@@ -1,0 +1,46 @@
+from typing import TYPE_CHECKING
+
+from ntrp.sources.models import RawItem
+
+if TYPE_CHECKING:
+    from ntrp.memory.store.base import GraphDatabase
+
+
+class MemoryIndexSource:
+    """Adapter that makes memory facts indexable like other sources."""
+
+    name = "memory"
+
+    def __init__(self, db: "GraphDatabase"):
+        self.db = db
+
+    async def scan(self) -> list[RawItem]:
+        from ntrp.memory.store.facts import FactRepository
+
+        repo = FactRepository(self.db.conn)
+        facts = await repo.list_recent(limit=1000)
+
+        items = []
+        for fact in facts:
+            entity_refs = await repo.get_entity_refs(fact.id)
+            entity_names = [e.name for e in entity_refs]
+
+            content = fact.text
+            if entity_names:
+                content = f"{content}\n\nEntities: {', '.join(entity_names)}"
+
+            title = entity_names[0] if entity_names else fact.text[:50]
+
+            items.append(
+                RawItem(
+                    source="memory",
+                    source_id=f"fact:{fact.id}",
+                    title=title,
+                    content=content,
+                    created_at=fact.created_at,
+                    updated_at=fact.created_at,
+                    metadata={},
+                )
+            )
+
+        return items

@@ -1,0 +1,140 @@
+import { useState, useCallback, useEffect, useRef } from "react";
+import { type AccentColor, setAccentColor } from "../components/ui/colors.js";
+import { updateConfig } from "../api/client.js";
+import type { Config } from "../types.js";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
+
+export interface UiSettings {
+  renderMarkdown: boolean;
+  accentColor: AccentColor;
+}
+
+export interface AgentSettings {
+  maxDepth: number;
+  maxIterations: number;
+}
+
+export interface Settings {
+  ui: UiSettings;
+  agent: AgentSettings;
+}
+
+const defaultSettings: Settings = {
+  ui: {
+    renderMarkdown: true,
+    accentColor: "blue",
+  },
+  agent: {
+    maxDepth: 8,
+    maxIterations: 10,
+  },
+};
+
+const SETTINGS_DIR = path.join(os.homedir(), ".ntrp");
+const SETTINGS_FILE = path.join(SETTINGS_DIR, "settings.json");
+const OLD_SETTINGS_FILE = path.join(SETTINGS_DIR, "ui-settings.json");
+
+function loadSettings(): Settings {
+  try {
+    // Try new settings file first
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const data = fs.readFileSync(SETTINGS_FILE, "utf-8");
+      const parsed = JSON.parse(data);
+      return {
+        ui: { ...defaultSettings.ui, ...parsed.ui },
+        agent: { ...defaultSettings.agent, ...parsed.agent },
+      };
+    }
+
+    // Migrate from old flat ui-settings.json
+    if (fs.existsSync(OLD_SETTINGS_FILE)) {
+      const data = fs.readFileSync(OLD_SETTINGS_FILE, "utf-8");
+      const old = JSON.parse(data);
+      const migrated: Settings = {
+        ui: {
+          renderMarkdown: old.renderMarkdown ?? defaultSettings.ui.renderMarkdown,
+          accentColor: old.accentColor ?? defaultSettings.ui.accentColor,
+        },
+        agent: { ...defaultSettings.agent },
+      };
+      saveSettings(migrated);
+      return migrated;
+    }
+  } catch {
+    // Ignore errors, use defaults
+  }
+  return defaultSettings;
+}
+
+function saveSettings(settings: Settings): void {
+  try {
+    if (!fs.existsSync(SETTINGS_DIR)) {
+      fs.mkdirSync(SETTINGS_DIR, { recursive: true });
+    }
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+  } catch {
+    // Ignore save errors
+  }
+}
+
+export function useSettings(config: Config) {
+  const [settings, setSettings] = useState<Settings>(() => loadSettings());
+  const [showSettings, setShowSettings] = useState(false);
+  const initializedRef = useRef(false);
+
+  // Sync accent color and save on change
+  useEffect(() => {
+    setAccentColor(settings.ui.accentColor);
+
+    if (initializedRef.current) {
+      saveSettings(settings);
+    } else {
+      initializedRef.current = true;
+    }
+  }, [settings]);
+
+  // Sync agent settings to server on mount
+  useEffect(() => {
+    updateConfig(config, {
+      max_depth: settings.agent.maxDepth,
+      max_iterations: settings.agent.maxIterations,
+    }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const updateSetting = useCallback(
+    (category: keyof Settings, key: string, value: unknown) => {
+      setSettings((prev) => {
+        const updated = {
+          ...prev,
+          [category]: { ...prev[category], [key]: value },
+        };
+
+        // Sync agent settings to server
+        if (category === "agent") {
+          const agentPatch: Record<string, unknown> = {};
+          if (key === "maxDepth") agentPatch.max_depth = value;
+          if (key === "maxIterations") agentPatch.max_iterations = value;
+          updateConfig(config, agentPatch as { max_depth?: number; max_iterations?: number }).catch(() => {});
+        }
+
+        return updated;
+      });
+    },
+    [config]
+  );
+
+  const openSettings = useCallback(() => setShowSettings(true), []);
+  const closeSettings = useCallback(() => setShowSettings(false), []);
+  const toggleSettings = useCallback(() => setShowSettings((v) => !v), []);
+
+  return {
+    settings,
+    showSettings,
+    updateSetting,
+    openSettings,
+    closeSettings,
+    toggleSettings,
+  };
+}

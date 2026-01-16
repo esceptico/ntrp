@@ -1,0 +1,41 @@
+{
+  "name": "ntrp-ui",
+  "version": "0.1.0",
+  "description": "Terminal UI client for ntrp",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "ntrp-ui": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "node --max-old-space-size=8192 node_modules/.bin/tsx src/index.tsx",
+    "build": "tsc",
+    "start": "node --max-old-space-size=8192 dist/index.js"
+  },
+  "dependencies": {
+    "@inkjs/ui": "^2.0.0",
+    "better-sqlite3": "^12.6.2",
+    "chalk": "^5.6.2",
+    "cli-markdown": "^3.5.1",
+    "eventsource": "^2.0.2",
+    "figures": "^6.1.0",
+    "glob": "^13.0.0",
+    "googleapis": "^170.1.0",
+    "ink": "^6.6.0",
+    "ink-markdown": "^1.0.4",
+    "ink-markdown-es": "^1.1.0",
+    "ink-scroll-view": "^0.3.5",
+    "marked": "^17.0.1",
+    "react": "^19.2.3",
+    "terminal-link": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/eventsource": "^1.1.15",
+    "@types/glob": "^8.1.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.2.8",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

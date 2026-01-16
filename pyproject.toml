@@ -1,0 +1,92 @@
+[project]
+name = "ntrp"
+version = "0.1.0"
+description = "personal entropy reduction system"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "openai>=1.0.0",
+    "litellm>=1.55.0",
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "numpy>=1.26.0",
+    "python-dotenv>=1.0.0",
+    "google-auth-oauthlib>=1.2.3",
+    "google-api-python-client>=2.188.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+    "sse-starlette>=2.1.0",
+    "exa-py>=2.0.2",
+    "pydantic-settings>=2.12.0",
+    "aiosqlite>=0.22.1",
+    "sqlite-vec>=0.1.6",
+    "lunary>=1.4.35",
+    "structlog>=24.0.0",
+]
+
+[project.optional-dependencies]
+gmail = [
+    "google-auth-oauthlib>=1.0.0",
+    "google-api-python-client>=2.0.0",
+]
+dev = [
+    "ruff>=0.9.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+ntrp = "ntrp.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ntrp"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "SIM",    # flake8-simplify
+    "TC",     # flake8-type-checking
+    "RUF",    # ruff-specific rules
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # function call in default argument (common in FastAPI)
+    "B904",   # raise from - not always needed
+    "B905",   # zip strict - pedantic
+    "SIM102", # nested ifs - often clearer than combined
+    "SIM103", # return condition directly - ternary can hurt readability
+    "SIM105", # contextlib.suppress - try/except/pass is often clearer
+    "SIM108", # ternary operator - explicit if/else is often clearer
+    "RUF003", # Comment contains ambiguous poo poo -_-
+    "RUF005", # list concat - [a] + [b] is fine
+    "RUF006", # asyncio task reference - not always needed
+    "RUF012", # ClassVar for mutable attrs - overkill for simple cases
+    "RUF022", # unsorted __all__ - logical grouping > alphabetical
+    "TC001",  # type-checking imports - overhead for small projects
+    "UP046",  # Generic subclass - style preference
+    "C401",   # unnecessary generator - micro-optimization
+    "C414",   # unnecessary list in sorted - micro-optimization
+    "E741",   # ambiguous variable name - single letter in comprehensions is fine
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ntrp"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false

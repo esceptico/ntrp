@@ -1,0 +1,156 @@
+from datetime import datetime
+from pathlib import Path
+
+from ntrp.database import VectorDatabase
+
+SCHEMA = """
+-- Observations (consolidated patterns from facts)
+CREATE TABLE IF NOT EXISTS observations (
+    id INTEGER PRIMARY KEY,
+    summary TEXT NOT NULL,
+    embedding BLOB,
+    evidence_count INTEGER DEFAULT 0,
+    source_fact_ids TEXT DEFAULT '[]',  -- JSON array of fact IDs
+    history TEXT DEFAULT '[]',          -- JSON array of changes
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    access_count INTEGER DEFAULT 0
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
+    summary,
+    content='observations',
+    content_rowid='id'
+);
+
+CREATE TRIGGER IF NOT EXISTS observations_ai AFTER INSERT ON observations BEGIN
+    INSERT INTO observations_fts(rowid, summary) VALUES (new.id, new.summary);
+END;
+
+CREATE TRIGGER IF NOT EXISTS observations_ad AFTER DELETE ON observations BEGIN
+    INSERT INTO observations_fts(observations_fts, rowid, summary) VALUES('delete', old.id, old.summary);
+END;
+
+CREATE TRIGGER IF NOT EXISTS observations_au AFTER UPDATE ON observations BEGIN
+    INSERT INTO observations_fts(observations_fts, rowid, summary) VALUES('delete', old.id, old.summary);
+    INSERT INTO observations_fts(rowid, summary) VALUES (new.id, new.summary);
+END;
+
+-- Fact-centric tables
+
+CREATE TABLE IF NOT EXISTS facts (
+    id INTEGER PRIMARY KEY,
+    text TEXT NOT NULL,
+    fact_type TEXT NOT NULL DEFAULT 'world',
+    embedding BLOB,
+    source_type TEXT NOT NULL,
+    source_ref TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    happened_at TIMESTAMP,
+    last_accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    access_count INTEGER DEFAULT 0,
+    consolidated_at TIMESTAMP  -- NULL = not yet consolidated
+);
+
+CREATE INDEX IF NOT EXISTS idx_facts_created ON facts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_facts_type ON facts(fact_type);
+
+CREATE TABLE IF NOT EXISTS fact_links (
+    id INTEGER PRIMARY KEY,
+    source_fact_id INTEGER REFERENCES facts(id),
+    target_fact_id INTEGER REFERENCES facts(id),
+    link_type TEXT NOT NULL,
+    weight REAL NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source_fact_id, target_fact_id, link_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fact_links_source ON fact_links(source_fact_id);
+CREATE INDEX IF NOT EXISTS idx_fact_links_target ON fact_links(target_fact_id);
+CREATE INDEX IF NOT EXISTS idx_fact_links_type ON fact_links(link_type);
+
+CREATE TABLE IF NOT EXISTS entity_refs (
+    id INTEGER PRIMARY KEY,
+    fact_id INTEGER REFERENCES facts(id),
+    name TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    canonical_id INTEGER REFERENCES entities(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_refs_fact ON entity_refs(fact_id);
+CREATE INDEX IF NOT EXISTS idx_entity_refs_name ON entity_refs(name);
+CREATE INDEX IF NOT EXISTS idx_entity_refs_canonical ON entity_refs(canonical_id);
+
+CREATE TABLE IF NOT EXISTS entities (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    embedding BLOB,
+    is_core BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_name_type ON entities(name, entity_type);
+
+CREATE INDEX IF NOT EXISTS idx_facts_consolidated ON facts(consolidated_at);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
+    text,
+    content='facts',
+    content_rowid='id'
+);
+
+CREATE TRIGGER IF NOT EXISTS facts_ai AFTER INSERT ON facts BEGIN
+    INSERT INTO facts_fts(rowid, text) VALUES (new.id, new.text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS facts_ad AFTER DELETE ON facts BEGIN
+    INSERT INTO facts_fts(facts_fts, rowid, text) VALUES('delete', old.id, old.text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS facts_au AFTER UPDATE ON facts BEGIN
+    INSERT INTO facts_fts(facts_fts, rowid, text) VALUES('delete', old.id, old.text);
+    INSERT INTO facts_fts(rowid, text) VALUES (new.id, new.text);
+END;
+"""
+
+
+def parse_datetime(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    return datetime.fromisoformat(value)
+
+
+class GraphDatabase(VectorDatabase):
+    def __init__(self, db_path: Path, embedding_dim: int):
+        super().__init__(db_path)
+        self.embedding_dim = embedding_dim
+
+    async def connect(self) -> None:
+        await super().connect()
+        await self.conn.executescript(SCHEMA)
+        await self._init_vec_tables()
+        await self.conn.commit()
+
+    async def _init_vec_tables(self) -> None:
+        dim = self.embedding_dim
+        await self.conn.execute(f"""
+            CREATE VIRTUAL TABLE IF NOT EXISTS observations_vec USING vec0(
+                observation_id INTEGER PRIMARY KEY,
+                embedding float[{dim}] distance_metric=cosine
+            );
+        """)
+        await self.conn.execute(f"""
+            CREATE VIRTUAL TABLE IF NOT EXISTS facts_vec USING vec0(
+                fact_id INTEGER PRIMARY KEY,
+                embedding float[{dim}] distance_metric=cosine
+            );
+        """)
+        await self.conn.execute(f"""
+            CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec USING vec0(
+                entity_id INTEGER PRIMARY KEY,
+                embedding float[{dim}] distance_metric=cosine
+            );
+        """)

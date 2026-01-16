@@ -1,0 +1,393 @@
+from datetime import datetime
+from typing import Any
+
+from ntrp.sources.base import CalendarSource
+from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.context import ToolExecution
+
+
+def _parse_datetime(value: str) -> datetime | None:
+    """Parse ISO datetime string, handling Z timezone suffix."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+class SearchCalendarTool(Tool):
+    """Search calendar events."""
+
+    name = "search_calendar"
+    description = """Search calendar events by text query.
+
+Use this to find specific events by name, attendee, or description."""
+    source_type = CalendarSource
+
+    def __init__(self, source: CalendarSource):
+        self.source = source
+
+    @property
+    def schema(self) -> dict:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query (searches title, description, attendees)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max results (default: 10)",
+                    },
+                },
+                "required": ["query"],
+            },
+        }
+
+    async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
+        if not self.source:
+            return ToolResult("Error: Calendar not available. Run `ntrp calendar add` to connect.", "Not configured")
+
+        if not query:
+            return ToolResult("Error: query is required", "Missing query")
+
+        try:
+            events = self.source.search(query, limit=limit)
+
+            if not events:
+                return ToolResult(
+                    f"No events found matching '{query}'. Try different keywords or use list_calendar for upcoming.",
+                    "0 events",
+                )
+
+            lines = [f"**Events matching '{query}':**\n"]
+            for event in events:
+                meta = event.metadata
+                start = meta.get("start", "")
+                event_id = event.source_id
+
+                if start:
+                    dt = datetime.fromisoformat(start)
+                    time_str = dt.strftime("%Y-%m-%d %H:%M")
+                else:
+                    time_str = "No time"
+
+                lines.append(f"- **{time_str}**: {event.title} `[{event_id}]`")
+
+            return ToolResult("\n".join(lines), f"{len(events)} events")
+        except Exception as e:
+            return ToolResult(f"Error searching events: {e}", "Search failed")
+
+
+class CreateCalendarEventTool(Tool):
+    """Create a new calendar event. Requires approval."""
+
+    name = "create_calendar_event"
+    description = """Create a new calendar event.
+
+Use this to schedule meetings, reminders, or block time on the calendar.
+Requires user approval before creating."""
+    mutates = True
+    source_type = CalendarSource
+
+    def __init__(self, source: CalendarSource):
+        self.source = source
+
+    @property
+    def schema(self) -> dict:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "summary": {"type": "string", "description": "Event title/summary"},
+                    "start": {
+                        "type": "string",
+                        "description": "Start time in ISO format (e.g., '2024-01-15T14:00:00')",
+                    },
+                    "end": {
+                        "type": "string",
+                        "description": "End time in ISO format (optional, defaults to 1 hour after start)",
+                    },
+                    "description": {"type": "string", "description": "Event description (optional)"},
+                    "location": {"type": "string", "description": "Event location (optional)"},
+                    "attendees": {
+                        "type": "string",
+                        "description": "Comma-separated email addresses of attendees (optional)",
+                    },
+                    "all_day": {"type": "boolean", "description": "Whether this is an all-day event (optional)"},
+                    "account": {
+                        "type": "string",
+                        "description": "Calendar account email (optional if only one account)",
+                    },
+                },
+                "required": ["summary", "start"],
+            },
+        }
+
+    async def execute(
+        self,
+        execution: ToolExecution,
+        summary: str = "",
+        start: str = "",
+        end: str = "",
+        description: str = "",
+        location: str = "",
+        attendees: str = "",
+        all_day: bool = False,
+        account: str = "",
+        **kwargs: Any,
+    ) -> ToolResult:
+        if not self.source:
+            return ToolResult("Error: Calendar not available. Run `ntrp calendar add` to connect.", "Not configured")
+
+        if not summary:
+            return ToolResult("Error: summary is required", "Missing summary")
+        if not start:
+            return ToolResult("Error: start time is required", "Missing start")
+
+        start_dt = _parse_datetime(start)
+        if not start_dt:
+            return ToolResult(f"Invalid start time: {start}. Use ISO format: 2024-01-15T14:00:00", "Invalid start")
+
+        end_dt = _parse_datetime(end)
+        attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
+
+        # Format preview for approval
+        time_str = start_dt.strftime("%Y-%m-%d %H:%M")
+        if end_dt:
+            time_str += f" - {end_dt.strftime('%H:%M')}"
+
+        await execution.require_approval(summary, {"time": time_str, "location": location})
+
+        # Create the event
+        result = self.source.create_event(
+            account=account,
+            summary=summary,
+            start=start_dt,
+            end=end_dt,
+            description=description,
+            location=location,
+            attendees=attendee_list,
+            all_day=all_day,
+        )
+        return ToolResult(result, "Created")
+
+
+class EditCalendarEventTool(Tool):
+    """Edit an existing calendar event. Requires approval."""
+
+    name = "edit_calendar_event"
+    description = """Edit an existing calendar event.
+
+Use list_calendar or search_calendar first to find the event ID.
+Only provide the fields you want to change - others remain unchanged.
+Requires user approval before editing."""
+    mutates = True
+    source_type = CalendarSource
+
+    def __init__(self, source: CalendarSource):
+        self.source = source
+
+    @property
+    def schema(self) -> dict:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_id": {
+                        "type": "string",
+                        "description": "The event ID to edit (from list_calendar or search_calendar)",
+                    },
+                    "summary": {"type": "string", "description": "New event title (optional)"},
+                    "start": {"type": "string", "description": "New start time in ISO format (optional)"},
+                    "end": {"type": "string", "description": "New end time in ISO format (optional)"},
+                    "description": {"type": "string", "description": "New event description (optional)"},
+                    "location": {"type": "string", "description": "New event location (optional)"},
+                    "attendees": {
+                        "type": "string",
+                        "description": "New comma-separated attendee emails (optional, replaces existing)",
+                    },
+                },
+                "required": ["event_id"],
+            },
+        }
+
+    async def execute(
+        self,
+        execution: ToolExecution,
+        event_id: str = "",
+        summary: str = "",
+        start: str = "",
+        end: str = "",
+        description: str = "",
+        location: str = "",
+        attendees: str = "",
+        **kwargs: Any,
+    ) -> ToolResult:
+        if not self.source:
+            return ToolResult("Error: Calendar not available. Run `ntrp calendar add` to connect.", "Not configured")
+
+        if not event_id:
+            return ToolResult("Error: event_id is required", "Missing event_id")
+
+        start_dt = _parse_datetime(start)
+        if start and not start_dt:
+            return ToolResult(f"Invalid start time: {start}. Use ISO format: 2024-01-15T14:00:00", "Invalid start")
+
+        end_dt = _parse_datetime(end)
+        if end and not end_dt:
+            return ToolResult(f"Invalid end time: {end}. Use ISO format: 2024-01-15T15:00:00", "Invalid end")
+
+        attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
+
+        # Build changes summary
+        changes = []
+        if summary:
+            changes.append(f"Title: {summary}")
+        if start:
+            changes.append(f"Start: {start}")
+        if end:
+            changes.append(f"End: {end}")
+        if location:
+            changes.append(f"Location: {location}")
+
+        await execution.require_approval(event_id, {"changes": changes})
+
+        # Edit the event
+        result = self.source.update_event(
+            event_id=event_id,
+            summary=summary if summary else None,
+            start=start_dt,
+            end=end_dt,
+            description=description if description else None,
+            location=location if location else None,
+            attendees=attendee_list,
+        )
+        return ToolResult(result, "Updated")
+
+
+class DeleteCalendarEventTool(Tool):
+    """Delete a calendar event. Requires approval."""
+
+    name = "delete_calendar_event"
+    description = """Delete a calendar event by ID.
+
+Use list_calendar or search_calendar first to find the event ID.
+Requires user approval before deleting."""
+    mutates = True
+    source_type = CalendarSource
+
+    def __init__(self, source: CalendarSource):
+        self.source = source
+
+    @property
+    def schema(self) -> dict:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_id": {
+                        "type": "string",
+                        "description": "The event ID to delete",
+                    },
+                },
+                "required": ["event_id"],
+            },
+        }
+
+    async def execute(self, execution: ToolExecution, event_id: str = "", **kwargs: Any) -> ToolResult:
+        if not self.source:
+            return ToolResult("Error: Calendar not available. Run `ntrp calendar add` to connect.", "Not configured")
+
+        if not event_id:
+            return ToolResult("Error: event_id is required", "Missing event_id")
+
+        await execution.require_approval(event_id)
+
+        # Delete the event
+        result = self.source.delete_event(event_id)
+        return ToolResult(result, "Deleted")
+
+
+class ListCalendarTool(Tool):
+    name = "list_calendar"
+    description = """List calendar events.
+
+Use days_forward for upcoming events, days_back for past events.
+Use search_calendar to find specific events by name."""
+    source_type = CalendarSource
+
+    def __init__(self, source: CalendarSource):
+        self.source = source
+
+    @property
+    def schema(self) -> dict:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days_forward": {"type": "integer", "description": "Days ahead to look (default: 7)"},
+                    "days_back": {"type": "integer", "description": "Days back to look (default: 0)"},
+                    "limit": {"type": "integer", "description": "Maximum results (default: 30)"},
+                },
+                "required": [],
+            },
+        }
+
+    async def execute(
+        self,
+        execution: ToolExecution,
+        days_forward: int = 7,
+        days_back: int = 0,
+        limit: int = 30,
+        **kwargs: Any,
+    ) -> ToolResult:
+        if not self.source:
+            return ToolResult("Error: Calendar not available. Run `ntrp calendar add` to connect.", "Not configured")
+
+        events = []
+
+        if days_back > 0:
+            past = self.source.get_past(days=days_back, limit=limit)
+            events.extend(past)
+
+        if days_forward > 0:
+            upcoming = self.source.get_upcoming(days=days_forward, limit=limit)
+            events.extend(upcoming)
+
+        if not events:
+            return ToolResult("No calendar events in the specified range", "0 events")
+
+        events.sort(key=lambda e: e.metadata.get("start", ""))
+
+        output = []
+        for event in events[:limit]:
+            meta = event.metadata
+            start = meta.get("start", "")
+
+            if start:
+                dt = datetime.fromisoformat(start)
+                if meta.get("is_all_day"):
+                    time_str = dt.strftime("%a %b %d") + " (all day)"
+                else:
+                    time_str = dt.strftime("%a %b %d, %H:%M")
+            else:
+                time_str = "No time"
+
+            location = f" @ {meta['location']}" if meta.get("location") else ""
+            output.append(f"• {time_str}: {event.title}{location}")
+
+        return ToolResult("\n".join(output), f"{len(events)} events")
