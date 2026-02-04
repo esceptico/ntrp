@@ -44,6 +44,7 @@ class Config(BaseSettings):
     # LiteLLM reads API keys from standard env vars:
     #   ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY
     chat_model: str = "gemini/gemini-3-flash-preview"
+    memory_model: str = "gemini/gemini-2.0-flash"
     embedding_model: str = "text-embedding-3-small"
     embedding_dim: int = 1536
     embedding_prefix: bool = False
@@ -100,4 +101,6 @@ def get_config() -> Config:
     settings = load_user_settings()
     if "chat_model" in settings:
         config.chat_model = settings["chat_model"]
+    if "memory_model" in settings:
+        config.memory_model = settings["memory_model"]
     return config

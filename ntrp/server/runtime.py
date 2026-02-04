@@ -73,7 +73,7 @@ class Runtime:
             self.memory = await FactMemory.create(
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
-                extraction_model=self.config.chat_model,
+                extraction_model=self.config.memory_model,
             )
 
         self.executor = ToolExecutor(

@@ -17,10 +17,12 @@ class SessionResponse(BaseModel):
 
 class UpdateModelsRequest(BaseModel):
     chat_model: str | None = None
+    memory_model: str | None = None
 
 
 class UpdateConfigRequest(BaseModel):
     chat_model: str | None = None
+    memory_model: str | None = None
     max_depth: int | None = None
     max_iterations: int | None = None
 
@@ -71,6 +73,7 @@ async def get_config():
 
     return {
         "chat_model": runtime.config.chat_model,
+        "memory_model": runtime.config.memory_model,
         "embedding_model": runtime.config.embedding_model,
         "vault_path": runtime.config.vault_path,
         "browser": runtime.config.browser,
@@ -89,18 +92,23 @@ async def list_models():
     runtime = get_runtime()
     return {
         "models": list(SUPPORTED_MODELS.keys()),
-        "current": runtime.config.chat_model,
+        "chat_model": runtime.config.chat_model,
+        "memory_model": runtime.config.memory_model,
     }
 
 
 @router.patch("/config")
 async def update_config(req: UpdateConfigRequest):
     runtime = get_runtime()
+    settings = load_user_settings()
 
     if req.chat_model:
         runtime.config.chat_model = req.chat_model
-        settings = load_user_settings()
         settings["chat_model"] = req.chat_model
+    if req.memory_model:
+        runtime.config.memory_model = req.memory_model
+        settings["memory_model"] = req.memory_model
+    if req.chat_model or req.memory_model:
         save_user_settings(settings)
     if req.max_depth is not None:
         runtime.max_depth = req.max_depth
@@ -109,6 +117,7 @@ async def update_config(req: UpdateConfigRequest):
 
     return {
         "chat_model": runtime.config.chat_model,
+        "memory_model": runtime.config.memory_model,
         "max_depth": runtime.max_depth,
         "max_iterations": runtime.max_iterations,
     }
@@ -117,15 +126,20 @@ async def update_config(req: UpdateConfigRequest):
 @router.patch("/config/models")
 async def update_models(req: UpdateModelsRequest):
     runtime = get_runtime()
+    settings = load_user_settings()
 
     if req.chat_model:
         runtime.config.chat_model = req.chat_model
-        settings = load_user_settings()
         settings["chat_model"] = req.chat_model
+    if req.memory_model:
+        runtime.config.memory_model = req.memory_model
+        settings["memory_model"] = req.memory_model
+    if req.chat_model or req.memory_model:
         save_user_settings(settings)
 
     return {
         "chat_model": runtime.config.chat_model,
+        "memory_model": runtime.config.memory_model,
     }
 
 
