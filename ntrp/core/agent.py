@@ -129,9 +129,7 @@ class Agent:
             is_cancelled=self._is_cancelled,
         )
 
-    async def stream(
-        self, task: str, history: list[dict] | None = None
-    ) -> AsyncGenerator[SSEEvent | str]:
+    async def stream(self, task: str, history: list[dict] | None = None) -> AsyncGenerator[SSEEvent | str]:
         if self.current_depth >= self.max_depth:
             yield f"Max depth ({self.max_depth}) reached."
             return

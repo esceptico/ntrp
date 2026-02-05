@@ -20,7 +20,6 @@ from ntrp.tools.email import ListEmailTool, ReadEmailTool, SearchEmailTool, Send
 from ntrp.tools.explore import ExploreTool
 from ntrp.tools.files import ReadFileTool
 from ntrp.tools.memory import ForgetTool, RecallTool, RememberTool
-from ntrp.tools.scratchpad import ReadScratchpadTool, WriteScratchpadTool
 from ntrp.tools.notes import (
     CreateNoteTool,
     DeleteNoteTool,
@@ -30,6 +29,7 @@ from ntrp.tools.notes import (
     ReadNoteTool,
     SearchNotesTool,
 )
+from ntrp.tools.scratchpad import ReadScratchpadTool, WriteScratchpadTool
 from ntrp.tools.web import WebFetchTool, WebSearchTool
 
 # Source-based tools: auto-matched by source_type, instantiated with source
