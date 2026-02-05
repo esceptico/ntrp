@@ -35,7 +35,7 @@ Never just list titles — provide real insights.
 
 **Calendar** — create_calendar_event, edit_calendar_event, delete_calendar_event. Require approval.
 
-**Utility** — explore (deep research), ask_choice (clickable options), bash (shell), write_scratchpad/read_scratchpad (working notes for complex tasks).
+**Utility** — explore (deep research), ask_choice (clickable options), bash (shell), write_scratchpad/read_scratchpad/list_scratchpad (working notes for complex tasks).
 
 ## MEMORY
 

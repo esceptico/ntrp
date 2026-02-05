@@ -29,7 +29,7 @@ from ntrp.tools.notes import (
     ReadNoteTool,
     SearchNotesTool,
 )
-from ntrp.tools.scratchpad import ReadScratchpadTool, WriteScratchpadTool
+from ntrp.tools.scratchpad import ListScratchpadTool, ReadScratchpadTool, WriteScratchpadTool
 from ntrp.tools.web import WebFetchTool, WebSearchTool
 
 # Source-based tools: auto-matched by source_type, instantiated with source
@@ -131,6 +131,7 @@ class ToolExecutor:
         self.registry.register(AskChoiceTool())
         self.registry.register(WriteScratchpadTool())
         self.registry.register(ReadScratchpadTool())
+        self.registry.register(ListScratchpadTool())
 
     def _get_source_for_type(self, source_type: type) -> Any | None:
         for source in self.sources.values():
