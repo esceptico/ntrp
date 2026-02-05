@@ -10,6 +10,20 @@ from ntrp.tools.core.context import ToolContext
 from ntrp.tools.executor import ToolExecutor
 
 
+def _create_session_state(calling_ctx: ToolContext, isolation: IsolationLevel) -> SessionState:
+    if isolation == IsolationLevel.SHARED:
+        return calling_ctx.session_state
+
+    child_session_id = f"{calling_ctx.session_id}::{uuid4().hex[:8]}"
+    return SessionState(
+        session_id=child_session_id,
+        user_id=calling_ctx.session_state.user_id,
+        started_at=datetime.now(),
+        auto_approve=calling_ctx.session_state.auto_approve,
+        yolo=calling_ctx.session_state.yolo,
+    )
+
+
 def create_spawn_fn(
     executor: ToolExecutor,
     model: str,
@@ -31,20 +45,7 @@ def create_spawn_fn(
         from ntrp.core.agent import Agent
 
         filtered_tools = tools or executor.registry.get_schemas()
-
-        # Create isolated or shared session state
-        if isolation == IsolationLevel.FULL:
-            # Full isolation: new session state, don't inherit gathered_context or rolling_summary
-            child_state = SessionState(
-                session_id=f"{calling_ctx.session_id}::{uuid4().hex[:8]}",
-                user_id=calling_ctx.session_state.user_id,
-                started_at=datetime.now(),
-                auto_approve=calling_ctx.session_state.auto_approve,
-                yolo=calling_ctx.session_state.yolo,
-            )
-        else:
-            # Shared: use parent's session state (original behavior)
-            child_state = calling_ctx.session_state
+        child_state = _create_session_state(calling_ctx, isolation)
 
         child_ctx = ToolContext(
             session_state=child_state,
