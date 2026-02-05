@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 
 import litellm
@@ -47,8 +46,27 @@ def count_tokens(messages: list, model: str) -> int:
     return total_chars // CHARS_PER_TOKEN
 
 
-def should_compress(messages: list[dict], model: str) -> bool:
+def should_compress(
+    messages: list[dict],
+    model: str,
+    actual_input_tokens: int | None = None,
+) -> bool:
+    """Check if context should be compressed.
+
+    Args:
+        messages: Current message history
+        model: Model identifier
+        actual_input_tokens: If provided, use actual token count from LLM response
+            instead of estimate. More accurate for compression decisions.
+    """
     limit = SUPPORTED_MODELS[model]["tokens"]
+
+    # Use actual count if available (more accurate), otherwise estimate
+    if actual_input_tokens is not None:
+        # Use slightly higher threshold (80%) when we have actual count
+        return actual_input_tokens > int(limit * 0.80)
+
+    # Fallback to estimate
     threshold = int(limit * COMPRESSION_THRESHOLD)
     current = count_tokens(messages, model)
     return current > threshold
@@ -215,77 +233,6 @@ def mask_old_tool_results(messages: list[dict], preserve_recent: int = 6) -> lis
         else:
             result.append(msg)
     return result
-
-
-def sanitize_history_for_model(messages: list[dict]) -> list[dict]:
-    sanitized = []
-    i = 0
-
-    while i < len(messages):
-        msg = messages[i]
-        role = msg.get("role", "")
-
-        if role == "system":
-            sanitized.append({"role": "system", "content": msg.get("content", "")})
-            i += 1
-            continue
-
-        if role == "user":
-            sanitized.append({"role": "user", "content": msg.get("content", "")})
-            i += 1
-            continue
-
-        if role == "assistant" and msg.get("tool_calls"):
-            tool_summaries = []
-
-            for tc in msg.get("tool_calls", []):
-                func = tc.get("function", {})
-                tool_name = func.get("name", "unknown")
-                args_str = func.get("arguments", "{}")
-                try:
-                    args = json.loads(args_str) if args_str else {}
-                    main_arg = next(iter(args.values()), "") if args else ""
-                    if isinstance(main_arg, str) and len(main_arg) > 100:
-                        main_arg = main_arg[:100] + "..."
-                except (json.JSONDecodeError, TypeError):
-                    main_arg = ""
-
-                tool_summaries.append(f"[{tool_name}({main_arg})]")
-
-            results = []
-            j = i + 1
-            while j < len(messages) and messages[j].get("role") == "tool":
-                result_content = messages[j].get("content", "")
-                if len(result_content) > 200:
-                    result_content = result_content[:200] + "..."
-                results.append(result_content)
-                j += 1
-
-            summary_parts = []
-            if msg.get("content"):
-                summary_parts.append(msg["content"])
-            summary_parts.append("Called: " + ", ".join(tool_summaries))
-            if results:
-                summary_parts.append("Results: " + " | ".join(results))
-
-            sanitized.append({"role": "assistant", "content": "\n".join(summary_parts)})
-
-            i = j
-            continue
-
-        if role == "assistant":
-            sanitized.append(msg)
-            i += 1
-            continue
-
-        if role == "tool":
-            i += 1
-            continue
-
-        sanitized.append(msg)
-        i += 1
-
-    return sanitized
 
 
 class SessionManager:

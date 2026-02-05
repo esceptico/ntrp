@@ -194,7 +194,7 @@ export function useStreaming({
       name: event.name,
       path: event.path,
       diff: event.diff,
-      preview: event.diff || event.content_preview || "",
+      preview: event.content_preview || "",
     });
     setStatus("awaiting approval...");
   }, [config, addMessage]);

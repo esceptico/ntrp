@@ -50,7 +50,7 @@ class SendEmailTool(Tool):
         if not account or not to:
             return ToolResult("Error: account and to are required", "Missing fields")
 
-        await execution.require_approval(to, {"subject": subject, "from": account})
+        await execution.require_approval(to, preview=f"Subject: {subject}\nFrom: {account}")
 
         result = self.source.send_email(account=account, to=to, subject=subject, body=body)
         return ToolResult(result, "Sent")

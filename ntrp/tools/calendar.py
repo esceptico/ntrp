@@ -164,7 +164,7 @@ Requires user approval before creating."""
         if end_dt:
             time_str += f" - {end_dt.strftime('%H:%M')}"
 
-        await execution.require_approval(summary, {"time": time_str, "location": location})
+        await execution.require_approval(summary, preview=f"Time: {time_str}\nLocation: {location or 'N/A'}")
 
         # Create the event
         result = self.source.create_event(
@@ -260,7 +260,7 @@ Requires user approval before editing."""
         if location:
             changes.append(f"Location: {location}")
 
-        await execution.require_approval(event_id, {"changes": changes})
+        await execution.require_approval(event_id, preview="\n".join(changes) if changes else "No changes")
 
         # Edit the event
         result = self.source.update_event(

@@ -61,7 +61,13 @@ class ToolExecution:
     tool_name: str
     ctx: ToolContext
 
-    async def require_approval(self, description: str, metadata: dict | None = None) -> None:
+    async def require_approval(
+        self,
+        description: str,
+        *,
+        diff: str | None = None,
+        preview: str | None = None,
+    ) -> None:
         if self.ctx.yolo or self.tool_name in self.ctx.auto_approve:
             return
 
@@ -73,7 +79,8 @@ class ToolExecution:
                 tool_id=self.tool_id,
                 name=self.tool_name,
                 path=description,
-                content_preview=str(metadata) if metadata else "",
+                diff=diff,
+                content_preview=preview if not diff else None,
             )
         )
 

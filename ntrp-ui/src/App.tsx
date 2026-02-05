@@ -233,7 +233,7 @@ function AppContent({
 
       {/* Live content - tool calls, status */}
       {toolChain.length > 0 && (
-        <Box marginTop={messages.length === 0 || messages[messages.length - 1]?.role !== "tool" ? 1 : 0}>
+        <Box marginTop={messages[messages.length - 1]?.role === "user" ? 1 : 0}>
           <ToolChainDisplay items={toolChain} />
         </Box>
       )}

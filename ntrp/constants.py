@@ -67,6 +67,11 @@ TAIL_TOKEN_BUDGET = 8000  # tokens kept verbatim during compaction
 MASK_THRESHOLD = 300  # chars — tool results below this are left as-is
 MASK_PREVIEW_CHARS = 200  # chars kept when masking old tool results
 
+# Tool result offloading: large results stored externally, compact reference in context
+# Manus pattern: full representation → file, compact representation → context
+OFFLOAD_THRESHOLD = 2000  # chars — results above this are offloaded to temp files
+OFFLOAD_PREVIEW_CHARS = 300  # chars kept in compact reference
+
 
 # --- Display Truncation ---
 

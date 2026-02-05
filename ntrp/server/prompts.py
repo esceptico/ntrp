@@ -52,6 +52,10 @@ Never just list titles — provide real insights.
 - ask_choice(question, options) — 2-6 clickable options for discrete choices
 - create_calendar_event(...), edit_calendar_event(...) — require approval
 
+**Scratchpad** (working notes for complex tasks)
+- write_scratchpad(content, key?) — save intermediate results, plans, tracking
+- read_scratchpad(key?) — retrieve saved notes
+
 ## MEMORY
 
 recall() = what you've stored. search_*() = finding new info.
@@ -135,9 +139,10 @@ Ask about their work, projects, and interests, then explore based on answers.
 
 def _environment() -> str:
     now = datetime.now()
+    # Hourly granularity for better cache hit rate (vs minute-level)
     return ENVIRONMENT_TEMPLATE.format(
         date=now.strftime("%A, %B %d, %Y"),
-        time=now.strftime("%H:%M"),
+        time=now.strftime("%H:00"),  # Round to hour
     )
 
 
@@ -201,11 +206,14 @@ def build_system_prompt(
     last_activity: datetime | None = None,
     memory_context: str | None = None,
 ) -> str:
+    # Order matters for prompt caching: static prefix → dynamic suffix
+    # BASE_SYSTEM_PROMPT + _sources are stable within a session
+    # _environment changes every minute, so it goes after the cache-friendly prefix
     sections = [
-        BASE_SYSTEM_PROMPT,
-        _environment(),
-        _time_gap(last_activity),
-        _sources(source_details),
+        BASE_SYSTEM_PROMPT,  # ~800 tokens, fully static
+        _sources(source_details),  # semi-static, changes only at session setup
+        _environment(),  # dynamic (date/time), cache break point
+        _time_gap(last_activity),  # dynamic, depends on activity
     ]
     if memory_context:
         sections.append(MEMORY_CONTEXT_TEMPLATE.format(memory_content=memory_context))

@@ -110,8 +110,8 @@ export function ApprovalDialog({ approval, onResult, isActive = true }: Approval
     return (
       <>
         {approval.path && <Text color={colors.text.primary}>{truncateText(approval.path, contentWidth)}</Text>}
-        {approval.preview && <Text color={colors.text.secondary}>{truncateText(approval.preview, contentWidth)}</Text>}
         {hasDiff && <DiffView diff={approval.diff!} width={contentWidth} />}
+        {!hasDiff && approval.preview && <Text color={colors.text.secondary}>{truncateText(approval.preview, contentWidth)}</Text>}
       </>
     );
   }, [approval.preview, approval.path, approval.diff, hasDiff, contentWidth]);

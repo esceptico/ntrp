@@ -5,7 +5,6 @@ from ntrp.context.compression import (
     count_tokens,
     find_compressible_range,
     mask_old_tool_results,
-    sanitize_history_for_model,
     should_compress,
 )
 from ntrp.context.models import SessionData, SessionState
@@ -21,6 +20,5 @@ __all__ = [
     "count_tokens",
     "find_compressible_range",
     "mask_old_tool_results",
-    "sanitize_history_for_model",
     "should_compress",
 ]

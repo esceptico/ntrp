@@ -11,13 +11,16 @@ interface UserMessageProps {
 export const UserMessage = memo(function UserMessage({ content }: UserMessageProps) {
   const { width: terminalWidth } = useDimensions();
   const contentWidth = Math.max(0, terminalWidth - 4);
+  const lines = content.split("\n");
 
   return (
-    <Box width={terminalWidth} overflow="hidden">
-      <Text>
-        <Text color={colors.status.warning} bold>{">"} </Text>
-        <Text>{truncateText(content, contentWidth)}</Text>
-      </Text>
+    <Box flexDirection="column" width={terminalWidth} overflow="hidden">
+      {lines.map((line, i) => (
+        <Text key={i}>
+          <Text color={colors.status.warning} bold>{i === 0 ? "> " : "  "}</Text>
+          <Text>{truncateText(line, contentWidth)}</Text>
+        </Text>
+      ))}
     </Box>
   );
 });

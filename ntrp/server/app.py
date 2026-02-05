@@ -9,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ntrp.context.compression import sanitize_history_for_model
 from ntrp.core.agent import Agent
 from ntrp.events import (
     CancelledEvent,
@@ -238,8 +237,7 @@ async def _run_agent_loop(ctx: ChatContext, agent, user_message: str):
     - Subagent/tool events also go to the same queue via event_bus forwarding
     - Consumer yields events as they arrive in true real-time
     """
-    raw_history = ctx.messages[:-1] if len(ctx.messages) > 1 else None
-    history = sanitize_history_for_model(raw_history) if raw_history else None
+    history = ctx.messages[:-1] if len(ctx.messages) > 1 else None
 
     # Sentinel to signal completion
     _DONE = object()

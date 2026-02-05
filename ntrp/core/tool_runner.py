@@ -1,6 +1,8 @@
 import asyncio
 from collections.abc import AsyncGenerator, Callable
+from pathlib import Path
 
+from ntrp.constants import OFFLOAD_PREVIEW_CHARS, OFFLOAD_THRESHOLD
 from ntrp.core.async_queue import AsyncQueue
 from ntrp.core.models import PendingToolCall, ToolExecutionResult
 from ntrp.events import SSEEvent, ToolCallEvent, ToolResultEvent
@@ -8,6 +10,8 @@ from ntrp.tools.core.base import ToolResult
 from ntrp.tools.core.context import ToolContext, ToolExecution
 from ntrp.tools.executor import ToolExecutor
 from ntrp.utils import ms_now
+
+OFFLOAD_BASE = Path("/tmp/ntrp")
 
 
 class ToolRunner:
@@ -24,6 +28,31 @@ class ToolRunner:
         self.depth = depth
         self.parent_id = parent_id or ""
         self.is_cancelled = is_cancelled
+        self._offload_counter = 0
+
+    def _maybe_offload(self, tool_id: str, tool_name: str, result: ToolResult) -> ToolResult:
+        """Offload large tool results to filesystem, return compact reference.
+
+        Manus pattern: full representation stored in file, compact reference in context.
+        Agent can use read_file() to access full content if needed.
+        """
+        content = result.content
+        if len(content) <= OFFLOAD_THRESHOLD:
+            return result
+
+        # Write full result to session-scoped temp file
+        self._offload_counter += 1
+        offload_dir = OFFLOAD_BASE / self.ctx.session_id / "results"
+        offload_dir.mkdir(parents=True, exist_ok=True)
+        offload_path = offload_dir / f"{tool_name}_{self._offload_counter}.txt"
+        offload_path.write_text(content, encoding="utf-8")
+
+        # Create compact reference
+        preview = content[:OFFLOAD_PREVIEW_CHARS]
+        if len(content) > OFFLOAD_PREVIEW_CHARS:
+            preview += f"\n\n[...{len(content) - OFFLOAD_PREVIEW_CHARS} chars offloaded → {offload_path}]"
+
+        return ToolResult(preview, result.preview, result.metadata)
 
     def _make_start_event(self, call: PendingToolCall) -> ToolCallEvent:
         return ToolCallEvent(
@@ -68,6 +97,7 @@ class ToolRunner:
         try:
             execution = ToolExecution(call.tool_call.id, call.name, self.ctx)
             result = await self.executor.execute(call.name, call.args, execution)
+            result = self._maybe_offload(call.tool_call.id, call.name, result)
             duration_ms = ms_now() - start_ms
             yield self._make_result_event(call=call, result=result, duration_ms=duration_ms)
         except Exception as e:
@@ -89,6 +119,7 @@ class ToolRunner:
             try:
                 execution = ToolExecution(call.tool_call.id, call.name, self.ctx)
                 result = await self.executor.execute(call.name, call.args, execution)
+                result = self._maybe_offload(call.tool_call.id, call.name, result)
                 duration_ms = ms_now() - start_ms
                 results_queue.enqueue(
                     ToolExecutionResult(

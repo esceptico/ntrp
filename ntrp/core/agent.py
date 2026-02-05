@@ -43,6 +43,7 @@ class Agent:
         self.messages: list[dict] = []
         self.total_input_tokens = 0
         self.total_output_tokens = 0
+        self._last_input_tokens: int | None = None  # For adaptive compression
 
         self.ctx.spawn_fn = create_spawn_fn(
             executor=self.executor,
@@ -87,16 +88,21 @@ class Agent:
 
     def _track_usage(self, response: Any) -> None:
         if response.usage:
-            self.total_input_tokens += response.usage.prompt_tokens or 0
+            prompt_tokens = response.usage.prompt_tokens or 0
+            self.total_input_tokens += prompt_tokens
             self.total_output_tokens += response.usage.completion_tokens or 0
+            # Track for adaptive compression on next iteration
+            self._last_input_tokens = prompt_tokens
 
     async def _maybe_compact(self) -> None:
-        if not should_compress(self.messages, self.model):
+        # Use actual token count from last LLM response if available (more accurate)
+        if not should_compress(self.messages, self.model, self._last_input_tokens):
             return
 
         # Phase 1: observation masking — truncate old tool results
         self.messages = mask_old_tool_results(self.messages)
 
+        # After masking, re-check without actual count (we modified messages)
         if not should_compress(self.messages, self.model):
             return
 

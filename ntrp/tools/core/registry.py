@@ -7,9 +7,12 @@ from ntrp.tools.core.context import ToolExecution
 class ToolRegistry:
     def __init__(self):
         self._tools: dict[str, Tool] = {}
+        self._schemas: dict[str, dict] = {}  # Pre-computed schemas
 
     def register(self, tool: Tool) -> None:
         self._tools[tool.name] = tool
+        # Pre-compute and cache schema at registration time
+        self._schemas[tool.name] = tool.to_dict()
 
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
@@ -25,12 +28,12 @@ class ToolRegistry:
         mutates: bool | None = None,
     ) -> list[dict]:
         schemas = []
-        for tool in self._tools.values():
-            if names is not None and tool.name not in names:
+        for name, tool in self._tools.items():
+            if names is not None and name not in names:
                 continue
             if mutates is not None and tool.mutates != mutates:
                 continue
-            schemas.append(tool.to_dict())
+            schemas.append(self._schemas[name])
         return schemas
 
     @property

@@ -245,7 +245,7 @@ class EditNoteTool(Tool):
         if len(diff.split("\n")) > DIFF_PREVIEW_LINES:
             diff_preview += "\n... (truncated)"
 
-        await execution.require_approval(path, {"diff": diff_preview})
+        await execution.require_approval(path, diff=diff_preview)
 
         # Apply the edit
         success = self.source.write(path, proposed)
@@ -307,7 +307,7 @@ class CreateNoteTool(Tool):
         if len(content) > CONTENT_PREVIEW_LIMIT:
             preview_content += "\n... (truncated)"
 
-        await execution.require_approval(path, {"preview": preview_content})
+        await execution.require_approval(path, preview=preview_content)
 
         # Create the note
         success = self.source.write(path, content)

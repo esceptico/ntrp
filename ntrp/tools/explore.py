@@ -1,4 +1,5 @@
 from ntrp.constants import EXPLORE_TIMEOUT
+from ntrp.core.isolation import IsolationLevel
 from ntrp.core.prompts import EXPLORE_PROMPT
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
@@ -42,5 +43,6 @@ class ExploreTool(Tool):
             tools=tools,
             timeout=EXPLORE_TIMEOUT,
             parent_id=execution.tool_id,
+            isolation=IsolationLevel.FULL,
         )
         return ToolResult(result, "Explored")

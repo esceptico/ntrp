@@ -1,5 +1,6 @@
 from typing import Any
 
+from ntrp.core.isolation import IsolationLevel
 from ntrp.memory.facts import FactMemory
 from ntrp.sources.base import NotesSource
 from ntrp.tools.ask_choice import AskChoiceTool
@@ -19,6 +20,7 @@ from ntrp.tools.email import ListEmailTool, ReadEmailTool, SearchEmailTool, Send
 from ntrp.tools.explore import ExploreTool
 from ntrp.tools.files import ReadFileTool
 from ntrp.tools.memory import ForgetTool, RecallTool, RememberTool
+from ntrp.tools.scratchpad import ReadScratchpadTool, WriteScratchpadTool
 from ntrp.tools.notes import (
     CreateNoteTool,
     DeleteNoteTool,
@@ -89,6 +91,7 @@ class ToolExecutor:
         timeout: int = 120,
         model_override: str | None = None,
         parent_id: str | None = None,
+        isolation: IsolationLevel = IsolationLevel.FULL,
     ) -> str:
         if not ctx.spawn_fn:
             return "Error: spawn capability not available"
@@ -101,6 +104,7 @@ class ToolExecutor:
             timeout=timeout,
             model_override=model_override,
             parent_id=parent_id,
+            isolation=isolation,
         )
 
     def _register_tools(self, working_dir: str | None) -> None:
@@ -125,6 +129,8 @@ class ToolExecutor:
         self.registry.register(ReadFileTool(base_path=working_dir))
         self.registry.register(ExploreTool())
         self.registry.register(AskChoiceTool())
+        self.registry.register(WriteScratchpadTool())
+        self.registry.register(ReadScratchpadTool())
 
     def _get_source_for_type(self, source_type: type) -> Any | None:
         for source in self.sources.values():
