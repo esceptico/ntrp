@@ -1,7 +1,7 @@
 import asyncio
 import json
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException
@@ -323,10 +323,8 @@ async def _run_agent_loop(ctx: ChatContext, agent, user_message: str, max_iterat
     finally:
         # Cancel forwarder and wait for cleanup
         forwarder_task.cancel()
-        try:
+        with suppress(asyncio.CancelledError):
             await forwarder_task
-        except asyncio.CancelledError:
-            pass
 
         # Drain any events forwarder put on merged_queue during cancellation
         while not merged_queue.empty():
@@ -339,10 +337,8 @@ async def _run_agent_loop(ctx: ChatContext, agent, user_message: str, max_iterat
 
         if not agent_task.done():
             agent_task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await agent_task
-            except asyncio.CancelledError:
-                pass
 
     if error:
         raise error
