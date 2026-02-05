@@ -166,6 +166,7 @@ export interface FactDetails {
 
 export interface ServerConfig {
   chat_model: string;
+  memory_model: string;
   embedding_model: string;
   vault_path: string;
   browser: string | null;
@@ -229,8 +230,8 @@ export async function updateConfig(
 
 export async function updateModels(
   config: Config,
-  models: { chat_model?: string }
-): Promise<{ chat_model: string }> {
+  models: { chat_model?: string; memory_model?: string }
+): Promise<{ chat_model: string; memory_model: string }> {
   const response = await fetch(`${config.serverUrl}/config/models`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -242,7 +243,8 @@ export async function updateModels(
 
 export async function getSupportedModels(config: Config): Promise<{
   models: string[];
-  current: string;
+  chat_model: string;
+  memory_model: string;
 }> {
   const response = await fetch(`${config.serverUrl}/models`);
   if (!response.ok) throw new Error(`Failed: ${response.status}`);

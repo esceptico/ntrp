@@ -1,9 +1,10 @@
-import React from "react";
 import { Text } from "ink";
-import { colors, accentColors, truncateText, type AccentColor } from "../../ui/index.js";
-import { BooleanItem, NumberItem, COL_CURSOR, COL_CHECK, COL_NUMBER, pad } from "./config.js";
+import { colors, accentColors, type AccentColor } from "../../ui/index.js";
+import type { BooleanItem, NumberItem } from "./config.js";
 
 export const colorOptions = Object.keys(accentColors) as AccentColor[];
+
+const LABEL_WIDTH = 14;
 
 interface RowProps {
   selected: boolean;
@@ -16,12 +17,11 @@ interface BooleanRowProps extends RowProps {
 }
 
 export function BooleanRow({ item, value, selected, accent }: BooleanRowProps) {
-  const cursor = pad(selected ? ">" : "", COL_CURSOR);
   return (
     <Text>
-      <Text color={selected ? accent : colors.text.disabled}>{cursor}</Text>
-      <Text color={value ? accent : colors.text.muted}>{pad(value ? "[✓]" : "[ ]", COL_CHECK)}</Text>
-      <Text bold={selected} color={selected ? accent : colors.text.primary}>{item.description}</Text>
+      <Text color={selected ? accent : colors.text.disabled}>{selected ? "› " : "  "}</Text>
+      <Text color={value ? accent : colors.text.muted}>{value ? "[•] " : "[ ] "}</Text>
+      <Text color={selected ? colors.text.primary : colors.text.secondary}>{item.label}</Text>
     </Text>
   );
 }
@@ -31,19 +31,17 @@ interface ColorPickerProps extends RowProps {
 }
 
 export function ColorPicker({ currentColor, selected, accent }: ColorPickerProps) {
-  const cursor = pad(selected ? ">" : "", COL_CURSOR);
   return (
     <Text>
-      <Text color={selected ? accent : colors.text.disabled}>{cursor}</Text>
-      <Text color={colors.text.muted}>Accent </Text>
+      <Text color={selected ? accent : colors.text.disabled}>{selected ? "› " : "  "}</Text>
+      <Text color={colors.text.secondary}>Accent  </Text>
       {colorOptions.map((color, idx) => {
         const isCurrent = currentColor === color;
         return (
           <Text key={color}>
-            <Text color={accentColors[color].primary} bold={isCurrent}>
-              {isCurrent ? `[${color}]` : color}
+            <Text color={accentColors[color].primary} inverse={isCurrent}>
+              {isCurrent ? ` ${color} ` : ` ${color} `}
             </Text>
-            {idx < colorOptions.length - 1 && <Text color={colors.text.muted}> </Text>}
           </Text>
         );
       })}
@@ -51,38 +49,56 @@ export function ColorPicker({ currentColor, selected, accent }: ColorPickerProps
   );
 }
 
-interface ModelRowProps extends RowProps {
-  model: string;
-  isCurrent: boolean;
-  maxWidth: number;
+interface NumberRowProps extends RowProps {
+  item: NumberItem;
+  value: number;
+  sliderWidth?: number;
 }
 
-export function ModelRow({ model, isCurrent, selected, accent, maxWidth }: ModelRowProps) {
-  const cursor = pad(selected ? ">" : "", COL_CURSOR);
-  const shortName = model.split("/").pop() || model;
-  const displayName = truncateText(shortName, maxWidth);
+export function NumberRow({ item, value, selected, accent, sliderWidth = 16 }: NumberRowProps) {
+  const label = item.label.padEnd(LABEL_WIDTH + 4);
+  const range = item.max - item.min;
+  const position = Math.round(((value - item.min) / range) * (sliderWidth - 1));
+
+  // Build slider track
+  const before = "─".repeat(position);
+  const after = "─".repeat(sliderWidth - 1 - position);
+  const knob = "●";
+
   return (
     <Text>
-      <Text color={selected ? accent : colors.text.disabled}>{cursor}</Text>
-      <Text color={isCurrent ? accent : colors.text.secondary} bold={isCurrent}>
-        {isCurrent ? `[${displayName}]` : ` ${displayName} `}
-      </Text>
+      <Text color={selected ? accent : colors.text.disabled}>{selected ? "› " : "  "}</Text>
+      <Text color={selected ? colors.text.primary : colors.text.secondary}>{label}</Text>
+      <Text color={selected ? accent : colors.text.primary} bold>{String(value).padStart(2)}</Text>
+      <Text color={colors.text.muted}>  [</Text>
+      <Text color={colors.text.disabled}>{before}</Text>
+      <Text color={selected ? accent : colors.text.primary}>{knob}</Text>
+      <Text color={colors.text.disabled}>{after}</Text>
+      <Text color={colors.text.muted}>]  </Text>
+      <Text color={colors.text.disabled}>({item.min}..{item.max})</Text>
     </Text>
   );
 }
 
-interface NumberRowProps extends RowProps {
-  item: NumberItem;
-  value: number;
+interface ModelSelectorProps extends RowProps {
+  label: string;
+  currentModel: string;
+  maxWidth: number;
 }
 
-export function NumberRow({ item, value, selected, accent }: NumberRowProps) {
-  const cursor = pad(selected ? ">" : "", COL_CURSOR);
+export function ModelSelector({ label, currentModel, selected, accent, maxWidth }: ModelSelectorProps) {
+  const model = currentModel || "";
+  const shortName = model.split("/").pop() || model || "—";
+  const displayName = shortName.length > maxWidth ? shortName.slice(0, maxWidth - 3) + "..." : shortName;
+  const paddedLabel = label.padEnd(LABEL_WIDTH);
+
   return (
     <Text>
-      <Text color={selected ? accent : colors.text.disabled}>{cursor}</Text>
-      <Text color={selected ? accent : colors.text.secondary}>{pad(`← ${value} →`, COL_NUMBER)}</Text>
-      <Text bold={selected} color={selected ? accent : colors.text.primary}>{item.description} ({item.min}–{item.max})</Text>
+      <Text color={selected ? accent : colors.text.disabled}>{selected ? "› " : "  "}</Text>
+      <Text color={selected ? colors.text.primary : colors.text.secondary}>{paddedLabel}</Text>
+      <Text color={colors.text.muted}>[</Text>
+      <Text color={selected ? accent : colors.text.primary}> {displayName} </Text>
+      <Text color={colors.text.muted}>▾]</Text>
     </Text>
   );
 }
