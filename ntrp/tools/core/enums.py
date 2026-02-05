@@ -1,5 +1,3 @@
-"""Enums for tool module."""
-
 from enum import StrEnum
 
 

@@ -3,7 +3,7 @@ from typing import Any
 
 from ntrp.constants import EMBEDDING_TEXT_LIMIT, WEB_SEARCH_MAX_RESULTS
 from ntrp.sources.base import WebSearchSource
-from ntrp.tools.core import Tool, ToolResult
+from ntrp.tools.core.base import Tool, ToolResult
 
 
 class WebSearchTool(Tool):

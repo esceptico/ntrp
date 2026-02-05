@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from ntrp.constants import AGENT_INIT_ITERATIONS
-from ntrp.context import sanitize_history_for_model
+from ntrp.context.compression import sanitize_history_for_model
 from ntrp.core.agent import Agent
 from ntrp.events import (
     CancelledEvent,
@@ -33,7 +33,7 @@ from ntrp.server.routers.gmail import router as gmail_router
 from ntrp.server.routers.session import router as session_router
 from ntrp.server.runtime import get_runtime, get_runtime_async, reset_runtime
 from ntrp.server.state import RunStatus, get_run_registry
-from ntrp.tools.core import ToolContext
+from ntrp.tools.core.context import ToolContext
 
 
 class ChatRequest(BaseModel):

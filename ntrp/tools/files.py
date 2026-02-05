@@ -1,7 +1,7 @@
 import os
 from typing import Any
 
-from ntrp.tools.core import Tool, ToolResult, format_lines_with_pagination
+from ntrp.tools.core.base import Tool, ToolResult, format_lines_with_pagination
 
 
 class ReadFileTool(Tool):

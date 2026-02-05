@@ -2,7 +2,7 @@ from typing import Any
 
 from ntrp.constants import BROWSER_TITLE_TRUNCATE, URL_TRUNCATE
 from ntrp.sources.base import BrowserSource
-from ntrp.tools.core import Tool, ToolResult
+from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.utils import truncate
 

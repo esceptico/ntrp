@@ -1,26 +1,24 @@
 from collections.abc import AsyncGenerator, Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import litellm
 
 from ntrp.constants import SUPPORTED_MODELS
-from ntrp.context import compress_context_async, mask_old_tool_results, should_compress
+from ntrp.context.compression import compress_context_async, mask_old_tool_results, should_compress
 from ntrp.core.parsing import parse_tool_calls, sanitize_assistant_message
 from ntrp.core.spawner import create_spawn_fn
 from ntrp.core.state import AgentState, StateCallback
 from ntrp.core.tool_runner import ToolRunner
 from ntrp.events import SSEEvent, TextEvent, ToolResultEvent
-from ntrp.tools.core import ToolContext
-
-if TYPE_CHECKING:
-    from ntrp.tools.executor import ToolExecutor
+from ntrp.tools.core.context import ToolContext
+from ntrp.tools.executor import ToolExecutor
 
 
 class Agent:
     def __init__(
         self,
         tools: list[dict],
-        tool_executor: "ToolExecutor",
+        tool_executor: ToolExecutor,
         model: str,
         system_prompt: str,
         ctx: ToolContext,

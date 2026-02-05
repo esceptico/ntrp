@@ -4,7 +4,9 @@ from typing import Any
 
 from ntrp.config import Config
 from ntrp.constants import AGENT_DEFAULT_ITERATIONS, AGENT_MAX_DEPTH
-from ntrp.context import SessionData, SessionManager, SessionState, SessionStore
+from ntrp.context.compression import SessionManager
+from ntrp.context.models import SessionData, SessionState
+from ntrp.context.store import SessionStore
 from ntrp.embedder import EmbeddingConfig
 from ntrp.memory.facts import FactMemory
 from ntrp.server.indexer import Indexer

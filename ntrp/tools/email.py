@@ -2,7 +2,7 @@ from typing import Any
 
 from ntrp.constants import EMAIL_FROM_TRUNCATE, EMAIL_SUBJECT_TRUNCATE
 from ntrp.sources.base import EmailSource
-from ntrp.tools.core import Tool, ToolResult
+from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.utils import truncate
 

@@ -3,7 +3,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, TypedDict
 
-from ntrp.context import SessionState
+from ntrp.context.models import SessionState
 from ntrp.events import ApprovalNeededEvent
 
 if TYPE_CHECKING:

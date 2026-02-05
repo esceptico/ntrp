@@ -1,24 +1,19 @@
-"""Chat stream helpers."""
-
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING
 
-from ntrp.context import SessionData, SessionState
+from ntrp.context.models import SessionData, SessionState
 from ntrp.events import SSEEvent
 from ntrp.memory.formatting import format_memory_context
 from ntrp.server.prompts import build_system_prompt
+from ntrp.server.runtime import Runtime
 from ntrp.server.state import RunState
-from ntrp.tools.core import ApprovalResponse
-
-if TYPE_CHECKING:
-    from ntrp.server.runtime import Runtime
+from ntrp.tools.core.context import ApprovalResponse
 
 
 @dataclass
 class ChatContext:
-    runtime: "Runtime"
+    runtime: Runtime
     run: RunState
     session_state: SessionState
     messages: list[dict]
@@ -30,7 +25,7 @@ class ChatContext:
     init_context: str = ""
 
 
-async def resolve_session(runtime: "Runtime") -> SessionData:
+async def resolve_session(runtime: Runtime) -> SessionData:
     data = await runtime.restore_session()
     if not data:
         return SessionData(runtime.create_session(), [])
@@ -38,7 +33,7 @@ async def resolve_session(runtime: "Runtime") -> SessionData:
 
 
 async def prepare_messages(
-    runtime: "Runtime",
+    runtime: Runtime,
     messages: list[dict],
     user_message: str,
     last_activity: datetime | None = None,

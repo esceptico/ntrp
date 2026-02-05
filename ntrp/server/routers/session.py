@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 from ntrp.config import load_user_settings, save_user_settings
 from ntrp.constants import SUPPORTED_MODELS
-from ntrp.context import count_tokens, find_compressible_range
+from ntrp.context.compression import count_tokens, find_compressible_range
 from ntrp.server.runtime import get_runtime
 
 router = APIRouter(tags=["session"])

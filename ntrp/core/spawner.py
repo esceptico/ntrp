@@ -1,16 +1,13 @@
 import asyncio
 from collections.abc import Callable
-from typing import TYPE_CHECKING
 
 from ntrp.constants import SUBAGENT_DEFAULT_ITERATIONS, SUBAGENT_DEFAULT_TIMEOUT
-from ntrp.tools.core import ToolContext
-
-if TYPE_CHECKING:
-    from ntrp.tools.executor import ToolExecutor
+from ntrp.tools.core.context import ToolContext
+from ntrp.tools.executor import ToolExecutor
 
 
 def create_spawn_fn(
-    executor: "ToolExecutor",
+    executor: ToolExecutor,
     model: str,
     max_depth: int,
     current_depth: int,

@@ -1,21 +1,19 @@
 import asyncio
 from collections.abc import AsyncGenerator, Callable
-from typing import TYPE_CHECKING
 
 from ntrp.core.async_queue import AsyncQueue
 from ntrp.core.models import PendingToolCall, ToolExecutionResult
 from ntrp.events import SSEEvent, ToolCallEvent, ToolResultEvent
-from ntrp.tools.core import ToolContext, ToolExecution, ToolResult
+from ntrp.tools.core.base import ToolResult
+from ntrp.tools.core.context import ToolContext, ToolExecution
+from ntrp.tools.executor import ToolExecutor
 from ntrp.utils import ms_now
-
-if TYPE_CHECKING:
-    from ntrp.tools.executor import ToolExecutor
 
 
 class ToolRunner:
     def __init__(
         self,
-        executor: "ToolExecutor",
+        executor: ToolExecutor,
         ctx: ToolContext,
         depth: int,
         parent_id: str | None,

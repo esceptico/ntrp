@@ -1,9 +1,6 @@
-from typing import TYPE_CHECKING
-
+from ntrp.memory.store.base import GraphDatabase
+from ntrp.memory.store.facts import FactRepository
 from ntrp.sources.models import RawItem
-
-if TYPE_CHECKING:
-    from ntrp.memory.store.base import GraphDatabase
 
 
 class MemoryIndexSource:
@@ -11,12 +8,10 @@ class MemoryIndexSource:
 
     name = "memory"
 
-    def __init__(self, db: "GraphDatabase"):
+    def __init__(self, db: GraphDatabase):
         self.db = db
 
     async def scan(self) -> list[RawItem]:
-        from ntrp.memory.store.facts import FactRepository
-
         repo = FactRepository(self.db.conn)
         facts = await repo.list_recent(limit=1000)
 

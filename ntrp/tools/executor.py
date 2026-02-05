@@ -1,5 +1,6 @@
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from ntrp.memory.facts import FactMemory
 from ntrp.sources.base import NotesSource
 from ntrp.tools.ask_choice import AskChoiceTool
 from ntrp.tools.bash import BashTool
@@ -11,8 +12,9 @@ from ntrp.tools.calendar import (
     ListCalendarTool,
     SearchCalendarTool,
 )
-from ntrp.tools.core import ToolContext, ToolExecution, ToolRegistry, ToolResult
-from ntrp.tools.core.base import Tool
+from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.context import ToolContext, ToolExecution
+from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.email import ListEmailTool, ReadEmailTool, SearchEmailTool, SendEmailTool
 from ntrp.tools.explore import ExploreTool
 from ntrp.tools.files import ReadFileTool
@@ -27,9 +29,6 @@ from ntrp.tools.notes import (
     SearchNotesTool,
 )
 from ntrp.tools.web import WebFetchTool, WebSearchTool
-
-if TYPE_CHECKING:
-    from ntrp.memory.facts import FactMemory
 
 # Source-based tools: auto-matched by source_type, instantiated with source
 SOURCE_TOOLS: list[type[Tool]] = [
@@ -68,7 +67,7 @@ class ToolExecutor:
         self,
         sources: dict[str, Any],
         model: str,
-        memory: "FactMemory | None" = None,
+        memory: FactMemory | None = None,
         working_dir: str | None = None,
         search_index: Any | None = None,
     ):

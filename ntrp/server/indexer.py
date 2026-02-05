@@ -4,7 +4,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from ntrp.embedder import EmbeddingConfig
-from ntrp.search import SearchIndex
+from ntrp.search.index import SearchIndex
 from ntrp.sources.base import IndexableSource
 
 

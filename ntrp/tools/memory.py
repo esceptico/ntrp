@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from ntrp.memory.models import FactType
-from ntrp.tools.core import Tool, ToolResult
+from ntrp.tools.core.base import Tool, ToolResult
 
 REMEMBER_DESCRIPTION = """Store a fact in memory for future recall.
 
