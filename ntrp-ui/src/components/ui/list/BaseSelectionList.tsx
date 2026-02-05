@@ -25,6 +25,7 @@ interface BaseSelectionListProps<T> {
   emptyMessage?: string;
   getKey?: (item: T, index: number) => string | number;
   width?: number;
+  indicator?: string;
 }
 
 export function BaseSelectionList<T>({
@@ -38,6 +39,7 @@ export function BaseSelectionList<T>({
   emptyMessage = "No items",
   getKey,
   width,
+  indicator,
 }: BaseSelectionListProps<T>) {
   const contentWidth = useContentWidth();
   const effectiveWidth = width ?? contentWidth;
@@ -85,9 +87,9 @@ export function BaseSelectionList<T>({
         };
 
         return (
-          <Text key={key}>
+          <Box key={key}>
             <Text color={context.colors.indicator}>
-              {isSelected ? `${BULLET} ` : "  "}
+              {isSelected ? `${indicator ?? BULLET} ` : "  "}
             </Text>
             {showNumbers && (
               <Text color={context.colors.indicator}>
@@ -95,7 +97,7 @@ export function BaseSelectionList<T>({
               </Text>
             )}
             {renderItem(item, context)}
-          </Text>
+          </Box>
         );
       })}
 

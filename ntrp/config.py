@@ -71,8 +71,8 @@ class Config(BaseSettings):
     # Exa.ai for web search (optional) - no prefix, standard env var
     exa_api_key: str | None = Field(default=None, alias="EXA_API_KEY")
 
-    # User identity
-    user_id: str = "local"
+    # Scheduling
+    schedule_email: str | None = None
 
     @property
     def db_dir(self) -> Path:

@@ -393,4 +393,35 @@ export async function removeGmailAccount(config: Config, tokenFile: string): Pro
   return response.json();
 }
 
+// --- Schedule API ---
+
+export interface Schedule {
+  task_id: string;
+  description: string;
+  time_of_day: string;
+  recurrence: string;
+  enabled: boolean;
+  created_at: string;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  notify_email: string | null;
+  last_result: string | null;
+}
+
+export async function getSchedules(config: Config): Promise<{ schedules: Schedule[] }> {
+  return api.get<{ schedules: Schedule[] }>(`${config.serverUrl}/schedules`);
+}
+
+export async function toggleSchedule(config: Config, taskId: string): Promise<{ enabled: boolean }> {
+  return api.post<{ enabled: boolean }>(`${config.serverUrl}/schedules/${taskId}/toggle`);
+}
+
+export async function deleteSchedule(config: Config, taskId: string): Promise<{ status: string }> {
+  return api.delete<{ status: string }>(`${config.serverUrl}/schedules/${taskId}`);
+}
+
+export async function getScheduleDetail(config: Config, taskId: string): Promise<Schedule> {
+  return api.get<Schedule>(`${config.serverUrl}/schedules/${taskId}`);
+}
+
 

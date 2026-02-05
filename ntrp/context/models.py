@@ -6,7 +6,6 @@ from datetime import datetime
 class SessionState:
     session_id: str
     started_at: datetime
-    user_id: str
     current_task: str | None = None
     gathered_context: list[dict] = field(default_factory=list)
     pending_actions: list[dict] = field(default_factory=list)

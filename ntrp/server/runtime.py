@@ -9,6 +9,8 @@ from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
 from ntrp.embedder import EmbeddingConfig
 from ntrp.memory.facts import FactMemory
+from ntrp.schedule.scheduler import Scheduler
+from ntrp.schedule.store import ScheduleStore
 from ntrp.server.indexer import Indexer
 from ntrp.sources.browser import BrowserHistorySource
 from ntrp.sources.exa import WebSource
@@ -17,6 +19,7 @@ from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.sources.memory import MemoryIndexSource
 from ntrp.sources.obsidian import ObsidianSource
 from ntrp.tools.executor import ToolExecutor
+from ntrp.tools.schedule import CancelScheduleTool, GetScheduleResultTool, ListSchedulesTool, ScheduleTaskTool
 
 
 class Runtime:
@@ -45,6 +48,8 @@ class Runtime:
         self.browser: BrowserHistorySource | None = self._sources.get("browser")
 
         self.max_depth = AGENT_MAX_DEPTH
+        self.schedule_store: ScheduleStore | None = None
+        self.scheduler: Scheduler | None = None
 
         self._connected = False
 
@@ -73,6 +78,10 @@ class Runtime:
         await self.session_store.connect()
         await self.indexer.connect()
 
+        # Schedule store shares sessions DB connection
+        self.schedule_store = ScheduleStore(self.session_store.conn)
+        await self.schedule_store.init_schema()
+
         if self.config.memory:
             self.memory = await FactMemory.create(
                 db_path=self.config.memory_db_path,
@@ -86,6 +95,17 @@ class Runtime:
             model=self.config.chat_model,
             search_index=self.indexer.index,
         )
+
+        # Register schedule tools
+        default_email = self.config.schedule_email
+        if not default_email and self.gmail:
+            accounts = self.gmail.list_accounts()
+            default_email = accounts[0] if accounts else None
+
+        self.executor.registry.register(ScheduleTaskTool(self.schedule_store, default_email))
+        self.executor.registry.register(ListSchedulesTool(self.schedule_store))
+        self.executor.registry.register(CancelScheduleTool(self.schedule_store))
+        self.executor.registry.register(GetScheduleResultTool(self.schedule_store))
 
         self.tools = self.executor.get_tools()
         self._connected = True
@@ -105,16 +125,15 @@ class Runtime:
             sources.append("memory")
         return sources
 
-    def create_session(self, user_id: str | None = None) -> SessionState:
+    def create_session(self) -> SessionState:
         return SessionState(
             session_id=datetime.now().strftime("%Y%m%d_%H%M%S"),
             started_at=datetime.now(),
-            user_id=user_id or self.config.user_id,
         )
 
-    async def restore_session(self, user_id: str | None = None) -> SessionData | None:
+    async def restore_session(self) -> SessionData | None:
         try:
-            data = await self.session_store.get_latest_session(user_id=user_id or self.config.user_id)
+            data = await self.session_store.get_latest_session()
         except Exception:
             return None
 
@@ -137,6 +156,11 @@ class Runtime:
         except Exception:
             pass
 
+    def start_scheduler(self) -> None:
+        if self.schedule_store:
+            self.scheduler = Scheduler(self, self.schedule_store)
+            self.scheduler.start()
+
     def start_indexing(self) -> None:
         sources = []
         if notes := self._sources.get("notes"):
@@ -149,6 +173,8 @@ class Runtime:
         return await self.indexer.get_status()
 
     async def close(self) -> None:
+        if self.scheduler:
+            await self.scheduler.stop()
         if self.memory:
             await self.memory.close()
         await self.session_store.close()
@@ -166,6 +192,7 @@ async def get_runtime_async() -> Runtime:
             _runtime = Runtime()
             await _runtime.connect()
             _runtime.start_indexing()
+            _runtime.start_scheduler()
     return _runtime
 
 

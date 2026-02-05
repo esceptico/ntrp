@@ -21,6 +21,7 @@ import {
   SettingsDialog,
   ChoiceSelector,
   MemoryViewer,
+  SchedulesViewer,
   ToolChainDisplay,
   Welcome,
   ThinkingIndicator,
@@ -30,7 +31,7 @@ import {
 } from "./components/index.js";
 import { COMMANDS } from "./lib/commands.js";
 
-type ViewMode = "chat" | "memory" | "settings";
+type ViewMode = "chat" | "memory" | "settings" | "schedules";
 
 import type { Settings } from "./hooks/useSettings.js";
 
@@ -290,6 +291,9 @@ function AppContent({
       {/* Overlays - rendered below input */}
       {viewMode === "memory" && (
         <MemoryViewer config={config} onClose={closeView} />
+      )}
+      {viewMode === "schedules" && (
+        <SchedulesViewer config={config} onClose={closeView} />
       )}
       {showSettings && (
         <SettingsDialog

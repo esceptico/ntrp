@@ -17,7 +17,6 @@ def _create_session_state(calling_ctx: ToolContext, isolation: IsolationLevel) -
     child_session_id = f"{calling_ctx.session_id}::{uuid4().hex[:8]}"
     return SessionState(
         session_id=child_session_id,
-        user_id=calling_ctx.session_state.user_id,
         started_at=datetime.now(),
         auto_approve=calling_ctx.session_state.auto_approve,
         yolo=calling_ctx.session_state.yolo,

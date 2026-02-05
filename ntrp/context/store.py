@@ -10,7 +10,6 @@ from ntrp.database import Database
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
     started_at TEXT NOT NULL,
     last_activity TEXT NOT NULL,
     current_task TEXT,
@@ -22,7 +21,6 @@ CREATE TABLE IF NOT EXISTS sessions (
     metadata TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
 """
 
@@ -46,14 +44,13 @@ class SessionStore(SessionDatabase):
         await self.conn.execute(
             """
             INSERT OR REPLACE INTO sessions (
-                session_id, user_id, started_at, last_activity,
+                session_id, started_at, last_activity,
                 current_task, rolling_summary, last_compaction_turn,
                 messages, gathered_context, pending_actions, metadata
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 state.session_id,
-                state.user_id,
                 state.started_at.isoformat(),
                 state.last_activity.isoformat(),
                 state.current_task,
@@ -75,7 +72,6 @@ class SessionStore(SessionDatabase):
         row = rows[0]
         state = SessionState(
             session_id=row["session_id"],
-            user_id=row["user_id"],
             started_at=datetime.fromisoformat(row["started_at"]),
             last_activity=datetime.fromisoformat(row["last_activity"]),
             current_task=row["current_task"],
@@ -88,25 +84,22 @@ class SessionStore(SessionDatabase):
         messages = json.loads(row["messages"]) if row["messages"] else []
         return SessionData(state=state, messages=messages)
 
-    async def get_latest_session(self, user_id: str = "local") -> SessionData | None:
+    async def get_latest_session(self) -> SessionData | None:
         rows = await self.conn.execute_fetchall(
             """SELECT session_id FROM sessions
-               WHERE user_id = ?
                ORDER BY last_activity DESC LIMIT 1""",
-            (user_id,),
         )
         if not rows:
             return None
         return await self.load_session(rows[0]["session_id"])
 
-    async def list_sessions(self, user_id: str = "local", limit: int = 10) -> list[dict]:
+    async def list_sessions(self, limit: int = 10) -> list[dict]:
         rows = await self.conn.execute_fetchall(
             """SELECT session_id, started_at, last_activity, rolling_summary
                FROM sessions
-               WHERE user_id = ?
                ORDER BY last_activity DESC
                LIMIT ?""",
-            (user_id, limit),
+            (limit,),
         )
         return [
             {

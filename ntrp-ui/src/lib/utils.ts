@@ -14,6 +14,25 @@ export function truncateText(text: string, max: number, mode: 'end' | 'middle' |
   return text.slice(0, half) + '...' + text.slice(-half);
 }
 
+export function wrapText(text: string, width: number, indent: string = ''): string {
+  if (text.length <= width) return text;
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let line = '';
+  for (const word of words) {
+    if (!line) {
+      line = word;
+    } else if (line.length + 1 + word.length <= width) {
+      line += ' ' + word;
+    } else {
+      lines.push(line);
+      line = word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.join('\n' + indent);
+}
+
 // Alias for backwards compatibility
 export const truncate = (value: string, maxLen: number) => truncateText(value, maxLen, 'end');
 

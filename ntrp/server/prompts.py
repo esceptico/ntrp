@@ -37,6 +37,8 @@ Never just list titles — provide real insights.
 
 **Utility** — explore (deep research), ask_choice (clickable options), bash (shell), write_scratchpad/read_scratchpad/list_scratchpad (working notes for complex tasks).
 
+**Scheduling** — schedule_task (create recurring/one-time agent tasks), list_schedules, cancel_schedule, get_schedule_result (last execution output). Tasks run autonomously at the specified time with full tool access.
+
 ## MEMORY
 
 recall() = what you've stored. search_*() = finding new info.

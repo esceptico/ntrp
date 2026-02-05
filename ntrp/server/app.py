@@ -28,6 +28,7 @@ from ntrp.server.chat import (
 from ntrp.server.prompts import INIT_INSTRUCTION
 from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
+from ntrp.server.routers.schedule import router as schedule_router
 from ntrp.server.routers.session import router as session_router
 from ntrp.server.runtime import get_runtime, get_runtime_async, reset_runtime
 from ntrp.server.state import RunStatus, get_run_registry
@@ -84,6 +85,7 @@ app.add_middleware(
 
 app.include_router(data_router)
 app.include_router(gmail_router)
+app.include_router(schedule_router)
 app.include_router(session_router)
 
 
