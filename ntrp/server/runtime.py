@@ -41,6 +41,9 @@ class Runtime:
         self.executor: ToolExecutor | None = None
         self.tools: list[dict] = []
 
+        self.gmail: MultiGmailSource | None = self._sources.get("email")
+        self.browser: BrowserHistorySource | None = self._sources.get("browser")
+
         self.max_depth = AGENT_MAX_DEPTH
         self.max_iterations = AGENT_DEFAULT_ITERATIONS
 

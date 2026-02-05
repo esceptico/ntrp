@@ -5,7 +5,7 @@ export { InputArea, MessageDisplay } from "./chat/index.js";
 export { ApprovalDialog, ChoiceSelector, SettingsDialog, type PendingApproval, type ApprovalResult } from "./dialogs/index.js";
 
 // Viewer components
-export { ConfigViewer, ConnectionsViewer, MemoryViewer } from "./viewers/index.js";
+export { MemoryViewer } from "./viewers/index.js";
 
 // Standalone components
 export { Welcome } from "./AsciiArt.js";

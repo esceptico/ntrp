@@ -21,8 +21,6 @@ import {
   SettingsDialog,
   ChoiceSelector,
   MemoryViewer,
-  ConfigViewer,
-  ConnectionsViewer,
   ToolChainDisplay,
   Welcome,
   ThinkingIndicator,
@@ -32,7 +30,7 @@ import {
 } from "./components/index.js";
 import { COMMANDS } from "./lib/commands.js";
 
-type ViewMode = "chat" | "memory" | "config" | "connections" | "settings";
+type ViewMode = "chat" | "memory" | "settings";
 
 import type { Settings } from "./hooks/useSettings.js";
 
@@ -292,15 +290,10 @@ function AppContent({
       {viewMode === "memory" && (
         <MemoryViewer config={config} onClose={closeView} />
       )}
-      {viewMode === "config" && (
-        <ConfigViewer config={config} onClose={closeView} />
-      )}
-      {viewMode === "connections" && (
-        <ConnectionsViewer config={config} onClose={closeView} onStatusMessage={(msg) => addMessage({ role: "status", content: msg })} />
-      )}
       {showSettings && (
         <SettingsDialog
           config={config}
+          serverConfig={serverConfig}
           settings={settings}
           onUpdate={updateSetting}
           onModelChange={(model) => setServerConfig((prev) => prev && { ...prev, chat_model: model })}

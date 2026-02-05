@@ -11,7 +11,7 @@ import {
   startIndexing,
 } from "../api/client.js";
 
-type ViewMode = "chat" | "memory" | "config" | "connections" | "settings";
+type ViewMode = "chat" | "memory" | "settings";
 
 interface CommandContext {
   config: Config;
@@ -49,14 +49,6 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   },
   entities: ({ setViewMode }) => {
     setViewMode("memory");
-    return true;
-  },
-  config: ({ setViewMode }) => {
-    setViewMode("config");
-    return true;
-  },
-  connections: ({ setViewMode }) => {
-    setViewMode("connections");
     return true;
   },
   settings: ({ toggleSettings }) => {

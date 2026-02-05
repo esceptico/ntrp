@@ -34,6 +34,13 @@ SUPPORTED_MODELS: dict[str, dict[str, Any]] = {
     "openrouter/arcee-ai/trinity-large-preview:free": {"tokens": 200000},
 }
 
+# Embedding models (OpenAI): model -> dimension
+EMBEDDING_MODELS: dict[str, int] = {
+    "text-embedding-3-small": 1536,
+    "text-embedding-3-large": 3072,
+    "text-embedding-ada-002": 1536,
+}
+
 
 # --- Agent Limits ---
 

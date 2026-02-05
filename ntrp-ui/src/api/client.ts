@@ -251,6 +251,28 @@ export async function getSupportedModels(config: Config): Promise<{
   return response.json();
 }
 
+export async function getEmbeddingModels(config: Config): Promise<{
+  models: string[];
+  current: string;
+}> {
+  const response = await fetch(`${config.serverUrl}/models/embedding`);
+  if (!response.ok) throw new Error(`Failed: ${response.status}`);
+  return response.json();
+}
+
+export async function updateEmbeddingModel(
+  config: Config,
+  embeddingModel: string
+): Promise<{ status: string; embedding_model?: string; embedding_dim?: number; message?: string }> {
+  const response = await fetch(`${config.serverUrl}/config/embedding`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ embedding_model: embeddingModel }),
+  });
+  if (!response.ok) throw new Error(`Failed: ${response.status}`);
+  return response.json();
+}
+
 export async function compactContext(config: Config): Promise<{ status: string; message: string }> {
   return api.post<{ status: string; message: string }>(`${config.serverUrl}/compact`, {});
 }

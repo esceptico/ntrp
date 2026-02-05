@@ -1,8 +1,9 @@
-export type SectionId = "agent" | "appearance" | "limits";
+export type SectionId = "agent" | "connections" | "appearance" | "limits";
 
-export const SECTION_IDS: SectionId[] = ["agent", "appearance", "limits"];
+export const SECTION_IDS: SectionId[] = ["agent", "connections", "appearance", "limits"];
 export const SECTION_LABELS: Record<SectionId, string> = {
   agent: "Agent",
+  connections: "Connections",
   appearance: "Appearance",
   limits: "Limits",
 };
@@ -32,10 +33,11 @@ export const LIMIT_ITEMS: NumberItem[] = [
   { key: "maxIterations", label: "Iterations", description: "Tool calls per query", min: 1, max: 25 },
 ];
 
-export const COL_CURSOR = 2;
-export const COL_CHECK = 5;
-export const COL_NUMBER = 8;
-
-export function pad(s: string, w: number): string {
-  return s.padEnd(w);
-}
+// Connections section items
+export type ConnectionItem = "vault" | "google" | "browser";
+export const CONNECTION_ITEMS: ConnectionItem[] = ["vault", "google", "browser"];
+export const CONNECTION_LABELS: Record<ConnectionItem, string> = {
+  vault: "Vault",
+  google: "Google",
+  browser: "Browser",
+};

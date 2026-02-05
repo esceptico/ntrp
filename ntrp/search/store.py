@@ -298,6 +298,13 @@ class SearchStore:
         rows = await self.conn.execute_fetchall("SELECT source, COUNT(*) as cnt FROM items GROUP BY source")
         return {row["source"]: row["cnt"] for row in rows}
 
+    async def clear_all(self) -> int:
+        if self._has_vec:
+            await self.conn.execute("DELETE FROM items_vec")
+        cursor = await self.conn.execute("DELETE FROM items")
+        await self.conn.commit()
+        return cursor.rowcount
+
     async def vector_search(
         self,
         query_embedding: bytes,

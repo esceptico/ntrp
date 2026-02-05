@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from ntrp.config import load_user_settings, save_user_settings
-from ntrp.constants import SUPPORTED_MODELS
+from ntrp.constants import EMBEDDING_MODELS, SUPPORTED_MODELS
 from ntrp.context.compression import count_tokens, find_compressible_range
 from ntrp.server.runtime import get_runtime
 
@@ -140,6 +140,51 @@ async def update_models(req: UpdateModelsRequest):
     return {
         "chat_model": runtime.config.chat_model,
         "memory_model": runtime.config.memory_model,
+    }
+
+
+class UpdateEmbeddingRequest(BaseModel):
+    embedding_model: str
+
+
+@router.get("/models/embedding")
+async def list_embedding_models():
+    runtime = get_runtime()
+    return {
+        "models": list(EMBEDDING_MODELS.keys()),
+        "current": runtime.config.embedding_model,
+    }
+
+
+@router.post("/config/embedding")
+async def update_embedding_model(req: UpdateEmbeddingRequest):
+    runtime = get_runtime()
+
+    if req.embedding_model not in EMBEDDING_MODELS:
+        return {"status": "error", "message": f"Unknown model: {req.embedding_model}"}
+
+    if req.embedding_model == runtime.config.embedding_model:
+        return {"status": "unchanged", "embedding_model": req.embedding_model}
+
+    # Update config
+    new_dim = EMBEDDING_MODELS[req.embedding_model]
+    runtime.config.embedding_model = req.embedding_model
+    runtime.config.embedding_dim = new_dim
+
+    # Persist to user settings
+    settings = load_user_settings()
+    settings["embedding_model"] = req.embedding_model
+    settings["embedding_dim"] = new_dim
+    save_user_settings(settings)
+
+    # Clear search index and re-index
+    await runtime.indexer.index.clear()
+    runtime.start_indexing()
+
+    return {
+        "status": "reindexing",
+        "embedding_model": req.embedding_model,
+        "embedding_dim": new_dim,
     }
 
 

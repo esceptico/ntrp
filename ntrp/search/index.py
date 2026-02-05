@@ -142,3 +142,6 @@ class SearchIndex:
 
     async def clear_source(self, source: str) -> int:
         return await self.store.clear_source(source)
+
+    async def clear(self) -> int:
+        return await self.store.clear_all()
