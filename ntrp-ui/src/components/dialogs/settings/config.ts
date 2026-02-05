@@ -30,7 +30,6 @@ export const APPEARANCE_ITEMS: BooleanItem[] = [
 // Limits section
 export const LIMIT_ITEMS: NumberItem[] = [
   { key: "maxDepth", label: "Subagent depth", description: "Maximum nesting level", min: 1, max: 16 },
-  { key: "maxIterations", label: "Iterations", description: "Tool calls per query", min: 1, max: 25 },
 ];
 
 // Connections section items

@@ -124,7 +124,7 @@ class Agent:
         )
 
     async def stream(
-        self, task: str, max_iterations: int = 10, history: list[dict] | None = None
+        self, task: str, history: list[dict] | None = None
     ) -> AsyncGenerator[SSEEvent | str]:
         if self.current_depth >= self.max_depth:
             yield f"Max depth ({self.max_depth}) reached."
@@ -133,7 +133,7 @@ class Agent:
         self._init_messages(task, history)
         runner = self._create_tool_runner()
 
-        for _ in range(max_iterations):
+        while True:
             if self._is_cancelled():
                 await self._set_state(AgentState.IDLE)
                 yield "Cancelled."
@@ -183,12 +183,9 @@ class Agent:
 
             self._append_tool_results(message.tool_calls, results)
 
-        await self._set_state(AgentState.IDLE)
-        yield ""
-
-    async def run(self, task: str, max_iterations: int = 10, history: list[dict] | None = None) -> str:
+    async def run(self, task: str, history: list[dict] | None = None) -> str:
         result = ""
-        async for item in self.stream(task, max_iterations, history):
+        async for item in self.stream(task, history):
             if isinstance(item, str):
                 result = item
             elif isinstance(item, TextEvent):

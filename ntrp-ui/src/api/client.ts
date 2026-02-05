@@ -195,7 +195,6 @@ export interface ServerConfig {
   has_browser: boolean;
   has_gmail: boolean;
   max_depth: number;
-  max_iterations: number;
   memory_enabled: boolean;
 }
 
@@ -237,8 +236,8 @@ export async function getServerConfig(config: Config): Promise<ServerConfig> {
 
 export async function updateConfig(
   config: Config,
-  patch: { chat_model?: string; max_depth?: number; max_iterations?: number }
-): Promise<{ chat_model: string; max_depth: number; max_iterations: number }> {
+  patch: { chat_model?: string; max_depth?: number }
+): Promise<{ chat_model: string; max_depth: number }> {
   const response = await fetch(`${config.serverUrl}/config`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

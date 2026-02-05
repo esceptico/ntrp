@@ -9,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ntrp.constants import AGENT_INIT_ITERATIONS
 from ntrp.context.compression import sanitize_history_for_model
 from ntrp.core.agent import Agent
 from ntrp.events import (
@@ -192,10 +191,9 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 cancel_check=lambda: run.cancelled,
             )
 
-            max_iters = AGENT_INIT_ITERATIONS if is_init else runtime.max_iterations
             result: str | None = None
 
-            async for sse in _run_agent_loop(ctx, agent, user_message, max_iters):
+            async for sse in _run_agent_loop(ctx, agent, user_message):
                 if isinstance(sse, dict) and "_result" in sse:
                     result = sse["_result"]
                 else:
@@ -232,7 +230,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     )
 
 
-async def _run_agent_loop(ctx: ChatContext, agent, user_message: str, max_iterations: int):
+async def _run_agent_loop(ctx: ChatContext, agent, user_message: str):
     """Run agent and yield SSE strings. Yields dict with result at end.
 
     Uses a merged event stream pattern:
@@ -275,7 +273,7 @@ async def _run_agent_loop(ctx: ChatContext, agent, user_message: str, max_iterat
         """Run agent and push events to merged queue."""
         nonlocal result, error
         try:
-            async for item in agent.stream(user_message, max_iterations=max_iterations, history=history):
+            async for item in agent.stream(user_message, history=history):
                 if isinstance(item, str):
                     result = item
                 elif isinstance(item, SSEEvent):

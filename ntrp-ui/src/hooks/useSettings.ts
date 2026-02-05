@@ -13,7 +13,6 @@ export interface UiSettings {
 
 export interface AgentSettings {
   maxDepth: number;
-  maxIterations: number;
 }
 
 export interface Settings {
@@ -28,7 +27,6 @@ const defaultSettings: Settings = {
   },
   agent: {
     maxDepth: 8,
-    maxIterations: 10,
   },
 };
 
@@ -99,7 +97,6 @@ export function useSettings(config: Config) {
   useEffect(() => {
     updateConfig(config, {
       max_depth: settings.agent.maxDepth,
-      max_iterations: settings.agent.maxIterations,
     }).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -115,8 +112,7 @@ export function useSettings(config: Config) {
         if (category === "agent") {
           const agentPatch: Record<string, unknown> = {};
           if (key === "maxDepth") agentPatch.max_depth = value;
-          if (key === "maxIterations") agentPatch.max_iterations = value;
-          updateConfig(config, agentPatch as { max_depth?: number; max_iterations?: number }).catch(() => {});
+          updateConfig(config, agentPatch as { max_depth?: number }).catch(() => {});
         }
 
         return updated;

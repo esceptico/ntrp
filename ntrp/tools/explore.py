@@ -1,4 +1,4 @@
-from ntrp.constants import EXPLORE_ITERATIONS, EXPLORE_TIMEOUT
+from ntrp.constants import EXPLORE_TIMEOUT
 from ntrp.core.prompts import EXPLORE_PROMPT
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
@@ -40,7 +40,6 @@ class ExploreTool(Tool):
             task=task,
             system_prompt=EXPLORE_PROMPT,
             tools=tools,
-            max_iterations=EXPLORE_ITERATIONS,
             timeout=EXPLORE_TIMEOUT,
             parent_id=execution.tool_id,
         )

@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import Callable
 
-from ntrp.constants import SUBAGENT_DEFAULT_ITERATIONS, SUBAGENT_DEFAULT_TIMEOUT
+from ntrp.constants import SUBAGENT_DEFAULT_TIMEOUT
 from ntrp.tools.core.context import ToolContext
 from ntrp.tools.executor import ToolExecutor
 
@@ -19,7 +19,6 @@ def create_spawn_fn(
         *,
         system_prompt: str,
         tools: list[dict] | None = None,
-        max_iterations: int = SUBAGENT_DEFAULT_ITERATIONS,
         timeout: int = SUBAGENT_DEFAULT_TIMEOUT,
         model_override: str | None = None,
         parent_id: str | None = None,
@@ -50,7 +49,7 @@ def create_spawn_fn(
 
         try:
             return await asyncio.wait_for(
-                sub_agent.run(task, max_iterations=max_iterations),
+                sub_agent.run(task),
                 timeout=timeout,
             )
         except TimeoutError:

@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from ntrp.config import Config, get_config
-from ntrp.constants import AGENT_DEFAULT_ITERATIONS, AGENT_MAX_DEPTH
+from ntrp.constants import AGENT_MAX_DEPTH
 from ntrp.context.compression import SessionManager
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
@@ -45,7 +45,6 @@ class Runtime:
         self.browser: BrowserHistorySource | None = self._sources.get("browser")
 
         self.max_depth = AGENT_MAX_DEPTH
-        self.max_iterations = AGENT_DEFAULT_ITERATIONS
 
         self._connected = False
 

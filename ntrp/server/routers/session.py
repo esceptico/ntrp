@@ -24,7 +24,6 @@ class UpdateConfigRequest(BaseModel):
     chat_model: str | None = None
     memory_model: str | None = None
     max_depth: int | None = None
-    max_iterations: int | None = None
 
 
 @router.get("/session")
@@ -82,7 +81,6 @@ async def get_config():
         "has_browser": runtime.browser is not None,
         "has_gmail": runtime.gmail is not None,
         "max_depth": runtime.max_depth,
-        "max_iterations": runtime.max_iterations,
         "memory_enabled": runtime.memory is not None,
     }
 
@@ -112,14 +110,11 @@ async def update_config(req: UpdateConfigRequest):
         save_user_settings(settings)
     if req.max_depth is not None:
         runtime.max_depth = req.max_depth
-    if req.max_iterations is not None:
-        runtime.max_iterations = req.max_iterations
 
     return {
         "chat_model": runtime.config.chat_model,
         "memory_model": runtime.config.memory_model,
         "max_depth": runtime.max_depth,
-        "max_iterations": runtime.max_iterations,
     }
 
 
