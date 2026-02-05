@@ -11,9 +11,7 @@ def _scratchpad_path(session_id: str, key: str) -> Path:
     return SCRATCHPAD_BASE / session_id / "scratch" / f"{key}.md"
 
 
-class WriteScratchpadTool(Tool):
-    name = "write_scratchpad"
-    description = """Save working notes for this session.
+_WRITE_SCRATCHPAD_DESCRIPTION = """Save working notes for this session.
 
 USE FOR:
 - Plans and task tracking during complex operations
@@ -25,6 +23,17 @@ PARAMETERS:
 - key: Namespace for the note (default: "default")
 
 Multiple keys let you organize different types of notes."""
+
+_READ_SCRATCHPAD_DESCRIPTION = """Read previously saved working notes.
+
+PARAMETERS:
+- key: Namespace to read from (default: "default")
+
+Returns empty if no note exists for the key."""
+
+class WriteScratchpadTool(Tool):
+    name = "write_scratchpad"
+    description = _WRITE_SCRATCHPAD_DESCRIPTION
 
     @property
     def schema(self) -> dict:
@@ -62,12 +71,7 @@ Multiple keys let you organize different types of notes."""
 
 class ReadScratchpadTool(Tool):
     name = "read_scratchpad"
-    description = """Read previously saved working notes.
-
-PARAMETERS:
-- key: Namespace to read from (default: "default")
-
-Returns empty if no note exists for the key."""
+    description = _READ_SCRATCHPAD_DESCRIPTION
 
     @property
     def schema(self) -> dict:
