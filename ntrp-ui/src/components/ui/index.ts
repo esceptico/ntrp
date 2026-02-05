@@ -12,7 +12,7 @@ export { ExpandableText, getTextMaxScroll } from "./ExpandableText.js";
 export { Panel, SplitView, MaxSizedBox, Section, Divider, Footer, DetailPane } from "./layout/index.js";
 
 // List components
-export { ListItem, SelectableItem, ScrollableList, BaseSelectionList, type RenderItemContext } from "./list/index.js";
+export { ListItem, SelectableItem, MenuItem, ScrollableList, BaseSelectionList, type RenderItemContext } from "./list/index.js";
 
 // Status components
 export { StatusIndicator, Badge, Loading, ErrorDisplay } from "./Status.js";
@@ -20,3 +20,7 @@ export { StatusIndicator, Badge, Loading, ErrorDisplay } from "./Status.js";
 // Interactive components
 export { KeyValue } from "./KeyValue.js";
 export { Tabs } from "./Tabs.js";
+export { SelectionIndicator } from "./SelectionIndicator.js";
+
+// Input components
+export { TextInputField } from "./input/index.js";

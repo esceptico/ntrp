@@ -35,6 +35,7 @@ class RunState:
     completion_tokens: int = 0
     pending_tools: list[PendingToolCall] = field(default_factory=list)
     event_queue: asyncio.Queue | None = None
+    choice_queue: asyncio.Queue | None = None
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
     cancelled: bool = False
@@ -61,6 +62,7 @@ class RunRegistry:
         run_id = str(uuid4())[:8]
         run = RunState(run_id=run_id, session_id=session_id)
         run.event_queue = asyncio.Queue()
+        run.choice_queue = asyncio.Queue()
         self._runs[run_id] = run
         self._session_runs[session_id] = run_id
         return run

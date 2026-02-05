@@ -5,6 +5,17 @@
 // --- Icons ---
 export const BULLET = "⏺";
 
+// --- UI Indicators ---
+export const INDICATOR_SELECTED = "› ";
+export const INDICATOR_UNSELECTED = "  ";
+export const CURSOR_CHAR = "█";
+export const CHECKBOX_CHECKED = "[•] ";
+export const CHECKBOX_UNCHECKED = "[ ] ";
+
+// --- Layout ---
+export const TERMINAL_PADDING = 4;
+export const DIALOG_PADDING = 8;
+
 // --- Message Limits ---
 export const MAX_MESSAGES = 200;
 export const MAX_TOOL_MESSAGE_CHARS = 4000;

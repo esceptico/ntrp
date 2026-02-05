@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { Box, Text } from "ink";
-import { colors, brand } from "../../ui/colors.js";
+import { colors, brand, SelectionIndicator } from "../../ui/index.js";
 import { useKeypress, type Key } from "../../../hooks/index.js";
 
 interface ModelDropdownProps {
@@ -122,9 +122,7 @@ export function ModelDropdown({
 
           return (
             <Text key={model}>
-              <Text color={isSelected ? brand.primary : colors.text.disabled}>
-                {isSelected ? "› " : "  "}
-              </Text>
+              <SelectionIndicator selected={isSelected} accent={brand.primary} />
               <Text
                 color={isCurrent ? brand.primary : isSelected ? colors.text.primary : colors.text.secondary}
                 bold={isCurrent}

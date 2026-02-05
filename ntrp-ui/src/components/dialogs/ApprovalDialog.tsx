@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import { Box, Text } from "ink";
 import { brand, colors } from "../ui/colors.js";
 import { useDimensions } from "../../contexts/index.js";
-import { truncateText } from "../ui/index.js";
+import { truncateText, SelectionIndicator, TextInputField } from "../ui/index.js";
 import { useKeypress, type Key } from "../../hooks/index.js";
 import type { PendingApproval, ApprovalResult } from "../../types.js";
 import { DiffView } from "./DiffView.js";
@@ -14,9 +14,10 @@ const ALWAYS_TEXT = "Yes, and don't ask again for this project";
 interface ApprovalDialogProps {
   approval: PendingApproval;
   onResult: (result: ApprovalResult, feedback?: string) => void;
+  isActive?: boolean;
 }
 
-export function ApprovalDialog({ approval, onResult }: ApprovalDialogProps) {
+export function ApprovalDialog({ approval, onResult, isActive = true }: ApprovalDialogProps) {
   const { width: terminalWidth } = useDimensions();
   const [selectedIndex, setSelectedIndex] = useState(2);
   const [customReason, setCustomReason] = useState("");
@@ -101,7 +102,7 @@ export function ApprovalDialog({ approval, onResult }: ApprovalDialogProps) {
     [isOnCustomOption, customReason, cursorPos, selectedIndex, onResult]
   );
 
-  useKeypress(handleKeypress, { isActive: true });
+  useKeypress(handleKeypress, { isActive });
 
   const hasDiff = approval.diff && approval.diff.length > 0;
 
@@ -130,42 +131,30 @@ export function ApprovalDialog({ approval, onResult }: ApprovalDialogProps) {
 
       <Box flexDirection="column" marginLeft={3}>
         <Text>
-          <Text color={selectedIndex === 0 ? brand.primary : colors.text.disabled}>
-            {selectedIndex === 0 ? "❯ " : "  "}
-          </Text>
+          <SelectionIndicator selected={selectedIndex === 0} accent={brand.primary} />
           <Text color={selectedIndex === 0 ? colors.text.primary : colors.text.secondary}>
             1. Yes
           </Text>
         </Text>
 
         <Text>
-          <Text color={selectedIndex === 1 ? brand.primary : colors.text.disabled}>
-            {selectedIndex === 1 ? "❯ " : "  "}
-          </Text>
+          <SelectionIndicator selected={selectedIndex === 1} accent={brand.primary} />
           <Text color={selectedIndex === 1 ? colors.text.primary : colors.text.secondary}>
             2. {alwaysTextTruncated}
           </Text>
         </Text>
 
         <Text>
-          <Text color={isOnCustomOption ? brand.primary : colors.text.disabled}>
-            {isOnCustomOption ? "❯ " : "  "}
-          </Text>
+          <SelectionIndicator selected={isOnCustomOption} accent={brand.primary} />
           <Text color={isOnCustomOption ? colors.text.primary : colors.text.secondary}>
             3.{" "}
           </Text>
-          {customReason ? (
-            <Text>
-              {customReason.slice(0, cursorPos)}
-              {isOnCustomOption && "█"}
-              {customReason.slice(cursorPos)}
-            </Text>
-          ) : (
-            <Text color={colors.text.muted}>
-              {customPlaceholder}
-              {isOnCustomOption && "█"}
-            </Text>
-          )}
+          <TextInputField
+            value={customReason}
+            cursorPos={cursorPos}
+            placeholder={customPlaceholder}
+            showCursor={isOnCustomOption}
+          />
         </Text>
       </Box>
 

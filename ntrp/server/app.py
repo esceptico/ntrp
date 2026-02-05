@@ -53,6 +53,12 @@ class CancelRequest(BaseModel):
     run_id: str
 
 
+class ChoiceResultRequest(BaseModel):
+    run_id: str
+    tool_id: str
+    selected: list[str]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown logic."""
@@ -149,6 +155,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             is_init=is_init,
         )
         run.event_queue = ctx.client_responses
+        run.choice_queue = ctx.choice_responses
 
         extra_auto_approve = {"remember", "forget", "reflect", "merge"} if is_init else set()
         session_state.yolo = request.yolo
@@ -157,6 +164,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             executor=runtime.executor,
             emit=ctx.event_bus.put,
             approval_queue=ctx.client_responses,
+            choice_queue=ctx.choice_responses,
             extra_auto_approve=extra_auto_approve,
         )
 
@@ -363,6 +371,22 @@ async def submit_tool_result(request: ToolResultRequest):
                 "approved": request.approved,
             }
         )
+    else:
+        raise HTTPException(status_code=400, detail="No active stream for this run")
+
+    return {"status": "ok"}
+
+
+@app.post("/tools/choice")
+async def submit_choice_result(request: ChoiceResultRequest):
+    registry = get_run_registry()
+    run = registry.get_run(request.run_id)
+
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    if run.choice_queue:
+        await run.choice_queue.put({"selected": request.selected})
     else:
         raise HTTPException(status_code=400, detail="No active stream for this run")
 

@@ -4,7 +4,7 @@
 import { useState, useCallback, useRef } from "react";
 import type { Message, ServerEvent, Config, PendingApproval } from "../types.js";
 import type { ToolChainItem } from "../components/index.js";
-import { streamChat, submitToolResult, cancelRun } from "../api/client.js";
+import { streamChat, submitToolResult, submitChoiceResult, cancelRun } from "../api/client.js";
 import {
   MAX_MESSAGES,
   MAX_TOOL_MESSAGE_CHARS,
@@ -138,9 +138,10 @@ export function useStreaming({
     const duration = startTime ? Math.round((Date.now() - startTime) / 1000) : undefined;
     toolStartRef.current.delete(event.tool_id);
 
-    // Skip ask_choice results - choice UI handles interaction
+    // ask_choice results are handled silently - user already saw selection status
     if (event.name === "ask_choice") {
       setToolChain((prev) => prev.filter((item) => item.id !== event.tool_id));
+      setStatus("thinking...");
       return;
     }
 
@@ -318,32 +319,35 @@ export function useStreaming({
     setStatus("thinking...");
   }, [pendingApproval, config, addMessage]);
 
-  // Handle choice selection - send as next message
-  const handleChoice = useCallback((selected: string[]) => {
-    if (!pendingChoice) return;
+  // Handle choice selection - submit to server
+  const handleChoice = useCallback(async (selected: string[]) => {
+    const currentRunId = runIdRef.current;
+    if (!pendingChoice || !currentRunId) return;
 
-    // Find the labels for the selected options
-    // If not found, it's custom text - use the value directly
+    // Find the labels for the selected options for status message
     const labels = selected.map((id) => {
       const opt = pendingChoice.options.find((o) => o.id === id);
-      return opt?.label ?? id; // Use id directly if not found (custom text)
+      return opt?.label ?? id;
     });
 
-    // Clear the pending choice
-    setPendingChoice(null);
-    setStatus("");
+    await submitChoiceResult(currentRunId, pendingChoice.toolId, selected, config);
+    addMessage({ role: "status", content: `Selected: ${labels.join(", ")}` });
 
-    // Send selection as the next message
-    const message = labels.length === 1 ? labels[0] : labels.join(", ");
-    sendMessage(message);
-  }, [pendingChoice, sendMessage]);
+    setPendingChoice(null);
+    setStatus("thinking...");
+  }, [pendingChoice, config, addMessage]);
 
   // Cancel pending choice
-  const cancelChoice = useCallback(() => {
-    setPendingChoice(null);
-    setStatus("");
+  const cancelChoice = useCallback(async () => {
+    const currentRunId = runIdRef.current;
+    if (!pendingChoice || !currentRunId) return;
+
+    await submitChoiceResult(currentRunId, pendingChoice.toolId, [], config);
     addMessage({ role: "status", content: "Choice cancelled" });
-  }, [addMessage]);
+
+    setPendingChoice(null);
+    setStatus("thinking...");
+  }, [pendingChoice, config, addMessage]);
 
   // Cancel the current run
   const cancel = useCallback(async () => {

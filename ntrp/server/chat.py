@@ -8,7 +8,7 @@ from ntrp.memory.formatting import format_memory_context
 from ntrp.server.prompts import build_system_prompt
 from ntrp.server.runtime import Runtime
 from ntrp.server.state import RunState
-from ntrp.tools.core.context import ApprovalResponse
+from ntrp.tools.core.context import ApprovalResponse, ChoiceResponse
 
 
 @dataclass
@@ -22,6 +22,7 @@ class ChatContext:
 
     event_bus: asyncio.Queue[SSEEvent] = field(default_factory=asyncio.Queue)
     client_responses: asyncio.Queue[ApprovalResponse] = field(default_factory=asyncio.Queue)
+    choice_responses: asyncio.Queue[ChoiceResponse] = field(default_factory=asyncio.Queue)
     init_context: str = ""
 
 

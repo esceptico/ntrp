@@ -17,9 +17,10 @@ import {
   type GmailAccount,
 } from "../../../api/client.js";
 import { SectionId, SECTION_IDS, SECTION_LABELS, APPEARANCE_ITEMS, LIMIT_ITEMS, CONNECTION_ITEMS, type ConnectionItem } from "./config.js";
-import { BooleanRow, ColorPicker, NumberRow, ModelSelector, colorOptions } from "./SettingsRows.js";
+import { colorOptions } from "./SettingsRows.js";
 import { ModelDropdown } from "./ModelDropdown.js";
 import { ConnectionsSection } from "./ConnectionsSection.js";
+import { AgentSection, AppearanceSection, LimitsSection } from "./sections/index.js";
 
 function useAccent(accentColor: AccentColor) {
   return useMemo(() => accentColors[accentColor].primary, [accentColor]);
@@ -32,7 +33,7 @@ interface SettingsDialogProps {
   serverConfig: ServerConfig | null;
   settings: Settings;
   onUpdate: (category: keyof Settings, key: string, value: unknown) => void;
-  onModelChange: (model: string) => void;
+  onModelChange: (type: "chat" | "memory", model: string) => void;
   onClose: () => void;
   onStatusMessage?: (msg: string) => void;
 }
@@ -110,7 +111,7 @@ export function SettingsDialog({
       if (modelType === "chat") {
         if (modelName === chatModel) return;
         setChatModel(modelName);
-        onModelChange(modelName);
+        onModelChange("chat", modelName);
         setModelUpdating(true);
         updateModels(config, { chat_model: modelName })
           .catch(() => {})
@@ -118,6 +119,7 @@ export function SettingsDialog({
       } else {
         if (modelName === memoryModel) return;
         setMemoryModel(modelName);
+        onModelChange("memory", modelName);
         setModelUpdating(true);
         updateModels(config, { memory_model: modelName })
           .catch(() => {})
@@ -383,36 +385,14 @@ export function SettingsDialog({
         {/* Detail pane */}
         <Box flexDirection="column" width={detailWidth} minHeight={contentHeight}>
           {activeSection === "agent" && (
-            <Box flexDirection="column">
-              <ModelSelector
-                label="Agent"
-                currentModel={chatModel}
-                selected={agentIndex === 0}
-                accent={accent}
-                maxWidth={modelNameWidth}
-              />
-              <ModelSelector
-                label="Memory"
-                currentModel={memoryModel}
-                selected={agentIndex === 1}
-                accent={accent}
-                maxWidth={modelNameWidth}
-              />
-              <ModelSelector
-                label="Embedding"
-                currentModel={embeddingModel}
-                selected={agentIndex === 2}
-                accent={accent}
-                maxWidth={modelNameWidth}
-              />
-              <Box marginTop={1}>
-                <Text color={colors.text.disabled}>
-                  Agent: reasoning + tools{"\n"}
-                  Memory: extraction + recall{"\n"}
-                  Embedding: search vectors
-                </Text>
-              </Box>
-            </Box>
+            <AgentSection
+              chatModel={chatModel}
+              memoryModel={memoryModel}
+              embeddingModel={embeddingModel}
+              selectedIndex={agentIndex}
+              accent={accent}
+              modelNameWidth={modelNameWidth}
+            />
           )}
 
           {activeSection === "connections" && (
@@ -427,38 +407,19 @@ export function SettingsDialog({
           )}
 
           {activeSection === "appearance" && (
-            <Box flexDirection="column">
-              {APPEARANCE_ITEMS.map((item, index) => (
-                <BooleanRow
-                  key={item.key}
-                  item={item}
-                  value={settings.ui[item.key as keyof typeof settings.ui] as boolean}
-                  selected={index === appearanceIndex}
-                  accent={accent}
-                />
-              ))}
-              <Box marginTop={1}>
-                <ColorPicker
-                  currentColor={settings.ui.accentColor}
-                  selected={isColorItem}
-                  accent={accent}
-                />
-              </Box>
-            </Box>
+            <AppearanceSection
+              settings={settings.ui}
+              selectedIndex={appearanceIndex}
+              accent={accent}
+            />
           )}
 
           {activeSection === "limits" && (
-            <Box flexDirection="column">
-              {LIMIT_ITEMS.map((item, idx) => (
-                <NumberRow
-                  key={item.key}
-                  item={item}
-                  value={settings.agent[item.key as keyof typeof settings.agent] as number}
-                  selected={idx === limitsIndex}
-                  accent={accent}
-                />
-              ))}
-            </Box>
+            <LimitsSection
+              settings={settings.agent}
+              selectedIndex={limitsIndex}
+              accent={accent}
+            />
           )}
         </Box>
       </Box>

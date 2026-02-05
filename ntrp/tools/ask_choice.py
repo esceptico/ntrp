@@ -1,6 +1,5 @@
 from typing import Any
 
-from ntrp.events import ChoiceEvent
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
@@ -60,15 +59,16 @@ class AskChoiceTool(Tool):
             if not isinstance(opt, dict) or "id" not in opt or "label" not in opt:
                 return ToolResult("Error: each option must have 'id' and 'label'", "Invalid options")
 
-        # Emit choice event to UI
-        if execution.ctx.emit:
-            await execution.ctx.emit(
-                ChoiceEvent(
-                    question=question,
-                    options=options,
-                    allow_multiple=allow_multiple,
-                    tool_id=execution.tool_id,
-                )
-            )
+        # Ask user and wait for response
+        selected = await execution.ask_choice(question, options, allow_multiple)
 
-        return ToolResult("", "Asking")
+        if not selected:
+            return ToolResult("User cancelled or no selection made", "Cancelled")
+
+        # Return selected labels for agent context
+        labels = []
+        for sel_id in selected:
+            opt = next((o for o in options if o["id"] == sel_id), None)
+            labels.append(opt["label"] if opt else sel_id)
+
+        return ToolResult(", ".join(labels), f"Selected: {', '.join(labels)}")

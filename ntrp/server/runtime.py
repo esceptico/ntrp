@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 from typing import Any
 
-from ntrp.config import Config
+from ntrp.config import Config, get_config
 from ntrp.constants import AGENT_DEFAULT_ITERATIONS, AGENT_MAX_DEPTH
 from ntrp.context.compression import SessionManager
 from ntrp.context.models import SessionData, SessionState
@@ -21,7 +21,7 @@ from ntrp.tools.executor import ToolExecutor
 
 class Runtime:
     def __init__(self, config: Config | None = None):
-        self.config = config or Config()
+        self.config = config or get_config()
 
         self._source_errors: dict[str, str] = {}
         self._sources: dict[str, Any] = {}

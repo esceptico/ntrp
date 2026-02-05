@@ -108,6 +108,26 @@ export async function submitToolResult(
 }
 
 /**
+ * Submit a choice selection back to the server.
+ */
+export async function submitChoiceResult(
+  runId: string,
+  toolId: string,
+  selected: string[],
+  config: Config
+): Promise<void> {
+  const response = await fetch(`${config.serverUrl}/tools/choice`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ run_id: runId, tool_id: toolId, selected }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to submit choice result: ${response.status}`);
+  }
+}
+
+/**
  * Get or create a session.
  */
 export async function getSession(config: Config): Promise<{

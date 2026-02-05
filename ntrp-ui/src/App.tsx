@@ -245,7 +245,7 @@ function AppContent({
         </Box>
       )}
 
-      {/* Approval dialog */}
+      {/* Approval dialog - takes priority over choice */}
       {pendingApproval && (
         <ApprovalDialog
           approval={pendingApproval}
@@ -253,7 +253,7 @@ function AppContent({
         />
       )}
 
-      {/* Choice selector */}
+      {/* Choice selector - waits if approval is pending */}
       {pendingChoice && (
         <ChoiceSelector
           question={pendingChoice.question}
@@ -261,6 +261,7 @@ function AppContent({
           allowMultiple={pendingChoice.allowMultiple}
           onSelect={handleChoice}
           onCancel={cancelChoice}
+          isActive={!pendingApproval}
         />
       )}
 
@@ -296,7 +297,7 @@ function AppContent({
           serverConfig={serverConfig}
           settings={settings}
           onUpdate={updateSetting}
-          onModelChange={(model) => setServerConfig((prev) => prev && { ...prev, chat_model: model })}
+          onModelChange={(type: "chat" | "memory", model: string) => setServerConfig((prev) => prev && { ...prev, [`${type}_model`]: model })}
           onClose={closeSettings}
         />
       )}

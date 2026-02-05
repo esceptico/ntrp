@@ -1,7 +1,7 @@
 import { Box, Text } from "ink";
-import { colors, brand, truncateText } from "../../ui/index.js";
+import { colors, truncateText, SelectionIndicator } from "../../ui/index.js";
 import type { ServerConfig, GmailAccount } from "../../../api/client.js";
-import { CONNECTION_ITEMS, CONNECTION_LABELS, type ConnectionItem } from "./config.js";
+import { CONNECTION_LABELS, type ConnectionItem } from "./config.js";
 
 interface ConnectionsSectionProps {
   serverConfig: ServerConfig | null;
@@ -59,9 +59,7 @@ export function ConnectionsSection({
             const email = account.email || account.token_file;
             return (
               <Text key={account.token_file}>
-                <Text color={isSelected ? accent : colors.text.disabled}>
-                  {isSelected ? "› " : "  "}
-                </Text>
+                <SelectionIndicator selected={isSelected} accent={accent} />
                 <Text color={account.error ? colors.status.error : (isSelected ? accent : colors.text.secondary)}>
                   {truncateText(email, valueWidth - 4)}
                 </Text>
@@ -108,7 +106,7 @@ function ConnectionRow({ item, selected, accent, children }: ConnectionRowProps)
   const label = CONNECTION_LABELS[item].padEnd(14);
   return (
     <Text>
-      <Text color={selected ? accent : colors.text.disabled}>{selected ? "› " : "  "}</Text>
+      <SelectionIndicator selected={selected} accent={accent} />
       <Text color={selected ? colors.text.primary : colors.text.secondary}>{label}</Text>
       {children}
     </Text>

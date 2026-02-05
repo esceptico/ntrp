@@ -2,7 +2,7 @@ import React, { useState, useCallback } from "react";
 import { Box, Text } from "ink";
 import { brand, colors } from "../ui/colors.js";
 import { useDimensions } from "../../contexts/index.js";
-import { truncateText } from "../ui/index.js";
+import { truncateText, SelectionIndicator, TextInputField } from "../ui/index.js";
 import { useKeypress, type Key } from "../../hooks/index.js";
 import type { ChoiceOption } from "../../types.js";
 
@@ -12,6 +12,7 @@ interface ChoiceSelectorProps {
   allowMultiple: boolean;
   onSelect: (selected: string[]) => void;
   onCancel: () => void;
+  isActive?: boolean;
 }
 
 export function ChoiceSelector({
@@ -20,6 +21,7 @@ export function ChoiceSelector({
   allowMultiple,
   onSelect,
   onCancel,
+  isActive = true,
 }: ChoiceSelectorProps) {
   const { width: terminalWidth } = useDimensions();
   const totalOptions = options.length + 1;
@@ -134,7 +136,7 @@ export function ChoiceSelector({
     [options, selectedIndex, allowMultiple, checked, isOnOther, customText, cursorPos, totalOptions, onSelect, onCancel]
   );
 
-  useKeypress(handleKeypress, { isActive: true });
+  useKeypress(handleKeypress, { isActive });
 
   const hintText = isOnOther
     ? customText
@@ -158,9 +160,7 @@ export function ChoiceSelector({
 
           return (
             <Text key={opt.id}>
-              <Text color={isSelected ? brand.primary : colors.text.disabled}>
-                {isSelected ? "❯ " : "  "}
-              </Text>
+              <SelectionIndicator selected={isSelected} accent={brand.primary} />
               {allowMultiple && (
                 <Text color={isChecked ? brand.primary : colors.text.disabled}>
                   {isChecked ? "◉ " : "○ "}
@@ -178,25 +178,18 @@ export function ChoiceSelector({
         })}
 
         <Text>
-          <Text color={isOnOther ? brand.primary : colors.text.disabled}>
-            {isOnOther ? "❯ " : "  "}
-          </Text>
+          <SelectionIndicator selected={isOnOther} accent={brand.primary} />
           {allowMultiple && (
             <Text color={colors.text.disabled}>{"○ "}</Text>
           )}
           <Text color={colors.text.disabled}>{options.length + 1}. </Text>
-          {customText ? (
-            <Text>
-              {customText.slice(0, cursorPos)}
-              {isOnOther && "█"}
-              {customText.slice(cursorPos)}
-            </Text>
-          ) : (
-            <Text color={isOnOther ? colors.text.secondary : colors.text.muted}>
-              Other (type your answer)
-              {isOnOther && "█"}
-            </Text>
-          )}
+          <TextInputField
+            value={customText}
+            cursorPos={cursorPos}
+            placeholder="Other (type your answer)"
+            showCursor={isOnOther}
+            placeholderColor={isOnOther ? colors.text.secondary : colors.text.muted}
+          />
         </Text>
       </Box>
 
