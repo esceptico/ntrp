@@ -236,10 +236,12 @@ class BrowserHistorySource(BrowserSource):
                 temp_db.unlink()
 
     def list_recent(self, days: int = 7, limit: int = 50) -> list[SourceItem]:
-        old_days = self.days_back
-        self.days_back = days
-        raw_items = self.scan(limit=limit)
-        self.days_back = old_days
+        saved = self.days_back
+        try:
+            self.days_back = days
+            raw_items = self.scan(limit=limit)
+        finally:
+            self.days_back = saved
         return [
             SourceItem(
                 identity=item.source_id,

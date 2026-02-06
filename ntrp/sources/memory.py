@@ -13,12 +13,17 @@ class MemoryIndexSource:
 
     async def scan(self) -> list[RawItem]:
         repo = FactRepository(self.db.conn)
-        facts = await repo.list_recent(limit=1000)
+        total = await repo.count()
+        if total == 0:
+            return []
+
+        facts = await repo.list_recent(limit=total)
+        fact_ids = [f.id for f in facts]
+        entity_map = await repo.get_entity_refs_batch(fact_ids)
 
         items = []
         for fact in facts:
-            entity_refs = await repo.get_entity_refs(fact.id)
-            entity_names = [e.name for e in entity_refs]
+            entity_names = [e.name for e in entity_map.get(fact.id, [])]
 
             content = fact.text
             if entity_names:

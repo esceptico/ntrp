@@ -10,6 +10,9 @@ from ntrp.constants import (
 from ntrp.memory.models import Fact, LinkType
 from ntrp.memory.store.facts import FactRepository
 
+# Entity links below this weight are not worth creating
+_ENTITY_LINK_MIN_WEIGHT = 0.01
+
 # Query window for temporal links (5x sigma covers 99%+ of weight)
 _TEMPORAL_QUERY_WINDOW_HOURS = LINK_TEMPORAL_SIGMA_HOURS * 5
 
@@ -72,13 +75,24 @@ async def _create_entity_links(repo: FactRepository, fact: Fact) -> int:
     if not entity_refs:
         return 0
 
-    sharing = await repo.get_facts_sharing_entities(fact.id)
-    if not sharing:
-        return 0
+    # IDF-weighted entity links: rare entities create strong links,
+    # common entities (like "User") create weak ones.
+    # weight = 1 / log2(freq + 1), so freq=1 → 1.0, freq=30 → 0.20, freq=1000 → 0.10
+    best_weight: dict[int, float] = {}
 
-    # Binary weight (Hindsight approach): any entity overlap = full connection
+    for ref in entity_refs:
+        freq = await repo.count_entity_facts(ref.name)
+        weight = min(1.0, 1.0 / math.log2(freq + 1))
+        if weight < _ENTITY_LINK_MIN_WEIGHT:
+            continue
+
+        others = await repo.get_facts_for_entity(ref.name, limit=50)
+        for other in others:
+            if other.id != fact.id:
+                best_weight[other.id] = max(best_weight.get(other.id, 0), weight)
+
     count = 0
-    for other, _ in sharing:
-        await repo.create_link(fact.id, other.id, LinkType.ENTITY, 1.0)
+    for other_id, weight in best_weight.items():
+        await repo.create_link(fact.id, other_id, LinkType.ENTITY, weight)
         count += 1
     return count

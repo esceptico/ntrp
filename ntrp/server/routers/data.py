@@ -7,9 +7,16 @@ from ntrp.server.runtime import get_runtime
 router = APIRouter(tags=["data"])
 
 
+def _require_memory():
+    runtime = get_runtime()
+    if not runtime.memory:
+        raise HTTPException(status_code=503, detail="Memory is disabled")
+    return runtime
+
+
 @router.get("/facts")
 async def get_facts(limit: int = 100, offset: int = 0):
-    runtime = get_runtime()
+    runtime = _require_memory()
     repo = FactRepository(runtime.memory.db.conn)
 
     total = await repo.count()
@@ -33,7 +40,7 @@ async def get_facts(limit: int = 100, offset: int = 0):
 
 @router.get("/facts/{fact_id}")
 async def get_fact_details(fact_id: int):
-    runtime = get_runtime()
+    runtime = _require_memory()
     repo = FactRepository(runtime.memory.db.conn)
 
     fact = await repo.get(fact_id)
@@ -74,15 +81,14 @@ async def get_fact_details(fact_id: int):
 
 @router.post("/memory/clear")
 async def clear_memory():
-    runtime = get_runtime()
+    runtime = _require_memory()
     repo = FactRepository(runtime.memory.db.conn)
     obs_repo = ObservationRepository(runtime.memory.db.conn)
 
     fact_count = await repo.count()
     links = await runtime.memory.db.conn.execute_fetchall("SELECT COUNT(*) FROM fact_links")
     link_count = links[0][0] if links else 0
-    observations = await obs_repo.list_recent(limit=1000)
-    observation_count = len(observations)
+    observation_count = await obs_repo.count()
 
     await runtime.memory.db.conn.execute("DELETE FROM observations_vec")
     await runtime.memory.db.conn.execute("DELETE FROM observations")
@@ -100,7 +106,7 @@ async def clear_memory():
 
 @router.get("/observations")
 async def get_observations(limit: int = 50):
-    runtime = get_runtime()
+    runtime = _require_memory()
     obs_repo = ObservationRepository(runtime.memory.db.conn)
 
     observations = await obs_repo.list_recent(limit=limit)
@@ -122,12 +128,11 @@ async def get_observations(limit: int = 50):
 
 @router.get("/observations/{observation_id}")
 async def get_observation_details(observation_id: int):
-    runtime = get_runtime()
+    runtime = _require_memory()
     obs_repo = ObservationRepository(runtime.memory.db.conn)
     fact_repo = FactRepository(runtime.memory.db.conn)
 
-    observations = await obs_repo.list_recent(limit=100)
-    obs = next((o for o in observations if o.id == observation_id), None)
+    obs = await obs_repo.get(observation_id)
     if not obs:
         raise HTTPException(status_code=404, detail="Observation not found")
 
@@ -153,16 +158,14 @@ async def get_observation_details(observation_id: int):
 
 @router.get("/stats")
 async def get_stats():
-    runtime = get_runtime()
+    runtime = _require_memory()
     repo = FactRepository(runtime.memory.db.conn)
     obs_repo = ObservationRepository(runtime.memory.db.conn)
 
     fact_count = await repo.count()
     links = await runtime.memory.db.conn.execute_fetchall("SELECT COUNT(*) FROM fact_links")
     link_count = links[0][0] if links else 0
-
-    observations = await obs_repo.list_recent(limit=1000)
-    observation_count = len(observations)
+    observation_count = await obs_repo.count()
 
     return {
         "fact_count": fact_count,

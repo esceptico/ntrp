@@ -19,7 +19,7 @@ interface ApprovalDialogProps {
 
 export function ApprovalDialog({ approval, onResult, isActive = true }: ApprovalDialogProps) {
   const { width: terminalWidth } = useDimensions();
-  const [selectedIndex, setSelectedIndex] = useState(2);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [customReason, setCustomReason] = useState("");
   const [cursorPos, setCursorPos] = useState(0);
 

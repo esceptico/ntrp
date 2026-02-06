@@ -16,16 +16,6 @@ class RunStatus(str, Enum):
 
 
 @dataclass
-class PendingToolCall:
-    tool_id: str
-    tool_call_id: str  # OpenAI tool_call.id
-    name: str
-    args: dict
-    mutates: bool
-    created_at: datetime = field(default_factory=datetime.now)
-
-
-@dataclass
 class RunState:
     run_id: str
     session_id: str
@@ -33,7 +23,6 @@ class RunState:
     messages: list[dict] = field(default_factory=list)
     prompt_tokens: int = 0
     completion_tokens: int = 0
-    pending_tools: list[PendingToolCall] = field(default_factory=list)
     event_queue: asyncio.Queue | None = None
     choice_queue: asyncio.Queue | None = None
     created_at: datetime = field(default_factory=datetime.now)
@@ -81,6 +70,7 @@ class RunRegistry:
         if run:
             run.status = RunStatus.COMPLETED
             run.updated_at = datetime.now()
+        self.cleanup_old_runs()
 
     def cancel_run(self, run_id: str) -> None:
         run = self._runs.get(run_id)

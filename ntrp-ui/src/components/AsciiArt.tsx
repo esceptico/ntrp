@@ -1,7 +1,9 @@
+import { createRequire } from "module";
 import { Box, Text } from "ink";
 import { brand } from "./ui/colors.js";
 
-const VERSION = "0.1.0";
+const require = createRequire(import.meta.url);
+const { version: VERSION } = require("../../package.json");
 
 const LOGO_LINE_1 = "█▄ █ ▀█▀ █▀▄ █▀▄";
 const LOGO_LINE_2 = "█ ▀█  █  █▀▄ █▀▀";

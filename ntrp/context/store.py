@@ -116,12 +116,3 @@ class SessionStore(SessionDatabase):
         await self.conn.commit()
         return cursor.rowcount > 0
 
-    async def cleanup_old_sessions(self, days: int = 30) -> int:
-        cutoff = datetime.now().isoformat()
-        cursor = await self.conn.execute(
-            """DELETE FROM sessions
-               WHERE last_activity < datetime(?, ?)""",
-            (cutoff, f"-{days} days"),
-        )
-        await self.conn.commit()
-        return cursor.rowcount

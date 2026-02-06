@@ -1,7 +1,7 @@
 /**
  * Hook for handling slash commands with a registry pattern.
  */
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type { Config } from "../types.js";
 import {
   clearSession,
@@ -163,6 +163,9 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
 };
 
 export function useCommands(context: CommandContext) {
+  const contextRef = useRef(context);
+  contextRef.current = context;
+
   const handleCommand = useCallback(
     async (command: string): Promise<boolean> => {
       const parts = command.toLowerCase().replace("/", "").split(" ");
@@ -170,14 +173,13 @@ export function useCommands(context: CommandContext) {
 
       const handler = COMMAND_HANDLERS[cmd];
       if (handler) {
-        const result = handler(context);
-        // Handle both sync and async handlers
+        const result = handler(contextRef.current);
         return result instanceof Promise ? await result : result;
       }
 
       return false;
     },
-    [context]
+    []
   );
 
   return { handleCommand };

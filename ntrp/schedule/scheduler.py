@@ -109,12 +109,16 @@ class Scheduler:
             if accounts:
                 subject = f"[ntrp] {task.description}"
                 body = result or "(no output)"
-                runtime.gmail.send_email(
-                    account=accounts[0],
-                    to=task.notify_email,
-                    subject=subject,
-                    body=body,
-                )
+                try:
+                    await asyncio.to_thread(
+                        runtime.gmail.send_email,
+                        account=accounts[0],
+                        to=task.notify_email,
+                        subject=subject,
+                        body=body,
+                    )
+                except Exception:
+                    logger.exception("Failed to send email for task %s", task.task_id)
 
         # Store result and update timing
         now = datetime.now()

@@ -40,6 +40,7 @@ class FactMemory:
         self.extractor = Extractor(extraction_model)
         self.extraction_model = extraction_model
         self._consolidation_task: asyncio.Task | None = None
+        self._db_lock = asyncio.Lock()
 
     @classmethod
     async def create(cls, db_path: Path, embedding: EmbeddingConfig, extraction_model: str) -> Self:
@@ -62,25 +63,26 @@ class FactMemory:
                 logger.warning(f"Consolidation batch failed: {e}")
 
     async def _consolidate_pending(self, batch_size: int = 10) -> int:
-        repo = FactRepository(self.db.conn)
-        obs_repo = ObservationRepository(self.db.conn)
-        facts = await repo.list_unconsolidated(limit=batch_size)
-        if not facts:
-            return 0
+        async with self._db_lock:
+            repo = FactRepository(self.db.conn)
+            obs_repo = ObservationRepository(self.db.conn)
+            facts = await repo.list_unconsolidated(limit=batch_size)
+            if not facts:
+                return 0
 
-        count = 0
-        for fact in facts:
-            fact.entity_refs = await repo.get_entity_refs(fact.id)
-            await consolidate_fact(
-                fact=fact,
-                fact_repo=repo,
-                obs_repo=obs_repo,
-                model=self.extraction_model,
-                embed_fn=self.embedder.embed_one,
-            )
-            count += 1
-        logger.info(f"Consolidated {count} facts")
-        return count
+            count = 0
+            for fact in facts:
+                fact.entity_refs = await repo.get_entity_refs(fact.id)
+                await consolidate_fact(
+                    fact=fact,
+                    fact_repo=repo,
+                    obs_repo=obs_repo,
+                    model=self.extraction_model,
+                    embed_fn=self.embedder.embed_one,
+                )
+                count += 1
+            logger.info(f"Consolidated {count} facts")
+            return count
 
     async def close(self) -> None:
         if self._consolidation_task:
@@ -100,28 +102,30 @@ class FactMemory:
         fact_type: FactType = FactType.WORLD,
         happened_at: datetime | None = None,
     ) -> RememberFactResult:
-        repo = FactRepository(self.db.conn)
-        obs_repo = ObservationRepository(self.db.conn)
-
         embedding = await self.embedder.embed_one(text)
-        fact = await repo.create(
-            text=text,
-            fact_type=fact_type,
-            source_type=source_type,
-            source_ref=source_ref,
-            embedding=embedding,
-            happened_at=happened_at,
-        )
 
-        try:
-            extraction = await self.extractor.extract(text)
-            entities_extracted = await self._process_extraction(repo, fact.id, extraction, source_ref)
+        async with self._db_lock:
+            repo = FactRepository(self.db.conn)
 
-            fact.entity_refs = await repo.get_entity_refs(fact.id)
-            links_created = await create_links_for_fact(repo, fact)
-        except Exception:
-            await repo.delete(fact.id)
-            raise
+            fact = await repo.create(
+                text=text,
+                fact_type=fact_type,
+                source_type=source_type,
+                source_ref=source_ref,
+                embedding=embedding,
+                happened_at=happened_at,
+            )
+
+            try:
+                extraction = await self.extractor.extract(text)
+                entities_extracted = await self._process_extraction(repo, fact.id, extraction, source_ref)
+
+                fact.entity_refs = await repo.get_entity_refs(fact.id)
+                links_created = await create_links_for_fact(repo, fact)
+            except Exception:
+                logger.warning("Remember failed for fact %d, rolling back", fact.id)
+                await repo.delete(fact.id)
+                raise
 
         return RememberFactResult(
             fact=fact,

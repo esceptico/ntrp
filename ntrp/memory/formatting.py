@@ -1,12 +1,17 @@
-from ntrp.memory.models import Fact, FactContext
+from ntrp.memory.models import Fact, FactContext, Observation
 
 
 def format_facts_list(facts: list[str]) -> str:
     return "\n".join(f"- {f}" for f in facts)
 
 
-def format_memory_context(user_facts: list[Fact], recent_facts: list[Fact]) -> str:
-    if not user_facts and not recent_facts:
+def format_memory_context(
+    user_facts: list[Fact],
+    recent_facts: list[Fact],
+    query_facts: list[Fact] | None = None,
+    query_observations: list[Observation] | None = None,
+) -> str:
+    if not user_facts and not recent_facts and not query_facts and not query_observations:
         return ""
 
     lines = []
@@ -20,6 +25,18 @@ def format_memory_context(user_facts: list[Fact], recent_facts: list[Fact]) -> s
             lines.append("")
         lines.append("**Recent**")
         lines.extend(f"- {f.text}" for f in recent_facts)
+
+    if query_facts:
+        if lines:
+            lines.append("")
+        lines.append("**Relevant**")
+        lines.extend(f"- {f.text}" for f in query_facts)
+
+    if query_observations:
+        if lines:
+            lines.append("")
+        lines.append("**Patterns**")
+        lines.extend(f"- {obs.summary}" for obs in query_observations)
 
     return "\n".join(lines)
 

@@ -46,6 +46,8 @@ export const InputArea = memo(function InputArea({
   // Refs for stable access in callbacks
   const cursorRef = useRef(0);
   cursorRef.current = cursorPos;
+  const valueRef = useRef(value);
+  valueRef.current = value;
   const escPendingRef = useRef(false);
   const escTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -80,20 +82,22 @@ export const InputArea = memo(function InputArea({
   const showAutocomplete = value.startsWith("/") && filteredCommands.length > 0;
   const showHelp = value === "?";
 
-  // Word boundary navigation helpers
-  const findPrevWordBoundary = (pos: number) => {
+  // Word boundary navigation helpers (use ref for fresh value)
+  const findPrevWordBoundary = useCallback((pos: number) => {
+    const v = valueRef.current;
     let p = pos - 1;
-    while (p > 0 && /\s/.test(value[p])) p--;
-    while (p > 0 && /\S/.test(value[p - 1])) p--;
+    while (p > 0 && /\s/.test(v[p])) p--;
+    while (p > 0 && /\S/.test(v[p - 1])) p--;
     return Math.max(0, p);
-  };
+  }, []);
 
-  const findNextWordBoundary = (pos: number) => {
+  const findNextWordBoundary = useCallback((pos: number) => {
+    const v = valueRef.current;
     let p = pos;
-    while (p < value.length && /\S/.test(value[p])) p++;
-    while (p < value.length && /\s/.test(value[p])) p++;
+    while (p < v.length && /\S/.test(v[p])) p++;
+    while (p < v.length && /\s/.test(v[p])) p++;
     return p;
-  };
+  }, []);
 
   const insertAt = (pos: number, text: string) => {
     setValue((v) => v.slice(0, pos) + text + v.slice(pos));

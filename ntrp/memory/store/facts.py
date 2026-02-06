@@ -69,6 +69,7 @@ _SQL_SEARCH_FACTS_FTS = """
 # Entity refs
 _SQL_INSERT_ENTITY_REF = "INSERT INTO entity_refs (fact_id, name, entity_type, canonical_id) VALUES (?, ?, ?, ?)"
 _SQL_GET_ENTITY_REFS = "SELECT * FROM entity_refs WHERE fact_id = ?"
+_SQL_GET_ENTITY_REFS_BATCH = "SELECT * FROM entity_refs WHERE fact_id IN ({placeholders})"
 _SQL_DELETE_ENTITY_REFS = "DELETE FROM entity_refs WHERE fact_id = ?"
 _SQL_UPDATE_ENTITY_REFS_CANONICAL = "UPDATE entity_refs SET canonical_id = ? WHERE canonical_id IN ({placeholders})"
 
@@ -158,6 +159,8 @@ _SQL_SEARCH_ENTITIES_VEC = """
 """
 
 # Entity resolution helpers
+_SQL_COUNT_ENTITY_FACTS = "SELECT COUNT(*) FROM entity_refs WHERE name = ?"
+
 _SQL_ENTITY_CO_OCCURRENCE_SOURCES = """
     SELECT COUNT(DISTINCT f.source_ref) as shared_sources
     FROM facts f
@@ -320,6 +323,19 @@ class FactRepository(BaseRepository):
     async def get_entity_refs(self, fact_id: int) -> list[EntityRef]:
         rows = await self.conn.execute_fetchall(_SQL_GET_ENTITY_REFS, (fact_id,))
         return [self._row_to_entity_ref(r) for r in rows]
+
+    async def get_entity_refs_batch(self, fact_ids: list[int]) -> dict[int, list[EntityRef]]:
+        if not fact_ids:
+            return {}
+        placeholders = ",".join("?" * len(fact_ids))
+        rows = await self.conn.execute_fetchall(
+            _SQL_GET_ENTITY_REFS_BATCH.format(placeholders=placeholders), fact_ids
+        )
+        result: dict[int, list[EntityRef]] = {fid: [] for fid in fact_ids}
+        for r in rows:
+            ref = self._row_to_entity_ref(r)
+            result[ref.fact_id].append(ref)
+        return result
 
     async def get_facts_for_entity(self, name: str, limit: int = 100) -> list[Fact]:
         rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_FOR_ENTITY, (name, limit))
@@ -509,6 +525,10 @@ class FactRepository(BaseRepository):
     async def get_entity_last_mention(self, name: str) -> datetime | None:
         rows = await self.conn.execute_fetchall(_SQL_ENTITY_LAST_MENTION, (name,))
         return parse_datetime(rows[0][0]) if rows else None
+
+    async def count_entity_facts(self, entity_name: str) -> int:
+        rows = await self.conn.execute_fetchall(_SQL_COUNT_ENTITY_FACTS, (entity_name,))
+        return rows[0][0] if rows else 0
 
     async def get_entity_source_overlap(self, entity_name: str, source_ref: str) -> bool:
         rows = await self.conn.execute_fetchall(_SQL_ENTITY_SOURCE_OVERLAP, (entity_name, source_ref))

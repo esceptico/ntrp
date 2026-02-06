@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
@@ -12,6 +13,8 @@ from ntrp.core.tool_runner import ToolRunner
 from ntrp.events import SSEEvent, TextEvent, ToolResultEvent
 from ntrp.tools.core.context import ToolContext
 from ntrp.tools.executor import ToolExecutor
+
+logger = logging.getLogger(__name__)
 
 
 class Agent:
@@ -149,6 +152,7 @@ class Agent:
             try:
                 response = await self._call_llm()
             except Exception:
+                logger.exception("LLM call failed (model=%s)", self.model)
                 await self._set_state(AgentState.IDLE)
                 raise
 

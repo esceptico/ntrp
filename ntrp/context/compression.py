@@ -21,57 +21,6 @@ def _get_attr(msg, key: str, default=None):
     return getattr(msg, key, default)
 
 
-def count_tokens(messages: list, model: str) -> int:
-    total_chars = 0
-
-    for msg in messages:
-        total_chars += 16
-
-        content = _get_attr(msg, "content")
-        if isinstance(content, str):
-            total_chars += len(content)
-
-        role = _get_attr(msg, "role")
-        if role:
-            total_chars += len(role)
-
-        tool_calls = _get_attr(msg, "tool_calls")
-        if tool_calls:
-            for tc in tool_calls:
-                func = getattr(tc, "function", None)
-                if func:
-                    total_chars += len(func.name or "")
-                    total_chars += len(func.arguments or "")
-
-    return total_chars // CHARS_PER_TOKEN
-
-
-def should_compress(
-    messages: list[dict],
-    model: str,
-    actual_input_tokens: int | None = None,
-) -> bool:
-    """Check if context should be compressed.
-
-    Args:
-        messages: Current message history
-        model: Model identifier
-        actual_input_tokens: If provided, use actual token count from LLM response
-            instead of estimate. More accurate for compression decisions.
-    """
-    limit = SUPPORTED_MODELS[model]["tokens"]
-
-    # Use actual count if available (more accurate), otherwise estimate
-    if actual_input_tokens is not None:
-        # Use slightly higher threshold (80%) when we have actual count
-        return actual_input_tokens > int(limit * 0.80)
-
-    # Fallback to estimate
-    threshold = int(limit * COMPRESSION_THRESHOLD)
-    current = count_tokens(messages, model)
-    return current > threshold
-
-
 def _count_message_tokens(msg) -> int:
     total_chars = 16
 
@@ -92,6 +41,25 @@ def _count_message_tokens(msg) -> int:
                 total_chars += len(func.arguments or "")
 
     return total_chars // CHARS_PER_TOKEN
+
+
+def count_tokens(messages: list, model: str) -> int:
+    return sum(_count_message_tokens(msg) for msg in messages)
+
+
+def should_compress(
+    messages: list[dict],
+    model: str,
+    actual_input_tokens: int | None = None,
+) -> bool:
+    limit = SUPPORTED_MODELS[model]["tokens"]
+
+    if actual_input_tokens is not None:
+        return actual_input_tokens > int(limit * 0.80)
+
+    threshold = int(limit * COMPRESSION_THRESHOLD)
+    current = count_tokens(messages, model)
+    return current > threshold
 
 
 def find_compressible_range(
@@ -131,12 +99,19 @@ def _build_conversation_text(messages: list, start: int, end: int) -> str:
         role = _get_attr(msg, "role") or "unknown"
         content = _get_attr(msg, "content") or ""
         if isinstance(content, str) and content:
-            text_parts.append(f"{role}: {content}")
+            # Preserve previous summaries verbatim — don't let them get re-summarized
+            if content.startswith("[Session State Handoff]"):
+                text_parts.append(f"[PRIOR SUMMARY — preserve key points]\n{content}")
+            else:
+                text_parts.append(f"{role}: {content}")
     return "\n\n".join(text_parts)
 
 
 def _build_summarize_request(conversation_text: str, model: str) -> dict:
     model_params = SUPPORTED_MODELS[model]
+    # Scale budget: ~1 summary token per 4 input tokens, clamped to [400, 2000]
+    input_tokens = len(conversation_text) // CHARS_PER_TOKEN
+    max_tokens = max(400, min(2000, input_tokens // 4))
     return {
         "model": model,
         "messages": [
@@ -144,7 +119,7 @@ def _build_summarize_request(conversation_text: str, model: str) -> dict:
             {"role": "user", "content": conversation_text},
         ],
         "temperature": 0.3,
-        "max_tokens": 800,
+        "max_tokens": max_tokens,
         **model_params.get("request_kwargs", {}),
     }
 
