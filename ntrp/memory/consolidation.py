@@ -15,7 +15,7 @@ import json
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 
-from litellm import acompletion
+from ntrp.llm import acompletion
 
 from ntrp.constants import (
     CONSOLIDATION_SEARCH_LIMIT,

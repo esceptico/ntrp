@@ -1,7 +1,5 @@
 from datetime import datetime
 
-import litellm
-
 from ntrp.constants import (
     COMPRESSION_THRESHOLD,
     MASK_PREVIEW_CHARS,
@@ -11,6 +9,7 @@ from ntrp.constants import (
 )
 from ntrp.context.models import SessionState
 from ntrp.context.prompts import SUMMARIZE_PROMPT
+from ntrp.llm import acompletion, completion
 
 CHARS_PER_TOKEN = 4
 
@@ -131,7 +130,7 @@ def summarize_messages_sync(
     model: str,
 ) -> str:
     conversation_text = _build_conversation_text(messages, start, end)
-    response = litellm.completion(**_build_summarize_request(conversation_text, model))
+    response = completion(**_build_summarize_request(conversation_text, model))
     return response.choices[0].message.content or "Unable to summarize."
 
 
@@ -142,7 +141,7 @@ async def summarize_messages_async(
     model: str,
 ) -> str:
     conversation_text = _build_conversation_text(messages, start, end)
-    response = await litellm.acompletion(**_build_summarize_request(conversation_text, model))
+    response = await acompletion(**_build_summarize_request(conversation_text, model))
     return response.choices[0].message.content or "Unable to summarize."
 
 

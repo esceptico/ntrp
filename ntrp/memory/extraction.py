@@ -1,4 +1,4 @@
-import litellm
+from ntrp.llm import acompletion
 from pydantic import BaseModel
 
 from ntrp.constants import EXTRACTION_TEMPERATURE
@@ -30,7 +30,7 @@ class Extractor:
 
     async def extract(self, text: str) -> ExtractionResult:
         try:
-            response = await litellm.acompletion(
+            response = await acompletion(
                 model=self.model,
                 messages=[{"role": "user", "content": EXTRACTION_PROMPT.format(text=text)}],
                 response_format=ExtractionSchema,
