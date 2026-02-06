@@ -7,8 +7,6 @@ import { useKeypress, useInlineTextInput, useAccentColor, type Key } from "../..
 import type { PendingApproval, ApprovalResult } from "../../types.js";
 import { DiffView } from "./DiffView.js";
 
-export type { PendingApproval, ApprovalResult } from "../../types.js";
-
 const ALWAYS_TEXT = "Yes, and don't ask again for this project";
 
 interface ApprovalDialogProps {

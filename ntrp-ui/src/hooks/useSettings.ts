@@ -37,6 +37,7 @@ function loadSettings(): Settings {
     if (fs.existsSync(SETTINGS_FILE)) {
       const data = fs.readFileSync(SETTINGS_FILE, "utf-8");
       const parsed = JSON.parse(data);
+      if (typeof parsed !== "object" || parsed === null) return defaultSettings;
       return {
         ui: { ...defaultSettings.ui, ...parsed.ui },
         agent: { ...defaultSettings.agent, ...parsed.agent },

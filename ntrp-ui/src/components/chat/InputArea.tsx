@@ -16,7 +16,7 @@ export interface InputAreaProps {
   onSubmit: (v: string) => void;
   disabled: boolean;
   focus: boolean;
-  commands: SlashCommand[];
+  commands: readonly SlashCommand[];
   queueCount?: number;
   skipApprovals?: boolean;
   chatModel?: string;

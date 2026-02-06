@@ -3,7 +3,7 @@ import { Box, Text } from "ink";
 import { colors } from "./colors.js";
 
 interface TabsProps<T extends string> {
-  tabs: T[];
+  tabs: readonly T[];
   activeTab: T;
   onTabChange: (tab: T) => void;
   labels?: Record<T, string>;

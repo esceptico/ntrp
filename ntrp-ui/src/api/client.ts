@@ -52,8 +52,10 @@ export async function* streamChat(
       for (const line of lines) {
         if (line.startsWith("data: ")) {
           try {
-            const event = JSON.parse(line.slice(6)) as ServerEvent;
-            yield event;
+            const parsed = JSON.parse(line.slice(6));
+            if (parsed && typeof parsed.type === "string") {
+              yield parsed as ServerEvent;
+            }
           } catch {
             // Ignore parse errors (e.g., ping messages)
           }
@@ -64,7 +66,8 @@ export async function* streamChat(
     // Handle connection termination gracefully
     if (error instanceof TypeError && (error.message === "terminated" || error.message.includes("terminated"))) {
       // Connection was terminated - yield an error event for the UI
-      yield { type: "error", message: "Connection to server was terminated unexpectedly" } as ServerEvent;
+      const errorEvent: ServerEvent = { type: "error", message: "Connection to server was terminated unexpectedly", recoverable: false };
+      yield errorEvent;
       return;
     }
     throw error;
@@ -208,8 +211,8 @@ export async function getServerConfig(config: Config): Promise<ServerConfig> {
 
 export async function updateConfig(
   config: Config,
-  patch: { chat_model?: string; memory_model?: string; max_depth?: number }
-): Promise<{ chat_model: string; memory_model: string; max_depth: number }> {
+  patch: Partial<Pick<ServerConfig, "chat_model" | "memory_model" | "max_depth">>
+): Promise<Pick<ServerConfig, "chat_model" | "memory_model" | "max_depth">> {
   return api.patch(`${config.serverUrl}/config`, patch);
 }
 

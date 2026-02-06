@@ -82,7 +82,7 @@ async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> 
     // Handle empty responses
     const contentType = response.headers.get("content-type");
     if (!contentType?.includes("application/json")) {
-      return {} as T;
+      return undefined as T;
     }
 
     return await response.json();

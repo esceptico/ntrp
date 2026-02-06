@@ -48,7 +48,9 @@ export const MessageDisplay = memo(function MessageDisplay({
       return <StatusMessage content={msg.content} />;
     case "error":
       return <ErrorMessage content={msg.content} />;
-    default:
-      return <Text>{msg.content}</Text>;
+    default: {
+      const _exhaustive: never = msg.role;
+      return _exhaustive;
+    }
   }
 });

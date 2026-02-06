@@ -3,7 +3,7 @@ import { Box, Text } from "ink";
 import type { SlashCommand } from "../../types.js";
 
 interface AutocompleteListProps {
-  commands: SlashCommand[];
+  commands: readonly SlashCommand[];
   selectedIndex: number;
   accentValue: string;
 }

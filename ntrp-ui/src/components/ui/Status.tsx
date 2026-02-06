@@ -13,7 +13,7 @@ interface StatusIndicatorProps {
 }
 
 export function StatusIndicator({ status, label, detail }: StatusIndicatorProps) {
-  const statusColors: Record<string, string> = {
+  const statusColors: Record<StatusIndicatorProps["status"], string> = {
     connected: colors.status.success,
     disconnected: colors.text.muted,
     error: colors.status.error,
@@ -21,7 +21,7 @@ export function StatusIndicator({ status, label, detail }: StatusIndicatorProps)
     running: colors.status.warning,
     pending: colors.text.secondary,
   };
-  const icons: Record<string, string> = {
+  const icons: Record<StatusIndicatorProps["status"], string> = {
     connected: BULLET,
     disconnected: "○",
     error: "✗",

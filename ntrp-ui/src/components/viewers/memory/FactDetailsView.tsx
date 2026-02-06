@@ -181,5 +181,9 @@ export function getFactSectionMaxIndex(
       return Math.max(0, details.entities.length - 1);
     case FACT_SECTIONS.LINKED:
       return Math.max(0, details.linked_facts.length - 1);
+    default: {
+      const _exhaustive: never = section;
+      return _exhaustive;
+    }
   }
 }

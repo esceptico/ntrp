@@ -17,8 +17,8 @@ import { StatsView } from "./StatsView.js";
 import { FactsSection } from "./FactsSection.js";
 import { ObservationsSection } from "./ObservationsSection.js";
 
-type TabType = "facts" | "observations" | "stats";
-const TABS: TabType[] = ["facts", "observations", "stats"];
+const TABS = ["facts", "observations", "stats"] as const;
+type TabType = (typeof TABS)[number];
 
 interface MemoryViewerProps {
   config: Config;

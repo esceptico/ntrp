@@ -3,9 +3,9 @@ import { Text } from "ink";
 import { colors } from "./ui/colors.js";
 import { useAccentColor } from "../hooks/index.js";
 
-const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 const GLIMMER_WIDTH = 3;
-const VERBS = ["thinking", "processing", "analyzing", "reasoning", "considering", "pondering"];
+const VERBS = ["thinking", "processing", "analyzing", "reasoning", "considering", "pondering"] as const;
 
 function pickVerb() {
   return VERBS[Math.floor(Math.random() * VERBS.length)];

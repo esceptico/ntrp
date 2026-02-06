@@ -7,7 +7,7 @@ import { BULLET, MAX_TOOL_RESULT_LINE_CHARS } from "../../lib/constants.js";
 import { DiffDisplay } from "./DiffDisplay.js";
 import type { ToolChainItem } from "./types.js";
 
-export interface TreeNode extends ToolChainItem {
+interface TreeNode extends ToolChainItem {
   children: TreeNode[];
 }
 
@@ -18,12 +18,16 @@ function getStatusColor(status: ToolChainItem["status"], accentValue: string): s
     case "running":
     case "done":
       return accentValue;
-    default:
+    case "pending":
       return colors.text.muted;
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
   }
 }
 
-export function isContainer(name: string): boolean {
+function isContainer(name: string): boolean {
   return name === "delegate" || name === "explore";
 }
 

@@ -1,12 +1,12 @@
-export type SectionId = "agent" | "connections" | "appearance" | "limits";
+export const SECTION_IDS = ["agent", "connections", "appearance", "limits"] as const;
+export type SectionId = (typeof SECTION_IDS)[number];
 
-export const SECTION_IDS: SectionId[] = ["agent", "connections", "appearance", "limits"];
-export const SECTION_LABELS: Record<SectionId, string> = {
+export const SECTION_LABELS = {
   agent: "Agent",
   connections: "Connections",
   appearance: "Appearance",
   limits: "Limits",
-};
+} satisfies Record<SectionId, string>;
 
 export interface BooleanItem {
   key: string;
@@ -33,10 +33,11 @@ export const LIMIT_ITEMS: NumberItem[] = [
 ];
 
 // Connections section items
-export type ConnectionItem = "vault" | "google" | "browser";
-export const CONNECTION_ITEMS: ConnectionItem[] = ["vault", "google", "browser"];
-export const CONNECTION_LABELS: Record<ConnectionItem, string> = {
+export const CONNECTION_ITEMS = ["vault", "google", "browser"] as const;
+export type ConnectionItem = (typeof CONNECTION_ITEMS)[number];
+
+export const CONNECTION_LABELS = {
   vault: "Vault",
   google: "Google",
   browser: "Browser",
-};
+} satisfies Record<ConnectionItem, string>;

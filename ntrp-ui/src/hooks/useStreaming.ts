@@ -13,8 +13,6 @@ import {
 } from "../lib/constants.js";
 import { truncateText } from "../lib/utils.js";
 
-export type { PendingApproval } from "../types.js";
-
 export interface PendingChoice {
   toolId: string;
   question: string;
@@ -22,14 +20,7 @@ export interface PendingChoice {
   allowMultiple: boolean;
 }
 
-interface StreamingState {
-  messages: Message[];
-  isStreaming: boolean;
-  status: string;
-  toolChain: ToolChainItem[];
-  pendingApproval: PendingApproval | null;
-  usage: { prompt: number; completion: number };
-}
+type MessageInput = Omit<Message, "id"> & { id?: string };
 
 interface UseStreamingOptions {
   config: Config;
@@ -73,7 +64,7 @@ export function useStreaming({
     return `m-${Date.now()}-${messageIdRef.current++}`;
   }, []);
 
-  const addMessage = useCallback((msg: Omit<Message, "id"> & { id?: string }) => {
+  const addMessage = useCallback((msg: MessageInput) => {
     const content = msg.role === "tool"
       ? truncateText(msg.content, MAX_TOOL_MESSAGE_CHARS, 'end')
       : msg.content;
@@ -254,6 +245,10 @@ export function useStreaming({
         });
         setStatus("awaiting choice...");
         break;
+      default: {
+        const _exhaustive: never = event;
+        return _exhaustive;
+      }
     }
   }, [
     handleSessionInfo,

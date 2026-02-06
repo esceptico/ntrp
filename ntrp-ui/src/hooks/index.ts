@@ -1,8 +1,8 @@
 export { useSettings, type Settings } from "./useSettings.js";
-export { KeypressProvider, useKeypress, useKeypressContext, type Key, type KeypressHandler } from "./useKeypress.js";
+export { KeypressProvider, useKeypress, type Key, type KeypressHandler } from "./useKeypress.js";
 export { useCommands } from "./useCommands.js";
 export { useSession, type IndexStatus } from "./useSession.js";
-export { useStreaming, type PendingApproval } from "./useStreaming.js";
+export { useStreaming } from "./useStreaming.js";
 export { AccentColorProvider, useAccentColor } from "./useAccentColor.js";
 export { useTerminalSize } from "./useTerminalSize.js";
 export { useInlineTextInput } from "./useInlineTextInput.js";
