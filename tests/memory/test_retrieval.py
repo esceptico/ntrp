@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -12,9 +12,9 @@ from ntrp.memory.store.retrieval import (
     hybrid_search,
     retrieve_facts,
     retrieve_with_observations,
-    rrf_merge,
     score_fact,
 )
+from ntrp.ranking import rrf_merge
 from tests.conftest import mock_embedding
 
 
@@ -72,7 +72,7 @@ class TestScoreFact:
     def test_recent_fact_scores_higher(self, repo: FactRepository):
         from ntrp.memory.models import Fact
 
-        now = datetime.now(UTC)
+        now = datetime.now()
         old = now - timedelta(days=30)
 
         recent_fact = Fact(
@@ -110,7 +110,7 @@ class TestScoreFact:
     def test_frequently_accessed_fact_scores_higher(self):
         from ntrp.memory.models import Fact
 
-        now = datetime.now(UTC)
+        now = datetime.now()
 
         frequent = Fact(
             id=1,
@@ -147,7 +147,7 @@ class TestScoreFact:
     def test_base_score_multiplied(self):
         from ntrp.memory.models import Fact
 
-        now = datetime.now(UTC)
+        now = datetime.now()
         fact = Fact(
             id=1,
             text="test",

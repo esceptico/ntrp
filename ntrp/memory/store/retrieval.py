@@ -1,5 +1,4 @@
 import heapq
-from collections import defaultdict
 
 from ntrp.constants import (
     BFS_DECAY_FACTOR,
@@ -11,18 +10,7 @@ from ntrp.memory.decay import decay_score, recency_boost
 from ntrp.memory.models import Embedding, Fact, FactContext, Observation
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
-
-
-def rrf_merge(
-    rankings: list[list[tuple[int, float]]],
-    k: int = 60,
-) -> dict[int, float]:
-    """Reciprocal Rank Fusion to merge multiple ranked lists."""
-    scores: dict[int, float] = defaultdict(float)
-    for ranking in rankings:
-        for rank, (item_id, _) in enumerate(ranking):
-            scores[item_id] += 1 / (k + rank + 1)
-    return dict(scores)
+from ntrp.ranking import rrf_merge
 
 
 async def hybrid_search(

@@ -9,7 +9,6 @@ from ntrp.constants import (
     ENTITY_TEMPORAL_NEUTRAL,
     ENTITY_TEMPORAL_SIGMA_HOURS,
 )
-from ntrp.memory.utils import ensure_utc
 
 _PREFIX_BASE = 0.7
 _PREFIX_RANGE = 0.3
@@ -40,7 +39,6 @@ def temporal_proximity_score(
     t2: datetime | None,
     sigma_hours: float = ENTITY_TEMPORAL_SIGMA_HOURS,
 ) -> float:
-    t1, t2 = ensure_utc(t1), ensure_utc(t2)
     if t1 is None or t2 is None:
         return ENTITY_TEMPORAL_NEUTRAL
 

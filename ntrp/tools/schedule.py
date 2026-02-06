@@ -97,6 +97,7 @@ class ScheduleTaskTool(Tool):
             last_run_at=None,
             notify_email=email,
             last_result=None,
+            running_since=None,
         )
 
         preview = f"Time: {time_normalized} ({rec.value})\nNext run: {next_run.strftime('%Y-%m-%d %H:%M')}"

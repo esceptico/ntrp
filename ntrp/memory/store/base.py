@@ -120,7 +120,8 @@ END;
 def parse_datetime(value: str | None) -> datetime | None:
     if value is None:
         return None
-    return datetime.fromisoformat(value)
+    dt = datetime.fromisoformat(value)
+    return dt.replace(tzinfo=None) if dt.tzinfo else dt
 
 
 class GraphDatabase(VectorDatabase):

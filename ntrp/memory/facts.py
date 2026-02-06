@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -38,6 +39,7 @@ class FactMemory:
         self.embedder = Embedder(embedding)
         self.extractor = Extractor(extraction_model)
         self.extraction_model = extraction_model
+        self._consolidation_task: asyncio.Task | None = None
 
     @classmethod
     async def create(cls, db_path: Path, embedding: EmbeddingConfig, extraction_model: str) -> Self:
@@ -45,7 +47,49 @@ class FactMemory:
         await instance.db.connect()
         return instance
 
+    def start_consolidation(self, interval: float = 30.0) -> None:
+        if self._consolidation_task is None:
+            self._consolidation_task = asyncio.create_task(self._consolidation_loop(interval))
+
+    async def _consolidation_loop(self, interval: float) -> None:
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                await self._consolidate_pending()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.warning(f"Consolidation batch failed: {e}")
+
+    async def _consolidate_pending(self, batch_size: int = 10) -> int:
+        repo = FactRepository(self.db.conn)
+        obs_repo = ObservationRepository(self.db.conn)
+        facts = await repo.list_unconsolidated(limit=batch_size)
+        if not facts:
+            return 0
+
+        count = 0
+        for fact in facts:
+            fact.entity_refs = await repo.get_entity_refs(fact.id)
+            await consolidate_fact(
+                fact=fact,
+                fact_repo=repo,
+                obs_repo=obs_repo,
+                model=self.extraction_model,
+                embed_fn=self.embedder.embed_one,
+            )
+            count += 1
+        logger.info(f"Consolidated {count} facts")
+        return count
+
     async def close(self) -> None:
+        if self._consolidation_task:
+            self._consolidation_task.cancel()
+            try:
+                await self._consolidation_task
+            except asyncio.CancelledError:
+                pass
+            self._consolidation_task = None
         await self.db.close()
 
     async def remember(
@@ -69,20 +113,15 @@ class FactMemory:
             happened_at=happened_at,
         )
 
-        extraction = await self.extractor.extract(text)
-        entities_extracted = await self._process_extraction(repo, fact.id, extraction, source_ref)
+        try:
+            extraction = await self.extractor.extract(text)
+            entities_extracted = await self._process_extraction(repo, fact.id, extraction, source_ref)
 
-        fact.entity_refs = await repo.get_entity_refs(fact.id)
-        links_created = await create_links_for_fact(repo, fact)
-
-        # Consolidate immediately
-        await consolidate_fact(
-            fact=fact,
-            fact_repo=repo,
-            obs_repo=obs_repo,
-            model=self.extraction_model,
-            embed_fn=self.embedder.embed_one,
-        )
+            fact.entity_refs = await repo.get_entity_refs(fact.id)
+            links_created = await create_links_for_fact(repo, fact)
+        except Exception:
+            await repo.delete(fact.id)
+            raise
 
         return RememberFactResult(
             fact=fact,

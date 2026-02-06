@@ -3,7 +3,7 @@ from typing import Any
 
 import litellm
 
-from ntrp.constants import SUPPORTED_MODELS
+from ntrp.constants import AGENT_MAX_ITERATIONS, SUPPORTED_MODELS
 from ntrp.context.compression import compress_context_async, mask_old_tool_results, should_compress
 from ntrp.core.parsing import parse_tool_calls, sanitize_assistant_message
 from ntrp.core.spawner import create_spawn_fn
@@ -137,7 +137,7 @@ class Agent:
         self._init_messages(task, history)
         runner = self._create_tool_runner()
 
-        while True:
+        for _ in range(AGENT_MAX_ITERATIONS):
             if self._is_cancelled():
                 await self._set_state(AgentState.IDLE)
                 yield "Cancelled."
@@ -186,6 +186,9 @@ class Agent:
                 return
 
             self._append_tool_results(message.tool_calls, results)
+
+        await self._set_state(AgentState.IDLE)
+        yield f"Stopped: reached max iterations ({AGENT_MAX_ITERATIONS})."
 
     async def run(self, task: str, history: list[dict] | None = None) -> str:
         result = ""

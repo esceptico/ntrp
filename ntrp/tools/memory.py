@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Any
 
+from ntrp.memory.formatting import format_context
 from ntrp.memory.models import FactType
 from ntrp.tools.core.base import Tool, ToolResult
 
@@ -130,7 +131,7 @@ PREFER search() FOR: Finding new info in notes/emails/web pages"""
 
     async def execute(self, execution: Any, query: str, limit: int = 5, **kwargs: Any) -> ToolResult:
         context = await self.memory.recall(query=query, limit=limit)
-        formatted = self.memory.format_context(context)
+        formatted = format_context(context)
         if formatted:
             count = len(context.facts)
             return ToolResult(formatted, f"{count} facts")

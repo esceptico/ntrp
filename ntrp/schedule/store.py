@@ -14,25 +14,34 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
     last_run_at TEXT,
     next_run_at TEXT,
     notify_email TEXT,
-    last_result TEXT
+    last_result TEXT,
+    running_since TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_scheduled_next_run ON scheduled_tasks(next_run_at);
 CREATE INDEX IF NOT EXISTS idx_scheduled_enabled ON scheduled_tasks(enabled);
 """
 
+_MIGRATE_RUNNING_SINCE = """
+    ALTER TABLE scheduled_tasks ADD COLUMN running_since TEXT;
+"""
+
 
 class ScheduleStore(BaseRepository):
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
+        try:
+            await self.conn.execute(_MIGRATE_RUNNING_SINCE)
+        except Exception:
+            pass  # column already exists
         await self.conn.commit()
 
     async def save(self, task: ScheduledTask) -> None:
         await self.conn.execute(
             """INSERT OR REPLACE INTO scheduled_tasks
                (task_id, description, time_of_day, recurrence, enabled,
-                created_at, last_run_at, next_run_at, notify_email, last_result)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                created_at, last_run_at, next_run_at, notify_email, last_result, running_since)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 task.task_id,
                 task.description,
@@ -44,6 +53,7 @@ class ScheduleStore(BaseRepository):
                 task.next_run_at.isoformat(),
                 task.notify_email,
                 task.last_result,
+                task.running_since.isoformat() if task.running_since else None,
             ),
         )
         await self.conn.commit()
@@ -65,11 +75,25 @@ class ScheduleStore(BaseRepository):
     async def list_due(self, now: datetime) -> list[ScheduledTask]:
         rows = await self.conn.execute_fetchall(
             """SELECT * FROM scheduled_tasks
-               WHERE enabled = 1 AND next_run_at <= ?
+               WHERE enabled = 1 AND next_run_at <= ? AND running_since IS NULL
                ORDER BY next_run_at""",
             (now.isoformat(),),
         )
         return [ScheduledTask(**row) for row in rows]
+
+    async def mark_running(self, task_id: str, now: datetime) -> None:
+        await self.conn.execute(
+            "UPDATE scheduled_tasks SET running_since = ? WHERE task_id = ?",
+            (now.isoformat(), task_id),
+        )
+        await self.conn.commit()
+
+    async def clear_running(self, task_id: str) -> None:
+        await self.conn.execute(
+            "UPDATE scheduled_tasks SET running_since = NULL WHERE task_id = ?",
+            (task_id,),
+        )
+        await self.conn.commit()
 
     async def update_last_run(
         self, task_id: str, last_run: datetime, next_run: datetime, result: str | None = None

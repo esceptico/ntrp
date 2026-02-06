@@ -49,10 +49,13 @@ class Scheduler:
         now = datetime.now()
         due_tasks = await self.store.list_due(now)
         for task in due_tasks:
+            await self.store.mark_running(task.task_id, now)
             try:
                 await self._execute_task(task)
             except Exception:
                 logger.exception("Failed to execute scheduled task %s", task.task_id)
+            finally:
+                await self.store.clear_running(task.task_id)
 
     async def _execute_task(self, task: ScheduledTask) -> None:
         runtime = self.runtime

@@ -1,11 +1,11 @@
-from datetime import UTC, datetime
+from datetime import datetime
 
 from ntrp.memory.formatting import format_context
 from ntrp.memory.models import Fact, FactContext, FactType, Observation
 
 
 def make_fact(id: int, text: str) -> Fact:
-    now = datetime.now(UTC)
+    now = datetime.now()
     return Fact(
         id=id,
         text=text,
@@ -22,7 +22,7 @@ def make_fact(id: int, text: str) -> Fact:
 
 
 def make_observation(id: int, summary: str) -> Observation:
-    now = datetime.now(UTC)
+    now = datetime.now()
     return Observation(
         id=id,
         summary=summary,

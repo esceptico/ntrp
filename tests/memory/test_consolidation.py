@@ -1,6 +1,6 @@
 """Tests for Hindsight-style per-fact consolidation (synthesis, not decomposition)."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -20,7 +20,7 @@ from tests.conftest import mock_embedding
 
 
 def make_fact(id: int, text: str, embedding=None) -> Fact:
-    now = datetime.now(UTC)
+    now = datetime.now()
     return Fact(
         id=id,
         text=text,
@@ -37,7 +37,7 @@ def make_fact(id: int, text: str, embedding=None) -> Fact:
 
 
 def make_observation(id: int, summary: str, evidence_count: int = 1) -> Observation:
-    now = datetime.now(UTC)
+    now = datetime.now()
     return Observation(
         id=id,
         summary=summary,

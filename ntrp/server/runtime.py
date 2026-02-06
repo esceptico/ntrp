@@ -4,6 +4,7 @@ from typing import Any
 
 from ntrp.config import Config, get_config
 from ntrp.constants import AGENT_MAX_DEPTH
+from ntrp.logging import get_logger
 from ntrp.context.compression import SessionManager
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
@@ -20,6 +21,8 @@ from ntrp.sources.memory import MemoryIndexSource
 from ntrp.sources.obsidian import ObsidianSource
 from ntrp.tools.executor import ToolExecutor
 from ntrp.tools.schedule import CancelScheduleTool, GetScheduleResultTool, ListSchedulesTool, ScheduleTaskTool
+
+logger = get_logger(__name__)
 
 
 class Runtime:
@@ -68,8 +71,8 @@ class Runtime:
                 if source.errors:
                     self._source_errors[source.name] = "; ".join(f"{k}: {v}" for k, v in source.errors.items())
                 self._sources[source.name] = source
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to init source %s: %s", cls.__name__, e)
 
     async def connect(self) -> None:
         if self._connected:
@@ -134,7 +137,8 @@ class Runtime:
     async def restore_session(self) -> SessionData | None:
         try:
             data = await self.session_store.get_latest_session()
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to restore session: %s", e)
             return None
 
         if not data:
@@ -153,13 +157,17 @@ class Runtime:
         try:
             session_state.last_activity = datetime.now()
             await self.session_store.save_session(session_state, messages)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to save session: %s", e)
 
     def start_scheduler(self) -> None:
         if self.schedule_store:
             self.scheduler = Scheduler(self, self.schedule_store)
             self.scheduler.start()
+
+    def start_consolidation(self) -> None:
+        if self.memory:
+            self.memory.start_consolidation()
 
     def start_indexing(self) -> None:
         sources = []
@@ -193,6 +201,7 @@ async def get_runtime_async() -> Runtime:
             await _runtime.connect()
             _runtime.start_indexing()
             _runtime.start_scheduler()
+            _runtime.start_consolidation()
     return _runtime
 
 

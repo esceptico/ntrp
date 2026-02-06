@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from ntrp.memory.entity_resolution import (
     compute_resolution_score,
@@ -23,16 +23,16 @@ class TestNameSimilarity:
 
 class TestTemporalProximityScore:
     def test_none_returns_neutral(self):
-        score = temporal_proximity_score(None, datetime.now(UTC))
+        score = temporal_proximity_score(None, datetime.now())
         assert score == 0.5
 
     def test_same_time_is_high(self):
-        now = datetime.now(UTC)
+        now = datetime.now()
         score = temporal_proximity_score(now, now)
         assert score > 0.99
 
     def test_old_time_decays(self):
-        now = datetime.now(UTC)
+        now = datetime.now()
         old = now - timedelta(days=30)
         score = temporal_proximity_score(now, old)
         assert score < 0.5
