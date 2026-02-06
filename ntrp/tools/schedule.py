@@ -9,7 +9,7 @@ from ntrp.tools.core.context import ToolExecution
 
 SCHEDULE_TASK_DESCRIPTION = (
     "Schedule a task for the agent to run at a specific time. "
-    "The task runs autonomously with full tool access. "
+    "The task runs autonomously — read-only by default, set writable=true for memory/note writes. "
     "Results are stored on the task and optionally emailed."
 )
 
@@ -52,6 +52,10 @@ class ScheduleTaskTool(Tool):
                     "type": "string",
                     "description": "Email address to send results to (optional)",
                 },
+                "writable": {
+                    "type": "boolean",
+                    "description": "Allow task to write to memory and notes (default: false)",
+                },
             },
             ["description", "time", "recurrence"],
         )
@@ -63,6 +67,7 @@ class ScheduleTaskTool(Tool):
         time: str = "",
         recurrence: str = "",
         notify_email: str = "",
+        writable: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
         if not description or not time or not recurrence:
@@ -103,11 +108,14 @@ class ScheduleTaskTool(Tool):
             notify_email=email,
             last_result=None,
             running_since=None,
+            writable=bool(writable),
         )
 
         preview = f"Time: {time_normalized} ({rec.value})\nNext run: {next_run.strftime('%Y-%m-%d %H:%M')}"
         if email:
             preview += f"\nEmail: {email}"
+        if writable:
+            preview += "\nWritable: yes"
 
         await execution.require_approval(description, preview=preview)
         await self.store.save(task)

@@ -7,6 +7,8 @@ import {
   getScheduleDetail,
   toggleSchedule,
   deleteSchedule,
+  runSchedule,
+  toggleWritable,
   type Schedule,
 } from "../../../api/client.js";
 import { useDimensions } from "../../../contexts/index.js";
@@ -97,6 +99,34 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
     }
   }, [config, schedules, selectedIndex, loadSchedules]);
 
+  const handleToggleWritable = useCallback(async () => {
+    const task = schedules[selectedIndex];
+    if (!task) return;
+    try {
+      const result = await toggleWritable(config, task.task_id);
+      setSchedules((prev) =>
+        prev.map((s) => (s.task_id === task.task_id ? { ...s, writable: result.writable } : s))
+      );
+    } catch {
+      loadSchedules();
+    }
+  }, [config, schedules, selectedIndex, loadSchedules]);
+
+  const handleRun = useCallback(async () => {
+    const task = schedules[selectedIndex];
+    if (!task || task.running_since) return;
+    try {
+      await runSchedule(config, task.task_id);
+      setSchedules((prev) =>
+        prev.map((s) =>
+          s.task_id === task.task_id ? { ...s, running_since: new Date().toISOString() } : s
+        )
+      );
+    } catch {
+      // ignore
+    }
+  }, [config, schedules, selectedIndex]);
+
   const handleViewResult = useCallback(async () => {
     const task = schedules[selectedIndex];
     if (!task) return;
@@ -133,20 +163,25 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
         handleViewResult();
       } else if (key.name === "d") {
         if (schedules.length > 0) setConfirmDelete(true);
+      } else if (key.name === "w") {
+        handleToggleWritable();
+      } else if (key.name === "x") {
+        handleRun();
       } else if (key.name === "r") {
         setLoading(true);
         loadSchedules();
       }
     },
-    [onClose, schedules.length, handleToggle, confirmDelete, handleDelete, loadSchedules, handleViewResult]
+    [onClose, schedules.length, handleToggle, handleToggleWritable, confirmDelete, handleDelete, loadSchedules, handleViewResult, handleRun]
   );
 
   useKeypress(handleKeypress, { isActive: !viewingResult });
 
   const renderScheduleItem = useCallback((item: Schedule, { isSelected }: RenderItemContext) => {
     const enabled = item.enabled;
-    const statusIcon = enabled ? "✓" : "⏸";
-    const statusColor = enabled ? colors.status.success : colors.text.disabled;
+    const isRunning = !!item.running_since;
+    const statusIcon = isRunning ? "⟳" : (enabled ? "✓" : "⏸");
+    const statusColor = isRunning ? colors.tool.running : (enabled ? colors.status.success : colors.text.disabled);
     const textColor = isSelected ? colors.text.primary : (enabled ? colors.text.secondary : colors.text.disabled);
     const metaColor = isSelected ? colors.text.secondary : colors.text.muted;
 
@@ -157,7 +192,7 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
       <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color={statusColor}>{statusIcon}</Text>
-          <Text color={metaColor}>{` ${item.time_of_day}  ${item.recurrence}`}</Text>
+          <Text color={metaColor}>{` ${item.time_of_day}  ${item.recurrence}${item.writable ? "  ✎" : ""}`}</Text>
         </Text>
         <Text color={textColor}>{wrapText(item.description, textWidth).join('\n')}</Text>
         <Text color={metaColor}>{`next: ${nextRun}   last: ${lastRun}`}</Text>
@@ -217,7 +252,7 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
       <Footer>
         {confirmDelete
           ? "y: confirm  n: cancel"
-          : "enter: view  space: toggle  d: delete  r: refresh  q: close"}
+          : "enter: view  space: toggle  w: writable  x: run  d: delete  r: refresh  q: close"}
       </Footer>
     </Panel>
   );

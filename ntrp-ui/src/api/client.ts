@@ -333,6 +333,8 @@ export interface Schedule {
   next_run_at: string | null;
   notify_email: string | null;
   last_result: string | null;
+  writable: boolean;
+  running_since: string | null;
 }
 
 export async function getSchedules(config: Config): Promise<{ schedules: Schedule[] }> {
@@ -349,6 +351,14 @@ export async function deleteSchedule(config: Config, taskId: string): Promise<{ 
 
 export async function getScheduleDetail(config: Config, taskId: string): Promise<Schedule> {
   return api.get<Schedule>(`${config.serverUrl}/schedules/${taskId}`);
+}
+
+export async function toggleWritable(config: Config, taskId: string): Promise<{ writable: boolean }> {
+  return api.post<{ writable: boolean }>(`${config.serverUrl}/schedules/${taskId}/writable`);
+}
+
+export async function runSchedule(config: Config, taskId: string): Promise<{ status: string }> {
+  return api.post<{ status: string }>(`${config.serverUrl}/schedules/${taskId}/run`);
 }
 
 

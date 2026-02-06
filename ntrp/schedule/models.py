@@ -23,6 +23,7 @@ class ScheduledTask:
     notify_email: str | None
     last_result: str | None
     running_since: datetime | None
+    writable: bool
 
     def __post_init__(self):
         if isinstance(self.recurrence, str):
@@ -36,6 +37,7 @@ class ScheduledTask:
         if isinstance(self.running_since, str):
             self.running_since = datetime.fromisoformat(self.running_since)
         self.enabled = bool(self.enabled)
+        self.writable = bool(self.writable)
 
 
 def compute_next_run(

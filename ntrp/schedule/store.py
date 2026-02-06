@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
     next_run_at TEXT,
     notify_email TEXT,
     last_result TEXT,
-    running_since TEXT
+    running_since TEXT,
+    writable INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_scheduled_next_run ON scheduled_tasks(next_run_at);
@@ -32,8 +33,8 @@ class ScheduleStore(BaseRepository):
         await self.conn.execute(
             """INSERT OR REPLACE INTO scheduled_tasks
                (task_id, description, time_of_day, recurrence, enabled,
-                created_at, last_run_at, next_run_at, notify_email, last_result, running_since)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                created_at, last_run_at, next_run_at, notify_email, last_result, running_since, writable)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 task.task_id,
                 task.description,
@@ -46,6 +47,7 @@ class ScheduleStore(BaseRepository):
                 task.notify_email,
                 task.last_result,
                 task.running_since.isoformat() if task.running_since else None,
+                int(task.writable),
             ),
         )
         await self.conn.commit()
@@ -103,5 +105,12 @@ class ScheduleStore(BaseRepository):
         await self.conn.execute(
             "UPDATE scheduled_tasks SET enabled = ? WHERE task_id = ?",
             (int(enabled), task_id),
+        )
+        await self.conn.commit()
+
+    async def set_writable(self, task_id: str, writable: bool) -> None:
+        await self.conn.execute(
+            "UPDATE scheduled_tasks SET writable = ? WHERE task_id = ?",
+            (int(writable), task_id),
         )
         await self.conn.commit()

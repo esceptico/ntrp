@@ -58,11 +58,10 @@ class Scheduler:
             finally:
                 await self.store.clear_running(task.task_id)
 
-    async def _execute_task(self, task: ScheduledTask) -> None:
+    async def _run_agent(self, task: ScheduledTask) -> str | None:
         runtime = self.runtime
         logger.info("Executing scheduled task %s: %s", task.task_id, task.description[:80])
 
-        # Build system prompt with memory context
         memory_context = None
         if runtime.memory:
             from ntrp.memory.formatting import format_memory_context
@@ -76,6 +75,12 @@ class Scheduler:
             source_details=runtime.get_source_details(),
             memory_context=memory_context,
         )
+        system_prompt += (
+            "\n\nYou are executing a scheduled task autonomously. "
+            "Do the work described directly — gather information, produce output, and return the result. "
+            "Do not schedule new tasks or ask for confirmation. "
+            "Return only the final output — no preamble, no narration, no thinking out loud."
+        )
 
         session_state = runtime.create_session()
 
@@ -86,12 +91,9 @@ class Scheduler:
             executor=runtime.executor,
         )
 
-        # Read-only tools only — scheduled tasks gather and summarize,
-        # email notification is handled below outside the agent.
-        # TODO: per-task tool access control
         from ntrp.core.agent import Agent
 
-        tools = runtime.executor.get_tools(mutates=False)
+        tools = runtime.executor.get_tools() if task.writable else runtime.executor.get_tools(mutates=False)
         agent = Agent(
             tools=tools,
             tool_executor=runtime.executor,
@@ -104,7 +106,6 @@ class Scheduler:
 
         result = await agent.run(task.description)
 
-        # Send email if configured
         if task.notify_email and runtime.gmail:
             accounts = runtime.gmail.list_accounts()
             if accounts:
@@ -121,7 +122,10 @@ class Scheduler:
                 except Exception:
                     logger.exception("Failed to send email for task %s", task.task_id)
 
-        # Store result and update timing
+        return result
+
+    async def _execute_task(self, task: ScheduledTask) -> None:
+        result = await self._run_agent(task)
         now = datetime.now()
         if task.recurrence == Recurrence.ONCE:
             await self.store.update_last_run(task.task_id, now, now, result=result)
@@ -129,5 +133,24 @@ class Scheduler:
         else:
             next_run = compute_next_run(task.time_of_day, task.recurrence, after=now)
             await self.store.update_last_run(task.task_id, now, next_run, result=result)
-
         logger.info("Completed scheduled task %s", task.task_id)
+
+    async def run_now(self, task_id: str) -> str | None:
+        task = await self.store.get(task_id)
+        if not task:
+            raise ValueError(f"Task {task_id} not found")
+        if task.running_since:
+            raise ValueError(f"Task {task_id} is already running")
+
+        await self.store.mark_running(task.task_id, datetime.now())
+        try:
+            result = await self._run_agent(task)
+            now = datetime.now()
+            if task.recurrence == Recurrence.ONCE:
+                await self.store.update_last_run(task.task_id, now, task.next_run_at, result=result)
+            else:
+                next_run = compute_next_run(task.time_of_day, task.recurrence, after=now)
+                await self.store.update_last_run(task.task_id, now, next_run, result=result)
+            return result
+        finally:
+            await self.store.clear_running(task.task_id)
