@@ -17,6 +17,8 @@ class EntitySchema(BaseModel):
 class EntityPairSchema(BaseModel):
     source: str
     target: str
+    source_type: str = "other"
+    target_type: str = "other"
 
 
 class ExtractionSchema(BaseModel):
@@ -43,7 +45,13 @@ class Extractor:
             parsed = ExtractionSchema.model_validate_json(content)
             return ExtractionResult(
                 entities=[ExtractedEntity(name=e.name, entity_type=e.type) for e in parsed.entities],
-                entity_pairs=[ExtractedEntityPair(source=p.source, target=p.target) for p in parsed.entity_pairs],
+                entity_pairs=[
+                    ExtractedEntityPair(
+                        source=p.source, target=p.target,
+                        source_type=p.source_type, target_type=p.target_type,
+                    )
+                    for p in parsed.entity_pairs
+                ],
             )
         except Exception:
             logger.warning("Extraction failed", exc_info=True)

@@ -6,7 +6,7 @@ from ntrp.constants import (
     SUPPORTED_MODELS,
     TAIL_TOKEN_BUDGET,
 )
-from ntrp.context.prompts import SUMMARIZE_PROMPT
+from ntrp.context.prompts import SUMMARIZE_PROMPT_TEMPLATE
 from ntrp.llm import acompletion
 
 
@@ -107,10 +107,13 @@ def _build_summarize_request(conversation_text: str, model: str) -> dict:
     # Scale budget: ~1 summary token per 4 input tokens, clamped to [400, 2000]
     input_tokens = len(conversation_text) // CHARS_PER_TOKEN
     max_tokens = max(400, min(2000, input_tokens // 4))
+    # ~0.75 words per token
+    word_budget = int(max_tokens * 0.75)
+    prompt = SUMMARIZE_PROMPT_TEMPLATE.format(budget=word_budget)
     return {
         "model": model,
         "messages": [
-            {"role": "system", "content": SUMMARIZE_PROMPT},
+            {"role": "system", "content": prompt},
             {"role": "user", "content": conversation_text},
         ],
         "temperature": 0.3,

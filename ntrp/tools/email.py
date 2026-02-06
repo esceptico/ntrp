@@ -12,7 +12,7 @@ READ_EMAIL_DESCRIPTION = (
     "Read the full content of an email by its ID. Use search_email or list_email first to find email IDs."
 )
 
-LIST_EMAIL_DESCRIPTION = "List recent emails. Use read_email(id) to get full content."
+LIST_EMAIL_DESCRIPTION = "List recent emails (subjects only). Use search_email() to find email IDs, then read_email(id) for full content."
 
 SEARCH_EMAIL_DESCRIPTION = "Search emails by content. Use read_email(id) to get full content."
 
@@ -132,7 +132,10 @@ class ListEmailTool(Tool):
         for email in emails[:limit]:
             title = truncate(email.title, EMAIL_SUBJECT_TRUNCATE) if email.title else "(no subject)"
             preview = truncate(email.preview, EMAIL_FROM_TRUNCATE) if email.preview else ""
-            output.append(f"• {title}" + (f" ({preview})" if preview else ""))
+            line = f"• {title}" + (f" ({preview})" if preview else "")
+            if email.identity:
+                line += f"  id: {email.identity}"
+            output.append(line)
 
         return ToolResult("\n".join(output), f"{len(emails)} emails")
 

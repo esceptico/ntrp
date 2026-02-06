@@ -1,5 +1,5 @@
-SUMMARIZE_PROMPT = """You are continuing an active personal assistant session.
-Create a state handoff for seamless continuation.
+SUMMARIZE_PROMPT_TEMPLATE = """You are continuing an active personal assistant session.
+Create a state handoff for seamless continuation. Target length: ~{budget} words.
 
 ## Required Sections:
 

@@ -39,12 +39,16 @@ class ExploreTool(Tool):
         context = "\n".join(f"- {f.text}" for f in user_facts)
         return f"{EXPLORE_PROMPT}\n\nUSER CONTEXT:\n{context}"
 
+    EXPLORE_TOOLS = {
+        "search_notes", "read_note", "search_email", "read_email",
+        "search_calendar", "search_browser", "recall", "remember",
+        "web_search", "web_fetch", "explore",
+    }
+
     async def execute(self, execution: ToolExecution, task: str, **kwargs) -> ToolResult:
         ctx = execution.ctx
 
-        tools = ctx.executor.get_tools(mutates=False)
-        remember_schema = ctx.executor.registry.get_schemas(names={"remember"})
-        tools = tools + remember_schema
+        tools = ctx.executor.registry.get_schemas(names=self.EXPLORE_TOOLS)
 
         prompt = await self._build_prompt(ctx.executor)
 

@@ -167,8 +167,8 @@ class FactMemory:
             await self._add_entity_ref(repo, fact_id, entity.name, entity.entity_type, source_ref, seen)
 
         for pair in extraction.entity_pairs:
-            await self._add_entity_ref(repo, fact_id, pair.source, "other", source_ref, seen)
-            await self._add_entity_ref(repo, fact_id, pair.target, "other", source_ref, seen)
+            await self._add_entity_ref(repo, fact_id, pair.source, pair.source_type, source_ref, seen)
+            await self._add_entity_ref(repo, fact_id, pair.target, pair.target_type, source_ref, seen)
 
         return list(seen)
 

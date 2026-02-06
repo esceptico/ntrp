@@ -28,6 +28,8 @@ class ExtractedEntity:
 class ExtractedEntityPair:
     source: str
     target: str
+    source_type: str = "other"
+    target_type: str = "other"
 
 
 @dataclass

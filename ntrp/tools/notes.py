@@ -19,58 +19,15 @@ from ntrp.utils import truncate
 logger = get_logger(__name__)
 
 
-READ_NOTE_DESCRIPTION = """Read content of a note by its file path.
+READ_NOTE_DESCRIPTION = "Read a note by path. Use search_notes() first to find paths. Supports offset/limit for large notes."
 
-USE AFTER search() to get full content of a matching note.
+EDIT_NOTE_DESCRIPTION = """Edit a note by find-and-replace. Requires approval. Always read_note() first.
+find text must match exactly. For large changes, use multiple small edits."""
 
-PARAMETERS:
-- path: relative path from search results (e.g., "projects/idea.md")
-- offset/limit: for reading specific sections of large notes
+CREATE_NOTE_DESCRIPTION = """Create a new note. Requires approval. Search first to avoid duplicates.
+Check for templates in vault. .md added automatically. Fails if note exists."""
 
-WORKFLOW: search() -> read_note() -> remember() or edit_note()"""
-
-EDIT_NOTE_DESCRIPTION = """Edit a note by finding and replacing text. Requires user approval.
-
-IMPORTANT: Always read_note() first to see current content.
-
-WORKFLOW:
-1. read_note(path) -> get current content
-2. edit_note(path, find="exact text", replace="new text")
-3. read_note(path) -> verify if needed
-
-TIPS:
-- find text must match exactly (including whitespace)
-- For large changes, use multiple small edits
-- If "not found" error, read the note first to copy exact text"""
-
-CREATE_NOTE_DESCRIPTION = """Create a new note in the vault. Requires user approval.
-
-IMPORTANT: Only for NEW notes. Use edit_note() for existing ones.
-
-WORKFLOW:
-1. search() or list_notes() -> verify note doesn't already exist
-2. Check if user has note templates (Templater plugin) -> search for relevant templates in the vault
-3. If a matching template exists, use its structure as a base for the new note content
-4. create_note(path, content) -> propose creation
-5. User approves -> note is created
-
-TIPS:
-- .md extension is added automatically if missing
-- Fails if note already exists at the given path"""
-
-DELETE_NOTE_DESCRIPTION = """Permanently delete a note from the vault. Requires user approval.
-
-IMPORTANT: Destructive and irreversible. Verify before proposing.
-
-WORKFLOW:
-1. read_note(path) -> confirm this is the right note
-2. delete_note(path) -> propose deletion
-3. User approves -> note is removed
-
-TIPS:
-- Always read the note first to confirm identity
-- Use search() or list_notes() if unsure of exact path
-- To reorganize rather than remove, use move_note() instead"""
+DELETE_NOTE_DESCRIPTION = "Permanently delete a note. Requires approval. Always read_note() first to confirm."
 
 
 def simplify_query(query: str) -> str:
@@ -470,15 +427,6 @@ class SearchNotesTool(Tool):
                     for item in results:
                         output.append(f"• {item.title}")
                         output.append(f"  path: `{item.source_id}`")
-                        scores = []
-                        if item.rrf_score:
-                            scores.append(f"rrf={item.rrf_score:.4f}")
-                        if item.vector_score is not None:
-                            scores.append(f"vec={item.vector_score:.3f}@{item.vector_rank}")
-                        if item.fts_score is not None:
-                            scores.append(f"fts={item.fts_score:.2f}@{item.fts_rank}")
-                        if scores:
-                            output.append(f"  [{' '.join(scores)}]")
                         if item.snippet:
                             output.append(f"  {truncate(item.snippet, SNIPPET_TRUNCATE)}")
                     return ToolResult("\n".join(output), f"{len(results)} notes")

@@ -12,6 +12,8 @@ WHEN TO USE:
 - Checking what you know about a person/topic
 - Before asking questions that may have been answered
 
+NOTE: Your system prompt already contains relevant memory context. Only call recall() when you need facts beyond what's in MEMORY CONTEXT.
+
 PREFER recall() FOR: Known facts, user preferences, stored knowledge
 PREFER search() FOR: Finding new info in notes/emails/web pages"""
 
