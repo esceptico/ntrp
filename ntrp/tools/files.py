@@ -4,14 +4,16 @@ from typing import Any
 from ntrp.tools.core.base import Tool, ToolResult, make_schema
 from ntrp.tools.core.formatting import format_lines_with_pagination
 
+READ_FILE_DESCRIPTION = (
+    "Read content from a file. Use for code, configs, logs, etc. (For Obsidian notes, use read_note instead.)"
+)
+
 
 class ReadFileTool(Tool):
     """Read content from any file on the filesystem."""
 
     name = "read_file"
-    description = (
-        "Read content from a file. Use for code, configs, logs, etc. (For Obsidian notes, use read_note instead.)"
-    )
+    description = READ_FILE_DESCRIPTION
 
     def __init__(self, base_path: str | None = None):
         """Initialize with optional base path for relative paths."""
@@ -19,20 +21,25 @@ class ReadFileTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "path": {
-                "type": "string",
-                "description": "Path to the file (relative or absolute)",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "path": {
+                    "type": "string",
+                    "description": "Path to the file (relative or absolute)",
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Line number to start from (1-based, default: 1)",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum lines to read (default: 500)",
+                },
             },
-            "offset": {
-                "type": "integer",
-                "description": "Line number to start from (1-based, default: 1)",
-            },
-            "limit": {
-                "type": "integer",
-                "description": "Maximum lines to read (default: 500)",
-            },
-        }, ["path"])
+            ["path"],
+        )
 
     async def execute(
         self, execution: Any, path: str = "", offset: int = 1, limit: int = 500, **kwargs: Any

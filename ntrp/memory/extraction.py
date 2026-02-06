@@ -1,7 +1,7 @@
-from ntrp.llm import acompletion
 from pydantic import BaseModel
 
 from ntrp.constants import EXTRACTION_TEMPERATURE
+from ntrp.llm import acompletion
 from ntrp.logging import get_logger
 from ntrp.memory.models import ExtractedEntity, ExtractedEntityPair, ExtractionResult
 from ntrp.memory.prompts import EXTRACTION_PROMPT

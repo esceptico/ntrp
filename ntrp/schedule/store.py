@@ -51,17 +51,13 @@ class ScheduleStore(BaseRepository):
         await self.conn.commit()
 
     async def get(self, task_id: str) -> ScheduledTask | None:
-        rows = await self.conn.execute_fetchall(
-            "SELECT * FROM scheduled_tasks WHERE task_id = ?", (task_id,)
-        )
+        rows = await self.conn.execute_fetchall("SELECT * FROM scheduled_tasks WHERE task_id = ?", (task_id,))
         if not rows:
             return None
         return ScheduledTask(**rows[0])
 
     async def list_all(self) -> list[ScheduledTask]:
-        rows = await self.conn.execute_fetchall(
-            "SELECT * FROM scheduled_tasks ORDER BY created_at"
-        )
+        rows = await self.conn.execute_fetchall("SELECT * FROM scheduled_tasks ORDER BY created_at")
         return [ScheduledTask(**row) for row in rows]
 
     async def list_due(self, now: datetime) -> list[ScheduledTask]:
@@ -99,9 +95,7 @@ class ScheduleStore(BaseRepository):
         await self.conn.commit()
 
     async def delete(self, task_id: str) -> bool:
-        cursor = await self.conn.execute(
-            "DELETE FROM scheduled_tasks WHERE task_id = ?", (task_id,)
-        )
+        cursor = await self.conn.execute("DELETE FROM scheduled_tasks WHERE task_id = ?", (task_id,))
         await self.conn.commit()
         return cursor.rowcount > 0
 

@@ -159,16 +159,21 @@ class BashTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "command": {
-                "type": "string",
-                "description": "The shell command to execute",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "command": {
+                    "type": "string",
+                    "description": "The shell command to execute",
+                },
+                "working_dir": {
+                    "type": "string",
+                    "description": "Working directory (optional, defaults to current)",
+                },
             },
-            "working_dir": {
-                "type": "string",
-                "description": "Working directory (optional, defaults to current)",
-            },
-        }, ["command"])
+            ["command"],
+        )
 
     async def execute(
         self, execution: ToolExecution, command: str = "", working_dir: str | None = None, **kwargs: Any

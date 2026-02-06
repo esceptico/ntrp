@@ -7,14 +7,22 @@ from ntrp.schedule.store import ScheduleStore
 from ntrp.tools.core.base import Tool, ToolResult, make_schema
 from ntrp.tools.core.context import ToolExecution
 
+SCHEDULE_TASK_DESCRIPTION = (
+    "Schedule a task for the agent to run at a specific time. "
+    "The task runs autonomously with full tool access. "
+    "Results are stored on the task and optionally emailed."
+)
+
+LIST_SCHEDULES_DESCRIPTION = "List all scheduled tasks with their status, timing, and next run."
+
+CANCEL_SCHEDULE_DESCRIPTION = "Cancel (delete) a scheduled task by its ID. Use list_schedules to find task IDs."
+
+GET_SCHEDULE_RESULT_DESCRIPTION = "Get the last execution result of a scheduled task by its ID."
+
 
 class ScheduleTaskTool(Tool):
     name = "schedule_task"
-    description = (
-        "Schedule a task for the agent to run at a specific time. "
-        "The task runs autonomously with full tool access. "
-        "Results are stored on the task and optionally emailed."
-    )
+    description = SCHEDULE_TASK_DESCRIPTION
     mutates = True
 
     def __init__(self, store: ScheduleStore, default_email: str | None = None):
@@ -23,25 +31,30 @@ class ScheduleTaskTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "description": {
-                "type": "string",
-                "description": "What the agent should do (natural language task)",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "description": {
+                    "type": "string",
+                    "description": "What the agent should do (natural language task)",
+                },
+                "time": {
+                    "type": "string",
+                    "description": "Time of day in HH:MM format (24h, local time)",
+                },
+                "recurrence": {
+                    "type": "string",
+                    "enum": ["once", "daily", "weekdays", "weekly"],
+                    "description": "How often: once, daily, weekdays (Mon-Fri), weekly",
+                },
+                "notify_email": {
+                    "type": "string",
+                    "description": "Email address to send results to (optional)",
+                },
             },
-            "time": {
-                "type": "string",
-                "description": "Time of day in HH:MM format (24h, local time)",
-            },
-            "recurrence": {
-                "type": "string",
-                "enum": ["once", "daily", "weekdays", "weekly"],
-                "description": "How often: once, daily, weekdays (Mon-Fri), weekly",
-            },
-            "notify_email": {
-                "type": "string",
-                "description": "Email address to send results to (optional)",
-            },
-        }, ["description", "time", "recurrence"])
+            ["description", "time", "recurrence"],
+        )
 
     async def execute(
         self,
@@ -103,15 +116,14 @@ class ScheduleTaskTool(Tool):
             f"Scheduled: {description}\n"
             f"ID: {task.task_id}\n"
             f"Time: {time_normalized} ({rec.value})\n"
-            f"Next run: {next_run.strftime('%Y-%m-%d %H:%M')}"
-            + (f"\nEmail: {email}" if email else ""),
+            f"Next run: {next_run.strftime('%Y-%m-%d %H:%M')}" + (f"\nEmail: {email}" if email else ""),
             f"Scheduled ({task.task_id})",
         )
 
 
 class ListSchedulesTool(Tool):
     name = "list_schedules"
-    description = "List all scheduled tasks with their status, timing, and next run."
+    description = LIST_SCHEDULES_DESCRIPTION
 
     def __init__(self, store: ScheduleStore):
         self.store = store
@@ -141,7 +153,7 @@ class ListSchedulesTool(Tool):
 
 class CancelScheduleTool(Tool):
     name = "cancel_schedule"
-    description = "Cancel (delete) a scheduled task by its ID. Use list_schedules to find task IDs."
+    description = CANCEL_SCHEDULE_DESCRIPTION
     mutates = True
 
     def __init__(self, store: ScheduleStore):
@@ -149,16 +161,19 @@ class CancelScheduleTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "task_id": {
-                "type": "string",
-                "description": "The task ID to cancel",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "task_id": {
+                    "type": "string",
+                    "description": "The task ID to cancel",
+                },
             },
-        }, ["task_id"])
+            ["task_id"],
+        )
 
-    async def execute(
-        self, execution: ToolExecution, task_id: str = "", **kwargs: Any
-    ) -> ToolResult:
+    async def execute(self, execution: ToolExecution, task_id: str = "", **kwargs: Any) -> ToolResult:
         if not task_id:
             return ToolResult("Error: task_id is required", "Missing task_id")
 
@@ -174,23 +189,26 @@ class CancelScheduleTool(Tool):
 
 class GetScheduleResultTool(Tool):
     name = "get_schedule_result"
-    description = "Get the last execution result of a scheduled task by its ID."
+    description = GET_SCHEDULE_RESULT_DESCRIPTION
 
     def __init__(self, store: ScheduleStore):
         self.store = store
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "task_id": {
-                "type": "string",
-                "description": "The task ID to get results for",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "task_id": {
+                    "type": "string",
+                    "description": "The task ID to get results for",
+                },
             },
-        }, ["task_id"])
+            ["task_id"],
+        )
 
-    async def execute(
-        self, execution: ToolExecution, task_id: str = "", **kwargs: Any
-    ) -> ToolResult:
+    async def execute(self, execution: ToolExecution, task_id: str = "", **kwargs: Any) -> ToolResult:
         if not task_id:
             return ToolResult("Error: task_id is required", "Missing task_id")
 

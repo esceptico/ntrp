@@ -4,9 +4,9 @@ from typing import Any
 
 from ntrp.config import Config, get_config
 from ntrp.constants import AGENT_MAX_DEPTH, SESSION_EXPIRY_HOURS
-from ntrp.logging import get_logger
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
+from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
 from ntrp.schedule.scheduler import Scheduler
 from ntrp.schedule.store import ScheduleStore

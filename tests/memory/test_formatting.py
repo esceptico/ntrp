@@ -40,18 +40,14 @@ def make_observation(id: int, summary: str) -> Observation:
 class TestFormatMemoryContext:
     def test_empty_context(self):
         context = FactContext(facts=[], observations=[])
-        assert format_memory_context(
-            query_facts=context.facts, query_observations=context.observations
-        ) == ""
+        assert format_memory_context(query_facts=context.facts, query_observations=context.observations) == ""
 
     def test_facts_only(self):
         context = FactContext(
             facts=[make_fact(1, "Alice works at Google")],
             observations=[],
         )
-        result = format_memory_context(
-            query_facts=context.facts, query_observations=context.observations
-        )
+        result = format_memory_context(query_facts=context.facts, query_observations=context.observations)
         assert "**Relevant**" in result
         assert "Alice works at Google" in result
         assert "**Patterns**" not in result
@@ -61,9 +57,7 @@ class TestFormatMemoryContext:
             facts=[],
             observations=[make_observation(1, "Prefers Python for data analysis")],
         )
-        result = format_memory_context(
-            query_facts=context.facts, query_observations=context.observations
-        )
+        result = format_memory_context(query_facts=context.facts, query_observations=context.observations)
         assert "**Patterns**" in result
         assert "Prefers Python" in result
         assert "**Relevant**" not in result
@@ -73,9 +67,7 @@ class TestFormatMemoryContext:
             facts=[make_fact(1, "Likes coffee")],
             observations=[make_observation(1, "Morning person")],
         )
-        result = format_memory_context(
-            query_facts=context.facts, query_observations=context.observations
-        )
+        result = format_memory_context(query_facts=context.facts, query_observations=context.observations)
         assert "**Patterns**" in result
         assert "**Relevant**" in result
         assert "Likes coffee" in result

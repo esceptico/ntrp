@@ -3,9 +3,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from ntrp.context.models import SessionData, SessionState
+from ntrp.core.prompts import build_system_prompt
 from ntrp.events import SSEEvent
 from ntrp.memory.formatting import format_memory_context
-from ntrp.core.prompts import build_system_prompt
 from ntrp.server.runtime import Runtime
 from ntrp.server.state import RunState
 from ntrp.tools.core.context import ApprovalResponse, ChoiceResponse
@@ -45,14 +45,17 @@ async def prepare_messages(
 
         # Query-conditioned recall: inject facts relevant to this specific message
         query_context = await runtime.memory.recall(user_message, limit=5)
-        query_fact_ids = {f.id for f in query_context.facts}
         # Deduplicate against static context
         static_ids = {f.id for f in user_facts} | {f.id for f in recent_facts}
         query_facts = [f for f in query_context.facts if f.id not in static_ids]
 
-        memory_context = format_memory_context(
-            user_facts, recent_facts, query_facts, query_context.observations,
-        ) or None
+        formatted_memory_context = format_memory_context(
+            user_facts=user_facts,
+            recent_facts=recent_facts,
+            query_facts=query_facts,
+            query_observations=query_context.observations,
+        )
+        memory_context = formatted_memory_context or None
 
     system_prompt = build_system_prompt(
         source_details=runtime.get_source_details(),

@@ -6,10 +6,14 @@ from ntrp.tools.core.base import Tool, ToolResult, make_schema
 from ntrp.tools.core.context import ToolExecution
 from ntrp.utils import truncate
 
+LIST_BROWSER_DESCRIPTION = "List recent browser history."
+
+SEARCH_BROWSER_DESCRIPTION = "Search browser history by content or URL."
+
 
 class ListBrowserTool(Tool):
     name = "list_browser"
-    description = "List recent browser history."
+    description = LIST_BROWSER_DESCRIPTION
     source_type = BrowserSource
 
     def __init__(self, source: BrowserSource):
@@ -17,10 +21,14 @@ class ListBrowserTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "days": {"type": "integer", "description": "How many days back to look (default: 7)"},
-            "limit": {"type": "integer", "description": "Maximum results (default: 30)"},
-        })
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "days": {"type": "integer", "description": "How many days back to look (default: 7)"},
+                "limit": {"type": "integer", "description": "Maximum results (default: 30)"},
+            },
+        )
 
     async def execute(self, execution: ToolExecution, days: int = 7, limit: int = 30, **kwargs: Any) -> ToolResult:
         items = self.source.list_recent(days=days, limit=limit)
@@ -39,7 +47,7 @@ class ListBrowserTool(Tool):
 
 class SearchBrowserTool(Tool):
     name = "search_browser"
-    description = "Search browser history by content or URL."
+    description = SEARCH_BROWSER_DESCRIPTION
     source_type = BrowserSource
 
     def __init__(self, source: BrowserSource):
@@ -47,10 +55,15 @@ class SearchBrowserTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "query": {"type": "string", "description": "Search query"},
-            "limit": {"type": "integer", "description": "Maximum results (default: 10)"},
-        }, ["query"])
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "query": {"type": "string", "description": "Search query"},
+                "limit": {"type": "integer", "description": "Maximum results (default: 10)"},
+            },
+            ["query"],
+        )
 
     async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
         if not query:

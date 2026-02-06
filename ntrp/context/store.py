@@ -98,4 +98,3 @@ class SessionStore(SessionDatabase):
         cursor = await self.conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
         await self.conn.commit()
         return cursor.rowcount > 0
-

@@ -48,7 +48,7 @@ def _is_retryable(exc: Exception) -> tuple[bool, float | None]:
 def _delay(attempt: int, retry_after: float | None) -> float:
     if retry_after is not None:
         return min(retry_after, MAX_DELAY)
-    base = min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
+    base = min(BASE_DELAY * (2**attempt), MAX_DELAY)
     jitter = base * JITTER * (2 * random.random() - 1)
     return base + jitter
 
@@ -65,5 +65,3 @@ async def acompletion(**kwargs):
             wait = _delay(attempt, retry_after)
             logger.warning("LLM call failed (attempt %d/%d), retrying in %.1fs: %s", attempt + 1, MAX_RETRIES, wait, e)
             await asyncio.sleep(wait)
-
-

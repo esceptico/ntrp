@@ -3,38 +3,45 @@ from typing import Any
 from ntrp.tools.core.base import Tool, ToolResult, make_schema
 from ntrp.tools.core.context import ToolExecution
 
+ASK_CHOICE_DESCRIPTION = "Ask the user to choose from predefined options."
+
 
 class AskChoiceTool(Tool):
     name = "ask_choice"
-    description = "Ask the user to choose from predefined options."
+    description = ASK_CHOICE_DESCRIPTION
     mutates = False
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "question": {
-                "type": "string",
-                "description": "The question to ask",
-            },
-            "options": {
-                "type": "array",
-                "description": "List of options. Each option has 'id' (short key), 'label' (display text), and optional 'description'",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "string"},
-                        "label": {"type": "string"},
-                        "description": {"type": "string"},
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "question": {
+                    "type": "string",
+                    "description": "The question to ask",
+                },
+                "options": {
+                    "type": "array",
+                    "description": "List of options. Each option has 'id' (short key), 'label' (display text), and optional 'description'",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "label": {"type": "string"},
+                            "description": {"type": "string"},
+                        },
+                        "required": ["id", "label"],
                     },
-                    "required": ["id", "label"],
+                },
+                "allow_multiple": {
+                    "type": "boolean",
+                    "description": "If true, user can select multiple options. Default: false",
+                    "default": False,
                 },
             },
-            "allow_multiple": {
-                "type": "boolean",
-                "description": "If true, user can select multiple options. Default: false",
-                "default": False,
-            },
-        }, ["question", "options"])
+            ["question", "options"],
+        )
 
     async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult:
         question = kwargs.get("question", "")

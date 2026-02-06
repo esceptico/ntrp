@@ -51,16 +51,21 @@ class WriteScratchpadTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "content": {
-                "type": "string",
-                "description": "Content to save",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "content": {
+                    "type": "string",
+                    "description": "Content to save",
+                },
+                "key": {
+                    "type": "string",
+                    "description": "Namespace for the note (default: 'default')",
+                },
             },
-            "key": {
-                "type": "string",
-                "description": "Namespace for the note (default: 'default')",
-            },
-        }, ["content"])
+            ["content"],
+        )
 
     async def execute(
         self, execution: ToolExecution, content: str = "", key: str = "default", **kwargs: Any
@@ -87,12 +92,16 @@ class ReadScratchpadTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "key": {
-                "type": "string",
-                "description": "Namespace to read (default: 'default')",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "key": {
+                    "type": "string",
+                    "description": "Namespace to read (default: 'default')",
+                },
             },
-        })
+        )
 
     async def execute(self, execution: ToolExecution, key: str = "default", **kwargs: Any) -> ToolResult:
         path = _scratchpad_path(execution.ctx.session_id, key)

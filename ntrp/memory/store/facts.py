@@ -313,9 +313,7 @@ class FactRepository(BaseRepository):
         if not fact_ids:
             return {}
         placeholders = ",".join("?" * len(fact_ids))
-        rows = await self.conn.execute_fetchall(
-            _SQL_GET_ENTITY_REFS_BATCH.format(placeholders=placeholders), fact_ids
-        )
+        rows = await self.conn.execute_fetchall(_SQL_GET_ENTITY_REFS_BATCH.format(placeholders=placeholders), fact_ids)
         result: dict[int, list[EntityRef]] = {fid: [] for fid in fact_ids}
         for r in rows:
             ref = self._row_to_entity_ref(r)

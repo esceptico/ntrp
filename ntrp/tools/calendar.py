@@ -5,13 +5,37 @@ from ntrp.sources.base import CalendarSource
 from ntrp.tools.core.base import Tool, ToolResult, make_schema
 from ntrp.tools.core.context import ToolExecution
 
+SEARCH_CALENDAR_DESCRIPTION = """Search calendar events by text query.
+
+Use this to find specific events by name, attendee, or description."""
+
+CREATE_CALENDAR_EVENT_DESCRIPTION = """Create a new calendar event.
+
+Use this to schedule meetings, reminders, or block time on the calendar.
+Requires user approval before creating."""
+
+EDIT_CALENDAR_EVENT_DESCRIPTION = """Edit an existing calendar event.
+
+Use list_calendar or search_calendar first to find the event ID.
+Only provide the fields you want to change - others remain unchanged.
+Requires user approval before editing."""
+
+DELETE_CALENDAR_EVENT_DESCRIPTION = """Delete a calendar event by ID.
+
+Use list_calendar or search_calendar first to find the event ID.
+Requires user approval before deleting."""
+
+LIST_CALENDAR_DESCRIPTION = """List calendar events.
+
+Use days_forward for upcoming events, days_back for past events.
+Use search_calendar to find specific events by name."""
+
 
 def _parse_datetime(value: str) -> datetime | None:
-    """Parse ISO datetime string, handling Z timezone suffix."""
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(value)
     except Exception:
         return None
 
@@ -20,9 +44,7 @@ class SearchCalendarTool(Tool):
     """Search calendar events."""
 
     name = "search_calendar"
-    description = """Search calendar events by text query.
-
-Use this to find specific events by name, attendee, or description."""
+    description = SEARCH_CALENDAR_DESCRIPTION
     source_type = CalendarSource
 
     def __init__(self, source: CalendarSource):
@@ -30,16 +52,21 @@ Use this to find specific events by name, attendee, or description."""
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "query": {
-                "type": "string",
-                "description": "Search query (searches title, description, attendees)",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "query": {
+                    "type": "string",
+                    "description": "Search query (searches title, description, attendees)",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results (default: 10)",
+                },
             },
-            "limit": {
-                "type": "integer",
-                "description": "Max results (default: 10)",
-            },
-        }, ["query"])
+            ["query"],
+        )
 
     async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
         if not query:
@@ -77,10 +104,7 @@ class CreateCalendarEventTool(Tool):
     """Create a new calendar event. Requires approval."""
 
     name = "create_calendar_event"
-    description = """Create a new calendar event.
-
-Use this to schedule meetings, reminders, or block time on the calendar.
-Requires user approval before creating."""
+    description = CREATE_CALENDAR_EVENT_DESCRIPTION
     mutates = True
     source_type = CalendarSource
 
@@ -89,28 +113,33 @@ Requires user approval before creating."""
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "summary": {"type": "string", "description": "Event title/summary"},
-            "start": {
-                "type": "string",
-                "description": "Start time in ISO format (e.g., '2024-01-15T14:00:00')",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "summary": {"type": "string", "description": "Event title/summary"},
+                "start": {
+                    "type": "string",
+                    "description": "Start time in ISO format (e.g., '2024-01-15T14:00:00')",
+                },
+                "end": {
+                    "type": "string",
+                    "description": "End time in ISO format (optional, defaults to 1 hour after start)",
+                },
+                "description": {"type": "string", "description": "Event description (optional)"},
+                "location": {"type": "string", "description": "Event location (optional)"},
+                "attendees": {
+                    "type": "string",
+                    "description": "Comma-separated email addresses of attendees (optional)",
+                },
+                "all_day": {"type": "boolean", "description": "Whether this is an all-day event (optional)"},
+                "account": {
+                    "type": "string",
+                    "description": "Calendar account email (optional if only one account)",
+                },
             },
-            "end": {
-                "type": "string",
-                "description": "End time in ISO format (optional, defaults to 1 hour after start)",
-            },
-            "description": {"type": "string", "description": "Event description (optional)"},
-            "location": {"type": "string", "description": "Event location (optional)"},
-            "attendees": {
-                "type": "string",
-                "description": "Comma-separated email addresses of attendees (optional)",
-            },
-            "all_day": {"type": "boolean", "description": "Whether this is an all-day event (optional)"},
-            "account": {
-                "type": "string",
-                "description": "Calendar account email (optional if only one account)",
-            },
-        }, ["summary", "start"])
+            ["summary", "start"],
+        )
 
     async def execute(
         self,
@@ -162,11 +191,7 @@ class EditCalendarEventTool(Tool):
     """Edit an existing calendar event. Requires approval."""
 
     name = "edit_calendar_event"
-    description = """Edit an existing calendar event.
-
-Use list_calendar or search_calendar first to find the event ID.
-Only provide the fields you want to change - others remain unchanged.
-Requires user approval before editing."""
+    description = EDIT_CALENDAR_EVENT_DESCRIPTION
     mutates = True
     source_type = CalendarSource
 
@@ -175,21 +200,26 @@ Requires user approval before editing."""
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "event_id": {
-                "type": "string",
-                "description": "The event ID to edit (from list_calendar or search_calendar)",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "event_id": {
+                    "type": "string",
+                    "description": "The event ID to edit (from list_calendar or search_calendar)",
+                },
+                "summary": {"type": "string", "description": "New event title (optional)"},
+                "start": {"type": "string", "description": "New start time in ISO format (optional)"},
+                "end": {"type": "string", "description": "New end time in ISO format (optional)"},
+                "description": {"type": "string", "description": "New event description (optional)"},
+                "location": {"type": "string", "description": "New event location (optional)"},
+                "attendees": {
+                    "type": "string",
+                    "description": "New comma-separated attendee emails (optional, replaces existing)",
+                },
             },
-            "summary": {"type": "string", "description": "New event title (optional)"},
-            "start": {"type": "string", "description": "New start time in ISO format (optional)"},
-            "end": {"type": "string", "description": "New end time in ISO format (optional)"},
-            "description": {"type": "string", "description": "New event description (optional)"},
-            "location": {"type": "string", "description": "New event location (optional)"},
-            "attendees": {
-                "type": "string",
-                "description": "New comma-separated attendee emails (optional, replaces existing)",
-            },
-        }, ["event_id"])
+            ["event_id"],
+        )
 
     async def execute(
         self,
@@ -246,10 +276,7 @@ class DeleteCalendarEventTool(Tool):
     """Delete a calendar event. Requires approval."""
 
     name = "delete_calendar_event"
-    description = """Delete a calendar event by ID.
-
-Use list_calendar or search_calendar first to find the event ID.
-Requires user approval before deleting."""
+    description = DELETE_CALENDAR_EVENT_DESCRIPTION
     mutates = True
     source_type = CalendarSource
 
@@ -258,12 +285,17 @@ Requires user approval before deleting."""
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "event_id": {
-                "type": "string",
-                "description": "The event ID to delete",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "event_id": {
+                    "type": "string",
+                    "description": "The event ID to delete",
+                },
             },
-        }, ["event_id"])
+            ["event_id"],
+        )
 
     async def execute(self, execution: ToolExecution, event_id: str = "", **kwargs: Any) -> ToolResult:
         if not event_id:
@@ -278,10 +310,7 @@ Requires user approval before deleting."""
 
 class ListCalendarTool(Tool):
     name = "list_calendar"
-    description = """List calendar events.
-
-Use days_forward for upcoming events, days_back for past events.
-Use search_calendar to find specific events by name."""
+    description = LIST_CALENDAR_DESCRIPTION
     source_type = CalendarSource
 
     def __init__(self, source: CalendarSource):
@@ -289,11 +318,15 @@ Use search_calendar to find specific events by name."""
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "days_forward": {"type": "integer", "description": "Days ahead to look (default: 7)"},
-            "days_back": {"type": "integer", "description": "Days back to look (default: 0)"},
-            "limit": {"type": "integer", "description": "Maximum results (default: 30)"},
-        })
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "days_forward": {"type": "integer", "description": "Days ahead to look (default: 7)"},
+                "days_back": {"type": "integer", "description": "Days back to look (default: 0)"},
+                "limit": {"type": "integer", "description": "Maximum results (default: 30)"},
+            },
+        )
 
     async def execute(
         self,

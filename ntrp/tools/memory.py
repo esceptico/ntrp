@@ -5,6 +5,18 @@ from ntrp.memory.formatting import format_memory_context
 from ntrp.memory.models import FactType
 from ntrp.tools.core.base import Tool, ToolResult, make_schema
 
+RECALL_DESCRIPTION = """Recall stored facts from memory about a topic or entity.
+
+WHEN TO USE:
+- Retrieving previously learned information
+- Checking what you know about a person/topic
+- Before asking questions that may have been answered
+
+PREFER recall() FOR: Known facts, user preferences, stored knowledge
+PREFER search() FOR: Finding new info in notes/emails/web pages"""
+
+FORGET_DESCRIPTION = "Delete facts from memory by semantic search."
+
 REMEMBER_DESCRIPTION = """Store a fact in memory for future recall.
 
 WHEN TO USE:
@@ -33,25 +45,30 @@ class RememberTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "fact": {
-                "type": "string",
-                "description": "The fact to remember (natural language).",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "fact": {
+                    "type": "string",
+                    "description": "The fact to remember (natural language).",
+                },
+                "fact_type": {
+                    "type": "string",
+                    "enum": ["world", "experience"],
+                    "description": "'world' (default) for facts about users/people/things, 'experience' ONLY for YOUR agent actions.",
+                },
+                "source": {
+                    "type": "string",
+                    "description": "Where this fact came from (e.g. file path, email id).",
+                },
+                "happened_at": {
+                    "type": "string",
+                    "description": "ISO timestamp of when the event occurred (for temporal linking).",
+                },
             },
-            "fact_type": {
-                "type": "string",
-                "enum": ["world", "experience"],
-                "description": "'world' (default) for facts about users/people/things, 'experience' ONLY for YOUR agent actions.",
-            },
-            "source": {
-                "type": "string",
-                "description": "Where this fact came from (e.g. file path, email id).",
-            },
-            "happened_at": {
-                "type": "string",
-                "description": "ISO timestamp of when the event occurred (for temporal linking).",
-            },
-        }, ["fact"])
+            ["fact"],
+        )
 
     async def execute(
         self,
@@ -87,37 +104,32 @@ class RememberTool(Tool):
 
 class RecallTool(Tool):
     name = "recall"
-    description = """Recall stored facts from memory about a topic or entity.
-
-WHEN TO USE:
-- Retrieving previously learned information
-- Checking what you know about a person/topic
-- Before asking questions that may have been answered
-
-PREFER recall() FOR: Known facts, user preferences, stored knowledge
-PREFER search() FOR: Finding new info in notes/emails/web pages"""
+    description = RECALL_DESCRIPTION
 
     def __init__(self, memory: Any):
         self.memory = memory
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "query": {
-                "type": "string",
-                "description": "What to recall.",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "query": {
+                    "type": "string",
+                    "description": "What to recall.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Number of seed facts (default 5).",
+                },
             },
-            "limit": {
-                "type": "integer",
-                "description": "Number of seed facts (default 5).",
-            },
-        }, ["query"])
+            ["query"],
+        )
 
     async def execute(self, execution: Any, query: str, limit: int = 5, **kwargs: Any) -> ToolResult:
         context = await self.memory.recall(query=query, limit=limit)
-        formatted = format_memory_context(
-            query_facts=context.facts, query_observations=context.observations
-        )
+        formatted = format_memory_context(query_facts=context.facts, query_observations=context.observations)
         if formatted:
             count = len(context.facts)
             return ToolResult(formatted, f"{count} facts")
@@ -129,7 +141,7 @@ PREFER search() FOR: Finding new info in notes/emails/web pages"""
 
 class ForgetTool(Tool):
     name = "forget"
-    description = "Delete facts from memory by semantic search."
+    description = FORGET_DESCRIPTION
     mutates = True
 
     def __init__(self, memory: Any):
@@ -137,12 +149,17 @@ class ForgetTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "query": {
-                "type": "string",
-                "description": "Description of facts to forget.",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "query": {
+                    "type": "string",
+                    "description": "Description of facts to forget.",
+                },
             },
-        }, ["query"])
+            ["query"],
+        )
 
     async def execute(self, execution: Any, query: str = "", **kwargs: Any) -> ToolResult:
         if not query:

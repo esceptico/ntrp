@@ -6,10 +6,10 @@ from ntrp.constants import OFFLOAD_PREVIEW_CHARS, OFFLOAD_THRESHOLD
 from ntrp.core.async_queue import AsyncQueue
 from ntrp.core.models import PendingToolCall, ToolExecutionResult
 from ntrp.events import SSEEvent, ToolCallEvent, ToolResultEvent
+from ntrp.logging import get_logger
 from ntrp.tools.core.base import ToolResult
 from ntrp.tools.core.context import ToolContext, ToolExecution
 from ntrp.tools.executor import ToolExecutor
-from ntrp.logging import get_logger
 from ntrp.utils import ms_now
 
 logger = get_logger(__name__)

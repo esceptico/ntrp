@@ -6,12 +6,16 @@ from ntrp.sources.base import WebSearchSource
 from ntrp.tools.core.base import Tool, ToolResult, make_schema
 from ntrp.tools.core.context import ToolExecution
 
+WEB_SEARCH_DESCRIPTION = "Search the web for information. Returns titles, URLs, and content snippets."
+
+WEB_FETCH_DESCRIPTION = "Fetch content from a URL. Returns the page text in readable format."
+
 
 class WebSearchTool(Tool):
     """Search the web using Exa's AI-powered search engine."""
 
     name = "web_search"
-    description = "Search the web for information. Returns titles, URLs, and content snippets."
+    description = WEB_SEARCH_DESCRIPTION
     source_type = WebSearchSource
 
     def __init__(self, source: WebSearchSource):
@@ -19,21 +23,26 @@ class WebSearchTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "query": {
-                "type": "string",
-                "description": "The search query",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "query": {
+                    "type": "string",
+                    "description": "The search query",
+                },
+                "num_results": {
+                    "type": "integer",
+                    "description": f"Number of results (default: 5, max: {WEB_SEARCH_MAX_RESULTS})",
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Filter by category: company, research paper, news, pdf, github, tweet",
+                    "enum": ["company", "research paper", "news", "pdf", "github", "tweet"],
+                },
             },
-            "num_results": {
-                "type": "integer",
-                "description": f"Number of results (default: 5, max: {WEB_SEARCH_MAX_RESULTS})",
-            },
-            "category": {
-                "type": "string",
-                "description": "Filter by category: company, research paper, news, pdf, github, tweet",
-                "enum": ["company", "research paper", "news", "pdf", "github", "tweet"],
-            },
-        }, ["query"])
+            ["query"],
+        )
 
     async def execute(
         self,
@@ -78,7 +87,7 @@ class WebFetchTool(Tool):
     """Fetch and extract content from a webpage."""
 
     name = "web_fetch"
-    description = "Fetch content from a URL. Returns the page text in readable format."
+    description = WEB_FETCH_DESCRIPTION
     source_type = WebSearchSource
 
     def __init__(self, source: WebSearchSource):
@@ -86,12 +95,17 @@ class WebFetchTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "url": {
-                "type": "string",
-                "description": "The URL to fetch",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "url": {
+                    "type": "string",
+                    "description": "The URL to fetch",
+                },
             },
-        }, ["url"])
+            ["url"],
+        )
 
     async def execute(self, execution: ToolExecution, url: str = "", **kwargs: Any) -> ToolResult:
         if not url.strip():

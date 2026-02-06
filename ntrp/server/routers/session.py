@@ -233,7 +233,9 @@ async def compact_context():
     # Run compression (force=True for manual compaction)
     msg_count = end - start
     new_messages, was_compressed = await compress_context_async(
-        messages, model, force=True,
+        messages=messages,
+        model=model,
+        force=True,
     )
 
     if was_compressed:

@@ -8,9 +8,9 @@ from ntrp.core.spawner import create_spawn_fn
 from ntrp.core.state import AgentState, StateCallback
 from ntrp.core.tool_runner import ToolRunner
 from ntrp.events import SSEEvent, TextEvent, ToolResultEvent
-from ntrp.tools.core.context import ToolContext
 from ntrp.llm import acompletion
 from ntrp.logging import get_logger
+from ntrp.tools.core.context import ToolContext
 from ntrp.tools.executor import ToolExecutor
 
 logger = get_logger(__name__)

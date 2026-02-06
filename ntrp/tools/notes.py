@@ -12,8 +12,8 @@ from ntrp.constants import (
 from ntrp.logging import get_logger
 from ntrp.sources.base import NotesSource
 from ntrp.tools.core.base import Tool, ToolResult, make_schema
-from ntrp.tools.core.formatting import format_lines_with_pagination
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.formatting import format_lines_with_pagination
 from ntrp.utils import truncate
 
 logger = get_logger(__name__)
@@ -103,11 +103,25 @@ def generate_diff(original: str, proposed: str, path: str) -> str:
     return "".join(diff)
 
 
+LIST_NOTES_DESCRIPTION = "List note files in the Obsidian vault, sorted by most recently modified."
+
+MOVE_NOTE_DESCRIPTION = "Move or rename a note in the vault. User must approve the operation."
+
+SEARCH_NOTES_DESCRIPTION = """Search notes by content.
+
+QUERY FORMAT:
+- Use natural language: "job applications", "MATS program"
+- Avoid boolean operators: no AND, OR, quotes
+- Keep queries simple: 2-4 words work best
+
+After finding notes, use read_note(path) to get full content."""
+
+
 class ListNotesTool(Tool):
     """List all notes in the vault."""
 
     name = "list_notes"
-    description = "List note files in the Obsidian vault, sorted by most recently modified."
+    description = LIST_NOTES_DESCRIPTION
     source_type = NotesSource
 
     def __init__(self, source: NotesSource):
@@ -115,12 +129,16 @@ class ListNotesTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "limit": {
-                "type": "integer",
-                "description": f"Maximum notes to return (default: {DEFAULT_LIST_LIMIT})",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "limit": {
+                    "type": "integer",
+                    "description": f"Maximum notes to return (default: {DEFAULT_LIST_LIMIT})",
+                },
             },
-        })
+        )
 
     async def execute(
         self,
@@ -159,20 +177,25 @@ class ReadNoteTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "path": {
-                "type": "string",
-                "description": "The relative path to the note file (e.g., 'folder/note.md')",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "path": {
+                    "type": "string",
+                    "description": "The relative path to the note file (e.g., 'folder/note.md')",
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Line number to start from (1-based, default: 1)",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": f"Maximum lines to read (default: {DEFAULT_READ_LINES})",
+                },
             },
-            "offset": {
-                "type": "integer",
-                "description": "Line number to start from (1-based, default: 1)",
-            },
-            "limit": {
-                "type": "integer",
-                "description": f"Maximum lines to read (default: {DEFAULT_READ_LINES})",
-            },
-        }, ["path"])
+            ["path"],
+        )
 
     async def execute(
         self, execution: ToolExecution, path: str = "", offset: int = 1, limit: int = DEFAULT_READ_LINES, **kwargs: Any
@@ -200,20 +223,25 @@ class EditNoteTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "path": {
-                "type": "string",
-                "description": "Relative path to the note file",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "path": {
+                    "type": "string",
+                    "description": "Relative path to the note file",
+                },
+                "find": {
+                    "type": "string",
+                    "description": "Text to find (must match exactly)",
+                },
+                "replace": {
+                    "type": "string",
+                    "description": "Text to replace with",
+                },
             },
-            "find": {
-                "type": "string",
-                "description": "Text to find (must match exactly)",
-            },
-            "replace": {
-                "type": "string",
-                "description": "Text to replace with",
-            },
-        }, ["path", "find", "replace"])
+            ["path", "find", "replace"],
+        )
 
     async def execute(
         self, execution: ToolExecution, path: str = "", find: str = "", replace: str = "", **kwargs: Any
@@ -266,16 +294,21 @@ class CreateNoteTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "path": {
-                "type": "string",
-                "description": "Relative path for the new note (e.g., 'projects/new-idea.md')",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "path": {
+                    "type": "string",
+                    "description": "Relative path for the new note (e.g., 'projects/new-idea.md')",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Content for the new note",
+                },
             },
-            "content": {
-                "type": "string",
-                "description": "Content for the new note",
-            },
-        }, ["path", "content"])
+            ["path", "content"],
+        )
 
     async def execute(self, execution: ToolExecution, path: str = "", content: str = "", **kwargs: Any) -> ToolResult:
         if not path or not content:
@@ -315,12 +348,17 @@ class DeleteNoteTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "path": {
-                "type": "string",
-                "description": "Relative path to the note file",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "path": {
+                    "type": "string",
+                    "description": "Relative path to the note file",
+                },
             },
-        }, ["path"])
+            ["path"],
+        )
 
     async def execute(self, execution: ToolExecution, path: str = "", **kwargs: Any) -> ToolResult:
         if not path:
@@ -343,7 +381,7 @@ class MoveNoteTool(Tool):
     """Move or rename a note. Must be approved by user."""
 
     name = "move_note"
-    description = "Move or rename a note in the vault. User must approve the operation."
+    description = MOVE_NOTE_DESCRIPTION
     mutates = True
     source_type = NotesSource
 
@@ -352,16 +390,21 @@ class MoveNoteTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "path": {
-                "type": "string",
-                "description": "Current relative path to the note",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "path": {
+                    "type": "string",
+                    "description": "Current relative path to the note",
+                },
+                "new_path": {
+                    "type": "string",
+                    "description": "New relative path for the note",
+                },
             },
-            "new_path": {
-                "type": "string",
-                "description": "New relative path for the note",
-            },
-        }, ["path", "new_path"])
+            ["path", "new_path"],
+        )
 
     async def execute(self, execution: ToolExecution, path: str = "", new_path: str = "", **kwargs: Any) -> ToolResult:
         if not path or not new_path:
@@ -389,14 +432,7 @@ class MoveNoteTool(Tool):
 
 class SearchNotesTool(Tool):
     name = "search_notes"
-    description = """Search notes by content.
-
-QUERY FORMAT:
-- Use natural language: "job applications", "MATS program"
-- Avoid boolean operators: no AND, OR, quotes
-- Keep queries simple: 2-4 words work best
-
-After finding notes, use read_note(path) to get full content."""
+    description = SEARCH_NOTES_DESCRIPTION
     source_type = NotesSource
 
     def __init__(
@@ -409,10 +445,15 @@ After finding notes, use read_note(path) to get full content."""
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "query": {"type": "string", "description": "Search query"},
-            "limit": {"type": "integer", "description": "Maximum results (default: 10)"},
-        }, ["query"])
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "query": {"type": "string", "description": "Search query"},
+                "limit": {"type": "integer", "description": "Maximum results (default: 10)"},
+            },
+            ["query"],
+        )
 
     async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
         if not query:

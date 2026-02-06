@@ -130,5 +130,3 @@ def add_gmail_account() -> str:
     token_path.write_text(creds.to_json())
 
     return email
-
-

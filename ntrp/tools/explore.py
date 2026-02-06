@@ -4,22 +4,29 @@ from ntrp.core.prompts import EXPLORE_PROMPT
 from ntrp.tools.core.base import Tool, ToolResult, make_schema
 from ntrp.tools.core.context import ToolExecution
 
+EXPLORE_DESCRIPTION = (
+    "Spawn an exploration agent for information gathering. "
+    "Can run in parallel (call multiple in one turn) and nest recursively."
+)
+
 
 class ExploreTool(Tool):
     name = "explore"
-    description = (
-        "Spawn an exploration agent for information gathering. "
-        "Can run in parallel (call multiple in one turn) and nest recursively."
-    )
+    description = EXPLORE_DESCRIPTION
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {
-            "task": {
-                "type": "string",
-                "description": "What to explore or research.",
+        return make_schema(
+            self.name,
+            self.description,
+            {
+                "task": {
+                    "type": "string",
+                    "description": "What to explore or research.",
+                },
             },
-        }, ["task"])
+            ["task"],
+        )
 
     async def _build_prompt(self, executor) -> str:
         if not executor.memory:

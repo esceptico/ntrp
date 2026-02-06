@@ -108,7 +108,6 @@ class QuestionEvent(SSEEvent):
     tool_id: str = ""  # For tracking
 
 
-
 @dataclass
 class ChoiceEvent(SSEEvent):
     type: EventType = field(default=EventType.CHOICE, init=False)

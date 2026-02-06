@@ -15,12 +15,11 @@ import json
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 
-from ntrp.llm import acompletion
-
 from ntrp.constants import (
     CONSOLIDATION_SEARCH_LIMIT,
     CONSOLIDATION_TEMPERATURE,
 )
+from ntrp.llm import acompletion
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact, Observation
 from ntrp.memory.prompts import CONSOLIDATION_PROMPT
