@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useMemo } from "react";
-import { accentColors, type AccentColor } from "../components/ui/colors.js";
+import React, { createContext, useContext, useEffect, useMemo } from "react";
+import { accentColors, syncAccentColor, type AccentColor } from "../components/ui/colors.js";
 
 interface AccentColorContextValue {
   accent: AccentColor;
@@ -19,6 +19,10 @@ interface AccentColorProviderProps {
 }
 
 export function AccentColorProvider({ accent, children }: AccentColorProviderProps) {
+  useEffect(() => {
+    syncAccentColor(accent);
+  }, [accent]);
+
   const value = useMemo(() => ({
     accent,
     accentValue: accentColors[accent].primary,

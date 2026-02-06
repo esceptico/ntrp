@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from ntrp.sources.base import CalendarSource
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import Tool, ToolResult, make_schema
 from ntrp.tools.core.context import ToolExecution
 
 
@@ -30,29 +30,18 @@ Use this to find specific events by name, attendee, or description."""
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Search query (searches title, description, attendees)",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Max results (default: 10)",
-                    },
-                },
-                "required": ["query"],
+        return make_schema(self.name, self.description, {
+            "query": {
+                "type": "string",
+                "description": "Search query (searches title, description, attendees)",
             },
-        }
+            "limit": {
+                "type": "integer",
+                "description": "Max results (default: 10)",
+            },
+        }, ["query"])
 
     async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
-        if not self.source:
-            return ToolResult("Error: Calendar not available. Run `ntrp calendar add` to connect.", "Not configured")
-
         if not query:
             return ToolResult("Error: query is required", "Missing query")
 
@@ -100,36 +89,28 @@ Requires user approval before creating."""
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "summary": {"type": "string", "description": "Event title/summary"},
-                    "start": {
-                        "type": "string",
-                        "description": "Start time in ISO format (e.g., '2024-01-15T14:00:00')",
-                    },
-                    "end": {
-                        "type": "string",
-                        "description": "End time in ISO format (optional, defaults to 1 hour after start)",
-                    },
-                    "description": {"type": "string", "description": "Event description (optional)"},
-                    "location": {"type": "string", "description": "Event location (optional)"},
-                    "attendees": {
-                        "type": "string",
-                        "description": "Comma-separated email addresses of attendees (optional)",
-                    },
-                    "all_day": {"type": "boolean", "description": "Whether this is an all-day event (optional)"},
-                    "account": {
-                        "type": "string",
-                        "description": "Calendar account email (optional if only one account)",
-                    },
-                },
-                "required": ["summary", "start"],
+        return make_schema(self.name, self.description, {
+            "summary": {"type": "string", "description": "Event title/summary"},
+            "start": {
+                "type": "string",
+                "description": "Start time in ISO format (e.g., '2024-01-15T14:00:00')",
             },
-        }
+            "end": {
+                "type": "string",
+                "description": "End time in ISO format (optional, defaults to 1 hour after start)",
+            },
+            "description": {"type": "string", "description": "Event description (optional)"},
+            "location": {"type": "string", "description": "Event location (optional)"},
+            "attendees": {
+                "type": "string",
+                "description": "Comma-separated email addresses of attendees (optional)",
+            },
+            "all_day": {"type": "boolean", "description": "Whether this is an all-day event (optional)"},
+            "account": {
+                "type": "string",
+                "description": "Calendar account email (optional if only one account)",
+            },
+        }, ["summary", "start"])
 
     async def execute(
         self,
@@ -144,9 +125,6 @@ Requires user approval before creating."""
         account: str = "",
         **kwargs: Any,
     ) -> ToolResult:
-        if not self.source:
-            return ToolResult("Error: Calendar not available. Run `ntrp calendar add` to connect.", "Not configured")
-
         if not summary:
             return ToolResult("Error: summary is required", "Missing summary")
         if not start:
@@ -197,29 +175,21 @@ Requires user approval before editing."""
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "event_id": {
-                        "type": "string",
-                        "description": "The event ID to edit (from list_calendar or search_calendar)",
-                    },
-                    "summary": {"type": "string", "description": "New event title (optional)"},
-                    "start": {"type": "string", "description": "New start time in ISO format (optional)"},
-                    "end": {"type": "string", "description": "New end time in ISO format (optional)"},
-                    "description": {"type": "string", "description": "New event description (optional)"},
-                    "location": {"type": "string", "description": "New event location (optional)"},
-                    "attendees": {
-                        "type": "string",
-                        "description": "New comma-separated attendee emails (optional, replaces existing)",
-                    },
-                },
-                "required": ["event_id"],
+        return make_schema(self.name, self.description, {
+            "event_id": {
+                "type": "string",
+                "description": "The event ID to edit (from list_calendar or search_calendar)",
             },
-        }
+            "summary": {"type": "string", "description": "New event title (optional)"},
+            "start": {"type": "string", "description": "New start time in ISO format (optional)"},
+            "end": {"type": "string", "description": "New end time in ISO format (optional)"},
+            "description": {"type": "string", "description": "New event description (optional)"},
+            "location": {"type": "string", "description": "New event location (optional)"},
+            "attendees": {
+                "type": "string",
+                "description": "New comma-separated attendee emails (optional, replaces existing)",
+            },
+        }, ["event_id"])
 
     async def execute(
         self,
@@ -233,9 +203,6 @@ Requires user approval before editing."""
         attendees: str = "",
         **kwargs: Any,
     ) -> ToolResult:
-        if not self.source:
-            return ToolResult("Error: Calendar not available. Run `ntrp calendar add` to connect.", "Not configured")
-
         if not event_id:
             return ToolResult("Error: event_id is required", "Missing event_id")
 
@@ -291,25 +258,14 @@ Requires user approval before deleting."""
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "event_id": {
-                        "type": "string",
-                        "description": "The event ID to delete",
-                    },
-                },
-                "required": ["event_id"],
+        return make_schema(self.name, self.description, {
+            "event_id": {
+                "type": "string",
+                "description": "The event ID to delete",
             },
-        }
+        }, ["event_id"])
 
     async def execute(self, execution: ToolExecution, event_id: str = "", **kwargs: Any) -> ToolResult:
-        if not self.source:
-            return ToolResult("Error: Calendar not available. Run `ntrp calendar add` to connect.", "Not configured")
-
         if not event_id:
             return ToolResult("Error: event_id is required", "Missing event_id")
 
@@ -333,19 +289,11 @@ Use search_calendar to find specific events by name."""
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "days_forward": {"type": "integer", "description": "Days ahead to look (default: 7)"},
-                    "days_back": {"type": "integer", "description": "Days back to look (default: 0)"},
-                    "limit": {"type": "integer", "description": "Maximum results (default: 30)"},
-                },
-                "required": [],
-            },
-        }
+        return make_schema(self.name, self.description, {
+            "days_forward": {"type": "integer", "description": "Days ahead to look (default: 7)"},
+            "days_back": {"type": "integer", "description": "Days back to look (default: 0)"},
+            "limit": {"type": "integer", "description": "Maximum results (default: 30)"},
+        })
 
     async def execute(
         self,
@@ -355,9 +303,6 @@ Use search_calendar to find specific events by name."""
         limit: int = 30,
         **kwargs: Any,
     ) -> ToolResult:
-        if not self.source:
-            return ToolResult("Error: Calendar not available. Run `ntrp calendar add` to connect.", "Not configured")
-
         events = []
 
         if days_back > 0:

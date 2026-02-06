@@ -36,18 +36,22 @@ class SearchStore:
         self._has_fts = False
         self._has_vec = False
 
+    async def _open_connection(self) -> aiosqlite.Connection:
+        conn = await aiosqlite.connect(self.db_path)
+        conn.row_factory = aiosqlite.Row
+
+        await conn.enable_load_extension(True)
+        await conn.load_extension(sqlite_vec.loadable_path())
+        await conn.enable_load_extension(False)
+
+        await conn.execute("PRAGMA journal_mode=WAL;")
+        await conn.execute("PRAGMA synchronous=NORMAL;")
+        await conn.execute("PRAGMA busy_timeout=30000;")
+
+        return conn
+
     async def connect(self) -> None:
-        self._conn = await aiosqlite.connect(self.db_path)
-        self._conn.row_factory = aiosqlite.Row
-
-        # Load sqlite_vec extension
-        await self._conn.enable_load_extension(True)
-        await self._conn.load_extension(sqlite_vec.loadable_path())
-        await self._conn.enable_load_extension(False)
-
-        await self._conn.execute("PRAGMA journal_mode=WAL;")
-        await self._conn.execute("PRAGMA synchronous=NORMAL;")
-        await self._conn.execute("PRAGMA busy_timeout=30000;")
+        self._conn = await self._open_connection()
 
         await self._check_integrity()
         await self._init_schema()
@@ -74,16 +78,7 @@ class SearchStore:
             Path(str(self.db_path) + "-wal").unlink(missing_ok=True)
             Path(str(self.db_path) + "-shm").unlink(missing_ok=True)
 
-            self._conn = await aiosqlite.connect(self.db_path)
-            self._conn.row_factory = aiosqlite.Row
-
-            await self._conn.enable_load_extension(True)
-            await self._conn.load_extension(sqlite_vec.loadable_path())
-            await self._conn.enable_load_extension(False)
-
-            await self._conn.execute("PRAGMA journal_mode=WAL;")
-            await self._conn.execute("PRAGMA synchronous=NORMAL;")
-            await self._conn.execute("PRAGMA busy_timeout=30000;")
+            self._conn = await self._open_connection()
 
     async def _init_schema(self) -> None:
         await self.conn.executescript("""

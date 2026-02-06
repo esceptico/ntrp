@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { Box, Text } from "ink";
-import { colors, brand, SelectionIndicator } from "../../ui/index.js";
-import { useKeypress, type Key } from "../../../hooks/index.js";
+import { colors, SelectionIndicator } from "../../ui/index.js";
+import { useKeypress, useAccentColor, type Key } from "../../../hooks/index.js";
 
 interface ModelDropdownProps {
   title: string;
@@ -26,6 +26,7 @@ export function ModelDropdown({
   onClose,
   width,
 }: ModelDropdownProps) {
+  const { accentValue } = useAccentColor();
   const [search, setSearch] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(() => {
     const idx = models.indexOf(currentModel);
@@ -93,17 +94,17 @@ export function ModelDropdown({
   const contentWidth = Math.max(0, width - 6);
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={brand.primary} width={width} paddingX={1}>
+    <Box flexDirection="column" borderStyle="round" borderColor={accentValue} width={width} paddingX={1}>
       {/* Title */}
       <Box justifyContent="center">
-        <Text color={brand.primary} bold> {title} </Text>
+        <Text color={accentValue} bold> {title} </Text>
       </Box>
 
       {/* Search */}
       <Box marginY={1}>
         <Text color={colors.text.muted}>/ </Text>
         <Text color={colors.text.primary}>{search}</Text>
-        <Text color={brand.primary}>_</Text>
+        <Text color={accentValue}>_</Text>
       </Box>
 
       {/* Scroll indicator up */}
@@ -122,9 +123,9 @@ export function ModelDropdown({
 
           return (
             <Text key={model}>
-              <SelectionIndicator selected={isSelected} accent={brand.primary} />
+              <SelectionIndicator selected={isSelected} accent={accentValue} />
               <Text
-                color={isCurrent ? brand.primary : isSelected ? colors.text.primary : colors.text.secondary}
+                color={isCurrent ? accentValue : isSelected ? colors.text.primary : colors.text.secondary}
                 bold={isCurrent}
               >
                 {displayName}

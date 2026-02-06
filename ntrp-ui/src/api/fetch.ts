@@ -37,7 +37,7 @@ function createApiError(
 /**
  * Typed fetch wrapper with error handling.
  */
-export async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> {
+async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> {
   const { method = "GET", body, timeout = DEFAULT_TIMEOUT, signal } = options;
 
   // Create timeout controller

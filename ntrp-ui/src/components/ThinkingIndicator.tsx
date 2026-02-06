@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Text } from "ink";
-import { brand, colors } from "./ui/colors.js";
+import { colors } from "./ui/colors.js";
+import { useAccentColor } from "../hooks/index.js";
 
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const GLIMMER_WIDTH = 3;
@@ -15,6 +16,7 @@ interface ThinkingIndicatorProps {
 }
 
 export function ThinkingIndicator({ status }: ThinkingIndicatorProps) {
+  const { accentValue } = useAccentColor();
   const [frame, setFrame] = useState(0);
   const [verb, setVerb] = useState(pickVerb);
   const prevStatus = useRef(status);
@@ -40,7 +42,7 @@ export function ThinkingIndicator({ status }: ThinkingIndicatorProps) {
       const dist = Math.abs(i - glimmerPos);
       const isHighlight = dist < GLIMMER_WIDTH;
       return (
-        <Text key={i} color={isHighlight ? colors.status.processingShimmer : brand.primary}>
+        <Text key={i} color={isHighlight ? colors.status.processingShimmer : accentValue}>
           {char}
         </Text>
       );
@@ -49,7 +51,7 @@ export function ThinkingIndicator({ status }: ThinkingIndicatorProps) {
 
   return (
     <Text>
-      <Text color={brand.primary}>{SPINNER[frame % SPINNER.length]} </Text>
+      <Text color={accentValue}>{SPINNER[frame % SPINNER.length]} </Text>
       {shimmerText}
       <Text color={colors.text.muted}> (Esc to cancel)</Text>
     </Text>

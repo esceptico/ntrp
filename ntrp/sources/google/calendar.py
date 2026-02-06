@@ -47,6 +47,35 @@ def format_event_time(start: datetime | None, end: datetime | None, is_all_day: 
     return f"{date_str} {time_str}"
 
 
+def _apply_time_update(
+    event: dict,
+    start: datetime | None,
+    end: datetime | None,
+    all_day: bool | None,
+) -> None:
+    if start is None and all_day is None:
+        return
+
+    is_all_day = all_day if all_day is not None else "date" in event.get("start", {})
+
+    if start is not None:
+        if is_all_day:
+            event["start"] = {"date": start.strftime("%Y-%m-%d")}
+        else:
+            event["start"] = {"dateTime": start.isoformat(), "timeZone": "UTC"}
+
+    if end is not None:
+        if is_all_day:
+            event["end"] = {"date": end.strftime("%Y-%m-%d")}
+        else:
+            event["end"] = {"dateTime": end.isoformat(), "timeZone": "UTC"}
+    elif start is not None:
+        if is_all_day:
+            event["end"] = {"date": (start + timedelta(days=1)).strftime("%Y-%m-%d")}
+        else:
+            event["end"] = {"dateTime": (start + timedelta(hours=1)).isoformat(), "timeZone": "UTC"}
+
+
 class GoogleCalendar:
     name = "calendar"
 
@@ -295,27 +324,7 @@ class GoogleCalendar:
                 event["attendees"] = [{"email": email} for email in attendees]
 
             # Handle time updates
-            if start is not None or all_day is not None:
-                # Determine if this should be all-day
-                is_all_day = all_day if all_day is not None else "date" in event.get("start", {})
-
-                if start is not None:
-                    if is_all_day:
-                        event["start"] = {"date": start.strftime("%Y-%m-%d")}
-                    else:
-                        event["start"] = {"dateTime": start.isoformat(), "timeZone": "UTC"}
-
-                if end is not None:
-                    if is_all_day:
-                        event["end"] = {"date": end.strftime("%Y-%m-%d")}
-                    else:
-                        event["end"] = {"dateTime": end.isoformat(), "timeZone": "UTC"}
-                elif start is not None and end is None:
-                    # If start changed but not end, adjust end to maintain duration or default 1hr
-                    if is_all_day:
-                        event["end"] = {"date": (start + timedelta(days=1)).strftime("%Y-%m-%d")}
-                    else:
-                        event["end"] = {"dateTime": (start + timedelta(hours=1)).isoformat(), "timeZone": "UTC"}
+            _apply_time_update(event, start, end, all_day)
 
             # Update the event
             updated = (

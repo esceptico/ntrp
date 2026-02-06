@@ -18,7 +18,7 @@ export interface InputAreaProps {
   focus: boolean;
   commands: SlashCommand[];
   queueCount?: number;
-  yolo?: boolean;
+  skipApprovals?: boolean;
   chatModel?: string;
   indexStatus?: { indexing: boolean; progress: { total: number; done: number } } | null;
 }
@@ -29,7 +29,7 @@ export const InputArea = memo(function InputArea({
   focus,
   commands,
   queueCount = 0,
-  yolo = false,
+  skipApprovals = false,
   chatModel,
   indexStatus = null,
 }: InputAreaProps) {
@@ -99,11 +99,14 @@ export const InputArea = memo(function InputArea({
     return p;
   }, []);
 
-  const insertAt = (pos: number, text: string) => {
-    setValue((v) => v.slice(0, pos) + text + v.slice(pos));
-    const newPos = pos + text.length;
+  const moveCursor = (newPos: number) => {
     setCursorPos(newPos);
     cursorRef.current = newPos;
+  };
+
+  const insertAt = (pos: number, text: string) => {
+    setValue((v) => v.slice(0, pos) + text + v.slice(pos));
+    moveCursor(pos + text.length);
     setSelectedIndex(0);
   };
 
@@ -126,8 +129,7 @@ export const InputArea = memo(function InputArea({
           const cmd = filteredCommands[selectedIndex];
           const newPos = cmd.name.length + 2;
           setValue(`/${cmd.name} `);
-          setCursorPos(newPos);
-          cursorRef.current = newPos;
+          moveCursor(newPos);
           setSelectedIndex(0);
           return;
         }
@@ -158,10 +160,8 @@ export const InputArea = memo(function InputArea({
           if (value.endsWith("\\")) {
             // Remove backslash and insert newline at the end
             const newValue = value.slice(0, -1) + "\n";
-            const newPos = newValue.length;
             setValue(newValue);
-            setCursorPos(newPos);
-            cursorRef.current = newPos;
+            moveCursor(newValue.length);
           } else {
             insertAt(pos, "\n");
           }
@@ -182,82 +182,63 @@ export const InputArea = memo(function InputArea({
         if (pos === 0) return;
         const newPos = findPrevWordBoundary(pos);
         setValue((v) => v.slice(0, newPos) + v.slice(pos));
-        setCursorPos(newPos);
-        cursorRef.current = newPos;
+        moveCursor(newPos);
         return;
       }
       if (key.name === "backspace") {
         if (pos > 0) {
           setValue((v) => v.slice(0, pos - 1) + v.slice(pos));
-          setCursorPos(pos - 1);
-          cursorRef.current = pos - 1;
+          moveCursor(pos - 1);
         }
         return;
       }
       if (key.name === "delete") {
         setValue((v) => v.slice(0, pos) + v.slice(pos + 1));
-        // Cursor stays at pos (no change needed, but ensure ref is synced)
-        cursorRef.current = pos;
+        moveCursor(pos);
         return;
       }
       if (key.name === "k" && key.ctrl) {
         setValue((v) => v.slice(0, pos));
-        // Cursor stays at pos (no change needed, but ensure ref is synced)
-        cursorRef.current = pos;
+        moveCursor(pos);
         return;
       }
       if (key.name === "u" && key.ctrl) {
         setValue((v) => v.slice(pos));
-        setCursorPos(0);
-        cursorRef.current = 0;
+        moveCursor(0);
         return;
       }
       // Navigation - must sync cursorRef for next keypress
       // Word navigation: meta+arrows (Mac), ctrl+arrows (Linux/Windows)
       if ((key.name === "left" && key.meta) || (key.name === "left" && key.ctrl)) {
-        const newPos = findPrevWordBoundary(pos);
-        setCursorPos(newPos);
-        cursorRef.current = newPos;
+        moveCursor(findPrevWordBoundary(pos));
         return;
       }
       if ((key.name === "right" && key.meta) || (key.name === "right" && key.ctrl)) {
-        const newPos = findNextWordBoundary(pos);
-        setCursorPos(newPos);
-        cursorRef.current = newPos;
+        moveCursor(findNextWordBoundary(pos));
         return;
       }
       if (key.name === "b" && key.meta) {
-        const newPos = findPrevWordBoundary(pos);
-        setCursorPos(newPos);
-        cursorRef.current = newPos;
+        moveCursor(findPrevWordBoundary(pos));
         return;
       }
       if (key.name === "f" && key.meta) {
-        const newPos = findNextWordBoundary(pos);
-        setCursorPos(newPos);
-        cursorRef.current = newPos;
+        moveCursor(findNextWordBoundary(pos));
         return;
       }
       if (key.name === "left") {
-        const newPos = Math.max(0, pos - 1);
-        setCursorPos(newPos);
-        cursorRef.current = newPos;
+        moveCursor(Math.max(0, pos - 1));
         return;
       }
       if (key.name === "right") {
-        const newPos = Math.min(value.length, pos + 1);
-        setCursorPos(newPos);
-        cursorRef.current = newPos;
+        moveCursor(Math.min(value.length, pos + 1));
         return;
       }
       if (key.name === "home" || (key.name === "a" && key.ctrl)) {
-        setCursorPos(0);
-        cursorRef.current = 0;
+        moveCursor(0);
         return;
       }
       if (key.name === "end" || (key.name === "e" && key.ctrl)) {
-        setCursorPos(value.length);
-        cursorRef.current = value.length;
+        moveCursor(value.length);
         return;
       }
 
@@ -299,11 +280,11 @@ export const InputArea = memo(function InputArea({
         <Box flexDirection="column" width={columns - 2} overflow="hidden">
           {chatModel && <Text dimColor>{formatModel(chatModel)}</Text>}
           <Text>
-            {yolo && <Text color={colors.status.warning} bold>yolo mode</Text>}
-            {indexStatus?.indexing && <Text dimColor>{yolo ? "  ·  " : ""}indexing {indexStatus.progress.done}/{indexStatus.progress.total}</Text>}
-            {escHint && <Text dimColor>{yolo || indexStatus?.indexing ? "  ·  " : ""}esc to clear</Text>}
+            {skipApprovals && <Text color={colors.status.warning} bold>skip approvals</Text>}
+            {indexStatus?.indexing && <Text dimColor>{skipApprovals ? "  ·  " : ""}indexing {indexStatus.progress.done}/{indexStatus.progress.total}</Text>}
+            {escHint && <Text dimColor>{skipApprovals || indexStatus?.indexing ? "  ·  " : ""}esc to clear</Text>}
             {queueCount > 0 && (
-              <Text color={colors.status.warning}>{escHint || yolo || indexStatus?.indexing ? "  ·  " : ""}{queueCount} queued</Text>
+              <Text color={colors.status.warning}>{escHint || skipApprovals || indexStatus?.indexing ? "  ·  " : ""}{queueCount} queued</Text>
             )}
           </Text>
         </Box>

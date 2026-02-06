@@ -1,7 +1,8 @@
 import React, { memo } from "react";
 import { Box, Text } from "ink";
-import { brand, colors } from "../../ui/colors.js";
+import { colors } from "../../ui/colors.js";
 import { useDimensions } from "../../../contexts/index.js";
+import { useAccentColor } from "../../../hooks/index.js";
 import { truncateText } from "../../ui/index.js";
 import { BULLET, MAX_TOOL_OUTPUT_LINES, MIN_DELEGATE_DURATION_SHOW } from "../../../lib/constants.js";
 
@@ -21,6 +22,7 @@ const DelegateMessage = memo(function DelegateMessage({
   duration,
 }: DelegateMessageProps) {
   const { width: terminalWidth } = useDimensions();
+  const { accentValue } = useAccentColor();
   const parts: string[] = [];
   if (toolCount && toolCount > 0) parts.push(`${toolCount} tool${toolCount !== 1 ? "s" : ""}`);
   if (duration && duration >= MIN_DELEGATE_DURATION_SHOW) parts.push(`${duration}s`);
@@ -31,7 +33,7 @@ const DelegateMessage = memo(function DelegateMessage({
   return (
     <Box flexDirection="column" width={terminalWidth} overflow="hidden">
       <Text>
-        <Text color={brand.primary}>{BULLET} </Text>
+        <Text color={accentValue}>{BULLET} </Text>
         <Text>{truncateText(descText, contentWidth)}</Text>
         {stats && <Text color={colors.text.muted}>{stats}</Text>}
       </Text>
@@ -56,6 +58,7 @@ export const ToolMessage = memo(function ToolMessage({
   duration,
 }: ToolMessageProps) {
   const { width: terminalWidth } = useDimensions();
+  const { accentValue } = useAccentColor();
   const contentWidth = Math.max(0, terminalWidth - 6);
 
   if (name === "delegate" || name === "explore") {
@@ -83,7 +86,7 @@ export const ToolMessage = memo(function ToolMessage({
     return (
       <Box flexDirection="column" width={terminalWidth} overflow="hidden">
         <Text>
-          <Text color={brand.primary}>{BULLET} </Text>
+          <Text color={accentValue}>{BULLET} </Text>
           <Text>{truncateText(displayName, contentWidth)}</Text>
         </Text>
         <Text color={colors.text.secondary}>
@@ -102,7 +105,7 @@ export const ToolMessage = memo(function ToolMessage({
   return (
     <Box flexDirection="column" width={terminalWidth} overflow="hidden">
       <Text>
-        <Text color={brand.primary}>{BULLET} </Text>
+        <Text color={accentValue}>{BULLET} </Text>
         <Text>{truncateText(displayName, contentWidth)}</Text>
       </Text>
       {visibleLines.map((line, i) => (

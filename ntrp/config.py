@@ -5,6 +5,7 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from ntrp.embedder import EmbeddingConfig
 from ntrp.logging import get_logger
 
 NTRP_DIR = Path.home() / ".ntrp"
@@ -75,10 +76,16 @@ class Config(BaseSettings):
     schedule_email: str | None = None
 
     @property
+    def embedding(self) -> EmbeddingConfig:
+        return EmbeddingConfig(
+            model=self.embedding_model,
+            dim=self.embedding_dim,
+            prefix=self.embedding_prefix,
+        )
+
+    @property
     def db_dir(self) -> Path:
-        db_dir = Path.home() / ".ntrp"
-        db_dir.mkdir(exist_ok=True)
-        return db_dir
+        return NTRP_DIR
 
     @property
     def sessions_db_path(self) -> Path:
@@ -108,4 +115,8 @@ def get_config() -> Config:
         config.chat_model = settings["chat_model"]
     if "memory_model" in settings:
         config.memory_model = settings["memory_model"]
+    if "embedding_model" in settings:
+        config.embedding_model = settings["embedding_model"]
+    if "embedding_dim" in settings:
+        config.embedding_dim = settings["embedding_dim"]
     return config

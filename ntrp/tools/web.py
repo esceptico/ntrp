@@ -3,7 +3,8 @@ from typing import Any
 
 from ntrp.constants import EMBEDDING_TEXT_LIMIT, WEB_SEARCH_MAX_RESULTS
 from ntrp.sources.base import WebSearchSource
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import Tool, ToolResult, make_schema
+from ntrp.tools.core.context import ToolExecution
 
 
 class WebSearchTool(Tool):
@@ -18,33 +19,25 @@ class WebSearchTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query",
-                    },
-                    "num_results": {
-                        "type": "integer",
-                        "description": f"Number of results (default: 5, max: {WEB_SEARCH_MAX_RESULTS})",
-                    },
-                    "category": {
-                        "type": "string",
-                        "description": "Filter by category: company, research paper, news, pdf, github, tweet",
-                        "enum": ["company", "research paper", "news", "pdf", "github", "tweet"],
-                    },
-                },
-                "required": ["query"],
+        return make_schema(self.name, self.description, {
+            "query": {
+                "type": "string",
+                "description": "The search query",
             },
-        }
+            "num_results": {
+                "type": "integer",
+                "description": f"Number of results (default: 5, max: {WEB_SEARCH_MAX_RESULTS})",
+            },
+            "category": {
+                "type": "string",
+                "description": "Filter by category: company, research paper, news, pdf, github, tweet",
+                "enum": ["company", "research paper", "news", "pdf", "github", "tweet"],
+            },
+        }, ["query"])
 
     async def execute(
         self,
-        execution: Any,
+        execution: ToolExecution,
         query: str = "",
         num_results: int = 5,
         category: str | None = None,
@@ -93,22 +86,14 @@ class WebFetchTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "The URL to fetch",
-                    },
-                },
-                "required": ["url"],
+        return make_schema(self.name, self.description, {
+            "url": {
+                "type": "string",
+                "description": "The URL to fetch",
             },
-        }
+        }, ["url"])
 
-    async def execute(self, execution: Any, url: str = "", **kwargs: Any) -> ToolResult:
+    async def execute(self, execution: ToolExecution, url: str = "", **kwargs: Any) -> ToolResult:
         if not url.strip():
             return ToolResult("Error: url is required", "Missing url")
 

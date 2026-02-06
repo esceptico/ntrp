@@ -16,15 +16,6 @@ SCOPES_CALENDAR = ["https://www.googleapis.com/auth/calendar"]
 SCOPES_ALL = SCOPES_GMAIL_READ + SCOPES_GMAIL_SEND + SCOPES_CALENDAR
 
 
-def discover_google_tokens() -> list[Path]:
-    """Find all Google token files in ~/.ntrp/ (Gmail or Calendar)."""
-    if not NTRP_DIR.exists():
-        return []
-    gmail_tokens = list(NTRP_DIR.glob("gmail_token*.json"))
-    calendar_tokens = list(NTRP_DIR.glob("calendar_token*.json"))
-    return sorted(gmail_tokens + calendar_tokens)
-
-
 def discover_gmail_tokens() -> list[Path]:
     """Find all Gmail token files in ~/.ntrp/"""
     if not NTRP_DIR.exists():
@@ -49,15 +40,6 @@ def get_next_gmail_token_path() -> Path:
         return NTRP_DIR / "gmail_token.json"
     n = len(existing) + 1
     return NTRP_DIR / f"gmail_token_{n}.json"
-
-
-def get_next_calendar_token_path() -> Path:
-    """Get path for next Calendar token (for adding new account)."""
-    existing = discover_calendar_tokens()
-    if not existing:
-        return NTRP_DIR / "calendar_token.json"
-    n = len(existing) + 1
-    return NTRP_DIR / f"calendar_token_{n}.json"
 
 
 def get_google_credentials(
@@ -150,32 +132,3 @@ def add_gmail_account() -> str:
     return email
 
 
-def add_calendar_account() -> str:
-    """
-    Add a new Google Calendar account via OAuth flow.
-
-    Returns:
-        The email address of the added account
-
-    Raises:
-        FileNotFoundError: If credentials file doesn't exist
-    """
-
-    if not CREDENTIALS_PATH.exists():
-        raise FileNotFoundError(
-            f"Google credentials not found at {CREDENTIALS_PATH}\n"
-            "Download OAuth 'Desktop app' credentials from Google Cloud Console."
-        )
-
-    flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), SCOPES_CALENDAR)
-    creds = flow.run_local_server(port=0)
-
-    service = build("calendar", "v3", credentials=creds)
-    calendar = service.calendars().get(calendarId="primary").execute()
-    email = calendar.get("id", "unknown")
-
-    token_path = get_next_calendar_token_path()
-    NTRP_DIR.mkdir(parents=True, exist_ok=True)
-    token_path.write_text(creds.to_json())
-
-    return email

@@ -1,6 +1,7 @@
 import { Box, Text } from "ink";
 import type { ObservationDetails } from "../../../api/client.js";
-import { colors, brand, truncateText, ExpandableText, ScrollableList } from "../../ui/index.js";
+import { colors, truncateText, ExpandableText, ScrollableList } from "../../ui/index.js";
+import { useAccentColor } from "../../../hooks/index.js";
 import { formatTimeAgo } from "../../../lib/format.js";
 
 // Section indices for keyboard navigation
@@ -53,10 +54,11 @@ export function ObservationDetailsView({
     );
   }
 
+  const { accentValue } = useAccentColor();
   const { observation, supporting_facts } = details;
   const textColor = isFocused ? colors.text.primary : colors.text.secondary;
   const labelColor = colors.text.muted;
-  const valueColor = isFocused ? brand.primary : colors.text.secondary;
+  const valueColor = isFocused ? accentValue : colors.text.secondary;
 
   const sectionFocused = (section: ObsDetailSection) => isFocused && focusedSection === section;
   const textWidth = width - 2;

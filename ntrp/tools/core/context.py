@@ -45,8 +45,8 @@ class ToolContext:
         return self.session_state.session_id
 
     @property
-    def yolo(self) -> bool:
-        return self.session_state.yolo
+    def skip_approvals(self) -> bool:
+        return self.session_state.skip_approvals
 
     @property
     def auto_approve(self) -> set[str]:
@@ -68,7 +68,7 @@ class ToolExecution:
         diff: str | None = None,
         preview: str | None = None,
     ) -> None:
-        if self.ctx.yolo or self.tool_name in self.ctx.auto_approve:
+        if self.ctx.skip_approvals or self.tool_name in self.ctx.auto_approve:
             return
 
         if not self.ctx.emit or not self.ctx.approval_queue:

@@ -1,7 +1,7 @@
 from ntrp.constants import EXPLORE_TIMEOUT
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.prompts import EXPLORE_PROMPT
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import Tool, ToolResult, make_schema
 from ntrp.tools.core.context import ToolExecution
 
 
@@ -14,20 +14,12 @@ class ExploreTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "task": {
-                        "type": "string",
-                        "description": "What to explore or research.",
-                    },
-                },
-                "required": ["task"],
+        return make_schema(self.name, self.description, {
+            "task": {
+                "type": "string",
+                "description": "What to explore or research.",
             },
-        }
+        }, ["task"])
 
     async def _build_prompt(self, executor) -> str:
         if not executor.memory:

@@ -6,10 +6,8 @@ import type { Config } from "../types.js";
 import {
   checkHealth,
   getSession,
-  getStats,
   getServerConfig,
   getIndexStatus,
-  type Stats,
   type ServerConfig,
 } from "../api/client.js";
 import { INDEX_STATUS_POLL_MS, INDEX_DONE_HIDE_MS } from "../lib/constants.js";
@@ -19,22 +17,11 @@ export interface IndexStatus {
   progress: { total: number; done: number; status: string };
 }
 
-export interface SessionState {
-  sessionId: string | null;
-  sources: string[];
-  yolo: boolean;
-  serverConnected: boolean;
-  stats: Stats | null;
-  serverConfig: ServerConfig | null;
-  indexStatus: IndexStatus | null;
-}
-
 export function useSession(config: Config) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sources, setSources] = useState<string[]>([]);
-  const [yolo, setYolo] = useState(false);
+  const [skipApprovals, setSkipApprovals] = useState(false);
   const [serverConnected, setServerConnected] = useState(false);
-  const [stats, setStats] = useState<Stats | null>(null);
   const [serverConfig, setServerConfig] = useState<ServerConfig | null>(null);
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
   const initRef = useRef(false);
@@ -50,16 +37,14 @@ export function useSession(config: Config) {
         setServerConnected(healthy);
 
         if (healthy) {
-          const [session, statsData, configData, idxStatus] = await Promise.all([
+          const [session, configData, idxStatus] = await Promise.all([
             getSession(config),
-            getStats(config),
             getServerConfig(config),
             getIndexStatus(config).catch(() => null),
           ]);
 
           setSessionId(session.session_id);
           setSources(session.sources);
-          setStats(statsData);
           setServerConfig(configData);
 
           if (idxStatus?.indexing) {
@@ -109,18 +94,29 @@ export function useSession(config: Config) {
     }
   };
 
+  const updateSessionInfo = (info: { session_id: string; sources: string[] }) => {
+    setSessionId(info.session_id);
+    setSources(info.sources);
+  };
+
+  const toggleSkipApprovals = () => {
+    setSkipApprovals((prev) => !prev);
+  };
+
+  const updateServerConfig = (patch: Partial<ServerConfig>) => {
+    setServerConfig((prev) => prev && { ...prev, ...patch });
+  };
+
   return {
     sessionId,
-    setSessionId,
     sources,
-    setSources,
-    yolo,
-    setYolo,
+    skipApprovals,
     serverConnected,
-    stats,
     serverConfig,
-    setServerConfig,
     indexStatus,
     refreshIndexStatus,
+    updateSessionInfo,
+    toggleSkipApprovals,
+    updateServerConfig,
   };
 }

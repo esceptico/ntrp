@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from ntrp.schedule.models import Recurrence, ScheduledTask, compute_next_run
 from ntrp.schedule.store import ScheduleStore
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import Tool, ToolResult, make_schema
 from ntrp.tools.core.context import ToolExecution
 
 
@@ -23,33 +23,25 @@ class ScheduleTaskTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "description": {
-                        "type": "string",
-                        "description": "What the agent should do (natural language task)",
-                    },
-                    "time": {
-                        "type": "string",
-                        "description": "Time of day in HH:MM format (24h, local time)",
-                    },
-                    "recurrence": {
-                        "type": "string",
-                        "enum": ["once", "daily", "weekdays", "weekly"],
-                        "description": "How often: once, daily, weekdays (Mon-Fri), weekly",
-                    },
-                    "notify_email": {
-                        "type": "string",
-                        "description": "Email address to send results to (optional)",
-                    },
-                },
-                "required": ["description", "time", "recurrence"],
+        return make_schema(self.name, self.description, {
+            "description": {
+                "type": "string",
+                "description": "What the agent should do (natural language task)",
             },
-        }
+            "time": {
+                "type": "string",
+                "description": "Time of day in HH:MM format (24h, local time)",
+            },
+            "recurrence": {
+                "type": "string",
+                "enum": ["once", "daily", "weekdays", "weekly"],
+                "description": "How often: once, daily, weekdays (Mon-Fri), weekly",
+            },
+            "notify_email": {
+                "type": "string",
+                "description": "Email address to send results to (optional)",
+            },
+        }, ["description", "time", "recurrence"])
 
     async def execute(
         self,
@@ -126,11 +118,7 @@ class ListSchedulesTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {"type": "object", "properties": {}},
-        }
+        return make_schema(self.name, self.description, {})
 
     async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult:
         tasks = await self.store.list_all()
@@ -161,20 +149,12 @@ class CancelScheduleTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "task_id": {
-                        "type": "string",
-                        "description": "The task ID to cancel",
-                    },
-                },
-                "required": ["task_id"],
+        return make_schema(self.name, self.description, {
+            "task_id": {
+                "type": "string",
+                "description": "The task ID to cancel",
             },
-        }
+        }, ["task_id"])
 
     async def execute(
         self, execution: ToolExecution, task_id: str = "", **kwargs: Any
@@ -201,20 +181,12 @@ class GetScheduleResultTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "task_id": {
-                        "type": "string",
-                        "description": "The task ID to get results for",
-                    },
-                },
-                "required": ["task_id"],
+        return make_schema(self.name, self.description, {
+            "task_id": {
+                "type": "string",
+                "description": "The task ID to get results for",
             },
-        }
+        }, ["task_id"])
 
     async def execute(
         self, execution: ToolExecution, task_id: str = "", **kwargs: Any

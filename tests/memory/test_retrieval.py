@@ -14,7 +14,7 @@ from ntrp.memory.store.retrieval import (
     retrieve_with_observations,
     score_fact,
 )
-from ntrp.ranking import rrf_merge
+from ntrp.search.retrieval import rrf_merge
 from tests.conftest import mock_embedding
 
 

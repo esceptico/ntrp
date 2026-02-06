@@ -1,8 +1,10 @@
 export { useSettings, type Settings } from "./useSettings.js";
 export { KeypressProvider, useKeypress, useKeypressContext, type Key, type KeypressHandler } from "./useKeypress.js";
-export { useSelectionList, type UseSelectionListOptions, type UseSelectionListReturn } from "./useSelectionList.js";
 export { useCommands } from "./useCommands.js";
-export { useSession, type SessionState, type IndexStatus } from "./useSession.js";
-export { useStreaming, type PendingApproval, type StreamingState } from "./useStreaming.js";
+export { useSession, type IndexStatus } from "./useSession.js";
+export { useStreaming, type PendingApproval } from "./useStreaming.js";
 export { AccentColorProvider, useAccentColor } from "./useAccentColor.js";
-export { useTerminalSize, useTerminalWidth, useTerminalHeight } from "./useTerminalSize.js";
+export { useTerminalSize } from "./useTerminalSize.js";
+export { useInlineTextInput } from "./useInlineTextInput.js";
+export { useFactsTab, type FactsTabState } from "./useFactsTab.js";
+export { useObservationsTab, type ObservationsTabState } from "./useObservationsTab.js";

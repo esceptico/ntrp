@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class IsolationLevel(Enum):
+class IsolationLevel(StrEnum):
     """Context isolation level for sub-agents."""
 
     FULL = "full"  # New session state, no inherited context

@@ -159,7 +159,7 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
           <Text color={statusColor}>{statusIcon}</Text>
           <Text color={metaColor}>{` ${item.time_of_day}  ${item.recurrence}`}</Text>
         </Text>
-        <Text color={textColor}>{wrapText(item.description, textWidth)}</Text>
+        <Text color={textColor}>{wrapText(item.description, textWidth).join('\n')}</Text>
         <Text color={metaColor}>{`next: ${nextRun}   last: ${lastRun}`}</Text>
       </Box>
     );

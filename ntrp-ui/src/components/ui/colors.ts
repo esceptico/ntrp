@@ -17,23 +17,12 @@ export const accentColors = {
 
 export type AccentColor = keyof typeof accentColors;
 
-// Default accent color
+// Internal accent state, synced by AccentColorProvider
 let currentAccent: AccentColor = "blue";
 
-// Get/set the current accent color
-export function setAccentColor(color: AccentColor) {
+export function syncAccentColor(color: AccentColor) {
   currentAccent = color;
 }
-
-export function getAccentColor(): AccentColor {
-  return currentAccent;
-}
-
-// Brand colors (dynamic based on accent)
-export const brand = {
-  get primary() { return accentColors[currentAccent].primary; },
-  muted: "#71717A",        // Zinc 500
-} as const;
 
 // Semantic colors
 export const colors = {

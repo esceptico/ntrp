@@ -1,8 +1,8 @@
 import React, { memo } from "react";
 import { Box, Text } from "ink";
 import { Markdown } from "../../Markdown.js";
-import { brand } from "../../ui/colors.js";
 import { useDimensions } from "../../../contexts/index.js";
+import { useAccentColor } from "../../../hooks/index.js";
 import { BULLET } from "../../../lib/constants.js";
 
 interface AssistantMessageProps {
@@ -15,12 +15,13 @@ export const AssistantMessage = memo(function AssistantMessage({
   renderMarkdown = true,
 }: AssistantMessageProps) {
   const { width: terminalWidth } = useDimensions();
+  const { accentValue } = useAccentColor();
   const contentWidth = Math.max(0, terminalWidth - 4);
 
   return (
     <Box flexDirection="row" width={terminalWidth} overflow="hidden">
       <Box width={2} flexShrink={0}>
-        <Text color={brand.primary}>{BULLET} </Text>
+        <Text color={accentValue}>{BULLET} </Text>
       </Box>
       <Box width={contentWidth} flexGrow={1} flexDirection="column" overflow="hidden">
         {renderMarkdown ? (

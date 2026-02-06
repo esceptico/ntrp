@@ -11,7 +11,7 @@ import {
   MAX_TOOL_DESCRIPTION_CHARS,
   MAX_ASSISTANT_CHARS,
 } from "../lib/constants.js";
-import { truncate } from "../lib/utils.js";
+import { truncateText } from "../lib/utils.js";
 
 export type { PendingApproval } from "../types.js";
 
@@ -22,7 +22,7 @@ export interface PendingChoice {
   allowMultiple: boolean;
 }
 
-export interface StreamingState {
+interface StreamingState {
   messages: Message[];
   isStreaming: boolean;
   status: string;
@@ -34,14 +34,14 @@ export interface StreamingState {
 interface UseStreamingOptions {
   config: Config;
   sessionId: string | null;
-  yolo: boolean;
+  skipApprovals: boolean;
   onSessionInfo?: (info: { session_id: string; sources: string[] }) => void;
 }
 
 export function useStreaming({
   config,
   sessionId,
-  yolo,
+  skipApprovals,
   onSessionInfo,
 }: UseStreamingOptions) {
   const messageIdRef = useRef(0);
@@ -75,7 +75,7 @@ export function useStreaming({
 
   const addMessage = useCallback((msg: Omit<Message, "id"> & { id?: string }) => {
     const content = msg.role === "tool"
-      ? truncate(msg.content, MAX_TOOL_MESSAGE_CHARS)
+      ? truncateText(msg.content, MAX_TOOL_MESSAGE_CHARS, 'end')
       : msg.content;
     const withId: Message = {
       ...msg,
@@ -112,7 +112,7 @@ export function useStreaming({
     }
 
     setStatus(`${event.name}...`);
-    const description = truncate(event.description, MAX_TOOL_DESCRIPTION_CHARS);
+    const description = truncateText(event.description, MAX_TOOL_DESCRIPTION_CHARS, 'end');
     toolDescRef.current.set(event.tool_id, description);
     toolStartRef.current.set(event.tool_id, Date.now());
     const seq = toolSeqRef.current++;
@@ -274,7 +274,7 @@ export function useStreaming({
     toolSeqRef.current = 0;
 
     try {
-      for await (const event of streamChat(message, sessionId, config, yolo)) {
+      for await (const event of streamChat(message, sessionId, config, skipApprovals)) {
         await handleEvent(event);
       }
     } catch (error) {
@@ -282,13 +282,13 @@ export function useStreaming({
     }
 
     // Finalize remaining text as assistant message
-    const finalContent = truncate(pendingTextRef.current, MAX_ASSISTANT_CHARS);
+    const finalContent = truncateText(pendingTextRef.current, MAX_ASSISTANT_CHARS, 'end');
     pendingTextRef.current = "";
     if (finalContent) addMessage({ role: "assistant", content: finalContent });
 
     setIsStreaming(false);
     setStatus("");
-  }, [sessionId, config, yolo, handleEvent, addMessage]);
+  }, [sessionId, config, skipApprovals, handleEvent, addMessage]);
 
   // Handle approval result
   const handleApproval = useCallback(async (
@@ -363,7 +363,6 @@ export function useStreaming({
 
   return {
     messages,
-    setMessages,
     isStreaming,
     status,
     toolChain,

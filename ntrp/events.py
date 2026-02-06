@@ -1,9 +1,9 @@
 import json
 from dataclasses import asdict, dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class EventType(str, Enum):
+class EventType(StrEnum):
     """Types of events the server can emit."""
 
     # Agent state
@@ -16,7 +16,6 @@ class EventType(str, Enum):
 
     # Approvals
     APPROVAL_NEEDED = "approval_needed"  # Write operation needs approval
-    APPROVAL_RESULT = "approval_result"  # Approval decision received
 
     # User interaction
     QUESTION = "question"  # Agent asking user a question (free-form)
@@ -24,7 +23,6 @@ class EventType(str, Enum):
 
     # Session
     SESSION_INFO = "session_info"
-    CONTEXT_COMPRESSED = "context_compressed"
 
     # Completion
     DONE = "done"
@@ -110,12 +108,6 @@ class QuestionEvent(SSEEvent):
     tool_id: str = ""  # For tracking
 
 
-@dataclass
-class ChoiceOption:
-    id: str
-    label: str
-    description: str = ""
-
 
 @dataclass
 class ChoiceEvent(SSEEvent):
@@ -133,7 +125,7 @@ class SessionInfoEvent(SSEEvent):
     run_id: str = ""
     sources: list[str] = field(default_factory=list)
     source_errors: dict[str, str] = field(default_factory=dict)
-    yolo: bool = False
+    skip_approvals: bool = False
 
 
 @dataclass

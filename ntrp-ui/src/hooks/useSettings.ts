@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { type AccentColor, setAccentColor } from "../components/ui/colors.js";
+import type { AccentColor } from "../components/ui/colors.js";
 import { updateConfig } from "../api/client.js";
 import type { Config } from "../types.js";
 import * as fs from "fs";
@@ -32,11 +32,8 @@ const defaultSettings: Settings = {
 
 const SETTINGS_DIR = path.join(os.homedir(), ".ntrp");
 const SETTINGS_FILE = path.join(SETTINGS_DIR, "settings.json");
-const OLD_SETTINGS_FILE = path.join(SETTINGS_DIR, "ui-settings.json");
-
 function loadSettings(): Settings {
   try {
-    // Try new settings file first
     if (fs.existsSync(SETTINGS_FILE)) {
       const data = fs.readFileSync(SETTINGS_FILE, "utf-8");
       const parsed = JSON.parse(data);
@@ -44,21 +41,6 @@ function loadSettings(): Settings {
         ui: { ...defaultSettings.ui, ...parsed.ui },
         agent: { ...defaultSettings.agent, ...parsed.agent },
       };
-    }
-
-    // Migrate from old flat ui-settings.json
-    if (fs.existsSync(OLD_SETTINGS_FILE)) {
-      const data = fs.readFileSync(OLD_SETTINGS_FILE, "utf-8");
-      const old = JSON.parse(data);
-      const migrated: Settings = {
-        ui: {
-          renderMarkdown: old.renderMarkdown ?? defaultSettings.ui.renderMarkdown,
-          accentColor: old.accentColor ?? defaultSettings.ui.accentColor,
-        },
-        agent: { ...defaultSettings.agent },
-      };
-      saveSettings(migrated);
-      return migrated;
     }
   } catch {
     // Ignore errors, use defaults
@@ -82,10 +64,8 @@ export function useSettings(config: Config) {
   const [showSettings, setShowSettings] = useState(false);
   const initializedRef = useRef(false);
 
-  // Sync accent color and save on change
+  // Save settings on change (accent color synced by AccentColorProvider)
   useEffect(() => {
-    setAccentColor(settings.ui.accentColor);
-
     if (initializedRef.current) {
       saveSettings(settings);
     } else {
@@ -121,7 +101,6 @@ export function useSettings(config: Config) {
     [config]
   );
 
-  const openSettings = useCallback(() => setShowSettings(true), []);
   const closeSettings = useCallback(() => setShowSettings(false), []);
   const toggleSettings = useCallback(() => setShowSettings((v) => !v), []);
 
@@ -129,7 +108,6 @@ export function useSettings(config: Config) {
     settings,
     showSettings,
     updateSetting,
-    openSettings,
     closeSettings,
     toggleSettings,
   };

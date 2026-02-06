@@ -7,7 +7,7 @@ import { useDimensions } from "../../../contexts/index.js";
 import { Panel, Footer, colors, accentColors, type AccentColor } from "../../ui/index.js";
 import {
   getSupportedModels,
-  updateModels,
+  updateConfig,
   getGmailAccounts,
   addGmailAccount,
   removeGmailAccount,
@@ -35,7 +35,6 @@ interface SettingsDialogProps {
   onUpdate: (category: keyof Settings, key: string, value: unknown) => void;
   onModelChange: (type: "chat" | "memory", model: string) => void;
   onClose: () => void;
-  onStatusMessage?: (msg: string) => void;
 }
 
 export function SettingsDialog({
@@ -45,7 +44,6 @@ export function SettingsDialog({
   onUpdate,
   onModelChange,
   onClose,
-  onStatusMessage,
 }: SettingsDialogProps) {
   const { width: terminalWidth } = useDimensions();
   const accent = useAccent(settings.ui.accentColor);
@@ -113,7 +111,7 @@ export function SettingsDialog({
         setChatModel(modelName);
         onModelChange("chat", modelName);
         setModelUpdating(true);
-        updateModels(config, { chat_model: modelName })
+        updateConfig(config, { chat_model: modelName })
           .catch(() => {})
           .finally(() => setModelUpdating(false));
       } else {
@@ -121,7 +119,7 @@ export function SettingsDialog({
         setMemoryModel(modelName);
         onModelChange("memory", modelName);
         setModelUpdating(true);
-        updateModels(config, { memory_model: modelName })
+        updateConfig(config, { memory_model: modelName })
           .catch(() => {})
           .finally(() => setModelUpdating(false));
       }
@@ -134,15 +132,14 @@ export function SettingsDialog({
     setActionInProgress("Adding account...");
     try {
       const result = await addGmailAccount(config);
-      onStatusMessage?.(`✓ Connected: ${result.email}`);
       const accounts = await getGmailAccounts(config);
       setGoogleAccounts(accounts.accounts);
-    } catch (e) {
-      onStatusMessage?.(`✗ Failed: ${e}`);
+    } catch {
+      // Ignore errors
     } finally {
       setActionInProgress(null);
     }
-  }, [config, actionInProgress, onStatusMessage]);
+  }, [config, actionInProgress]);
 
   const handleRemoveGoogle = useCallback(async () => {
     if (actionInProgress || googleAccounts.length === 0) return;
@@ -151,17 +148,16 @@ export function SettingsDialog({
 
     setActionInProgress("Removing...");
     try {
-      const result = await removeGmailAccount(config, account.token_file);
-      onStatusMessage?.(`✓ Removed: ${result.email || account.token_file}`);
+      await removeGmailAccount(config, account.token_file);
       const accounts = await getGmailAccounts(config);
       setGoogleAccounts(accounts.accounts);
       setSelectedGoogleIndex(Math.max(0, selectedGoogleIndex - 1));
-    } catch (e) {
-      onStatusMessage?.(`✗ Failed: ${e}`);
+    } catch {
+      // Ignore errors
     } finally {
       setActionInProgress(null);
     }
-  }, [config, googleAccounts, selectedGoogleIndex, actionInProgress, onStatusMessage]);
+  }, [config, googleAccounts, selectedGoogleIndex, actionInProgress]);
 
   const handleKeypress = useCallback(
     (key: Key) => {
@@ -267,19 +263,14 @@ export function SettingsDialog({
       const result = await updateEmbeddingModel(config, pendingEmbeddingModel);
       if (result.status === "reindexing") {
         setEmbeddingModel(pendingEmbeddingModel);
-        onStatusMessage?.(`✓ Switched to ${pendingEmbeddingModel}, re-indexing started`);
-      } else if (result.status === "unchanged") {
-        onStatusMessage?.("Model unchanged");
-      } else {
-        onStatusMessage?.(`✗ ${result.message || "Failed"}`);
       }
-    } catch (e) {
-      onStatusMessage?.(`✗ Failed: ${e}`);
+    } catch {
+      // Ignore errors
     } finally {
       setPendingEmbeddingModel(null);
       setActionInProgress(null);
     }
-  }, [config, pendingEmbeddingModel, actionInProgress, onStatusMessage]);
+  }, [config, pendingEmbeddingModel, actionInProgress]);
 
   const handleEmbeddingKeypress = useCallback(
     (key: Key) => {

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Self
 
 from ntrp.constants import (
+    CONSOLIDATION_INTERVAL,
     ENTITY_CANDIDATES_LIMIT,
     ENTITY_RESOLUTION_AUTO_MERGE,
     ENTITY_RESOLUTION_NAME_SIM_THRESHOLD,
@@ -48,19 +49,24 @@ class FactMemory:
         await instance.db.connect()
         return instance
 
-    def start_consolidation(self, interval: float = 30.0) -> None:
+    def start_consolidation(self, interval: float = CONSOLIDATION_INTERVAL) -> None:
         if self._consolidation_task is None:
             self._consolidation_task = asyncio.create_task(self._consolidation_loop(interval))
 
     async def _consolidation_loop(self, interval: float) -> None:
+        backoff = interval
+        max_backoff = interval * 16
         while True:
-            await asyncio.sleep(interval)
+            await asyncio.sleep(backoff)
             try:
-                await self._consolidate_pending()
+                count = await self._consolidate_pending()
+                if count > 0:
+                    backoff = interval
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.warning(f"Consolidation batch failed: {e}")
+                logger.warning("Consolidation batch failed: %s", e)
+                backoff = min(backoff * 2, max_backoff)
 
     async def _consolidate_pending(self, batch_size: int = 10) -> int:
         async with self._db_lock:
@@ -81,7 +87,7 @@ class FactMemory:
                     embed_fn=self.embedder.embed_one,
                 )
                 count += 1
-            logger.info(f"Consolidated {count} facts")
+            logger.info("Consolidated %d facts", count)
             return count
 
     async def close(self) -> None:
@@ -226,7 +232,7 @@ class FactMemory:
         if best_score < ENTITY_RESOLUTION_AUTO_MERGE:
             return await self._create_new_entity(repo, name, entity_type)
 
-        logger.info(f"Entity resolution: '{name}' → '{best_candidate.name}' (score={best_score:.2f})")
+        logger.info("Entity resolution: '%s' → '%s' (score=%.2f)", name, best_candidate.name, best_score)
         return best_candidate.id
 
     async def recall(self, query: str, limit: int = RECALL_SEARCH_LIMIT) -> FactContext:
@@ -282,7 +288,7 @@ class FactMemory:
         merge_ids = [e.id for e in entities if e.id != keep.id]
 
         count = await repo.merge_entities(keep.id, merge_ids)
-        logger.info(f"Merged entities {[e.name for e in entities]} → '{keep.name}' ({count} refs)")
+        logger.info("Merged entities %s → '%s' (%d refs)", [e.name for e in entities], keep.name, count)
         return count
 
     async def count(self) -> int:
@@ -297,3 +303,26 @@ class FactMemory:
         recent_facts = await repo.list_recent(limit=recent_limit)
 
         return user_facts, recent_facts
+
+    def fact_repo(self) -> FactRepository:
+        return FactRepository(self.db.conn)
+
+    def obs_repo(self) -> ObservationRepository:
+        return ObservationRepository(self.db.conn)
+
+    async def link_count(self) -> int:
+        repo = FactRepository(self.db.conn)
+        return await repo.link_count()
+
+    async def clear(self) -> dict[str, int]:
+        async with self._db_lock:
+            repo = FactRepository(self.db.conn)
+            obs_repo = ObservationRepository(self.db.conn)
+
+            counts = {
+                "facts": await repo.count(),
+                "links": await repo.link_count(),
+                "observations": await obs_repo.count(),
+            }
+            await self.db.clear_all()
+            return counts

@@ -161,25 +161,6 @@ _SQL_SEARCH_ENTITIES_VEC = """
 # Entity resolution helpers
 _SQL_COUNT_ENTITY_FACTS = "SELECT COUNT(*) FROM entity_refs WHERE name = ?"
 
-_SQL_ENTITY_CO_OCCURRENCE_SOURCES = """
-    SELECT COUNT(DISTINCT f.source_ref) as shared_sources
-    FROM facts f
-    JOIN entity_refs er1 ON f.id = er1.fact_id
-    JOIN entity_refs er2 ON f.id = er2.fact_id
-    WHERE er1.name = ? AND er2.name = ?
-      AND f.source_ref IS NOT NULL
-"""
-
-_SQL_ENTITY_CO_OCCURRENCE_FACTS = """
-    SELECT COUNT(*) FROM (
-        SELECT f.id
-        FROM facts f
-        JOIN entity_refs er1 ON f.id = er1.fact_id
-        JOIN entity_refs er2 ON f.id = er2.fact_id
-        WHERE er1.name = ? AND er2.name = ?
-    )
-"""
-
 _SQL_ENTITY_LAST_MENTION = """
     SELECT f.created_at
     FROM facts f
@@ -271,6 +252,10 @@ class FactRepository(BaseRepository):
     async def count(self) -> int:
         rows = await self.conn.execute_fetchall(_SQL_COUNT_FACTS)
         return rows[0][0]
+
+    async def link_count(self) -> int:
+        rows = await self.conn.execute_fetchall("SELECT COUNT(*) FROM fact_links")
+        return rows[0][0] if rows else 0
 
     async def delete(self, fact_id: int) -> None:
         await self.conn.execute(_SQL_DELETE_ENTITY_REFS, (fact_id,))
@@ -512,15 +497,6 @@ class FactRepository(BaseRepository):
     async def list_entities_by_type(self, entity_type: str, limit: int = 100) -> list[Entity]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_ENTITIES_BY_TYPE, (entity_type, limit))
         return [self._row_to_entity(r) for r in rows]
-
-    async def get_entity_co_occurrence(self, name1: str, name2: str) -> tuple[int, int]:
-        rows = await self.conn.execute_fetchall(_SQL_ENTITY_CO_OCCURRENCE_SOURCES, (name1, name2))
-        shared_sources = rows[0][0] if rows else 0
-
-        rows = await self.conn.execute_fetchall(_SQL_ENTITY_CO_OCCURRENCE_FACTS, (name1, name2))
-        shared_facts = rows[0][0] if rows else 0
-
-        return shared_sources, shared_facts
 
     async def get_entity_last_mention(self, name: str) -> datetime | None:
         rows = await self.conn.execute_fetchall(_SQL_ENTITY_LAST_MENTION, (name,))

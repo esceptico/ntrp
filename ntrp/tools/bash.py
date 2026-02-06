@@ -3,7 +3,7 @@ import subprocess
 from typing import Any
 
 from ntrp.constants import BASH_OUTPUT_LIMIT
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import Tool, ToolResult, make_schema
 from ntrp.tools.core.context import ToolExecution
 
 SAFE_COMMANDS = frozenset(
@@ -88,10 +88,6 @@ SAFETY: Destructive commands (rm -rf) are blocked. Non-safe commands require app
 
 
 def is_safe_command(command: str) -> bool:
-    cmd_lower = command.lower().strip()
-    for blocked in BLOCKED_PATTERNS:
-        if blocked in cmd_lower:
-            return False
     try:
         parts = shlex.split(command)
     except ValueError:
@@ -163,24 +159,16 @@ class BashTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "The shell command to execute",
-                    },
-                    "working_dir": {
-                        "type": "string",
-                        "description": "Working directory (optional, defaults to current)",
-                    },
-                },
-                "required": ["command"],
+        return make_schema(self.name, self.description, {
+            "command": {
+                "type": "string",
+                "description": "The shell command to execute",
             },
-        }
+            "working_dir": {
+                "type": "string",
+                "description": "Working directory (optional, defaults to current)",
+            },
+        }, ["command"])
 
     async def execute(
         self, execution: ToolExecution, command: str = "", working_dir: str | None = None, **kwargs: Any

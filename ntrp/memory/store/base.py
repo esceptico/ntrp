@@ -135,6 +135,15 @@ class GraphDatabase(VectorDatabase):
         await self._init_vec_tables()
         await self.conn.commit()
 
+    async def clear_all(self) -> None:
+        await self.conn.execute("DELETE FROM observations_vec")
+        await self.conn.execute("DELETE FROM observations")
+        await self.conn.execute("DELETE FROM entity_refs")
+        await self.conn.execute("DELETE FROM fact_links")
+        await self.conn.execute("DELETE FROM facts_vec")
+        await self.conn.execute("DELETE FROM facts")
+        await self.conn.commit()
+
     async def _init_vec_tables(self) -> None:
         dim = self.embedding_dim
         await self.conn.execute(f"""

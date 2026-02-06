@@ -1,17 +1,13 @@
-from datetime import datetime
-
 from ntrp.constants import (
+    CHARS_PER_TOKEN,
     COMPRESSION_THRESHOLD,
     MASK_PREVIEW_CHARS,
     MASK_THRESHOLD,
     SUPPORTED_MODELS,
     TAIL_TOKEN_BUDGET,
 )
-from ntrp.context.models import SessionState
 from ntrp.context.prompts import SUMMARIZE_PROMPT
-from ntrp.llm import acompletion, completion
-
-CHARS_PER_TOKEN = 4
+from ntrp.llm import acompletion
 
 
 def _get_attr(msg, key: str, default=None):
@@ -42,7 +38,7 @@ def _count_message_tokens(msg) -> int:
     return total_chars // CHARS_PER_TOKEN
 
 
-def count_tokens(messages: list, model: str) -> int:
+def count_tokens(messages: list) -> int:
     return sum(_count_message_tokens(msg) for msg in messages)
 
 
@@ -57,7 +53,7 @@ def should_compress(
         return actual_input_tokens > int(limit * 0.80)
 
     threshold = int(limit * COMPRESSION_THRESHOLD)
-    current = count_tokens(messages, model)
+    current = count_tokens(messages)
     return current > threshold
 
 
@@ -123,17 +119,6 @@ def _build_summarize_request(conversation_text: str, model: str) -> dict:
     }
 
 
-def summarize_messages_sync(
-    messages: list,
-    start: int,
-    end: int,
-    model: str,
-) -> str:
-    conversation_text = _build_conversation_text(messages, start, end)
-    response = completion(**_build_summarize_request(conversation_text, model))
-    return response.choices[0].message.content or "Unable to summarize."
-
-
 async def summarize_messages_async(
     messages: list,
     start: int,
@@ -151,21 +136,6 @@ def _build_compressed_messages(messages: list[dict], end: int, summary: str) -> 
         {"role": "assistant", "content": f"[Session State Handoff]\n{summary}"},
         *messages[end:],
     ]
-
-
-def compress_context_sync(
-    messages: list[dict],
-    model: str,
-) -> list[dict]:
-    if not should_compress(messages, model):
-        return messages
-
-    start, end = find_compressible_range(messages)
-    if start == 0 and end == 0:
-        return messages
-
-    summary = summarize_messages_sync(messages, start, end, model)
-    return _build_compressed_messages(messages, end, summary)
 
 
 async def compress_context_async(
@@ -207,43 +177,3 @@ def mask_old_tool_results(messages: list[dict], preserve_recent: int = 6) -> lis
         else:
             result.append(msg)
     return result
-
-
-class SessionManager:
-    def __init__(
-        self,
-        model: str,
-        max_turns: int = 20,
-        idle_seconds: int = 900,
-    ) -> None:
-        self.model = model
-        self.max_turns = max_turns
-        self.idle_seconds = idle_seconds
-
-    def should_compact(self, session: SessionState, messages: list) -> bool:
-        return should_compress(messages, self.model)
-
-    async def compact_session(
-        self,
-        session: SessionState,
-        messages: list[dict],
-        on_compress=None,
-        force: bool = False,
-    ) -> tuple[SessionState, list[dict], bool]:
-        new_messages, was_compressed = await compress_context_async(
-            messages, self.model, on_compress=on_compress, force=force
-        )
-
-        if was_compressed:
-            session.last_compaction_turn = len(new_messages)
-            for msg in new_messages:
-                if msg.get("role") == "assistant" and isinstance(msg.get("content"), str):
-                    content = msg.get("content", "")
-                    if content.startswith("[Session State Handoff]"):
-                        session.rolling_summary = content
-                        break
-        else:
-            session.last_compaction_turn = len(messages)
-
-        session.last_activity = datetime.now()
-        return session, new_messages, was_compressed

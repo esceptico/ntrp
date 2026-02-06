@@ -56,12 +56,13 @@ class ObservationRepository(BaseRepository):
         now = datetime.now()
         source_fact_ids = [source_fact_id] if source_fact_id else []
         evidence_count = len(source_fact_ids)
+        embedding_bytes = serialize_embedding(embedding)
 
         cursor = await self.conn.execute(
             _SQL_INSERT_OBSERVATION,
             (
                 summary,
-                serialize_embedding(embedding),
+                embedding_bytes,
                 evidence_count,
                 json.dumps(source_fact_ids),
                 json.dumps([]),
@@ -73,8 +74,7 @@ class ObservationRepository(BaseRepository):
         )
         obs_id = cursor.lastrowid
 
-        if embedding is not None:
-            embedding_bytes = serialize_embedding(embedding)
+        if embedding_bytes is not None:
             await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (obs_id, embedding_bytes))
 
         await self.conn.commit()
@@ -173,8 +173,13 @@ class ObservationRepository(BaseRepository):
         await self.conn.commit()
 
     async def get_fact_ids(self, observation_id: int) -> list[int]:
-        obs = await self.get(observation_id)
-        return obs.source_fact_ids if obs else []
+        rows = await self.conn.execute_fetchall(
+            "SELECT source_fact_ids FROM observations WHERE id = ?", (observation_id,)
+        )
+        if not rows:
+            return []
+        raw = rows[0]["source_fact_ids"]
+        return json.loads(raw) if raw else []
 
     async def list_recent(self, limit: int = 100) -> list[Observation]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_RECENT_OBSERVATIONS, (limit,))

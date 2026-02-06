@@ -2,7 +2,7 @@ from typing import Any
 
 from ntrp.constants import EMAIL_FROM_TRUNCATE, EMAIL_SUBJECT_TRUNCATE
 from ntrp.sources.base import EmailSource
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import Tool, ToolResult, make_schema
 from ntrp.tools.core.context import ToolExecution
 from ntrp.utils import truncate
 
@@ -18,23 +18,15 @@ class SendEmailTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "account": {
-                        "type": "string",
-                        "description": "Sender email address (must match a connected Gmail account)",
-                    },
-                    "to": {"type": "string", "description": "Recipient email address"},
-                    "subject": {"type": "string", "description": "Email subject"},
-                    "body": {"type": "string", "description": "Email body (plain text)"},
-                },
-                "required": ["account", "to", "subject", "body"],
+        return make_schema(self.name, self.description, {
+            "account": {
+                "type": "string",
+                "description": "Sender email address (must match a connected Gmail account)",
             },
-        }
+            "to": {"type": "string", "description": "Recipient email address"},
+            "subject": {"type": "string", "description": "Email subject"},
+            "body": {"type": "string", "description": "Email body (plain text)"},
+        }, ["account", "to", "subject", "body"])
 
     async def execute(
         self,
@@ -66,20 +58,12 @@ class ReadEmailTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "email_id": {
-                        "type": "string",
-                        "description": "The email ID (from search or list results)",
-                    },
-                },
-                "required": ["email_id"],
+        return make_schema(self.name, self.description, {
+            "email_id": {
+                "type": "string",
+                "description": "The email ID (from search or list results)",
             },
-        }
+        }, ["email_id"])
 
     async def execute(self, execution: ToolExecution, email_id: str = "", **kwargs: Any) -> ToolResult:
         if not email_id:
@@ -106,18 +90,10 @@ class ListEmailTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "days": {"type": "integer", "description": "How many days back to look (default: 7)"},
-                    "limit": {"type": "integer", "description": "Maximum results (default: 30)"},
-                },
-                "required": [],
-            },
-        }
+        return make_schema(self.name, self.description, {
+            "days": {"type": "integer", "description": "How many days back to look (default: 7)"},
+            "limit": {"type": "integer", "description": "Maximum results (default: 30)"},
+        })
 
     async def execute(self, execution: ToolExecution, days: int = 7, limit: int = 30, **kwargs: Any) -> ToolResult:
         accounts = self.source.list_accounts()
@@ -147,18 +123,10 @@ class SearchEmailTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Search query"},
-                    "limit": {"type": "integer", "description": "Maximum results (default: 10)"},
-                },
-                "required": ["query"],
-            },
-        }
+        return make_schema(self.name, self.description, {
+            "query": {"type": "string", "description": "Search query"},
+            "limit": {"type": "integer", "description": "Maximum results (default: 10)"},
+        }, ["query"])
 
     async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
         if not query:

@@ -48,10 +48,3 @@ export function useTerminalSize(): TerminalSize {
   return size;
 }
 
-export function useTerminalWidth(): number {
-  return useTerminalSize().width;
-}
-
-export function useTerminalHeight(): number {
-  return useTerminalSize().height;
-}

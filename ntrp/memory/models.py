@@ -7,10 +7,6 @@ import numpy as np
 type Embedding = np.ndarray
 
 
-class MemoryError(Exception):
-    pass
-
-
 class FactType(StrEnum):
     WORLD = "world"
     EXPERIENCE = "experience"

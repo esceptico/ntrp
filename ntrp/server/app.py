@@ -1,7 +1,5 @@
-import asyncio
-import json
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException
@@ -10,12 +8,11 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from ntrp.core.agent import Agent
+from ntrp.core.prompts import INIT_INSTRUCTION
 from ntrp.events import (
-    CancelledEvent,
     DoneEvent,
     ErrorEvent,
     SessionInfoEvent,
-    SSEEvent,
     TextEvent,
     ThinkingEvent,
 )
@@ -25,20 +22,20 @@ from ntrp.server.chat import (
     prepare_messages,
     resolve_session,
 )
-from ntrp.server.prompts import INIT_INSTRUCTION
 from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
 from ntrp.server.routers.schedule import router as schedule_router
 from ntrp.server.routers.session import router as session_router
 from ntrp.server.runtime import get_runtime, get_runtime_async, reset_runtime
 from ntrp.server.state import RunStatus, get_run_registry
+from ntrp.server.stream import run_agent_loop, to_sse
 from ntrp.tools.core.context import ToolContext
 
 
 class ChatRequest(BaseModel):
     message: str
     session_id: str | None = None
-    yolo: bool = False
+    skip_approvals: bool = False
 
 
 class ToolResultRequest(BaseModel):
@@ -116,12 +113,6 @@ async def list_tools():
     return {"tools": tools}
 
 
-def _to_sse(event: SSEEvent | dict) -> str:
-    if isinstance(event, SSEEvent):
-        return event.to_sse_string()
-    return f"data: {json.dumps(event)}\n\n"
-
-
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest) -> StreamingResponse:
     runtime = get_runtime()
@@ -158,7 +149,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         run.choice_queue = ctx.choice_responses
 
         extra_auto_approve = {"remember", "forget", "reflect", "merge"} if is_init else set()
-        session_state.yolo = request.yolo
+        session_state.skip_approvals = request.skip_approvals
         tool_ctx = ToolContext(
             session_state=session_state,
             executor=runtime.executor,
@@ -168,17 +159,17 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             extra_auto_approve=extra_auto_approve,
         )
 
-        yield _to_sse(
+        yield to_sse(
             SessionInfoEvent(
                 session_id=session_id,
                 run_id=run.run_id,
                 sources=runtime.get_available_sources(),
                 source_errors=runtime.get_source_errors(),
-                yolo=request.yolo,
+                skip_approvals=request.skip_approvals,
             )
         )
 
-        yield _to_sse(ThinkingEvent(status="processing..."))
+        yield to_sse(ThinkingEvent(status="processing..."))
 
         try:
             agent = Agent(
@@ -194,7 +185,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
             result: str | None = None
 
-            async for sse in _run_agent_loop(ctx, agent, user_message):
+            async for sse in run_agent_loop(ctx, agent, user_message):
                 if isinstance(sse, dict) and "_result" in sse:
                     result = sse["_result"]
                 else:
@@ -205,7 +196,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 return  # Cancelled
 
             if result:
-                yield _to_sse(TextEvent(content=result))
+                yield to_sse(TextEvent(content=result))
 
             run.prompt_tokens = agent.total_input_tokens
             run.completion_tokens = agent.total_output_tokens
@@ -214,11 +205,11 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             session_state.last_activity = datetime.now()
             await runtime.save_session(session_state, run.messages)
 
-            yield _to_sse(DoneEvent(run_id=run.run_id, usage=run.get_usage()))
+            yield to_sse(DoneEvent(run_id=run.run_id, usage=run.get_usage()))
             registry.complete_run(run.run_id)
 
         except Exception as e:
-            yield _to_sse(ErrorEvent(message=str(e), recoverable=False))
+            yield to_sse(ErrorEvent(message=str(e), recoverable=False))
 
     return StreamingResponse(
         event_generator(),
@@ -229,127 +220,6 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             "X-Accel-Buffering": "no",
         },
     )
-
-
-async def _run_agent_loop(ctx: ChatContext, agent, user_message: str):
-    """Run agent and yield SSE strings. Yields dict with result at end.
-
-    Uses a merged event stream pattern:
-    - Agent runs in background task, pushing events to a shared queue
-    - Subagent/tool events also go to the same queue via event_bus forwarding
-    - Consumer yields events as they arrive in true real-time
-    """
-    history = ctx.messages[:-1] if len(ctx.messages) > 1 else None
-
-    # Sentinel to signal completion
-    _DONE = object()
-    _ERROR = object()
-
-    # Merged event queue - all events flow here
-    merged_queue: asyncio.Queue = asyncio.Queue()
-    result: str = ""
-    error: Exception | None = None
-
-    async def forward_event_bus():
-        """Forward events from event_bus to merged_queue in real-time."""
-        while True:
-            try:
-                event = await asyncio.wait_for(ctx.event_bus.get(), timeout=0.05)
-                await merged_queue.put(("event_bus", event))
-            except TimeoutError:
-                # Check if we should stop (will be cancelled when agent is done)
-                continue
-            except asyncio.CancelledError:
-                # Drain remaining events before exiting
-                while not ctx.event_bus.empty():
-                    try:
-                        event = ctx.event_bus.get_nowait()
-                        await merged_queue.put(("event_bus", event))
-                    except asyncio.QueueEmpty:
-                        break
-                raise
-
-    async def run_agent():
-        """Run agent and push events to merged queue."""
-        nonlocal result, error
-        try:
-            async for item in agent.stream(user_message, history=history):
-                if isinstance(item, str):
-                    result = item
-                elif isinstance(item, SSEEvent):
-                    await merged_queue.put(("agent", item))
-        except Exception as e:
-            error = e
-            await merged_queue.put((_ERROR, e))
-        finally:
-            await merged_queue.put((_DONE, None))
-
-    # Start both tasks
-    agent_task = asyncio.create_task(run_agent())
-    forwarder_task = asyncio.create_task(forward_event_bus())
-
-    try:
-        # Consume merged events
-        while True:
-            if ctx.run.cancelled:
-                yield _to_sse(CancelledEvent(run_id=ctx.run.run_id))
-                return
-
-            try:
-                source, item = await asyncio.wait_for(merged_queue.get(), timeout=0.1)
-            except TimeoutError:
-                # Check if agent is done
-                if agent_task.done():
-                    # Drain any remaining events
-                    while not merged_queue.empty():
-                        source, item = merged_queue.get_nowait()
-                        if source == _DONE:
-                            break
-                        if source == _ERROR:
-                            raise item
-                        if isinstance(item, SSEEvent):
-                            yield _to_sse(item)
-                    break
-                continue
-
-            if source == _DONE:
-                # Agent finished, drain remaining and exit
-                while not merged_queue.empty():
-                    _src, evt = merged_queue.get_nowait()
-                    if isinstance(evt, SSEEvent):
-                        yield _to_sse(evt)
-                break
-
-            if source == _ERROR:
-                raise item
-
-            if isinstance(item, SSEEvent):
-                yield _to_sse(item)
-
-    finally:
-        # Cancel forwarder and wait for cleanup
-        forwarder_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await forwarder_task
-
-        # Drain any events forwarder put on merged_queue during cancellation
-        while not merged_queue.empty():
-            try:
-                _src, evt = merged_queue.get_nowait()
-                if isinstance(evt, SSEEvent):
-                    yield _to_sse(evt)
-            except asyncio.QueueEmpty:
-                break
-
-        if not agent_task.done():
-            agent_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await agent_task
-
-    if error:
-        raise error
-
-    yield {"_result": result}
 
 
 @app.post("/tools/result")

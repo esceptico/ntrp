@@ -1,15 +1,10 @@
 import React from "react";
-import { Box, Text } from "ink";
+import { Text } from "ink";
 import type { Observation, ObservationDetails } from "../../../api/client.js";
-import {
-  SplitView,
-  BaseSelectionList,
-  colors,
-  brand,
-  truncateText,
-  type RenderItemContext,
-} from "../../ui/index.js";
+import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
+import { useAccentColor } from "../../../hooks/index.js";
 import { ObservationDetailsView, type ObsDetailSection } from "./ObservationDetailsView.js";
+import { ListDetailSection } from "./ListDetailSection.js";
 
 interface ObservationsSectionProps {
   observations: Observation[];
@@ -20,7 +15,6 @@ interface ObservationsSectionProps {
   focusPane: "list" | "details";
   visibleLines: number;
   width: number;
-  // New detail section state
   detailSection: ObsDetailSection;
   textExpanded: boolean;
   textScrollOffset: number;
@@ -41,12 +35,13 @@ export function ObservationsSection({
   textScrollOffset,
   factsIndex,
 }: ObservationsSectionProps) {
+  const { accentValue } = useAccentColor();
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
   const detailWidth = Math.max(0, width - listWidth - 1);
 
   const renderItem = (obs: Observation, ctx: RenderItemContext) => {
     const textWidth = listWidth - 10;
-    const countColor = ctx.isSelected ? brand.primary : colors.text.muted;
+    const countColor = ctx.isSelected ? accentValue : colors.text.muted;
 
     return (
       <Text>
@@ -56,49 +51,28 @@ export function ObservationsSection({
     );
   };
 
-  const sidebar = (
-    <Box flexDirection="column">
-      {searchQuery && (
-        <Box marginBottom={1}>
-          <Text color={colors.text.muted}>/{searchQuery}</Text>
-        </Box>
-      )}
-      <BaseSelectionList
-        items={observations}
-        selectedIndex={selectedIndex}
-        renderItem={renderItem}
-        visibleLines={visibleLines}
-        getKey={(o) => o.id}
-        emptyMessage="No observations synthesized yet"
-        showScrollArrows
-        width={listWidth}
-      />
-      {observations.length > 0 && (
-        <Box marginTop={1}>
-          <Text color={colors.text.muted}>
-            {selectedIndex + 1}/{observations.length}
-          </Text>
-        </Box>
-      )}
-    </Box>
-  );
-
-  const main = (
-    <ObservationDetailsView
-      details={obsDetails}
-      loading={detailsLoading}
-      width={detailWidth}
-      isFocused={focusPane === "details"}
-      focusedSection={detailSection}
-      textExpanded={textExpanded}
-      textScrollOffset={textScrollOffset}
-      factsIndex={factsIndex}
-    />
-  );
-
   return (
-    <Box marginY={1} height={visibleLines + 3}>
-      <SplitView sidebarWidth={listWidth} sidebar={sidebar} main={main} />
-    </Box>
+    <ListDetailSection
+      items={observations}
+      selectedIndex={selectedIndex}
+      renderItem={renderItem}
+      getKey={(o) => o.id}
+      emptyMessage="No observations synthesized yet"
+      searchQuery={searchQuery}
+      visibleLines={visibleLines}
+      width={width}
+      details={
+        <ObservationDetailsView
+          details={obsDetails}
+          loading={detailsLoading}
+          width={detailWidth}
+          isFocused={focusPane === "details"}
+          focusedSection={detailSection}
+          textExpanded={textExpanded}
+          textScrollOffset={textScrollOffset}
+          factsIndex={factsIndex}
+        />
+      }
+    />
   );
 }

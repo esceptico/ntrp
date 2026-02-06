@@ -1,7 +1,5 @@
 from fastapi import APIRouter, HTTPException
 
-from ntrp.memory.store.facts import FactRepository
-from ntrp.memory.store.observations import ObservationRepository
 from ntrp.server.runtime import get_runtime
 
 router = APIRouter(tags=["data"])
@@ -17,7 +15,7 @@ def _require_memory():
 @router.get("/facts")
 async def get_facts(limit: int = 100, offset: int = 0):
     runtime = _require_memory()
-    repo = FactRepository(runtime.memory.db.conn)
+    repo = runtime.memory.fact_repo()
 
     total = await repo.count()
     facts = await repo.list_recent(limit=limit + offset)
@@ -41,7 +39,7 @@ async def get_facts(limit: int = 100, offset: int = 0):
 @router.get("/facts/{fact_id}")
 async def get_fact_details(fact_id: int):
     runtime = _require_memory()
-    repo = FactRepository(runtime.memory.db.conn)
+    repo = runtime.memory.fact_repo()
 
     fact = await repo.get(fact_id)
     if not fact:
@@ -82,32 +80,14 @@ async def get_fact_details(fact_id: int):
 @router.post("/memory/clear")
 async def clear_memory():
     runtime = _require_memory()
-    repo = FactRepository(runtime.memory.db.conn)
-    obs_repo = ObservationRepository(runtime.memory.db.conn)
-
-    fact_count = await repo.count()
-    links = await runtime.memory.db.conn.execute_fetchall("SELECT COUNT(*) FROM fact_links")
-    link_count = links[0][0] if links else 0
-    observation_count = await obs_repo.count()
-
-    await runtime.memory.db.conn.execute("DELETE FROM observations_vec")
-    await runtime.memory.db.conn.execute("DELETE FROM observations")
-    await runtime.memory.db.conn.execute("DELETE FROM entity_refs")
-    await runtime.memory.db.conn.execute("DELETE FROM fact_links")
-    await runtime.memory.db.conn.execute("DELETE FROM facts_vec")
-    await runtime.memory.db.conn.execute("DELETE FROM facts")
-    await runtime.memory.db.conn.commit()
-
-    return {
-        "status": "cleared",
-        "deleted": {"facts": fact_count, "links": link_count, "observations": observation_count},
-    }
+    deleted = await runtime.memory.clear()
+    return {"status": "cleared", "deleted": deleted}
 
 
 @router.get("/observations")
 async def get_observations(limit: int = 50):
     runtime = _require_memory()
-    obs_repo = ObservationRepository(runtime.memory.db.conn)
+    obs_repo = runtime.memory.obs_repo()
 
     observations = await obs_repo.list_recent(limit=limit)
 
@@ -129,8 +109,8 @@ async def get_observations(limit: int = 50):
 @router.get("/observations/{observation_id}")
 async def get_observation_details(observation_id: int):
     runtime = _require_memory()
-    obs_repo = ObservationRepository(runtime.memory.db.conn)
-    fact_repo = FactRepository(runtime.memory.db.conn)
+    obs_repo = runtime.memory.obs_repo()
+    fact_repo = runtime.memory.fact_repo()
 
     obs = await obs_repo.get(observation_id)
     if not obs:
@@ -159,17 +139,12 @@ async def get_observation_details(observation_id: int):
 @router.get("/stats")
 async def get_stats():
     runtime = _require_memory()
-    repo = FactRepository(runtime.memory.db.conn)
-    obs_repo = ObservationRepository(runtime.memory.db.conn)
-
-    fact_count = await repo.count()
-    links = await runtime.memory.db.conn.execute_fetchall("SELECT COUNT(*) FROM fact_links")
-    link_count = links[0][0] if links else 0
-    observation_count = await obs_repo.count()
+    repo = runtime.memory.fact_repo()
+    obs_repo = runtime.memory.obs_repo()
 
     return {
-        "fact_count": fact_count,
-        "link_count": link_count,
-        "observation_count": observation_count,
+        "fact_count": await repo.count(),
+        "link_count": await runtime.memory.link_count(),
+        "observation_count": await obs_repo.count(),
         "sources": runtime.get_available_sources(),
     }

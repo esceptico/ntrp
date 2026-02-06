@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { Box, Text } from "ink";
-import { brand, colors } from "../ui/colors.js";
+import { colors } from "../ui/colors.js";
 import { useDimensions } from "../../contexts/index.js";
 import { truncateText, SelectionIndicator, TextInputField } from "../ui/index.js";
-import { useKeypress, type Key } from "../../hooks/index.js";
+import { useKeypress, useInlineTextInput, useAccentColor, type Key } from "../../hooks/index.js";
 import type { PendingApproval, ApprovalResult } from "../../types.js";
 import { DiffView } from "./DiffView.js";
 
@@ -19,9 +19,9 @@ interface ApprovalDialogProps {
 
 export function ApprovalDialog({ approval, onResult, isActive = true }: ApprovalDialogProps) {
   const { width: terminalWidth } = useDimensions();
+  const { accentValue } = useAccentColor();
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [customReason, setCustomReason] = useState("");
-  const [cursorPos, setCursorPos] = useState(0);
+  const textInput = useInlineTextInput();
 
   const contentWidth = Math.max(0, terminalWidth - 8);
   const header = `Allow ${approval.name.replace(/_/g, " ")}?`;
@@ -30,7 +30,7 @@ export function ApprovalDialog({ approval, onResult, isActive = true }: Approval
   const customPlaceholder = "No, and tell ntrp what to do differently";
 
   const hintText = isOnCustomOption
-    ? customReason
+    ? textInput.value
       ? "Enter to submit · Esc to clear"
       : "Type reason · Esc to cancel"
     : "Enter to select · Esc to cancel";
@@ -53,38 +53,18 @@ export function ApprovalDialog({ approval, onResult, isActive = true }: Approval
 
       if (isOnCustomOption) {
         if (key.name === "return") {
-          onResult("reject", customReason.trim() || undefined);
+          onResult("reject", textInput.value.trim() || undefined);
           return;
         }
         if (key.name === "escape") {
-          if (customReason) {
-            setCustomReason("");
-            setCursorPos(0);
+          if (textInput.value) {
+            textInput.reset();
           } else {
             onResult("reject");
           }
           return;
         }
-        if (key.name === "left") {
-          setCursorPos((p) => Math.max(0, p - 1));
-          return;
-        }
-        if (key.name === "right") {
-          setCursorPos((p) => Math.min(customReason.length, p + 1));
-          return;
-        }
-        if (key.name === "backspace" || key.name === "delete") {
-          if (cursorPos > 0) {
-            setCustomReason((t) => t.slice(0, cursorPos - 1) + t.slice(cursorPos));
-            setCursorPos((p) => p - 1);
-          }
-          return;
-        }
-        if (key.insertable && key.sequence && !key.ctrl && !key.meta) {
-          setCustomReason((t) => t.slice(0, cursorPos) + key.sequence + t.slice(cursorPos));
-          setCursorPos((p) => p + key.sequence.length);
-          return;
-        }
+        if (textInput.handleKey(key)) return;
       }
 
       if (key.name === "return") {
@@ -99,7 +79,7 @@ export function ApprovalDialog({ approval, onResult, isActive = true }: Approval
         onResult("reject");
       }
     },
-    [isOnCustomOption, customReason, cursorPos, selectedIndex, onResult]
+    [isOnCustomOption, textInput, selectedIndex, onResult]
   );
 
   useKeypress(handleKeypress, { isActive });
@@ -131,27 +111,27 @@ export function ApprovalDialog({ approval, onResult, isActive = true }: Approval
 
       <Box flexDirection="column" marginLeft={3}>
         <Text>
-          <SelectionIndicator selected={selectedIndex === 0} accent={brand.primary} />
+          <SelectionIndicator selected={selectedIndex === 0} accent={accentValue} />
           <Text color={selectedIndex === 0 ? colors.text.primary : colors.text.secondary}>
             1. Yes
           </Text>
         </Text>
 
         <Text>
-          <SelectionIndicator selected={selectedIndex === 1} accent={brand.primary} />
+          <SelectionIndicator selected={selectedIndex === 1} accent={accentValue} />
           <Text color={selectedIndex === 1 ? colors.text.primary : colors.text.secondary}>
             2. {alwaysTextTruncated}
           </Text>
         </Text>
 
         <Text>
-          <SelectionIndicator selected={isOnCustomOption} accent={brand.primary} />
+          <SelectionIndicator selected={isOnCustomOption} accent={accentValue} />
           <Text color={isOnCustomOption ? colors.text.primary : colors.text.secondary}>
             3.{" "}
           </Text>
           <TextInputField
-            value={customReason}
-            cursorPos={cursorPos}
+            value={textInput.value}
+            cursorPos={textInput.cursorPos}
             placeholder={customPlaceholder}
             showCursor={isOnCustomOption}
           />

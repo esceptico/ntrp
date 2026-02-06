@@ -1,15 +1,10 @@
 import React from "react";
-import { Box, Text } from "ink";
+import { Text } from "ink";
 import type { Fact, FactDetails } from "../../../api/client.js";
-import {
-  SplitView,
-  BaseSelectionList,
-  colors,
-  brand,
-  truncateText,
-  type RenderItemContext,
-} from "../../ui/index.js";
+import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
+import { useAccentColor } from "../../../hooks/index.js";
 import { FactDetailsView, type FactDetailSection } from "./FactDetailsView.js";
+import { ListDetailSection } from "./ListDetailSection.js";
 
 interface FactsSectionProps {
   facts: Fact[];
@@ -20,7 +15,6 @@ interface FactsSectionProps {
   focusPane: "list" | "details";
   visibleLines: number;
   width: number;
-  // New detail section state
   detailSection: FactDetailSection;
   textExpanded: boolean;
   textScrollOffset: number;
@@ -43,12 +37,13 @@ export function FactsSection({
   entitiesIndex,
   linkedIndex,
 }: FactsSectionProps) {
+  const { accentValue } = useAccentColor();
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
   const detailWidth = Math.max(0, width - listWidth - 1);
 
   const renderItem = (fact: Fact, ctx: RenderItemContext) => {
     const typeChar = fact.fact_type === "world" ? "W" : "E";
-    const typeColor = fact.fact_type === "world" ? colors.status.warning : brand.primary;
+    const typeColor = fact.fact_type === "world" ? colors.status.warning : accentValue;
     const textWidth = listWidth - 10;
 
     return (
@@ -59,50 +54,29 @@ export function FactsSection({
     );
   };
 
-  const sidebar = (
-    <Box flexDirection="column">
-      {searchQuery && (
-        <Box marginBottom={1}>
-          <Text color={colors.text.muted}>/{searchQuery}</Text>
-        </Box>
-      )}
-      <BaseSelectionList
-        items={facts}
-        selectedIndex={selectedIndex}
-        renderItem={renderItem}
-        visibleLines={visibleLines}
-        getKey={(f) => f.id}
-        emptyMessage="No facts stored yet"
-        showScrollArrows
-        width={listWidth}
-      />
-      {facts.length > 0 && (
-        <Box marginTop={1}>
-          <Text color={colors.text.muted}>
-            {selectedIndex + 1}/{facts.length}
-          </Text>
-        </Box>
-      )}
-    </Box>
-  );
-
-  const main = (
-    <FactDetailsView
-      details={factDetails}
-      loading={detailsLoading}
-      width={detailWidth}
-      isFocused={focusPane === "details"}
-      focusedSection={detailSection}
-      textExpanded={textExpanded}
-      textScrollOffset={textScrollOffset}
-      entitiesIndex={entitiesIndex}
-      linkedIndex={linkedIndex}
-    />
-  );
-
   return (
-    <Box marginY={1} height={visibleLines + 3}>
-      <SplitView sidebarWidth={listWidth} sidebar={sidebar} main={main} />
-    </Box>
+    <ListDetailSection
+      items={facts}
+      selectedIndex={selectedIndex}
+      renderItem={renderItem}
+      getKey={(f) => f.id}
+      emptyMessage="No facts stored yet"
+      searchQuery={searchQuery}
+      visibleLines={visibleLines}
+      width={width}
+      details={
+        <FactDetailsView
+          details={factDetails}
+          loading={detailsLoading}
+          width={detailWidth}
+          isFocused={focusPane === "details"}
+          focusedSection={detailSection}
+          textExpanded={textExpanded}
+          textScrollOffset={textScrollOffset}
+          entitiesIndex={entitiesIndex}
+          linkedIndex={linkedIndex}
+        />
+      }
+    />
   );
 }

@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -9,7 +8,9 @@ from ntrp.schedule.store import ScheduleStore
 if TYPE_CHECKING:
     from ntrp.server.runtime import Runtime
 
-logger = logging.getLogger(__name__)
+from ntrp.logging import get_logger
+
+logger = get_logger(__name__)
 
 POLL_INTERVAL = 60
 
@@ -69,7 +70,7 @@ class Scheduler:
             user_facts, recent_facts = await runtime.memory.get_context()
             memory_context = format_memory_context(user_facts, recent_facts) or None
 
-        from ntrp.server.prompts import build_system_prompt
+        from ntrp.core.prompts import build_system_prompt
 
         system_prompt = build_system_prompt(
             source_details=runtime.get_source_details(),

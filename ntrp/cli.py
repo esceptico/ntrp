@@ -42,10 +42,9 @@ def status(ctx):
     console.print("[bold]ntrp status[/bold]")
     console.print()
     console.print(f"Vault path: [cyan]{config.vault_path}[/cyan]")
-    console.print(f"Database: [cyan]{config.db_path}[/cyan]")
+    console.print(f"Database dir: [cyan]{config.db_dir}[/cyan]")
     console.print(f"Embedding model: {config.embedding_model}")
     console.print(f"Chat model: {config.chat_model}")
-    console.print(f"Database exists: {'[green]yes[/green]' if config.db_path.exists() else '[yellow]no[/yellow]'}")
 
 
 @main.command()

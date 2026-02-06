@@ -1,12 +1,13 @@
 """LLM completion wrappers with retry and exponential backoff."""
 
 import asyncio
-import logging
 import random
 
 import litellm
 
-logger = logging.getLogger(__name__)
+from ntrp.logging import get_logger
+
+logger = get_logger(__name__)
 
 MAX_RETRIES = 2
 BASE_DELAY = 0.5
@@ -66,17 +67,3 @@ async def acompletion(**kwargs):
             await asyncio.sleep(wait)
 
 
-def completion(**kwargs):
-    """litellm.completion with retry + exponential backoff (sync)."""
-    import time
-
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            return litellm.completion(**kwargs)
-        except Exception as e:
-            retryable, retry_after = _is_retryable(e)
-            if not retryable or attempt >= MAX_RETRIES:
-                raise
-            wait = _delay(attempt, retry_after)
-            logger.warning("LLM call failed (attempt %d/%d), retrying in %.1fs: %s", attempt + 1, MAX_RETRIES, wait, e)
-            time.sleep(wait)

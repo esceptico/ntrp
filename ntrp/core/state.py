@@ -1,13 +1,12 @@
 from collections.abc import Awaitable, Callable
-from enum import Enum
+from enum import StrEnum
 
 
-class AgentState(Enum):
+class AgentState(StrEnum):
     IDLE = "idle"
     THINKING = "thinking"
     TOOL_CALL = "tool_call"
     RESPONDING = "responding"
-    ERROR = "error"
 
 
 # Callback type for state changes

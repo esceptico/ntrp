@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
-import { brand, colors } from "../ui/colors.js";
+import { colors } from "../ui/colors.js";
+import { useAccentColor } from "../../hooks/index.js";
 import { truncateText } from "../../lib/utils.js";
 import { BULLET, MAX_TOOL_RESULT_LINE_CHARS } from "../../lib/constants.js";
 import { DiffDisplay } from "./DiffDisplay.js";
@@ -10,13 +11,13 @@ export interface TreeNode extends ToolChainItem {
   children: TreeNode[];
 }
 
-export function getStatusColor(status: ToolChainItem["status"]): string {
+function getStatusColor(status: ToolChainItem["status"], accentValue: string): string {
   switch (status) {
     case "error":
       return colors.status.error;
     case "running":
     case "done":
-      return brand.primary;
+      return accentValue;
     default:
       return colors.text.muted;
   }
@@ -58,7 +59,8 @@ interface TreeItemProps {
 }
 
 export function TreeItem({ node, indent, expanded, width }: TreeItemProps) {
-  const color = getStatusColor(node.status);
+  const { accentValue } = useAccentColor();
+  const color = getStatusColor(node.status, accentValue);
   const icon = `${BULLET} `;
   const label = node.description || node.name;
   const prefix = indent > 0 ? "  ".repeat(indent) : "";

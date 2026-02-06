@@ -1,9 +1,9 @@
 from datetime import datetime
 from typing import Any
 
-from ntrp.memory.formatting import format_context
+from ntrp.memory.formatting import format_memory_context
 from ntrp.memory.models import FactType
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import Tool, ToolResult, make_schema
 
 REMEMBER_DESCRIPTION = """Store a fact in memory for future recall.
 
@@ -33,33 +33,25 @@ class RememberTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "fact": {
-                        "type": "string",
-                        "description": "The fact to remember (natural language).",
-                    },
-                    "fact_type": {
-                        "type": "string",
-                        "enum": ["world", "experience"],
-                        "description": "'world' (default) for facts about users/people/things, 'experience' ONLY for YOUR agent actions.",
-                    },
-                    "source": {
-                        "type": "string",
-                        "description": "Where this fact came from (e.g. file path, email id).",
-                    },
-                    "happened_at": {
-                        "type": "string",
-                        "description": "ISO timestamp of when the event occurred (for temporal linking).",
-                    },
-                },
-                "required": ["fact"],
+        return make_schema(self.name, self.description, {
+            "fact": {
+                "type": "string",
+                "description": "The fact to remember (natural language).",
             },
-        }
+            "fact_type": {
+                "type": "string",
+                "enum": ["world", "experience"],
+                "description": "'world' (default) for facts about users/people/things, 'experience' ONLY for YOUR agent actions.",
+            },
+            "source": {
+                "type": "string",
+                "description": "Where this fact came from (e.g. file path, email id).",
+            },
+            "happened_at": {
+                "type": "string",
+                "description": "ISO timestamp of when the event occurred (for temporal linking).",
+            },
+        }, ["fact"])
 
     async def execute(
         self,
@@ -110,28 +102,22 @@ PREFER search() FOR: Finding new info in notes/emails/web pages"""
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "What to recall.",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Number of seed facts (default 5).",
-                    },
-                },
-                "required": ["query"],
+        return make_schema(self.name, self.description, {
+            "query": {
+                "type": "string",
+                "description": "What to recall.",
             },
-        }
+            "limit": {
+                "type": "integer",
+                "description": "Number of seed facts (default 5).",
+            },
+        }, ["query"])
 
     async def execute(self, execution: Any, query: str, limit: int = 5, **kwargs: Any) -> ToolResult:
         context = await self.memory.recall(query=query, limit=limit)
-        formatted = format_context(context)
+        formatted = format_memory_context(
+            query_facts=context.facts, query_observations=context.observations
+        )
         if formatted:
             count = len(context.facts)
             return ToolResult(formatted, f"{count} facts")
@@ -151,20 +137,12 @@ class ForgetTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Description of facts to forget.",
-                    },
-                },
-                "required": ["query"],
+        return make_schema(self.name, self.description, {
+            "query": {
+                "type": "string",
+                "description": "Description of facts to forget.",
             },
-        }
+        }, ["query"])
 
     async def execute(self, execution: Any, query: str = "", **kwargs: Any) -> ToolResult:
         if not query:

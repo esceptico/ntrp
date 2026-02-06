@@ -71,7 +71,7 @@ async def _create_semantic_links(repo: FactRepository, fact: Fact) -> int:
 
 
 async def _create_entity_links(repo: FactRepository, fact: Fact) -> int:
-    entity_refs = await repo.get_entity_refs(fact.id)
+    entity_refs = fact.entity_refs
     if not entity_refs:
         return 0
 

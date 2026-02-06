@@ -1,7 +1,5 @@
 from ntrp.context.compression import (
-    SessionManager,
     compress_context_async,
-    compress_context_sync,
     count_tokens,
     find_compressible_range,
     mask_old_tool_results,
@@ -12,11 +10,9 @@ from ntrp.context.store import SessionStore
 
 __all__ = [
     "SessionData",
-    "SessionManager",
     "SessionState",
     "SessionStore",
     "compress_context_async",
-    "compress_context_sync",
     "count_tokens",
     "find_compressible_range",
     "mask_old_tool_results",

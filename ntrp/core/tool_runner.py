@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
 
@@ -10,9 +9,10 @@ from ntrp.events import SSEEvent, ToolCallEvent, ToolResultEvent
 from ntrp.tools.core.base import ToolResult
 from ntrp.tools.core.context import ToolContext, ToolExecution
 from ntrp.tools.executor import ToolExecutor
+from ntrp.logging import get_logger
 from ntrp.utils import ms_now
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 OFFLOAD_BASE = Path("/tmp/ntrp")
 
@@ -87,7 +87,7 @@ class ToolRunner:
         tool = self.executor.registry.get(call.name)
         if not tool or not tool.mutates:
             return False
-        if self.ctx.yolo:
+        if self.ctx.skip_approvals:
             return False
         if call.name in self.ctx.auto_approve:
             return False

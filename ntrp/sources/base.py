@@ -20,9 +20,6 @@ class IndexableSource(Protocol):
 class Source(ABC):
     name: str
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-
     @property
     def errors(self) -> dict[str, str]:
         if not hasattr(self, "_errors"):

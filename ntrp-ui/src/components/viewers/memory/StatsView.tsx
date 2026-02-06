@@ -1,21 +1,19 @@
 import { useEffect, useState } from "react";
 import { Box, Text } from "ink";
-import { colors, brand } from "../../ui/index.js";
+import { colors } from "../../ui/index.js";
+import { useAccentColor } from "../../../hooks/index.js";
 import { getStats, type Stats } from "../../../api/client.js";
 import type { Config } from "../../../types.js";
 
 interface StatsViewProps {
   config: Config;
   width: number;
-  height: number;
-  isActive: boolean;
-  onClose: () => void;
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({ label, value, accentValue }: { label: string; value: number; accentValue: string }) {
   return (
     <Box flexDirection="column" marginRight={4}>
-      <Text color={brand.primary} bold>
+      <Text color={accentValue} bold>
         {value.toLocaleString()}
       </Text>
       <Text color={colors.text.muted}>{label}</Text>
@@ -24,6 +22,7 @@ function StatCard({ label, value }: { label: string; value: number }) {
 }
 
 export function StatsView({ config, width }: StatsViewProps) {
+  const { accentValue } = useAccentColor();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -57,9 +56,9 @@ export function StatsView({ config, width }: StatsViewProps) {
       <Text color={colors.text.muted}>MEMORY OVERVIEW</Text>
 
       <Box flexDirection="row" marginTop={1} marginBottom={1}>
-        <StatCard label="facts" value={stats.fact_count} />
-        <StatCard label="observations" value={stats.observation_count} />
-        <StatCard label="links" value={stats.link_count} />
+        <StatCard label="facts" value={stats.fact_count} accentValue={accentValue} />
+        <StatCard label="observations" value={stats.observation_count} accentValue={accentValue} />
+        <StatCard label="links" value={stats.link_count} accentValue={accentValue} />
       </Box>
 
       {!hasData && (
@@ -77,7 +76,7 @@ export function StatsView({ config, width }: StatsViewProps) {
         {stats.sources.length > 0 ? (
           stats.sources.map((s) => (
             <Text key={s}>
-              <Text color={brand.primary}>•</Text>
+              <Text color={accentValue}>•</Text>
               <Text color={colors.text.primary}> {s}</Text>
             </Text>
           ))

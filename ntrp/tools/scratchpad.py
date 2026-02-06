@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any
 
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import Tool, ToolResult, make_schema
 from ntrp.tools.core.context import ToolExecution
 
 SCRATCHPAD_BASE = Path("/tmp/ntrp")
@@ -51,24 +51,16 @@ class WriteScratchpadTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "content": {
-                        "type": "string",
-                        "description": "Content to save",
-                    },
-                    "key": {
-                        "type": "string",
-                        "description": "Namespace for the note (default: 'default')",
-                    },
-                },
-                "required": ["content"],
+        return make_schema(self.name, self.description, {
+            "content": {
+                "type": "string",
+                "description": "Content to save",
             },
-        }
+            "key": {
+                "type": "string",
+                "description": "Namespace for the note (default: 'default')",
+            },
+        }, ["content"])
 
     async def execute(
         self, execution: ToolExecution, content: str = "", key: str = "default", **kwargs: Any
@@ -95,19 +87,12 @@ class ReadScratchpadTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "key": {
-                        "type": "string",
-                        "description": "Namespace to read (default: 'default')",
-                    },
-                },
+        return make_schema(self.name, self.description, {
+            "key": {
+                "type": "string",
+                "description": "Namespace to read (default: 'default')",
             },
-        }
+        })
 
     async def execute(self, execution: ToolExecution, key: str = "default", **kwargs: Any) -> ToolResult:
         path = _scratchpad_path(execution.ctx.session_id, key)
@@ -125,14 +110,7 @@ class ListScratchpadTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {},
-            },
-        }
+        return make_schema(self.name, self.description, {})
 
     async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult:
         scratch_dir = _scratchpad_dir(execution.ctx.session_id)

@@ -1,3 +1,5 @@
+import type { ToolChainItem } from "./components/toolchain/types.js";
+
 // SSE Event types from the server
 export type EventType =
   | "thinking"
@@ -68,7 +70,7 @@ export interface SessionInfoEvent {
   run_id: string;
   sources: string[];
   source_errors: Record<string, string>;
-  yolo?: boolean;
+  skip_approvals?: boolean;
 }
 
 export interface DoneEvent {
@@ -125,18 +127,6 @@ export type ServerEvent =
   | ErrorEvent
   | CancelledEvent;
 
-export interface ToolChainItemData {
-  id: string;
-  type: "task" | "tool";
-  depth: number;
-  name: string;
-  description?: string;
-  result?: string;
-  status: "pending" | "running" | "done" | "error";
-  seq?: number;
-  parentId?: string;
-}
-
 // Message types for display
 export interface Message {
   id?: string;
@@ -146,7 +136,7 @@ export interface Message {
   toolDescription?: string; // Server-formatted: name(key=value, ...)
   toolCount?: number;
   duration?: number;
-  toolChain?: ToolChainItemData[];
+  toolChain?: ToolChainItem[];
 }
 
 // Approval types

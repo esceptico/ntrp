@@ -19,7 +19,7 @@ def _create_session_state(calling_ctx: ToolContext, isolation: IsolationLevel) -
         session_id=child_session_id,
         started_at=datetime.now(),
         auto_approve=calling_ctx.session_state.auto_approve,
-        yolo=calling_ctx.session_state.yolo,
+        skip_approvals=calling_ctx.session_state.skip_approvals,
     )
 
 

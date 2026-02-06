@@ -18,12 +18,12 @@ export async function* streamChat(
   message: string,
   sessionId: string | null,
   config: Config,
-  yolo: boolean = false
+  skipApprovals: boolean = false
 ): AsyncGenerator<ServerEvent, void, unknown> {
   const response = await fetch(`${config.serverUrl}/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, session_id: sessionId, yolo }),
+    body: JSON.stringify({ message, session_id: sessionId, skip_approvals: skipApprovals }),
   });
 
   if (!response.ok) {
@@ -75,15 +75,7 @@ export async function* streamChat(
  * Cancel an active run.
  */
 export async function cancelRun(runId: string, config: Config): Promise<void> {
-  const response = await fetch(`${config.serverUrl}/cancel`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ run_id: runId }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to cancel run: ${response.status}`);
-  }
+  await api.post(`${config.serverUrl}/cancel`, { run_id: runId });
 }
 
 /**
@@ -96,15 +88,7 @@ export async function submitToolResult(
   approved: boolean,
   config: Config
 ): Promise<void> {
-  const response = await fetch(`${config.serverUrl}/tools/result`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ run_id: runId, tool_id: toolId, result, approved }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to submit tool result: ${response.status}`);
-  }
+  await api.post(`${config.serverUrl}/tools/result`, { run_id: runId, tool_id: toolId, result, approved });
 }
 
 /**
@@ -116,15 +100,7 @@ export async function submitChoiceResult(
   selected: string[],
   config: Config
 ): Promise<void> {
-  const response = await fetch(`${config.serverUrl}/tools/choice`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ run_id: runId, tool_id: toolId, selected }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to submit choice result: ${response.status}`);
-  }
+  await api.post(`${config.serverUrl}/tools/choice`, { run_id: runId, tool_id: toolId, selected });
 }
 
 /**
@@ -134,13 +110,9 @@ export async function getSession(config: Config): Promise<{
   session_id: string;
   sources: string[];
   source_errors: Record<string, string>;
-  yolo: boolean;
+  skip_approvals: boolean;
 }> {
-  const response = await fetch(`${config.serverUrl}/session`);
-  if (!response.ok) {
-    throw new Error(`Failed to get session: ${response.status}`);
-  }
-  return response.json();
+  return api.get(`${config.serverUrl}/session`);
 }
 
 /**
@@ -148,8 +120,8 @@ export async function getSession(config: Config): Promise<{
  */
 export async function checkHealth(config: Config): Promise<boolean> {
   try {
-    const response = await fetch(`${config.serverUrl}/health`);
-    return response.ok;
+    await api.get(`${config.serverUrl}/health`);
+    return true;
   } catch {
     return false;
   }
@@ -236,28 +208,9 @@ export async function getServerConfig(config: Config): Promise<ServerConfig> {
 
 export async function updateConfig(
   config: Config,
-  patch: { chat_model?: string; max_depth?: number }
-): Promise<{ chat_model: string; max_depth: number }> {
-  const response = await fetch(`${config.serverUrl}/config`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
-  if (!response.ok) throw new Error(`Failed: ${response.status}`);
-  return response.json();
-}
-
-export async function updateModels(
-  config: Config,
-  models: { chat_model?: string; memory_model?: string }
-): Promise<{ chat_model: string; memory_model: string }> {
-  const response = await fetch(`${config.serverUrl}/config/models`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(models),
-  });
-  if (!response.ok) throw new Error(`Failed: ${response.status}`);
-  return response.json();
+  patch: { chat_model?: string; memory_model?: string; max_depth?: number }
+): Promise<{ chat_model: string; memory_model: string; max_depth: number }> {
+  return api.patch(`${config.serverUrl}/config`, patch);
 }
 
 export async function getSupportedModels(config: Config): Promise<{
@@ -265,31 +218,21 @@ export async function getSupportedModels(config: Config): Promise<{
   chat_model: string;
   memory_model: string;
 }> {
-  const response = await fetch(`${config.serverUrl}/models`);
-  if (!response.ok) throw new Error(`Failed: ${response.status}`);
-  return response.json();
+  return api.get(`${config.serverUrl}/models`);
 }
 
 export async function getEmbeddingModels(config: Config): Promise<{
   models: string[];
   current: string;
 }> {
-  const response = await fetch(`${config.serverUrl}/models/embedding`);
-  if (!response.ok) throw new Error(`Failed: ${response.status}`);
-  return response.json();
+  return api.get(`${config.serverUrl}/models/embedding`);
 }
 
 export async function updateEmbeddingModel(
   config: Config,
   embeddingModel: string
 ): Promise<{ status: string; embedding_model?: string; embedding_dim?: number; message?: string }> {
-  const response = await fetch(`${config.serverUrl}/config/embedding`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ embedding_model: embeddingModel }),
-  });
-  if (!response.ok) throw new Error(`Failed: ${response.status}`);
-  return response.json();
+  return api.post(`${config.serverUrl}/config/embedding`, { embedding_model: embeddingModel });
 }
 
 export async function compactContext(config: Config): Promise<{ status: string; message: string }> {
@@ -366,31 +309,15 @@ export interface GmailAccount {
 }
 
 export async function getGmailAccounts(config: Config): Promise<{ accounts: GmailAccount[] }> {
-  const response = await fetch(`${config.serverUrl}/gmail/accounts`);
-  if (!response.ok) throw new Error(`Failed: ${response.status}`);
-  return response.json();
+  return api.get(`${config.serverUrl}/gmail/accounts`);
 }
 
 export async function addGmailAccount(config: Config): Promise<{ email: string; status: string }> {
-  const response = await fetch(`${config.serverUrl}/gmail/add`, {
-    method: "POST",
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }));
-    throw new Error(error.detail || `Failed: ${response.status}`);
-  }
-  return response.json();
+  return api.post(`${config.serverUrl}/gmail/add`);
 }
 
 export async function removeGmailAccount(config: Config, tokenFile: string): Promise<{ email: string | null; status: string }> {
-  const response = await fetch(`${config.serverUrl}/gmail/${tokenFile}`, {
-    method: "DELETE",
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }));
-    throw new Error(error.detail || `Failed: ${response.status}`);
-  }
-  return response.json();
+  return api.delete(`${config.serverUrl}/gmail/${tokenFile}`);
 }
 
 // --- Schedule API ---

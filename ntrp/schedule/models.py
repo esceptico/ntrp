@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 
 
-class Recurrence(str, Enum):
+class Recurrence(StrEnum):
     ONCE = "once"
     DAILY = "daily"
     WEEKDAYS = "weekdays"

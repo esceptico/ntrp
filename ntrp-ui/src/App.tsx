@@ -58,15 +58,14 @@ function AppContent({
   const session = useSession(config);
   const {
     sessionId,
-    setSessionId,
-    setSources,
-    yolo,
-    setYolo,
+    skipApprovals,
     serverConnected,
     serverConfig,
-    setServerConfig,
     indexStatus,
     refreshIndexStatus,
+    updateSessionInfo,
+    toggleSkipApprovals,
+    updateServerConfig,
   } = session;
 
   // Local state for UI
@@ -79,11 +78,8 @@ function AppContent({
   const streaming = useStreaming({
     config,
     sessionId,
-    yolo,
-    onSessionInfo: (info) => {
-      setSessionId(info.session_id);
-      setSources(info.sources);
-    },
+    skipApprovals,
+    onSessionInfo: updateSessionInfo,
   });
   const {
     messages,
@@ -111,7 +107,7 @@ function AppContent({
     sessionId,
     messages,
     setViewMode,
-    setSessionId,
+    updateSessionInfo,
     addMessage: (msg) => addMessage(msg as Message),
     clearMessages,
     clearMessageQueue: () => setMessageQueue([]),
@@ -159,7 +155,7 @@ function AppContent({
 
   const closeView = useCallback(() => setViewMode("chat"), []);
 
-  // Global keypress handler for exit, cancel, and yolo toggle
+  // Global keypress handler for exit, cancel, and skip approvals toggle
   // Scrolling uses native terminal scrollback
   const handleGlobalKeypress = useCallback(
     async (key: Key) => {
@@ -170,12 +166,12 @@ function AppContent({
       if (key.name === "escape" && isStreaming) {
         cancel();
       }
-      // Shift+Tab toggles yolo mode
+      // Shift+Tab toggles skip approvals mode
       if (key.shift && key.name === "tab") {
-        setYolo((y) => !y);
+        toggleSkipApprovals();
       }
     },
-    [exit, isStreaming, cancel, setYolo]
+    [exit, isStreaming, cancel, toggleSkipApprovals]
   );
 
   useKeypress(handleGlobalKeypress, { isActive: true });
@@ -282,7 +278,7 @@ function AppContent({
         focus={isInChatMode && !hasOverlay && !showSettings && !pendingApproval && !pendingChoice}
         commands={COMMANDS}
         queueCount={messageQueue.length}
-        yolo={yolo}
+        skipApprovals={skipApprovals}
         chatModel={serverConfig?.chat_model}
         indexStatus={indexStatus}
       />
@@ -301,7 +297,7 @@ function AppContent({
           serverConfig={serverConfig}
           settings={settings}
           onUpdate={updateSetting}
-          onModelChange={(type: "chat" | "memory", model: string) => setServerConfig((prev) => prev && { ...prev, [`${type}_model`]: model })}
+          onModelChange={(type: "chat" | "memory", model: string) => updateServerConfig({ [`${type}_model`]: model })}
           onClose={closeSettings}
         />
       )}

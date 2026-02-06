@@ -61,6 +61,13 @@ WEB_SEARCH_MAX_RESULTS = 20
 CONVERSATION_GAP_THRESHOLD = 1800  # seconds (30 min) - show time gap note if exceeded
 
 
+# --- Session ---
+
+SESSION_EXPIRY_HOURS = 24
+CONSOLIDATION_INTERVAL = 30.0  # seconds between consolidation batches
+CHARS_PER_TOKEN = 4  # rough char-to-token ratio for estimation
+
+
 # --- Context Compaction ---
 
 COMPRESSION_THRESHOLD = 0.75  # % of model limit to trigger compaction
@@ -114,9 +121,6 @@ FORGET_SEARCH_LIMIT = 10
 
 # Recall: search and expand graph context
 RECALL_SEARCH_LIMIT = 5  # seed nodes from search
-RECALL_EXPANSION_DEPTH = 2  # BFS hops from seeds
-RECALL_EPISODES_PER_NODE = 5  # episodes collected per node during BFS
-RECALL_EPISODE_LIMIT = 20  # max episodes in context
 RECALL_OBSERVATION_LIMIT = 5  # max observations in context
 
 # V2 Fact Linking

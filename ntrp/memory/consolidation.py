@@ -37,8 +37,6 @@ class ConsolidationResult:
     action: str  # "created", "updated", "multiple", "skipped"
     observation_id: int | None = None
     reason: str | None = None
-    created: int = 0
-    updated: int = 0
 
 
 @dataclass
@@ -147,10 +145,10 @@ async def _llm_consolidation_decision(
         return None
 
     except json.JSONDecodeError as e:
-        logger.warning(f"Invalid JSON from consolidation LLM: {e}")
+        logger.warning("Invalid JSON from consolidation LLM: %s", e)
         return None
     except Exception as e:
-        logger.warning(f"Consolidation LLM failed: {e}")
+        logger.warning("Consolidation LLM failed: %s", e)
         return None
 
 
@@ -178,10 +176,10 @@ async def _execute_action(
             reason=action.reason or "",
         )
         if obs:
-            logger.info(f"Updated observation {obs.id} with fact {fact.id}: {action.reason}")
+            logger.info("Updated observation %d with fact %d: %s", obs.id, fact.id, action.reason)
             return ConsolidationResult(action="updated", observation_id=obs.id, reason=action.reason)
         else:
-            logger.debug(f"Observation {action.observation_id} not found for update")
+            logger.debug("Observation %s not found for update", action.observation_id)
             return None
 
     if action.type == "create":
@@ -195,7 +193,7 @@ async def _execute_action(
             embedding=embedding,
             source_fact_id=fact.id,
         )
-        logger.info(f"Created observation {obs.id} from fact {fact.id}")
+        logger.info("Created observation %d from fact %d", obs.id, fact.id)
         return ConsolidationResult(action="created", observation_id=obs.id)
 
     return None

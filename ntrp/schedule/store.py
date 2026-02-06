@@ -22,18 +22,10 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_next_run ON scheduled_tasks(next_run_at
 CREATE INDEX IF NOT EXISTS idx_scheduled_enabled ON scheduled_tasks(enabled);
 """
 
-_MIGRATE_RUNNING_SINCE = """
-    ALTER TABLE scheduled_tasks ADD COLUMN running_since TEXT;
-"""
-
 
 class ScheduleStore(BaseRepository):
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
-        try:
-            await self.conn.execute(_MIGRATE_RUNNING_SINCE)
-        except Exception:
-            pass  # column already exists
         await self.conn.commit()
 
     async def save(self, task: ScheduledTask) -> None:

@@ -1,6 +1,6 @@
 from typing import Any
 
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import Tool, ToolResult, make_schema
 from ntrp.tools.core.context import ToolExecution
 
 
@@ -11,38 +11,30 @@ class AskChoiceTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "question": {
-                        "type": "string",
-                        "description": "The question to ask",
-                    },
-                    "options": {
-                        "type": "array",
-                        "description": "List of options. Each option has 'id' (short key), 'label' (display text), and optional 'description'",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": {"type": "string"},
-                                "label": {"type": "string"},
-                                "description": {"type": "string"},
-                            },
-                            "required": ["id", "label"],
-                        },
-                    },
-                    "allow_multiple": {
-                        "type": "boolean",
-                        "description": "If true, user can select multiple options. Default: false",
-                        "default": False,
-                    },
-                },
-                "required": ["question", "options"],
+        return make_schema(self.name, self.description, {
+            "question": {
+                "type": "string",
+                "description": "The question to ask",
             },
-        }
+            "options": {
+                "type": "array",
+                "description": "List of options. Each option has 'id' (short key), 'label' (display text), and optional 'description'",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "label": {"type": "string"},
+                        "description": {"type": "string"},
+                    },
+                    "required": ["id", "label"],
+                },
+            },
+            "allow_multiple": {
+                "type": "boolean",
+                "description": "If true, user can select multiple options. Default: false",
+                "default": False,
+            },
+        }, ["question", "options"])
 
     async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult:
         question = kwargs.get("question", "")

@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 from ntrp.config import load_user_settings, save_user_settings
 from ntrp.constants import EMBEDDING_MODELS, SUPPORTED_MODELS
-from ntrp.context.compression import count_tokens, find_compressible_range
+from ntrp.context.compression import compress_context_async, count_tokens, find_compressible_range
 from ntrp.server.runtime import get_runtime
 
 router = APIRouter(tags=["session"])
@@ -13,11 +13,6 @@ class SessionResponse(BaseModel):
     session_id: str
     sources: list[str]
     source_errors: dict[str, str]
-
-
-class UpdateModelsRequest(BaseModel):
-    chat_model: str | None = None
-    memory_model: str | None = None
 
 
 class UpdateConfigRequest(BaseModel):
@@ -118,26 +113,6 @@ async def update_config(req: UpdateConfigRequest):
     }
 
 
-@router.patch("/config/models")
-async def update_models(req: UpdateModelsRequest):
-    runtime = get_runtime()
-    settings = load_user_settings()
-
-    if req.chat_model:
-        runtime.config.chat_model = req.chat_model
-        settings["chat_model"] = req.chat_model
-    if req.memory_model:
-        runtime.config.memory_model = req.memory_model
-        settings["memory_model"] = req.memory_model
-    if req.chat_model or req.memory_model:
-        save_user_settings(settings)
-
-    return {
-        "chat_model": runtime.config.chat_model,
-        "memory_model": runtime.config.memory_model,
-    }
-
-
 class UpdateEmbeddingRequest(BaseModel):
     embedding_model: str
 
@@ -188,7 +163,7 @@ async def get_context_usage():
     """Get token usage breakdown for current context."""
     import json
 
-    from ntrp.server.prompts import build_system_prompt
+    from ntrp.core.prompts import build_system_prompt
 
     runtime = get_runtime()
     model = runtime.config.chat_model
@@ -210,7 +185,7 @@ async def get_context_usage():
     # Count tokens (approximate: chars / 4)
     system_tokens = len(system_prompt) // 4
     tools_tokens = len(tools_json) // 4
-    messages_tokens = count_tokens(messages, model) if messages else 0
+    messages_tokens = count_tokens(messages) if messages else 0
 
     total = system_tokens + tools_tokens + messages_tokens
 
@@ -242,7 +217,7 @@ async def compact_context():
     session_state = data.state
     messages = data.messages
 
-    before_tokens = count_tokens(messages, model)
+    before_tokens = count_tokens(messages)
     before_count = len(messages)
 
     # Check if there's anything to compress
@@ -257,17 +232,15 @@ async def compact_context():
 
     # Run compression (force=True for manual compaction)
     msg_count = end - start
-    session_state, new_messages, was_compressed = await runtime.session_manager.compact_session(
-        session_state,
-        messages,
-        force=True,
+    new_messages, was_compressed = await compress_context_async(
+        messages, model, force=True,
     )
 
     if was_compressed:
         # Save compacted session
         await runtime.save_session(session_state, new_messages)
 
-        after_tokens = count_tokens(new_messages, model)
+        after_tokens = count_tokens(new_messages)
         saved = before_tokens - after_tokens
 
         return {

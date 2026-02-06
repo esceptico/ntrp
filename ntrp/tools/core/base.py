@@ -5,50 +5,23 @@ from typing import Any, ClassVar
 from ntrp.tools.core.context import ToolExecution
 
 
+def make_schema(name: str, description: str, properties: dict, required: list[str] | None = None) -> dict:
+    return {
+        "name": name,
+        "description": description,
+        "parameters": {
+            "type": "object",
+            "properties": properties,
+            "required": required or [],
+        },
+    }
+
+
 @dataclass
 class ToolResult:
     content: str
     preview: str
     metadata: dict | None = None
-
-
-def format_lines_with_pagination(
-    content: str,
-    offset: int = 1,
-    limit: int = 500,
-) -> str:
-    """Format content with line numbers and pagination.
-
-    Args:
-        content: The text content to format
-        offset: Line number to start from (1-based)
-        limit: Maximum lines to return
-
-    Returns:
-        Formatted string with line numbers and header showing range
-    """
-    lines = content.split("\n")
-    total_lines = len(lines)
-
-    # Clamp offset
-    offset = max(1, min(offset, total_lines))
-    start_idx = offset - 1
-    end_idx = min(start_idx + limit, total_lines)
-
-    selected_lines = lines[start_idx:end_idx]
-
-    # Format with line numbers
-    output_lines = []
-    for i, line in enumerate(selected_lines):
-        line_num = start_idx + i + 1
-        output_lines.append(f"{line_num:>6}|{line}")
-
-    # Header with total
-    header = f"[{total_lines} lines]"
-    if start_idx > 0 or end_idx < total_lines:
-        header = f"[{total_lines} lines, showing {offset}-{end_idx}]"
-
-    return header + "\n" + "\n".join(output_lines)
 
 
 class Tool(ABC):

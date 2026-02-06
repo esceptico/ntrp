@@ -19,7 +19,7 @@ interface CommandContext {
   messages: { role: string; content: string; id?: string }[];
   // State setters
   setViewMode: (mode: ViewMode) => void;
-  setSessionId: (id: string) => void;
+  updateSessionInfo: (info: { session_id: string; sources: string[] }) => void;
   // Actions
   addMessage: (msg: { role: string; content: string }) => void;
   clearMessages: () => void;
@@ -104,10 +104,10 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  clear: async ({ config, setSessionId, clearMessages, clearMessageQueue, addMessage }) => {
+  clear: async ({ config, updateSessionInfo, clearMessages, clearMessageQueue, addMessage }) => {
     try {
       const result = await clearSession(config);
-      setSessionId(result.session_id);
+      updateSessionInfo({ session_id: result.session_id, sources: [] });
       clearMessageQueue();
       clearMessages();
     } catch (error) {

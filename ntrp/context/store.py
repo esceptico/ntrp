@@ -12,12 +12,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
     started_at TEXT NOT NULL,
     last_activity TEXT NOT NULL,
-    current_task TEXT,
-    rolling_summary TEXT,
-    last_compaction_turn INTEGER DEFAULT 0,
     messages TEXT,
-    gathered_context TEXT,
-    pending_actions TEXT,
     metadata TEXT
 );
 
@@ -45,20 +40,14 @@ class SessionStore(SessionDatabase):
             """
             INSERT OR REPLACE INTO sessions (
                 session_id, started_at, last_activity,
-                current_task, rolling_summary, last_compaction_turn,
-                messages, gathered_context, pending_actions, metadata
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                messages, metadata
+            ) VALUES (?, ?, ?, ?, ?)
             """,
             (
                 state.session_id,
                 state.started_at.isoformat(),
                 state.last_activity.isoformat(),
-                state.current_task,
-                state.rolling_summary,
-                state.last_compaction_turn,
                 json.dumps(serializable_messages, default=str),
-                json.dumps(state.gathered_context, default=str),
-                json.dumps(state.pending_actions, default=str),
                 json.dumps({}),
             ),
         )
@@ -74,11 +63,6 @@ class SessionStore(SessionDatabase):
             session_id=row["session_id"],
             started_at=datetime.fromisoformat(row["started_at"]),
             last_activity=datetime.fromisoformat(row["last_activity"]),
-            current_task=row["current_task"],
-            rolling_summary=row["rolling_summary"] or "",
-            last_compaction_turn=row["last_compaction_turn"] or 0,
-            gathered_context=json.loads(row["gathered_context"]) if row["gathered_context"] else [],
-            pending_actions=json.loads(row["pending_actions"]) if row["pending_actions"] else [],
         )
 
         messages = json.loads(row["messages"]) if row["messages"] else []
@@ -95,7 +79,7 @@ class SessionStore(SessionDatabase):
 
     async def list_sessions(self, limit: int = 10) -> list[dict]:
         rows = await self.conn.execute_fetchall(
-            """SELECT session_id, started_at, last_activity, rolling_summary
+            """SELECT session_id, started_at, last_activity
                FROM sessions
                ORDER BY last_activity DESC
                LIMIT ?""",
@@ -106,7 +90,6 @@ class SessionStore(SessionDatabase):
                 "session_id": row["session_id"],
                 "started_at": row["started_at"],
                 "last_activity": row["last_activity"],
-                "summary": (row["rolling_summary"] or "")[:100],
             }
             for row in rows
         ]

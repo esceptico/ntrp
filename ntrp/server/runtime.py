@@ -3,12 +3,10 @@ from datetime import datetime
 from typing import Any
 
 from ntrp.config import Config, get_config
-from ntrp.constants import AGENT_MAX_DEPTH
+from ntrp.constants import AGENT_MAX_DEPTH, SESSION_EXPIRY_HOURS
 from ntrp.logging import get_logger
-from ntrp.context.compression import SessionManager
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
-from ntrp.embedder import EmbeddingConfig
 from ntrp.memory.facts import FactMemory
 from ntrp.schedule.scheduler import Scheduler
 from ntrp.schedule.store import ScheduleStore
@@ -33,15 +31,10 @@ class Runtime:
         self._sources: dict[str, Any] = {}
         self._init_sources()
 
-        self.embedding = EmbeddingConfig(
-            model=self.config.embedding_model,
-            dim=self.config.embedding_dim,
-            prefix=self.config.embedding_prefix,
-        )
+        self.embedding = self.config.embedding
         self.indexer = Indexer(db_path=self.config.search_db_path, embedding=self.embedding)
 
         self.session_store = SessionStore(self.config.sessions_db_path)
-        self.session_manager = SessionManager(model=self.config.chat_model)
 
         self.memory: FactMemory | None = None
         self.executor: ToolExecutor | None = None
@@ -78,6 +71,7 @@ class Runtime:
         if self._connected:
             return
 
+        self.config.db_dir.mkdir(exist_ok=True)
         await self.session_store.connect()
         await self.indexer.connect()
 
@@ -145,7 +139,7 @@ class Runtime:
             return None
 
         age_hours = (datetime.now() - data.state.last_activity).total_seconds() / 3600
-        if age_hours > 24:
+        if age_hours > SESSION_EXPIRY_HOURS:
             return None
 
         if not data.messages or len(data.messages) < 2:

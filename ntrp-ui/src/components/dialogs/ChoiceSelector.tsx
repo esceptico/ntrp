@@ -1,9 +1,9 @@
 import React, { useState, useCallback } from "react";
 import { Box, Text } from "ink";
-import { brand, colors } from "../ui/colors.js";
+import { colors } from "../ui/colors.js";
 import { useDimensions } from "../../contexts/index.js";
 import { truncateText, SelectionIndicator, TextInputField } from "../ui/index.js";
-import { useKeypress, type Key } from "../../hooks/index.js";
+import { useKeypress, useInlineTextInput, useAccentColor, type Key } from "../../hooks/index.js";
 import type { ChoiceOption } from "../../types.js";
 
 interface ChoiceSelectorProps {
@@ -24,13 +24,13 @@ export function ChoiceSelector({
   isActive = true,
 }: ChoiceSelectorProps) {
   const { width: terminalWidth } = useDimensions();
+  const { accentValue } = useAccentColor();
   const totalOptions = options.length + 1;
   const otherIndex = options.length;
 
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [customText, setCustomText] = useState("");
-  const [cursorPos, setCursorPos] = useState(0);
+  const textInput = useInlineTextInput();
 
   const contentWidth = Math.max(0, terminalWidth - 8);
   const labelWidth = Math.max(0, contentWidth - 15);
@@ -39,9 +39,8 @@ export function ChoiceSelector({
   const handleKeypress = useCallback(
     (key: Key) => {
       if (key.name === "escape") {
-        if (isOnOther && customText) {
-          setCustomText("");
-          setCursorPos(0);
+        if (isOnOther && textInput.value) {
+          textInput.reset();
           return;
         }
         onCancel();
@@ -62,32 +61,13 @@ export function ChoiceSelector({
       }
 
       if (isOnOther) {
-        if (key.name === "left") {
-          setCursorPos((p) => Math.max(0, p - 1));
-          return;
-        }
-        if (key.name === "right") {
-          setCursorPos((p) => Math.min(customText.length, p + 1));
-          return;
-        }
-        if (key.name === "backspace" || key.name === "delete") {
-          if (cursorPos > 0) {
-            setCustomText((t) => t.slice(0, cursorPos - 1) + t.slice(cursorPos));
-            setCursorPos((p) => p - 1);
-          }
-          return;
-        }
         if (key.name === "return") {
-          if (customText.trim()) {
-            onSelect([customText.trim()]);
+          if (textInput.value.trim()) {
+            onSelect([textInput.value.trim()]);
           }
           return;
         }
-        if (key.insertable && key.sequence && !key.ctrl && !key.meta) {
-          setCustomText((t) => t.slice(0, cursorPos) + key.sequence + t.slice(cursorPos));
-          setCursorPos((p) => p + key.sequence.length);
-          return;
-        }
+        if (textInput.handleKey(key)) return;
         return;
       }
 
@@ -133,13 +113,13 @@ export function ChoiceSelector({
         return;
       }
     },
-    [options, selectedIndex, allowMultiple, checked, isOnOther, customText, cursorPos, totalOptions, onSelect, onCancel]
+    [options, selectedIndex, allowMultiple, checked, isOnOther, textInput, totalOptions, onSelect, onCancel]
   );
 
   useKeypress(handleKeypress, { isActive });
 
   const hintText = isOnOther
-    ? customText
+    ? textInput.value
       ? "Enter to submit · Esc to clear"
       : "Type your answer · Esc to cancel"
     : allowMultiple
@@ -160,9 +140,9 @@ export function ChoiceSelector({
 
           return (
             <Text key={opt.id}>
-              <SelectionIndicator selected={isSelected} accent={brand.primary} />
+              <SelectionIndicator selected={isSelected} accent={accentValue} />
               {allowMultiple && (
-                <Text color={isChecked ? brand.primary : colors.text.disabled}>
+                <Text color={isChecked ? accentValue : colors.text.disabled}>
                   {isChecked ? "◉ " : "○ "}
                 </Text>
               )}
@@ -178,14 +158,14 @@ export function ChoiceSelector({
         })}
 
         <Text>
-          <SelectionIndicator selected={isOnOther} accent={brand.primary} />
+          <SelectionIndicator selected={isOnOther} accent={accentValue} />
           {allowMultiple && (
             <Text color={colors.text.disabled}>{"○ "}</Text>
           )}
           <Text color={colors.text.disabled}>{options.length + 1}. </Text>
           <TextInputField
-            value={customText}
-            cursorPos={cursorPos}
+            value={textInput.value}
+            cursorPos={textInput.cursorPos}
             placeholder="Other (type your answer)"
             showCursor={isOnOther}
             placeholderColor={isOnOther ? colors.text.secondary : colors.text.muted}

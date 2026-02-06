@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Box, Text } from "ink";
-import { truncateText } from "../../lib/utils.js";
+import { truncateText, wrapText } from "../../lib/utils.js";
 import { colors } from "./colors.js";
 
 interface ExpandableTextProps {
@@ -12,26 +12,6 @@ interface ExpandableTextProps {
   isFocused?: boolean;
   color?: string;
   boldFirstLine?: boolean;
-}
-
-function wrapText(text: string, width: number): string[] {
-  if (width <= 0) return [text];
-  const words = text.split(" ");
-  const lines: string[] = [];
-  let line = "";
-
-  for (const word of words) {
-    if (!line) {
-      line = word;
-    } else if (line.length + 1 + word.length <= width) {
-      line += " " + word;
-    } else {
-      lines.push(line);
-      line = word;
-    }
-  }
-  if (line) lines.push(line);
-  return lines;
 }
 
 export function ExpandableText({

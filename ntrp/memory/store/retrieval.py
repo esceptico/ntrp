@@ -10,7 +10,7 @@ from ntrp.memory.decay import decay_score, recency_boost
 from ntrp.memory.models import Embedding, Fact, FactContext, Observation
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
-from ntrp.ranking import rrf_merge
+from ntrp.search.retrieval import rrf_merge
 
 
 async def hybrid_search(

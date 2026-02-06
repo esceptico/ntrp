@@ -234,67 +234,24 @@ class GmailSource:
         except Exception:
             return None  # API error fetching full message
 
-    def _parse_metadata(self, raw: dict) -> RawItem:
+    def _build_raw_item(self, raw: dict, content: str) -> RawItem:
         msg_id = raw.get("id", "")
         payload = raw.get("payload", {})
         headers = payload.get("headers", [])
         header_dict = extract_headers(headers)
 
-        # Parse date
         internal_date = int(raw.get("internalDate", 0))
         email_date = parse_email_date(headers, internal_date)
 
-        # Build title from subject
         subject = decode_email_header(header_dict.get("subject", ""))
         sender = decode_email_header(header_dict.get("from", ""))
-        title = f"{subject}" if subject else f"Email from {sender}"
-
-        # Use snippet as content preview (no full body fetch)
-        snippet = raw.get("snippet", "")
+        title = subject if subject else f"Email from {sender}"
 
         return RawItem(
             source="gmail",
             source_id=msg_id,
             title=title,
-            content=snippet,  # Just the snippet, not full body
-            created_at=email_date,
-            updated_at=email_date,
-            metadata={
-                "thread_id": raw.get("threadId", ""),
-                "labels": raw.get("labelIds", []),
-                "from": sender,
-                "to": decode_email_header(header_dict.get("to", "")),
-                "subject": subject,
-                "snippet": snippet,
-            },
-        )
-
-    def _parse_full_message(self, raw: dict) -> RawItem:
-        msg_id = raw.get("id", "")
-        payload = raw.get("payload", {})
-        headers = payload.get("headers", [])
-        header_dict = extract_headers(headers)
-
-        # Extract full content
-        plain_text, html_text = find_email_parts(payload)
-        content = plain_text.strip() if plain_text.strip() else html_to_plain(html_text)
-        if not content:
-            content = raw.get("snippet", "")
-
-        # Parse date
-        internal_date = int(raw.get("internalDate", 0))
-        email_date = parse_email_date(headers, internal_date)
-
-        # Build title from subject
-        subject = decode_email_header(header_dict.get("subject", ""))
-        sender = decode_email_header(header_dict.get("from", ""))
-        title = f"{subject}" if subject else f"Email from {sender}"
-
-        return RawItem(
-            source="gmail",
-            source_id=msg_id,
-            title=title,
-            content=content[:CONTENT_READ_LIMIT],
+            content=content,
             created_at=email_date,
             updated_at=email_date,
             metadata={
@@ -306,6 +263,17 @@ class GmailSource:
                 "snippet": raw.get("snippet", ""),
             },
         )
+
+    def _parse_metadata(self, raw: dict) -> RawItem:
+        return self._build_raw_item(raw, raw.get("snippet", ""))
+
+    def _parse_full_message(self, raw: dict) -> RawItem:
+        payload = raw.get("payload", {})
+        plain_text, html_text = find_email_parts(payload)
+        content = plain_text.strip() if plain_text.strip() else html_to_plain(html_text)
+        if not content:
+            content = raw.get("snippet", "")
+        return self._build_raw_item(raw, content[:CONTENT_READ_LIMIT])
 
     def read(self, source_id: str) -> str | None:
         msg = self._fetch_message_full(source_id)

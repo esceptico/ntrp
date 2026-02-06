@@ -14,8 +14,8 @@ export function truncateText(text: string, max: number, mode: 'end' | 'middle' |
   return text.slice(0, half) + '...' + text.slice(-half);
 }
 
-export function wrapText(text: string, width: number, indent: string = ''): string {
-  if (text.length <= width) return text;
+export function wrapText(text: string, width: number): string[] {
+  if (width <= 0) return [text];
   const words = text.split(' ');
   const lines: string[] = [];
   let line = '';
@@ -30,23 +30,7 @@ export function wrapText(text: string, width: number, indent: string = ''): stri
     }
   }
   if (line) lines.push(line);
-  return lines.join('\n' + indent);
-}
-
-// Alias for backwards compatibility
-export const truncate = (value: string, maxLen: number) => truncateText(value, maxLen, 'end');
-
-// Value utilities
-
-export function isEmpty(value: unknown): boolean {
-  if (value === null || value === undefined) return true;
-  if (typeof value === "string") {
-    const trimmed = value.trim().toLowerCase();
-    return !trimmed || trimmed === "<empty>" || trimmed === "empty";
-  }
-  if (Array.isArray(value)) return value.length === 0;
-  if (typeof value === "object") return Object.keys(value).length === 0;
-  return false;
+  return lines;
 }
 
 // Scroll window calculation (shared by list components)

@@ -1,15 +1,13 @@
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from uuid import uuid4
 
 
-class RunStatus(str, Enum):
+class RunStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
-    WAITING_TOOL = "waiting_tool"  # Waiting for client to execute tool
-    WAITING_APPROVAL = "waiting_approval"  # Waiting for user approval
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     ERROR = "error"
@@ -29,11 +27,6 @@ class RunState:
     updated_at: datetime = field(default_factory=datetime.now)
     cancelled: bool = False
 
-    def add_usage(self, prompt: int, completion: int) -> None:
-        self.prompt_tokens += prompt
-        self.completion_tokens += completion
-        self.updated_at = datetime.now()
-
     def get_usage(self) -> dict:
         return {
             "prompt": self.prompt_tokens,
@@ -45,25 +38,15 @@ class RunState:
 class RunRegistry:
     def __init__(self):
         self._runs: dict[str, RunState] = {}
-        self._session_runs: dict[str, str] = {}  # session_id -> latest run_id
 
     def create_run(self, session_id: str) -> RunState:
         run_id = str(uuid4())[:8]
         run = RunState(run_id=run_id, session_id=session_id)
-        run.event_queue = asyncio.Queue()
-        run.choice_queue = asyncio.Queue()
         self._runs[run_id] = run
-        self._session_runs[session_id] = run_id
         return run
 
     def get_run(self, run_id: str) -> RunState | None:
         return self._runs.get(run_id)
-
-    def get_session_run(self, session_id: str) -> RunState | None:
-        run_id = self._session_runs.get(session_id)
-        if run_id:
-            return self._runs.get(run_id)
-        return None
 
     def complete_run(self, run_id: str) -> None:
         run = self._runs.get(run_id)
@@ -89,9 +72,7 @@ class RunRegistry:
                 to_remove.append(run_id)
 
         for run_id in to_remove:
-            run = self._runs.pop(run_id, None)
-            if run and self._session_runs.get(run.session_id) == run_id:
-                del self._session_runs[run.session_id]
+            self._runs.pop(run_id, None)
 
         return len(to_remove)
 

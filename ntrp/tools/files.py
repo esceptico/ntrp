@@ -1,7 +1,8 @@
 import os
 from typing import Any
 
-from ntrp.tools.core.base import Tool, ToolResult, format_lines_with_pagination
+from ntrp.tools.core.base import Tool, ToolResult, make_schema
+from ntrp.tools.core.formatting import format_lines_with_pagination
 
 
 class ReadFileTool(Tool):
@@ -18,28 +19,20 @@ class ReadFileTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Path to the file (relative or absolute)",
-                    },
-                    "offset": {
-                        "type": "integer",
-                        "description": "Line number to start from (1-based, default: 1)",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum lines to read (default: 500)",
-                    },
-                },
-                "required": ["path"],
+        return make_schema(self.name, self.description, {
+            "path": {
+                "type": "string",
+                "description": "Path to the file (relative or absolute)",
             },
-        }
+            "offset": {
+                "type": "integer",
+                "description": "Line number to start from (1-based, default: 1)",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Maximum lines to read (default: 500)",
+            },
+        }, ["path"])
 
     async def execute(
         self, execution: Any, path: str = "", offset: int = 1, limit: int = 500, **kwargs: Any

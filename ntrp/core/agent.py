@@ -1,4 +1,3 @@
-import logging
 from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
@@ -11,9 +10,10 @@ from ntrp.core.tool_runner import ToolRunner
 from ntrp.events import SSEEvent, TextEvent, ToolResultEvent
 from ntrp.tools.core.context import ToolContext
 from ntrp.llm import acompletion
+from ntrp.logging import get_logger
 from ntrp.tools.executor import ToolExecutor
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class Agent:

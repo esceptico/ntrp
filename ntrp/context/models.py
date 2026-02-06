@@ -6,15 +6,9 @@ from datetime import datetime
 class SessionState:
     session_id: str
     started_at: datetime
-    current_task: str | None = None
-    gathered_context: list[dict] = field(default_factory=list)
-    pending_actions: list[dict] = field(default_factory=list)
-    last_compaction_turn: int = 0
-    rolling_summary: str = ""
     last_activity: datetime = field(default_factory=datetime.now)
-    approved_patterns: dict[str, set[str]] = field(default_factory=dict)
     auto_approve: set[str] = field(default_factory=set)
-    yolo: bool = False
+    skip_approvals: bool = False
 
 
 @dataclass
