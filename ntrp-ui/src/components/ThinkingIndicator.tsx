@@ -33,7 +33,8 @@ export function ThinkingIndicator({ status }: ThinkingIndicatorProps) {
     return () => clearInterval(interval);
   }, []);
 
-  const displayText = `${verb}...`;
+  const isGenericStatus = !status || status === "thinking..." || status === "";
+  const displayText = isGenericStatus ? `${verb}...` : status;
   const glimmerPos = frame % (displayText.length + GLIMMER_WIDTH);
 
   // Single Text element with nested Text for inline color changes

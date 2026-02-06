@@ -10,11 +10,16 @@ interface ErrorMessageProps {
 
 export const ErrorMessage = memo(function ErrorMessage({ content }: ErrorMessageProps) {
   const { width: terminalWidth } = useDimensions();
-  const contentWidth = Math.max(0, terminalWidth - 6);
+  const contentWidth = Math.max(0, terminalWidth - 4);
 
   return (
-    <Box marginLeft={2} width={contentWidth} overflow="hidden">
-      <Text color={colors.status.error}>✗ {truncateText(content, contentWidth)}</Text>
+    <Box flexDirection="row" width={terminalWidth} overflow="hidden">
+      <Box width={2} flexShrink={0}>
+        <Text color={colors.status.error}>✗ </Text>
+      </Box>
+      <Box width={contentWidth} flexGrow={1} overflow="hidden">
+        <Text color={colors.status.error}>{truncateText(content, contentWidth)}</Text>
+      </Box>
     </Box>
   );
 });

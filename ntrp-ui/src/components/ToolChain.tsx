@@ -18,8 +18,7 @@ export function ToolChainDisplay({ items, maxItems = 5 }: { items: ToolChainItem
   );
 
   const roots = useMemo(() => {
-    const active = items.filter((i) => i.status !== "error");
-    return buildTree(active).slice(-maxItems);
+    return buildTree(items).slice(-maxItems);
   }, [items, maxItems]);
 
   if (roots.length === 0) return null;

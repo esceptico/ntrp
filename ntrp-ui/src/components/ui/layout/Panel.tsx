@@ -22,7 +22,7 @@ export function Panel({ children, title, subtitle, width }: PanelProps) {
         <Box marginBottom={1}>
           <Text color={accentValue} bold>
             {title}
-            {subtitle && <Text color={colors.panel.subtitle}> {subtitle}</Text>}
+            {subtitle && <Text bold={false} color={colors.panel.subtitle}> {subtitle}</Text>}
           </Text>
         </Box>
       )}

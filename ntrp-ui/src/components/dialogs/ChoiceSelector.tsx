@@ -13,6 +13,7 @@ interface ChoiceSelectorProps {
   onSelect: (selected: string[]) => void;
   onCancel: () => void;
   isActive?: boolean;
+  allowOther?: boolean;
 }
 
 export function ChoiceSelector({
@@ -22,10 +23,11 @@ export function ChoiceSelector({
   onSelect,
   onCancel,
   isActive = true,
+  allowOther = true,
 }: ChoiceSelectorProps) {
   const { width: terminalWidth } = useDimensions();
   const { accentValue } = useAccentColor();
-  const totalOptions = options.length + 1;
+  const totalOptions = allowOther ? options.length + 1 : options.length;
   const otherIndex = options.length;
 
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -157,20 +159,22 @@ export function ChoiceSelector({
           );
         })}
 
-        <Text>
-          <SelectionIndicator selected={isOnOther} accent={accentValue} />
-          {allowMultiple && (
-            <Text color={colors.text.disabled}>{"○ "}</Text>
-          )}
-          <Text color={colors.text.disabled}>{options.length + 1}. </Text>
-          <TextInputField
-            value={textInput.value}
-            cursorPos={textInput.cursorPos}
-            placeholder="Other (type your answer)"
-            showCursor={isOnOther}
-            placeholderColor={isOnOther ? colors.text.secondary : colors.text.muted}
-          />
-        </Text>
+        {allowOther && (
+          <Text>
+            <SelectionIndicator selected={isOnOther} accent={accentValue} />
+            {allowMultiple && (
+              <Text color={colors.text.disabled}>{"○ "}</Text>
+            )}
+            <Text color={colors.text.disabled}>{options.length + 1}. </Text>
+            <TextInputField
+              value={textInput.value}
+              cursorPos={textInput.cursorPos}
+              placeholder="Other (type your answer)"
+              showCursor={isOnOther}
+              placeholderColor={isOnOther ? colors.text.secondary : colors.text.muted}
+            />
+          </Text>
+        )}
       </Box>
 
       <Box height={1} />

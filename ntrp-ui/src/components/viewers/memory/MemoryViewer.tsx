@@ -62,11 +62,31 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     })();
   }, [config]);
 
+  const reload = useCallback(() => {
+    loadedRef.current = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const [factsData, obsData] = await Promise.all([
+          getFacts(config, 200),
+          getObservations(config, 100),
+        ]);
+        setFacts(factsData.facts || []);
+        setObservations(obsData.observations || []);
+      } catch (e) {
+        setError(`Failed to load: ${e}`);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [config]);
+
   const handleKeypress = useCallback(
     (key: Key) => {
       if (key.name === "1") { setActiveTab("facts"); return; }
       if (key.name === "2") { setActiveTab("observations"); return; }
       if (key.name === "3") { setActiveTab("stats"); return; }
+      if (key.name === "r") { reload(); return; }
 
       if (key.name === "escape" || key.name === "q") {
         if (activeTab === "stats") { setActiveTab("facts"); return; }
@@ -81,7 +101,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
             obsTab.setSelectedIndex(0);
             return;
           }
-          setActiveTab("facts");
+          onClose();
           return;
         }
         if (factsTab.focusPane === "details") {
@@ -102,7 +122,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
-    [activeTab, factsTab, obsTab, onClose]
+    [activeTab, factsTab, obsTab, onClose, reload]
   );
 
   useKeypress(handleKeypress, { isActive: true });

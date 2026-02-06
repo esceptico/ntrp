@@ -51,6 +51,15 @@ export function ApprovalDialog({ approval, onResult, isActive = true }: Approval
         return;
       }
 
+      if (!isOnCustomOption && key.sequence === "y") {
+        onResult("once");
+        return;
+      }
+      if (!isOnCustomOption && key.sequence === "n") {
+        onResult("reject");
+        return;
+      }
+
       if (isOnCustomOption) {
         if (key.name === "return") {
           onResult("reject", textInput.value.trim() || undefined);

@@ -261,7 +261,7 @@ export const InputArea = memo(function InputArea({
   return (
     <Box flexDirection="column">
       {/* Top divider */}
-      <Text dimColor>{divider}</Text>
+      <Text color={colors.divider}>{divider}</Text>
 
       {/* Input row - single Text element */}
       <Text>
@@ -273,7 +273,7 @@ export const InputArea = memo(function InputArea({
       </Text>
 
       {/* Bottom divider */}
-      <Text dimColor>{divider}</Text>
+      <Text color={colors.divider}>{divider}</Text>
 
       {/* Footer */}
       {!showAutocomplete && !showHelp && (
@@ -285,6 +285,9 @@ export const InputArea = memo(function InputArea({
             {escHint && <Text dimColor>{skipApprovals || indexStatus?.indexing ? "  ·  " : ""}esc to clear</Text>}
             {queueCount > 0 && (
               <Text color={colors.status.warning}>{escHint || skipApprovals || indexStatus?.indexing ? "  ·  " : ""}{queueCount} queued</Text>
+            )}
+            {!value && !skipApprovals && !indexStatus?.indexing && !escHint && queueCount === 0 && (
+              <Text color={colors.text.disabled}>? for help</Text>
             )}
           </Text>
         </Box>

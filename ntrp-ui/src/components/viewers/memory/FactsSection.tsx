@@ -62,6 +62,7 @@ export function FactsSection({
       getKey={(f) => f.id}
       emptyMessage="No facts stored yet"
       searchQuery={searchQuery}
+      focusPane={focusPane}
       visibleLines={visibleLines}
       width={width}
       details={

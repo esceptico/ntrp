@@ -17,6 +17,7 @@ interface ListDetailSectionProps<T> {
   visibleLines: number;
   width: number;
   details: ReactNode;
+  focusPane?: "list" | "details";
 }
 
 export function ListDetailSection<T>({
@@ -29,16 +30,21 @@ export function ListDetailSection<T>({
   visibleLines,
   width,
   details,
+  focusPane = "list",
 }: ListDetailSectionProps<T>) {
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
 
   const sidebar = (
     <Box flexDirection="column">
-      {searchQuery && (
+      {searchQuery ? (
         <Box marginBottom={1}>
           <Text color={colors.text.muted}>/{searchQuery}</Text>
         </Box>
-      )}
+      ) : focusPane === "list" ? (
+        <Box marginBottom={1}>
+          <Text color={colors.text.disabled}>type to search</Text>
+        </Box>
+      ) : null}
       <BaseSelectionList
         items={items}
         selectedIndex={selectedIndex}

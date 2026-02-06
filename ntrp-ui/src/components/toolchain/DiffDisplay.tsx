@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import { truncateText } from "../../lib/utils.js";
+import { colors } from "../ui/index.js";
 
 interface DiffDisplayProps {
   diff: string;
@@ -21,9 +22,9 @@ export function DiffDisplay({ diff, prefix, width, maxLines = 10 }: DiffDisplayP
         <Text
           key={i}
           color={
-            line.startsWith('+') && !line.startsWith('+++') ? 'green' :
-            line.startsWith('-') && !line.startsWith('---') ? 'red' :
-            line.startsWith('@') ? 'cyan' :
+            line.startsWith('+') && !line.startsWith('+++') ? colors.diff.added :
+            line.startsWith('-') && !line.startsWith('---') ? colors.diff.removed :
+            line.startsWith('@') ? colors.text.muted :
             undefined
           }
           dimColor={line.startsWith('@@') || line.startsWith('---') || line.startsWith('+++')}

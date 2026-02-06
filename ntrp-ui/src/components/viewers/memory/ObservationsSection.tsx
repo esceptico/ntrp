@@ -59,6 +59,7 @@ export function ObservationsSection({
       getKey={(o) => o.id}
       emptyMessage="No observations synthesized yet"
       searchQuery={searchQuery}
+      focusPane={focusPane}
       visibleLines={visibleLines}
       width={width}
       details={

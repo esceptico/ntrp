@@ -166,12 +166,12 @@ function AppContent({
       if (key.name === "escape" && isStreaming) {
         cancel();
       }
-      // Shift+Tab toggles skip approvals mode
-      if (key.shift && key.name === "tab") {
+      // Shift+Tab toggles skip approvals mode (guard: not in settings overlay)
+      if (key.shift && key.name === "tab" && !showSettings) {
         toggleSkipApprovals();
       }
     },
-    [exit, isStreaming, cancel, toggleSkipApprovals]
+    [exit, isStreaming, cancel, toggleSkipApprovals, showSettings]
   );
 
   useKeypress(handleGlobalKeypress, { isActive: true });
