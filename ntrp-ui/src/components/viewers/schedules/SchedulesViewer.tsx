@@ -172,9 +172,10 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
       <ScheduleEditView
         editText={editText}
         cursorPos={cursorPos}
+        setEditText={setEditText}
+        setCursorPos={setCursorPos}
         saving={saving}
         contentWidth={contentWidth}
-        textWidth={textWidth}
       />
     );
   }

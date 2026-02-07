@@ -14,3 +14,4 @@ export { Tabs } from "./Tabs.js";
 export { SelectionIndicator } from "./SelectionIndicator.js";
 
 export { TextInputField } from "./input/index.js";
+export { TextEditArea } from "./TextEditArea.js";
