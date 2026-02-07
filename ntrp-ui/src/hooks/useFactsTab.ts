@@ -27,6 +27,7 @@ export interface FactsTabState {
   linkedIndex: number;
   editMode: boolean;
   editText: string;
+  cursorPos: number;
   confirmDelete: boolean;
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
@@ -35,6 +36,7 @@ export interface FactsTabState {
   resetDetailState: () => void;
   setEditMode: React.Dispatch<React.SetStateAction<boolean>>;
   setEditText: React.Dispatch<React.SetStateAction<string>>;
+  setCursorPos: React.Dispatch<React.SetStateAction<number>>;
   setConfirmDelete: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
@@ -56,6 +58,7 @@ export function useFactsTab(
   const [linkedIndex, setLinkedIndex] = useState(0);
   const [editMode, setEditMode] = useState(false);
   const [editText, setEditText] = useState("");
+  const [cursorPos, setCursorPos] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const filteredFacts = useMemo(
@@ -76,6 +79,7 @@ export function useFactsTab(
     setLinkedIndex(0);
     setEditMode(false);
     setEditText("");
+    setCursorPos(0);
     setConfirmDelete(false);
   }, []);
 
@@ -216,6 +220,7 @@ export function useFactsTab(
     linkedIndex,
     editMode,
     editText,
+    cursorPos,
     confirmDelete,
     handleKeys,
     setSearchQuery,
@@ -224,6 +229,7 @@ export function useFactsTab(
     resetDetailState,
     setEditMode,
     setEditText,
+    setCursorPos,
     setConfirmDelete,
   };
 }

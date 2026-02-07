@@ -28,6 +28,7 @@ interface FactDetailsViewProps {
   // Edit/delete state
   editMode: boolean;
   editText: string;
+  cursorPos: number;
   confirmDelete: boolean;
   saving: boolean;
 }
@@ -53,6 +54,7 @@ export function FactDetailsView({
   linkedIndex,
   editMode,
   editText,
+  cursorPos,
   confirmDelete,
   saving,
 }: FactDetailsViewProps) {
@@ -98,24 +100,55 @@ export function FactDetailsView({
   }
 
   if (editMode) {
+    // Calculate cursor position in wrapped text
     const wrappedLines = wrapText(editText, textWidth);
-    const cursorLine = wrappedLines.length > 0 ? wrappedLines.length - 1 : 0;
+    let charCount = 0;
+    let cursorLine = 0;
+    let cursorCol = 0;
+
+    if (wrappedLines.length === 0) {
+      cursorLine = 0;
+      cursorCol = 0;
+    } else {
+      for (let i = 0; i < wrappedLines.length; i++) {
+        const lineLength = wrappedLines[i].length;
+        if (charCount + lineLength >= cursorPos) {
+          cursorLine = i;
+          cursorCol = cursorPos - charCount;
+          break;
+        }
+        charCount += lineLength;
+      }
+      // If cursor is at the very end
+      if (cursorPos === editText.length && cursorPos > charCount) {
+        cursorLine = wrappedLines.length - 1;
+        cursorCol = wrappedLines[cursorLine].length;
+      }
+    }
 
     return (
       <Box flexDirection="column" width={width} paddingLeft={1}>
         <Text color={colors.text.muted}>EDIT FACT</Text>
         <Box marginTop={1} flexDirection="column">
-          {wrappedLines.map((line, idx) => (
-            <Text key={idx} color={colors.text.primary}>
-              {line}
-              {idx === cursorLine && <Text color={accentValue}>█</Text>}
-            </Text>
-          ))}
-          {wrappedLines.length === 0 && (
+          {wrappedLines.length === 0 ? (
             <Text color={colors.text.muted}>
               Type to edit...
               <Text color={accentValue}>█</Text>
             </Text>
+          ) : (
+            wrappedLines.map((line, idx) => (
+              <Text key={idx} color={colors.text.primary}>
+                {idx === cursorLine ? (
+                  <>
+                    {line.slice(0, cursorCol)}
+                    <Text color={accentValue}>█</Text>
+                    {line.slice(cursorCol)}
+                  </>
+                ) : (
+                  line
+                )}
+              </Text>
+            ))
           )}
         </Box>
         {saving ? (

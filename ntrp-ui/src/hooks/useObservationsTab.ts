@@ -26,6 +26,7 @@ export interface ObservationsTabState {
   factsIndex: number;
   editMode: boolean;
   editText: string;
+  cursorPos: number;
   confirmDelete: boolean;
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
@@ -34,6 +35,7 @@ export interface ObservationsTabState {
   resetDetailState: () => void;
   setEditMode: React.Dispatch<React.SetStateAction<boolean>>;
   setEditText: React.Dispatch<React.SetStateAction<string>>;
+  setCursorPos: React.Dispatch<React.SetStateAction<number>>;
   setConfirmDelete: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
@@ -54,6 +56,7 @@ export function useObservationsTab(
   const [factsIndex, setFactsIndex] = useState(0);
   const [editMode, setEditMode] = useState(false);
   const [editText, setEditText] = useState("");
+  const [cursorPos, setCursorPos] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const filteredObservations = useMemo(
@@ -73,6 +76,7 @@ export function useObservationsTab(
     setFactsIndex(0);
     setEditMode(false);
     setEditText("");
+    setCursorPos(0);
     setConfirmDelete(false);
   }, []);
 
@@ -191,6 +195,7 @@ export function useObservationsTab(
     factsIndex,
     editMode,
     editText,
+    cursorPos,
     confirmDelete,
     handleKeys,
     setSearchQuery,
@@ -199,6 +204,7 @@ export function useObservationsTab(
     resetDetailState,
     setEditMode,
     setEditText,
+    setCursorPos,
     setConfirmDelete,
   };
 }

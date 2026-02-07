@@ -21,6 +21,7 @@ interface ObservationsSectionProps {
   factsIndex: number;
   editMode: boolean;
   editText: string;
+  cursorPos: number;
   confirmDelete: boolean;
   saving: boolean;
 }
@@ -40,6 +41,7 @@ export function ObservationsSection({
   factsIndex,
   editMode,
   editText,
+  cursorPos,
   confirmDelete,
   saving,
 }: ObservationsSectionProps) {
@@ -82,6 +84,7 @@ export function ObservationsSection({
           factsIndex={factsIndex}
           editMode={editMode}
           editText={editText}
+          cursorPos={cursorPos}
           confirmDelete={confirmDelete}
           saving={saving}
         />

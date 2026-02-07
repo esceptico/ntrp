@@ -22,6 +22,7 @@ interface FactsSectionProps {
   linkedIndex: number;
   editMode: boolean;
   editText: string;
+  cursorPos: number;
   confirmDelete: boolean;
   saving: boolean;
 }
@@ -42,6 +43,7 @@ export function FactsSection({
   linkedIndex,
   editMode,
   editText,
+  cursorPos,
   confirmDelete,
   saving,
 }: FactsSectionProps) {
@@ -86,6 +88,7 @@ export function FactsSection({
           linkedIndex={linkedIndex}
           editMode={editMode}
           editText={editText}
+          cursorPos={cursorPos}
           confirmDelete={confirmDelete}
           saving={saving}
         />

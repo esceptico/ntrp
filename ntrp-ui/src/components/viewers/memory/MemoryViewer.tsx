@@ -118,6 +118,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 );
                 factsTab.setEditMode(false);
                 factsTab.setEditText("");
+                factsTab.setCursorPos(0);
                 reload();
               })
               .catch((e) => setError(`Save failed: ${e}`))
@@ -127,15 +128,42 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
           if (key.name === "escape") {
             factsTab.setEditMode(false);
             factsTab.setEditText("");
+            factsTab.setCursorPos(0);
+            return;
+          }
+          if (key.name === "left") {
+            factsTab.setCursorPos((pos) => Math.max(0, pos - 1));
+            return;
+          }
+          if (key.name === "right") {
+            factsTab.setCursorPos((pos) => Math.min(factsTab.editText.length, pos + 1));
+            return;
+          }
+          if (key.name === "home") {
+            factsTab.setCursorPos(0);
+            return;
+          }
+          if (key.name === "end") {
+            factsTab.setCursorPos(factsTab.editText.length);
             return;
           }
           if (key.name === "backspace") {
-            factsTab.setEditText((prev) => prev.slice(0, -1));
+            if (factsTab.cursorPos > 0) {
+              factsTab.setEditText((prev) => prev.slice(0, factsTab.cursorPos - 1) + prev.slice(factsTab.cursorPos));
+              factsTab.setCursorPos((pos) => pos - 1);
+            }
+            return;
+          }
+          if (key.name === "delete") {
+            if (factsTab.cursorPos < factsTab.editText.length) {
+              factsTab.setEditText((prev) => prev.slice(0, factsTab.cursorPos) + prev.slice(factsTab.cursorPos + 1));
+            }
             return;
           }
           if (key.insertable && !key.ctrl && !key.meta && key.sequence) {
             const char = key.name === "return" ? "\n" : key.name === "space" ? " " : key.sequence;
-            factsTab.setEditText((prev) => prev + char);
+            factsTab.setEditText((prev) => prev.slice(0, factsTab.cursorPos) + char + prev.slice(factsTab.cursorPos));
+            factsTab.setCursorPos((pos) => pos + 1);
             return;
           }
           return;
@@ -144,11 +172,31 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
         if (key.name === "e") {
           factsTab.setEditMode(true);
           factsTab.setEditText(factsTab.factDetails.fact.text);
+          factsTab.setCursorPos(factsTab.factDetails.fact.text.length);
           return;
         }
         if (key.name === "d" || key.name === "delete") {
           factsTab.setConfirmDelete(true);
           return;
+        }
+      }
+
+      // Handle edit/delete from list view
+      if (activeTab === "facts" && factsTab.focusPane === "list" && factsTab.filteredFacts.length > 0) {
+        const selectedFact = factsTab.filteredFacts[factsTab.selectedIndex];
+        if (selectedFact) {
+          if (key.name === "e") {
+            factsTab.setFocusPane("details");
+            factsTab.setEditMode(true);
+            factsTab.setEditText(selectedFact.text);
+            factsTab.setCursorPos(selectedFact.text.length);
+            return;
+          }
+          if (key.name === "d" || key.name === "delete") {
+            factsTab.setFocusPane("details");
+            factsTab.setConfirmDelete(true);
+            return;
+          }
         }
       }
 
@@ -182,6 +230,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 );
                 obsTab.setEditMode(false);
                 obsTab.setEditText("");
+                obsTab.setCursorPos(0);
                 reload();
               })
               .catch((e) => setError(`Save failed: ${e}`))
@@ -191,15 +240,42 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
           if (key.name === "escape") {
             obsTab.setEditMode(false);
             obsTab.setEditText("");
+            obsTab.setCursorPos(0);
+            return;
+          }
+          if (key.name === "left") {
+            obsTab.setCursorPos((pos) => Math.max(0, pos - 1));
+            return;
+          }
+          if (key.name === "right") {
+            obsTab.setCursorPos((pos) => Math.min(obsTab.editText.length, pos + 1));
+            return;
+          }
+          if (key.name === "home") {
+            obsTab.setCursorPos(0);
+            return;
+          }
+          if (key.name === "end") {
+            obsTab.setCursorPos(obsTab.editText.length);
             return;
           }
           if (key.name === "backspace") {
-            obsTab.setEditText((prev) => prev.slice(0, -1));
+            if (obsTab.cursorPos > 0) {
+              obsTab.setEditText((prev) => prev.slice(0, obsTab.cursorPos - 1) + prev.slice(obsTab.cursorPos));
+              obsTab.setCursorPos((pos) => pos - 1);
+            }
+            return;
+          }
+          if (key.name === "delete") {
+            if (obsTab.cursorPos < obsTab.editText.length) {
+              obsTab.setEditText((prev) => prev.slice(0, obsTab.cursorPos) + prev.slice(obsTab.cursorPos + 1));
+            }
             return;
           }
           if (key.insertable && !key.ctrl && !key.meta && key.sequence) {
             const char = key.name === "return" ? "\n" : key.name === "space" ? " " : key.sequence;
-            obsTab.setEditText((prev) => prev + char);
+            obsTab.setEditText((prev) => prev.slice(0, obsTab.cursorPos) + char + prev.slice(obsTab.cursorPos));
+            obsTab.setCursorPos((pos) => pos + 1);
             return;
           }
           return;
@@ -208,11 +284,31 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
         if (key.name === "e") {
           obsTab.setEditMode(true);
           obsTab.setEditText(obsTab.obsDetails.observation.summary);
+          obsTab.setCursorPos(obsTab.obsDetails.observation.summary.length);
           return;
         }
         if (key.name === "d" || key.name === "delete") {
           obsTab.setConfirmDelete(true);
           return;
+        }
+      }
+
+      // Handle edit/delete from list view
+      if (activeTab === "observations" && obsTab.focusPane === "list" && obsTab.filteredObservations.length > 0) {
+        const selectedObs = obsTab.filteredObservations[obsTab.selectedIndex];
+        if (selectedObs) {
+          if (key.name === "e") {
+            obsTab.setFocusPane("details");
+            obsTab.setEditMode(true);
+            obsTab.setEditText(selectedObs.summary);
+            obsTab.setCursorPos(selectedObs.summary.length);
+            return;
+          }
+          if (key.name === "d" || key.name === "delete") {
+            obsTab.setFocusPane("details");
+            obsTab.setConfirmDelete(true);
+            return;
+          }
         }
       }
 
@@ -275,21 +371,21 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     if (activeTab === "stats") return "1-3: tabs │ Esc: back";
 
     if (activeTab === "facts") {
-      if (factsTab.editMode) return "Ctrl+S: save │ Esc: cancel";
+      if (factsTab.editMode) return "Ctrl+S: save │ Esc: cancel │ ←→: move cursor │ Home/End: start/end";
       if (factsTab.confirmDelete) return "y: confirm │ any key: cancel";
       if (factsTab.focusPane === "details") {
         return "1-3: tabs │ ↑↓: navigate │ Tab: list │ Enter: expand │ e: edit │ d: delete │ Esc: back";
       }
-      return "1-3: tabs │ ↑↓: navigate │ Tab: details │ Type: search │ Esc: close";
+      return "1-3: tabs │ ↑↓: navigate │ Tab: details │ e: edit │ d: delete │ Type: search │ Esc: close";
     }
 
     if (activeTab === "observations") {
-      if (obsTab.editMode) return "Ctrl+S: save │ Esc: cancel";
+      if (obsTab.editMode) return "Ctrl+S: save │ Esc: cancel │ ←→: move cursor │ Home/End: start/end";
       if (obsTab.confirmDelete) return "y: confirm │ any key: cancel";
       if (obsTab.focusPane === "details") {
         return "1-3: tabs │ ↑↓: navigate │ Tab: list │ Enter: expand │ e: edit │ d: delete │ Esc: back";
       }
-      return "1-3: tabs │ ↑↓: navigate │ Tab: details │ Type: search │ Esc: close";
+      return "1-3: tabs │ ↑↓: navigate │ Tab: details │ e: edit │ d: delete │ Type: search │ Esc: close";
     }
 
     return "";
@@ -321,6 +417,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
           linkedIndex={factsTab.linkedIndex}
           editMode={factsTab.editMode}
           editText={factsTab.editText}
+          cursorPos={factsTab.cursorPos}
           confirmDelete={factsTab.confirmDelete}
           saving={saving}
         />
@@ -342,6 +439,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
           factsIndex={obsTab.factsIndex}
           editMode={obsTab.editMode}
           editText={obsTab.editText}
+          cursorPos={obsTab.cursorPos}
           confirmDelete={obsTab.confirmDelete}
           saving={saving}
         />
