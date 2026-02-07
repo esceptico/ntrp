@@ -69,13 +69,9 @@ export function ScheduleEditView({
             ))
           )}
         </Box>
-        {saving ? (
+        {saving && (
           <Box marginTop={1}>
             <Text color={colors.tool.running}>Saving...</Text>
-          </Box>
-        ) : (
-          <Box marginTop={1}>
-            <Text color={colors.text.muted}>Ctrl+S: save  Esc: cancel</Text>
           </Box>
         )}
       </Box>
