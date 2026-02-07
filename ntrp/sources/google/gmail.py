@@ -163,7 +163,8 @@ class GmailSource:
         except Exception:
             return ""  # API error fetching profile - return empty email
 
-    def send(self, to: str, subject: str, body: str, from_email: str | None = None) -> str:
+    def send(self, to: str, subject: str, body: str, from_email: str | None = None, html: bool = False) -> str:
+        from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
 
         if not to:
@@ -172,11 +173,30 @@ class GmailSource:
         if not self.has_send_scope():
             return "Error: Gmail token lacks send permission. Run `ntrp gmail add` to re-authenticate with send scope."
 
-        message = MIMEText(body or "")
-        message["to"] = to
-        message["subject"] = subject or "(no subject)"
-        if from_email:
-            message["from"] = from_email
+        body_text = body or ""
+
+        if html:
+            # Create multipart message with both plain text and HTML
+            message = MIMEMultipart("alternative")
+            message["to"] = to
+            message["subject"] = subject or "(no subject)"
+            if from_email:
+                message["from"] = from_email
+
+            # Add plain text version (strip markdown)
+            plain_part = MIMEText(body_text, "plain")
+            message.attach(plain_part)
+
+            # Convert markdown to HTML
+            html_body = self._markdown_to_html(body_text)
+            html_part = MIMEText(html_body, "html")
+            message.attach(html_part)
+        else:
+            message = MIMEText(body_text)
+            message["to"] = to
+            message["subject"] = subject or "(no subject)"
+            if from_email:
+                message["from"] = from_email
 
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
 
@@ -195,6 +215,109 @@ class GmailSource:
             return f"Sent email to {to}" + (f" (id: {msg_id})" if msg_id else "")
         except Exception as e:
             return f"Error sending email: {e}"
+
+    def _markdown_to_html(self, markdown_text: str) -> str:
+        """Convert markdown to HTML for email using the markdown library."""
+        import markdown
+
+        # Convert markdown to HTML with common extensions
+        md = markdown.Markdown(
+            extensions=[
+                "extra",  # tables, fenced code, etc.
+                "nl2br",  # newline to <br>
+                "sane_lists",  # better list handling
+                "codehilite",  # code highlighting
+            ]
+        )
+        content = md.convert(markdown_text)
+
+        # Wrap in basic HTML structure with email-friendly CSS
+        return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0;
+            padding: 20px;
+        }}
+        table {{
+            border-collapse: collapse;
+            width: 100%;
+            margin: 16px 0;
+        }}
+        th, td {{
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }}
+        th {{
+            background: #f5f5f5;
+            font-weight: 600;
+        }}
+        pre {{
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }}
+        code {{
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', Consolas, monospace;
+            font-size: 0.9em;
+        }}
+        pre code {{
+            background: transparent;
+            padding: 0;
+        }}
+        h1, h2, h3 {{
+            margin-top: 24px;
+            margin-bottom: 12px;
+            color: #111;
+            font-weight: 600;
+        }}
+        h1 {{ font-size: 24px; }}
+        h2 {{ font-size: 20px; }}
+        h3 {{ font-size: 18px; }}
+        ul, ol {{
+            margin: 12px 0;
+            padding-left: 24px;
+        }}
+        li {{
+            margin: 4px 0;
+        }}
+        p {{
+            margin: 12px 0;
+        }}
+        a {{
+            color: #0066cc;
+            text-decoration: none;
+        }}
+        a:hover {{
+            text-decoration: underline;
+        }}
+        strong {{
+            font-weight: 600;
+        }}
+        blockquote {{
+            border-left: 4px solid #ddd;
+            margin: 16px 0;
+            padding-left: 16px;
+            color: #666;
+        }}
+    </style>
+</head>
+<body>
+{content}
+</body>
+</html>"""
 
     def _fetch_message_metadata(self, msg_id: str) -> dict | None:
         cache_key = f"meta:{msg_id}"
@@ -390,7 +513,7 @@ class MultiGmailSource(EmailSource):
                 accounts.append(email)
         return accounts
 
-    def send_email(self, account: str, to: str, subject: str, body: str) -> str:
+    def send_email(self, account: str, to: str, subject: str, body: str, html: bool = False) -> str:
         if not account:
             return "Error: account is required"
 
@@ -398,7 +521,7 @@ class MultiGmailSource(EmailSource):
         for src in self.sources:
             email = src.get_email_address().lower()
             if email == account_lower:
-                return src.send(to=to, subject=subject, body=body, from_email=account)
+                return src.send(to=to, subject=subject, body=body, from_email=account, html=html)
 
         accounts = self.list_accounts()
         if accounts:

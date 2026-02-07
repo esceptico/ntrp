@@ -127,6 +127,7 @@ class Scheduler:
                         to=task.notify_email,
                         subject=subject,
                         body=body,
+                        html=True,
                     )
                 except Exception:
                     logger.exception("Failed to send email for task %s", task.task_id)
