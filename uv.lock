@@ -952,6 +952,15 @@ wheels = [
 ]
 
 [[package]]
+name = "markdown"
+version = "3.10.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b7/b1/af95bcae8549f1f3fd70faacb29075826a0d689a27f232e8cee315efa053/markdown-3.10.1.tar.gz", hash = "sha256:1c19c10bd5c14ac948c53d0d762a04e2fa35a6d58a6b7b1e6bfcbe6fefc0001a", size = 365402 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/59/1b/6ef961f543593969d25b2afe57a3564200280528caa9bd1082eecdd7b3bc/markdown-3.10.1-py3-none-any.whl", hash = "sha256:867d788939fe33e4b736426f5b9f651ad0c0ae0ecf89df0ca5d1176c70812fe3", size = 107684 },
+]
+
+[[package]]
 name = "markdown-it-py"
 version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1139,6 +1148,7 @@ dependencies = [
     { name = "google-auth-oauthlib" },
     { name = "litellm" },
     { name = "lunary" },
+    { name = "markdown" },
     { name = "numpy" },
     { name = "openai" },
     { name = "pydantic-settings" },
@@ -1173,6 +1183,7 @@ requires-dist = [
     { name = "google-auth-oauthlib", marker = "extra == 'gmail'", specifier = ">=1.0.0" },
     { name = "litellm", specifier = ">=1.55.0" },
     { name = "lunary", specifier = ">=1.4.35" },
+    { name = "markdown", specifier = ">=3.7" },
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "openai", specifier = ">=1.0.0" },
     { name = "pydantic-settings", specifier = ">=2.12.0" },
