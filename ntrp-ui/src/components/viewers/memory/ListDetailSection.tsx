@@ -36,15 +36,11 @@ export function ListDetailSection<T>({
 
   const sidebar = (
     <Box flexDirection="column">
-      {searchQuery ? (
-        <Box marginBottom={1}>
-          <Text color={colors.text.muted}>/{searchQuery}</Text>
-        </Box>
-      ) : focusPane === "list" ? (
-        <Box marginBottom={1}>
-          <Text color={colors.text.disabled}>type to search</Text>
-        </Box>
-      ) : null}
+      <Box marginBottom={1}>
+        <Text color={searchQuery ? colors.text.muted : colors.text.disabled}>
+          {searchQuery ? `/${searchQuery}` : focusPane === "list" ? "type to search" : " "}
+        </Text>
+      </Box>
       <BaseSelectionList
         items={items}
         selectedIndex={selectedIndex}
@@ -66,7 +62,7 @@ export function ListDetailSection<T>({
   );
 
   return (
-    <Box marginY={1} height={visibleLines + 3}>
+    <Box marginY={1} height={visibleLines + 4}>
       <SplitView sidebarWidth={listWidth} sidebar={sidebar} main={details} />
     </Box>
   );

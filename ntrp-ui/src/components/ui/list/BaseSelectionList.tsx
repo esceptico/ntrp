@@ -1,6 +1,6 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { Box, Text } from "ink";
-import { computeScrollWindow } from "../../../lib/utils.js";
+import { useScrollOffset } from "../../../hooks/useScrollOffset.js";
 import { useContentWidth } from "../../../contexts/index.js";
 import { colors } from "../colors.js";
 import { BULLET } from "../../../lib/constants.js";
@@ -22,6 +22,7 @@ interface BaseSelectionListProps<T> {
   showNumbers?: boolean;
   showScrollArrows?: boolean;
   showCount?: boolean;
+  showIndicator?: boolean;
   emptyMessage?: string;
   getKey?: (item: T, index: number) => string | number;
   width?: number;
@@ -36,6 +37,7 @@ export function BaseSelectionList<T>({
   showNumbers = false,
   showScrollArrows = false,
   showCount = false,
+  showIndicator = true,
   emptyMessage = "No items",
   getKey,
   width,
@@ -44,23 +46,12 @@ export function BaseSelectionList<T>({
   const contentWidth = useContentWidth();
   const effectiveWidth = width ?? contentWidth;
 
-  const { scrollOffset, canScrollUp, canScrollDown } = useMemo(
-    () => computeScrollWindow(selectedIndex, items.length, visibleLines),
-    [items.length, selectedIndex, visibleLines]
+  const { scrollOffset, canScrollUp, canScrollDown } = useScrollOffset(
+    selectedIndex, items.length, visibleLines
   );
 
   const visibleItems = items.slice(scrollOffset, scrollOffset + visibleLines);
   const numberWidth = String(items.length).length;
-
-  const countDisplay = useMemo(() => {
-    if (!showCount || items.length === 0) return null;
-    const start = scrollOffset + 1;
-    const end = Math.min(scrollOffset + visibleLines, items.length);
-    if (items.length <= visibleLines) {
-      return `${items.length} item${items.length !== 1 ? "s" : ""}`;
-    }
-    return `${start}-${end} of ${items.length}`;
-  }, [showCount, items.length, scrollOffset, visibleLines]);
 
   if (items.length === 0) {
     return <Text color={colors.text.muted}>{emptyMessage}</Text>;
@@ -68,29 +59,38 @@ export function BaseSelectionList<T>({
 
   return (
     <Box flexDirection="column" width={effectiveWidth} overflow="hidden">
-      {showScrollArrows && canScrollUp && (
-        <Text color={colors.list.scrollArrow}>▲</Text>
-      )}
-
       {visibleItems.map((item, i) => {
         const actualIndex = scrollOffset + i;
         const isSelected = actualIndex === selectedIndex;
         const key = getKey ? getKey(item, actualIndex) : actualIndex;
+        const isFirst = i === 0;
+        const isLast = i === visibleItems.length - 1;
+
+        let indicatorText = "  ";
+        let indicatorColor: string = colors.text.disabled;
+        if (isSelected) {
+          indicatorText = `${indicator ?? BULLET}`;
+          indicatorColor = colors.selection.active;
+        } else if (showScrollArrows && isFirst && canScrollUp) {
+          indicatorText = "▲ ";
+          indicatorColor = colors.list.scrollArrow;
+        } else if (showScrollArrows && isLast && canScrollDown) {
+          indicatorText = "▼ ";
+          indicatorColor = colors.list.scrollArrow;
+        }
 
         const context: RenderItemContext = {
           isSelected,
           index: actualIndex,
           colors: {
             text: isSelected ? colors.selection.active : colors.text.primary,
-            indicator: isSelected ? colors.selection.active : colors.text.disabled,
+            indicator: indicatorColor,
           },
         };
 
         return (
           <Box key={key}>
-            <Text color={context.colors.indicator}>
-              {isSelected ? `${indicator ?? BULLET} ` : "  "}
-            </Text>
+            {showIndicator && <Text color={indicatorColor}>{indicatorText}</Text>}
             {showNumbers && (
               <Text color={context.colors.indicator}>
                 {String(actualIndex + 1).padStart(numberWidth)}.{" "}
@@ -101,13 +101,13 @@ export function BaseSelectionList<T>({
         );
       })}
 
-      {showScrollArrows && canScrollDown && (
-        <Text color={colors.list.scrollArrow}>▼</Text>
-      )}
-
-      {countDisplay && (
+      {showCount && items.length > 0 && (
         <Box marginTop={1}>
-          <Text color={colors.text.muted}>{countDisplay}</Text>
+          <Text color={colors.text.muted}>
+            {items.length <= visibleLines
+              ? `${items.length} item${items.length !== 1 ? "s" : ""}`
+              : `${scrollOffset + 1}-${Math.min(scrollOffset + visibleLines, items.length)} of ${items.length}`}
+          </Text>
         </Box>
       )}
     </Box>

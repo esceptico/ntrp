@@ -36,24 +36,3 @@ export interface ScrollWindow {
   canScrollUp: boolean;
   canScrollDown: boolean;
 }
-
-export function computeScrollWindow(
-  selectedIndex: number,
-  totalItems: number,
-  visibleLines: number
-): ScrollWindow {
-  if (totalItems <= visibleLines) {
-    return { scrollOffset: 0, canScrollUp: false, canScrollDown: false };
-  }
-
-  const padding = Math.floor(visibleLines / 3);
-  let offset = selectedIndex - padding;
-  offset = Math.max(0, offset);
-  offset = Math.min(totalItems - visibleLines, offset);
-
-  return {
-    scrollOffset: offset,
-    canScrollUp: offset > 0,
-    canScrollDown: offset + visibleLines < totalItems,
-  };
-}

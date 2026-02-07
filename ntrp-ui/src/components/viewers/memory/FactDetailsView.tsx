@@ -123,7 +123,7 @@ export function FactDetailsView({
                 <Text color={colors.text.muted}>({entity.type})</Text>
               </Text>
             )}
-            showScrollArrows={false}
+
             width={textWidth}
           />
         ) : (
@@ -157,7 +157,7 @@ export function FactDetailsView({
                 </Text>
               );
             }}
-            showScrollArrows={false}
+
             width={textWidth}
           />
         ) : (

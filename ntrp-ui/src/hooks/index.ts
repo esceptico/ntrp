@@ -8,3 +8,4 @@ export { useTerminalSize } from "./useTerminalSize.js";
 export { useInlineTextInput } from "./useInlineTextInput.js";
 export { useFactsTab, type FactsTabState } from "./useFactsTab.js";
 export { useObservationsTab, type ObservationsTabState } from "./useObservationsTab.js";
+export { useScrollOffset } from "./useScrollOffset.js";

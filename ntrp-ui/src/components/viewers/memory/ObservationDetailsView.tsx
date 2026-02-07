@@ -115,7 +115,6 @@ export function ObservationDetailsView({
                 • {truncateText(fact.text, textWidth - 4)}
               </Text>
             )}
-            showScrollArrows={false}
             width={textWidth}
           />
         ) : (

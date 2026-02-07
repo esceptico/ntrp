@@ -189,7 +189,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
       )}
 
       {activeTab === "stats" && (
-        <Box height={viewHeight + 2} marginY={1}>
+        <Box height={viewHeight + 4} marginY={1}>
           <StatsView config={config} width={contentWidth} />
         </Box>
       )}
