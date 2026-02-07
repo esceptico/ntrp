@@ -69,21 +69,6 @@ export function StatsView({ config, width }: StatsViewProps) {
         </Box>
       )}
 
-      <Box height={1} />
-
-      <Text color={colors.text.muted}>CONNECTED SOURCES</Text>
-      <Box flexDirection="column" marginTop={1}>
-        {stats.sources.length > 0 ? (
-          stats.sources.map((s) => (
-            <Text key={s}>
-              <Text color={accentValue}>•</Text>
-              <Text color={colors.text.primary}> {s}</Text>
-            </Text>
-          ))
-        ) : (
-          <Text color={colors.text.secondary}>No sources connected</Text>
-        )}
-      </Box>
     </Box>
   );
 }

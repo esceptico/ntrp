@@ -88,7 +88,7 @@ async def get_config():
         "browser": runtime.config.browser,
         "gmail_enabled": runtime.config.gmail,
         "gmail_accounts": gmail_accounts,
-        "has_browser": runtime.browser is not None,
+        "has_browser": runtime.config.browser is not None,
         "has_gmail": runtime.gmail is not None,
         "has_notes": runtime.config.vault_path is not None and runtime._sources.get("notes") is not None,
         "max_depth": runtime.max_depth,
@@ -201,7 +201,7 @@ async def update_config(req: UpdateConfigRequest):
         "vault_path": str(runtime.config.vault_path) if runtime.config.vault_path else None,
         "browser": runtime.config.browser,
         "has_notes": runtime.config.vault_path is not None and runtime._sources.get("notes") is not None,
-        "has_browser": runtime.browser is not None,
+        "has_browser": runtime.config.browser is not None,
     }
 
 

@@ -161,7 +161,6 @@ async def get_stats():
         "fact_count": await repo.count(),
         "link_count": await runtime.memory.link_count(),
         "observation_count": await obs_repo.count(),
-        "sources": runtime.get_available_sources(),
     }
 
 

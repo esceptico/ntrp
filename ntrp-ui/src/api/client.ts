@@ -157,7 +157,6 @@ export interface Stats {
   fact_count: number;
   link_count: number;
   observation_count: number;
-  sources: string[];
 }
 
 export interface Observation {
