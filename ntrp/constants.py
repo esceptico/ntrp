@@ -77,7 +77,7 @@ MASK_PREVIEW_CHARS = 200  # chars kept when masking old tool results
 
 # Tool result offloading: large results stored externally, compact reference in context
 # Manus pattern: full representation → file, compact representation → context
-OFFLOAD_THRESHOLD = 2000  # chars — results above this are offloaded to temp files
+OFFLOAD_THRESHOLD = 30000  # chars — results above this are offloaded to temp files (matches Claude Code)
 OFFLOAD_PREVIEW_CHARS = 300  # chars kept in compact reference
 
 
