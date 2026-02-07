@@ -194,12 +194,10 @@ export const InputArea = memo(function InputArea({
       }
       if (key.name === "delete") {
         setValue((v) => v.slice(0, pos) + v.slice(pos + 1));
-        moveCursor(pos);
         return;
       }
       if (key.name === "k" && key.ctrl) {
         setValue((v) => v.slice(0, pos));
-        moveCursor(pos);
         return;
       }
       if (key.name === "u" && key.ctrl) {

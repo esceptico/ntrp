@@ -173,7 +173,6 @@ async def update_embedding_model(req: UpdateEmbeddingRequest):
 
 @router.get("/context")
 async def get_context_usage():
-    """Get token usage breakdown for current context."""
     import json
 
     from ntrp.core.prompts import build_system_prompt

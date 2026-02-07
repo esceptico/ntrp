@@ -158,11 +158,11 @@ class Agent:
             if not message.tool_calls:
                 await self._set_state(AgentState.RESPONDING)
                 await self._set_state(AgentState.IDLE)
-                yield message.content or ""
+                yield (message.content or "").strip()
                 return
 
-            if message.content:
-                yield TextEvent(content=message.content)
+            if text := (message.content or "").strip():
+                yield TextEvent(content=text)
 
             await self._set_state(AgentState.TOOL_CALL)
             calls = parse_tool_calls(message.tool_calls)

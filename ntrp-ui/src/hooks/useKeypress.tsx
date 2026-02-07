@@ -363,10 +363,6 @@ export function KeypressProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * Hook to listen for keypress events.
- * This bypasses Ink's useInput for better control over keyboard handling.
- */
 export function useKeypress(
   onKeypress: KeypressHandler,
   { isActive }: { isActive: boolean }

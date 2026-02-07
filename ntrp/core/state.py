@@ -9,5 +9,4 @@ class AgentState(StrEnum):
     RESPONDING = "responding"
 
 
-# Callback type for state changes
 StateCallback = Callable[[AgentState], Awaitable[None]]

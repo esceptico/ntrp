@@ -30,8 +30,6 @@ def save_user_settings(settings: dict) -> None:
 
 
 class Config(BaseSettings):
-    """Runtime configuration loaded from environment variables."""
-
     model_config = SettingsConfigDict(
         env_prefix="NTRP_",
         env_file=".env",
@@ -102,13 +100,11 @@ class Config(BaseSettings):
     @field_validator("vault_path", mode="before")
     @classmethod
     def expand_vault_path(cls, v: str | Path) -> Path:
-        """Expand ~ in vault path."""
         return Path(v).expanduser()
 
 
 @lru_cache
 def get_config() -> Config:
-    """Get cached config instance with user settings overlay."""
     config = Config()  # type: ignore - pydantic handles validation
     settings = load_user_settings()
     if "chat_model" in settings:

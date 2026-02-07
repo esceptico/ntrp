@@ -1,6 +1,3 @@
-/**
- * Hook for managing server session and initialization.
- */
 import { useState, useEffect, useRef } from "react";
 import type { Config } from "../types.js";
 import {

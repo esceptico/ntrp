@@ -27,7 +27,6 @@ import {
   ThinkingIndicator,
   ApprovalDialog,
   ErrorBoundary,
-  type ApprovalResult,
 } from "./components/index.js";
 import { COMMANDS } from "./lib/commands.js";
 

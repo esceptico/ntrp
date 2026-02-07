@@ -41,8 +41,6 @@ def _parse_datetime(value: str) -> datetime | None:
 
 
 class SearchCalendarTool(Tool):
-    """Search calendar events."""
-
     name = "search_calendar"
     description = SEARCH_CALENDAR_DESCRIPTION
     source_type = CalendarSource
@@ -101,8 +99,6 @@ class SearchCalendarTool(Tool):
 
 
 class CreateCalendarEventTool(Tool):
-    """Create a new calendar event. Requires approval."""
-
     name = "create_calendar_event"
     description = CREATE_CALENDAR_EVENT_DESCRIPTION
     mutates = True
@@ -188,8 +184,6 @@ class CreateCalendarEventTool(Tool):
 
 
 class EditCalendarEventTool(Tool):
-    """Edit an existing calendar event. Requires approval."""
-
     name = "edit_calendar_event"
     description = EDIT_CALENDAR_EVENT_DESCRIPTION
     mutates = True
@@ -273,8 +267,6 @@ class EditCalendarEventTool(Tool):
 
 
 class DeleteCalendarEventTool(Tool):
-    """Delete a calendar event. Requires approval."""
-
     name = "delete_calendar_event"
     description = DELETE_CALENDAR_EVENT_DESCRIPTION
     mutates = True

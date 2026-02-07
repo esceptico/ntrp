@@ -1,5 +1,4 @@
 import React, { memo } from "react";
-import { Text } from "ink";
 import type { Message } from "../../../types.js";
 import { ToolChainDisplay, type ToolChainItem } from "../../ToolChain.js";
 import { UserMessage } from "./UserMessage.js";

@@ -54,8 +54,6 @@ class SendEmailTool(Tool):
         body: str = "",
         **kwargs: Any,
     ) -> ToolResult:
-        if not self.source:
-            return ToolResult("Error: Gmail not available", "Not configured")
         if not account or not to:
             return ToolResult("Error: account and to are required", "Missing fields")
 

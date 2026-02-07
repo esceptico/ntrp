@@ -19,7 +19,6 @@ async def hybrid_search(
     query_embedding: Embedding,
     limit: int,
 ) -> dict[int, float]:
-    """Run vector + FTS search and merge with RRF."""
     vector_results = await repo.search_facts_vector(query_embedding, limit * 2)
     vector_ranking = [(f.id, sim) for f, sim in vector_results]
 
@@ -71,7 +70,6 @@ async def expand_graph(
 
 
 def score_fact(fact: Fact, base_score: float) -> float:
-    """Combine base relevance with decay and recency."""
     decay = decay_score(fact.last_accessed_at, fact.access_count)
     recency = recency_boost(fact.happened_at or fact.created_at)
     return base_score * decay * recency
@@ -83,7 +81,6 @@ async def retrieve_facts(
     query_embedding: Embedding,
     seed_limit: int = 5,
 ) -> FactContext:
-    """Retrieve facts using hybrid search with graph expansion."""
     rrf_scores = await hybrid_search(repo, query_text, query_embedding, seed_limit)
     if not rrf_scores:
         return FactContext(facts=[])
@@ -107,7 +104,6 @@ async def retrieve_with_observations(
     query_embedding: Embedding,
     seed_limit: int = 5,
 ) -> FactContext:
-    """Retrieve facts and observations using hybrid search."""
     context = await retrieve_facts(repo, query_text, query_embedding, seed_limit)
 
     observations = await obs_repo.search_vector(query_embedding, RECALL_OBSERVATION_LIMIT)

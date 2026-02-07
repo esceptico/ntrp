@@ -33,7 +33,6 @@ DELETE_NOTE_DESCRIPTION = "Permanently delete a note. Requires approval. Always 
 
 
 def simplify_query(query: str) -> str:
-    """Strip boolean operators, quotes, parentheses from complex queries."""
     simplified = re.sub(r"\s+OR\s+", " ", query, flags=re.IGNORECASE)
     simplified = re.sub(r"\s+AND\s+", " ", simplified, flags=re.IGNORECASE)
     simplified = simplified.replace('"', "").replace("'", "")
@@ -48,7 +47,6 @@ def simplify_query(query: str) -> str:
 
 
 def generate_diff(original: str, proposed: str, path: str) -> str:
-    """Generate a unified diff between original and proposed content."""
     original_lines = original.splitlines(keepends=True)
     proposed_lines = proposed.splitlines(keepends=True)
 
@@ -77,8 +75,6 @@ After finding notes, use read_note(path) to get full content."""
 
 
 class ListNotesTool(Tool):
-    """List all notes in the vault."""
-
     name = "list_notes"
     description = LIST_NOTES_DESCRIPTION
     source_type = NotesSource
@@ -125,8 +121,6 @@ class ListNotesTool(Tool):
 
 
 class ReadNoteTool(Tool):
-    """Read a single note."""
-
     name = "read_note"
     description = READ_NOTE_DESCRIPTION
     source_type = NotesSource
@@ -170,8 +164,6 @@ class ReadNoteTool(Tool):
 
 
 class EditNoteTool(Tool):
-    """Propose an edit to a note. Edit must be approved by user."""
-
     name = "edit_note"
     description = EDIT_NOTE_DESCRIPTION
     mutates = True
@@ -220,7 +212,6 @@ class EditNoteTool(Tool):
         proposed = original.replace(find, replace, 1)
         diff = generate_diff(original, proposed, path)
 
-        # Show diff preview in approval
         preview_lines = diff.split("\n")[:DIFF_PREVIEW_LINES]
         diff_preview = "\n".join(preview_lines)
         if len(diff.split("\n")) > DIFF_PREVIEW_LINES:
@@ -228,7 +219,6 @@ class EditNoteTool(Tool):
 
         await execution.require_approval(path, diff=diff_preview)
 
-        # Apply the edit
         success = self.source.write(path, proposed)
         if success:
             lines_changed = len([l for l in diff.split("\n") if l.startswith("+") or l.startswith("-")]) - 2
@@ -241,8 +231,6 @@ class EditNoteTool(Tool):
 
 
 class CreateNoteTool(Tool):
-    """Create a new note. Must be approved by user."""
-
     name = "create_note"
     description = CREATE_NOTE_DESCRIPTION
     mutates = True
@@ -287,7 +275,6 @@ class CreateNoteTool(Tool):
 
         await execution.require_approval(path, preview=preview_content)
 
-        # Create the note
         success = self.source.write(path, content)
         if success:
             return ToolResult(f"Created note: {path}", "Created")
@@ -295,8 +282,6 @@ class CreateNoteTool(Tool):
 
 
 class DeleteNoteTool(Tool):
-    """Delete a note. Must be approved by user."""
-
     name = "delete_note"
     description = DELETE_NOTE_DESCRIPTION
     mutates = True
@@ -329,7 +314,6 @@ class DeleteNoteTool(Tool):
 
         await execution.require_approval(path)
 
-        # Delete the note
         success = self.source.delete(path)
         if success:
             return ToolResult(f"Deleted: {path}", "Deleted")
@@ -337,8 +321,6 @@ class DeleteNoteTool(Tool):
 
 
 class MoveNoteTool(Tool):
-    """Move or rename a note. Must be approved by user."""
-
     name = "move_note"
     description = MOVE_NOTE_DESCRIPTION
     mutates = True
@@ -382,7 +364,6 @@ class MoveNoteTool(Tool):
 
         await execution.require_approval(f"{path} → {new_path}")
 
-        # Move the note
         success = self.source.move(path, new_path)
         if success:
             return ToolResult(f"Moved: `{path}` → `{new_path}`", "Moved")
@@ -420,7 +401,6 @@ class SearchNotesTool(Tool):
 
         query = simplify_query(query)
 
-        # Hybrid search if available
         if self.search_index:
             try:
                 results = await self.search_index.search(query, sources=["notes"], limit=limit)
@@ -435,7 +415,6 @@ class SearchNotesTool(Tool):
             except Exception as e:
                 logger.warning("Hybrid search failed, falling back to text search: %s", e)
 
-        # Fallback to text search
         seen = set()
         results = []
         for path in self.source.search(query):

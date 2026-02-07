@@ -4,8 +4,6 @@ from ntrp.sources.models import RawItem
 
 
 class MemoryIndexSource:
-    """Adapter that makes memory facts indexable like other sources."""
-
     name = "memory"
 
     def __init__(self, db: GraphDatabase):

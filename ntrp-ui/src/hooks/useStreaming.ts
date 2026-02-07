@@ -1,6 +1,3 @@
-/**
- * Hook for handling SSE streaming and event processing.
- */
 import { useState, useCallback, useRef } from "react";
 import type { Message, ServerEvent, Config, PendingApproval } from "../types.js";
 import type { ToolChainItem } from "../components/index.js";

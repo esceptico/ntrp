@@ -3,8 +3,6 @@ from dataclasses import dataclass
 
 @dataclass
 class SearchResult:
-    """Search result with full scoring breakdown."""
-
     source: str
     source_id: str
     title: str
@@ -32,8 +30,6 @@ class ScoredRow:
 
 @dataclass
 class RankedResult:
-    """Merged result with RRF score and individual rankings."""
-
     row_id: int
     rrf_score: float
     vector_rank: int | None = None

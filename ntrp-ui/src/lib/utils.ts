@@ -1,5 +1,3 @@
-// Text utilities
-
 export function truncateText(text: string, max: number, mode: 'end' | 'middle' | 'start' = 'end'): string {
   if (text.length <= max) return text;
   if (max <= 3) return '...'.slice(0, max);
@@ -32,8 +30,6 @@ export function wrapText(text: string, width: number): string[] {
   if (line) lines.push(line);
   return lines;
 }
-
-// Scroll window calculation (shared by list components)
 
 export interface ScrollWindow {
   scrollOffset: number;

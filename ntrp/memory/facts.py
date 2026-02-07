@@ -328,7 +328,6 @@ class FactMemory:
         return await repo.count()
 
     async def get_context(self, user_limit: int = 10, recent_limit: int = 10) -> tuple[list[Fact], list[Fact]]:
-        """Get memory context for prompt injection. Returns (user_facts, recent_facts)."""
         repo = FactRepository(self.db.conn)
 
         user_facts = await repo.get_facts_for_entity("User", limit=user_limit)

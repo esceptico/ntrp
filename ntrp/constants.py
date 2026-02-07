@@ -112,7 +112,6 @@ ENTITY_CANDIDATES_LIMIT = 50  # max candidates to consider during resolution
 
 # LLM temperatures
 EXTRACTION_TEMPERATURE = 0.0  # deterministic extraction
-SYNTHESIS_TEMPERATURE = 0.3  # low variance for synthesis
 CONSOLIDATION_TEMPERATURE = 0.1  # very deterministic for consolidation decisions
 
 # Forget operation

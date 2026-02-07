@@ -31,35 +31,28 @@ from ntrp.tools.notes import (
 from ntrp.tools.scratchpad import ListScratchpadTool, ReadScratchpadTool, WriteScratchpadTool
 from ntrp.tools.web import WebFetchTool, WebSearchTool
 
-# Source-based tools: auto-matched by source_type, instantiated with source
 SOURCE_TOOLS: list[type[Tool]] = [
-    # Notes (CRUD, no search - search needs index)
     ListNotesTool,
     ReadNoteTool,
     EditNoteTool,
     CreateNoteTool,
     DeleteNoteTool,
     MoveNoteTool,
-    # Email
     SendEmailTool,
     ReadEmailTool,
     ListEmailTool,
     SearchEmailTool,
-    # Calendar
     ListCalendarTool,
     SearchCalendarTool,
     CreateCalendarEventTool,
     EditCalendarEventTool,
     DeleteCalendarEventTool,
-    # Browser
     ListBrowserTool,
     SearchBrowserTool,
-    # Web
     WebSearchTool,
     WebFetchTool,
 ]
 
-# Memory tools: use FactMemory (which has built-in vector search)
 MEMORY_TOOLS: list[type[Tool]] = [RememberTool, RecallTool, ForgetTool]
 
 
@@ -82,23 +75,19 @@ class ToolExecutor:
         self._register_tools(working_dir)
 
     def _register_tools(self, working_dir: str | None) -> None:
-        # 1. Source-based tools (auto-matched by source_type)
         for tool_cls in SOURCE_TOOLS:
             if tool_cls.source_type is None:
                 continue
             if source := self._get_source_for_type(tool_cls.source_type):
                 self.registry.register(tool_cls(source))
 
-        # 2. Memory tools (FactMemory has built-in vector search)
         if self.memory:
             for tool_cls in MEMORY_TOOLS:
                 self.registry.register(tool_cls(self.memory))
 
-        # 3. Search tools (need source + search index for hybrid search)
         if notes := self._get_source_for_type(NotesSource):
             self.registry.register(SearchNotesTool(notes, search_index=self.search_index))
 
-        # 4. Standalone tools (no dependencies)
         self.registry.register(BashTool(working_dir=working_dir))
         self.registry.register(ReadFileTool(base_path=working_dir))
         self.registry.register(ExploreTool())
@@ -121,9 +110,4 @@ class ToolExecutor:
         return await self.registry.execute(tool_name, execution, **arguments)
 
     def get_tools(self, mutates: bool | None = None) -> list[dict]:
-        """Get tools in OpenAI format.
-
-        Args:
-            mutates: Filter by mutates value. None = all, False = read-only.
-        """
         return self.registry.get_schemas(mutates=mutates)

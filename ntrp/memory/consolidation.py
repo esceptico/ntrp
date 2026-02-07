@@ -1,16 +1,3 @@
-"""Per-fact consolidation using LLM decisions (Hindsight approach).
-
-Each fact is processed independently:
-1. Find related observations via vector search
-2. Single LLM call returns ONE action (update/create/skip)
-3. Execute the action
-4. Mark fact as consolidated
-
-Observations are HIGHER-LEVEL than facts — they synthesize patterns,
-preferences, and learnings. Each fact typically results in one action
-(update existing or create new), not multiple decomposed atoms.
-"""
-
 import json
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
@@ -43,7 +30,7 @@ class ConsolidationSchema(BaseModel):
 
 @dataclass
 class ConsolidationResult:
-    action: str  # "created", "updated", "multiple", "skipped"
+    action: str  # "created", "updated", "skipped"
     observation_id: int | None = None
     reason: str | None = None
 
@@ -63,35 +50,20 @@ async def consolidate_fact(
     model: str,
     embed_fn: EmbedFn,
 ) -> ConsolidationResult:
-    """
-    Consolidate a single fact into an observation.
-
-    Hindsight approach:
-    1. Find related observations via vector search
-    2. LLM returns ONE action (update/create/skip)
-    3. Execute the action
-    4. Mark fact as consolidated
-
-    Observations are higher-level than facts — they synthesize patterns.
-    """
     if fact.embedding is None:
         await fact_repo.mark_consolidated(fact.id)
         return ConsolidationResult(action="skipped", reason="no_embedding")
 
-    # Find related observations
     candidates = await obs_repo.search_vector(fact.embedding, limit=CONSOLIDATION_SEARCH_LIMIT)
 
-    # Single LLM call - returns ONE action
     action = await _llm_consolidation_decision(fact, candidates, fact_repo, model)
 
     if action is None or action.type == "skip":
         await fact_repo.mark_consolidated(fact.id)
         return ConsolidationResult(action="skipped", reason=action.reason if action else "no_durable_knowledge")
 
-    # Execute the action
     result = await _execute_action(action, fact, obs_repo, embed_fn)
 
-    # Mark fact as consolidated
     await fact_repo.mark_consolidated(fact.id)
 
     if not result:
@@ -106,14 +78,6 @@ async def _llm_consolidation_decision(
     fact_repo: FactRepository,
     model: str,
 ) -> ConsolidationAction | None:
-    """
-    Single LLM call to decide consolidation action.
-
-    Returns ONE action:
-    - {"action": "update", "observation_id": N, "text": "...", "reason": "..."}
-    - {"action": "create", "text": "...", "reason": "..."}
-    - {"action": "skip", "reason": "..."} if fact is ephemeral
-    """
     observations_json = await _format_observations(candidates, fact_repo)
 
     prompt = CONSOLIDATION_PROMPT.format(
@@ -151,7 +115,6 @@ async def _execute_action(
     obs_repo: ObservationRepository,
     embed_fn: EmbedFn,
 ) -> ConsolidationResult | None:
-    """Execute a single action (update or create)."""
     if action.type == "skip":
         return None
 
@@ -196,7 +159,6 @@ async def _format_observations(
     candidates: list[tuple[Observation, float]],
     fact_repo: FactRepository,
 ) -> str:
-    """Format observations with source facts for the LLM prompt."""
     if not candidates:
         return "[]"
 

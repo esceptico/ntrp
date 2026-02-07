@@ -18,7 +18,6 @@ _TEMPORAL_QUERY_WINDOW_HOURS = LINK_TEMPORAL_SIGMA_HOURS * 5
 
 
 async def create_links_for_fact(repo: FactRepository, fact: Fact) -> int:
-    """Create all links for a newly stored fact. Returns count of links created."""
     count = 0
     count += await _create_temporal_links(repo, fact)
     count += await _create_semantic_links(repo, fact)

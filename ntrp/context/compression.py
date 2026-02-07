@@ -130,7 +130,10 @@ async def summarize_messages_async(
 ) -> str:
     conversation_text = _build_conversation_text(messages, start, end)
     response = await acompletion(**_build_summarize_request(conversation_text, model))
-    return response.choices[0].message.content or "Unable to summarize."
+    content = response.choices[0].message.content
+    if not content:
+        return "Unable to summarize."
+    return content.strip()
 
 
 def _build_compressed_messages(messages: list[dict], end: int, summary: str) -> list[dict]:

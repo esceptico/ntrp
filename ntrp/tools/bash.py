@@ -112,7 +112,6 @@ def is_blocked_command(command: str) -> bool:
 
 
 def execute_bash(command: str, working_dir: str | None = None, timeout: int = 30) -> str:
-    """Actually execute a bash command."""
     try:
         result = subprocess.run(
             command,
@@ -146,8 +145,6 @@ def execute_bash(command: str, working_dir: str | None = None, timeout: int = 30
 
 
 class BashTool(Tool):
-    """Execute shell commands."""
-
     name = "bash"
     description = BASH_DESCRIPTION
 

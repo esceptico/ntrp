@@ -1,19 +1,6 @@
-/**
- * API client for communicating with the ntrp server.
- *
- * Tool execution is now handled locally (see ./tools/),
- * so we only need server communication for:
- * - Streaming chat (SSE)
- * - Submitting tool results back to server
- * - Session management
- */
-
 import type { ServerEvent, Config } from "../types.js";
 import { api } from "./fetch.js";
 
-/**
- * Stream chat messages from the server via SSE.
- */
 export async function* streamChat(
   message: string,
   sessionId: string | null,
@@ -74,16 +61,10 @@ export async function* streamChat(
   }
 }
 
-/**
- * Cancel an active run.
- */
 export async function cancelRun(runId: string, config: Config): Promise<void> {
   await api.post(`${config.serverUrl}/cancel`, { run_id: runId });
 }
 
-/**
- * Submit a tool execution result back to the server.
- */
 export async function submitToolResult(
   runId: string,
   toolId: string,
@@ -94,9 +75,6 @@ export async function submitToolResult(
   await api.post(`${config.serverUrl}/tools/result`, { run_id: runId, tool_id: toolId, result, approved });
 }
 
-/**
- * Submit a choice selection back to the server.
- */
 export async function submitChoiceResult(
   runId: string,
   toolId: string,
@@ -106,9 +84,6 @@ export async function submitChoiceResult(
   await api.post(`${config.serverUrl}/tools/choice`, { run_id: runId, tool_id: toolId, selected });
 }
 
-/**
- * Get or create a session.
- */
 export async function getSession(config: Config): Promise<{
   session_id: string;
   sources: string[];
@@ -118,9 +93,6 @@ export async function getSession(config: Config): Promise<{
   return api.get(`${config.serverUrl}/session`);
 }
 
-/**
- * Check if server is healthy.
- */
 export async function checkHealth(config: Config): Promise<boolean> {
   try {
     await api.get(`${config.serverUrl}/health`);
@@ -129,8 +101,6 @@ export async function checkHealth(config: Config): Promise<boolean> {
     return false;
   }
 }
-
-// --- Data fetching for UI views ---
 
 export interface Fact {
   id: number;
@@ -242,7 +212,7 @@ export async function compactContext(config: Config): Promise<{ status: string; 
   return api.post<{ status: string; message: string }>(`${config.serverUrl}/compact`, {});
 }
 
-export interface ContextUsage {
+export async function getContextUsage(config: Config): Promise<{
   model: string;
   limit: number;
   total: number;
@@ -251,10 +221,8 @@ export interface ContextUsage {
   messages: number;
   message_count: number;
   tool_count: number;
-}
-
-export async function getContextUsage(config: Config): Promise<ContextUsage> {
-  return api.get<ContextUsage>(`${config.serverUrl}/context`);
+}> {
+  return api.get(`${config.serverUrl}/context`);
 }
 
 export async function getStats(config: Config): Promise<Stats> {
@@ -279,8 +247,6 @@ export async function purgeMemory(config: Config): Promise<{ status: string; del
   return api.post<{ status: string; deleted: Record<string, number> }>(`${config.serverUrl}/memory/clear`);
 }
 
-// --- Index Status API ---
-
 export interface IndexStatus {
   indexing: boolean;
   progress: {
@@ -302,8 +268,6 @@ export async function startIndexing(config: Config): Promise<{ status: string }>
   return api.post<{ status: string }>(`${config.serverUrl}/index/start`);
 }
 
-// --- Gmail Management API ---
-
 export interface GmailAccount {
   email: string | null;
   token_file: string;
@@ -322,8 +286,6 @@ export async function addGmailAccount(config: Config): Promise<{ email: string; 
 export async function removeGmailAccount(config: Config, tokenFile: string): Promise<{ email: string | null; status: string }> {
   return api.delete(`${config.serverUrl}/gmail/${tokenFile}`);
 }
-
-// --- Schedule API ---
 
 export interface Schedule {
   task_id: string;
@@ -363,5 +325,3 @@ export async function toggleWritable(config: Config, taskId: string): Promise<{ 
 export async function runSchedule(config: Config, taskId: string): Promise<{ status: string }> {
   return api.post<{ status: string }>(`${config.serverUrl}/schedules/${taskId}/run`);
 }
-
-

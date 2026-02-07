@@ -9,7 +9,7 @@ interface TabsProps<T extends string> {
   labels?: Record<T, string>;
 }
 
-export function Tabs<T extends string>({ tabs, activeTab, onTabChange, labels }: TabsProps<T>) {
+export function Tabs<T extends string>({ tabs, activeTab, labels }: TabsProps<T>) {
   return (
     <Box marginBottom={1}>
       {tabs.map((tab, i) => {

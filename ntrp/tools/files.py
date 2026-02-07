@@ -10,13 +10,10 @@ READ_FILE_DESCRIPTION = (
 
 
 class ReadFileTool(Tool):
-    """Read content from any file on the filesystem."""
-
     name = "read_file"
     description = READ_FILE_DESCRIPTION
 
     def __init__(self, base_path: str | None = None):
-        """Initialize with optional base path for relative paths."""
         self.base_path = base_path or os.getcwd()
 
     @property
@@ -47,16 +44,13 @@ class ReadFileTool(Tool):
         if not path:
             return ToolResult("Error: path is required", "Missing path")
 
-        # Resolve path
         if not os.path.isabs(path):
             full_path = os.path.join(self.base_path, path)
         else:
             full_path = path
 
-        # Normalize
         full_path = os.path.normpath(full_path)
 
-        # Check exists
         if not os.path.exists(full_path):
             return ToolResult(f"File not found: {path}. Check the path or use bash(ls) to list directory.", "Not found")
 

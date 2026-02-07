@@ -1,7 +1,3 @@
-/**
- * Typed fetch wrapper with error handling and timeout support.
- */
-
 export interface ApiError extends Error {
   status?: number;
   statusText?: string;
@@ -18,9 +14,6 @@ export interface FetchOptions {
 
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
 
-/**
- * Create an ApiError from various error sources.
- */
 function createApiError(
   message: string,
   options: { status?: number; statusText?: string; isNetworkError?: boolean; isTimeout?: boolean } = {}
@@ -34,9 +27,6 @@ function createApiError(
   return error;
 }
 
-/**
- * Typed fetch wrapper with error handling.
- */
 async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> {
   const { method = "GET", body, timeout = DEFAULT_TIMEOUT, signal } = options;
 
@@ -111,9 +101,6 @@ async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> 
   }
 }
 
-/**
- * Convenience methods for common HTTP verbs.
- */
 export const api = {
   get: <T>(url: string, options?: Omit<FetchOptions, "method" | "body">) =>
     apiFetch<T>(url, { ...options, method: "GET" }),

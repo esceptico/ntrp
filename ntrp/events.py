@@ -4,27 +4,14 @@ from enum import StrEnum
 
 
 class EventType(StrEnum):
-    """Types of events the server can emit."""
-
-    # Agent state
     THINKING = "thinking"
     TEXT = "text"
-
-    # Tool handling
-    TOOL_CALL = "tool_call"  # Tool being called
-    TOOL_RESULT = "tool_result"  # Result from tool
-
-    # Approvals
-    APPROVAL_NEEDED = "approval_needed"  # Write operation needs approval
-
-    # User interaction
-    QUESTION = "question"  # Agent asking user a question (free-form)
-    CHOICE = "choice"  # Agent asking user to pick from options
-
-    # Session
+    TOOL_CALL = "tool_call"
+    TOOL_RESULT = "tool_result"
+    APPROVAL_NEEDED = "approval_needed"
+    QUESTION = "question"
+    CHOICE = "choice"
     SESSION_INFO = "session_info"
-
-    # Completion
     DONE = "done"
     ERROR = "error"
     CANCELLED = "cancelled"

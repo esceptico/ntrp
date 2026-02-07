@@ -7,9 +7,6 @@ from ntrp.database import BaseRepository, deserialize_embedding, serialize_embed
 from ntrp.memory.models import Embedding, Entity, EntityRef, Fact, FactLink, FactType, LinkType
 from ntrp.memory.store.base import parse_datetime
 
-# --- SQL Queries ---
-
-# Facts CRUD
 _SQL_GET_FACT = "SELECT * FROM facts WHERE id = ?"
 _SQL_COUNT_FACTS = "SELECT COUNT(*) FROM facts"
 _SQL_LIST_RECENT = "SELECT * FROM facts ORDER BY created_at DESC LIMIT ?"
@@ -46,7 +43,6 @@ _SQL_REINFORCE_FACTS = """
 
 _SQL_GET_FACTS_BY_IDS = "SELECT * FROM facts WHERE id IN ({placeholders})"
 
-# Facts vector
 _SQL_INSERT_FACT_VEC = "INSERT INTO facts_vec (fact_id, embedding) VALUES (?, ?)"
 _SQL_DELETE_FACT_VEC = "DELETE FROM facts_vec WHERE fact_id = ?"
 
@@ -66,7 +62,6 @@ _SQL_SEARCH_FACTS_FTS = """
     LIMIT ?
 """
 
-# Entity refs
 _SQL_INSERT_ENTITY_REF = "INSERT INTO entity_refs (fact_id, name, entity_type, canonical_id) VALUES (?, ?, ?, ?)"
 _SQL_GET_ENTITY_REFS = "SELECT * FROM entity_refs WHERE fact_id = ?"
 _SQL_GET_ENTITY_REFS_BATCH = "SELECT * FROM entity_refs WHERE fact_id IN ({placeholders})"
@@ -82,30 +77,6 @@ _SQL_GET_FACTS_FOR_ENTITY = """
     LIMIT ?
 """
 
-_SQL_GET_FACTS_SHARING_ENTITIES = """
-    SELECT f.*, COUNT(*) as shared_count
-    FROM facts f
-    JOIN entity_refs er1 ON f.id = er1.fact_id
-    JOIN entity_refs er2 ON er1.name = er2.name
-    WHERE er2.fact_id = ? AND f.id != ?
-    GROUP BY f.id
-    ORDER BY shared_count DESC, f.created_at DESC
-    LIMIT ?
-"""
-
-_SQL_GET_FACTS_SHARING_ENTITIES_EXCLUDE = """
-    SELECT f.*, COUNT(*) as shared_count
-    FROM facts f
-    JOIN entity_refs er1 ON f.id = er1.fact_id
-    JOIN entity_refs er2 ON er1.name = er2.name
-    WHERE er2.fact_id = ? AND f.id != ?
-      AND er1.name NOT IN ({placeholders})
-    GROUP BY f.id
-    ORDER BY shared_count DESC, f.created_at DESC
-    LIMIT ?
-"""
-
-# Fact links
 _SQL_DELETE_FACT_LINKS = "DELETE FROM fact_links WHERE source_fact_id = ? OR target_fact_id = ?"
 
 _SQL_INSERT_LINK = """
@@ -125,11 +96,9 @@ _SQL_GET_LINKS_BY_TYPE = """
     WHERE (source_fact_id = ? OR target_fact_id = ?) AND link_type = ?
 """
 
-# Entities CRUD
 _SQL_GET_ENTITY = "SELECT * FROM entities WHERE id = ?"
 _SQL_GET_ENTITY_BY_NAME = "SELECT * FROM entities WHERE name = ?"
 _SQL_GET_ENTITY_BY_NAME_TYPE = "SELECT * FROM entities WHERE name = ? AND entity_type = ?"
-_SQL_GET_CORE_ENTITIES = "SELECT * FROM entities WHERE is_core = TRUE"
 _SQL_GET_ENTITIES_BY_IDS = "SELECT * FROM entities WHERE id IN ({placeholders})"
 _SQL_DELETE_ENTITIES = "DELETE FROM entities WHERE id IN ({placeholders})"
 
@@ -147,7 +116,6 @@ _SQL_LIST_ENTITIES_BY_TYPE = """
     LIMIT ?
 """
 
-# Entities vector
 _SQL_INSERT_ENTITY_VEC = "INSERT INTO entities_vec (entity_id, embedding) VALUES (?, ?)"
 _SQL_DELETE_ENTITIES_VEC = "DELETE FROM entities_vec WHERE entity_id IN ({placeholders})"
 
@@ -158,7 +126,6 @@ _SQL_SEARCH_ENTITIES_VEC = """
     ORDER BY v.distance
 """
 
-# Entity resolution helpers
 _SQL_COUNT_ENTITY_FACTS = "SELECT COUNT(*) FROM entity_refs WHERE name = ?"
 
 _SQL_ENTITY_LAST_MENTION = """
@@ -290,8 +257,6 @@ class FactRepository(BaseRepository):
             consolidated_at=parse_datetime(row["consolidated_at"]),
         )
 
-    # --- Entity Refs ---
-
     async def add_entity_ref(
         self, fact_id: int, name: str, entity_type: str, canonical_id: int | None = None
     ) -> EntityRef:
@@ -324,19 +289,6 @@ class FactRepository(BaseRepository):
         rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_FOR_ENTITY, (name, limit))
         return [self._row_to_fact(r) for r in rows]
 
-    async def get_facts_sharing_entities(
-        self, fact_id: int, limit: int = 50, exclude_names: set[str] | None = None
-    ) -> list[tuple[Fact, int]]:
-        if exclude_names:
-            placeholders = ",".join("?" * len(exclude_names))
-            rows = await self.conn.execute_fetchall(
-                _SQL_GET_FACTS_SHARING_ENTITIES_EXCLUDE.format(placeholders=placeholders),
-                (fact_id, fact_id, *exclude_names, limit),
-            )
-        else:
-            rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_SHARING_ENTITIES, (fact_id, fact_id, limit))
-        return [(self._row_to_fact(r), r["shared_count"]) for r in rows]
-
     def _row_to_entity_ref(self, row: aiosqlite.Row) -> EntityRef:
         return EntityRef(
             id=row["id"],
@@ -345,8 +297,6 @@ class FactRepository(BaseRepository):
             entity_type=row["entity_type"],
             canonical_id=row["canonical_id"],
         )
-
-    # --- Fact Links ---
 
     async def create_link(
         self,
@@ -388,8 +338,6 @@ class FactRepository(BaseRepository):
             created_at=parse_datetime(row["created_at"]),
         )
 
-    # --- Search ---
-
     async def search_facts_vector(self, query_embedding: Embedding, limit: int = 10) -> list[tuple[Fact, float]]:
         query_bytes = serialize_embedding(query_embedding)
         rows = await self.conn.execute_fetchall(_SQL_SEARCH_FACTS_VEC, (query_bytes, limit))
@@ -426,8 +374,6 @@ class FactRepository(BaseRepository):
         entities_by_id = {r["id"]: self._row_to_entity(r) for r in entity_rows}
 
         return [(entities_by_id[eid], 1 - distances[eid]) for eid in entity_ids if eid in entities_by_id]
-
-    # --- Entities ---
 
     async def get_entity(self, entity_id: int) -> Entity | None:
         rows = await self.conn.execute_fetchall(_SQL_GET_ENTITY, (entity_id,))
@@ -476,10 +422,6 @@ class FactRepository(BaseRepository):
             created_at=now,
             updated_at=now,
         )
-
-    async def get_core_entities(self) -> list[Entity]:
-        rows = await self.conn.execute_fetchall(_SQL_GET_CORE_ENTITIES)
-        return [self._row_to_entity(r) for r in rows]
 
     def _row_to_entity(self, row: aiosqlite.Row) -> Entity:
         return Entity(

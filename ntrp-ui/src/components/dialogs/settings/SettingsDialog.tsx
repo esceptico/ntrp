@@ -131,7 +131,7 @@ export function SettingsDialog({
     if (actionInProgress) return;
     setActionInProgress("Adding account...");
     try {
-      const result = await addGmailAccount(config);
+      await addGmailAccount(config);
       const accounts = await getGmailAccounts(config);
       setGoogleAccounts(accounts.accounts);
     } catch {

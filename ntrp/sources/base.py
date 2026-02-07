@@ -1,17 +1,12 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
 from ntrp.sources.models import RawItem
 
-ProgressCallback = Callable[[int, int], None]
-
 
 class IndexableSource(Protocol):
-    """Source that can be indexed into the search database."""
-
     name: str
 
     async def scan(self) -> list[RawItem]: ...

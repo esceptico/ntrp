@@ -24,8 +24,6 @@ class ToolResult:
 
 
 class Tool(ABC):
-    """Base class for all tools."""
-
     name: str
     description: str
     mutates: bool = False
@@ -33,27 +31,14 @@ class Tool(ABC):
 
     @property
     def available(self) -> bool:
-        """Check if tool is available (has required dependencies).
-
-        Override in subclasses to check if required sources exist.
-        """
         return True
 
     @property
     @abstractmethod
-    def schema(self) -> dict:
-        """Return OpenAI function schema for this tool."""
-        ...
+    def schema(self) -> dict: ...
 
     @abstractmethod
-    async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult:
-        """Execute the tool and return result.
-
-        Args:
-            execution: Per-tool execution context with permission handling
-            **kwargs: Tool-specific arguments
-        """
-        ...
+    async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult: ...
 
     def to_dict(self) -> dict:
         return {
@@ -62,7 +47,6 @@ class Tool(ABC):
         }
 
     def get_metadata(self) -> dict:
-        """Get tool metadata for the API."""
         return {
             "name": self.name,
             "description": self.description,

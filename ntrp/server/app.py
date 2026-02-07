@@ -57,8 +57,6 @@ class ChoiceResultRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup and shutdown logic."""
-    # Initialize runtime at startup
     await get_runtime_async()
     configure_logging()
     yield

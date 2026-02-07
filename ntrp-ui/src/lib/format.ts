@@ -1,7 +1,3 @@
-/**
- * Formatting utilities for the ntrp-ui TUI.
- */
-
 export function formatTimeAgo(isoDate: string): string {
   const date = new Date(isoDate);
   const now = new Date();

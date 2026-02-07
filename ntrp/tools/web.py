@@ -12,8 +12,6 @@ WEB_FETCH_DESCRIPTION = "Fetch content from a URL. Returns the page text in read
 
 
 class WebSearchTool(Tool):
-    """Search the web using Exa's AI-powered search engine."""
-
     name = "web_search"
     description = WEB_SEARCH_DESCRIPTION
     source_type = WebSearchSource
@@ -84,8 +82,6 @@ class WebSearchTool(Tool):
 
 
 class WebFetchTool(Tool):
-    """Fetch and extract content from a webpage."""
-
     name = "web_fetch"
     description = WEB_FETCH_DESCRIPTION
     source_type = WebSearchSource

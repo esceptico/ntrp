@@ -3,7 +3,6 @@
  * Minimalist: white text, single accent, gray muted.
  */
 
-// Available accent colors
 export const accentColors = {
   blue: { primary: "#7AA2F7", shimmer: "#B4D0FF" },
   green: { primary: "#9ECE6A", shimmer: "#C3E88D" },
@@ -17,24 +16,20 @@ export const accentColors = {
 
 export type AccentColor = keyof typeof accentColors;
 
-// Internal accent state, synced by AccentColorProvider
 let currentAccent: AccentColor = "blue";
 
 export function syncAccentColor(color: AccentColor) {
   currentAccent = color;
 }
 
-// Semantic colors
 export const colors = {
-  // Text
   text: {
     primary: "#FAFAFA",    // Zinc 50
     secondary: "#A1A1AA",  // Zinc 400
     muted: "#71717A",      // Zinc 500
     disabled: "#52525B",   // Zinc 600
   },
-  
-  // Status
+
   status: {
     get success() { return accentColors[currentAccent].primary; },
     error: "#EF4444",      // Red 500
@@ -42,49 +37,45 @@ export const colors = {
     get processing() { return accentColors[currentAccent].primary; },
     get processingShimmer() { return accentColors[currentAccent].shimmer; },
   },
-  
-  // Selection
+
   selection: {
     get active() { return accentColors[currentAccent].primary; },
     get indicator() { return accentColors[currentAccent].primary; },
   },
-  
-  // UI elements
+
   panel: {
     get title() { return accentColors[currentAccent].primary; },
     subtitle: "#A1A1AA",
   },
-  
+
   tabs: {
     get active() { return accentColors[currentAccent].primary; },
     inactive: "#71717A",
     separator: "#3F3F46",  // Zinc 700
   },
-  
+
   list: {
     itemText: "#FAFAFA",
     get itemTextSelected() { return accentColors[currentAccent].primary; },
     itemDetail: "#71717A",
     scrollArrow: "#71717A",
   },
-  
+
   keyValue: {
     label: "#FAFAFA",
     get value() { return accentColors[currentAccent].primary; },
   },
-  
+
   divider: "#3F3F46",
   footer: "#71717A",
-  
-  // Diff
+
   diff: {
     added: "#4ADE80",
     addedBg: "#14532D",
     removed: "#F87171",
     removedBg: "#7F1D1D",
   },
-  
-  // Tool states
+
   tool: {
     pending: "#A1A1AA",
     running: "#FBBF24",
@@ -92,4 +83,3 @@ export const colors = {
     error: "#EF4444",
   },
 } as const;
-

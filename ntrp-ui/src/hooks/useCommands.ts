@@ -1,6 +1,3 @@
-/**
- * Hook for handling slash commands with a registry pattern.
- */
 import { useCallback, useRef } from "react";
 import type { Config } from "../types.js";
 import {

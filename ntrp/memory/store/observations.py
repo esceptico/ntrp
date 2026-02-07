@@ -8,8 +8,6 @@ from ntrp.database import BaseRepository, deserialize_embedding, serialize_embed
 from ntrp.memory.models import Embedding, HistoryEntry, Observation
 from ntrp.memory.store.base import parse_datetime
 
-# --- SQL Queries ---
-
 _SQL_GET_OBSERVATION = "SELECT * FROM observations WHERE id = ?"
 _SQL_COUNT_OBSERVATIONS = "SELECT COUNT(*) FROM observations"
 _SQL_LIST_RECENT_OBSERVATIONS = "SELECT * FROM observations ORDER BY updated_at DESC LIMIT ?"

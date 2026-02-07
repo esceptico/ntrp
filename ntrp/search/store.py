@@ -61,13 +61,6 @@ class SearchStore:
             await self._conn.close()
             self._conn = None
 
-    async def __aenter__(self):
-        await self.connect()
-        return self
-
-    async def __aexit__(self, *exc):
-        await self.close()
-
     @property
     def conn(self) -> aiosqlite.Connection:
         if self._conn is None:
@@ -152,14 +145,6 @@ class SearchStore:
             self._has_vec = False
 
         await self.conn.commit()
-
-    @property
-    def has_fts(self) -> bool:
-        return self._has_fts
-
-    @property
-    def has_vec(self) -> bool:
-        return self._has_vec
 
     @staticmethod
     def hash_content(content: str) -> str:

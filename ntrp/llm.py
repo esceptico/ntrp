@@ -1,5 +1,3 @@
-"""LLM completion wrappers with retry and exponential backoff."""
-
 import asyncio
 import random
 
@@ -19,7 +17,6 @@ _RETRYABLE_ERROR_NAMES = {"ECONNRESET", "ETIMEDOUT"}
 
 
 def _is_retryable(exc: Exception) -> tuple[bool, float | None]:
-    """Check if an exception is retryable. Returns (retryable, retry_after)."""
     status = getattr(exc, "status_code", None)
 
     if status is not None:
@@ -54,7 +51,6 @@ def _delay(attempt: int, retry_after: float | None) -> float:
 
 
 async def acompletion(**kwargs):
-    """litellm.acompletion with retry + exponential backoff."""
     for attempt in range(MAX_RETRIES + 1):
         try:
             return await litellm.acompletion(**kwargs)

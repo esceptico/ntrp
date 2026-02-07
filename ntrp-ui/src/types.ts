@@ -1,19 +1,5 @@
 import type { ToolChainItem } from "./components/toolchain/types.js";
 
-// SSE Event types from the server
-export type EventType =
-  | "thinking"
-  | "text"
-  | "tool_call"
-  | "tool_result"
-  | "approval_needed"
-  | "question"
-  | "choice"
-  | "session_info"
-  | "done"
-  | "error"
-  | "cancelled";
-
 export interface ThinkingEvent {
   type: "thinking";
   status: string;
@@ -127,7 +113,6 @@ export type ServerEvent =
   | ErrorEvent
   | CancelledEvent;
 
-// Message types for display
 export interface Message {
   id?: string;
   role: "user" | "assistant" | "tool" | "status" | "error" | "thinking" | "tool_chain";
@@ -139,7 +124,6 @@ export interface Message {
   toolChain?: ToolChainItem[];
 }
 
-// Approval types
 export interface PendingApproval {
   toolId: string;
   name: string;
@@ -150,7 +134,6 @@ export interface PendingApproval {
 
 export type ApprovalResult = "once" | "always" | "reject";
 
-// Config
 export interface Config {
   serverUrl: string;
 }

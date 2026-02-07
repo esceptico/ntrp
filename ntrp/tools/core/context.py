@@ -96,7 +96,6 @@ class ToolExecution:
         options: list[dict],
         allow_multiple: bool = False,
     ) -> list[str]:
-        """Emit choice event and wait for user selection. Returns list of selected option ids."""
         if not self.ctx.emit or not self.ctx.choice_queue:
             return []
 

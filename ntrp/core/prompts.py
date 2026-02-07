@@ -65,8 +65,6 @@ OUTPUT:
 - Relevant file paths for reference"""
 
 
-# === Section Templates ===
-
 ENVIRONMENT_TEMPLATE = """## CONTEXT
 Today is {date} at {time} (user's local time)."""
 
@@ -84,7 +82,6 @@ MEMORY_CONTEXT_TEMPLATE = """## MEMORY CONTEXT
 {memory_content}"""
 
 
-# Instruction for /init command - autonomous profile building
 INIT_INSTRUCTION = """Build a profile of the user by exploring their data. Explore first, present findings, confirm later.
 
 ## STEP 1: BROAD SWEEP
