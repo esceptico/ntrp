@@ -115,13 +115,16 @@ class FactMemory:
         fact_type: FactType = FactType.WORLD,
         happened_at: datetime | None = None,
     ) -> RememberFactResult:
+        from uuid import uuid4
+
         embedding = await self.embedder.embed_one(text)
 
         async with self._db_lock:
             conn = self.db.conn
             repo = FactRepository(conn)
 
-            await conn.execute("SAVEPOINT remember")
+            savepoint_name = f"remember_{uuid4().hex[:8]}"
+            await conn.execute(f"SAVEPOINT {savepoint_name}")
             try:
                 fact = await repo.create(
                     text=text,
@@ -138,11 +141,14 @@ class FactMemory:
                 fact.entity_refs = await repo.get_entity_refs(fact.id)
                 links_created = await create_links_for_fact(repo, fact)
 
-                await conn.execute("RELEASE remember")
+                await conn.execute(f"RELEASE {savepoint_name}")
             except Exception:
                 logger.warning("Remember failed, rolling back savepoint")
-                await conn.execute("ROLLBACK TO remember")
-                await conn.execute("RELEASE remember")
+                try:
+                    await conn.execute(f"ROLLBACK TO {savepoint_name}")
+                    await conn.execute(f"RELEASE {savepoint_name}")
+                except Exception:
+                    logger.warning("Failed to rollback savepoint (may have already been released)")
                 raise
 
         return RememberFactResult(
