@@ -19,6 +19,10 @@ interface ObservationsSectionProps {
   textExpanded: boolean;
   textScrollOffset: number;
   factsIndex: number;
+  editMode: boolean;
+  editText: string;
+  confirmDelete: boolean;
+  saving: boolean;
 }
 
 export function ObservationsSection({
@@ -34,6 +38,10 @@ export function ObservationsSection({
   textExpanded,
   textScrollOffset,
   factsIndex,
+  editMode,
+  editText,
+  confirmDelete,
+  saving,
 }: ObservationsSectionProps) {
   const { accentValue } = useAccentColor();
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
@@ -72,6 +80,10 @@ export function ObservationsSection({
           textExpanded={textExpanded}
           textScrollOffset={textScrollOffset}
           factsIndex={factsIndex}
+          editMode={editMode}
+          editText={editText}
+          confirmDelete={confirmDelete}
+          saving={saving}
         />
       }
     />

@@ -25,11 +25,17 @@ export interface FactsTabState {
   textScrollOffset: number;
   entitiesIndex: number;
   linkedIndex: number;
+  editMode: boolean;
+  editText: string;
+  confirmDelete: boolean;
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
   setSelectedIndex: (i: number) => void;
   setFocusPane: (p: "list" | "details") => void;
   resetDetailState: () => void;
+  setEditMode: React.Dispatch<React.SetStateAction<boolean>>;
+  setEditText: React.Dispatch<React.SetStateAction<string>>;
+  setConfirmDelete: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export function useFactsTab(
@@ -48,6 +54,9 @@ export function useFactsTab(
   const [textScrollOffset, setTextScrollOffset] = useState(0);
   const [entitiesIndex, setEntitiesIndex] = useState(0);
   const [linkedIndex, setLinkedIndex] = useState(0);
+  const [editMode, setEditMode] = useState(false);
+  const [editText, setEditText] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const filteredFacts = useMemo(
     () =>
@@ -65,6 +74,9 @@ export function useFactsTab(
     setTextScrollOffset(0);
     setEntitiesIndex(0);
     setLinkedIndex(0);
+    setEditMode(false);
+    setEditText("");
+    setConfirmDelete(false);
   }, []);
 
   useEffect(() => {
@@ -202,10 +214,16 @@ export function useFactsTab(
     textScrollOffset,
     entitiesIndex,
     linkedIndex,
+    editMode,
+    editText,
+    confirmDelete,
     handleKeys,
     setSearchQuery,
     setSelectedIndex,
     setFocusPane,
     resetDetailState,
+    setEditMode,
+    setEditText,
+    setConfirmDelete,
   };
 }

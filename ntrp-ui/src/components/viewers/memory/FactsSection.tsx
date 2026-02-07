@@ -20,6 +20,10 @@ interface FactsSectionProps {
   textScrollOffset: number;
   entitiesIndex: number;
   linkedIndex: number;
+  editMode: boolean;
+  editText: string;
+  confirmDelete: boolean;
+  saving: boolean;
 }
 
 export function FactsSection({
@@ -36,6 +40,10 @@ export function FactsSection({
   textScrollOffset,
   entitiesIndex,
   linkedIndex,
+  editMode,
+  editText,
+  confirmDelete,
+  saving,
 }: FactsSectionProps) {
   const { accentValue } = useAccentColor();
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
@@ -76,6 +84,10 @@ export function FactsSection({
           textScrollOffset={textScrollOffset}
           entitiesIndex={entitiesIndex}
           linkedIndex={linkedIndex}
+          editMode={editMode}
+          editText={editText}
+          confirmDelete={confirmDelete}
+          saving={saving}
         />
       }
     />

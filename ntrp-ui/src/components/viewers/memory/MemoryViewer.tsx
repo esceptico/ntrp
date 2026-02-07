@@ -7,6 +7,10 @@ import { useObservationsTab } from "../../../hooks/useObservationsTab.js";
 import {
   getFacts,
   getObservations,
+  updateFact,
+  deleteFact,
+  updateObservation,
+  deleteObservation,
   type Fact,
   type Observation,
 } from "../../../api/client.js";
@@ -35,6 +39,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const [error, setError] = useState<string | null>(null);
   const [facts, setFacts] = useState<Fact[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
+  const [saving, setSaving] = useState(false);
 
   const loadedRef = useRef(false);
 
@@ -83,6 +88,134 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
 
   const handleKeypress = useCallback(
     (key: Key) => {
+      // Handle facts tab editing/deleting
+      if (activeTab === "facts" && factsTab.focusPane === "details" && factsTab.factDetails) {
+        if (factsTab.confirmDelete) {
+          if (key.name === "y") {
+            setSaving(true);
+            deleteFact(config, factsTab.factDetails.fact.id)
+              .then(() => {
+                setFacts((prev) => prev.filter((f) => f.id !== factsTab.factDetails?.fact.id));
+                factsTab.setConfirmDelete(false);
+                factsTab.setFocusPane("list");
+                factsTab.resetDetailState();
+              })
+              .catch((e) => setError(`Delete failed: ${e}`))
+              .finally(() => setSaving(false));
+          } else {
+            factsTab.setConfirmDelete(false);
+          }
+          return;
+        }
+
+        if (factsTab.editMode) {
+          if (key.ctrl && key.name === "s") {
+            setSaving(true);
+            updateFact(config, factsTab.factDetails.fact.id, factsTab.editText)
+              .then((result) => {
+                setFacts((prev) =>
+                  prev.map((f) => (f.id === result.fact.id ? { ...f, text: result.fact.text } : f))
+                );
+                factsTab.setEditMode(false);
+                factsTab.setEditText("");
+                reload();
+              })
+              .catch((e) => setError(`Save failed: ${e}`))
+              .finally(() => setSaving(false));
+            return;
+          }
+          if (key.name === "escape") {
+            factsTab.setEditMode(false);
+            factsTab.setEditText("");
+            return;
+          }
+          if (key.name === "backspace") {
+            factsTab.setEditText((prev) => prev.slice(0, -1));
+            return;
+          }
+          if (key.insertable && !key.ctrl && !key.meta && key.sequence) {
+            const char = key.name === "return" ? "\n" : key.name === "space" ? " " : key.sequence;
+            factsTab.setEditText((prev) => prev + char);
+            return;
+          }
+          return;
+        }
+
+        if (key.name === "e") {
+          factsTab.setEditMode(true);
+          factsTab.setEditText(factsTab.factDetails.fact.text);
+          return;
+        }
+        if (key.name === "d" || key.name === "delete") {
+          factsTab.setConfirmDelete(true);
+          return;
+        }
+      }
+
+      // Handle observations tab editing/deleting
+      if (activeTab === "observations" && obsTab.focusPane === "details" && obsTab.obsDetails) {
+        if (obsTab.confirmDelete) {
+          if (key.name === "y") {
+            setSaving(true);
+            deleteObservation(config, obsTab.obsDetails.observation.id)
+              .then(() => {
+                setObservations((prev) => prev.filter((o) => o.id !== obsTab.obsDetails?.observation.id));
+                obsTab.setConfirmDelete(false);
+                obsTab.setFocusPane("list");
+                obsTab.resetDetailState();
+              })
+              .catch((e) => setError(`Delete failed: ${e}`))
+              .finally(() => setSaving(false));
+          } else {
+            obsTab.setConfirmDelete(false);
+          }
+          return;
+        }
+
+        if (obsTab.editMode) {
+          if (key.ctrl && key.name === "s") {
+            setSaving(true);
+            updateObservation(config, obsTab.obsDetails.observation.id, obsTab.editText)
+              .then((result) => {
+                setObservations((prev) =>
+                  prev.map((o) => (o.id === result.id ? { ...o, summary: result.summary } : o))
+                );
+                obsTab.setEditMode(false);
+                obsTab.setEditText("");
+                reload();
+              })
+              .catch((e) => setError(`Save failed: ${e}`))
+              .finally(() => setSaving(false));
+            return;
+          }
+          if (key.name === "escape") {
+            obsTab.setEditMode(false);
+            obsTab.setEditText("");
+            return;
+          }
+          if (key.name === "backspace") {
+            obsTab.setEditText((prev) => prev.slice(0, -1));
+            return;
+          }
+          if (key.insertable && !key.ctrl && !key.meta && key.sequence) {
+            const char = key.name === "return" ? "\n" : key.name === "space" ? " " : key.sequence;
+            obsTab.setEditText((prev) => prev + char);
+            return;
+          }
+          return;
+        }
+
+        if (key.name === "e") {
+          obsTab.setEditMode(true);
+          obsTab.setEditText(obsTab.obsDetails.observation.summary);
+          return;
+        }
+        if (key.name === "d" || key.name === "delete") {
+          obsTab.setConfirmDelete(true);
+          return;
+        }
+      }
+
       if (key.name === "1") { setActiveTab("facts"); return; }
       if (key.name === "2") { setActiveTab("observations"); return; }
       if (key.name === "3") { setActiveTab("stats"); return; }
@@ -122,7 +255,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
-    [activeTab, factsTab, obsTab, onClose, reload]
+    [activeTab, factsTab, obsTab, onClose, reload, config]
   );
 
   useKeypress(handleKeypress, { isActive: true });
@@ -138,10 +271,28 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     );
   }
 
-  const footerText = {
-    facts: `1-3: tabs │ ↑↓: navigate │ Tab: ${factsTab.focusPane === "list" ? "details" : "list"} │ ${factsTab.focusPane === "details" ? "Enter: expand" : "Type: search"} │ Esc: close`,
-    observations: `1-3: tabs │ ↑↓: navigate │ Tab: ${obsTab.focusPane === "list" ? "details" : "list"} │ ${obsTab.focusPane === "details" ? "Enter: expand" : "Type: search"} │ Esc: back`,
-    stats: "1-3: tabs │ Esc: back",
+  const getFooterText = (): string => {
+    if (activeTab === "stats") return "1-3: tabs │ Esc: back";
+
+    if (activeTab === "facts") {
+      if (factsTab.editMode) return "Ctrl+S: save │ Esc: cancel";
+      if (factsTab.confirmDelete) return "y: confirm │ any key: cancel";
+      if (factsTab.focusPane === "details") {
+        return "1-3: tabs │ ↑↓: navigate │ Tab: list │ Enter: expand │ e: edit │ d: delete │ Esc: back";
+      }
+      return "1-3: tabs │ ↑↓: navigate │ Tab: details │ Type: search │ Esc: close";
+    }
+
+    if (activeTab === "observations") {
+      if (obsTab.editMode) return "Ctrl+S: save │ Esc: cancel";
+      if (obsTab.confirmDelete) return "y: confirm │ any key: cancel";
+      if (obsTab.focusPane === "details") {
+        return "1-3: tabs │ ↑↓: navigate │ Tab: list │ Enter: expand │ e: edit │ d: delete │ Esc: back";
+      }
+      return "1-3: tabs │ ↑↓: navigate │ Tab: details │ Type: search │ Esc: close";
+    }
+
+    return "";
   };
 
   return (
@@ -168,6 +319,10 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
           textScrollOffset={factsTab.textScrollOffset}
           entitiesIndex={factsTab.entitiesIndex}
           linkedIndex={factsTab.linkedIndex}
+          editMode={factsTab.editMode}
+          editText={factsTab.editText}
+          confirmDelete={factsTab.confirmDelete}
+          saving={saving}
         />
       )}
 
@@ -185,6 +340,10 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
           textExpanded={obsTab.textExpanded}
           textScrollOffset={obsTab.textScrollOffset}
           factsIndex={obsTab.factsIndex}
+          editMode={obsTab.editMode}
+          editText={obsTab.editText}
+          confirmDelete={obsTab.confirmDelete}
+          saving={saving}
         />
       )}
 
@@ -195,7 +354,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
       )}
 
       <Divider width={contentWidth - 2} />
-      <Footer>{footerText[activeTab]}</Footer>
+      <Footer>{getFooterText()}</Footer>
     </Panel>
   );
 }

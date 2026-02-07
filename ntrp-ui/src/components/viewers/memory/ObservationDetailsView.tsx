@@ -1,8 +1,9 @@
 import { Box, Text } from "ink";
 import type { ObservationDetails } from "../../../api/client.js";
-import { colors, truncateText, ExpandableText, ScrollableList } from "../../ui/index.js";
+import { colors, truncateText, ExpandableText, ScrollableList, TextInputField } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import { formatTimeAgo } from "../../../lib/format.js";
+import { wrapText } from "../../../lib/utils.js";
 
 // Section indices for keyboard navigation
 export const OBS_SECTIONS = {
@@ -22,6 +23,11 @@ interface ObservationDetailsViewProps {
   textExpanded: boolean;
   textScrollOffset: number;
   factsIndex: number;
+  // Edit/delete state
+  editMode: boolean;
+  editText: string;
+  confirmDelete: boolean;
+  saving: boolean;
 }
 
 // Fixed heights for each section
@@ -41,6 +47,10 @@ export function ObservationDetailsView({
   textExpanded,
   textScrollOffset,
   factsIndex,
+  editMode,
+  editText,
+  confirmDelete,
+  saving,
 }: ObservationDetailsViewProps) {
   if (loading) {
     return <Text color={colors.text.muted}>Loading...</Text>;
@@ -65,6 +75,53 @@ export function ObservationDetailsView({
 
   // Calculate visible items for scrollable list
   const factsVisible = SECTION_HEIGHTS.FACTS - 1; // minus header
+
+  if (confirmDelete) {
+    return (
+      <Box flexDirection="column" width={width} paddingLeft={1}>
+        <Text color={colors.status.warning}>
+          Delete this observation? This will remove the observation and {details.supporting_facts.length} supporting fact references.
+        </Text>
+        <Box marginTop={1}>
+          <Text color={colors.text.muted}>Press y to confirm, any other key to cancel</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (editMode) {
+    const wrappedLines = wrapText(editText, textWidth);
+    const cursorLine = wrappedLines.length > 0 ? wrappedLines.length - 1 : 0;
+
+    return (
+      <Box flexDirection="column" width={width} paddingLeft={1}>
+        <Text color={colors.text.muted}>EDIT OBSERVATION</Text>
+        <Box marginTop={1} flexDirection="column">
+          {wrappedLines.map((line, idx) => (
+            <Text key={idx} color={colors.text.primary}>
+              {line}
+              {idx === cursorLine && <Text color={accentValue}>█</Text>}
+            </Text>
+          ))}
+          {wrappedLines.length === 0 && (
+            <Text color={colors.text.muted}>
+              Type to edit...
+              <Text color={accentValue}>█</Text>
+            </Text>
+          )}
+        </Box>
+        {saving ? (
+          <Box marginTop={1}>
+            <Text color={colors.tool.running}>Saving...</Text>
+          </Box>
+        ) : (
+          <Box marginTop={1}>
+            <Text color={colors.text.muted}>Ctrl+S: save  Esc: cancel</Text>
+          </Box>
+        )}
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column" width={width} paddingLeft={1}>

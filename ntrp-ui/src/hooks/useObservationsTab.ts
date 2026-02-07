@@ -24,11 +24,17 @@ export interface ObservationsTabState {
   textExpanded: boolean;
   textScrollOffset: number;
   factsIndex: number;
+  editMode: boolean;
+  editText: string;
+  confirmDelete: boolean;
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
   setSelectedIndex: (i: number) => void;
   setFocusPane: (p: "list" | "details") => void;
   resetDetailState: () => void;
+  setEditMode: React.Dispatch<React.SetStateAction<boolean>>;
+  setEditText: React.Dispatch<React.SetStateAction<string>>;
+  setConfirmDelete: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export function useObservationsTab(
@@ -46,6 +52,9 @@ export function useObservationsTab(
   const [textExpanded, setTextExpanded] = useState(false);
   const [textScrollOffset, setTextScrollOffset] = useState(0);
   const [factsIndex, setFactsIndex] = useState(0);
+  const [editMode, setEditMode] = useState(false);
+  const [editText, setEditText] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const filteredObservations = useMemo(
     () =>
@@ -62,6 +71,9 @@ export function useObservationsTab(
     setTextExpanded(false);
     setTextScrollOffset(0);
     setFactsIndex(0);
+    setEditMode(false);
+    setEditText("");
+    setConfirmDelete(false);
   }, []);
 
   useEffect(() => {
@@ -177,10 +189,16 @@ export function useObservationsTab(
     textExpanded,
     textScrollOffset,
     factsIndex,
+    editMode,
+    editText,
+    confirmDelete,
     handleKeys,
     setSearchQuery,
     setSelectedIndex,
     setFocusPane,
     resetDetailState,
+    setEditMode,
+    setEditText,
+    setConfirmDelete,
   };
 }

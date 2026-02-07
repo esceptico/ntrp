@@ -325,3 +325,57 @@ export async function toggleWritable(config: Config, taskId: string): Promise<{ 
 export async function runSchedule(config: Config, taskId: string): Promise<{ status: string }> {
   return api.post<{ status: string }>(`${config.serverUrl}/schedules/${taskId}/run`);
 }
+
+export async function updateFact(
+  config: Config,
+  factId: number,
+  text: string
+): Promise<{
+  fact: {
+    id: number;
+    text: string;
+    fact_type: string;
+    source_type: string;
+    source_ref: string | null;
+    created_at: string;
+    access_count: number;
+  };
+  entity_refs: Array<{ name: string; type: string }>;
+  links_created: number;
+}> {
+  return api.patch(`${config.serverUrl}/facts/${factId}`, { text });
+}
+
+export async function deleteFact(
+  config: Config,
+  factId: number
+): Promise<{
+  fact_id: number;
+  deleted_entities: number;
+  deleted_links: number;
+  deleted_fact_observations: number;
+}> {
+  return api.delete(`${config.serverUrl}/facts/${factId}`);
+}
+
+export async function updateObservation(
+  config: Config,
+  observationId: number,
+  summary: string
+): Promise<{
+  id: number;
+  summary: string;
+  evidence_count: number;
+  access_count: number;
+  created_at: string;
+  updated_at: string;
+}> {
+  return api.patch(`${config.serverUrl}/observations/${observationId}`, { summary });
+}
+
+export async function deleteObservation(
+  config: Config,
+  observationId: number
+): Promise<{ status: string }> {
+  return api.delete(`${config.serverUrl}/observations/${observationId}`);
+}
