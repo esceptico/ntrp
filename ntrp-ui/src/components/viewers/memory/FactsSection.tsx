@@ -23,6 +23,8 @@ interface FactsSectionProps {
   editMode: boolean;
   editText: string;
   cursorPos: number;
+  setEditText: (text: string | ((prev: string) => string)) => void;
+  setCursorPos: (pos: number | ((prev: number) => number)) => void;
   confirmDelete: boolean;
   saving: boolean;
 }
@@ -44,6 +46,8 @@ export function FactsSection({
   editMode,
   editText,
   cursorPos,
+  setEditText,
+  setCursorPos,
   confirmDelete,
   saving,
 }: FactsSectionProps) {
@@ -89,6 +93,8 @@ export function FactsSection({
           editMode={editMode}
           editText={editText}
           cursorPos={cursorPos}
+          setEditText={setEditText}
+          setCursorPos={setCursorPos}
           confirmDelete={confirmDelete}
           saving={saving}
         />

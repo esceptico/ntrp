@@ -370,6 +370,8 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
           editMode={factsTab.editMode}
           editText={factsTab.editText}
           cursorPos={factsTab.cursorPos}
+          setEditText={factsTab.setEditText}
+          setCursorPos={factsTab.setCursorPos}
           confirmDelete={factsTab.confirmDelete}
           saving={saving}
         />
@@ -392,6 +394,8 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
           editMode={obsTab.editMode}
           editText={obsTab.editText}
           cursorPos={obsTab.cursorPos}
+          setEditText={obsTab.setEditText}
+          setCursorPos={obsTab.setCursorPos}
           confirmDelete={obsTab.confirmDelete}
           saving={saving}
         />

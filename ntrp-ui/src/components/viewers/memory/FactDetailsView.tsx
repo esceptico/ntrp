@@ -1,9 +1,8 @@
 import { Box, Text } from "ink";
 import type { FactDetails } from "../../../api/client.js";
-import { colors, truncateText, ExpandableText, ScrollableList, TextInputField } from "../../ui/index.js";
+import { colors, truncateText, ExpandableText, ScrollableList, TextEditArea } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import { formatTimeAgo } from "../../../lib/format.js";
-import { wrapText } from "../../../lib/utils.js";
 
 // Section indices for keyboard navigation
 export const FACT_SECTIONS = {
@@ -29,6 +28,8 @@ interface FactDetailsViewProps {
   editMode: boolean;
   editText: string;
   cursorPos: number;
+  setEditText: (text: string | ((prev: string) => string)) => void;
+  setCursorPos: (pos: number | ((prev: number) => number)) => void;
   confirmDelete: boolean;
   saving: boolean;
 }
@@ -55,6 +56,8 @@ export function FactDetailsView({
   editMode,
   editText,
   cursorPos,
+  setEditText,
+  setCursorPos,
   confirmDelete,
   saving,
 }: FactDetailsViewProps) {
@@ -100,63 +103,21 @@ export function FactDetailsView({
   }
 
   if (editMode) {
-    // Calculate cursor position in wrapped text
-    const wrappedLines = wrapText(editText, textWidth);
-    let charCount = 0;
-    let cursorLine = 0;
-    let cursorCol = 0;
-
-    if (wrappedLines.length === 0) {
-      cursorLine = 0;
-      cursorCol = 0;
-    } else {
-      for (let i = 0; i < wrappedLines.length; i++) {
-        const lineLength = wrappedLines[i].length;
-        if (charCount + lineLength >= cursorPos) {
-          cursorLine = i;
-          cursorCol = cursorPos - charCount;
-          break;
-        }
-        charCount += lineLength;
-      }
-      // If cursor is at the very end
-      if (cursorPos === editText.length && cursorPos > charCount) {
-        cursorLine = wrappedLines.length - 1;
-        cursorCol = wrappedLines[cursorLine].length;
-      }
-    }
-
     return (
       <Box flexDirection="column" width={width} paddingLeft={1}>
         <Text color={colors.text.muted}>EDIT FACT</Text>
-        <Box marginTop={1} flexDirection="column">
-          {wrappedLines.length === 0 ? (
-            <Text color={colors.text.primary}>
-              <Text inverse> </Text>
-            </Text>
-          ) : (
-            wrappedLines.map((line, idx) => (
-              <Text key={idx} color={colors.text.primary}>
-                {idx === cursorLine ? (
-                  <>
-                    <Text>{line.slice(0, cursorCol)}</Text>
-                    <Text inverse>{line[cursorCol] || " "}</Text>
-                    <Text>{line.slice(cursorCol + 1)}</Text>
-                  </>
-                ) : (
-                  line
-                )}
-              </Text>
-            ))
-          )}
+        <Box marginTop={1}>
+          <TextEditArea
+            value={editText}
+            cursorPos={cursorPos}
+            onValueChange={setEditText}
+            onCursorChange={setCursorPos}
+            placeholder="Type to edit..."
+          />
         </Box>
-        {saving ? (
+        {saving && (
           <Box marginTop={1}>
             <Text color={colors.tool.running}>Saving...</Text>
-          </Box>
-        ) : (
-          <Box marginTop={1}>
-            <Text color={colors.text.muted}>Ctrl+S: save  Esc: cancel</Text>
           </Box>
         )}
       </Box>
