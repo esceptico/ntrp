@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import uuid4
 
@@ -23,8 +23,8 @@ class RunState:
     completion_tokens: int = 0
     event_queue: asyncio.Queue | None = None
     choice_queue: asyncio.Queue | None = None
-    created_at: datetime = field(default_factory=datetime.now)
-    updated_at: datetime = field(default_factory=datetime.now)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     cancelled: bool = False
 
     def get_usage(self) -> dict:
@@ -52,7 +52,7 @@ class RunRegistry:
         run = self._runs.get(run_id)
         if run:
             run.status = RunStatus.COMPLETED
-            run.updated_at = datetime.now()
+            run.updated_at = datetime.now(UTC)
         self.cleanup_old_runs()
 
     def cancel_run(self, run_id: str) -> None:
@@ -60,10 +60,10 @@ class RunRegistry:
         if run:
             run.cancelled = True
             run.status = RunStatus.CANCELLED
-            run.updated_at = datetime.now()
+            run.updated_at = datetime.now(UTC)
 
     def cleanup_old_runs(self, max_age_hours: int = 24) -> int:
-        now = datetime.now()
+        now = datetime.now(UTC)
         to_remove = []
 
         for run_id, run in self._runs.items():

@@ -3,7 +3,7 @@ import shutil
 import sqlite3
 import tempfile
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from ntrp.sources.base import BrowserSource, SourceItem
@@ -68,7 +68,7 @@ class BrowserHistorySource(BrowserSource):
 
             if self.browser in ("chrome", "arc"):
                 # Chrome/Arc schema
-                cutoff = datetime.now() - timedelta(days=days)
+                cutoff = datetime.now(UTC) - timedelta(days=days)
                 # Chrome time is microseconds since 1601
                 chrome_cutoff = int((cutoff - datetime(1601, 1, 1)).total_seconds() * 1_000_000)
 
@@ -113,7 +113,7 @@ class BrowserHistorySource(BrowserSource):
 
             elif self.browser == "safari":
                 # Safari schema
-                cutoff = datetime.now() - timedelta(days=days)
+                cutoff = datetime.now(UTC) - timedelta(days=days)
                 safari_cutoff = (cutoff - datetime(2001, 1, 1)).total_seconds()
 
                 cursor.execute(

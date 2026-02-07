@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from ntrp.constants import AGENT_MAX_DEPTH, CONVERSATION_GAP_THRESHOLD
 
@@ -190,7 +190,7 @@ def _sources(details: dict[str, dict]) -> str:
 def _time_gap(last_activity: datetime | None) -> str:
     if not last_activity:
         return ""
-    gap = (datetime.now() - last_activity).total_seconds()
+    gap = (datetime.now(UTC) - last_activity).total_seconds()
     if gap < CONVERSATION_GAP_THRESHOLD:
         return ""
     hours = gap / 3600

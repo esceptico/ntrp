@@ -1,7 +1,7 @@
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import aiosqlite
@@ -81,9 +81,12 @@ class SearchStore:
                 raise RuntimeError("Integrity check failed")
         except Exception:
             await self.conn.close()
-            self.db_path.unlink(missing_ok=True)
-            Path(str(self.db_path) + "-wal").unlink(missing_ok=True)
-            Path(str(self.db_path) + "-shm").unlink(missing_ok=True)
+            timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+            for suffix in ("", "-wal", "-shm"):
+                src = Path(str(self.db_path) + suffix)
+                if src.exists():
+                    src.rename(Path(f"{self.db_path}.bak.{timestamp}{suffix}"))
+            logger.warning("Search DB integrity check failed — backed up to %s.bak.%s", self.db_path, timestamp)
 
             self._conn = await self._open_connection()
 
@@ -214,7 +217,7 @@ class SearchStore:
     ) -> bool:
         content_hash = self.hash_content(content)
         snippet = self.make_snippet(content)
-        now = datetime.now().isoformat()
+        now = datetime.now(UTC).isoformat()
         metadata_json = json.dumps(metadata) if metadata else None
 
         existing = await self.conn.execute_fetchall(

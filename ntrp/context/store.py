@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel
@@ -59,10 +59,17 @@ class SessionStore(SessionDatabase):
             return None
 
         row = rows[0]
+        started_at = datetime.fromisoformat(row["started_at"])
+        last_activity = datetime.fromisoformat(row["last_activity"])
+        # Attach UTC to naive datetimes from old sessions
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=UTC)
+        if last_activity.tzinfo is None:
+            last_activity = last_activity.replace(tzinfo=UTC)
         state = SessionState(
             session_id=row["session_id"],
-            started_at=datetime.fromisoformat(row["started_at"]),
-            last_activity=datetime.fromisoformat(row["last_activity"]),
+            started_at=started_at,
+            last_activity=last_activity,
         )
 
         messages = json.loads(row["messages"]) if row["messages"] else []

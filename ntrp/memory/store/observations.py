@@ -1,6 +1,6 @@
 import json
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 
 import aiosqlite
 
@@ -53,7 +53,7 @@ class ObservationRepository(BaseRepository):
         embedding: Embedding | None = None,
         source_fact_id: int | None = None,
     ) -> Observation:
-        now = datetime.now()
+        now = datetime.now(UTC)
         source_fact_ids = [source_fact_id] if source_fact_id else []
         evidence_count = len(source_fact_ids)
         embedding_bytes = serialize_embedding(embedding)
@@ -104,7 +104,7 @@ class ObservationRepository(BaseRepository):
         new_fact_id: int | None = None,
         reason: str = "",
     ) -> Observation | None:
-        now = datetime.now()
+        now = datetime.now(UTC)
         obs = await self.get(observation_id)
         if not obs:
             return None
@@ -164,7 +164,7 @@ class ObservationRepository(BaseRepository):
     async def reinforce(self, observation_ids: Sequence[int]) -> None:
         if not observation_ids:
             return
-        now = datetime.now()
+        now = datetime.now(UTC)
         placeholders = ",".join("?" * len(observation_ids))
         await self.conn.execute(
             _SQL_REINFORCE_OBSERVATIONS.format(placeholders=placeholders),

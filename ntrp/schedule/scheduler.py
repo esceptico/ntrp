@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from ntrp.schedule.models import Recurrence, ScheduledTask, compute_next_run
@@ -47,7 +47,7 @@ class Scheduler:
             await asyncio.sleep(POLL_INTERVAL)
 
     async def _tick(self) -> None:
-        now = datetime.now()
+        now = datetime.now(UTC)
         due_tasks = await self.store.list_due(now)
         for task in due_tasks:
             await self.store.mark_running(task.task_id, now)
@@ -84,11 +84,20 @@ class Scheduler:
 
         session_state = runtime.create_session()
 
+        from ntrp.core.spawner import create_spawn_fn
         from ntrp.tools.core.context import ToolContext
 
         tool_ctx = ToolContext(
             session_state=session_state,
+            registry=runtime.executor.registry,
+            memory=runtime.memory,
+        )
+        tool_ctx.spawn_fn = create_spawn_fn(
             executor=runtime.executor,
+            model=runtime.config.chat_model,
+            max_depth=runtime.max_depth,
+            current_depth=0,
+            cancel_check=None,
         )
 
         from ntrp.core.agent import Agent
@@ -126,7 +135,7 @@ class Scheduler:
 
     async def _execute_task(self, task: ScheduledTask) -> None:
         result = await self._run_agent(task)
-        now = datetime.now()
+        now = datetime.now(UTC)
         if task.recurrence == Recurrence.ONCE:
             await self.store.update_last_run(task.task_id, now, now, result=result)
             await self.store.set_enabled(task.task_id, False)
@@ -142,10 +151,10 @@ class Scheduler:
         if task.running_since:
             raise ValueError(f"Task {task_id} is already running")
 
-        await self.store.mark_running(task.task_id, datetime.now())
+        await self.store.mark_running(task.task_id, datetime.now(UTC))
         try:
             result = await self._run_agent(task)
-            now = datetime.now()
+            now = datetime.now(UTC)
             if task.recurrence == Recurrence.ONCE:
                 await self.store.update_last_run(task.task_id, now, task.next_run_at, result=result)
             else:

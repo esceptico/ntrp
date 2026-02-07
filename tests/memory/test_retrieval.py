@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -72,7 +72,7 @@ class TestScoreFact:
     def test_recent_fact_scores_higher(self, repo: FactRepository):
         from ntrp.memory.models import Fact
 
-        now = datetime.now()
+        now = datetime.now(UTC)
         old = now - timedelta(days=30)
 
         recent_fact = Fact(
@@ -110,7 +110,7 @@ class TestScoreFact:
     def test_frequently_accessed_fact_scores_higher(self):
         from ntrp.memory.models import Fact
 
-        now = datetime.now()
+        now = datetime.now(UTC)
 
         frequent = Fact(
             id=1,
@@ -147,7 +147,7 @@ class TestScoreFact:
     def test_base_score_multiplied(self):
         from ntrp.memory.models import Fact
 
-        now = datetime.now()
+        now = datetime.now(UTC)
         fact = Fact(
             id=1,
             text="test",

@@ -14,6 +14,9 @@ preferences, and learnings. Each fact typically results in one action
 import json
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
+from typing import Literal
+
+from pydantic import BaseModel
 
 from ntrp.constants import (
     CONSOLIDATION_SEARCH_LIMIT,
@@ -31,6 +34,13 @@ logger = get_logger(__name__)
 type EmbedFn = Callable[[str], Coroutine[None, None, Embedding]]
 
 
+class ConsolidationSchema(BaseModel):
+    action: Literal["update", "create", "skip"]
+    observation_id: int | None = None
+    text: str | None = None
+    reason: str | None = None
+
+
 @dataclass
 class ConsolidationResult:
     action: str  # "created", "updated", "multiple", "skipped"
@@ -44,15 +54,6 @@ class ConsolidationAction:
     observation_id: int | None = None
     text: str | None = None
     reason: str | None = None
-
-    @classmethod
-    def from_json(cls, data: dict) -> "ConsolidationAction":
-        return cls(
-            type=data.get("action", "skip"),
-            observation_id=data.get("observation_id"),
-            text=data.get("text"),
-            reason=data.get("reason"),
-        )
 
 
 async def consolidate_fact(
@@ -124,28 +125,21 @@ async def _llm_consolidation_decision(
         response = await acompletion(
             model=model,
             messages=[{"role": "user", "content": prompt}],
+            response_format=ConsolidationSchema,
             temperature=CONSOLIDATION_TEMPERATURE,
         )
         content = response.choices[0].message.content
         if not content:
             return None
 
-        clean = _strip_markdown(content)
-        data = json.loads(clean)
+        parsed = ConsolidationSchema.model_validate_json(content)
+        return ConsolidationAction(
+            type=parsed.action,
+            observation_id=parsed.observation_id,
+            text=parsed.text,
+            reason=parsed.reason,
+        )
 
-        # Handle single action (expected)
-        if isinstance(data, dict):
-            return ConsolidationAction.from_json(data)
-
-        # Handle array response (legacy - take first action)
-        if isinstance(data, list) and data:
-            return ConsolidationAction.from_json(data[0])
-
-        return None
-
-    except json.JSONDecodeError as e:
-        logger.warning("Invalid JSON from consolidation LLM: %s", e)
-        return None
     except Exception as e:
         logger.warning("Consolidation LLM failed: %s", e)
         return None
@@ -235,12 +229,3 @@ async def _format_observations(
     return json.dumps(obs_list, indent=2)
 
 
-def _strip_markdown(content: str) -> str:
-    """Strip markdown code fences if present."""
-    clean = content.strip()
-    if clean.startswith("```"):
-        clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
-        if clean.endswith("```"):
-            clean = clean[:-3]
-        clean = clean.strip()
-    return clean

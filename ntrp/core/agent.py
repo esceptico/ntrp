@@ -4,7 +4,6 @@ from typing import Any
 from ntrp.constants import AGENT_MAX_ITERATIONS, SUPPORTED_MODELS
 from ntrp.context.compression import compress_context_async, mask_old_tool_results, should_compress
 from ntrp.core.parsing import parse_tool_calls, sanitize_assistant_message
-from ntrp.core.spawner import create_spawn_fn
 from ntrp.core.state import AgentState, StateCallback
 from ntrp.core.tool_runner import ToolRunner
 from ntrp.events import SSEEvent, TextEvent, ToolResultEvent
@@ -46,14 +45,6 @@ class Agent:
         self.total_input_tokens = 0
         self.total_output_tokens = 0
         self._last_input_tokens: int | None = None  # For adaptive compression
-
-        self.ctx.spawn_fn = create_spawn_fn(
-            executor=self.executor,
-            model=self.model,
-            max_depth=self.max_depth,
-            current_depth=self.current_depth,
-            cancel_check=self.cancel_check,
-        )
 
     @property
     def state(self) -> AgentState:

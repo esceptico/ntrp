@@ -5,16 +5,15 @@ from typing import Any, ClassVar
 from ntrp.tools.core.context import ToolExecution
 
 
-def make_schema(name: str, description: str, properties: dict, required: list[str] | None = None) -> dict:
-    return {
-        "name": name,
-        "description": description,
-        "parameters": {
+def make_schema(name: str, description: str, properties: dict | None = None, required: list[str] | None = None) -> dict:
+    schema: dict = {"name": name, "description": description}
+    if properties:
+        schema["parameters"] = {
             "type": "object",
             "properties": properties,
             "required": required or [],
-        },
-    }
+        }
+    return schema
 
 
 @dataclass

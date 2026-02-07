@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from ntrp.config import Config, get_config
@@ -166,9 +166,10 @@ class Runtime:
         return sources
 
     def create_session(self) -> SessionState:
+        now = datetime.now(UTC)
         return SessionState(
-            session_id=datetime.now().strftime("%Y%m%d_%H%M%S"),
-            started_at=datetime.now(),
+            session_id=now.strftime("%Y%m%d_%H%M%S"),
+            started_at=now,
         )
 
     async def restore_session(self) -> SessionData | None:
@@ -181,7 +182,7 @@ class Runtime:
         if not data:
             return None
 
-        age_hours = (datetime.now() - data.state.last_activity).total_seconds() / 3600
+        age_hours = (datetime.now(UTC) - data.state.last_activity).total_seconds() / 3600
         if age_hours > SESSION_EXPIRY_HOURS:
             return None
 
@@ -192,7 +193,7 @@ class Runtime:
 
     async def save_session(self, session_state: SessionState, messages: list[dict]) -> None:
         try:
-            session_state.last_activity = datetime.now()
+            session_state.last_activity = datetime.now(UTC)
             await self.session_store.save_session(session_state, messages)
         except Exception as e:
             logger.warning("Failed to save session: %s", e)
@@ -223,6 +224,7 @@ class Runtime:
         if self.memory:
             await self.memory.close()
         await self.session_store.close()
+        await self.indexer.stop()
         await self.indexer.close()
 
 

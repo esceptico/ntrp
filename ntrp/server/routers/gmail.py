@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, HTTPException
 
 from ntrp.server.runtime import get_runtime
@@ -51,7 +53,7 @@ async def gmail_add():
         )
 
     try:
-        email = add_gmail_account()
+        email = await asyncio.to_thread(add_gmail_account)
 
         # Reinitialize Gmail source in runtime
         runtime = get_runtime()

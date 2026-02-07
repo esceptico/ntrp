@@ -1,6 +1,5 @@
 from typing import Any
 
-from ntrp.core.isolation import IsolationLevel
 from ntrp.memory.facts import FactMemory
 from ntrp.sources.base import NotesSource
 from ntrp.tools.ask_choice import AskChoiceTool
@@ -14,7 +13,7 @@ from ntrp.tools.calendar import (
     SearchCalendarTool,
 )
 from ntrp.tools.core.base import Tool, ToolResult
-from ntrp.tools.core.context import ToolContext, ToolExecution
+from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.email import ListEmailTool, ReadEmailTool, SearchEmailTool, SendEmailTool
 from ntrp.tools.explore import ExploreTool
@@ -81,32 +80,6 @@ class ToolExecutor:
 
         self.registry = registry or ToolRegistry()
         self._register_tools(working_dir)
-
-    async def spawn(
-        self,
-        ctx: ToolContext,
-        task: str,
-        *,
-        system_prompt: str,
-        tools: list[dict] | None = None,
-        timeout: int = 120,
-        model_override: str | None = None,
-        parent_id: str | None = None,
-        isolation: IsolationLevel = IsolationLevel.FULL,
-    ) -> str:
-        if not ctx.spawn_fn:
-            return "Error: spawn capability not available"
-
-        return await ctx.spawn_fn(
-            ctx,
-            task,
-            system_prompt=system_prompt,
-            tools=tools,
-            timeout=timeout,
-            model_override=model_override,
-            parent_id=parent_id,
-            isolation=isolation,
-        )
 
     def _register_tools(self, working_dir: str | None) -> None:
         # 1. Source-based tools (auto-matched by source_type)

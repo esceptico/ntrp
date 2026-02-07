@@ -31,9 +31,19 @@ class Indexer:
         self._progress = IndexProgress()
         self._error: str | None = None
         self._running = False
+        self._task: asyncio.Task | None = None
 
     async def connect(self) -> None:
         await self.index.connect()
+
+    async def stop(self) -> None:
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
 
     async def close(self) -> None:
         await self.index.close()
@@ -59,7 +69,7 @@ class Indexer:
             self._progress = IndexProgress(status=IndexStatus.SKIPPED)
             return
 
-        asyncio.create_task(self._run(sources))
+        self._task = asyncio.create_task(self._run(sources))
 
     async def _run(self, sources: list[IndexableSource]) -> None:
         self._running = True

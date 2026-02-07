@@ -28,11 +28,11 @@ class ExploreTool(Tool):
             ["task"],
         )
 
-    async def _build_prompt(self, executor) -> str:
-        if not executor.memory:
+    async def _build_prompt(self, memory) -> str:
+        if not memory:
             return EXPLORE_PROMPT
 
-        user_facts, _ = await executor.memory.get_context(user_limit=5, recent_limit=0)
+        user_facts, _ = await memory.get_context(user_limit=5, recent_limit=0)
         if not user_facts:
             return EXPLORE_PROMPT
 
@@ -48,11 +48,13 @@ class ExploreTool(Tool):
     async def execute(self, execution: ToolExecution, task: str, **kwargs) -> ToolResult:
         ctx = execution.ctx
 
-        tools = ctx.executor.registry.get_schemas(names=self.EXPLORE_TOOLS)
+        if not ctx.spawn_fn:
+            return ToolResult("Error: spawn capability not available", "Error")
 
-        prompt = await self._build_prompt(ctx.executor)
+        tools = ctx.registry.get_schemas(names=self.EXPLORE_TOOLS)
+        prompt = await self._build_prompt(ctx.memory)
 
-        result = await ctx.executor.spawn(
+        result = await ctx.spawn_fn(
             ctx,
             task=task,
             system_prompt=prompt,

@@ -4,7 +4,10 @@ from pydantic import BaseModel
 from ntrp.config import load_user_settings, save_user_settings
 from ntrp.constants import EMBEDDING_MODELS, SUPPORTED_MODELS
 from ntrp.context.compression import compress_context_async, count_tokens, find_compressible_range
+from ntrp.logging import get_logger
 from ntrp.server.runtime import get_runtime
+
+logger = get_logger(__name__)
 
 router = APIRouter(tags=["session"])
 
@@ -151,10 +154,21 @@ async def update_embedding_model(req: UpdateEmbeddingRequest):
     await runtime.indexer.index.clear()
     runtime.start_indexing()
 
+    # Memory vectors are now stale — they were embedded with the old model
+    warning = None
+    if runtime.memory:
+        logger.warning(
+            "Embedding model changed to %s — memory vectors are stale. "
+            "Run /init or clear memory to re-embed.",
+            req.embedding_model,
+        )
+        warning = "Memory vectors are stale and may return poor results. Clear memory or re-add facts to re-embed."
+
     return {
         "status": "reindexing",
         "embedding_model": req.embedding_model,
         "embedding_dim": new_dim,
+        "warning": warning,
     }
 
 

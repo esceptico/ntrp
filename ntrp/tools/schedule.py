@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -93,7 +93,7 @@ class ScheduleTaskTool(Tool):
             )
 
         email = notify_email or self.default_email
-        now = datetime.now()
+        now = datetime.now(UTC)
         next_run = compute_next_run(time_normalized, rec, after=now)
 
         task = ScheduledTask(

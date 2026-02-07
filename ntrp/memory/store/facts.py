@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 
 import aiosqlite
 
@@ -197,7 +197,7 @@ class FactRepository(BaseRepository):
         embedding: Embedding | None = None,
         happened_at: datetime | None = None,
     ) -> Fact:
-        now = datetime.now()
+        now = datetime.now(UTC)
         embedding_bytes = serialize_embedding(embedding)
         cursor = await self.conn.execute(
             _SQL_INSERT_FACT,
@@ -233,7 +233,7 @@ class FactRepository(BaseRepository):
     async def reinforce(self, fact_ids: Sequence[int]) -> None:
         if not fact_ids:
             return
-        now = datetime.now()
+        now = datetime.now(UTC)
         placeholders = ",".join("?" * len(fact_ids))
         await self.conn.execute(
             _SQL_REINFORCE_FACTS.format(placeholders=placeholders),
@@ -269,7 +269,7 @@ class FactRepository(BaseRepository):
         return [self._row_to_fact(r) for r in rows]
 
     async def mark_consolidated(self, fact_id: int) -> None:
-        now = datetime.now()
+        now = datetime.now(UTC)
         await self.conn.execute(_SQL_MARK_CONSOLIDATED, (now.isoformat(), fact_id))
         await self.conn.commit()
 
@@ -355,7 +355,7 @@ class FactRepository(BaseRepository):
         link_type: LinkType,
         weight: float,
     ) -> FactLink:
-        now = datetime.now()
+        now = datetime.now(UTC)
         cursor = await self.conn.execute(
             _SQL_INSERT_LINK,
             (source_fact_id, target_fact_id, link_type.value, weight, now.isoformat()),
@@ -447,7 +447,7 @@ class FactRepository(BaseRepository):
         embedding: Embedding | None = None,
         is_core: bool = False,
     ) -> Entity:
-        now = datetime.now()
+        now = datetime.now(UTC)
         embedding_bytes = serialize_embedding(embedding)
         cursor = await self.conn.execute(
             _SQL_INSERT_ENTITY,

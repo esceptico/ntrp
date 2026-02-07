@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ntrp.database import VectorDatabase
@@ -121,7 +121,7 @@ def parse_datetime(value: str | None) -> datetime | None:
     if value is None:
         return None
     dt = datetime.fromisoformat(value)
-    return dt.replace(tzinfo=None) if dt.tzinfo else dt
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
 class GraphDatabase(VectorDatabase):

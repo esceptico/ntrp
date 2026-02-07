@@ -7,7 +7,8 @@ from ntrp.context.models import SessionState
 from ntrp.events import ApprovalNeededEvent, ChoiceEvent
 
 if TYPE_CHECKING:
-    from ntrp.tools.executor import ToolExecutor
+    from ntrp.memory.facts import FactMemory
+    from ntrp.tools.core.registry import ToolRegistry
 
 
 # subset of response from POST /tools/result endpoint in app.py
@@ -31,7 +32,8 @@ class ToolContext:
     """Shared context for tool execution. Stateless, one per request."""
 
     session_state: SessionState
-    executor: "ToolExecutor"
+    registry: "ToolRegistry"
+    memory: "FactMemory | None" = None
 
     emit: Callable[[Any], Awaitable[None]] | None = None
     approval_queue: asyncio.Queue[ApprovalResponse] | None = None

@@ -1,6 +1,6 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from ntrp.core.agent import Agent
 from ntrp.core.prompts import INIT_INSTRUCTION
+from ntrp.core.spawner import create_spawn_fn
 from ntrp.events import (
     DoneEvent,
     ErrorEvent,
@@ -34,7 +35,6 @@ from ntrp.tools.core.context import ToolContext
 
 class ChatRequest(BaseModel):
     message: str
-    session_id: str | None = None
     skip_approvals: bool = False
 
 
@@ -152,7 +152,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         session_state.skip_approvals = request.skip_approvals
         tool_ctx = ToolContext(
             session_state=session_state,
-            executor=runtime.executor,
+            registry=runtime.executor.registry,
+            memory=runtime.memory,
             emit=ctx.event_bus.put,
             approval_queue=ctx.client_responses,
             choice_queue=ctx.choice_responses,
@@ -172,6 +173,15 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         yield to_sse(ThinkingEvent(status="processing..."))
 
         try:
+            cancel_check = lambda: run.cancelled
+            tool_ctx.spawn_fn = create_spawn_fn(
+                executor=runtime.executor,
+                model=runtime.config.chat_model,
+                max_depth=runtime.max_depth,
+                current_depth=0,
+                cancel_check=cancel_check,
+            )
+
             agent = Agent(
                 tools=runtime.tools,
                 tool_executor=runtime.executor,
@@ -180,7 +190,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 ctx=tool_ctx,
                 max_depth=runtime.max_depth,
                 current_depth=0,
-                cancel_check=lambda: run.cancelled,
+                cancel_check=cancel_check,
             )
 
             result: str | None = None
@@ -202,7 +212,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             run.completion_tokens = agent.total_output_tokens
 
             run.messages = agent.messages
-            session_state.last_activity = datetime.now()
+            session_state.last_activity = datetime.now(UTC)
             await runtime.save_session(session_state, run.messages)
 
             yield to_sse(DoneEvent(run_id=run.run_id, usage=run.get_usage()))

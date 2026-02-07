@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Self
 
@@ -118,26 +118,31 @@ class FactMemory:
         embedding = await self.embedder.embed_one(text)
 
         async with self._db_lock:
-            repo = FactRepository(self.db.conn)
+            conn = self.db.conn
+            repo = FactRepository(conn)
 
-            fact = await repo.create(
-                text=text,
-                fact_type=fact_type,
-                source_type=source_type,
-                source_ref=source_ref,
-                embedding=embedding,
-                happened_at=happened_at,
-            )
-
+            await conn.execute("SAVEPOINT remember")
             try:
+                fact = await repo.create(
+                    text=text,
+                    fact_type=fact_type,
+                    source_type=source_type,
+                    source_ref=source_ref,
+                    embedding=embedding,
+                    happened_at=happened_at,
+                )
+
                 extraction = await self.extractor.extract(text)
                 entities_extracted = await self._process_extraction(repo, fact.id, extraction, source_ref)
 
                 fact.entity_refs = await repo.get_entity_refs(fact.id)
                 links_created = await create_links_for_fact(repo, fact)
+
+                await conn.execute("RELEASE remember")
             except Exception:
-                logger.warning("Remember failed for fact %d, rolling back", fact.id)
-                await repo.delete(fact.id)
+                logger.warning("Remember failed, rolling back savepoint")
+                await conn.execute("ROLLBACK TO remember")
+                await conn.execute("RELEASE remember")
                 raise
 
         return RememberFactResult(
@@ -197,7 +202,7 @@ class FactMemory:
             temporal_proximity_score,
         )
 
-        now = datetime.now()
+        now = datetime.now(UTC)
         best_candidate = None
         best_score = 0.0
 
@@ -227,7 +232,22 @@ class FactMemory:
         if existing:
             return existing.id
 
-        candidates = await repo.list_entities_by_type(entity_type, limit=ENTITY_CANDIDATES_LIMIT)
+        # Name-based candidates
+        name_candidates = await repo.list_entities_by_type(entity_type, limit=ENTITY_CANDIDATES_LIMIT)
+
+        # Embedding-based candidates
+        embedding = await self.embedder.embed_one(f"{name} ({entity_type})")
+        vec_results = await repo.search_entities_vector(embedding, limit=ENTITY_CANDIDATES_LIMIT)
+        vec_candidates = [entity for entity, _ in vec_results if entity.entity_type == entity_type]
+
+        # Merge and deduplicate
+        seen_ids: set[int] = set()
+        candidates = []
+        for c in [*name_candidates, *vec_candidates]:
+            if c.id not in seen_ids:
+                seen_ids.add(c.id)
+                candidates.append(c)
+
         if not candidates:
             return await self._create_new_entity(repo, name, entity_type)
 
@@ -249,17 +269,18 @@ class FactMemory:
 
         context = await retrieve_with_observations(repo, obs_repo, query, query_embedding, seed_limit=limit)
 
-        # Reinforce accessed facts
-        if context.facts:
-            await repo.reinforce([f.id for f in context.facts])
+        async with self._db_lock:
+            # Reinforce accessed facts
+            if context.facts:
+                await repo.reinforce([f.id for f in context.facts])
 
-        # Reinforce accessed observations and their supporting facts
-        if context.observations:
-            await obs_repo.reinforce([o.id for o in context.observations])
-            for obs in context.observations:
-                fact_ids = await obs_repo.get_fact_ids(obs.id)
-                if fact_ids:
-                    await repo.reinforce(fact_ids)
+            # Reinforce accessed observations and their supporting facts
+            if context.observations:
+                await obs_repo.reinforce([o.id for o in context.observations])
+                for obs in context.observations:
+                    fact_ids = await obs_repo.get_fact_ids(obs.id)
+                    if fact_ids:
+                        await repo.reinforce(fact_ids)
 
         return context
 
@@ -268,35 +289,37 @@ class FactMemory:
         query_embedding = await self.embedder.embed_one(query)
         results = await repo.search_facts_vector(query_embedding, limit=FORGET_SEARCH_LIMIT)
 
-        count = 0
-        for fact, score in results:
-            if score >= FORGET_SIMILARITY_THRESHOLD:
-                await repo.delete(fact.id)
-                count += 1
-        return count
+        async with self._db_lock:
+            count = 0
+            for fact, score in results:
+                if score >= FORGET_SIMILARITY_THRESHOLD:
+                    await repo.delete(fact.id)
+                    count += 1
+            return count
 
     async def merge_entities(self, names: list[str], canonical_name: str | None = None) -> int:
         if len(names) < 2:
             return 0
 
-        repo = FactRepository(self.db.conn)
+        async with self._db_lock:
+            repo = FactRepository(self.db.conn)
 
-        entities = []
-        for name in names:
-            entity = await repo.get_entity_by_name(name)
-            if entity:
-                entities.append(entity)
+            entities = []
+            for name in names:
+                entity = await repo.get_entity_by_name(name)
+                if entity:
+                    entities.append(entity)
 
-        if len(entities) < 2:
-            return 0
+            if len(entities) < 2:
+                return 0
 
-        keep = next((e for e in entities if e.name == canonical_name), entities[0]) if canonical_name else entities[0]
+            keep = next((e for e in entities if e.name == canonical_name), entities[0]) if canonical_name else entities[0]
 
-        merge_ids = [e.id for e in entities if e.id != keep.id]
+            merge_ids = [e.id for e in entities if e.id != keep.id]
 
-        count = await repo.merge_entities(keep.id, merge_ids)
-        logger.info("Merged entities %s → '%s' (%d refs)", [e.name for e in entities], keep.name, count)
-        return count
+            count = await repo.merge_entities(keep.id, merge_ids)
+            logger.info("Merged entities %s → '%s' (%d refs)", [e.name for e in entities], keep.name, count)
+            return count
 
     async def count(self) -> int:
         repo = FactRepository(self.db.conn)

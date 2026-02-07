@@ -119,7 +119,7 @@ class ListScratchpadTool(Tool):
 
     @property
     def schema(self) -> dict:
-        return make_schema(self.name, self.description, {})
+        return make_schema(self.name, self.description)
 
     async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult:
         scratch_dir = _scratchpad_dir(execution.ctx.session_id)

@@ -8,6 +8,7 @@ import pytest_asyncio
 
 from ntrp.memory.consolidation import (
     ConsolidationAction,
+    ConsolidationSchema,
     _execute_action,
     _format_observations,
     consolidate_fact,
@@ -86,30 +87,30 @@ class TestFormatObservations:
         assert "Source fact text" in result
 
 
-class TestConsolidationAction:
-    def test_from_json_create(self):
-        data = {"action": "create", "text": "New observation"}
-        action = ConsolidationAction.from_json(data)
-        assert action.type == "create"
-        assert action.text == "New observation"
+class TestConsolidationSchema:
+    def test_parse_create(self):
+        parsed = ConsolidationSchema.model_validate_json('{"action": "create", "text": "New observation"}')
+        assert parsed.action == "create"
+        assert parsed.text == "New observation"
 
-    def test_from_json_update(self):
-        data = {"action": "update", "observation_id": 1, "text": "Updated", "reason": "refinement"}
-        action = ConsolidationAction.from_json(data)
-        assert action.type == "update"
-        assert action.observation_id == 1
-        assert action.text == "Updated"
-        assert action.reason == "refinement"
+    def test_parse_update(self):
+        parsed = ConsolidationSchema.model_validate_json(
+            '{"action": "update", "observation_id": 1, "text": "Updated", "reason": "refinement"}'
+        )
+        assert parsed.action == "update"
+        assert parsed.observation_id == 1
+        assert parsed.text == "Updated"
+        assert parsed.reason == "refinement"
 
-    def test_from_json_skip(self):
-        data = {"action": "skip", "reason": "ephemeral state"}
-        action = ConsolidationAction.from_json(data)
-        assert action.type == "skip"
-        assert action.reason == "ephemeral state"
+    def test_parse_skip(self):
+        parsed = ConsolidationSchema.model_validate_json('{"action": "skip", "reason": "ephemeral state"}')
+        assert parsed.action == "skip"
+        assert parsed.reason == "ephemeral state"
 
-    def test_from_json_defaults_to_skip(self):
-        action = ConsolidationAction.from_json({})
-        assert action.type == "skip"
+    def test_invalid_action_rejected(self):
+        import pydantic
+        with pytest.raises(pydantic.ValidationError):
+            ConsolidationSchema.model_validate_json('{"action": "invalid"}')
 
 
 class TestExecuteAction:
@@ -410,8 +411,8 @@ class TestConsolidateFact:
         assert obs_count == 2
 
     @pytest.mark.asyncio
-    async def test_legacy_array_response_takes_first(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
-        """Legacy array response still works, takes first action."""
+    async def test_invalid_json_falls_back_to_none(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
+        """Invalid JSON from LLM results in skipped consolidation."""
         fact = await fact_repo.create(
             text="Bob likes pizza",
             fact_type=FactType.WORLD,
@@ -421,21 +422,20 @@ class TestConsolidateFact:
         embed_fn = AsyncMock(return_value=mock_embedding("test"))
 
         with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            # Legacy array format - takes first
             mock_llm.return_value.choices = [
                 type(
                     "Choice",
                     (),
                     {
                         "message": type(
-                            "Message", (), {"content": '[{"action": "create", "text": "Bob enjoys pizza"}]'}
+                            "Message", (), {"content": "not valid json at all"}
                         )()
                     },
                 )()
             ]
             result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
 
-        assert result.action == "created"
+        assert result.action == "skipped"
 
 
 class TestAlwaysConsolidated:
