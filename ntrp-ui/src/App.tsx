@@ -297,6 +297,7 @@ function AppContent({
           settings={settings}
           onUpdate={updateSetting}
           onModelChange={(type: "chat" | "memory", model: string) => updateServerConfig({ [`${type}_model`]: model })}
+          onServerConfigChange={(newConfig) => updateServerConfig(newConfig)}
           onClose={closeSettings}
         />
       )}

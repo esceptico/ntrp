@@ -33,11 +33,16 @@ export const LIMIT_ITEMS: NumberItem[] = [
 ];
 
 // Connections section items
-export const CONNECTION_ITEMS = ["vault", "google", "browser"] as const;
+export const CONNECTION_ITEMS = ["vault", "gmail", "calendar", "browser", "memory", "web"] as const;
 export type ConnectionItem = (typeof CONNECTION_ITEMS)[number];
 
 export const CONNECTION_LABELS = {
-  vault: "Vault",
-  google: "Google",
+  vault: "Notes",
+  gmail: "Gmail",
+  calendar: "Calendar",
   browser: "Browser",
+  memory: "Memory",
+  web: "Web Search",
 } satisfies Record<ConnectionItem, string>;
+
+export const TOGGLEABLE_SOURCES: ConnectionItem[] = ["gmail", "calendar", "memory"];

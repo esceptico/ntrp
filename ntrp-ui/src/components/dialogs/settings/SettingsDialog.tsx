@@ -13,14 +13,19 @@ import {
   removeGmailAccount,
   getEmbeddingModels,
   updateEmbeddingModel,
+  updateVaultPath,
+  updateBrowser,
+  getServerConfig,
   type ServerConfig,
   type GmailAccount,
 } from "../../../api/client.js";
-import { SectionId, SECTION_IDS, SECTION_LABELS, APPEARANCE_ITEMS, LIMIT_ITEMS, CONNECTION_ITEMS, type ConnectionItem } from "./config.js";
+import { SectionId, SECTION_IDS, SECTION_LABELS, APPEARANCE_ITEMS, LIMIT_ITEMS, CONNECTION_ITEMS, TOGGLEABLE_SOURCES, type ConnectionItem } from "./config.js";
 import { colorOptions } from "./SettingsRows.js";
 import { ModelDropdown } from "./ModelDropdown.js";
+import { BrowserDropdown } from "./BrowserDropdown.js";
 import { ConnectionsSection } from "./ConnectionsSection.js";
 import { AgentSection, AppearanceSection, LimitsSection } from "./sections/index.js";
+import { useTextInput } from "../../../hooks/useTextInput.js";
 
 function useAccent(accentColor: AccentColor) {
   return useMemo(() => accentColors[accentColor].primary, [accentColor]);
@@ -34,6 +39,7 @@ interface SettingsDialogProps {
   settings: Settings;
   onUpdate: (category: keyof Settings, key: string, value: unknown) => void;
   onModelChange: (type: "chat" | "memory", model: string) => void;
+  onServerConfigChange: (config: ServerConfig) => void;
   onClose: () => void;
 }
 
@@ -43,6 +49,7 @@ export function SettingsDialog({
   settings,
   onUpdate,
   onModelChange,
+  onServerConfigChange,
   onClose,
 }: SettingsDialogProps) {
   const { width: terminalWidth } = useDimensions();
@@ -58,6 +65,18 @@ export function SettingsDialog({
   const [googleAccounts, setGoogleAccounts] = useState<GmailAccount[]>([]);
   const [selectedGoogleIndex, setSelectedGoogleIndex] = useState(0);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+
+  // Vault editing state
+  const [editingVault, setEditingVault] = useState(false);
+  const [vaultPath, setVaultPath] = useState(serverConfig?.vault_path || "");
+  const [vaultCursorPos, setVaultCursorPos] = useState(0);
+  const [updatingVault, setUpdatingVault] = useState(false);
+  const [vaultError, setVaultError] = useState<string | null>(null);
+
+  // Browser editing state
+  const [showingBrowserDropdown, setShowingBrowserDropdown] = useState(false);
+  const [updatingBrowser, setUpdatingBrowser] = useState(false);
+  const [browserError, setBrowserError] = useState<string | null>(null);
 
   // Models state
   const [models, setModels] = useState<string[]>([]);
@@ -159,6 +178,83 @@ export function SettingsDialog({
     }
   }, [config, googleAccounts, selectedGoogleIndex, actionInProgress]);
 
+  // Vault editing handlers
+  const { handleKey: handleVaultKey } = useTextInput({
+    text: vaultPath,
+    cursorPos: vaultCursorPos,
+    setText: setVaultPath,
+    setCursorPos: setVaultCursorPos,
+  });
+
+  const handleSaveVault = useCallback(async () => {
+    if (updatingVault) return;
+    const trimmed = vaultPath.trim();
+    if (!trimmed) {
+      setVaultError("Path cannot be empty");
+      return;
+    }
+    setVaultError(null);
+    setUpdatingVault(true);
+    try {
+      await updateVaultPath(config, trimmed);
+      const updatedConfig = await getServerConfig(config);
+      onServerConfigChange(updatedConfig);
+      setEditingVault(false);
+    } catch (err) {
+      setVaultError(err instanceof Error ? err.message : "Failed to update vault path");
+    } finally {
+      setUpdatingVault(false);
+    }
+  }, [config, vaultPath, updatingVault, onServerConfigChange]);
+
+  const handleCancelVaultEdit = useCallback(() => {
+    setVaultPath(serverConfig?.vault_path || "");
+    setVaultCursorPos(0);
+    setVaultError(null);
+    setEditingVault(false);
+  }, [serverConfig?.vault_path]);
+
+  const handleStartVaultEdit = useCallback(() => {
+    const path = serverConfig?.vault_path || "";
+    setVaultPath(path);
+    setVaultCursorPos(path.length);
+    setVaultError(null);
+    setEditingVault(true);
+  }, [serverConfig?.vault_path]);
+
+  // Browser selection handler
+  const handleSelectBrowser = useCallback(async (browser: string | null) => {
+    setShowingBrowserDropdown(false);
+    if (browser === serverConfig?.browser) return;
+
+    setBrowserError(null);
+    setUpdatingBrowser(true);
+    try {
+      await updateBrowser(config, browser);
+      const updatedConfig = await getServerConfig(config);
+      onServerConfigChange(updatedConfig);
+    } catch (err) {
+      setBrowserError(err instanceof Error ? err.message : "Failed to update browser");
+    } finally {
+      setUpdatingBrowser(false);
+    }
+  }, [config, serverConfig?.browser, onServerConfigChange]);
+
+  const handleToggleSource = useCallback(async (source: string) => {
+    if (actionInProgress || !serverConfig?.sources) return;
+    const current = serverConfig.sources[source]?.enabled ?? false;
+    setActionInProgress("Updating...");
+    try {
+      await updateConfig(config, { sources: { [source]: !current } });
+      const updatedConfig = await getServerConfig(config);
+      onServerConfigChange(updatedConfig);
+    } catch {
+      // Ignore errors
+    } finally {
+      setActionInProgress(null);
+    }
+  }, [config, serverConfig, actionInProgress, onServerConfigChange]);
+
   const handleKeypress = useCallback(
     (key: Key) => {
       if (dropdownTarget || actionInProgress) return;
@@ -188,22 +284,31 @@ export function SettingsDialog({
         }
       } else if (activeSection === "connections") {
         const connIdx = CONNECTION_ITEMS.indexOf(connectionItem);
+        const gmailEnabled = serverConfig?.sources?.gmail?.enabled;
 
         if (key.name === "up" || key.name === "k") {
-          if (connectionItem === "google" && googleAccounts.length > 0 && selectedGoogleIndex > 0) {
+          if (connectionItem === "gmail" && gmailEnabled && googleAccounts.length > 0 && selectedGoogleIndex > 0) {
             setSelectedGoogleIndex((i) => i - 1);
           } else if (connIdx > 0) {
             setConnectionItem(CONNECTION_ITEMS[connIdx - 1]);
           }
         } else if (key.name === "down" || key.name === "j") {
-          if (connectionItem === "google" && googleAccounts.length > 0 && selectedGoogleIndex < googleAccounts.length - 1) {
+          if (connectionItem === "gmail" && gmailEnabled && googleAccounts.length > 0 && selectedGoogleIndex < googleAccounts.length - 1) {
             setSelectedGoogleIndex((i) => i + 1);
           } else if (connIdx < CONNECTION_ITEMS.length - 1) {
             setConnectionItem(CONNECTION_ITEMS[connIdx + 1]);
           }
-        } else if (key.sequence === "a" && connectionItem === "google") {
+        } else if (key.name === "return" || key.name === "space") {
+          if (connectionItem === "vault") {
+            handleStartVaultEdit();
+          } else if (connectionItem === "browser") {
+            setShowingBrowserDropdown(true);
+          } else if (TOGGLEABLE_SOURCES.includes(connectionItem)) {
+            handleToggleSource(connectionItem);
+          }
+        } else if (key.sequence === "a" && connectionItem === "gmail" && gmailEnabled) {
           handleAddGoogle();
-        } else if ((key.sequence === "d" || key.name === "delete") && connectionItem === "google") {
+        } else if ((key.sequence === "d" || key.name === "delete") && connectionItem === "gmail" && gmailEnabled) {
           handleRemoveGoogle();
         }
       } else if (activeSection === "appearance") {
@@ -249,12 +354,29 @@ export function SettingsDialog({
       activeSection, agentIndex, appearanceIndex, limitsIndex,
       agentTotalItems, appearanceTotalItems, limitsTotalItems,
       isColorItem, settings, onUpdate, onClose, dropdownTarget,
-      connectionItem, googleAccounts, selectedGoogleIndex,
-      handleAddGoogle, handleRemoveGoogle, actionInProgress,
+      connectionItem, googleAccounts, selectedGoogleIndex, serverConfig,
+      handleAddGoogle, handleRemoveGoogle, handleStartVaultEdit, handleToggleSource, actionInProgress,
     ]
   );
 
-  useKeypress(handleKeypress, { isActive: !dropdownTarget });
+  // Vault editing keypress handler
+  const handleVaultEditKeypress = useCallback(
+    (key: Key) => {
+      if (key.name === "escape") {
+        handleCancelVaultEdit();
+        return;
+      }
+      if (key.name === "return") {
+        handleSaveVault();
+        return;
+      }
+      handleVaultKey(key);
+    },
+    [handleVaultKey, handleSaveVault, handleCancelVaultEdit]
+  );
+
+  useKeypress(handleKeypress, { isActive: !dropdownTarget && !editingVault && !showingBrowserDropdown });
+  useKeypress(handleVaultEditKeypress, { isActive: editingVault && !updatingVault });
 
   const handleEmbeddingConfirm = useCallback(async () => {
     if (!pendingEmbeddingModel || actionInProgress) return;
@@ -346,7 +468,20 @@ export function SettingsDialog({
     );
   }
 
-  const contentHeight = 10;
+  if (showingBrowserDropdown) {
+    return (
+      <Box flexDirection="column" alignItems="center" paddingY={1}>
+        <BrowserDropdown
+          currentBrowser={serverConfig?.browser || null}
+          width={Math.min(50, contentWidth)}
+          onSelect={handleSelectBrowser}
+          onClose={() => setShowingBrowserDropdown(false)}
+        />
+      </Box>
+    );
+  }
+
+  const contentHeight = 12;
 
   return (
     <Panel title="PREFERENCES" width={contentWidth}>
@@ -394,6 +529,13 @@ export function SettingsDialog({
               selectedGoogleIndex={selectedGoogleIndex}
               accent={accent}
               width={detailWidth}
+              editingVault={editingVault}
+              vaultPath={vaultPath}
+              vaultCursorPos={vaultCursorPos}
+              updatingVault={updatingVault}
+              vaultError={vaultError}
+              updatingBrowser={updatingBrowser}
+              browserError={browserError}
             />
           )}
 

@@ -37,9 +37,6 @@ class Config(BaseSettings):
         extra="ignore",
     )
 
-    # Required
-    vault_path: Path = Field(description="Path to Obsidian vault")
-
     # OpenAI (for embeddings) - no prefix, standard env var
     openai_api_key: str = Field(alias="OPENAI_API_KEY")
 
@@ -56,10 +53,6 @@ class Config(BaseSettings):
     # Memory (graph-based knowledge store)
     memory: bool = True
 
-    # Browser history (optional)
-    browser: str | None = None  # "chrome", "arc", "safari", or None to disable
-    browser_days: int = 30
-
     # Gmail (optional)
     gmail: bool = False
     gmail_days: int = 30
@@ -69,6 +62,13 @@ class Config(BaseSettings):
 
     # Exa.ai for web search (optional) - no prefix, standard env var
     exa_api_key: str | None = Field(default=None, alias="EXA_API_KEY")
+
+    # Obsidian vault
+    vault_path: Path | None = None
+
+    # Browser history (optional)
+    browser: str | None = None
+    browser_days: int = 30
 
     # Scheduling
     schedule_email: str | None = None
@@ -97,10 +97,6 @@ class Config(BaseSettings):
     def memory_db_path(self) -> Path:
         return self.db_dir / "memory.db"
 
-    @field_validator("vault_path", mode="before")
-    @classmethod
-    def expand_vault_path(cls, v: str | Path) -> Path:
-        return Path(v).expanduser()
 
 
 @lru_cache
@@ -115,4 +111,18 @@ def get_config() -> Config:
         config.embedding_model = settings["embedding_model"]
     if "embedding_dim" in settings:
         config.embedding_dim = settings["embedding_dim"]
+    if "vault_path" in settings:
+        config.vault_path = Path(settings["vault_path"])
+    if "browser" in settings:
+        config.browser = settings["browser"]
+    if "browser_days" in settings:
+        config.browser_days = settings["browser_days"]
+    if "sources" in settings:
+        src = settings["sources"]
+        if "gmail" in src:
+            config.gmail = src["gmail"]
+        if "calendar" in src:
+            config.calendar = src["calendar"]
+        if "memory" in src:
+            config.memory = src["memory"]
     return config

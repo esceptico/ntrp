@@ -129,6 +129,14 @@ export interface FactDetails {
   }>;
 }
 
+export interface SourceInfo {
+  enabled?: boolean;
+  connected: boolean;
+  accounts?: string[];
+  path?: string;
+  type?: string;
+}
+
 export interface ServerConfig {
   chat_model: string;
   memory_model: string;
@@ -139,8 +147,10 @@ export interface ServerConfig {
   gmail_accounts: string[];
   has_browser: boolean;
   has_gmail: boolean;
+  has_notes: boolean;
   max_depth: number;
   memory_enabled: boolean;
+  sources?: Record<string, SourceInfo>;
 }
 
 export interface Stats {
@@ -181,8 +191,10 @@ export async function getServerConfig(config: Config): Promise<ServerConfig> {
 
 export async function updateConfig(
   config: Config,
-  patch: Partial<Pick<ServerConfig, "chat_model" | "memory_model" | "max_depth">>
-): Promise<Pick<ServerConfig, "chat_model" | "memory_model" | "max_depth">> {
+  patch: Partial<Pick<ServerConfig, "chat_model" | "memory_model" | "max_depth">> & {
+    sources?: Record<string, boolean>;
+  }
+): Promise<Record<string, unknown>> {
   return api.patch(`${config.serverUrl}/config`, patch);
 }
 
@@ -285,6 +297,23 @@ export async function addGmailAccount(config: Config): Promise<{ email: string; 
 
 export async function removeGmailAccount(config: Config, tokenFile: string): Promise<{ email: string | null; status: string }> {
   return api.delete(`${config.serverUrl}/gmail/${tokenFile}`);
+}
+
+export async function updateVaultPath(
+  config: Config,
+  vaultPath: string
+): Promise<{ vault_path: string }> {
+  return api.patch(`${config.serverUrl}/config`, { vault_path: vaultPath });
+}
+
+export async function updateBrowser(
+  config: Config,
+  browser: string | null,
+  browserDays?: number
+): Promise<{ browser: string | null; browser_days?: number }> {
+  const body: { browser: string | null; browser_days?: number } = { browser };
+  if (browserDays !== undefined) body.browser_days = browserDays;
+  return api.patch(`${config.serverUrl}/config`, body);
 }
 
 export interface Schedule {

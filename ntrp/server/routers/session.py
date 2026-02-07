@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ntrp.config import load_user_settings, save_user_settings
@@ -18,10 +20,20 @@ class SessionResponse(BaseModel):
     source_errors: dict[str, str]
 
 
+class SourceToggles(BaseModel):
+    gmail: bool | None = None
+    calendar: bool | None = None
+    memory: bool | None = None
+
+
 class UpdateConfigRequest(BaseModel):
     chat_model: str | None = None
     memory_model: str | None = None
     max_depth: int | None = None
+    vault_path: str | None = None
+    browser: str | None = None
+    browser_days: int | None = None
+    sources: SourceToggles | None = None
 
 
 @router.get("/session")
@@ -78,8 +90,17 @@ async def get_config():
         "gmail_accounts": gmail_accounts,
         "has_browser": runtime.browser is not None,
         "has_gmail": runtime.gmail is not None,
+        "has_notes": runtime.config.vault_path is not None and runtime._sources.get("notes") is not None,
         "max_depth": runtime.max_depth,
         "memory_enabled": runtime.memory is not None,
+        "sources": {
+            "gmail": {"enabled": runtime.config.gmail, "connected": runtime.gmail is not None, "accounts": gmail_accounts},
+            "calendar": {"enabled": runtime.config.calendar, "connected": "calendar" in runtime._sources},
+            "memory": {"enabled": runtime.config.memory, "connected": runtime.memory is not None},
+            "web": {"connected": "web" in runtime._sources},
+            "notes": {"connected": "notes" in runtime._sources, "path": str(runtime.config.vault_path) if runtime.config.vault_path else None},
+            "browser": {"connected": "browser" in runtime._sources, "type": runtime.config.browser},
+        },
     }
 
 
@@ -96,23 +117,101 @@ async def list_models():
 @router.patch("/config")
 async def update_config(req: UpdateConfigRequest):
     runtime = get_runtime()
-    settings = load_user_settings()
 
-    if req.chat_model:
-        runtime.config.chat_model = req.chat_model
-        settings["chat_model"] = req.chat_model
-    if req.memory_model:
-        runtime.config.memory_model = req.memory_model
-        settings["memory_model"] = req.memory_model
-    if req.chat_model or req.memory_model:
-        save_user_settings(settings)
-    if req.max_depth is not None:
-        runtime.max_depth = req.max_depth
+    async with runtime._config_lock:
+        settings = load_user_settings()
+        needs_rebuild = False
+
+        if req.chat_model:
+            runtime.config.chat_model = req.chat_model
+            settings["chat_model"] = req.chat_model
+        if req.memory_model:
+            runtime.config.memory_model = req.memory_model
+            settings["memory_model"] = req.memory_model
+        if req.chat_model or req.memory_model:
+            save_user_settings(settings)
+
+        if req.max_depth is not None:
+            runtime.max_depth = req.max_depth
+
+        # Handle vault_path update
+        if req.vault_path is not None:
+            if req.vault_path == "":
+                runtime.config.vault_path = None
+                runtime.reinit_notes(None)
+                settings.pop("vault_path", None)
+            else:
+                vault_path = Path(req.vault_path).expanduser()
+                if not vault_path.exists():
+                    raise HTTPException(status_code=400, detail=f"Vault path does not exist: {vault_path}")
+                runtime.config.vault_path = vault_path
+                runtime.reinit_notes(vault_path)
+                settings["vault_path"] = str(vault_path)
+            save_user_settings(settings)
+            needs_rebuild = True
+
+        # Handle browser update
+        if req.browser is not None or req.browser_days is not None:
+            browser = req.browser if req.browser is not None else runtime.config.browser
+            browser_days = req.browser_days if req.browser_days is not None else runtime.config.browser_days
+
+            if browser == "" or browser == "none":
+                browser = None
+
+            runtime.config.browser = browser
+            runtime.config.browser_days = browser_days
+            runtime.reinit_browser(browser, browser_days)
+
+            if browser:
+                settings["browser"] = browser
+            else:
+                settings.pop("browser", None)
+            settings["browser_days"] = browser_days
+            save_user_settings(settings)
+            needs_rebuild = True
+
+        # Handle source toggles
+        if req.sources:
+            sources_settings = settings.setdefault("sources", {})
+
+            if req.sources.gmail is not None:
+                runtime.config.gmail = req.sources.gmail
+                sources_settings["gmail"] = req.sources.gmail
+                if req.sources.gmail:
+                    runtime.reinit_gmail()
+                else:
+                    runtime._sources.pop("email", None)
+                    runtime._source_errors.pop("email", None)
+                    runtime.gmail = None
+
+            if req.sources.calendar is not None:
+                runtime.config.calendar = req.sources.calendar
+                sources_settings["calendar"] = req.sources.calendar
+                if req.sources.calendar:
+                    runtime.reinit_calendar()
+                else:
+                    runtime._sources.pop("calendar", None)
+                    runtime._source_errors.pop("calendar", None)
+
+            if req.sources.memory is not None:
+                runtime.config.memory = req.sources.memory
+                sources_settings["memory"] = req.sources.memory
+                await runtime.reinit_memory(req.sources.memory)
+
+            save_user_settings(settings)
+            needs_rebuild = True
+
+        if needs_rebuild:
+            runtime.rebuild_executor()
 
     return {
         "chat_model": runtime.config.chat_model,
         "memory_model": runtime.config.memory_model,
         "max_depth": runtime.max_depth,
+        "vault_path": str(runtime.config.vault_path) if runtime.config.vault_path else None,
+        "browser": runtime.config.browser,
+        "has_notes": runtime.config.vault_path is not None and runtime._sources.get("notes") is not None,
+        "has_browser": runtime.browser is not None,
     }
 
 

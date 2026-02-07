@@ -1,5 +1,6 @@
 import asyncio
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from ntrp.config import Config, get_config
@@ -51,39 +52,35 @@ class Runtime:
         self.run_registry = RunRegistry()
 
         self._connected = False
+        self._config_lock = asyncio.Lock()
 
     def _init_sources(self) -> None:
-        source_factories: list[tuple[str, callable]] = [
-            ("ObsidianSource", lambda: ObsidianSource(vault_path=self.config.vault_path)),
-            (
-                "BrowserHistorySource",
-                lambda: BrowserHistorySource(
-                    browser_name=self.config.browser,
-                    days_back=self.config.browser_days,
-                )
-                if self.config.browser
-                else None,
-            ),
-            (
+        source_factories: list[tuple[str, callable]] = []
+
+        if self.config.gmail:
+            source_factories.append((
                 "MultiGmailSource",
                 lambda: MultiGmailSource(
                     token_paths=discover_gmail_tokens(),
                     days_back=self.config.gmail_days,
                 ),
-            ),
-            (
+            ))
+
+        if self.config.calendar:
+            source_factories.append((
                 "MultiCalendarSource",
                 lambda: MultiCalendarSource(
                     token_paths=discover_calendar_tokens(),
                     days_back=7,
                     days_ahead=30,
                 ),
-            ),
-            (
+            ))
+
+        if self.config.exa_api_key:
+            source_factories.append((
                 "WebSource",
-                lambda: WebSource(api_key=self.config.exa_api_key) if self.config.exa_api_key else None,
-            ),
-        ]
+                lambda: WebSource(api_key=self.config.exa_api_key),
+            ))
 
         for name, factory in source_factories:
             try:
@@ -108,6 +105,80 @@ class Runtime:
         self._sources["email"] = gmail
         return gmail
 
+    def reinit_notes(self, vault_path: Path | None) -> ObsidianSource | None:
+        if vault_path is None:
+            self._sources.pop("notes", None)
+            return None
+        try:
+            notes = ObsidianSource(vault_path=vault_path)
+            self._sources["notes"] = notes
+            return notes
+        except Exception as e:
+            logger.warning("Failed to init Obsidian source: %s", e)
+            self._source_errors["notes"] = str(e)
+            return None
+
+    def reinit_browser(self, browser_name: str | None, days_back: int | None = None) -> BrowserHistorySource | None:
+        if browser_name is None:
+            self._sources.pop("browser", None)
+            self.browser = None
+            return None
+        try:
+            browser = BrowserHistorySource(
+                browser_name=browser_name,
+                days_back=days_back or self.config.browser_days,
+            )
+            self._sources["browser"] = browser
+            self.browser = browser
+            return browser
+        except Exception as e:
+            logger.warning("Failed to init browser source: %s", e)
+            self._source_errors["browser"] = str(e)
+            return None
+
+    def reinit_calendar(self) -> MultiCalendarSource | None:
+        token_paths = discover_calendar_tokens()
+        if not token_paths:
+            return None
+        calendar = MultiCalendarSource(
+            token_paths=token_paths,
+            days_back=7,
+            days_ahead=30,
+        )
+        self._sources["calendar"] = calendar
+        return calendar
+
+    async def reinit_memory(self, enabled: bool) -> None:
+        if enabled and not self.memory:
+            self.memory = await FactMemory.create(
+                db_path=self.config.memory_db_path,
+                embedding=self.embedding,
+                extraction_model=self.config.memory_model,
+            )
+        elif not enabled and self.memory:
+            await self.memory.close()
+            self.memory = None
+
+    def rebuild_executor(self) -> None:
+        self.executor = ToolExecutor(
+            sources=self._sources,
+            memory=self.memory,
+            model=self.config.chat_model,
+            search_index=self.indexer.index,
+        )
+
+        default_email = self.config.schedule_email
+        if not default_email and self.gmail:
+            accounts = self.gmail.list_accounts()
+            default_email = accounts[0] if accounts else None
+
+        self.executor.registry.register(ScheduleTaskTool(self.schedule_store, default_email))
+        self.executor.registry.register(ListSchedulesTool(self.schedule_store))
+        self.executor.registry.register(CancelScheduleTool(self.schedule_store))
+        self.executor.registry.register(GetScheduleResultTool(self.schedule_store))
+
+        self.tools = self.executor.get_tools()
+
     async def connect(self) -> None:
         if self._connected:
             return
@@ -127,25 +198,7 @@ class Runtime:
                 extraction_model=self.config.memory_model,
             )
 
-        self.executor = ToolExecutor(
-            sources=self._sources,
-            memory=self.memory,
-            model=self.config.chat_model,
-            search_index=self.indexer.index,
-        )
-
-        # Register schedule tools
-        default_email = self.config.schedule_email
-        if not default_email and self.gmail:
-            accounts = self.gmail.list_accounts()
-            default_email = accounts[0] if accounts else None
-
-        self.executor.registry.register(ScheduleTaskTool(self.schedule_store, default_email))
-        self.executor.registry.register(ListSchedulesTool(self.schedule_store))
-        self.executor.registry.register(CancelScheduleTool(self.schedule_store))
-        self.executor.registry.register(GetScheduleResultTool(self.schedule_store))
-
-        self.tools = self.executor.get_tools()
+        self.rebuild_executor()
         self._connected = True
 
     def get_source_details(self) -> dict[str, dict]:
