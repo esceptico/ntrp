@@ -1,6 +1,5 @@
 import { Box, Text } from "ink";
 import { Panel, Footer, colors } from "../../ui/index.js";
-import { useAccentColor } from "../../../hooks/index.js";
 import { wrapText } from "../../../lib/utils.js";
 
 interface ScheduleEditViewProps {
