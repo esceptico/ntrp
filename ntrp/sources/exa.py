@@ -1,21 +1,20 @@
 from exa_py import Exa
 
-from ntrp.config import get_config
 from ntrp.sources.base import WebContentResult, WebSearchResult, WebSearchSource
 
 
 class WebSource(WebSearchSource):
     name = "web"
 
-    def __init__(self):
+    def __init__(self, api_key: str):
+        if not api_key:
+            raise ValueError("EXA_API_KEY not configured")
+        self._api_key = api_key
         self._client = None
 
     def _get_client(self):
         if self._client is None:
-            api_key = get_config().exa_api_key
-            if not api_key:
-                raise ValueError("EXA_API_KEY not configured")
-            self._client = Exa(api_key=api_key)
+            self._client = Exa(api_key=self._api_key)
         return self._client
 
     def search_with_details(

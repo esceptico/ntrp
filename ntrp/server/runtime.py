@@ -11,8 +11,10 @@ from ntrp.memory.facts import FactMemory
 from ntrp.schedule.scheduler import Scheduler
 from ntrp.schedule.store import ScheduleStore
 from ntrp.server.indexer import Indexer
+from ntrp.server.state import RunRegistry
 from ntrp.sources.browser import BrowserHistorySource
 from ntrp.sources.exa import WebSource
+from ntrp.sources.google.auth import discover_calendar_tokens, discover_gmail_tokens
 from ntrp.sources.google.calendar import MultiCalendarSource
 from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.sources.memory import MemoryIndexSource
@@ -46,26 +48,67 @@ class Runtime:
         self.max_depth = AGENT_MAX_DEPTH
         self.schedule_store: ScheduleStore | None = None
         self.scheduler: Scheduler | None = None
+        self.run_registry = RunRegistry()
 
         self._connected = False
 
     def _init_sources(self) -> None:
-        source_classes = [
-            ObsidianSource,
-            BrowserHistorySource,
-            MultiGmailSource,
-            MultiCalendarSource,
-            WebSource,
+        source_factories: list[tuple[str, callable]] = [
+            ("ObsidianSource", lambda: ObsidianSource(vault_path=self.config.vault_path)),
+            (
+                "BrowserHistorySource",
+                lambda: BrowserHistorySource(
+                    browser_name=self.config.browser,
+                    days_back=self.config.browser_days,
+                )
+                if self.config.browser
+                else None,
+            ),
+            (
+                "MultiGmailSource",
+                lambda: MultiGmailSource(
+                    token_paths=discover_gmail_tokens(),
+                    days_back=self.config.gmail_days,
+                ),
+            ),
+            (
+                "MultiCalendarSource",
+                lambda: MultiCalendarSource(
+                    token_paths=discover_calendar_tokens(),
+                    days_back=7,
+                    days_ahead=30,
+                ),
+            ),
+            (
+                "WebSource",
+                lambda: WebSource(api_key=self.config.exa_api_key)
+                if self.config.exa_api_key
+                else None,
+            ),
         ]
 
-        for cls in source_classes:
+        for name, factory in source_factories:
             try:
-                source = cls()
+                source = factory()
+                if source is None:
+                    continue
                 if source.errors:
                     self._source_errors[source.name] = "; ".join(f"{k}: {v}" for k, v in source.errors.items())
                 self._sources[source.name] = source
             except Exception as e:
-                logger.warning("Failed to init source %s: %s", cls.__name__, e)
+                logger.warning("Failed to init source %s: %s", name, e)
+
+    def reinit_gmail(self) -> MultiGmailSource | None:
+        token_paths = discover_gmail_tokens()
+        if not token_paths:
+            return None
+        gmail = MultiGmailSource(
+            token_paths=token_paths,
+            days_back=self.config.gmail_days,
+        )
+        self.gmail = gmail if gmail.sources else None
+        self._sources["email"] = gmail
+        return gmail
 
     async def connect(self) -> None:
         if self._connected:

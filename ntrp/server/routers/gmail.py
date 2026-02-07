@@ -7,7 +7,7 @@ from ntrp.sources.google.auth import (
     add_gmail_account,
     discover_gmail_tokens,
 )
-from ntrp.sources.google.gmail import GmailSource, MultiGmailSource
+from ntrp.sources.google.gmail import GmailSource
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
 
@@ -55,7 +55,7 @@ async def gmail_add():
 
         # Reinitialize Gmail source in runtime
         runtime = get_runtime()
-        runtime.gmail = MultiGmailSource()
+        runtime.reinit_gmail()
 
         return {"email": email, "status": "connected"}
     except Exception as e:
@@ -85,9 +85,7 @@ async def gmail_remove(token_file: str):
 
         # Reinitialize Gmail source in runtime
         runtime = get_runtime()
-        runtime.gmail = MultiGmailSource()
-        if not runtime.gmail.sources:
-            runtime.gmail = None
+        runtime.reinit_gmail()
 
         return {"email": email, "status": "removed"}
     except Exception as e:

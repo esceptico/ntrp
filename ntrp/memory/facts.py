@@ -35,10 +35,17 @@ class RememberFactResult:
 
 
 class FactMemory:
-    def __init__(self, db_path: Path, embedding: EmbeddingConfig, extraction_model: str):
+    def __init__(
+        self,
+        db_path: Path,
+        embedding: EmbeddingConfig,
+        extraction_model: str,
+        embedder: Embedder | None = None,
+        extractor: Extractor | None = None,
+    ):
         self.db = GraphDatabase(db_path, embedding.dim)
-        self.embedder = Embedder(embedding)
-        self.extractor = Extractor(extraction_model)
+        self.embedder = embedder or Embedder(embedding)
+        self.extractor = extractor or Extractor(extraction_model)
         self.extraction_model = extraction_model
         self._consolidation_task: asyncio.Task | None = None
         self._db_lock = asyncio.Lock()

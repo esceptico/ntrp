@@ -9,14 +9,12 @@ from typing import Any
 
 from googleapiclient.discovery import build
 
-from ntrp.config import get_config
 from ntrp.constants import CONTENT_READ_LIMIT
 from ntrp.sources.base import EmailSource, SourceItem
 from ntrp.sources.google.auth import (
     NTRP_DIR,
     SCOPES_ALL,
     SCOPES_GMAIL_SEND,
-    discover_gmail_tokens,
     get_google_credentials,
     has_scope,
 )
@@ -363,16 +361,14 @@ class GmailSource:
 
 
 class MultiGmailSource(EmailSource):
-    """Wrapper for multiple Gmail accounts (auto-discovers token files)."""
+    """Wrapper for multiple Gmail accounts."""
 
     name = "email"
 
-    def __init__(self):
+    def __init__(self, token_paths: list[Path], days_back: int):
         self.sources: list[GmailSource] = []
         self.errors: dict[str, str] = {}
-        days_back = get_config().gmail_days
 
-        token_paths = discover_gmail_tokens()
         for token_path in token_paths:
             try:
                 src = GmailSource(token_path=token_path, days_back=days_back)

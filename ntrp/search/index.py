@@ -22,9 +22,11 @@ class SearchIndex:
         rrf_k: int = 60,
         vector_weight: float = 0.5,
         fts_weight: float = 0.5,
+        store: SearchStore | None = None,
+        embedder: Embedder | None = None,
     ):
-        self.store = SearchStore(db_path, embedding.dim)
-        self.embedder = Embedder(embedding)
+        self.store = store or SearchStore(db_path, embedding.dim)
+        self.embedder = embedder or Embedder(embedding)
         self.retriever = HybridRetriever(
             store=self.store,
             embedder=self.embedder,

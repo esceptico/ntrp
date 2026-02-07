@@ -37,6 +37,13 @@ class Database:
             await self._conn.close()
             self._conn = None
 
+    async def __aenter__(self):
+        await self.connect()
+        return self
+
+    async def __aexit__(self, *exc):
+        await self.close()
+
     @property
     def conn(self) -> aiosqlite.Connection:
         if self._conn is None:

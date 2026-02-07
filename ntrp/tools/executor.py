@@ -72,13 +72,14 @@ class ToolExecutor:
         memory: FactMemory | None = None,
         working_dir: str | None = None,
         search_index: Any | None = None,
+        registry: ToolRegistry | None = None,
     ):
         self.sources = sources
         self.memory = memory
         self.model = model
         self.search_index = search_index
 
-        self.registry = ToolRegistry()
+        self.registry = registry or ToolRegistry()
         self._register_tools(working_dir)
 
     async def spawn(

@@ -3,7 +3,6 @@ from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 
-from ntrp.config import get_config
 from ntrp.sources.base import NotesSource
 from ntrp.sources.models import RawItem
 
@@ -21,8 +20,8 @@ def _walk_markdown_files(root_path: Path) -> Iterator[tuple[Path, str]]:
 class ObsidianSource(NotesSource):
     name = "notes"
 
-    def __init__(self):
-        self.vault_path = get_config().vault_path
+    def __init__(self, vault_path: Path):
+        self.vault_path = vault_path
         if not self.vault_path.exists():
             raise ValueError(f"Vault path does not exist: {self.vault_path}")
 

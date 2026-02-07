@@ -8,7 +8,6 @@ from ntrp.sources.base import CalendarSource
 from ntrp.sources.google.auth import (
     NTRP_DIR,
     SCOPES_CALENDAR,
-    discover_calendar_tokens,
     get_google_credentials,
     has_scope,
 )
@@ -370,15 +369,11 @@ class GoogleCalendar:
 class MultiCalendarSource(CalendarSource):
     name = "calendar"
 
-    def __init__(self):
+    def __init__(self, token_paths: list[Path], days_back: int, days_ahead: int):
         self.sources: list[GoogleCalendar] = []
         self.errors: dict[str, str] = {}
         self._needs_reauth = False
 
-        days_back = 7
-        days_ahead = 30
-
-        token_paths = discover_calendar_tokens()
         for token_path in token_paths:
             try:
                 src = GoogleCalendar(

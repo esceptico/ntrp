@@ -77,11 +77,8 @@ class RunRegistry:
         return len(to_remove)
 
 
-_registry: RunRegistry | None = None
-
-
 def get_run_registry() -> RunRegistry:
-    global _registry
-    if _registry is None:
-        _registry = RunRegistry()
-    return _registry
+    # RunRegistry lifecycle is managed by Runtime; this is a convenience accessor.
+    from ntrp.server.runtime import get_runtime
+
+    return get_runtime().run_registry

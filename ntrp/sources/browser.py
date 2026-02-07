@@ -6,7 +6,6 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from ntrp.config import get_config
 from ntrp.sources.base import BrowserSource, SourceItem
 from ntrp.sources.models import RawItem
 
@@ -21,13 +20,10 @@ BROWSER_PATHS = {
 class BrowserHistorySource(BrowserSource):
     name = "browser"
 
-    def __init__(self):
-        config = get_config()
-        if not config.browser:
-            raise ValueError("Browser not configured")
-        self.browser = config.browser
-        self.days_back = config.browser_days
-        self.db_path = BROWSER_PATHS.get(self.browser)
+    def __init__(self, browser_name: str, days_back: int, db_path: Path | None = None):
+        self.browser = browser_name
+        self.days_back = days_back
+        self.db_path = db_path or BROWSER_PATHS.get(self.browser)
 
         if not self.db_path or not self.db_path.exists():
             raise ValueError(f"Browser history not found: {self.browser} at {self.db_path}")
