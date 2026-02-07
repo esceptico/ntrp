@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
 
@@ -45,19 +45,38 @@ def compute_next_run(
     recurrence: Recurrence,
     after: datetime,
 ) -> datetime:
+    """
+    Compute next run time in UTC for a given local time-of-day.
+
+    Args:
+        time_of_day: "HH:MM" in local time
+        recurrence: how often the task repeats
+        after: UTC datetime to compute next run after
+
+    Returns:
+        UTC datetime for the next run
+    """
+    # Convert UTC 'after' to local time (system timezone)
+    after_local = after.astimezone()
+
+    # Parse the time components
     hour, minute = int(time_of_day[:2]), int(time_of_day[3:5])
 
-    candidate = after.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    # Create candidate in local time
+    candidate = after_local.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
-    if candidate <= after:
+    # If we've already passed that time today, move to tomorrow
+    if candidate <= after_local:
         candidate += timedelta(days=1)
 
+    # Handle recurrence patterns
     if recurrence == Recurrence.WEEKDAYS:
         while candidate.weekday() > 4:
             candidate += timedelta(days=1)
     elif recurrence == Recurrence.WEEKLY:
-        target_weekday = after.weekday()
+        target_weekday = after_local.weekday()
         while candidate.weekday() != target_weekday:
             candidate += timedelta(days=1)
 
-    return candidate
+    # Convert back to UTC
+    return candidate.astimezone(UTC)
