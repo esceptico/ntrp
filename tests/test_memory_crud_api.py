@@ -1,15 +1,13 @@
 """E2E integration tests for memory CRUD API endpoints"""
 import asyncio
 from collections.abc import AsyncGenerator
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from ntrp.config import Config, EmbeddingConfig
-from ntrp.memory.facts import FactMemory
+from ntrp.config import Config
 from ntrp.memory.models import FactType
 from ntrp.server.app import app
 from ntrp.server.runtime import Runtime, reset_runtime
@@ -139,7 +137,6 @@ class TestFactCRUD:
         # Verify entity refs were extracted (Alice, Anthropic, Claude should be detected)
         entity_refs = data["entity_refs"]
         assert isinstance(entity_refs, list)
-        entity_names = [e["name"] for e in entity_refs]
         # Note: Exact entities depend on extraction model, so just check structure
         assert all("name" in e and "type" in e for e in entity_refs)
 

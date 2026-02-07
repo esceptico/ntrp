@@ -42,13 +42,6 @@ export function AgentSection({
         accent={accent}
         maxWidth={modelNameWidth}
       />
-      <Box marginTop={1}>
-        <Text color={colors.text.disabled}>
-          Agent: reasoning + tools{"\n"}
-          Memory: extraction + recall{"\n"}
-          Embedding: search vectors
-        </Text>
-      </Box>
     </Box>
   );
 }

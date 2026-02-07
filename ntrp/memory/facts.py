@@ -5,8 +5,6 @@ from pathlib import Path
 from typing import Self
 
 from ntrp.bus import EventBus
-from ntrp.memory.events import FactCreated, FactDeleted
-
 from ntrp.constants import (
     CONSOLIDATION_INTERVAL,
     ENTITY_CANDIDATES_LIMIT,
@@ -19,6 +17,7 @@ from ntrp.constants import (
 from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.logging import get_logger
 from ntrp.memory.consolidation import consolidate_fact
+from ntrp.memory.events import FactCreated, FactDeleted
 from ntrp.memory.extraction import Extractor
 from ntrp.memory.models import ExtractionResult, Fact, FactContext, FactType
 from ntrp.memory.store.base import GraphDatabase

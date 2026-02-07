@@ -187,7 +187,6 @@ async def update_fact(fact_id: int, request: UpdateFactRequest):
         )
 
         # Update fact text, embedding, and mark for re-consolidation
-        now = datetime.now(UTC)
         embedding_bytes = serialize_embedding(new_embedding)
         await repo.conn.execute(
             """
@@ -204,7 +203,7 @@ async def update_fact(fact_id: int, request: UpdateFactRequest):
 
         # Re-extract entities
         extraction = await runtime.memory.extractor.extract(request.text)
-        entities_extracted = await runtime.memory._process_extraction(repo, fact_id, extraction, fact.source_ref)
+        await runtime.memory._process_extraction(repo, fact_id, extraction, fact.source_ref)
 
         # Reload fact with new entity refs
         fact = await repo.get(fact_id)
