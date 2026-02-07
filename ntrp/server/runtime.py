@@ -1,8 +1,11 @@
 import asyncio
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ntrp.bus import EventBus
+from ntrp.memory.events import FactCreated, FactDeleted, FactUpdated, MemoryCleared
 from ntrp.config import Config, get_config
 from ntrp.constants import AGENT_MAX_DEPTH, SESSION_EXPIRY_HOURS
 from ntrp.context.models import SessionData, SessionState
@@ -24,6 +27,11 @@ from ntrp.tools.executor import ToolExecutor
 from ntrp.tools.schedule import CancelScheduleTool, GetScheduleResultTool, ListSchedulesTool, ScheduleTaskTool
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class SourceChanged:
+    source_name: str
 
 
 class Runtime:
@@ -51,6 +59,7 @@ class Runtime:
         self.scheduler: Scheduler | None = None
         self.run_registry = RunRegistry()
 
+        self.bus = EventBus()
         self._connected = False
         self._config_lock = asyncio.Lock()
 
@@ -93,7 +102,7 @@ class Runtime:
             except Exception as e:
                 logger.warning("Failed to init source %s: %s", name, e)
 
-    def reinit_gmail(self) -> MultiGmailSource | None:
+    async def reinit_gmail(self) -> MultiGmailSource | None:
         token_paths = discover_gmail_tokens()
         if not token_paths:
             return None
@@ -103,25 +112,29 @@ class Runtime:
         )
         self.gmail = gmail if gmail.sources else None
         self._sources["email"] = gmail
+        await self.bus.publish(SourceChanged(source_name="email"))
         return gmail
 
-    def reinit_notes(self, vault_path: Path | None) -> ObsidianSource | None:
+    async def reinit_notes(self, vault_path: Path | None) -> ObsidianSource | None:
         if vault_path is None:
             self._sources.pop("notes", None)
+            await self.bus.publish(SourceChanged(source_name="notes"))
             return None
         try:
             notes = ObsidianSource(vault_path=vault_path)
             self._sources["notes"] = notes
+            await self.bus.publish(SourceChanged(source_name="notes"))
             return notes
         except Exception as e:
             logger.warning("Failed to init Obsidian source: %s", e)
             self._source_errors["notes"] = str(e)
             return None
 
-    def reinit_browser(self, browser_name: str | None, days_back: int | None = None) -> BrowserHistorySource | None:
+    async def reinit_browser(self, browser_name: str | None, days_back: int | None = None) -> BrowserHistorySource | None:
         if browser_name is None:
             self._sources.pop("browser", None)
             self.browser = None
+            await self.bus.publish(SourceChanged(source_name="browser"))
             return None
         try:
             browser = BrowserHistorySource(
@@ -130,13 +143,14 @@ class Runtime:
             )
             self._sources["browser"] = browser
             self.browser = browser
+            await self.bus.publish(SourceChanged(source_name="browser"))
             return browser
         except Exception as e:
             logger.warning("Failed to init browser source: %s", e)
             self._source_errors["browser"] = str(e)
             return None
 
-    def reinit_calendar(self) -> MultiCalendarSource | None:
+    async def reinit_calendar(self) -> MultiCalendarSource | None:
         token_paths = discover_calendar_tokens()
         if not token_paths:
             return None
@@ -146,6 +160,7 @@ class Runtime:
             days_ahead=30,
         )
         self._sources["calendar"] = calendar
+        await self.bus.publish(SourceChanged(source_name="calendar"))
         return calendar
 
     async def reinit_memory(self, enabled: bool) -> None:
@@ -154,10 +169,12 @@ class Runtime:
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
                 extraction_model=self.config.memory_model,
+                bus=self.bus,
             )
         elif not enabled and self.memory:
             await self.memory.close()
             self.memory = None
+        await self.bus.publish(SourceChanged(source_name="memory"))
 
     def rebuild_executor(self) -> None:
         self.executor = ToolExecutor(
@@ -191,11 +208,18 @@ class Runtime:
         self.schedule_store = ScheduleStore(self.session_store.conn)
         await self.schedule_store.init_schema()
 
+        self.bus.subscribe(FactCreated, self._on_fact_created)
+        self.bus.subscribe(FactUpdated, self._on_fact_updated)
+        self.bus.subscribe(FactDeleted, self._on_fact_deleted)
+        self.bus.subscribe(MemoryCleared, self._on_memory_cleared)
+        self.bus.subscribe(SourceChanged, self._on_source_changed)
+
         if self.config.memory:
             self.memory = await FactMemory.create(
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
                 extraction_model=self.config.memory_model,
+                bus=self.bus,
             )
 
         self.rebuild_executor()
@@ -268,6 +292,33 @@ class Runtime:
 
     async def get_index_status(self) -> dict:
         return await self.indexer.get_status()
+
+    async def _on_fact_created(self, event: FactCreated) -> None:
+        await self.indexer.index.upsert(
+            source="memory",
+            source_id=f"fact:{event.fact_id}",
+            title=event.text[:50],
+            content=event.text,
+        )
+
+    async def _on_fact_updated(self, event: FactUpdated) -> None:
+        await self.indexer.index.upsert(
+            source="memory",
+            source_id=f"fact:{event.fact_id}",
+            title=event.text[:50],
+            content=event.text,
+        )
+
+    async def _on_fact_deleted(self, event: FactDeleted) -> None:
+        await self.indexer.index.delete("memory", f"fact:{event.fact_id}")
+
+    async def _on_memory_cleared(self, event: MemoryCleared) -> None:
+        await self.indexer.index.clear_source("memory")
+
+    async def _on_source_changed(self, event: SourceChanged) -> None:
+        self.rebuild_executor()
+        if event.source_name in ("notes", "memory"):
+            self.start_indexing()
 
     async def close(self) -> None:
         if self.scheduler:

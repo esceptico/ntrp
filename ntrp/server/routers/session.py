@@ -120,7 +120,6 @@ async def update_config(req: UpdateConfigRequest):
 
     async with runtime._config_lock:
         settings = load_user_settings()
-        needs_rebuild = False
 
         if req.chat_model:
             runtime.config.chat_model = req.chat_model
@@ -134,23 +133,20 @@ async def update_config(req: UpdateConfigRequest):
         if req.max_depth is not None:
             runtime.max_depth = req.max_depth
 
-        # Handle vault_path update
         if req.vault_path is not None:
             if req.vault_path == "":
                 runtime.config.vault_path = None
-                runtime.reinit_notes(None)
+                await runtime.reinit_notes(None)
                 settings.pop("vault_path", None)
             else:
                 vault_path = Path(req.vault_path).expanduser()
                 if not vault_path.exists():
                     raise HTTPException(status_code=400, detail=f"Vault path does not exist: {vault_path}")
                 runtime.config.vault_path = vault_path
-                runtime.reinit_notes(vault_path)
+                await runtime.reinit_notes(vault_path)
                 settings["vault_path"] = str(vault_path)
             save_user_settings(settings)
-            needs_rebuild = True
 
-        # Handle browser update
         if req.browser is not None or req.browser_days is not None:
             browser = req.browser if req.browser is not None else runtime.config.browser
             browser_days = req.browser_days if req.browser_days is not None else runtime.config.browser_days
@@ -160,7 +156,7 @@ async def update_config(req: UpdateConfigRequest):
 
             runtime.config.browser = browser
             runtime.config.browser_days = browser_days
-            runtime.reinit_browser(browser, browser_days)
+            await runtime.reinit_browser(browser, browser_days)
 
             if browser:
                 settings["browser"] = browser
@@ -168,9 +164,7 @@ async def update_config(req: UpdateConfigRequest):
                 settings.pop("browser", None)
             settings["browser_days"] = browser_days
             save_user_settings(settings)
-            needs_rebuild = True
 
-        # Handle source toggles
         if req.sources:
             sources_settings = settings.setdefault("sources", {})
 
@@ -178,7 +172,7 @@ async def update_config(req: UpdateConfigRequest):
                 runtime.config.gmail = req.sources.gmail
                 sources_settings["gmail"] = req.sources.gmail
                 if req.sources.gmail:
-                    runtime.reinit_gmail()
+                    await runtime.reinit_gmail()
                 else:
                     runtime._sources.pop("email", None)
                     runtime._source_errors.pop("email", None)
@@ -188,7 +182,7 @@ async def update_config(req: UpdateConfigRequest):
                 runtime.config.calendar = req.sources.calendar
                 sources_settings["calendar"] = req.sources.calendar
                 if req.sources.calendar:
-                    runtime.reinit_calendar()
+                    await runtime.reinit_calendar()
                 else:
                     runtime._sources.pop("calendar", None)
                     runtime._source_errors.pop("calendar", None)
@@ -199,10 +193,6 @@ async def update_config(req: UpdateConfigRequest):
                 await runtime.reinit_memory(req.sources.memory)
 
             save_user_settings(settings)
-            needs_rebuild = True
-
-        if needs_rebuild:
-            runtime.rebuild_executor()
 
     return {
         "chat_model": runtime.config.chat_model,

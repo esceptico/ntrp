@@ -4,6 +4,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Self
 
+from ntrp.bus import EventBus
+from ntrp.memory.events import FactCreated, FactDeleted
+
 from ntrp.constants import (
     CONSOLIDATION_INTERVAL,
     ENTITY_CANDIDATES_LIMIT,
@@ -40,6 +43,7 @@ class FactMemory:
         db_path: Path,
         embedding: EmbeddingConfig,
         extraction_model: str,
+        bus: EventBus,
         embedder: Embedder | None = None,
         extractor: Extractor | None = None,
     ):
@@ -47,12 +51,15 @@ class FactMemory:
         self.embedder = embedder or Embedder(embedding)
         self.extractor = extractor or Extractor(extraction_model)
         self.extraction_model = extraction_model
+        self.bus = bus
         self._consolidation_task: asyncio.Task | None = None
         self._db_lock = asyncio.Lock()
 
     @classmethod
-    async def create(cls, db_path: Path, embedding: EmbeddingConfig, extraction_model: str) -> Self:
-        instance = cls(db_path, embedding, extraction_model)
+    async def create(
+        cls, db_path: Path, embedding: EmbeddingConfig, extraction_model: str, bus: EventBus,
+    ) -> Self:
+        instance = cls(db_path, embedding, extraction_model, bus=bus)
         await instance.db.connect()
         return instance
 
@@ -139,6 +146,8 @@ class FactMemory:
             except Exception:
                 logger.exception("Remember failed")
                 raise
+
+        await self.bus.publish(FactCreated(fact_id=fact.id, text=text))
 
         return RememberFactResult(
             fact=fact,
@@ -290,6 +299,7 @@ class FactMemory:
                 if score >= FORGET_SIMILARITY_THRESHOLD:
                     await repo.delete(fact.id)
                     count += 1
+                    await self.bus.publish(FactDeleted(fact_id=fact.id))
             return count
 
     async def merge_entities(self, names: list[str], canonical_name: str | None = None) -> int:

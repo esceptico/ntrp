@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ntrp.database import serialize_embedding
+from ntrp.memory.events import FactDeleted, FactUpdated, MemoryCleared
 from ntrp.memory.store.linking import create_links_for_fact
 from ntrp.server.runtime import get_runtime
 
@@ -94,6 +95,7 @@ async def get_fact_details(fact_id: int):
 async def clear_memory():
     runtime = _require_memory()
     deleted = await runtime.memory.clear()
+    await runtime.bus.publish(MemoryCleared())
     return {"status": "cleared", "deleted": deleted}
 
 
@@ -213,6 +215,8 @@ async def update_fact(fact_id: int, request: UpdateFactRequest):
 
         await repo.conn.commit()
 
+    await runtime.bus.publish(FactUpdated(fact_id=fact_id, text=request.text))
+
     return {
         "fact": {
             "id": fact.id,
@@ -257,6 +261,8 @@ async def delete_fact(fact_id: int):
 
         # Delete fact and cascades (uses existing method)
         await repo.delete(fact_id)
+
+    await runtime.bus.publish(FactDeleted(fact_id=fact_id))
 
     return {
         "status": "deleted",
