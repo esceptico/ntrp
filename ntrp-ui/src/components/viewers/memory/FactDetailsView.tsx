@@ -131,18 +131,17 @@ export function FactDetailsView({
         <Text color={colors.text.muted}>EDIT FACT</Text>
         <Box marginTop={1} flexDirection="column">
           {wrappedLines.length === 0 ? (
-            <Text color={colors.text.muted}>
-              Type to edit...
-              <Text color={accentValue}>█</Text>
+            <Text color={colors.text.primary}>
+              <Text inverse> </Text>
             </Text>
           ) : (
             wrappedLines.map((line, idx) => (
               <Text key={idx} color={colors.text.primary}>
                 {idx === cursorLine ? (
                   <>
-                    {line.slice(0, cursorCol)}
-                    <Text color={accentValue}>█</Text>
-                    {line.slice(cursorCol)}
+                    <Text>{line.slice(0, cursorCol)}</Text>
+                    <Text inverse>{line[cursorCol] || " "}</Text>
+                    <Text>{line.slice(cursorCol + 1)}</Text>
                   </>
                 ) : (
                   line
