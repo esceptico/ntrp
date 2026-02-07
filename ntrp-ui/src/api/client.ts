@@ -310,6 +310,10 @@ export async function toggleSchedule(config: Config, taskId: string): Promise<{ 
   return api.post<{ enabled: boolean }>(`${config.serverUrl}/schedules/${taskId}/toggle`);
 }
 
+export async function updateSchedule(config: Config, taskId: string, description: string): Promise<{ description: string }> {
+  return api.patch<{ description: string }>(`${config.serverUrl}/schedules/${taskId}`, { description });
+}
+
 export async function deleteSchedule(config: Config, taskId: string): Promise<{ status: string }> {
   return api.delete<{ status: string }>(`${config.serverUrl}/schedules/${taskId}`);
 }

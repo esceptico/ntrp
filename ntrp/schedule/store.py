@@ -114,3 +114,10 @@ class ScheduleStore(BaseRepository):
             (int(writable), task_id),
         )
         await self.conn.commit()
+
+    async def update_description(self, task_id: str, description: str) -> None:
+        await self.conn.execute(
+            "UPDATE scheduled_tasks SET description = ? WHERE task_id = ?",
+            (description, task_id),
+        )
+        await self.conn.commit()

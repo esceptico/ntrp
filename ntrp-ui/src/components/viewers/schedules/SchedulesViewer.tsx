@@ -2,10 +2,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Box, Text } from "ink";
 import type { Config } from "../../../types.js";
 import { useKeypress, type Key } from "../../../hooks/useKeypress.js";
+import { useAccentColor } from "../../../hooks/index.js";
 import {
   getSchedules,
   getScheduleDetail,
   toggleSchedule,
+  updateSchedule,
   deleteSchedule,
   runSchedule,
   toggleWritable,
@@ -50,6 +52,10 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [viewingResult, setViewingResult] = useState<{ description: string; result: string } | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editText, setEditText] = useState("");
+  const [cursorPos, setCursorPos] = useState(0);
+  const [saving, setSaving] = useState(false);
 
   const loadedRef = useRef(false);
 
@@ -142,6 +148,68 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
 
   const handleKeypress = useCallback(
     (key: Key) => {
+      if (editMode) {
+        if (key.ctrl && key.name === "s") {
+          const task = schedules[selectedIndex];
+          if (!task) return;
+          setSaving(true);
+          updateSchedule(config, task.task_id, editText)
+            .then(() => {
+              setSchedules((prev) =>
+                prev.map((s) => (s.task_id === task.task_id ? { ...s, description: editText } : s))
+              );
+              setEditMode(false);
+              setEditText("");
+              setCursorPos(0);
+            })
+            .catch(() => loadSchedules())
+            .finally(() => setSaving(false));
+          return;
+        }
+        if (key.name === "escape") {
+          setEditMode(false);
+          setEditText("");
+          setCursorPos(0);
+          return;
+        }
+        if (key.name === "left") {
+          setCursorPos((pos) => Math.max(0, pos - 1));
+          return;
+        }
+        if (key.name === "right") {
+          setCursorPos((pos) => Math.min(editText.length, pos + 1));
+          return;
+        }
+        if (key.name === "home") {
+          setCursorPos(0);
+          return;
+        }
+        if (key.name === "end") {
+          setCursorPos(editText.length);
+          return;
+        }
+        if (key.name === "backspace") {
+          if (cursorPos > 0) {
+            setEditText((prev) => prev.slice(0, cursorPos - 1) + prev.slice(cursorPos));
+            setCursorPos((pos) => pos - 1);
+          }
+          return;
+        }
+        if (key.name === "delete") {
+          if (cursorPos < editText.length) {
+            setEditText((prev) => prev.slice(0, cursorPos) + prev.slice(cursorPos + 1));
+          }
+          return;
+        }
+        if (key.insertable && !key.ctrl && !key.meta && key.sequence) {
+          const char = key.name === "return" ? "\n" : key.name === "space" ? " " : key.sequence;
+          setEditText((prev) => prev.slice(0, cursorPos) + char + prev.slice(cursorPos));
+          setCursorPos((pos) => pos + 1);
+          return;
+        }
+        return;
+      }
+
       if (confirmDelete) {
         if (key.name === "y") {
           handleDelete();
@@ -161,6 +229,13 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
         handleToggle();
       } else if (key.name === "return") {
         handleViewResult();
+      } else if (key.name === "e") {
+        const task = schedules[selectedIndex];
+        if (task) {
+          setEditMode(true);
+          setEditText(task.description);
+          setCursorPos(task.description.length);
+        }
       } else if (key.name === "d") {
         if (schedules.length > 0) setConfirmDelete(true);
       } else if (key.name === "w") {
@@ -172,7 +247,7 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
         loadSchedules();
       }
     },
-    [onClose, schedules.length, handleToggle, handleToggleWritable, confirmDelete, handleDelete, loadSchedules, handleViewResult, handleRun]
+    [onClose, schedules, selectedIndex, handleToggle, handleToggleWritable, confirmDelete, handleDelete, loadSchedules, handleViewResult, handleRun, config, editMode, editText, cursorPos]
   );
 
   useKeypress(handleKeypress, { isActive: !viewingResult });
@@ -228,6 +303,75 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
     );
   }
 
+  if (editMode) {
+    const { accentValue } = useAccentColor();
+    const wrappedLines = wrapText(editText, textWidth);
+    let charCount = 0;
+    let cursorLine = 0;
+    let cursorCol = 0;
+
+    if (wrappedLines.length === 0) {
+      cursorLine = 0;
+      cursorCol = 0;
+    } else {
+      for (let i = 0; i < wrappedLines.length; i++) {
+        const lineLength = wrappedLines[i].length;
+        if (charCount + lineLength >= cursorPos) {
+          cursorLine = i;
+          cursorCol = cursorPos - charCount;
+          break;
+        }
+        charCount += lineLength;
+      }
+      if (cursorPos === editText.length && cursorPos > charCount) {
+        cursorLine = wrappedLines.length - 1;
+        cursorCol = wrappedLines[cursorLine].length;
+      }
+    }
+
+    return (
+      <Panel title="SCHEDULES" width={contentWidth}>
+        <Box flexDirection="column" marginTop={1}>
+          <Text color={colors.text.muted}>EDIT SCHEDULE DESCRIPTION</Text>
+          <Box marginTop={1} flexDirection="column">
+            {wrappedLines.length === 0 ? (
+              <Text color={colors.text.muted}>
+                Type to edit...
+                <Text color={accentValue}>█</Text>
+              </Text>
+            ) : (
+              wrappedLines.map((line, idx) => (
+                <Text key={idx} color={colors.text.primary}>
+                  {idx === cursorLine ? (
+                    <>
+                      {line.slice(0, cursorCol)}
+                      <Text color={accentValue}>█</Text>
+                      {line.slice(cursorCol)}
+                    </>
+                  ) : (
+                    line
+                  )}
+                </Text>
+              ))
+            )}
+          </Box>
+          {saving ? (
+            <Box marginTop={1}>
+              <Text color={colors.tool.running}>Saving...</Text>
+            </Box>
+          ) : (
+            <Box marginTop={1}>
+              <Text color={colors.text.muted}>Ctrl+S: save  Esc: cancel</Text>
+            </Box>
+          )}
+        </Box>
+        <Footer>
+          {saving ? "Saving..." : "Ctrl+S: save │ Esc: cancel │ ←→: move cursor │ Home/End: start/end"}
+        </Footer>
+      </Panel>
+    );
+  }
+
   return (
     <Panel title="SCHEDULES" width={contentWidth}>
       <BaseSelectionList<Schedule>
@@ -252,7 +396,7 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
       <Footer>
         {confirmDelete
           ? "y: confirm  n: cancel"
-          : "enter: view  space: toggle  w: writable  x: run  d: delete  r: refresh  q: close"}
+          : "enter: view  space: toggle  e: edit  w: writable  x: run  d: delete  r: refresh  q: close"}
       </Footer>
     </Panel>
   );

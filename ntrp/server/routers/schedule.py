@@ -1,10 +1,15 @@
 import asyncio
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from ntrp.server.runtime import get_runtime
 
 router = APIRouter(tags=["schedule"])
+
+
+class UpdateScheduleRequest(BaseModel):
+    description: str = Field(min_length=1, max_length=1000)
 
 
 @router.get("/schedules")
@@ -104,6 +109,20 @@ async def run_schedule(task_id: str):
 
     asyncio.create_task(runtime.scheduler.run_now(task_id))
     return {"status": "started"}
+
+
+@router.patch("/schedules/{task_id}")
+async def update_schedule(task_id: str, request: UpdateScheduleRequest):
+    runtime = get_runtime()
+    if not runtime.schedule_store:
+        raise HTTPException(status_code=503, detail="Scheduling not available")
+
+    task = await runtime.schedule_store.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    await runtime.schedule_store.update_description(task_id, request.description)
+    return {"description": request.description}
 
 
 @router.delete("/schedules/{task_id}")
