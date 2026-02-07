@@ -180,7 +180,7 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
   const renderScheduleItem = useCallback((item: Schedule, { isSelected }: RenderItemContext) => {
     const enabled = item.enabled;
     const isRunning = !!item.running_since;
-    const statusIcon = isRunning ? "⟳" : (enabled ? "✓" : "⏸");
+    const statusIcon = isRunning ? "▶" : (enabled ? "✓" : "⏸");
     const statusColor = isRunning ? colors.tool.running : (enabled ? colors.status.success : colors.text.disabled);
     const textColor = isSelected ? colors.text.primary : (enabled ? colors.text.secondary : colors.text.disabled);
     const metaColor = isSelected ? colors.text.secondary : colors.text.muted;
