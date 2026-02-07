@@ -109,6 +109,7 @@ class TestConsolidationSchema:
 
     def test_invalid_action_rejected(self):
         import pydantic
+
         with pytest.raises(pydantic.ValidationError):
             ConsolidationSchema.model_validate_json('{"action": "invalid"}')
 
@@ -426,11 +427,7 @@ class TestConsolidateFact:
                 type(
                     "Choice",
                     (),
-                    {
-                        "message": type(
-                            "Message", (), {"content": "not valid json at all"}
-                        )()
-                    },
+                    {"message": type("Message", (), {"content": "not valid json at all"})()},
                 )()
             ]
             result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)

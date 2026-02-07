@@ -81,9 +81,7 @@ class Runtime:
             ),
             (
                 "WebSource",
-                lambda: WebSource(api_key=self.config.exa_api_key)
-                if self.config.exa_api_key
-                else None,
+                lambda: WebSource(api_key=self.config.exa_api_key) if self.config.exa_api_key else None,
             ),
         ]
 

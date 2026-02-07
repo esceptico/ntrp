@@ -173,13 +173,12 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         yield to_sse(ThinkingEvent(status="processing..."))
 
         try:
-            cancel_check = lambda: run.cancelled
             tool_ctx.spawn_fn = create_spawn_fn(
                 executor=runtime.executor,
                 model=runtime.config.chat_model,
                 max_depth=runtime.max_depth,
                 current_depth=0,
-                cancel_check=cancel_check,
+                cancel_check=lambda: run.cancelled,
             )
 
             agent = Agent(
@@ -190,7 +189,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 ctx=tool_ctx,
                 max_depth=runtime.max_depth,
                 current_depth=0,
-                cancel_check=cancel_check,
+                cancel_check=lambda: run.cancelled,
             )
 
             result: str | None = None

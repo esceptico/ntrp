@@ -19,7 +19,9 @@ from ntrp.utils import truncate
 logger = get_logger(__name__)
 
 
-READ_NOTE_DESCRIPTION = "Read a note by path. Use search_notes() first to find paths. Supports offset/limit for large notes."
+READ_NOTE_DESCRIPTION = (
+    "Read a note by path. Use search_notes() first to find paths. Supports offset/limit for large notes."
+)
 
 EDIT_NOTE_DESCRIPTION = """Edit a note by find-and-replace. Requires approval. Always read_note() first.
 find text must match exactly. For large changes, use multiple small edits."""

@@ -47,8 +47,10 @@ class Extractor:
                 entities=[ExtractedEntity(name=e.name, entity_type=e.type) for e in parsed.entities],
                 entity_pairs=[
                     ExtractedEntityPair(
-                        source=p.source, target=p.target,
-                        source_type=p.source_type, target_type=p.target_type,
+                        source=p.source,
+                        target=p.target,
+                        source_type=p.source_type,
+                        target_type=p.target_type,
                     )
                     for p in parsed.entity_pairs
                 ],

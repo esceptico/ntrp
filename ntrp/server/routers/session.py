@@ -158,8 +158,7 @@ async def update_embedding_model(req: UpdateEmbeddingRequest):
     warning = None
     if runtime.memory:
         logger.warning(
-            "Embedding model changed to %s — memory vectors are stale. "
-            "Run /init or clear memory to re-embed.",
+            "Embedding model changed to %s — memory vectors are stale. Run /init or clear memory to re-embed.",
             req.embedding_model,
         )
         warning = "Memory vectors are stale and may return poor results. Clear memory or re-add facts to re-embed."

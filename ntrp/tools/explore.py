@@ -40,9 +40,17 @@ class ExploreTool(Tool):
         return f"{EXPLORE_PROMPT}\n\nUSER CONTEXT:\n{context}"
 
     EXPLORE_TOOLS = {
-        "search_notes", "read_note", "search_email", "read_email",
-        "search_calendar", "search_browser", "recall", "remember",
-        "web_search", "web_fetch", "explore",
+        "search_notes",
+        "read_note",
+        "search_email",
+        "read_email",
+        "search_calendar",
+        "search_browser",
+        "recall",
+        "remember",
+        "web_search",
+        "web_fetch",
+        "explore",
     }
 
     async def execute(self, execution: ToolExecution, task: str, **kwargs) -> ToolResult:

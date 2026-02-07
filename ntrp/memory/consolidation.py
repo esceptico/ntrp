@@ -227,5 +227,3 @@ async def _format_observations(
         )
 
     return json.dumps(obs_list, indent=2)
-
-

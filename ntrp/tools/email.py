@@ -12,7 +12,9 @@ READ_EMAIL_DESCRIPTION = (
     "Read the full content of an email by its ID. Use search_email or list_email first to find email IDs."
 )
 
-LIST_EMAIL_DESCRIPTION = "List recent emails (subjects only). Use search_email() to find email IDs, then read_email(id) for full content."
+LIST_EMAIL_DESCRIPTION = (
+    "List recent emails (subjects only). Use search_email() to find email IDs, then read_email(id) for full content."
+)
 
 SEARCH_EMAIL_DESCRIPTION = "Search emails by content. Use read_email(id) to get full content."
 

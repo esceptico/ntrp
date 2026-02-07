@@ -313,7 +313,9 @@ class FactMemory:
             if len(entities) < 2:
                 return 0
 
-            keep = next((e for e in entities if e.name == canonical_name), entities[0]) if canonical_name else entities[0]
+            keep = (
+                next((e for e in entities if e.name == canonical_name), entities[0]) if canonical_name else entities[0]
+            )
 
             merge_ids = [e.id for e in entities if e.id != keep.id]
 
