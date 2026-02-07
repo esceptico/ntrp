@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Box, Text } from "ink";
 import type { Config } from "../../../types.js";
-import { useKeypress, type Key } from "../../../hooks/useKeypress.js";
+import { useKeypress, useTextInput, type Key } from "../../../hooks/index.js";
 import { useFactsTab } from "../../../hooks/useFactsTab.js";
 import { useObservationsTab } from "../../../hooks/useObservationsTab.js";
 import {
@@ -45,6 +45,20 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
 
   const factsTab = useFactsTab(config, facts, contentWidth);
   const obsTab = useObservationsTab(config, observations, contentWidth);
+
+  const factsTextInput = useTextInput({
+    text: factsTab.editText,
+    cursorPos: factsTab.cursorPos,
+    setText: factsTab.setEditText,
+    setCursorPos: factsTab.setCursorPos,
+  });
+
+  const obsTextInput = useTextInput({
+    text: obsTab.editText,
+    cursorPos: obsTab.cursorPos,
+    setText: obsTab.setEditText,
+    setCursorPos: obsTab.setCursorPos,
+  });
 
   useEffect(() => {
     if (loadedRef.current) return;
@@ -131,39 +145,8 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
             factsTab.setCursorPos(0);
             return;
           }
-          if (key.name === "left") {
-            factsTab.setCursorPos((pos) => Math.max(0, pos - 1));
-            return;
-          }
-          if (key.name === "right") {
-            factsTab.setCursorPos((pos) => Math.min(factsTab.editText.length, pos + 1));
-            return;
-          }
-          if (key.name === "home") {
-            factsTab.setCursorPos(0);
-            return;
-          }
-          if (key.name === "end") {
-            factsTab.setCursorPos(factsTab.editText.length);
-            return;
-          }
-          if (key.name === "backspace") {
-            if (factsTab.cursorPos > 0) {
-              factsTab.setEditText((prev) => prev.slice(0, factsTab.cursorPos - 1) + prev.slice(factsTab.cursorPos));
-              factsTab.setCursorPos((pos) => pos - 1);
-            }
-            return;
-          }
-          if (key.name === "delete") {
-            if (factsTab.cursorPos < factsTab.editText.length) {
-              factsTab.setEditText((prev) => prev.slice(0, factsTab.cursorPos) + prev.slice(factsTab.cursorPos + 1));
-            }
-            return;
-          }
-          if (key.insertable && !key.ctrl && !key.meta && key.sequence) {
-            const char = key.name === "return" ? "\n" : key.name === "space" ? " " : key.sequence;
-            factsTab.setEditText((prev) => prev.slice(0, factsTab.cursorPos) + char + prev.slice(factsTab.cursorPos));
-            factsTab.setCursorPos((pos) => pos + 1);
+          // Delegate all text editing to useTextInput hook
+          if (factsTextInput.handleKey(key)) {
             return;
           }
           return;
@@ -243,39 +226,8 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
             obsTab.setCursorPos(0);
             return;
           }
-          if (key.name === "left") {
-            obsTab.setCursorPos((pos) => Math.max(0, pos - 1));
-            return;
-          }
-          if (key.name === "right") {
-            obsTab.setCursorPos((pos) => Math.min(obsTab.editText.length, pos + 1));
-            return;
-          }
-          if (key.name === "home") {
-            obsTab.setCursorPos(0);
-            return;
-          }
-          if (key.name === "end") {
-            obsTab.setCursorPos(obsTab.editText.length);
-            return;
-          }
-          if (key.name === "backspace") {
-            if (obsTab.cursorPos > 0) {
-              obsTab.setEditText((prev) => prev.slice(0, obsTab.cursorPos - 1) + prev.slice(obsTab.cursorPos));
-              obsTab.setCursorPos((pos) => pos - 1);
-            }
-            return;
-          }
-          if (key.name === "delete") {
-            if (obsTab.cursorPos < obsTab.editText.length) {
-              obsTab.setEditText((prev) => prev.slice(0, obsTab.cursorPos) + prev.slice(obsTab.cursorPos + 1));
-            }
-            return;
-          }
-          if (key.insertable && !key.ctrl && !key.meta && key.sequence) {
-            const char = key.name === "return" ? "\n" : key.name === "space" ? " " : key.sequence;
-            obsTab.setEditText((prev) => prev.slice(0, obsTab.cursorPos) + char + prev.slice(obsTab.cursorPos));
-            obsTab.setCursorPos((pos) => pos + 1);
+          // Delegate all text editing to useTextInput hook
+          if (obsTextInput.handleKey(key)) {
             return;
           }
           return;
@@ -351,7 +303,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
-    [activeTab, factsTab, obsTab, onClose, reload, config]
+    [activeTab, factsTab, obsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setError]
   );
 
   useKeypress(handleKeypress, { isActive: true });

@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { Box, Text } from "ink";
 import type { Config } from "../../../types.js";
-import { useKeypress, type Key } from "../../../hooks/useKeypress.js";
+import { useKeypress, useTextInput, type Key } from "../../../hooks/index.js";
 import { useDimensions } from "../../../contexts/index.js";
 import { Panel, Footer, Loading, colors, BaseSelectionList } from "../../ui/index.js";
 import { VISIBLE_LINES } from "../../../lib/constants.js";
@@ -47,6 +47,13 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
     handleSave,
   } = useSchedules(config);
 
+  const textInput = useTextInput({
+    text: editText,
+    cursorPos,
+    setText: setEditText,
+    setCursorPos,
+  });
+
   const handleKeypress = useCallback(
     (key: Key) => {
       // Edit mode handlers
@@ -61,39 +68,8 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
           setCursorPos(0);
           return;
         }
-        if (key.name === "left") {
-          setCursorPos((pos) => Math.max(0, pos - 1));
-          return;
-        }
-        if (key.name === "right") {
-          setCursorPos((pos) => Math.min(editText.length, pos + 1));
-          return;
-        }
-        if (key.name === "home") {
-          setCursorPos(0);
-          return;
-        }
-        if (key.name === "end") {
-          setCursorPos(editText.length);
-          return;
-        }
-        if (key.name === "backspace") {
-          if (cursorPos > 0) {
-            setEditText((prev) => prev.slice(0, cursorPos - 1) + prev.slice(cursorPos));
-            setCursorPos((pos) => pos - 1);
-          }
-          return;
-        }
-        if (key.name === "delete") {
-          if (cursorPos < editText.length) {
-            setEditText((prev) => prev.slice(0, cursorPos) + prev.slice(cursorPos + 1));
-          }
-          return;
-        }
-        if (key.insertable && !key.ctrl && !key.meta && key.sequence) {
-          const char = key.name === "return" ? "\n" : key.name === "space" ? " " : key.sequence;
-          setEditText((prev) => prev.slice(0, cursorPos) + char + prev.slice(cursorPos));
-          setCursorPos((pos) => pos + 1);
+        // Delegate all text editing to useTextInput hook
+        if (textInput.handleKey(key)) {
           return;
         }
         return;
@@ -150,8 +126,6 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
       handleViewResult,
       handleRun,
       editMode,
-      editText,
-      cursorPos,
       handleSave,
       setSelectedIndex,
       setConfirmDelete,
@@ -159,6 +133,7 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
       setEditText,
       setCursorPos,
       setLoading,
+      textInput,
     ]
   );
 
