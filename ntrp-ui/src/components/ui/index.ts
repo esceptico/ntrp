@@ -15,4 +15,3 @@ export { SelectionIndicator } from "./SelectionIndicator.js";
 
 export { TextInputField } from "./input/index.js";
 export { TextEditArea } from "./TextEditArea.js";
-export { Sparkline } from "./Sparkline.js";

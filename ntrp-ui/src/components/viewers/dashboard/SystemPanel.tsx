@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { DashboardOverview } from "../../../api/client.js";
 import { colors } from "../../ui/colors.js";
-import { Sparkline } from "../../ui/Sparkline.js";
+import { Sparkline } from "@pppp606/ink-chart";
 
 interface SystemPanelProps {
   data: DashboardOverview;
@@ -63,7 +63,7 @@ export function SystemPanel({ data, width }: SystemPanelProps) {
       {sparkData.length > 1 && (
         <Box>
           <Text color={B}>{"trend".padEnd(9)}</Text>
-          <Sparkline data={sparkData} width={sparkW} color={colors.status.success} />
+          <Sparkline data={sparkData.slice(-sparkW)} width={sparkW} colorScheme="green" />
         </Box>
       )}
 

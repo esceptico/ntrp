@@ -13,6 +13,8 @@
     "start": "node --max-old-space-size=8192 dist/index.js"
   },
   "dependencies": {
+    "@inkjs/ui": "^2.0.0",
+    "@pppp606/ink-chart": "^0.2.4",
     "cli-markdown": "^3.5.1",
     "ink": "^6.6.0",
     "react": "^19.2.3"

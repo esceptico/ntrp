@@ -1,6 +1,4 @@
-import React from "react";
-import { Text } from "ink";
-import { colors } from "./colors.js";
+import { Spinner as InkSpinner } from "@inkjs/ui";
 import { Panel } from "./layout/Panel.js";
 
 interface LoadingProps {
@@ -10,7 +8,7 @@ interface LoadingProps {
 export function Loading({ message = "Loading..." }: LoadingProps) {
   return (
     <Panel>
-      <Text color={colors.text.muted}>{message}</Text>
+      <InkSpinner label={message} />
     </Panel>
   );
 }

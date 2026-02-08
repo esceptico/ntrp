@@ -23,12 +23,12 @@ function Section({ title, width, grow, children }: { title: string; width: numbe
   return (
     <Box flexDirection="column" flexGrow={grow ? 1 : 0}>
       <Text color={B}>
-        ┌ <Text color={colors.text.muted} bold>{title}</Text> {"─".repeat(lineLen)}┐
+        ╭ <Text color={colors.text.muted} bold>{title}</Text> {"─".repeat(lineLen)}╮
       </Text>
       <Box flexDirection="column" paddingX={2} flexGrow={grow ? 1 : 0}>
         {children}
       </Box>
-      <Text color={B}>└{" ".repeat(Math.max(0, width - 2))}┘</Text>
+      <Text color={B}>╰{" ".repeat(Math.max(0, width - 2))}╯</Text>
     </Box>
   );
 }
@@ -57,8 +57,8 @@ export function DashboardViewer({ config, onClose }: DashboardViewerProps) {
     <Box flexDirection="column" width={w}>
       {/* Top corners */}
       <Box justifyContent="space-between" width={w}>
-        <Text color={B}>┌───</Text>
-        <Text color={B}>───┐</Text>
+        <Text color={B}>╭───</Text>
+        <Text color={B}>───╮</Text>
       </Box>
 
       {/* Content */}
@@ -97,8 +97,8 @@ export function DashboardViewer({ config, onClose }: DashboardViewerProps) {
 
       {/* Bottom corners */}
       <Box justifyContent="space-between" width={w}>
-        <Text color={B}>└───</Text>
-        <Text color={B}>───┘</Text>
+        <Text color={B}>╰───</Text>
+        <Text color={B}>───╯</Text>
       </Box>
     </Box>
   );

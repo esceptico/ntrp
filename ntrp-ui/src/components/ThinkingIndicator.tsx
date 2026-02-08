@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Text } from "ink";
+import { useSpinner } from "@inkjs/ui";
 import { colors } from "./ui/colors.js";
 import { useAccentColor } from "../hooks/index.js";
 
-const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 const GLIMMER_WIDTH = 3;
 const VERBS = ["thinking", "processing", "analyzing", "reasoning", "considering", "pondering"] as const;
 
@@ -17,7 +17,8 @@ interface ThinkingIndicatorProps {
 
 export function ThinkingIndicator({ status }: ThinkingIndicatorProps) {
   const { accentValue } = useAccentColor();
-  const [frame, setFrame] = useState(0);
+  const { frame: spinnerFrame } = useSpinner({ type: "dots" });
+  const [tick, setTick] = useState(0);
   const [verb, setVerb] = useState(pickVerb);
   const prevStatus = useRef(status);
 
@@ -29,15 +30,14 @@ export function ThinkingIndicator({ status }: ThinkingIndicatorProps) {
   }, [status]);
 
   useEffect(() => {
-    const interval = setInterval(() => setFrame(f => f + 1), 100);
+    const interval = setInterval(() => setTick(t => t + 1), 100);
     return () => clearInterval(interval);
   }, []);
 
   const isGenericStatus = !status || status === "thinking..." || status === "";
   const displayText = isGenericStatus ? `${verb}...` : status;
-  const glimmerPos = frame % (displayText.length + GLIMMER_WIDTH);
+  const glimmerPos = tick % (displayText.length + GLIMMER_WIDTH);
 
-  // Single Text element with nested Text for inline color changes
   const shimmerText = useMemo(() => {
     return displayText.split("").map((char, i) => {
       const dist = Math.abs(i - glimmerPos);
@@ -52,7 +52,7 @@ export function ThinkingIndicator({ status }: ThinkingIndicatorProps) {
 
   return (
     <Text>
-      <Text color={accentValue}>{SPINNER[frame % SPINNER.length]} </Text>
+      <Text color={accentValue}>{spinnerFrame} </Text>
       {shimmerText}
       <Text color={colors.text.muted}> (Esc to cancel)</Text>
     </Text>
