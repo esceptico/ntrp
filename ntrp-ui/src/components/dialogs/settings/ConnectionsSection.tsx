@@ -5,6 +5,8 @@ import { CHECKBOX_CHECKED, CHECKBOX_UNCHECKED } from "../../../lib/constants.js"
 import type { ServerConfig, GoogleAccount } from "../../../api/client.js";
 import { CONNECTION_LABELS, type ConnectionItem } from "./config.js";
 
+const GOOGLE_SOURCES: ConnectionItem[] = ["gmail", "calendar"];
+
 interface ConnectionsSectionProps {
   serverConfig: ServerConfig | null;
   googleAccounts: GoogleAccount[];
@@ -39,6 +41,8 @@ export function ConnectionsSection({
   const labelWidth = 14;
   const valueWidth = Math.max(0, width - labelWidth - 6);
   const sources = serverConfig?.sources;
+  const isGoogleSource = GOOGLE_SOURCES.includes(selectedItem);
+  const sourceEnabled = isGoogleSource && sources?.[selectedItem]?.enabled;
 
   return (
     <Box flexDirection="column">
@@ -71,55 +75,42 @@ export function ConnectionsSection({
       )}
 
       {/* Gmail */}
-      <SourceRow item="gmail" selected={selectedItem === "gmail"} accent={accent}>
-        <ToggleIndicator source={sources?.gmail} accent={accent} />
-        {sources?.gmail?.enabled ? (
-          googleAccounts.length === 0 ? (
-            <Text color={colors.text.muted}>No accounts</Text>
-          ) : (
-            <Text color={colors.text.primary}>
-              {googleAccounts.length} account{googleAccounts.length !== 1 ? "s" : ""}
-            </Text>
-          )
-        ) : (
-          <Text color={colors.text.muted}>Disabled</Text>
-        )}
-      </SourceRow>
+      <GoogleSourceRow
+        item="gmail"
+        selectedItem={selectedItem}
+        sources={sources}
+        googleAccounts={googleAccounts}
+        accent={accent}
+      />
 
       {/* Gmail accounts sub-list */}
-      {selectedItem === "gmail" && sources?.gmail?.enabled && googleAccounts.length > 0 && (
-        <Box flexDirection="column" marginLeft={4}>
-          {googleAccounts.map((account, i) => {
-            const isSelected = i === selectedGoogleIndex;
-            const email = account.email || account.token_file;
-            return (
-              <Text key={account.token_file}>
-                <SelectionIndicator selected={isSelected} accent={accent} />
-                <Text color={account.error ? colors.status.error : (isSelected ? accent : colors.text.secondary)}>
-                  {truncateText(email, valueWidth - 4)}
-                </Text>
-                {account.error && <Text color={colors.status.error}> !</Text>}
-              </Text>
-            );
-          })}
-        </Box>
+      {selectedItem === "gmail" && sourceEnabled && googleAccounts.length > 0 && (
+        <GoogleAccountList
+          accounts={googleAccounts}
+          selectedIndex={selectedGoogleIndex}
+          accent={accent}
+          valueWidth={valueWidth}
+        />
       )}
 
       {/* Calendar — shares Google OAuth tokens with Gmail */}
-      <SourceRow item="calendar" selected={selectedItem === "calendar"} accent={accent}>
-        <ToggleIndicator source={sources?.calendar ? { ...sources.calendar, connected: googleAccounts.length > 0 } : sources?.calendar} accent={accent} />
-        {sources?.calendar?.enabled ? (
-          googleAccounts.length > 0 ? (
-            <Text color={colors.text.primary}>
-              {googleAccounts.length} account{googleAccounts.length !== 1 ? "s" : ""}
-            </Text>
-          ) : (
-            <Text color={colors.status.warning}>No tokens</Text>
-          )
-        ) : (
-          <Text color={colors.text.muted}>Disabled</Text>
-        )}
-      </SourceRow>
+      <GoogleSourceRow
+        item="calendar"
+        selectedItem={selectedItem}
+        sources={sources}
+        googleAccounts={googleAccounts}
+        accent={accent}
+      />
+
+      {/* Calendar accounts sub-list */}
+      {selectedItem === "calendar" && sourceEnabled && googleAccounts.length > 0 && (
+        <GoogleAccountList
+          accounts={googleAccounts}
+          selectedIndex={selectedGoogleIndex}
+          accent={accent}
+          valueWidth={valueWidth}
+        />
+      )}
 
       {/* Browser */}
       <SourceRow item="browser" selected={selectedItem === "browser"} accent={accent}>
@@ -155,20 +146,20 @@ export function ConnectionsSection({
       {/* Help text */}
       <Box marginTop={1}>
         <Text color={colors.text.disabled}>
-          {getHelpText(selectedItem, editingVault, sources?.gmail?.enabled)}
+          {getHelpText(selectedItem, editingVault, sourceEnabled)}
         </Text>
       </Box>
     </Box>
   );
 }
 
-function getHelpText(item: ConnectionItem, editingVault: boolean, gmailEnabled?: boolean): string {
+function getHelpText(item: ConnectionItem, editingVault: boolean, sourceEnabled?: boolean): string {
   switch (item) {
     case "vault":
       return editingVault ? "Enter: save · Esc: cancel" : "Enter: edit path";
     case "gmail":
-      return gmailEnabled ? "Enter: toggle · a: add account · d: remove" : "Enter: toggle";
     case "calendar":
+      return sourceEnabled ? "Enter: toggle · a: add account · d: remove" : "Enter: toggle";
     case "memory":
       return "Enter: toggle";
     case "browser":
@@ -176,6 +167,62 @@ function getHelpText(item: ConnectionItem, editingVault: boolean, gmailEnabled?:
     case "web":
       return "";
   }
+}
+
+interface GoogleSourceRowProps {
+  item: ConnectionItem;
+  selectedItem: ConnectionItem;
+  sources?: Record<string, { enabled?: boolean; connected?: boolean }>;
+  googleAccounts: GoogleAccount[];
+  accent: string;
+}
+
+function GoogleSourceRow({ item, selectedItem, sources, googleAccounts, accent }: GoogleSourceRowProps) {
+  const source = sources?.[item];
+  const hasTokens = googleAccounts.length > 0;
+  return (
+    <SourceRow item={item} selected={selectedItem === item} accent={accent}>
+      <ToggleIndicator source={source ? { ...source, connected: hasTokens } : source} accent={accent} />
+      {source?.enabled ? (
+        hasTokens ? (
+          <Text color={colors.text.primary}>
+            {googleAccounts.length} account{googleAccounts.length !== 1 ? "s" : ""}
+          </Text>
+        ) : (
+          <Text color={colors.status.warning}>No tokens</Text>
+        )
+      ) : (
+        <Text color={colors.text.muted}>Disabled</Text>
+      )}
+    </SourceRow>
+  );
+}
+
+interface GoogleAccountListProps {
+  accounts: GoogleAccount[];
+  selectedIndex: number;
+  accent: string;
+  valueWidth: number;
+}
+
+function GoogleAccountList({ accounts, selectedIndex, accent, valueWidth }: GoogleAccountListProps) {
+  return (
+    <Box flexDirection="column" marginLeft={4}>
+      {accounts.map((account, i) => {
+        const isSelected = i === selectedIndex;
+        const email = account.email || account.token_file;
+        return (
+          <Text key={account.token_file}>
+            <SelectionIndicator selected={isSelected} accent={accent} />
+            <Text color={account.error ? colors.status.error : (isSelected ? accent : colors.text.secondary)}>
+              {truncateText(email, valueWidth - 4)}
+            </Text>
+            {account.error && <Text color={colors.status.error}> !</Text>}
+          </Text>
+        );
+      })}
+    </Box>
+  );
 }
 
 interface SourceRowProps {

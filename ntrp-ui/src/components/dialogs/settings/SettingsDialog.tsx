@@ -284,19 +284,23 @@ export function SettingsDialog({
         }
       } else if (activeSection === "connections") {
         const connIdx = CONNECTION_ITEMS.indexOf(connectionItem);
-        const gmailEnabled = serverConfig?.sources?.gmail?.enabled;
+        const isGoogleSource = connectionItem === "gmail" || connectionItem === "calendar";
+        const sourceEnabled = isGoogleSource && serverConfig?.sources?.[connectionItem]?.enabled;
+        const hasAccountList = sourceEnabled && googleAccounts.length > 0;
 
         if (key.name === "up" || key.name === "k") {
-          if (connectionItem === "gmail" && gmailEnabled && googleAccounts.length > 0 && selectedGoogleIndex > 0) {
+          if (hasAccountList && selectedGoogleIndex > 0) {
             setSelectedGoogleIndex((i) => i - 1);
           } else if (connIdx > 0) {
             setConnectionItem(CONNECTION_ITEMS[connIdx - 1]);
+            setSelectedGoogleIndex(0);
           }
         } else if (key.name === "down" || key.name === "j") {
-          if (connectionItem === "gmail" && gmailEnabled && googleAccounts.length > 0 && selectedGoogleIndex < googleAccounts.length - 1) {
+          if (hasAccountList && selectedGoogleIndex < googleAccounts.length - 1) {
             setSelectedGoogleIndex((i) => i + 1);
           } else if (connIdx < CONNECTION_ITEMS.length - 1) {
             setConnectionItem(CONNECTION_ITEMS[connIdx + 1]);
+            setSelectedGoogleIndex(0);
           }
         } else if (key.name === "return" || key.name === "space") {
           if (connectionItem === "vault") {
@@ -306,9 +310,9 @@ export function SettingsDialog({
           } else if (TOGGLEABLE_SOURCES.includes(connectionItem)) {
             handleToggleSource(connectionItem);
           }
-        } else if (key.sequence === "a" && connectionItem === "gmail" && gmailEnabled) {
+        } else if (key.sequence === "a" && isGoogleSource && sourceEnabled) {
           handleAddGoogle();
-        } else if ((key.sequence === "d" || key.name === "delete") && connectionItem === "gmail" && gmailEnabled) {
+        } else if ((key.sequence === "d" || key.name === "delete") && isGoogleSource && sourceEnabled) {
           handleRemoveGoogle();
         }
       } else if (activeSection === "appearance") {
