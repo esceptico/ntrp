@@ -108,11 +108,7 @@ class GoogleCalendar:
 
     def _get_credentials(self):
         if self._creds is None or not self._creds.valid:
-            self._creds = get_google_credentials(
-                self.token_path,
-                scopes=SCOPES_CALENDAR,
-                require_scopes=SCOPES_CALENDAR,
-            )
+            self._creds = get_google_credentials(self.token_path)
         return self._creds
 
     def _get_service(self):
@@ -372,7 +368,6 @@ class MultiCalendarSource(Source, CalendarSource):
     def __init__(self, token_paths: list[Path], days_back: int, days_ahead: int):
         self.sources: list[GoogleCalendar] = []
         self.errors: dict[str, str] = {}
-        self._needs_reauth = False
 
         for token_path in token_paths:
             try:
@@ -383,9 +378,6 @@ class MultiCalendarSource(Source, CalendarSource):
                 )
                 src._get_credentials()
                 self.sources.append(src)
-            except PermissionError:
-                self._needs_reauth = True
-                self.errors[token_path.name] = "Needs re-auth for calendar scope"
             except Exception as e:
                 self.errors[token_path.name] = str(e)
 
