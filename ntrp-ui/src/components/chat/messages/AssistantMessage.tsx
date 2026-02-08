@@ -21,7 +21,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   return (
     <Box flexDirection="row" width={terminalWidth} overflow="hidden">
       <Box width={2} flexShrink={0}>
-        <Text color={accentValue}>{BULLET} </Text>
+        <Text color={accentValue}>{BULLET}</Text>
       </Box>
       <Box width={contentWidth} flexGrow={1} flexDirection="column" overflow="hidden">
         {renderMarkdown ? (
