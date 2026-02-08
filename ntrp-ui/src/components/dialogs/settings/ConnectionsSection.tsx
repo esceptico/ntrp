@@ -105,13 +105,13 @@ export function ConnectionsSection({
         </Box>
       )}
 
-      {/* Calendar */}
+      {/* Calendar — shares Google OAuth tokens with Gmail */}
       <SourceRow item="calendar" selected={selectedItem === "calendar"} accent={accent}>
-        <ToggleIndicator source={sources?.calendar} accent={accent} />
+        <ToggleIndicator source={sources?.calendar ? { ...sources.calendar, connected: googleAccounts.length > 0 } : sources?.calendar} accent={accent} />
         {sources?.calendar?.enabled ? (
-          sources?.calendar?.connected ? (
+          googleAccounts.length > 0 ? (
             <Text color={colors.text.primary}>
-              {(sources.calendar.accounts?.length ?? 0)} account{(sources.calendar.accounts?.length ?? 0) !== 1 ? "s" : ""}
+              {googleAccounts.length} account{googleAccounts.length !== 1 ? "s" : ""}
             </Text>
           ) : (
             <Text color={colors.status.warning}>No tokens</Text>
