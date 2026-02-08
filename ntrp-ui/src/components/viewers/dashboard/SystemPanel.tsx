@@ -1,4 +1,3 @@
-import React from "react";
 import { Box, Text } from "ink";
 import type { DashboardOverview } from "../../../api/client.js";
 import { colors } from "../../ui/colors.js";
