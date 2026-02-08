@@ -367,7 +367,7 @@ class MultiCalendarSource(Source, CalendarSource):
 
     def __init__(self, token_paths: list[Path], days_back: int, days_ahead: int):
         self.sources: list[GoogleCalendar] = []
-        self.errors: dict[str, str] = {}
+        self._errors: dict[str, str] = {}
 
         for token_path in token_paths:
             try:
@@ -379,7 +379,11 @@ class MultiCalendarSource(Source, CalendarSource):
                 src._get_credentials()
                 self.sources.append(src)
             except Exception as e:
-                self.errors[token_path.name] = str(e)
+                self._errors[token_path.name] = str(e)
+
+    @property
+    def errors(self) -> dict[str, str]:
+        return self._errors
 
     @property
     def details(self) -> dict:

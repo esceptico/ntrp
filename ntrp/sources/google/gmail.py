@@ -492,16 +492,20 @@ class MultiGmailSource(Source, EmailSource):
 
     def __init__(self, token_paths: list[Path], days_back: int):
         self.sources: list[GmailSource] = []
-        self.errors: dict[str, str] = {}
+        self._errors: dict[str, str] = {}
 
         for token_path in token_paths:
             try:
                 src = GmailSource(token_path=token_path, days_back=days_back)
                 self.sources.append(src)
             except Exception as e:
-                self.errors[token_path.name] = str(e)
+                self._errors[token_path.name] = str(e)
 
         self._days = days_back
+
+    @property
+    def errors(self) -> dict[str, str]:
+        return self._errors
 
     @property
     def details(self) -> dict:
