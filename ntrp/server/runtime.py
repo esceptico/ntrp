@@ -18,9 +18,9 @@ from ntrp.schedule.store import ScheduleStore
 from ntrp.server.dashboard import DashboardCollector
 from ntrp.server.indexer import Indexer
 from ntrp.server.sources import SourceManager
-from ntrp.sources.events import SourceChanged
 from ntrp.server.state import RunRegistry
 from ntrp.sources.browser import BrowserHistorySource
+from ntrp.sources.events import SourceChanged
 from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.sources.memory import MemoryIndexSource
 from ntrp.tools.executor import ToolExecutor

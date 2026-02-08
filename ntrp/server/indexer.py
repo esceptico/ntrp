@@ -95,6 +95,9 @@ class Indexer:
             await self.channel.publish(
                 IndexingCompleted(updated=self._progress.updated, deleted=self._progress.deleted)
             )
+        except asyncio.CancelledError:
+            self._progress.status = IndexStatus.ERROR
+            raise
         except Exception as e:
             self._error = str(e)
             self._progress.status = IndexStatus.ERROR

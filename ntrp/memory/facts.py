@@ -128,14 +128,15 @@ class FactMemory:
                     if result.action == "created":
                         obs_created += 1
                 await conn.commit()
-                _logger.info("Consolidated %d facts", count)
-                await self.channel.publish(
-                    ConsolidationCompleted(facts_processed=count, observations_created=obs_created)
-                )
-                return count
             except Exception:
                 await conn.rollback()
                 raise
+
+        _logger.info("Consolidated %d facts", count)
+        await self.channel.publish(
+            ConsolidationCompleted(facts_processed=count, observations_created=obs_created)
+        )
+        return count
 
     async def close(self) -> None:
         if self._consolidation_task:
