@@ -20,18 +20,23 @@ def _scratchpad_path(session_id: str, key: str) -> Path:
     return path
 
 
-_WRITE_SCRATCHPAD_DESCRIPTION = """Save working notes for this session.
+_WRITE_SCRATCHPAD_DESCRIPTION = """Your private workspace for internal reasoning that doesn't fit in context.
+
+This is YOUR scratch space — never use it to "save something for the user."
+If the user asks you to write/draft something, put it directly in your response.
 
 USE FOR:
-- Plans and task tracking during complex operations
-- Intermediate results from multi-step exploration
-- Temporary data that needs to persist across tool calls
+- Breaking down complex multi-step plans you need to track
+- Intermediate results from research/exploration you'll reference later
+- Temporary structured data (comparisons, aggregations) mid-task
+
+NOT FOR:
+- Drafts, summaries, or content intended for the user — just respond with it
+- Anything the user asked you to "save" or "write down" — use memory or respond directly
 
 PARAMETERS:
 - content: What to save (markdown supported)
-- key: Namespace for the note (default: "default")
-
-Multiple keys let you organize different types of notes."""
+- key: Namespace for the note (default: "default")"""
 
 _READ_SCRATCHPAD_DESCRIPTION = """Read previously saved working notes.
 
