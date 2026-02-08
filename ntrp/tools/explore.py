@@ -33,12 +33,12 @@ class ExploreTool(Tool):
         return f"{EXPLORE_PROMPT}\n\nUSER CONTEXT:\n{context}"
 
     EXPLORE_TOOLS = {
-        "search_notes",
+        "notes",
         "read_note",
-        "search_email",
+        "emails",
         "read_email",
-        "search_calendar",
-        "search_browser",
+        "calendar",
+        "browser",
         "recall",
         "remember",
         "web_search",

@@ -11,14 +11,15 @@ from ntrp.utils import truncate
 SEND_EMAIL_DESCRIPTION = "Send an email from a specified Gmail account. Requires approval."
 
 READ_EMAIL_DESCRIPTION = (
-    "Read the full content of an email by its ID. Use search_email or list_email first to find email IDs."
+    "Read the full content of an email by its ID. Use emails() or emails(query) first to find email IDs."
 )
 
-LIST_EMAIL_DESCRIPTION = (
-    "List recent emails (subjects only). Use search_email() to find email IDs, then read_email(id) for full content."
-)
+EMAILS_DESCRIPTION = """Browse or search emails.
 
-SEARCH_EMAIL_DESCRIPTION = "Search emails by content. Use read_email(id) to get full content."
+Without query: lists recent emails (subjects and senders). Use days to control time range.
+With query: searches email content. Use specific keywords like names, subjects, or phrases.
+
+Use read_email(id) to get full content of a specific email."""
 
 
 class SendEmailInput(BaseModel):
@@ -76,7 +77,7 @@ class ReadEmailTool(Tool):
         content = self.source.read(email_id)
         if not content:
             return ToolResult(
-                content=f"Email not found: {email_id}. Use search_email or list_email to find valid email IDs.",
+                content=f"Email not found: {email_id}. Use emails() or emails(query) to find valid email IDs.",
                 preview="Not found",
             )
 
@@ -84,21 +85,29 @@ class ReadEmailTool(Tool):
         return ToolResult(content=content, preview=f"Read {lines} lines")
 
 
-class ListEmailInput(BaseModel):
-    days: int = Field(default=7, description="How many days back to look (default: 7)")
+class EmailsInput(BaseModel):
+    query: str | None = Field(default=None, description="Search query. Omit to list recent emails.")
+    days: int = Field(default=7, description="How many days back to look when listing (default: 7)")
     limit: int = Field(default=30, description="Maximum results (default: 30)")
 
 
-class ListEmailTool(Tool):
-    name = "list_email"
-    description = LIST_EMAIL_DESCRIPTION
+class EmailsTool(Tool):
+    name = "emails"
+    description = EMAILS_DESCRIPTION
     source_type = EmailSource
-    input_model = ListEmailInput
+    input_model = EmailsInput
 
     def __init__(self, source: EmailSource):
         self.source = source
 
-    async def execute(self, execution: ToolExecution, days: int = 7, limit: int = 30, **kwargs: Any) -> ToolResult:
+    async def execute(
+        self, execution: ToolExecution, query: str | None = None, days: int = 7, limit: int = 30, **kwargs: Any
+    ) -> ToolResult:
+        if query:
+            return self._search(query, limit)
+        return self._list(days, limit)
+
+    def _list(self, days: int, limit: int) -> ToolResult:
         accounts = self.source.list_accounts()
         emails = self.source.list_recent(days=days, limit=limit)
 
@@ -121,25 +130,7 @@ class ListEmailTool(Tool):
 
         return ToolResult(content="\n".join(output), preview=f"{len(emails)} emails")
 
-
-class SearchEmailInput(BaseModel):
-    query: str = Field(description="Search query")
-    limit: int = Field(default=10, description="Maximum results (default: 10)")
-
-
-class SearchEmailTool(Tool):
-    name = "search_email"
-    description = SEARCH_EMAIL_DESCRIPTION
-    source_type = EmailSource
-    input_model = SearchEmailInput
-
-    def __init__(self, source: EmailSource):
-        self.source = source
-
-    async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
-        if not query:
-            return ToolResult(content="Error: query is required", preview="Missing query", is_error=True)
-
+    def _search(self, query: str, limit: int) -> ToolResult:
         results = self.source.search(query, limit=limit)
         if not results:
             return ToolResult(content=f"No emails found for '{query}'", preview="0 emails")

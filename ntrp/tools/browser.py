@@ -8,26 +8,37 @@ from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.utils import truncate
 
-LIST_BROWSER_DESCRIPTION = "List recent browser history."
+BROWSER_DESCRIPTION = """Browse or search browser history.
 
-SEARCH_BROWSER_DESCRIPTION = "Search browser history by content or URL."
+Without query: lists recent browser history sorted by visit time. Use days to control time range.
+With query: searches by page content or URL. Use specific keywords like site names or topics.
+
+Returns page titles and URLs."""
 
 
-class ListBrowserInput(BaseModel):
-    days: int = Field(default=7, description="How many days back to look (default: 7)")
+class BrowserInput(BaseModel):
+    query: str | None = Field(default=None, description="Search query. Omit to list recent history.")
+    days: int = Field(default=7, description="How many days back to look when listing (default: 7)")
     limit: int = Field(default=30, description="Maximum results (default: 30)")
 
 
-class ListBrowserTool(Tool):
-    name = "list_browser"
-    description = LIST_BROWSER_DESCRIPTION
+class BrowserTool(Tool):
+    name = "browser"
+    description = BROWSER_DESCRIPTION
     source_type = BrowserSource
-    input_model = ListBrowserInput
+    input_model = BrowserInput
 
     def __init__(self, source: BrowserSource):
         self.source = source
 
-    async def execute(self, execution: ToolExecution, days: int = 7, limit: int = 30, **kwargs: Any) -> ToolResult:
+    async def execute(
+        self, execution: ToolExecution, query: str | None = None, days: int = 7, limit: int = 30, **kwargs: Any
+    ) -> ToolResult:
+        if query:
+            return self._search(query, limit)
+        return self._list(days, limit)
+
+    def _list(self, days: int, limit: int) -> ToolResult:
         items = self.source.list_recent(days=days, limit=limit)
 
         if not items:
@@ -41,25 +52,7 @@ class ListBrowserTool(Tool):
 
         return ToolResult(content="\n".join(output), preview=f"{len(items)} items")
 
-
-class SearchBrowserInput(BaseModel):
-    query: str = Field(description="Search query")
-    limit: int = Field(default=10, description="Maximum results (default: 10)")
-
-
-class SearchBrowserTool(Tool):
-    name = "search_browser"
-    description = SEARCH_BROWSER_DESCRIPTION
-    source_type = BrowserSource
-    input_model = SearchBrowserInput
-
-    def __init__(self, source: BrowserSource):
-        self.source = source
-
-    async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
-        if not query:
-            return ToolResult(content="Error: query is required", preview="Missing query", is_error=True)
-
+    def _search(self, query: str, limit: int) -> ToolResult:
         urls = self.source.search(query)
         if not urls:
             return ToolResult(content=f"No browser history found for '{query}'", preview="0 results")

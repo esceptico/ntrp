@@ -22,7 +22,7 @@ _logger = get_logger(__name__)
 
 
 READ_NOTE_DESCRIPTION = (
-    "Read a note by path. Use search_notes() first to find paths. Supports offset/limit for large notes."
+    "Read a note by path. Use notes(query) first to find paths. Supports offset/limit for large notes."
 )
 
 EDIT_NOTE_DESCRIPTION = """Edit a note by find-and-replace. Requires approval. Always read_note() first.
@@ -62,39 +62,43 @@ def generate_diff(original: str, proposed: str, path: str) -> str:
     return "".join(diff)
 
 
-LIST_NOTES_DESCRIPTION = "List note files in the Obsidian vault, sorted by most recently modified."
+NOTES_DESCRIPTION = """Browse or search notes in the Obsidian vault.
+
+Without query: lists all notes sorted by most recently modified. Use limit to control how many.
+With query: searches note content. Use simple keywords (2-4 words, no boolean operators).
+
+Use read_note(path) to get full content after finding notes."""
 
 MOVE_NOTE_DESCRIPTION = "Move or rename a note in the vault. User must approve the operation."
 
-SEARCH_NOTES_DESCRIPTION = """Search notes by content.
 
-QUERY FORMAT:
-- Use natural language: "job applications", "MATS program"
-- Avoid boolean operators: no AND, OR, quotes
-- Keep queries simple: 2-4 words work best
-
-After finding notes, use read_note(path) to get full content."""
+class NotesInput(BaseModel):
+    query: str | None = Field(default=None, description="Search query. Omit to list recent notes.")
+    limit: int | None = Field(default=None, description=f"Maximum results (default: {DEFAULT_LIST_LIMIT})")
 
 
-class ListNotesInput(BaseModel):
-    limit: int | None = Field(default=None, description=f"Maximum notes to return (default: {DEFAULT_LIST_LIMIT})")
-
-
-class ListNotesTool(Tool):
-    name = "list_notes"
-    description = LIST_NOTES_DESCRIPTION
+class NotesTool(Tool):
+    name = "notes"
+    description = NOTES_DESCRIPTION
     source_type = NotesSource
-    input_model = ListNotesInput
+    input_model = NotesInput
 
-    def __init__(self, source: NotesSource):
+    def __init__(self, source: NotesSource, search_index: Any | None = None):
         self.source = source
+        self.search_index = search_index
 
     async def execute(
         self,
         execution: ToolExecution,
+        query: str | None = None,
         limit: int = DEFAULT_LIST_LIMIT,
         **kwargs: Any,
     ) -> ToolResult:
+        if query:
+            return await self._search(query, limit)
+        return self._list(limit)
+
+    def _list(self, limit: int) -> ToolResult:
         files_by_mtime = self.source.get_all_with_mtime()
 
         sorted_files = sorted(
@@ -112,6 +116,48 @@ class ListNotesTool(Tool):
         content = f"{header}\n" + "\n".join(formatted_names)
 
         return ToolResult(content=content, preview=f"{showing} notes")
+
+    async def _search(self, query: str, limit: int) -> ToolResult:
+        query = simplify_query(query)
+
+        if self.search_index:
+            try:
+                results = await self.search_index.search(query, sources=["notes"], limit=limit)
+                if results:
+                    output = []
+                    for item in results:
+                        output.append(f"• {item.title}")
+                        output.append(f"  path: `{item.source_id}`")
+                        if item.snippet:
+                            output.append(f"  {truncate(item.snippet, SNIPPET_TRUNCATE)}")
+                    return ToolResult(content="\n".join(output), preview=f"{len(results)} notes")
+            except Exception as e:
+                _logger.warning("Hybrid search failed, falling back to text search: %s", e)
+
+        seen = set()
+        results = []
+        for path in self.source.search(query):
+            if path in seen:
+                continue
+            seen.add(path)
+            content = self.source.read(path) or ""
+            snippet = truncate(content.replace("\n", " ").strip(), SNIPPET_TRUNCATE)
+            title = path.split("/")[-1].replace(".md", "")
+            results.append((title, path, snippet))
+            if len(results) >= limit:
+                break
+
+        if not results:
+            return ToolResult(content=f"No notes found for '{query}'", preview="0 notes")
+
+        output = []
+        for title, path, snippet in results:
+            output.append(f"• {title}")
+            output.append(f"  path: `{path}`")
+            if snippet:
+                output.append(f"  {snippet}")
+
+        return ToolResult(content="\n".join(output), preview=f"{len(results)} notes")
 
 
 class ReadNoteInput(BaseModel):
@@ -135,7 +181,7 @@ class ReadNoteTool(Tool):
         content = self.source.read(path)
         if content is None:
             return ToolResult(
-                content=f"Note not found: {path}. Use list_notes to see available notes.",
+                content=f"Note not found: {path}. Use notes() to see available notes.",
                 preview="Not found",
             )
 
@@ -170,7 +216,7 @@ class EditNoteTool(Tool):
         original = self.source.read(path)
         if original is None:
             return ToolResult(
-                content=f"Note not found: {path}. Use list_notes to find correct path.",
+                content=f"Note not found: {path}. Use notes() to find correct path.",
                 preview="Not found",
             )
 
@@ -262,7 +308,7 @@ class DeleteNoteTool(Tool):
         original = self.source.read(path)
         if original is None:
             return ToolResult(
-                content=f"Note not found: {path}. Use list_notes to find correct path.",
+                content=f"Note not found: {path}. Use notes() to find correct path.",
                 preview="Not found",
             )
 
@@ -298,7 +344,7 @@ class MoveNoteTool(Tool):
 
         if not self.source.exists(path):
             return ToolResult(
-                content=f"Note not found: {path}. Use list_notes to find correct path.",
+                content=f"Note not found: {path}. Use notes() to find correct path.",
                 preview="Not found",
             )
 
@@ -316,66 +362,3 @@ class MoveNoteTool(Tool):
         return ToolResult(content=f"Error moving {path}", preview="Move failed", is_error=True)
 
 
-class SearchNotesInput(BaseModel):
-    query: str = Field(description="Search query")
-    limit: int = Field(default=10, description="Maximum results (default: 10)")
-
-
-class SearchNotesTool(Tool):
-    name = "search_notes"
-    description = SEARCH_NOTES_DESCRIPTION
-    source_type = NotesSource
-    input_model = SearchNotesInput
-
-    def __init__(
-        self,
-        source: NotesSource,
-        search_index: Any | None = None,
-    ):
-        self.source = source
-        self.search_index = search_index
-
-    async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
-        if not query:
-            return ToolResult(content="Error: query is required", preview="Missing query", is_error=True)
-
-        query = simplify_query(query)
-
-        if self.search_index:
-            try:
-                results = await self.search_index.search(query, sources=["notes"], limit=limit)
-                if results:
-                    output = []
-                    for item in results:
-                        output.append(f"• {item.title}")
-                        output.append(f"  path: `{item.source_id}`")
-                        if item.snippet:
-                            output.append(f"  {truncate(item.snippet, SNIPPET_TRUNCATE)}")
-                    return ToolResult(content="\n".join(output), preview=f"{len(results)} notes")
-            except Exception as e:
-                _logger.warning("Hybrid search failed, falling back to text search: %s", e)
-
-        seen = set()
-        results = []
-        for path in self.source.search(query):
-            if path in seen:
-                continue
-            seen.add(path)
-            content = self.source.read(path) or ""
-            snippet = truncate(content.replace("\n", " ").strip(), SNIPPET_TRUNCATE)
-            title = path.split("/")[-1].replace(".md", "")
-            results.append((title, path, snippet))
-            if len(results) >= limit:
-                break
-
-        if not results:
-            return ToolResult(content=f"No notes found for '{query}'", preview="0 notes")
-
-        output = []
-        for title, path, snippet in results:
-            output.append(f"• {title}")
-            output.append(f"  path: `{path}`")
-            if snippet:
-                output.append(f"  {snippet}")
-
-        return ToolResult(content="\n".join(output), preview=f"{len(results)} notes")

@@ -7,16 +7,15 @@ from ntrp.schedule.store import ScheduleStore
 from ntrp.sources.base import BrowserSource, CalendarSource, EmailSource, NotesSource, Source, WebSearchSource
 from ntrp.tools.ask_choice import AskChoiceTool
 from ntrp.tools.bash import BashTool
-from ntrp.tools.browser import ListBrowserTool, SearchBrowserTool
+from ntrp.tools.browser import BrowserTool
 from ntrp.tools.calendar import (
+    CalendarTool,
     CreateCalendarEventTool,
     DeleteCalendarEventTool,
     EditCalendarEventTool,
-    ListCalendarTool,
-    SearchCalendarTool,
 )
 from ntrp.tools.core.base import Tool
-from ntrp.tools.email import ListEmailTool, ReadEmailTool, SearchEmailTool, SendEmailTool
+from ntrp.tools.email import EmailsTool, ReadEmailTool, SendEmailTool
 from ntrp.tools.explore import ExploreTool
 from ntrp.tools.files import ReadFileTool
 from ntrp.tools.memory import ForgetTool, RecallTool, RememberTool
@@ -24,10 +23,9 @@ from ntrp.tools.notes import (
     CreateNoteTool,
     DeleteNoteTool,
     EditNoteTool,
-    ListNotesTool,
     MoveNoteTool,
+    NotesTool,
     ReadNoteTool,
-    SearchNotesTool,
 )
 from ntrp.tools.schedule import CancelScheduleTool, GetScheduleResultTool, ListSchedulesTool, ScheduleTaskTool
 from ntrp.tools.scratchpad import ListScratchpadTool, ReadScratchpadTool, WriteScratchpadTool
@@ -56,13 +54,12 @@ def _create_notes_tools(deps: ToolDeps) -> list[Tool]:
     if not source:
         return []
     return [
-        ListNotesTool(source),
+        NotesTool(source, search_index=deps.search_index),
         ReadNoteTool(source),
         EditNoteTool(source),
         CreateNoteTool(source),
         DeleteNoteTool(source),
         MoveNoteTool(source),
-        SearchNotesTool(source, search_index=deps.search_index),
     ]
 
 
@@ -73,8 +70,7 @@ def _create_email_tools(deps: ToolDeps) -> list[Tool]:
     return [
         SendEmailTool(source),
         ReadEmailTool(source),
-        ListEmailTool(source),
-        SearchEmailTool(source),
+        EmailsTool(source),
     ]
 
 
@@ -83,8 +79,7 @@ def _create_calendar_tools(deps: ToolDeps) -> list[Tool]:
     if not source:
         return []
     return [
-        ListCalendarTool(source),
-        SearchCalendarTool(source),
+        CalendarTool(source),
         CreateCalendarEventTool(source),
         EditCalendarEventTool(source),
         DeleteCalendarEventTool(source),
@@ -96,8 +91,7 @@ def _create_browser_tools(deps: ToolDeps) -> list[Tool]:
     if not source:
         return []
     return [
-        ListBrowserTool(source),
-        SearchBrowserTool(source),
+        BrowserTool(source),
     ]
 
 

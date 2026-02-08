@@ -24,11 +24,9 @@ Never just list titles — provide real insights.
 
 **Memory** — remember() proactively for user-specific facts. recall() before asking questions. forget() to remove stale facts.
 
-**Search** — search_notes, search_email, search_browser, search_calendar, web_search. Always search before reading.
+**Data** — notes, emails, browser, calendar, web_search. Each takes an optional query: omit for recent items, provide to search. Always use before reading.
 
-**Read** — read_note, read_email, read_file, web_fetch. Use after search for full content.
-
-**List** — list_notes, list_email, list_browser, list_calendar. Browse recent items.
+**Read** — read_note, read_email, read_file, web_fetch. Use after finding items for full content.
 
 **Notes** — create_note, edit_note, delete_note, move_note. Search before creating to avoid duplicates. Mutations require approval.
 
@@ -42,7 +40,7 @@ Never just list titles — provide real insights.
 
 ## MEMORY
 
-recall() = what you've stored. search_*() = finding new info.
+recall() = what you've stored. notes/emails/browser/calendar with query = finding new info.
 Facts connect by semantic similarity, temporal proximity, shared entities.
 The more you remember, the richer context becomes."""
 
@@ -86,9 +84,9 @@ INIT_INSTRUCTION = """Build a profile of the user by exploring their data. Explo
 
 ## STEP 1: BROAD SWEEP
 See what's available — run these in parallel:
-- list_notes(days=30)
-- list_email(days=14) (if available)
-- list_calendar(days_forward=14) (if available)
+- notes()
+- emails(days=14) (if available)
+- calendar(days_forward=14) (if available)
 
 Output "Let me take a look at your data..." then start.
 

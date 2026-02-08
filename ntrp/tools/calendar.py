@@ -7,9 +7,12 @@ from ntrp.sources.base import CalendarSource
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
-SEARCH_CALENDAR_DESCRIPTION = """Search calendar events by text query.
+CALENDAR_DESCRIPTION = """Browse or search calendar events.
 
-Use this to find specific events by name, attendee, or description."""
+Without query: lists events by time range. Use days_forward/days_back to control window.
+With query: searches events by name, attendee, or description. Use specific keywords.
+
+Returns event times, titles, and IDs. Use the event ID for edit/delete operations."""
 
 CREATE_CALENDAR_EVENT_DESCRIPTION = """Create a new calendar event.
 
@@ -18,19 +21,14 @@ Requires user approval before creating."""
 
 EDIT_CALENDAR_EVENT_DESCRIPTION = """Edit an existing calendar event.
 
-Use list_calendar or search_calendar first to find the event ID.
+Use calendar() or calendar(query) first to find the event ID.
 Only provide the fields you want to change - others remain unchanged.
 Requires user approval before editing."""
 
 DELETE_CALENDAR_EVENT_DESCRIPTION = """Delete a calendar event by ID.
 
-Use list_calendar or search_calendar first to find the event ID.
+Use calendar() or calendar(query) first to find the event ID.
 Requires user approval before deleting."""
-
-LIST_CALENDAR_DESCRIPTION = """List calendar events.
-
-Use days_forward for upcoming events, days_back for past events.
-Use search_calendar to find specific events by name."""
 
 
 def _parse_datetime(value: str) -> datetime | None:
@@ -42,30 +40,42 @@ def _parse_datetime(value: str) -> datetime | None:
         return None
 
 
-class SearchCalendarInput(BaseModel):
-    query: str = Field(description="Search query (searches title, description, attendees)")
-    limit: int = Field(default=10, description="Max results (default: 10)")
+class CalendarInput(BaseModel):
+    query: str | None = Field(default=None, description="Search query. Omit to list events by time range.")
+    days_forward: int = Field(default=7, description="Days ahead to look when listing (default: 7)")
+    days_back: int = Field(default=0, description="Days back to look when listing (default: 0)")
+    limit: int = Field(default=30, description="Maximum results (default: 30)")
 
 
-class SearchCalendarTool(Tool):
-    name = "search_calendar"
-    description = SEARCH_CALENDAR_DESCRIPTION
+class CalendarTool(Tool):
+    name = "calendar"
+    description = CALENDAR_DESCRIPTION
     source_type = CalendarSource
-    input_model = SearchCalendarInput
+    input_model = CalendarInput
 
     def __init__(self, source: CalendarSource):
         self.source = source
 
-    async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
-        if not query:
-            return ToolResult(content="Error: query is required", preview="Missing query", is_error=True)
+    async def execute(
+        self,
+        execution: ToolExecution,
+        query: str | None = None,
+        days_forward: int = 7,
+        days_back: int = 0,
+        limit: int = 30,
+        **kwargs: Any,
+    ) -> ToolResult:
+        if query:
+            return self._search(query, limit)
+        return self._list(days_forward, days_back, limit)
 
+    def _search(self, query: str, limit: int) -> ToolResult:
         try:
             events = self.source.search(query, limit=limit)
 
             if not events:
                 return ToolResult(
-                    content=f"No events found matching '{query}'. Try different keywords or use list_calendar for upcoming.",
+                    content=f"No events found matching '{query}'. Try different keywords or omit query to list upcoming.",
                     preview="0 events",
                 )
 
@@ -86,6 +96,41 @@ class SearchCalendarTool(Tool):
             return ToolResult(content="\n".join(lines), preview=f"{len(events)} events")
         except Exception as e:
             return ToolResult(content=f"Error searching events: {e}", preview="Search failed", is_error=True)
+
+    def _list(self, days_forward: int, days_back: int, limit: int) -> ToolResult:
+        events = []
+
+        if days_back > 0:
+            past = self.source.get_past(days=days_back, limit=limit)
+            events.extend(past)
+
+        if days_forward > 0:
+            upcoming = self.source.get_upcoming(days=days_forward, limit=limit)
+            events.extend(upcoming)
+
+        if not events:
+            return ToolResult(content="No calendar events in the specified range", preview="0 events")
+
+        events.sort(key=lambda e: e.metadata.get("start", ""))
+
+        output = []
+        for event in events[:limit]:
+            meta = event.metadata
+            start = meta.get("start", "")
+
+            if start:
+                dt = datetime.fromisoformat(start)
+                if meta.get("is_all_day"):
+                    time_str = dt.strftime("%a %b %d") + " (all day)"
+                else:
+                    time_str = dt.strftime("%a %b %d, %H:%M")
+            else:
+                time_str = "No time"
+
+            location = f" @ {meta['location']}" if meta.get("location") else ""
+            output.append(f"• {time_str}: {event.title}{location}")
+
+        return ToolResult(content="\n".join(output), preview=f"{len(events)} events")
 
 
 class CreateCalendarEventInput(BaseModel):
@@ -168,7 +213,7 @@ class CreateCalendarEventTool(Tool):
 
 
 class EditCalendarEventInput(BaseModel):
-    event_id: str = Field(description="The event ID to edit (from list_calendar or search_calendar)")
+    event_id: str = Field(description="The event ID to edit (from calendar() or calendar(query))")
     summary: str | None = Field(default=None, description="New event title (optional)")
     start: str | None = Field(default=None, description="New start time in ISO format (optional)")
     end: str | None = Field(default=None, description="New end time in ISO format (optional)")
@@ -278,59 +323,3 @@ class DeleteCalendarEventTool(Tool):
         return ToolResult(content=result, preview="Deleted")
 
 
-class ListCalendarInput(BaseModel):
-    days_forward: int = Field(default=7, description="Days ahead to look (default: 7)")
-    days_back: int = Field(default=0, description="Days back to look (default: 0)")
-    limit: int = Field(default=30, description="Maximum results (default: 30)")
-
-
-class ListCalendarTool(Tool):
-    name = "list_calendar"
-    description = LIST_CALENDAR_DESCRIPTION
-    source_type = CalendarSource
-    input_model = ListCalendarInput
-
-    def __init__(self, source: CalendarSource):
-        self.source = source
-
-    async def execute(
-        self,
-        execution: ToolExecution,
-        days_forward: int = 7,
-        days_back: int = 0,
-        limit: int = 30,
-        **kwargs: Any,
-    ) -> ToolResult:
-        events = []
-
-        if days_back > 0:
-            past = self.source.get_past(days=days_back, limit=limit)
-            events.extend(past)
-
-        if days_forward > 0:
-            upcoming = self.source.get_upcoming(days=days_forward, limit=limit)
-            events.extend(upcoming)
-
-        if not events:
-            return ToolResult(content="No calendar events in the specified range", preview="0 events")
-
-        events.sort(key=lambda e: e.metadata.get("start", ""))
-
-        output = []
-        for event in events[:limit]:
-            meta = event.metadata
-            start = meta.get("start", "")
-
-            if start:
-                dt = datetime.fromisoformat(start)
-                if meta.get("is_all_day"):
-                    time_str = dt.strftime("%a %b %d") + " (all day)"
-                else:
-                    time_str = dt.strftime("%a %b %d, %H:%M")
-            else:
-                time_str = "No time"
-
-            location = f" @ {meta['location']}" if meta.get("location") else ""
-            output.append(f"• {time_str}: {event.title}{location}")
-
-        return ToolResult(content="\n".join(output), preview=f"{len(events)} events")
