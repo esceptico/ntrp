@@ -8,7 +8,7 @@ import {
   startIndexing,
 } from "../api/client.js";
 
-type ViewMode = "chat" | "memory" | "settings" | "schedules";
+type ViewMode = "chat" | "memory" | "settings" | "schedules" | "dashboard";
 
 interface CommandContext {
   config: Config;
@@ -54,6 +54,10 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   },
   schedule: ({ setViewMode }) => {
     setViewMode("schedules");
+    return true;
+  },
+  dashboard: ({ setViewMode }) => {
+    setViewMode("dashboard");
     return true;
   },
   settings: ({ toggleSettings }) => {

@@ -72,6 +72,10 @@ class ToolRunner:
         result: ToolResult,
         duration_ms: int,
     ) -> ToolResultEvent:
+        if self.ctx.dashboard:
+            is_error = result.content.startswith("Error:")
+            self.ctx.dashboard.record_tool(call.name, duration_ms, self.depth, is_error)
+
         return ToolResultEvent(
             tool_id=call.tool_call.id,
             name=call.name,

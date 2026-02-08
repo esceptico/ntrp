@@ -22,6 +22,7 @@ import {
   ChoiceSelector,
   MemoryViewer,
   SchedulesViewer,
+  DashboardViewer,
   ToolChainDisplay,
   Welcome,
   ThinkingIndicator,
@@ -30,7 +31,7 @@ import {
 } from "./components/index.js";
 import { COMMANDS } from "./lib/commands.js";
 
-type ViewMode = "chat" | "memory" | "settings" | "schedules";
+type ViewMode = "chat" | "memory" | "settings" | "schedules" | "dashboard";
 
 import type { Settings } from "./hooks/useSettings.js";
 
@@ -289,6 +290,9 @@ function AppContent({
       )}
       {viewMode === "schedules" && (
         <SchedulesViewer config={config} onClose={closeView} />
+      )}
+      {viewMode === "dashboard" && (
+        <DashboardViewer config={config} onClose={closeView} />
       )}
       {showSettings && (
         <SettingsDialog

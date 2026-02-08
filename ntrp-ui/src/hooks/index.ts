@@ -10,3 +10,4 @@ export { useFactsTab, type FactsTabState } from "./useFactsTab.js";
 export { useObservationsTab, type ObservationsTabState } from "./useObservationsTab.js";
 export { useScrollOffset } from "./useScrollOffset.js";
 export { useTextInput, type UseTextInputOptions, type UseTextInputResult } from "./useTextInput.js";
+export { useDashboard } from "./useDashboard.js";

@@ -14,6 +14,7 @@ from ntrp.memory.events import FactCreated, FactDeleted, FactUpdated, MemoryClea
 from ntrp.memory.facts import FactMemory
 from ntrp.schedule.scheduler import Scheduler
 from ntrp.schedule.store import ScheduleStore
+from ntrp.server.dashboard import DashboardCollector
 from ntrp.server.indexer import Indexer
 from ntrp.server.state import RunRegistry
 from ntrp.sources.browser import BrowserHistorySource
@@ -59,6 +60,7 @@ class Runtime:
         self.scheduler: Scheduler | None = None
         self.run_registry = RunRegistry()
 
+        self.dashboard = DashboardCollector()
         self.bus = EventBus()
         self._connected = False
         self._config_lock = asyncio.Lock()
@@ -208,6 +210,7 @@ class Runtime:
         self.schedule_store = ScheduleStore(self.session_store.conn)
         await self.schedule_store.init_schema()
 
+        self.bus.subscribe(FactCreated, self.dashboard.on_fact_created)
         self.bus.subscribe(FactCreated, self._on_fact_created)
         self.bus.subscribe(FactUpdated, self._on_fact_updated)
         self.bus.subscribe(FactDeleted, self._on_fact_deleted)

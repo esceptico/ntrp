@@ -9,6 +9,7 @@ from ntrp.memory.store.base import parse_datetime
 
 _SQL_GET_FACT = "SELECT * FROM facts WHERE id = ?"
 _SQL_COUNT_FACTS = "SELECT COUNT(*) FROM facts"
+_SQL_COUNT_UNCONSOLIDATED = "SELECT COUNT(*) FROM facts WHERE consolidated_at IS NULL"
 _SQL_LIST_RECENT = "SELECT * FROM facts ORDER BY created_at DESC LIMIT ?"
 _SQL_DELETE_FACT = "DELETE FROM facts WHERE id = ?"
 
@@ -219,6 +220,10 @@ class FactRepository(BaseRepository):
     async def count(self) -> int:
         rows = await self.conn.execute_fetchall(_SQL_COUNT_FACTS)
         return rows[0][0]
+
+    async def count_unconsolidated(self) -> int:
+        rows = await self.conn.execute_fetchall(_SQL_COUNT_UNCONSOLIDATED)
+        return rows[0][0] if rows else 0
 
     async def link_count(self) -> int:
         rows = await self.conn.execute_fetchall("SELECT COUNT(*) FROM fact_links")

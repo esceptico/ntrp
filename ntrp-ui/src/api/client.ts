@@ -411,3 +411,90 @@ export async function deleteObservation(
 ): Promise<{ status: string }> {
   return api.delete(`${config.serverUrl}/observations/${observationId}`);
 }
+
+// --- Dashboard ---
+
+export interface DashboardSystem {
+  uptime_seconds: number;
+  model: string;
+  memory_model: string;
+  sources: string[];
+  source_errors: Record<string, string>;
+}
+
+export interface TokenDataPoint {
+  prompt: number;
+  completion: number;
+  ts: number;
+}
+
+export interface DashboardTokens {
+  total_prompt: number;
+  total_completion: number;
+  history: TokenDataPoint[];
+}
+
+export interface RecentToolCall {
+  name: string;
+  duration_ms: number;
+  depth: number;
+  ts: number;
+  error: boolean;
+}
+
+export interface ToolStats {
+  count: number;
+  avg_ms: number;
+  error_count: number;
+}
+
+export interface DashboardAgent {
+  active_runs: number;
+  total_runs: number;
+  recent_tools: RecentToolCall[];
+  tool_stats: Record<string, ToolStats>;
+}
+
+export interface DashboardMemory {
+  enabled: boolean;
+  fact_count: number;
+  link_count: number;
+  observation_count: number;
+  unconsolidated: number;
+  consolidation_running: boolean;
+  last_consolidation_at: number | null;
+  recent_facts: Array<{ id: number; text: string; ts: number }>;
+}
+
+export interface DashboardIndexer {
+  status: string;
+  progress_done: number;
+  progress_total: number;
+  error: string | null;
+}
+
+export interface DashboardScheduler {
+  running: boolean;
+  active_task: string | null;
+  total_scheduled: number;
+  enabled_count: number;
+  next_run_at: number | null;
+}
+
+export interface DashboardBackground {
+  indexer: DashboardIndexer;
+  scheduler: DashboardScheduler;
+  consolidation: { running: boolean; interval_seconds: number };
+}
+
+export interface DashboardOverview {
+  system: DashboardSystem;
+  tokens: DashboardTokens;
+  agent: DashboardAgent;
+  memory: DashboardMemory;
+  background: DashboardBackground;
+}
+
+export async function getDashboardOverview(config: Config): Promise<DashboardOverview> {
+  return api.get<DashboardOverview>(`${config.serverUrl}/dashboard/overview`);
+}

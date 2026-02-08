@@ -23,6 +23,7 @@ from ntrp.server.chat import (
     prepare_messages,
     resolve_session,
 )
+from ntrp.server.routers.dashboard import router as dashboard_router
 from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
 from ntrp.server.routers.schedule import router as schedule_router
@@ -78,6 +79,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(dashboard_router)
 app.include_router(data_router)
 app.include_router(gmail_router)
 app.include_router(schedule_router)
@@ -155,6 +157,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             emit=ctx.event_bus.put,
             approval_queue=ctx.client_responses,
             choice_queue=ctx.choice_responses,
+            dashboard=runtime.dashboard,
             extra_auto_approve=extra_auto_approve,
         )
 
@@ -169,6 +172,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         )
 
         yield to_sse(ThinkingEvent(status="processing..."))
+        runtime.dashboard.record_run_started()
 
         try:
             tool_ctx.spawn_fn = create_spawn_fn(
@@ -214,6 +218,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
             yield to_sse(DoneEvent(run_id=run.run_id, usage=run.get_usage()))
             registry.complete_run(run.run_id)
+            runtime.dashboard.record_run_completed(agent.total_input_tokens, agent.total_output_tokens)
 
         except Exception as e:
             yield to_sse(ErrorEvent(message=str(e), recoverable=False))
