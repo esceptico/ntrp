@@ -21,7 +21,7 @@ class RunState:
     messages: list[dict] = field(default_factory=list)
     prompt_tokens: int = 0
     completion_tokens: int = 0
-    event_queue: asyncio.Queue | None = None
+    approval_queue: asyncio.Queue | None = None
     choice_queue: asyncio.Queue | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
@@ -44,6 +44,10 @@ class RunRegistry:
         run = RunState(run_id=run_id, session_id=session_id)
         self._runs[run_id] = run
         return run
+
+    @property
+    def active_run_count(self) -> int:
+        return sum(1 for r in self._runs.values() if r.status == RunStatus.RUNNING)
 
     def get_run(self, run_id: str) -> RunState | None:
         return self._runs.get(run_id)
@@ -79,6 +83,7 @@ class RunRegistry:
 
 def get_run_registry() -> RunRegistry:
     # RunRegistry lifecycle is managed by Runtime; this is a convenience accessor.
+    # TO CLAUDE: why we have this import here?
     from ntrp.server.runtime import get_runtime
 
     return get_runtime().run_registry

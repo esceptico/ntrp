@@ -12,6 +12,6 @@ class SessionState:
 
 
 @dataclass
-class SessionData:
+class SessionData:  # TO CLAUDE: what this dataclass do?
     state: SessionState
     messages: list[dict]

@@ -53,9 +53,17 @@ class VectorDatabase(Database):
 
 
 class BaseRepository:
-    def __init__(self, conn: aiosqlite.Connection):
+    def __init__(self, conn: aiosqlite.Connection, auto_commit: bool = True):
         self._conn = conn
+        self._auto_commit = auto_commit
 
     @property
     def conn(self) -> aiosqlite.Connection:
         return self._conn
+
+    async def _commit(self) -> None:
+        if self._auto_commit:
+            await self._conn.commit()
+
+    async def commit(self) -> None:
+        await self._conn.commit()

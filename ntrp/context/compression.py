@@ -10,13 +10,14 @@ from ntrp.context.prompts import SUMMARIZE_PROMPT_TEMPLATE
 from ntrp.llm import acompletion
 
 
+# TO CLAUDE: do we need this function? looks dirty
 def _get_attr(msg, key: str, default=None):
     if isinstance(msg, dict):
         return msg.get(key, default)
     return getattr(msg, key, default)
 
 
-def _count_message_tokens(msg) -> int:
+def _count_message_tokens(msg) -> int:  # TO CLAUDE: this is approx function, do we have real token compute? (litellm must return this info)
     total_chars = 16
 
     content = _get_attr(msg, "content")
@@ -50,7 +51,7 @@ def should_compress(
     limit = SUPPORTED_MODELS[model]["tokens"]
 
     if actual_input_tokens is not None:
-        return actual_input_tokens > int(limit * 0.80)
+        return actual_input_tokens > int(limit * 0.80)  # TO CLAUDE: why 0.8 here?
 
     threshold = int(limit * COMPRESSION_THRESHOLD)
     current = count_tokens(messages)

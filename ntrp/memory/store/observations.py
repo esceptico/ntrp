@@ -4,9 +4,8 @@ from datetime import UTC, datetime
 
 import aiosqlite
 
-from ntrp.database import BaseRepository, deserialize_embedding, serialize_embedding
+from ntrp.database import BaseRepository, serialize_embedding
 from ntrp.memory.models import Embedding, HistoryEntry, Observation
-from ntrp.memory.store.base import parse_datetime
 
 _SQL_GET_OBSERVATION = "SELECT * FROM observations WHERE id = ?"
 _SQL_COUNT_OBSERVATIONS = "SELECT COUNT(*) FROM observations"
@@ -44,6 +43,13 @@ _SQL_SEARCH_OBSERVATIONS_VEC = """
 """
 
 
+def _row_dict(row: aiosqlite.Row) -> dict:
+    d = dict(row)
+    d["source_fact_ids"] = json.loads(d["source_fact_ids"]) if d.get("source_fact_ids") else []
+    d["history"] = json.loads(d["history"]) if d.get("history") else []
+    return d
+
+
 class ObservationRepository(BaseRepository):
     async def create(
         self,
@@ -75,7 +81,7 @@ class ObservationRepository(BaseRepository):
         if embedding_bytes is not None:
             await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (obs_id, embedding_bytes))
 
-        await self.conn.commit()
+        await self._commit()
 
         return Observation(
             id=obs_id,
@@ -92,7 +98,7 @@ class ObservationRepository(BaseRepository):
 
     async def get(self, observation_id: int) -> Observation | None:
         rows = await self.conn.execute_fetchall(_SQL_GET_OBSERVATION, (observation_id,))
-        return self._row_to_observation(rows[0]) if rows else None
+        return Observation.model_validate(_row_dict(rows[0])) if rows else None
 
     async def update(
         self,
@@ -107,13 +113,11 @@ class ObservationRepository(BaseRepository):
         if not obs:
             return None
 
-        # Append new fact ID
         source_fact_ids = obs.source_fact_ids.copy()
         if new_fact_id and new_fact_id not in source_fact_ids:
             source_fact_ids.append(new_fact_id)
 
-        # Append history entry
-        history = obs.history.copy()
+        history = list(obs.history)
         if new_fact_id:
             history.append(
                 HistoryEntry(
@@ -144,7 +148,7 @@ class ObservationRepository(BaseRepository):
             await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (observation_id,))
             await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (observation_id, embedding_bytes))
 
-        await self.conn.commit()
+        await self._commit()
 
         return Observation(
             id=observation_id,
@@ -168,7 +172,7 @@ class ObservationRepository(BaseRepository):
             _SQL_REINFORCE_OBSERVATIONS.format(placeholders=placeholders),
             (now.isoformat(), *observation_ids),
         )
-        await self.conn.commit()
+        await self._commit()
 
     async def get_fact_ids(self, observation_id: int) -> list[int]:
         rows = await self.conn.execute_fetchall(
@@ -181,7 +185,7 @@ class ObservationRepository(BaseRepository):
 
     async def list_recent(self, limit: int = 100) -> list[Observation]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_RECENT_OBSERVATIONS, (limit,))
-        return [self._row_to_observation(r) for r in rows]
+        return [Observation.model_validate(_row_dict(r)) for r in rows]
 
     async def count(self) -> int:
         rows = await self.conn.execute_fetchall(_SQL_COUNT_OBSERVATIONS)
@@ -200,30 +204,9 @@ class ObservationRepository(BaseRepository):
         obs_rows = await self.conn.execute_fetchall(
             _SQL_GET_OBSERVATIONS_BY_IDS.format(placeholders=placeholders), obs_ids
         )
-        obs_by_id = {r["id"]: self._row_to_observation(r) for r in obs_rows}
+        obs_by_id = {r["id"]: Observation.model_validate(_row_dict(r)) for r in obs_rows}
 
         return [(obs_by_id[oid], 1 - distances[oid]) for oid in obs_ids if oid in obs_by_id]
-
-    def _row_to_observation(self, row: aiosqlite.Row) -> Observation:
-        created_at = parse_datetime(row["created_at"])
-        last_accessed_at = parse_datetime(row["last_accessed_at"]) or created_at
-
-        source_fact_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []
-        history_raw = json.loads(row["history"]) if row["history"] else []
-        history = [_dict_to_history(h) for h in history_raw]
-
-        return Observation(
-            id=row["id"],
-            summary=row["summary"],
-            embedding=deserialize_embedding(row["embedding"]),
-            evidence_count=row["evidence_count"],
-            source_fact_ids=source_fact_ids,
-            history=history,
-            created_at=created_at,
-            updated_at=parse_datetime(row["updated_at"]),
-            last_accessed_at=last_accessed_at,
-            access_count=row["access_count"] or 0,
-        )
 
 
 def _history_to_dict(h: HistoryEntry) -> dict:
@@ -233,12 +216,3 @@ def _history_to_dict(h: HistoryEntry) -> dict:
         "reason": h.reason,
         "source_fact_id": h.source_fact_id,
     }
-
-
-def _dict_to_history(d: dict) -> HistoryEntry:
-    return HistoryEntry(
-        previous_text=d["previous_text"],
-        changed_at=datetime.fromisoformat(d["changed_at"]),
-        reason=d["reason"],
-        source_fact_id=d["source_fact_id"],
-    )

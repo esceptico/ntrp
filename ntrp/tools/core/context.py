@@ -88,7 +88,10 @@ class ToolExecution:
             )
         )
 
-        response = await self.ctx.approval_queue.get()
+        try:
+            response = await asyncio.wait_for(self.ctx.approval_queue.get(), timeout=300)
+        except TimeoutError:
+            raise PermissionDenied(self.tool_name, description)
         if not response["approved"]:
             raise PermissionDenied(self.tool_name, description)
 
@@ -110,5 +113,8 @@ class ToolExecution:
             )
         )
 
-        response = await self.ctx.choice_queue.get()
+        try:
+            response = await asyncio.wait_for(self.ctx.choice_queue.get(), timeout=300)
+        except TimeoutError:
+            return []
         return response["selected"]

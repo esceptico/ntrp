@@ -1,33 +1,26 @@
-from abc import ABC
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from ntrp.sources.models import RawItem
+
+
+class Source:
+    name: str
+
+    @property
+    def errors(self) -> dict[str, str]:
+        return {}
+
+    @property
+    def details(self) -> dict:
+        return {}
 
 
 class IndexableSource(Protocol):
     name: str
 
     async def scan(self) -> list[RawItem]: ...
-
-
-class Source(ABC):
-    name: str
-
-    @property
-    def errors(self) -> dict[str, str]:
-        if not hasattr(self, "_errors"):
-            self._errors: dict[str, str] = {}
-        return self._errors
-
-    @errors.setter
-    def errors(self, value: dict[str, str]) -> None:
-        self._errors = value
-
-    @property
-    def details(self) -> dict:
-        return {}
 
 
 @dataclass(frozen=True)
@@ -57,6 +50,7 @@ class WebContentResult:
     author: str | None = None
 
 
+@runtime_checkable
 class NotesSource(Protocol):
     name: str
 
@@ -79,6 +73,7 @@ class NotesSource(Protocol):
     def get_all_with_mtime(self) -> dict[str, datetime]: ...
 
 
+@runtime_checkable
 class EmailSource(Protocol):
     name: str
 
@@ -93,6 +88,7 @@ class EmailSource(Protocol):
     def send_email(self, account: str, to: str, subject: str, body: str) -> str: ...
 
 
+@runtime_checkable
 class CalendarSource(Protocol):
     name: str
 
@@ -131,6 +127,7 @@ class CalendarSource(Protocol):
     ) -> str: ...
 
 
+@runtime_checkable
 class BrowserSource(Protocol):
     name: str
 
@@ -141,6 +138,7 @@ class BrowserSource(Protocol):
     def list_recent(self, days: int, limit: int) -> list[SourceItem]: ...
 
 
+@runtime_checkable
 class WebSearchSource(Protocol):
     name: str
 

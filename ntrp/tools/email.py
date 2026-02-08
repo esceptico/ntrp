@@ -1,8 +1,10 @@
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from ntrp.constants import EMAIL_FROM_TRUNCATE, EMAIL_SUBJECT_TRUNCATE
 from ntrp.sources.base import EmailSource
-from ntrp.tools.core.base import Tool, ToolResult, make_schema
+from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.utils import truncate
 
@@ -19,31 +21,22 @@ LIST_EMAIL_DESCRIPTION = (
 SEARCH_EMAIL_DESCRIPTION = "Search emails by content. Use read_email(id) to get full content."
 
 
+class SendEmailInput(BaseModel):
+    account: str = Field(description="Sender email address (must match a connected Gmail account)")
+    to: str = Field(description="Recipient email address")
+    subject: str = Field(description="Email subject")
+    body: str = Field(description="Email body (plain text)")
+
+
 class SendEmailTool(Tool):
     name = "send_email"
     description = SEND_EMAIL_DESCRIPTION
     mutates = True
     source_type = EmailSource
+    input_model = SendEmailInput
 
     def __init__(self, source: EmailSource):
         self.source = source
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "account": {
-                    "type": "string",
-                    "description": "Sender email address (must match a connected Gmail account)",
-                },
-                "to": {"type": "string", "description": "Recipient email address"},
-                "subject": {"type": "string", "description": "Email subject"},
-                "body": {"type": "string", "description": "Email body (plain text)"},
-            },
-            ["account", "to", "subject", "body"],
-        )
 
     async def execute(
         self,
@@ -63,27 +56,18 @@ class SendEmailTool(Tool):
         return ToolResult(result, "Sent")
 
 
+class ReadEmailInput(BaseModel):
+    email_id: str = Field(description="The email ID (from search or list results)")
+
+
 class ReadEmailTool(Tool):
     name = "read_email"
     description = READ_EMAIL_DESCRIPTION
     source_type = EmailSource
+    input_model = ReadEmailInput
 
     def __init__(self, source: EmailSource):
         self.source = source
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "email_id": {
-                    "type": "string",
-                    "description": "The email ID (from search or list results)",
-                },
-            },
-            ["email_id"],
-        )
 
     async def execute(self, execution: ToolExecution, email_id: str = "", **kwargs: Any) -> ToolResult:
         if not email_id:
@@ -100,24 +84,19 @@ class ReadEmailTool(Tool):
         return ToolResult(content, f"Read {lines} lines")
 
 
+class ListEmailInput(BaseModel):
+    days: int = Field(default=7, description="How many days back to look (default: 7)")
+    limit: int = Field(default=30, description="Maximum results (default: 30)")
+
+
 class ListEmailTool(Tool):
     name = "list_email"
     description = LIST_EMAIL_DESCRIPTION
     source_type = EmailSource
+    input_model = ListEmailInput
 
     def __init__(self, source: EmailSource):
         self.source = source
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "days": {"type": "integer", "description": "How many days back to look (default: 7)"},
-                "limit": {"type": "integer", "description": "Maximum results (default: 30)"},
-            },
-        )
 
     async def execute(self, execution: ToolExecution, days: int = 7, limit: int = 30, **kwargs: Any) -> ToolResult:
         accounts = self.source.list_accounts()
@@ -140,25 +119,19 @@ class ListEmailTool(Tool):
         return ToolResult("\n".join(output), f"{len(emails)} emails")
 
 
+class SearchEmailInput(BaseModel):
+    query: str = Field(description="Search query")
+    limit: int = Field(default=10, description="Maximum results (default: 10)")
+
+
 class SearchEmailTool(Tool):
     name = "search_email"
     description = SEARCH_EMAIL_DESCRIPTION
     source_type = EmailSource
+    input_model = SearchEmailInput
 
     def __init__(self, source: EmailSource):
         self.source = source
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "query": {"type": "string", "description": "Search query"},
-                "limit": {"type": "integer", "description": "Maximum results (default: 10)"},
-            },
-            ["query"],
-        )
 
     async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
         if not query:

@@ -32,8 +32,8 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
         memory=True,
         embedding_model="test-embedding",
         embedding_dim=TEST_EMBEDDING_DIM,
-        memory_model="gpt-4o-mini",
-        chat_model="gpt-4o",
+        memory_model="gemini/gemini-3-flash-preview",
+        chat_model="gemini/gemini-3-flash-preview",
         browser=None,  # Disable browser to avoid profile issues
         exa_api_key=None,  # Disable web search
     )

@@ -1,8 +1,10 @@
 from datetime import datetime
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from ntrp.sources.base import CalendarSource
-from ntrp.tools.core.base import Tool, ToolResult, make_schema
+from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
 SEARCH_CALENDAR_DESCRIPTION = """Search calendar events by text query.
@@ -40,31 +42,19 @@ def _parse_datetime(value: str) -> datetime | None:
         return None
 
 
+class SearchCalendarInput(BaseModel):
+    query: str = Field(description="Search query (searches title, description, attendees)")
+    limit: int = Field(default=10, description="Max results (default: 10)")
+
+
 class SearchCalendarTool(Tool):
     name = "search_calendar"
     description = SEARCH_CALENDAR_DESCRIPTION
     source_type = CalendarSource
+    input_model = SearchCalendarInput
 
     def __init__(self, source: CalendarSource):
         self.source = source
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "query": {
-                    "type": "string",
-                    "description": "Search query (searches title, description, attendees)",
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Max results (default: 10)",
-                },
-            },
-            ["query"],
-        )
 
     async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
         if not query:
@@ -98,44 +88,26 @@ class SearchCalendarTool(Tool):
             return ToolResult(f"Error searching events: {e}", "Search failed")
 
 
+class CreateCalendarEventInput(BaseModel):
+    summary: str = Field(description="Event title/summary")
+    start: str = Field(description="Start time in ISO format (e.g., '2024-01-15T14:00:00')")
+    end: str | None = Field(default=None, description="End time in ISO format (optional, defaults to 1 hour after start)")
+    description: str | None = Field(default=None, description="Event description (optional)")
+    location: str | None = Field(default=None, description="Event location (optional)")
+    attendees: str | None = Field(default=None, description="Comma-separated email addresses of attendees (optional)")
+    all_day: bool = Field(default=False, description="Whether this is an all-day event (optional)")
+    account: str | None = Field(default=None, description="Calendar account email (optional if only one account)")
+
+
 class CreateCalendarEventTool(Tool):
     name = "create_calendar_event"
     description = CREATE_CALENDAR_EVENT_DESCRIPTION
     mutates = True
     source_type = CalendarSource
+    input_model = CreateCalendarEventInput
 
     def __init__(self, source: CalendarSource):
         self.source = source
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "summary": {"type": "string", "description": "Event title/summary"},
-                "start": {
-                    "type": "string",
-                    "description": "Start time in ISO format (e.g., '2024-01-15T14:00:00')",
-                },
-                "end": {
-                    "type": "string",
-                    "description": "End time in ISO format (optional, defaults to 1 hour after start)",
-                },
-                "description": {"type": "string", "description": "Event description (optional)"},
-                "location": {"type": "string", "description": "Event location (optional)"},
-                "attendees": {
-                    "type": "string",
-                    "description": "Comma-separated email addresses of attendees (optional)",
-                },
-                "all_day": {"type": "boolean", "description": "Whether this is an all-day event (optional)"},
-                "account": {
-                    "type": "string",
-                    "description": "Calendar account email (optional if only one account)",
-                },
-            },
-            ["summary", "start"],
-        )
 
     async def execute(
         self,
@@ -162,14 +134,12 @@ class CreateCalendarEventTool(Tool):
         end_dt = _parse_datetime(end)
         attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
 
-        # Format preview for approval
         time_str = start_dt.strftime("%Y-%m-%d %H:%M")
         if end_dt:
             time_str += f" - {end_dt.strftime('%H:%M')}"
 
         await execution.require_approval(summary, preview=f"Time: {time_str}\nLocation: {location or 'N/A'}")
 
-        # Create the event
         result = self.source.create_event(
             account=account,
             summary=summary,
@@ -183,37 +153,25 @@ class CreateCalendarEventTool(Tool):
         return ToolResult(result, "Created")
 
 
+class EditCalendarEventInput(BaseModel):
+    event_id: str = Field(description="The event ID to edit (from list_calendar or search_calendar)")
+    summary: str | None = Field(default=None, description="New event title (optional)")
+    start: str | None = Field(default=None, description="New start time in ISO format (optional)")
+    end: str | None = Field(default=None, description="New end time in ISO format (optional)")
+    description: str | None = Field(default=None, description="New event description (optional)")
+    location: str | None = Field(default=None, description="New event location (optional)")
+    attendees: str | None = Field(default=None, description="New comma-separated attendee emails (optional, replaces existing)")
+
+
 class EditCalendarEventTool(Tool):
     name = "edit_calendar_event"
     description = EDIT_CALENDAR_EVENT_DESCRIPTION
     mutates = True
     source_type = CalendarSource
+    input_model = EditCalendarEventInput
 
     def __init__(self, source: CalendarSource):
         self.source = source
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "event_id": {
-                    "type": "string",
-                    "description": "The event ID to edit (from list_calendar or search_calendar)",
-                },
-                "summary": {"type": "string", "description": "New event title (optional)"},
-                "start": {"type": "string", "description": "New start time in ISO format (optional)"},
-                "end": {"type": "string", "description": "New end time in ISO format (optional)"},
-                "description": {"type": "string", "description": "New event description (optional)"},
-                "location": {"type": "string", "description": "New event location (optional)"},
-                "attendees": {
-                    "type": "string",
-                    "description": "New comma-separated attendee emails (optional, replaces existing)",
-                },
-            },
-            ["event_id"],
-        )
 
     async def execute(
         self,
@@ -240,7 +198,6 @@ class EditCalendarEventTool(Tool):
 
         attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
 
-        # Build changes summary
         changes = []
         if summary:
             changes.append(f"Title: {summary}")
@@ -253,7 +210,6 @@ class EditCalendarEventTool(Tool):
 
         await execution.require_approval(event_id, preview="\n".join(changes) if changes else "No changes")
 
-        # Edit the event
         result = self.source.update_event(
             event_id=event_id,
             summary=summary if summary else None,
@@ -266,28 +222,19 @@ class EditCalendarEventTool(Tool):
         return ToolResult(result, "Updated")
 
 
+class DeleteCalendarEventInput(BaseModel):
+    event_id: str = Field(description="The event ID to delete")
+
+
 class DeleteCalendarEventTool(Tool):
     name = "delete_calendar_event"
     description = DELETE_CALENDAR_EVENT_DESCRIPTION
     mutates = True
     source_type = CalendarSource
+    input_model = DeleteCalendarEventInput
 
     def __init__(self, source: CalendarSource):
         self.source = source
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "event_id": {
-                    "type": "string",
-                    "description": "The event ID to delete",
-                },
-            },
-            ["event_id"],
-        )
 
     async def execute(self, execution: ToolExecution, event_id: str = "", **kwargs: Any) -> ToolResult:
         if not event_id:
@@ -295,30 +242,24 @@ class DeleteCalendarEventTool(Tool):
 
         await execution.require_approval(event_id)
 
-        # Delete the event
         result = self.source.delete_event(event_id)
         return ToolResult(result, "Deleted")
+
+
+class ListCalendarInput(BaseModel):
+    days_forward: int = Field(default=7, description="Days ahead to look (default: 7)")
+    days_back: int = Field(default=0, description="Days back to look (default: 0)")
+    limit: int = Field(default=30, description="Maximum results (default: 30)")
 
 
 class ListCalendarTool(Tool):
     name = "list_calendar"
     description = LIST_CALENDAR_DESCRIPTION
     source_type = CalendarSource
+    input_model = ListCalendarInput
 
     def __init__(self, source: CalendarSource):
         self.source = source
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "days_forward": {"type": "integer", "description": "Days ahead to look (default: 7)"},
-                "days_back": {"type": "integer", "description": "Days back to look (default: 0)"},
-                "limit": {"type": "integer", "description": "Maximum results (default: 30)"},
-            },
-        )
 
     async def execute(
         self,

@@ -1,14 +1,11 @@
-import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.prompts import build_system_prompt
-from ntrp.events import SSEEvent
 from ntrp.memory.formatting import format_memory_context
 from ntrp.server.runtime import Runtime
 from ntrp.server.state import RunState
-from ntrp.tools.core.context import ApprovalResponse, ChoiceResponse
 
 
 @dataclass
@@ -19,10 +16,6 @@ class ChatContext:
     messages: list[dict]
     user_message: str
     is_init: bool
-
-    event_bus: asyncio.Queue[SSEEvent] = field(default_factory=asyncio.Queue)
-    client_responses: asyncio.Queue[ApprovalResponse] = field(default_factory=asyncio.Queue)
-    choice_responses: asyncio.Queue[ChoiceResponse] = field(default_factory=asyncio.Queue)
 
 
 async def resolve_session(runtime: Runtime) -> SessionData:

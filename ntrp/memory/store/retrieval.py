@@ -115,6 +115,5 @@ async def retrieve_with_observations(
         return similarity * decay * recency
 
     top_obs = heapq.nlargest(RECALL_OBSERVATION_LIMIT, observations, key=obs_score)
-    context.observations = [obs for obs, _ in top_obs]
 
-    return context
+    return context.model_copy(update={"observations": [obs for obs, _ in top_obs]})

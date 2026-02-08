@@ -1,9 +1,9 @@
 import asyncio
-import dataclasses
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Self
+
+from pydantic import BaseModel, ConfigDict
 
 from ntrp.bus import EventBus
 from ntrp.constants import (
@@ -17,7 +17,7 @@ from ntrp.constants import (
 )
 from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.logging import get_logger
-from ntrp.memory.consolidation import consolidate_fact
+from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decision
 from ntrp.memory.events import FactCreated, FactDeleted
 from ntrp.memory.extraction import Extractor
 from ntrp.memory.models import ExtractionResult, Fact, FactContext, FactType
@@ -30,8 +30,9 @@ from ntrp.memory.store.retrieval import retrieve_with_observations
 _logger = get_logger(__name__)
 
 
-@dataclass
-class RememberFactResult:
+class RememberFactResult(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     fact: Fact
     links_created: int
     entities_extracted: list[str]
@@ -54,6 +55,10 @@ class FactMemory:
         self.bus = bus
         self._consolidation_task: asyncio.Task | None = None
         self._db_lock = asyncio.Lock()
+
+    @property
+    def is_consolidating(self) -> bool:
+        return self._consolidation_task is not None and not self._consolidation_task.done()
 
     @classmethod
     async def create(
@@ -87,26 +92,41 @@ class FactMemory:
                 backoff = min(backoff * 2, max_backoff)
 
     async def _consolidate_pending(self, batch_size: int = 10) -> int:
+        # Phase 1: read unconsolidated facts under lock
         async with self._db_lock:
             repo = FactRepository(self.db.conn)
-            obs_repo = ObservationRepository(self.db.conn)
             facts = await repo.list_unconsolidated(limit=batch_size)
             if not facts:
                 return 0
+            facts = [
+                fact.model_copy(update={"entity_refs": await repo.get_entity_refs(fact.id)})
+                for fact in facts
+            ]
 
-            count = 0
-            for fact in facts:
-                fact = dataclasses.replace(fact, entity_refs=await repo.get_entity_refs(fact.id))
-                await consolidate_fact(
-                    fact=fact,
-                    fact_repo=repo,
-                    obs_repo=obs_repo,
-                    model=self.extraction_model,
-                    embed_fn=self.embedder.embed_one,
-                )
-                count += 1
-            _logger.info("Consolidated %d facts", count)
-            return count
+        # Phase 2: LLM decisions outside lock (DB reads + LLM calls, no writes)
+        decisions = []
+        for fact in facts:
+            obs_repo = ObservationRepository(self.db.conn)
+            fact_repo = FactRepository(self.db.conn)
+            action = await get_consolidation_decision(fact, obs_repo, fact_repo, self.extraction_model)
+            decisions.append((fact, action))
+
+        # Phase 3: apply results under lock (single transaction)
+        async with self._db_lock:
+            conn = self.db.conn
+            repo = FactRepository(conn, auto_commit=False)
+            obs_repo = ObservationRepository(conn, auto_commit=False)
+            try:
+                count = 0
+                for fact, action in decisions:
+                    await apply_consolidation(fact, action, repo, obs_repo, self.embedder.embed_one)
+                    count += 1
+                await conn.commit()
+                _logger.info("Consolidated %d facts", count)
+                return count
+            except Exception:
+                await conn.rollback()
+                raise
 
     async def close(self) -> None:
         if self._consolidation_task:
@@ -130,7 +150,7 @@ class FactMemory:
 
         async with self._db_lock:
             conn = self.db.conn
-            repo = FactRepository(conn)
+            repo = FactRepository(conn, auto_commit=False)
 
             try:
                 fact = await repo.create(
@@ -145,9 +165,12 @@ class FactMemory:
                 extraction = await self.extractor.extract(text)
                 entities_extracted = await self._process_extraction(repo, fact.id, extraction, source_ref)
 
-                fact = dataclasses.replace(fact, entity_refs=await repo.get_entity_refs(fact.id))
+                fact = fact.model_copy(update={"entity_refs": await repo.get_entity_refs(fact.id)})
                 links_created = await create_links_for_fact(repo, fact)
+
+                await conn.commit()
             except Exception:
+                await conn.rollback()
                 _logger.exception("Remember failed")
                 raise
 
@@ -304,6 +327,8 @@ class FactMemory:
                     await repo.delete(fact.id)
                     count += 1
                     await self.bus.publish(FactDeleted(fact_id=fact.id))
+            if count > 0:
+                await repo.cleanup_orphaned_entities()
             return count
 
     async def merge_entities(self, names: list[str], canonical_name: str | None = None) -> int:

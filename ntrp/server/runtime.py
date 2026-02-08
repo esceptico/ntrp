@@ -13,11 +13,12 @@ from ntrp.context.store import SessionStore
 from ntrp.logging import get_logger
 from ntrp.memory.events import FactCreated, FactDeleted, FactUpdated, MemoryCleared
 from ntrp.memory.facts import FactMemory
-from ntrp.schedule.scheduler import Scheduler
+from ntrp.schedule.scheduler import Scheduler, SchedulerDeps
 from ntrp.schedule.store import ScheduleStore
 from ntrp.server.dashboard import DashboardCollector
 from ntrp.server.indexer import Indexer
-from ntrp.server.sources import SourceChanged, SourceManager
+from ntrp.server.sources import SourceManager
+from ntrp.sources.events import SourceChanged
 from ntrp.server.state import RunRegistry
 from ntrp.sources.browser import BrowserHistorySource
 from ntrp.sources.google.gmail import MultiGmailSource
@@ -43,9 +44,6 @@ class Runtime:
         self.executor: ToolExecutor | None = None
         self.tools: list[dict] = []
 
-        self.gmail: MultiGmailSource | None = self.source_mgr.sources.get("email")
-        self.browser: BrowserHistorySource | None = self.source_mgr.sources.get("browser")
-
         self.max_depth = AGENT_MAX_DEPTH
         self.schedule_store: ScheduleStore | None = None
         self.scheduler: Scheduler | None = None
@@ -55,19 +53,17 @@ class Runtime:
         self._connected = False
         self._config_lock = asyncio.Lock()
 
+    def get_gmail(self) -> MultiGmailSource | None:
+        return self.source_mgr.sources.get("email")
+
+    def get_browser(self) -> BrowserHistorySource | None:
+        return self.source_mgr.sources.get("browser")
+
     async def reinit_source(self, name: str) -> None:
-        source = await self.source_mgr.reinit(name, self.config)
-        if name == "email":
-            self.gmail = source
-        elif name == "browser":
-            self.browser = source
+        await self.source_mgr.reinit(name, self.config)
 
     async def remove_source(self, name: str) -> None:
         await self.source_mgr.remove(name)
-        if name == "email":
-            self.gmail = None
-        elif name == "browser":
-            self.browser = None
 
     async def reinit_memory(self, enabled: bool) -> None:
         if enabled and not self.memory:
@@ -84,8 +80,9 @@ class Runtime:
 
     def rebuild_executor(self) -> None:
         default_email = self.config.schedule_email
-        if not default_email and self.gmail:
-            accounts = self.gmail.list_accounts()
+        gmail = self.get_gmail()
+        if not default_email and gmail:
+            accounts = gmail.list_accounts()
             default_email = accounts[0] if accounts else None
 
         self.executor = ToolExecutor(
@@ -185,8 +182,17 @@ class Runtime:
             _logger.warning("Failed to save session: %s", e)
 
     def start_scheduler(self) -> None:
-        if self.schedule_store:
-            self.scheduler = Scheduler(self, self.schedule_store)
+        if self.schedule_store and self.executor:
+            deps = SchedulerDeps(
+                executor=self.executor,
+                memory=lambda: self.memory,
+                model=self.config.chat_model,
+                max_depth=self.max_depth,
+                source_details=self.get_source_details,
+                create_session=self.create_session,
+                gmail=self.get_gmail,
+            )
+            self.scheduler = Scheduler(deps, self.schedule_store)
             self.scheduler.start()
 
     def start_consolidation(self) -> None:
@@ -228,8 +234,17 @@ class Runtime:
 
     async def _on_source_changed(self, event: SourceChanged) -> None:
         self.rebuild_executor()
-        if event.source_name in ("notes", "memory"):
+        name = event.source_name
+        if name not in ("notes", "memory"):
+            return
+        source_active = (
+            (name == "notes" and "notes" in self.source_mgr.sources)
+            or (name == "memory" and self.memory is not None)
+        )
+        if source_active:
             self.start_indexing()
+        else:
+            await self.indexer.index.clear_source(name)
 
     async def close(self) -> None:
         if self.scheduler:

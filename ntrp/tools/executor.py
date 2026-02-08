@@ -2,16 +2,17 @@ from typing import Any
 
 from ntrp.memory.facts import FactMemory
 from ntrp.schedule.store import ScheduleStore
+from ntrp.sources.base import Source
 from ntrp.tools.core.base import ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
-from ntrp.tools.specs import TOOLS, ToolDeps
+from ntrp.tools.specs import TOOL_FACTORIES, ToolDeps
 
 
 class ToolExecutor:
     def __init__(
         self,
-        sources: dict[str, Any],
+        sources: dict[str, Source],
         model: str,
         memory: FactMemory | None = None,
         working_dir: str | None = None,
@@ -35,8 +36,8 @@ class ToolExecutor:
             default_email=default_email,
             working_dir=working_dir,
         )
-        for spec in TOOLS:
-            for tool in spec.create(deps):
+        for create_tools in TOOL_FACTORIES:
+            for tool in create_tools(deps):
                 self.registry.register(tool)
 
     async def execute(self, tool_name: str, arguments: dict, execution: ToolExecution) -> ToolResult:

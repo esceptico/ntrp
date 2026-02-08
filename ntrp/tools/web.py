@@ -1,9 +1,12 @@
 import json
+from enum import Enum
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 from ntrp.constants import EMBEDDING_TEXT_LIMIT, WEB_SEARCH_MAX_RESULTS
 from ntrp.sources.base import WebSearchSource
-from ntrp.tools.core.base import Tool, ToolResult, make_schema
+from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
 WEB_SEARCH_DESCRIPTION = "Search the web for information. Returns titles, URLs, and content snippets."
@@ -11,36 +14,32 @@ WEB_SEARCH_DESCRIPTION = "Search the web for information. Returns titles, URLs, 
 WEB_FETCH_DESCRIPTION = "Fetch content from a URL. Returns the page text in readable format."
 
 
+class WebSearchCategory(str, Enum):
+    company = "company"
+    research_paper = "research paper"
+    news = "news"
+    pdf = "pdf"
+    github = "github"
+    tweet = "tweet"
+
+
+class WebSearchInput(BaseModel):
+    query: str = Field(description="The search query")
+    num_results: int = Field(default=5, description=f"Number of results (default: 5, max: {WEB_SEARCH_MAX_RESULTS})")
+    category: WebSearchCategory | None = Field(
+        default=None,
+        description="Filter by category: company, research paper, news, pdf, github, tweet",
+    )
+
+
 class WebSearchTool(Tool):
     name = "web_search"
     description = WEB_SEARCH_DESCRIPTION
     source_type = WebSearchSource
+    input_model = WebSearchInput
 
     def __init__(self, source: WebSearchSource):
         self.source = source
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "query": {
-                    "type": "string",
-                    "description": "The search query",
-                },
-                "num_results": {
-                    "type": "integer",
-                    "description": f"Number of results (default: 5, max: {WEB_SEARCH_MAX_RESULTS})",
-                },
-                "category": {
-                    "type": "string",
-                    "description": "Filter by category: company, research paper, news, pdf, github, tweet",
-                    "enum": ["company", "research paper", "news", "pdf", "github", "tweet"],
-                },
-            },
-            ["query"],
-        )
 
     async def execute(
         self,
@@ -81,27 +80,18 @@ class WebSearchTool(Tool):
             return ToolResult(f"Error: Search failed: {e}", "Search failed")
 
 
+class WebFetchInput(BaseModel):
+    url: str = Field(description="The URL to fetch")
+
+
 class WebFetchTool(Tool):
     name = "web_fetch"
     description = WEB_FETCH_DESCRIPTION
     source_type = WebSearchSource
+    input_model = WebFetchInput
 
     def __init__(self, source: WebSearchSource):
         self.source = source
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "url": {
-                    "type": "string",
-                    "description": "The URL to fetch",
-                },
-            },
-            ["url"],
-        )
 
     async def execute(self, execution: ToolExecution, url: str = "", **kwargs: Any) -> ToolResult:
         if not url.strip():

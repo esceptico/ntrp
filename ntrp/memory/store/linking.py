@@ -16,25 +16,25 @@ _ENTITY_LINK_MIN_WEIGHT = 0.01
 # Query window for temporal links (5x sigma covers 99%+ of weight)
 _TEMPORAL_QUERY_WINDOW_HOURS = LINK_TEMPORAL_SIGMA_HOURS * 5
 
+LinkTuple = tuple[int, int, LinkType, float]
+
 
 async def create_links_for_fact(repo: FactRepository, fact: Fact) -> int:
-    count = 0
-    count += await _create_temporal_links(repo, fact)
-    count += await _create_semantic_links(repo, fact)
-    count += await _create_entity_links(repo, fact)
-    return count
+    links: list[LinkTuple] = []
+    links.extend(await _compute_temporal_links(repo, fact))
+    links.extend(await _compute_semantic_links(repo, fact))
+    links.extend(await _compute_entity_links(repo, fact))
+    return await repo.create_links_batch(links)
 
 
-async def _create_temporal_links(repo: FactRepository, fact: Fact) -> int:
-    # Only create temporal links for facts with real event times
+async def _compute_temporal_links(repo: FactRepository, fact: Fact) -> list[LinkTuple]:
     if not fact.happened_at:
-        return 0
+        return []
 
-    # Query wider window, exponential decay handles relevance
     window_start = fact.happened_at - timedelta(hours=_TEMPORAL_QUERY_WINDOW_HOURS)
     recent_facts = await repo.list_in_time_window(window_start, fact.happened_at)
 
-    count = 0
+    links: list[LinkTuple] = []
     for other in recent_facts:
         if other.id == fact.id:
             continue
@@ -42,37 +42,34 @@ async def _create_temporal_links(repo: FactRepository, fact: Fact) -> int:
             continue
 
         hours_diff = abs((fact.happened_at - other.happened_at).total_seconds()) / 3600
-        # Exponential decay: weight = exp(-Δt / σ)
         weight = math.exp(-hours_diff / LINK_TEMPORAL_SIGMA_HOURS)
 
         if weight < LINK_TEMPORAL_MIN_WEIGHT:
             continue
 
-        await repo.create_link(fact.id, other.id, LinkType.TEMPORAL, weight)
-        count += 1
-    return count
+        links.append((fact.id, other.id, LinkType.TEMPORAL, weight))
+    return links
 
 
-async def _create_semantic_links(repo: FactRepository, fact: Fact) -> int:
+async def _compute_semantic_links(repo: FactRepository, fact: Fact) -> list[LinkTuple]:
     if fact.embedding is None:
-        return 0
+        return []
 
     similar = await repo.search_facts_vector(fact.embedding, LINK_SEMANTIC_SEARCH_LIMIT)
 
-    count = 0
+    links: list[LinkTuple] = []
     for other, similarity in similar:
         if other.id == fact.id:
             continue
         if similarity >= LINK_SEMANTIC_THRESHOLD:
-            await repo.create_link(fact.id, other.id, LinkType.SEMANTIC, similarity)
-            count += 1
-    return count
+            links.append((fact.id, other.id, LinkType.SEMANTIC, similarity))
+    return links
 
 
-async def _create_entity_links(repo: FactRepository, fact: Fact) -> int:
+async def _compute_entity_links(repo: FactRepository, fact: Fact) -> list[LinkTuple]:
     entity_refs = fact.entity_refs
     if not entity_refs:
-        return 0
+        return []
 
     # IDF-weighted entity links: rare entities create strong links,
     # common entities (like "User") create weak ones.
@@ -90,8 +87,4 @@ async def _create_entity_links(repo: FactRepository, fact: Fact) -> int:
             if other.id != fact.id:
                 best_weight[other.id] = max(best_weight.get(other.id, 0), weight)
 
-    count = 0
-    for other_id, weight in best_weight.items():
-        await repo.create_link(fact.id, other_id, LinkType.ENTITY, weight)
-        count += 1
-    return count
+    return [(fact.id, other_id, LinkType.ENTITY, w) for other_id, w in best_weight.items()]

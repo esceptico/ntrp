@@ -11,7 +11,8 @@ from ntrp.memory.consolidation import (
     ConsolidationSchema,
     _execute_action,
     _format_observations,
-    consolidate_fact,
+    apply_consolidation,
+    get_consolidation_decision,
 )
 from ntrp.memory.models import Fact, FactType, Observation
 from ntrp.memory.store.base import GraphDatabase
@@ -53,6 +54,12 @@ def make_observation(id: int, summary: str, evidence_count: int = 1) -> Observat
     )
 
 
+async def consolidate_fact(fact, fact_repo, obs_repo, model, embed_fn):
+    """Test helper that combines the two-step consolidation API."""
+    action = await get_consolidation_decision(fact, obs_repo, fact_repo, model)
+    return await apply_consolidation(fact, action, fact_repo, obs_repo, embed_fn)
+
+
 @pytest_asyncio.fixture
 async def fact_repo(db: GraphDatabase) -> FactRepository:
     return FactRepository(db.conn)
@@ -77,7 +84,8 @@ class TestFormatObservations:
             source_type="test",
         )
         obs = make_observation(1, "Test observation", evidence_count=1)
-        obs.source_fact_ids = [fact.id]
+
+        obs = obs.model_copy(update={"source_fact_ids": [fact.id]})
 
         result = await _format_observations([(obs, 0.85)], fact_repo)
         assert '"id": 1' in result
@@ -189,7 +197,6 @@ class TestConsolidateFact:
         result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
 
         assert result.action == "skipped"
-        assert result.reason == "no_embedding"
 
         updated = await fact_repo.get(fact.id)
         assert updated.consolidated_at is not None

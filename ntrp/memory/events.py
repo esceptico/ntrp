@@ -1,23 +1,23 @@
-from dataclasses import dataclass
+from pydantic import BaseModel, ConfigDict
 
 
-@dataclass(frozen=True)
-class FactCreated:
+class _FrozenEvent(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+
+class FactCreated(_FrozenEvent):
     fact_id: int
     text: str
 
 
-@dataclass(frozen=True)
-class FactUpdated:
+class FactUpdated(_FrozenEvent):
     fact_id: int
     text: str
 
 
-@dataclass(frozen=True)
-class FactDeleted:
+class FactDeleted(_FrozenEvent):
     fact_id: int
 
 
-@dataclass(frozen=True)
-class MemoryCleared:
+class MemoryCleared(_FrozenEvent):
     pass

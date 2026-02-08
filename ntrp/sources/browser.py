@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from ntrp.sources.base import BrowserSource, SourceItem
+from ntrp.sources.base import BrowserSource, Source, SourceItem
 from ntrp.sources.models import RawItem
 
 # Browser history DB locations (macOS)
@@ -17,7 +17,7 @@ BROWSER_PATHS = {
 }
 
 
-class BrowserHistorySource(BrowserSource):
+class BrowserHistorySource(Source, BrowserSource):
     name = "browser"
 
     def __init__(self, browser_name: str, days_back: int, db_path: Path | None = None):

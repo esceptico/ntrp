@@ -1,7 +1,9 @@
 import os
 from typing import Any
 
-from ntrp.tools.core.base import Tool, ToolResult, make_schema
+from pydantic import BaseModel, Field
+
+from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.formatting import format_lines_with_pagination
 
 READ_FILE_DESCRIPTION = (
@@ -11,34 +13,19 @@ READ_FILE_DESCRIPTION = (
 )
 
 
+class ReadFileInput(BaseModel):
+    path: str = Field(description="Path to the file (relative or absolute)")
+    offset: int = Field(default=1, description="Line number to start from (1-based, default: 1)")
+    limit: int = Field(default=500, description="Maximum lines to read (default: 500)")
+
+
 class ReadFileTool(Tool):
     name = "read_file"
     description = READ_FILE_DESCRIPTION
+    input_model = ReadFileInput
 
     def __init__(self, base_path: str | None = None):
         self.base_path = base_path or os.getcwd()
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "path": {
-                    "type": "string",
-                    "description": "Path to the file (relative or absolute)",
-                },
-                "offset": {
-                    "type": "integer",
-                    "description": "Line number to start from (1-based, default: 1)",
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Maximum lines to read (default: 500)",
-                },
-            },
-            ["path"],
-        )
 
     async def execute(
         self, execution: Any, path: str = "", offset: int = 1, limit: int = 500, **kwargs: Any

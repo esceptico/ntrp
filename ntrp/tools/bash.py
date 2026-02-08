@@ -2,8 +2,10 @@ import shlex
 import subprocess
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from ntrp.constants import BASH_OUTPUT_LIMIT
-from ntrp.tools.core.base import Tool, ToolResult, make_schema
+from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
 SAFE_COMMANDS = frozenset(
@@ -144,33 +146,21 @@ def execute_bash(command: str, working_dir: str | None = None, timeout: int = 30
         return f"Error: {e}"
 
 
+class BashInput(BaseModel):
+    command: str = Field(description="The shell command to execute")
+    working_dir: str | None = Field(default=None, description="Working directory (optional, defaults to current)")
+
+
 class BashTool(Tool):
     name = "bash"
     description = BASH_DESCRIPTION
+    input_model = BashInput
 
     mutates = True
 
     def __init__(self, working_dir: str | None = None, timeout: int = 30):
         self.working_dir = working_dir
         self.timeout = timeout
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "command": {
-                    "type": "string",
-                    "description": "The shell command to execute",
-                },
-                "working_dir": {
-                    "type": "string",
-                    "description": "Working directory (optional, defaults to current)",
-                },
-            },
-            ["command"],
-        )
 
     async def execute(
         self, execution: ToolExecution, command: str = "", working_dir: str | None = None, **kwargs: Any

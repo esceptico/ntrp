@@ -10,7 +10,7 @@ from typing import Any
 from googleapiclient.discovery import build
 
 from ntrp.constants import CONTENT_READ_LIMIT
-from ntrp.sources.base import EmailSource, SourceItem
+from ntrp.sources.base import EmailSource, Source, SourceItem
 from ntrp.sources.google.auth import (
     NTRP_DIR,
     SCOPES_ALL,
@@ -483,7 +483,7 @@ class GmailSource:
         return items
 
 
-class MultiGmailSource(EmailSource):
+class MultiGmailSource(Source, EmailSource):
     """Wrapper for multiple Gmail accounts."""
 
     name = "email"

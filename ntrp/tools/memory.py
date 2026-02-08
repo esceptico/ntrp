@@ -1,9 +1,11 @@
 from datetime import datetime
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from ntrp.memory.formatting import format_memory_context
 from ntrp.memory.models import FactType
-from ntrp.tools.core.base import Tool, ToolResult, make_schema
+from ntrp.tools.core.base import Tool, ToolResult
 
 RECALL_DESCRIPTION = """Recall stored facts from memory about a topic or entity.
 
@@ -37,40 +39,27 @@ IMPORTANT: User events are WORLD facts, not experiences. "experience" is ONLY fo
 BAD: "Python is a programming language" (not user-specific)"""
 
 
+class RememberInput(BaseModel):
+    fact: str = Field(description="The fact to remember (natural language).")
+    fact_type: str = Field(
+        default="world",
+        description="'world' (default) for facts about users/people/things, 'experience' ONLY for YOUR agent actions.",
+        json_schema_extra={"enum": ["world", "experience"]},
+    )
+    source: str | None = Field(default=None, description="Where this fact came from (e.g. file path, email id).")
+    happened_at: str | None = Field(
+        default=None, description="ISO timestamp of when the event occurred (for temporal linking)."
+    )
+
+
 class RememberTool(Tool):
     name = "remember"
     description = REMEMBER_DESCRIPTION
     mutates = True
+    input_model = RememberInput
 
     def __init__(self, memory: Any):
         self.memory = memory
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "fact": {
-                    "type": "string",
-                    "description": "The fact to remember (natural language).",
-                },
-                "fact_type": {
-                    "type": "string",
-                    "enum": ["world", "experience"],
-                    "description": "'world' (default) for facts about users/people/things, 'experience' ONLY for YOUR agent actions.",
-                },
-                "source": {
-                    "type": "string",
-                    "description": "Where this fact came from (e.g. file path, email id).",
-                },
-                "happened_at": {
-                    "type": "string",
-                    "description": "ISO timestamp of when the event occurred (for temporal linking).",
-                },
-            },
-            ["fact"],
-        )
 
     async def execute(
         self,
@@ -104,30 +93,18 @@ class RememberTool(Tool):
         )
 
 
+class RecallInput(BaseModel):
+    query: str = Field(description="What to recall.")
+    limit: int = Field(default=5, description="Number of seed facts (default 5).")
+
+
 class RecallTool(Tool):
     name = "recall"
     description = RECALL_DESCRIPTION
+    input_model = RecallInput
 
     def __init__(self, memory: Any):
         self.memory = memory
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "query": {
-                    "type": "string",
-                    "description": "What to recall.",
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Number of seed facts (default 5).",
-                },
-            },
-            ["query"],
-        )
 
     async def execute(self, execution: Any, query: str, limit: int = 5, **kwargs: Any) -> ToolResult:
         context = await self.memory.recall(query=query, limit=limit)
@@ -141,27 +118,18 @@ class RecallTool(Tool):
         )
 
 
+class ForgetInput(BaseModel):
+    query: str = Field(description="Description of facts to forget.")
+
+
 class ForgetTool(Tool):
     name = "forget"
     description = FORGET_DESCRIPTION
     mutates = True
+    input_model = ForgetInput
 
     def __init__(self, memory: Any):
         self.memory = memory
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "query": {
-                    "type": "string",
-                    "description": "Description of facts to forget.",
-                },
-            },
-            ["query"],
-        )
 
     async def execute(self, execution: Any, query: str = "", **kwargs: Any) -> ToolResult:
         if not query:

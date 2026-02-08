@@ -1,6 +1,5 @@
 import json
 from collections.abc import Callable, Coroutine
-from dataclasses import dataclass
 from typing import Literal
 
 from pydantic import BaseModel
@@ -28,42 +27,44 @@ class ConsolidationSchema(BaseModel):
     reason: str | None = None
 
 
-@dataclass
-class ConsolidationResult:
+class ConsolidationResult(BaseModel):
     action: str  # "created", "updated", "skipped"
     observation_id: int | None = None
     reason: str | None = None
 
 
-@dataclass
-class ConsolidationAction:
+class ConsolidationAction(BaseModel):
     type: str  # "update", "create", "skip"
     observation_id: int | None = None
     text: str | None = None
     reason: str | None = None
 
 
-async def consolidate_fact(
+async def get_consolidation_decision(
     fact: Fact,
-    fact_repo: FactRepository,
     obs_repo: ObservationRepository,
+    fact_repo: FactRepository,
     model: str,
-    embed_fn: EmbedFn,
-) -> ConsolidationResult:
+) -> ConsolidationAction | None:
     if fact.embedding is None:
-        await fact_repo.mark_consolidated(fact.id)
-        return ConsolidationResult(action="skipped", reason="no_embedding")
+        return None
 
     candidates = await obs_repo.search_vector(fact.embedding, limit=CONSOLIDATION_SEARCH_LIMIT)
+    return await _llm_consolidation_decision(fact, candidates, fact_repo, model)
 
-    action = await _llm_consolidation_decision(fact, candidates, fact_repo, model)
 
+async def apply_consolidation(
+    fact: Fact,
+    action: ConsolidationAction | None,
+    fact_repo: FactRepository,
+    obs_repo: ObservationRepository,
+    embed_fn: EmbedFn,
+) -> ConsolidationResult:
     if action is None or action.type == "skip":
         await fact_repo.mark_consolidated(fact.id)
         return ConsolidationResult(action="skipped", reason=action.reason if action else "no_durable_knowledge")
 
     result = await _execute_action(action, fact, obs_repo, embed_fn)
-
     await fact_repo.mark_consolidated(fact.id)
 
     if not result:

@@ -1,10 +1,10 @@
 import json
-from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from ntrp.constants import SUPPORTED_MODELS
 from ntrp.embedder import EmbeddingConfig
 from ntrp.logging import get_logger
 
@@ -35,6 +35,7 @@ class Config(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        validate_assignment=True,
     )
 
     # OpenAI (for embeddings) - no prefix, standard env var
@@ -73,6 +74,23 @@ class Config(BaseSettings):
     # Scheduling
     schedule_email: str | None = None
 
+    # API authentication (optional — required when exposed to network)
+    api_key: str | None = None
+
+    @field_validator("chat_model")
+    @classmethod
+    def _validate_chat_model(cls, v: str) -> str:
+        if v not in SUPPORTED_MODELS:
+            raise ValueError(f"Unsupported model: {v}. Must be one of: {', '.join(SUPPORTED_MODELS)}")
+        return v
+
+    @field_validator("browser_days")
+    @classmethod
+    def _validate_browser_days(cls, v: int) -> int:
+        if not 1 <= v <= 365:
+            raise ValueError(f"browser_days must be 1–365, got {v}")
+        return v
+
     @property
     def embedding(self) -> EmbeddingConfig:
         return EmbeddingConfig(
@@ -98,30 +116,28 @@ class Config(BaseSettings):
         return self.db_dir / "memory.db"
 
 
-@lru_cache
+_config: Config | None = None
+
+
 def get_config() -> Config:
+    global _config
+    if _config is not None:
+        return _config
     config = Config()  # type: ignore - pydantic handles validation
     settings = load_user_settings()
-    if "chat_model" in settings:
-        config.chat_model = settings["chat_model"]
-    if "memory_model" in settings:
-        config.memory_model = settings["memory_model"]
-    if "embedding_model" in settings:
-        config.embedding_model = settings["embedding_model"]
-    if "embedding_dim" in settings:
-        config.embedding_dim = settings["embedding_dim"]
+    for key in ("chat_model", "memory_model", "embedding_model", "embedding_dim",
+                "browser", "browser_days"):
+        if key in settings:
+            try:
+                setattr(config, key, settings[key])
+            except Exception:
+                _logger.warning("Ignoring invalid saved setting %s=%r", key, settings[key])
     if "vault_path" in settings:
         config.vault_path = Path(settings["vault_path"])
-    if "browser" in settings:
-        config.browser = settings["browser"]
-    if "browser_days" in settings:
-        config.browser_days = settings["browser_days"]
     if "sources" in settings:
         src = settings["sources"]
-        if "gmail" in src:
-            config.gmail = src["gmail"]
-        if "calendar" in src:
-            config.calendar = src["calendar"]
-        if "memory" in src:
-            config.memory = src["memory"]
-    return config
+        for key in ("gmail", "calendar", "memory"):
+            if key in src:
+                setattr(config, key, src[key])
+    _config = config
+    return _config

@@ -1,28 +1,22 @@
-from dataclasses import dataclass
-from typing import Any
-
 from ntrp.bus import EventBus
 from ntrp.config import Config
 from ntrp.logging import get_logger
+from ntrp.sources.base import Source
+from ntrp.sources.events import SourceChanged
 from ntrp.sources.registry import SOURCES
 
 _logger = get_logger(__name__)
 
 
-@dataclass
-class SourceChanged:
-    source_name: str
-
-
 class SourceManager:
     def __init__(self, config: Config, bus: EventBus):
-        self._sources: dict[str, Any] = {}
+        self._sources: dict[str, Source] = {}
         self._errors: dict[str, str] = {}
         self._bus = bus
         self._init_sources(config)
 
     @property
-    def sources(self) -> dict[str, Any]:
+    def sources(self) -> dict[str, Source]:
         return self._sources
 
     @property
@@ -35,12 +29,13 @@ class SourceManager:
     def get_available(self) -> list[str]:
         return list(self._sources.keys())
 
-    async def reinit(self, name: str, config: Config) -> Any | None:
-        spec = SOURCES.get(name)
-        if not spec:
+    async def reinit(self, name: str, config: Config) -> Source | None:
+        entry = SOURCES.get(name)
+        if not entry:
             return None
+        _, create = entry
         try:
-            source = spec.create(config)
+            source = create(config)
             if source is None:
                 self._sources.pop(name, None)
             else:
@@ -61,11 +56,11 @@ class SourceManager:
         await self._bus.publish(SourceChanged(source_name=name))
 
     def _init_sources(self, config: Config) -> None:
-        for name, spec in SOURCES.items():
-            if not spec.enabled(config):
+        for name, (enabled, create) in SOURCES.items():
+            if not enabled(config):
                 continue
             try:
-                source = spec.create(config)
+                source = create(config)
                 if source is None:
                     continue
                 if source.errors:

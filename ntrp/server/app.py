@@ -1,10 +1,11 @@
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from ntrp.core.agent import Agent
@@ -79,6 +80,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    runtime = get_runtime()
+    if runtime.config.api_key and request.url.path != "/health":
+        auth = request.headers.get("authorization", "")
+        if auth != f"Bearer {runtime.config.api_key}":
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
+
+
 app.include_router(dashboard_router)
 app.include_router(data_router)
 app.include_router(gmail_router)
@@ -88,7 +99,8 @@ app.include_router(session_router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    runtime = get_runtime()
+    return {"status": "ok" if runtime._connected else "unavailable"}
 
 
 @app.get("/index/status")
@@ -145,8 +157,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             user_message=user_message,
             is_init=is_init,
         )
-        run.event_queue = ctx.client_responses
-        run.choice_queue = ctx.choice_responses
+        run.approval_queue = asyncio.Queue()
+        run.choice_queue = asyncio.Queue()
 
         extra_auto_approve = {"remember", "forget", "reflect", "merge"} if is_init else set()
         session_state.skip_approvals = request.skip_approvals
@@ -154,9 +166,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             session_state=session_state,
             registry=runtime.executor.registry,
             memory=runtime.memory,
-            emit=ctx.event_bus.put,
-            approval_queue=ctx.client_responses,
-            choice_queue=ctx.choice_responses,
+            approval_queue=run.approval_queue,
+            choice_queue=run.choice_queue,
             dashboard=runtime.dashboard,
             extra_auto_approve=extra_auto_approve,
         )
@@ -174,6 +185,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         yield to_sse(ThinkingEvent(status="processing..."))
         runtime.dashboard.record_run_started()
 
+        agent: Agent | None = None
         try:
             tool_ctx.spawn_fn = create_spawn_fn(
                 executor=runtime.executor,
@@ -202,9 +214,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 else:
                     yield sse
 
-            # Handle agent result
             if result is None:
-                return  # Cancelled
+                return  # Cancelled — session saved in finally
 
             if result:
                 yield to_sse(TextEvent(content=result))
@@ -212,16 +223,21 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             run.prompt_tokens = agent.total_input_tokens
             run.completion_tokens = agent.total_output_tokens
 
-            run.messages = agent.messages
-            session_state.last_activity = datetime.now(UTC)
-            await runtime.save_session(session_state, run.messages)
-
             yield to_sse(DoneEvent(run_id=run.run_id, usage=run.get_usage()))
             registry.complete_run(run.run_id)
-            runtime.dashboard.record_run_completed(agent.total_input_tokens, agent.total_output_tokens)
 
         except Exception as e:
             yield to_sse(ErrorEvent(message=str(e), recoverable=False))
+            run.status = RunStatus.ERROR
+
+        finally:
+            if agent:
+                run.prompt_tokens = agent.total_input_tokens
+                run.completion_tokens = agent.total_output_tokens
+                run.messages = agent.messages
+            session_state.last_activity = datetime.now(UTC)
+            await runtime.save_session(session_state, run.messages)
+            runtime.dashboard.record_run_completed(run.prompt_tokens, run.completion_tokens)
 
     return StreamingResponse(
         event_generator(),
@@ -242,8 +258,8 @@ async def submit_tool_result(request: ToolResultRequest):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    if run.event_queue:
-        await run.event_queue.put(
+    if run.approval_queue:
+        await run.approval_queue.put(
             {
                 "type": "tool_response",
                 "tool_id": request.tool_id,

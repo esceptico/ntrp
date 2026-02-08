@@ -1,7 +1,9 @@
+from pydantic import BaseModel, Field
+
 from ntrp.constants import EXPLORE_TIMEOUT
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.prompts import EXPLORE_PROMPT
-from ntrp.tools.core.base import Tool, ToolResult, make_schema
+from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
 EXPLORE_DESCRIPTION = (
@@ -10,23 +12,14 @@ EXPLORE_DESCRIPTION = (
 )
 
 
+class ExploreInput(BaseModel):
+    task: str = Field(description="What to explore or research.")
+
+
 class ExploreTool(Tool):
     name = "explore"
     description = EXPLORE_DESCRIPTION
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "task": {
-                    "type": "string",
-                    "description": "What to explore or research.",
-                },
-            },
-            ["task"],
-        )
+    input_model = ExploreInput
 
     async def _build_prompt(self, memory) -> str:
         if not memory:

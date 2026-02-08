@@ -2,9 +2,11 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from pydantic import BaseModel, Field
+
 from ntrp.schedule.models import Recurrence, ScheduledTask, compute_next_run
 from ntrp.schedule.store import ScheduleStore
-from ntrp.tools.core.base import Tool, ToolResult, make_schema
+from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
 SCHEDULE_TASK_DESCRIPTION = (
@@ -20,45 +22,26 @@ CANCEL_SCHEDULE_DESCRIPTION = "Cancel (delete) a scheduled task by its ID. Use l
 GET_SCHEDULE_RESULT_DESCRIPTION = "Get the last execution result of a scheduled task by its ID."
 
 
+class ScheduleTaskInput(BaseModel):
+    description: str = Field(description="What the agent should do (natural language task)")
+    time: str = Field(description="Time of day in HH:MM format (24h, local time)")
+    recurrence: str = Field(
+        description="How often: once, daily, weekdays (Mon-Fri), weekly",
+        json_schema_extra={"enum": ["once", "daily", "weekdays", "weekly"]},
+    )
+    notify_email: str | None = Field(default=None, description="Email address to send results to (optional)")
+    writable: bool = Field(default=False, description="Allow task to write to memory and notes (default: false)")
+
+
 class ScheduleTaskTool(Tool):
     name = "schedule_task"
     description = SCHEDULE_TASK_DESCRIPTION
     mutates = True
+    input_model = ScheduleTaskInput
 
     def __init__(self, store: ScheduleStore, default_email: str | None = None):
         self.store = store
         self.default_email = default_email
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "description": {
-                    "type": "string",
-                    "description": "What the agent should do (natural language task)",
-                },
-                "time": {
-                    "type": "string",
-                    "description": "Time of day in HH:MM format (24h, local time)",
-                },
-                "recurrence": {
-                    "type": "string",
-                    "enum": ["once", "daily", "weekdays", "weekly"],
-                    "description": "How often: once, daily, weekdays (Mon-Fri), weekly",
-                },
-                "notify_email": {
-                    "type": "string",
-                    "description": "Email address to send results to (optional)",
-                },
-                "writable": {
-                    "type": "boolean",
-                    "description": "Allow task to write to memory and notes (default: false)",
-                },
-            },
-            ["description", "time", "recurrence"],
-        )
 
     async def execute(
         self,
@@ -73,7 +56,6 @@ class ScheduleTaskTool(Tool):
         if not description or not time or not recurrence:
             return ToolResult("Error: description, time, and recurrence are required", "Missing fields")
 
-        # Validate time format
         try:
             parts = time.split(":")
             h, m = int(parts[0]), int(parts[1])
@@ -83,7 +65,6 @@ class ScheduleTaskTool(Tool):
         except (ValueError, IndexError):
             return ToolResult(f"Error: invalid time format '{time}'. Use HH:MM (24h)", "Invalid time")
 
-        # Validate recurrence
         try:
             rec = Recurrence(recurrence)
         except ValueError:
@@ -132,13 +113,10 @@ class ScheduleTaskTool(Tool):
 class ListSchedulesTool(Tool):
     name = "list_schedules"
     description = LIST_SCHEDULES_DESCRIPTION
+    input_model = None
 
     def __init__(self, store: ScheduleStore):
         self.store = store
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(self.name, self.description, {})
 
     async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult:
         tasks = await self.store.list_all()
@@ -159,27 +137,18 @@ class ListSchedulesTool(Tool):
         return ToolResult("\n\n".join(lines), f"{len(tasks)} schedules")
 
 
+class CancelScheduleInput(BaseModel):
+    task_id: str = Field(description="The task ID to cancel")
+
+
 class CancelScheduleTool(Tool):
     name = "cancel_schedule"
     description = CANCEL_SCHEDULE_DESCRIPTION
     mutates = True
+    input_model = CancelScheduleInput
 
     def __init__(self, store: ScheduleStore):
         self.store = store
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "task_id": {
-                    "type": "string",
-                    "description": "The task ID to cancel",
-                },
-            },
-            ["task_id"],
-        )
 
     async def execute(self, execution: ToolExecution, task_id: str = "", **kwargs: Any) -> ToolResult:
         if not task_id:
@@ -195,26 +164,17 @@ class CancelScheduleTool(Tool):
         return ToolResult(f"Cancelled: {task.description} ({task_id})", "Cancelled")
 
 
+class GetScheduleResultInput(BaseModel):
+    task_id: str = Field(description="The task ID to get results for")
+
+
 class GetScheduleResultTool(Tool):
     name = "get_schedule_result"
     description = GET_SCHEDULE_RESULT_DESCRIPTION
+    input_model = GetScheduleResultInput
 
     def __init__(self, store: ScheduleStore):
         self.store = store
-
-    @property
-    def schema(self) -> dict:
-        return make_schema(
-            self.name,
-            self.description,
-            {
-                "task_id": {
-                    "type": "string",
-                    "description": "The task ID to get results for",
-                },
-            },
-            ["task_id"],
-        )
 
     async def execute(self, execution: ToolExecution, task_id: str = "", **kwargs: Any) -> ToolResult:
         if not task_id:

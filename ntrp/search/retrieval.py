@@ -47,10 +47,7 @@ class HybridRetriever:
         limit: int = 10,
     ) -> list[ScoredRow]:
         results = await self.store.vector_search(query_embedding, sources, limit * 2)
-        scored = [ScoredRow(row_id=row_id, score=score) for row_id, score in results]
-        for i, row in enumerate(scored):
-            row.rank = i + 1
-        return scored
+        return [ScoredRow(row_id=row_id, score=score, rank=i + 1) for i, (row_id, score) in enumerate(results)]
 
     async def _fts_search(
         self,
@@ -59,10 +56,7 @@ class HybridRetriever:
         limit: int = 10,
     ) -> list[ScoredRow]:
         results = await self.store.fts_search(query, sources, limit * 2)
-        scored = [ScoredRow(row_id=row_id, score=score) for row_id, score in results]
-        for i, row in enumerate(scored):
-            row.rank = i + 1
-        return scored
+        return [ScoredRow(row_id=row_id, score=score, rank=i + 1) for i, (row_id, score) in enumerate(results)]
 
     def _rrf_merge(
         self,

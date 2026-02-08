@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from ntrp.config import load_user_settings, save_user_settings
 from ntrp.constants import EMBEDDING_MODELS, SUPPORTED_MODELS
@@ -74,9 +74,10 @@ async def get_config():
     runtime = get_runtime()
 
     gmail_accounts: list[str] = []
-    if runtime.gmail:
+    gmail = runtime.get_gmail()
+    if gmail:
         try:
-            gmail_accounts = runtime.gmail.list_accounts()
+            gmail_accounts = gmail.list_accounts()
         except Exception:
             pass
 
@@ -89,14 +90,14 @@ async def get_config():
         "gmail_enabled": runtime.config.gmail,
         "gmail_accounts": gmail_accounts,
         "has_browser": runtime.config.browser is not None,
-        "has_gmail": runtime.gmail is not None,
+        "has_gmail": gmail is not None,
         "has_notes": runtime.config.vault_path is not None and runtime.source_mgr.sources.get("notes") is not None,
         "max_depth": runtime.max_depth,
         "memory_enabled": runtime.memory is not None,
         "sources": {
             "gmail": {
                 "enabled": runtime.config.gmail,
-                "connected": runtime.gmail is not None,
+                "connected": gmail is not None,
                 "accounts": gmail_accounts,
             },
             "calendar": {"enabled": runtime.config.calendar, "connected": "calendar" in runtime.source_mgr.sources},
@@ -125,6 +126,13 @@ async def list_models():
 async def update_config(req: UpdateConfigRequest):
     runtime = get_runtime()
 
+    try:
+        return await _apply_config(runtime, req)
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+async def _apply_config(runtime, req: UpdateConfigRequest):
     async with runtime._config_lock:
         settings = load_user_settings()
 

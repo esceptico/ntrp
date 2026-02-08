@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from ntrp.constants import CONSOLIDATION_INTERVAL
 from ntrp.memory.events import FactCreated
-from ntrp.server.state import RunStatus
 
 if TYPE_CHECKING:
     from ntrp.server.runtime import Runtime
@@ -86,7 +85,7 @@ class DashboardCollector:
             "history": [{"prompt": t.prompt, "completion": t.completion, "ts": t.ts} for t in self.token_history],
         }
 
-        active = sum(1 for r in runtime.run_registry._runs.values() if r.status == RunStatus.RUNNING)
+        active = runtime.run_registry.active_run_count
         agent = {
             "active_runs": active,
             "total_runs": self.total_runs,
@@ -113,18 +112,14 @@ class DashboardCollector:
                 "error": runtime.indexer.error,
             },
             "scheduler": {
-                "running": runtime.scheduler is not None and runtime.scheduler._task is not None,
+                "running": runtime.scheduler is not None and runtime.scheduler.is_running,
                 "active_task": None,
                 "total_scheduled": 0,
                 "enabled_count": 0,
                 "next_run_at": None,
             },
             "consolidation": {
-                "running": (
-                    runtime.memory is not None
-                    and runtime.memory._consolidation_task is not None
-                    and not runtime.memory._consolidation_task.done()
-                ),
+                "running": runtime.memory is not None and runtime.memory.is_consolidating,
                 "interval_seconds": CONSOLIDATION_INTERVAL,
             },
         }
@@ -149,9 +144,7 @@ class DashboardCollector:
                 "link_count": await runtime.memory.link_count(),
                 "observation_count": await obs_repo.count(),
                 "unconsolidated": await repo.count_unconsolidated(),
-                "consolidation_running": (
-                    runtime.memory._consolidation_task is not None and not runtime.memory._consolidation_task.done()
-                ),
+                "consolidation_running": runtime.memory.is_consolidating,
                 "last_consolidation_at": self.last_consolidation_at,
                 "recent_facts": list(self.recent_facts),
             }
@@ -173,7 +166,7 @@ class DashboardCollector:
             running = [t for t in tasks if t.running_since]
             next_runs = [t.next_run_at.timestamp() for t in enabled if t.next_run_at]
             data["background"]["scheduler"] = {
-                "running": runtime.scheduler is not None and runtime.scheduler._task is not None,
+                "running": runtime.scheduler is not None and runtime.scheduler.is_running,
                 "active_task": running[0].description[:60] if running else None,
                 "total_scheduled": len(tasks),
                 "enabled_count": len(enabled),
