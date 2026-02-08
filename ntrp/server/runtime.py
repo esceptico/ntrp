@@ -340,6 +340,12 @@ class Runtime:
         await self.indexer.stop()
         await self.indexer.close()
 
+        from litellm.llms.custom_httpx.async_client_cleanup import close_litellm_async_clients
+        from litellm.main import base_llm_aiohttp_handler
+
+        await base_llm_aiohttp_handler.close()
+        await close_litellm_async_clients()
+
 
 _runtime: Runtime | None = None
 _runtime_lock = asyncio.Lock()
