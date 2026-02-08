@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y gcc g++ build-essential && rm -rf /var/
 
 WORKDIR /app
 
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev
