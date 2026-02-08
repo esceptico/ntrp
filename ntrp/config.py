@@ -36,6 +36,7 @@ class Config(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         validate_assignment=True,
+        populate_by_name=True,
     )
 
     # OpenAI (for embeddings) - no prefix, standard env var

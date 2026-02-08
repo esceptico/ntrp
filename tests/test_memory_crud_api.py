@@ -333,8 +333,8 @@ class TestMemoryDisabled:
 
         # Create runtime with memory disabled
         test_config = Config(
-            db_dir=tmp_path / "db",
             vault_path=tmp_path / "vault",
+            openai_api_key="test-key",
             memory=False,  # Memory disabled
             browser=None,
             exa_api_key=None,
