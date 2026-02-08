@@ -9,7 +9,7 @@ from ntrp.config import Config, get_config
 from ntrp.constants import AGENT_MAX_DEPTH, INDEXABLE_SOURCES, SESSION_EXPIRY_HOURS
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
-from ntrp.core.events import RunCompleted, RunStarted, ToolExecuted
+from ntrp.core.events import ConsolidationCompleted, RunCompleted, RunStarted, ToolExecuted
 from ntrp.logging import get_logger
 from ntrp.memory.events import FactCreated, FactDeleted, FactUpdated, MemoryCleared
 from ntrp.memory.facts import FactMemory
@@ -36,7 +36,7 @@ class Runtime:
         self.source_mgr = SourceManager(self.config, self.channel)
 
         self.embedding = self.config.embedding
-        self.indexer = Indexer(db_path=self.config.search_db_path, embedding=self.embedding)
+        self.indexer = Indexer(db_path=self.config.search_db_path, embedding=self.embedding, channel=self.channel)
 
         self.session_store = SessionStore(self.config.sessions_db_path)
 
@@ -112,6 +112,7 @@ class Runtime:
         self.channel.subscribe(RunStarted, self.dashboard.on_run_started)
         self.channel.subscribe(RunCompleted, self.dashboard.on_run_completed)
         self.channel.subscribe(FactCreated, self.dashboard.on_fact_created)
+        self.channel.subscribe(ConsolidationCompleted, self.dashboard.on_consolidation_completed)
         self.channel.subscribe(FactCreated, self._on_fact_created)
         self.channel.subscribe(FactUpdated, self._on_fact_updated)
         self.channel.subscribe(FactDeleted, self._on_fact_deleted)

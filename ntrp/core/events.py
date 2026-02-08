@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -22,3 +22,20 @@ class RunCompleted:
     prompt_tokens: int
     completion_tokens: int
     result: str
+
+
+@dataclass(frozen=True)
+class ConsolidationCompleted:
+    facts_processed: int
+    observations_created: int
+
+
+@dataclass(frozen=True)
+class IndexingStarted:
+    sources: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class IndexingCompleted:
+    updated: int
+    deleted: int

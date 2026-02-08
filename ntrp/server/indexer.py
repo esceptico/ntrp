@@ -3,9 +3,14 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from ntrp.channel import Channel
+from ntrp.core.events import IndexingCompleted, IndexingStarted
 from ntrp.embedder import EmbeddingConfig
+from ntrp.logging import get_logger
 from ntrp.search.index import SearchIndex
 from ntrp.sources.base import IndexableSource
+
+_logger = get_logger(__name__)
 
 
 class IndexStatus(StrEnum):
@@ -26,8 +31,9 @@ class IndexProgress:
 
 
 class Indexer:
-    def __init__(self, db_path: Path, embedding: EmbeddingConfig):
+    def __init__(self, db_path: Path, embedding: EmbeddingConfig, channel: Channel):
         self.index = SearchIndex(db_path=db_path, embedding=embedding)
+        self.channel = channel
         self._progress = IndexProgress()
         self._error: str | None = None
         self._running = False
@@ -77,6 +83,7 @@ class Indexer:
 
         try:
             self._progress.status = IndexStatus.INDEXING
+            await self.channel.publish(IndexingStarted(sources=[s.name for s in sources]))
 
             for source in sources:
                 items = await source.scan()
@@ -85,6 +92,9 @@ class Indexer:
                 self._progress.deleted += d
 
             self._progress.status = IndexStatus.DONE
+            await self.channel.publish(
+                IndexingCompleted(updated=self._progress.updated, deleted=self._progress.deleted)
+            )
         except Exception as e:
             self._error = str(e)
             self._progress.status = IndexStatus.ERROR

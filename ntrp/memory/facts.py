@@ -6,6 +6,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict
 
 from ntrp.channel import Channel
+from ntrp.core.events import ConsolidationCompleted
 from ntrp.constants import (
     CONSOLIDATION_INTERVAL,
     CONSOLIDATION_MAX_BACKOFF_MULTIPLIER,
@@ -120,11 +121,17 @@ class FactMemory:
             obs_repo = ObservationRepository(conn, auto_commit=False)
             try:
                 count = 0
+                obs_created = 0
                 for fact, action in decisions:
-                    await apply_consolidation(fact, action, repo, obs_repo, self.embedder.embed_one)
+                    result = await apply_consolidation(fact, action, repo, obs_repo, self.embedder.embed_one)
                     count += 1
+                    if result.action == "created":
+                        obs_created += 1
                 await conn.commit()
                 _logger.info("Consolidated %d facts", count)
+                await self.channel.publish(
+                    ConsolidationCompleted(facts_processed=count, observations_created=obs_created)
+                )
                 return count
             except Exception:
                 await conn.rollback()

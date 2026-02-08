@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ntrp.constants import CONSOLIDATION_INTERVAL
-from ntrp.core.events import RunCompleted, RunStarted, ToolExecuted
+from ntrp.core.events import ConsolidationCompleted, RunCompleted, RunStarted, ToolExecuted
 from ntrp.memory.events import FactCreated
 
 if TYPE_CHECKING:
@@ -63,6 +63,9 @@ class DashboardCollector:
 
     async def on_run_started(self, _event: RunStarted) -> None:
         self.active_runs += 1
+
+    async def on_consolidation_completed(self, event: ConsolidationCompleted) -> None:
+        self.last_consolidation_at = time.time()
 
     async def on_fact_created(self, event: FactCreated) -> None:
         self.recent_facts.append({"id": event.fact_id, "text": event.text[:80], "ts": time.time()})
