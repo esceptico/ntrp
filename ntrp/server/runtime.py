@@ -99,6 +99,14 @@ class Runtime:
                 )
             )
 
+        if self.config.vault_path:
+            source_factories.append(
+                (
+                    "ObsidianSource",
+                    lambda: ObsidianSource(vault_path=self.config.vault_path),
+                )
+            )
+
         for name, factory in source_factories:
             try:
                 source = factory()
@@ -323,7 +331,7 @@ class Runtime:
     async def _on_fact_deleted(self, event: FactDeleted) -> None:
         await self.indexer.index.delete("memory", f"fact:{event.fact_id}")
 
-    async def _on_memory_cleared(self, event: MemoryCleared) -> None:
+    async def _on_memory_cleared(self, _event: MemoryCleared) -> None:
         await self.indexer.index.clear_source("memory")
 
     async def _on_source_changed(self, event: SourceChanged) -> None:
