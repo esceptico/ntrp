@@ -111,7 +111,7 @@ class ListNotesTool(Tool):
         header = f"{showing} of {total} notes:" if showing < total else f"{total} notes:"
         content = f"{header}\n" + "\n".join(formatted_names)
 
-        return ToolResult(content, f"{showing} notes")
+        return ToolResult(content=content, preview=f"{showing} notes")
 
 
 class ReadNoteInput(BaseModel):
@@ -134,12 +134,12 @@ class ReadNoteTool(Tool):
     ) -> ToolResult:
         content = self.source.read(path)
         if content is None:
-            return ToolResult(f"Note not found: {path}. Use list_notes to see available notes.", "Not found")
+            return ToolResult(content=f"Note not found: {path}. Use list_notes to see available notes.", preview="Not found")
 
         formatted = format_lines_with_pagination(content, offset, limit)
         lines = len(content.split("\n"))
 
-        return ToolResult(formatted, f"Read {lines} lines")
+        return ToolResult(content=formatted, preview=f"Read {lines} lines")
 
 
 class EditNoteInput(BaseModel):
@@ -162,15 +162,15 @@ class EditNoteTool(Tool):
         self, execution: ToolExecution, path: str = "", find: str = "", replace: str = "", **kwargs: Any
     ) -> ToolResult:
         if not path or not find:
-            return ToolResult("Error: path and find are required", "Missing fields", is_error=True)
+            return ToolResult(content="Error: path and find are required", preview="Missing fields", is_error=True)
 
         original = self.source.read(path)
         if original is None:
-            return ToolResult(f"Note not found: {path}. Use list_notes to find correct path.", "Not found")
+            return ToolResult(content=f"Note not found: {path}. Use list_notes to find correct path.", preview="Not found")
 
         if find not in original:
             return ToolResult(
-                f"Text to replace not found in {path}. Read the note first to get exact text.", "Not found"
+                content=f"Text to replace not found in {path}. Read the note first to get exact text.", preview="Not found"
             )
 
         proposed = original.replace(find, replace, 1)
@@ -191,7 +191,7 @@ class EditNoteTool(Tool):
                 preview="Edited",
                 metadata={"diff": diff, "lines_changed": max(0, lines_changed)},
             )
-        return ToolResult(f"Error writing to {path}", "Write failed", is_error=True)
+        return ToolResult(content=f"Error writing to {path}", preview="Write failed", is_error=True)
 
 
 class CreateNoteInput(BaseModel):
@@ -211,14 +211,14 @@ class CreateNoteTool(Tool):
 
     async def execute(self, execution: ToolExecution, path: str = "", content: str = "", **kwargs: Any) -> ToolResult:
         if not path or not content:
-            return ToolResult("Error: path and content are required", "Missing fields", is_error=True)
+            return ToolResult(content="Error: path and content are required", preview="Missing fields", is_error=True)
 
         if not path.endswith(".md"):
             path = path + ".md"
 
         if self.source.exists(path):
             return ToolResult(
-                f"Note already exists: {path}. Use edit_note to modify or choose different path.", "Exists"
+                content=f"Note already exists: {path}. Use edit_note to modify or choose different path.", preview="Exists"
             )
 
         preview_content = content[:CONTENT_PREVIEW_LIMIT]
@@ -229,8 +229,8 @@ class CreateNoteTool(Tool):
 
         success = self.source.write(path, content)
         if success:
-            return ToolResult(f"Created note: {path}", "Created")
-        return ToolResult(f"Error creating {path}", "Create failed", is_error=True)
+            return ToolResult(content=f"Created note: {path}", preview="Created")
+        return ToolResult(content=f"Error creating {path}", preview="Create failed", is_error=True)
 
 
 class DeleteNoteInput(BaseModel):
@@ -249,18 +249,18 @@ class DeleteNoteTool(Tool):
 
     async def execute(self, execution: ToolExecution, path: str = "", **kwargs: Any) -> ToolResult:
         if not path:
-            return ToolResult("Error: path is required", "Missing path", is_error=True)
+            return ToolResult(content="Error: path is required", preview="Missing path", is_error=True)
 
         original = self.source.read(path)
         if original is None:
-            return ToolResult(f"Note not found: {path}. Use list_notes to find correct path.", "Not found")
+            return ToolResult(content=f"Note not found: {path}. Use list_notes to find correct path.", preview="Not found")
 
         await execution.require_approval(path)
 
         success = self.source.delete(path)
         if success:
-            return ToolResult(f"Deleted: {path}", "Deleted")
-        return ToolResult(f"Error deleting {path}", "Delete failed", is_error=True)
+            return ToolResult(content=f"Deleted: {path}", preview="Deleted")
+        return ToolResult(content=f"Error deleting {path}", preview="Delete failed", is_error=True)
 
 
 class MoveNoteInput(BaseModel):
@@ -280,25 +280,25 @@ class MoveNoteTool(Tool):
 
     async def execute(self, execution: ToolExecution, path: str = "", new_path: str = "", **kwargs: Any) -> ToolResult:
         if not path or not new_path:
-            return ToolResult("Error: path and new_path are required", "Missing fields", is_error=True)
+            return ToolResult(content="Error: path and new_path are required", preview="Missing fields", is_error=True)
 
         if not new_path.endswith(".md"):
             new_path = new_path + ".md"
 
         if not self.source.exists(path):
-            return ToolResult(f"Note not found: {path}. Use list_notes to find correct path.", "Not found")
+            return ToolResult(content=f"Note not found: {path}. Use list_notes to find correct path.", preview="Not found")
 
         if self.source.exists(new_path):
             return ToolResult(
-                f"Destination already exists: {new_path}. Choose different path or delete existing first.", "Exists"
+                content=f"Destination already exists: {new_path}. Choose different path or delete existing first.", preview="Exists"
             )
 
         await execution.require_approval(f"{path} → {new_path}")
 
         success = self.source.move(path, new_path)
         if success:
-            return ToolResult(f"Moved: `{path}` → `{new_path}`", "Moved")
-        return ToolResult(f"Error moving {path}", "Move failed", is_error=True)
+            return ToolResult(content=f"Moved: `{path}` → `{new_path}`", preview="Moved")
+        return ToolResult(content=f"Error moving {path}", preview="Move failed", is_error=True)
 
 
 class SearchNotesInput(BaseModel):
@@ -322,7 +322,7 @@ class SearchNotesTool(Tool):
 
     async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
         if not query:
-            return ToolResult("Error: query is required", "Missing query", is_error=True)
+            return ToolResult(content="Error: query is required", preview="Missing query", is_error=True)
 
         query = simplify_query(query)
 
@@ -336,7 +336,7 @@ class SearchNotesTool(Tool):
                         output.append(f"  path: `{item.source_id}`")
                         if item.snippet:
                             output.append(f"  {truncate(item.snippet, SNIPPET_TRUNCATE)}")
-                    return ToolResult("\n".join(output), f"{len(results)} notes")
+                    return ToolResult(content="\n".join(output), preview=f"{len(results)} notes")
             except Exception as e:
                 _logger.warning("Hybrid search failed, falling back to text search: %s", e)
 
@@ -354,7 +354,7 @@ class SearchNotesTool(Tool):
                 break
 
         if not results:
-            return ToolResult(f"No notes found for '{query}'", "0 notes")
+            return ToolResult(content=f"No notes found for '{query}'", preview="0 notes")
 
         output = []
         for title, path, snippet in results:
@@ -363,4 +363,4 @@ class SearchNotesTool(Tool):
             if snippet:
                 output.append(f"  {snippet}")
 
-        return ToolResult("\n".join(output), f"{len(results)} notes")
+        return ToolResult(content="\n".join(output), preview=f"{len(results)} notes")

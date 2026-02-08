@@ -166,10 +166,10 @@ class BashTool(Tool):
         self, execution: ToolExecution, command: str = "", working_dir: str | None = None, **kwargs: Any
     ) -> ToolResult:
         if not command:
-            return ToolResult("Error: command is required", "Missing command", is_error=True)
+            return ToolResult(content="Error: command is required", preview="Missing command", is_error=True)
 
         if is_blocked_command(command):
-            return ToolResult(f"Blocked: {command}", "Blocked")
+            return ToolResult(content=f"Blocked: {command}", preview="Blocked")
 
         cwd = working_dir or self.working_dir
 
@@ -178,4 +178,4 @@ class BashTool(Tool):
 
         output = execute_bash(command, cwd, self.timeout)
         lines = output.count("\n") + 1
-        return ToolResult(output, f"{lines} lines")
+        return ToolResult(content=output, preview=f"{lines} lines")

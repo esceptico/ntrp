@@ -31,7 +31,7 @@ class ListBrowserTool(Tool):
         items = self.source.list_recent(days=days, limit=limit)
 
         if not items:
-            return ToolResult(f"No browser history in last {days} days", "0 items")
+            return ToolResult(content=f"No browser history in last {days} days", preview="0 items")
 
         output = []
         for item in items[:limit]:
@@ -39,7 +39,7 @@ class ListBrowserTool(Tool):
             date_str = item.timestamp.strftime("%Y-%m-%d") if item.timestamp else ""
             output.append(f"• {title}" + (f" ({date_str})" if date_str else ""))
 
-        return ToolResult("\n".join(output), f"{len(items)} items")
+        return ToolResult(content="\n".join(output), preview=f"{len(items)} items")
 
 
 class SearchBrowserInput(BaseModel):
@@ -58,11 +58,11 @@ class SearchBrowserTool(Tool):
 
     async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
         if not query:
-            return ToolResult("Error: query is required", "Missing query", is_error=True)
+            return ToolResult(content="Error: query is required", preview="Missing query", is_error=True)
 
         urls = self.source.search(query)
         if not urls:
-            return ToolResult(f"No browser history found for '{query}'", "0 results")
+            return ToolResult(content=f"No browser history found for '{query}'", preview="0 results")
 
         output = []
         for url in list(urls)[:limit]:
@@ -78,4 +78,4 @@ class SearchBrowserTool(Tool):
             else:
                 output.append(f"• {truncate(url, URL_TRUNCATE)}")
 
-        return ToolResult("\n".join(output), f"{min(len(urls), limit)} results")
+        return ToolResult(content="\n".join(output), preview=f"{min(len(urls), limit)} results")

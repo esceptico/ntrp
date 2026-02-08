@@ -48,12 +48,12 @@ class SendEmailTool(Tool):
         **kwargs: Any,
     ) -> ToolResult:
         if not account or not to:
-            return ToolResult("Error: account and to are required", "Missing fields", is_error=True)
+            return ToolResult(content="Error: account and to are required", preview="Missing fields", is_error=True)
 
         await execution.require_approval(to, preview=f"Subject: {subject}\nFrom: {account}")
 
         result = self.source.send_email(account=account, to=to, subject=subject, body=body)
-        return ToolResult(result, "Sent")
+        return ToolResult(content=result, preview="Sent")
 
 
 class ReadEmailInput(BaseModel):
@@ -71,17 +71,17 @@ class ReadEmailTool(Tool):
 
     async def execute(self, execution: ToolExecution, email_id: str = "", **kwargs: Any) -> ToolResult:
         if not email_id:
-            return ToolResult("Error: email_id is required", "Missing email_id", is_error=True)
+            return ToolResult(content="Error: email_id is required", preview="Missing email_id", is_error=True)
 
         content = self.source.read(email_id)
         if not content:
             return ToolResult(
-                f"Email not found: {email_id}. Use search_email or list_email to find valid email IDs.",
-                "Not found",
+                content=f"Email not found: {email_id}. Use search_email or list_email to find valid email IDs.",
+                preview="Not found",
             )
 
         lines = content.count("\n") + 1
-        return ToolResult(content, f"Read {lines} lines")
+        return ToolResult(content=content, preview=f"Read {lines} lines")
 
 
 class ListEmailInput(BaseModel):
@@ -104,8 +104,8 @@ class ListEmailTool(Tool):
 
         if not emails:
             if accounts:
-                return ToolResult(f"No emails in last {days} days from {len(accounts)} accounts", "0 emails")
-            return ToolResult(f"No emails in last {days} days", "0 emails")
+                return ToolResult(content=f"No emails in last {days} days from {len(accounts)} accounts", preview="0 emails")
+            return ToolResult(content=f"No emails in last {days} days", preview="0 emails")
 
         output = []
         for email in emails[:limit]:
@@ -116,7 +116,7 @@ class ListEmailTool(Tool):
                 line += f"  id: {email.identity}"
             output.append(line)
 
-        return ToolResult("\n".join(output), f"{len(emails)} emails")
+        return ToolResult(content="\n".join(output), preview=f"{len(emails)} emails")
 
 
 class SearchEmailInput(BaseModel):
@@ -135,11 +135,11 @@ class SearchEmailTool(Tool):
 
     async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
         if not query:
-            return ToolResult("Error: query is required", "Missing query", is_error=True)
+            return ToolResult(content="Error: query is required", preview="Missing query", is_error=True)
 
         results = self.source.search(query, limit=limit)
         if not results:
-            return ToolResult(f"No emails found for '{query}'", "0 emails")
+            return ToolResult(content=f"No emails found for '{query}'", preview="0 emails")
 
         output = []
         for item in results[:limit]:
@@ -149,4 +149,4 @@ class SearchEmailTool(Tool):
             output.append(f"• {subj}")
             output.append(f"  from: {frm}, id: {item.source_id}")
 
-        return ToolResult("\n".join(output), f"{len(results)} emails")
+        return ToolResult(content="\n".join(output), preview=f"{len(results)} emails")

@@ -34,22 +34,22 @@ class AskChoiceTool(Tool):
         allow_multiple = kwargs.get("allow_multiple", False)
 
         if not question:
-            return ToolResult("Error: question is required", "Missing question", is_error=True)
+            return ToolResult(content="Error: question is required", preview="Missing question", is_error=True)
         if not options or len(options) < 2:
-            return ToolResult("Error: at least 2 options are required", "Too few options", is_error=True)
+            return ToolResult(content="Error: at least 2 options are required", preview="Too few options", is_error=True)
 
         for opt in options:
             if not isinstance(opt, dict) or "id" not in opt or "label" not in opt:
-                return ToolResult("Error: each option must have 'id' and 'label'", "Invalid options", is_error=True)
+                return ToolResult(content="Error: each option must have 'id' and 'label'", preview="Invalid options", is_error=True)
 
         selected = await execution.ask_choice(question, options, allow_multiple)
 
         if not selected:
-            return ToolResult("User cancelled or no selection made", "Cancelled")
+            return ToolResult(content="User cancelled or no selection made", preview="Cancelled")
 
         labels = []
         for sel_id in selected:
             opt = next((o for o in options if o["id"] == sel_id), None)
             labels.append(opt["label"] if opt else sel_id)
 
-        return ToolResult(", ".join(labels), f"Selected: {', '.join(labels)}")
+        return ToolResult(content=", ".join(labels), preview=f"Selected: {', '.join(labels)}")

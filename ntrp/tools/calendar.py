@@ -58,15 +58,15 @@ class SearchCalendarTool(Tool):
 
     async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
         if not query:
-            return ToolResult("Error: query is required", "Missing query", is_error=True)
+            return ToolResult(content="Error: query is required", preview="Missing query", is_error=True)
 
         try:
             events = self.source.search(query, limit=limit)
 
             if not events:
                 return ToolResult(
-                    f"No events found matching '{query}'. Try different keywords or use list_calendar for upcoming.",
-                    "0 events",
+                    content=f"No events found matching '{query}'. Try different keywords or use list_calendar for upcoming.",
+                    preview="0 events",
                 )
 
             lines = [f"**Events matching '{query}':**\n"]
@@ -83,15 +83,17 @@ class SearchCalendarTool(Tool):
 
                 lines.append(f"- **{time_str}**: {event.title} `[{event_id}]`")
 
-            return ToolResult("\n".join(lines), f"{len(events)} events")
+            return ToolResult(content="\n".join(lines), preview=f"{len(events)} events")
         except Exception as e:
-            return ToolResult(f"Error searching events: {e}", "Search failed", is_error=True)
+            return ToolResult(content=f"Error searching events: {e}", preview="Search failed", is_error=True)
 
 
 class CreateCalendarEventInput(BaseModel):
     summary: str = Field(description="Event title/summary")
     start: str = Field(description="Start time in ISO format (e.g., '2024-01-15T14:00:00')")
-    end: str | None = Field(default=None, description="End time in ISO format (optional, defaults to 1 hour after start)")
+    end: str | None = Field(
+        default=None, description="End time in ISO format (optional, defaults to 1 hour after start)"
+    )
     description: str | None = Field(default=None, description="Event description (optional)")
     location: str | None = Field(default=None, description="Event location (optional)")
     attendees: str | None = Field(default=None, description="Comma-separated email addresses of attendees (optional)")
@@ -123,13 +125,25 @@ class CreateCalendarEventTool(Tool):
         **kwargs: Any,
     ) -> ToolResult:
         if not summary:
-            return ToolResult("Error: summary is required", "Missing summary", is_error=True)
+            return ToolResult(
+                content="Error: summary is required",
+                preview="Missing summary",
+                is_error=True,
+            )
         if not start:
-            return ToolResult("Error: start time is required", "Missing start", is_error=True)
+            return ToolResult(
+                content="Error: start time is required",
+                preview="Missing start",
+                is_error=True,
+            )
 
         start_dt = _parse_datetime(start)
         if not start_dt:
-            return ToolResult(f"Invalid start time: {start}. Use ISO format: 2024-01-15T14:00:00", "Invalid start", is_error=True)
+            return ToolResult(
+                content=f"Invalid start time: {start}. Use ISO format: 2024-01-15T14:00:00", 
+                preview="Invalid start",
+                is_error=True,
+            )
 
         end_dt = _parse_datetime(end)
         attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
@@ -150,7 +164,7 @@ class CreateCalendarEventTool(Tool):
             attendees=attendee_list,
             all_day=all_day,
         )
-        return ToolResult(result, "Created")
+        return ToolResult(content=result, preview="Created")
 
 
 class EditCalendarEventInput(BaseModel):
@@ -160,7 +174,9 @@ class EditCalendarEventInput(BaseModel):
     end: str | None = Field(default=None, description="New end time in ISO format (optional)")
     description: str | None = Field(default=None, description="New event description (optional)")
     location: str | None = Field(default=None, description="New event location (optional)")
-    attendees: str | None = Field(default=None, description="New comma-separated attendee emails (optional, replaces existing)")
+    attendees: str | None = Field(
+        default=None, description="New comma-separated attendee emails (optional, replaces existing)"
+    )
 
 
 class EditCalendarEventTool(Tool):
@@ -186,15 +202,27 @@ class EditCalendarEventTool(Tool):
         **kwargs: Any,
     ) -> ToolResult:
         if not event_id:
-            return ToolResult("Error: event_id is required", "Missing event_id", is_error=True)
+            return ToolResult(
+                content="Error: event_id is required",
+                preview="Missing event_id",
+                is_error=True,
+            )
 
         start_dt = _parse_datetime(start)
         if start and not start_dt:
-            return ToolResult(f"Invalid start time: {start}. Use ISO format: 2024-01-15T14:00:00", "Invalid start", is_error=True)
+            return ToolResult(
+                content=f"Invalid start time: {start}. Use ISO format: 2024-01-15T14:00:00",
+                preview="Invalid start",
+                is_error=True,
+            )
 
         end_dt = _parse_datetime(end)
         if end and not end_dt:
-            return ToolResult(f"Invalid end time: {end}. Use ISO format: 2024-01-15T15:00:00", "Invalid end", is_error=True)
+            return ToolResult(
+                content=f"Invalid end time: {end}. Use ISO format: 2024-01-15T15:00:00",
+                preview="Invalid end",
+                is_error=True,
+            )
 
         attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
 
@@ -219,7 +247,7 @@ class EditCalendarEventTool(Tool):
             location=location if location else None,
             attendees=attendee_list,
         )
-        return ToolResult(result, "Updated")
+        return ToolResult(content=result, preview="Updated")
 
 
 class DeleteCalendarEventInput(BaseModel):
@@ -238,12 +266,16 @@ class DeleteCalendarEventTool(Tool):
 
     async def execute(self, execution: ToolExecution, event_id: str = "", **kwargs: Any) -> ToolResult:
         if not event_id:
-            return ToolResult("Error: event_id is required", "Missing event_id", is_error=True)
+            return ToolResult(
+                content="Error: event_id is required", 
+                preview="Missing event_id", 
+                is_error=True,
+            )
 
         await execution.require_approval(event_id)
 
         result = self.source.delete_event(event_id)
-        return ToolResult(result, "Deleted")
+        return ToolResult(content=result, preview="Deleted")
 
 
 class ListCalendarInput(BaseModel):
@@ -280,7 +312,7 @@ class ListCalendarTool(Tool):
             events.extend(upcoming)
 
         if not events:
-            return ToolResult("No calendar events in the specified range", "0 events")
+            return ToolResult(content="No calendar events in the specified range", preview="0 events")
 
         events.sort(key=lambda e: e.metadata.get("start", ""))
 
@@ -301,4 +333,4 @@ class ListCalendarTool(Tool):
             location = f" @ {meta['location']}" if meta.get("location") else ""
             output.append(f"• {time_str}: {event.title}{location}")
 
-        return ToolResult("\n".join(output), f"{len(events)} events")
+        return ToolResult(content="\n".join(output), preview=f"{len(events)} events")

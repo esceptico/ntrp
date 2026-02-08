@@ -71,7 +71,7 @@ class RememberTool(Tool):
         **kwargs: Any,
     ) -> ToolResult:
         if not fact:
-            return ToolResult("Error: fact is required", "Missing fact", is_error=True)
+            return ToolResult(content="Error: fact is required", preview="Missing fact", is_error=True)
 
         await execution.require_approval(fact[:100])
 
@@ -88,8 +88,8 @@ class RememberTool(Tool):
 
         entities = ", ".join(result.entities_extracted) if result.entities_extracted else "none"
         return ToolResult(
-            f"Remembered: {result.fact.text}\nEntities: {entities}\nLinks: {result.links_created}",
-            "Remembered",
+            content=f"Remembered: {result.fact.text}\nEntities: {entities}\nLinks: {result.links_created}",
+            preview="Remembered",
         )
 
 
@@ -111,10 +111,10 @@ class RecallTool(Tool):
         formatted = format_memory_context(query_facts=context.facts, query_observations=context.observations)
         if formatted:
             count = len(context.facts)
-            return ToolResult(formatted, f"{count} facts")
+            return ToolResult(content=formatted, preview=f"{count} facts")
         return ToolResult(
-            "No memory found for this query. Try broader terms or use remember() to store facts first.",
-            "0 facts",
+            content="No memory found for this query. Try broader terms or use remember() to store facts first.",
+            preview="0 facts",
         )
 
 
@@ -133,9 +133,9 @@ class ForgetTool(Tool):
 
     async def execute(self, execution: Any, query: str = "", **kwargs: Any) -> ToolResult:
         if not query:
-            return ToolResult("Error: query is required", "Missing query", is_error=True)
+            return ToolResult(content="Error: query is required", preview="Missing query", is_error=True)
 
         await execution.require_approval(query)
 
         count = await self.memory.forget(query=query)
-        return ToolResult(f"Forgot {count} fact(s) related to '{query}'.", f"Forgot {count}")
+        return ToolResult(content=f"Forgot {count} fact(s) related to '{query}'.", preview=f"Forgot {count}")

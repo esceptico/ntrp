@@ -66,12 +66,12 @@ class WriteScratchpadTool(Tool):
         self, execution: ToolExecution, content: str = "", key: str = "default", **kwargs: Any
     ) -> ToolResult:
         if not content:
-            return ToolResult("Error: content is required", "Missing content", is_error=True)
+            return ToolResult(content="Error: content is required", preview="Missing content", is_error=True)
 
         if len(content) > MAX_CONTENT_SIZE:
             return ToolResult(
-                f"Error: content too large ({len(content)} chars, max {MAX_CONTENT_SIZE})",
-                "Too large",
+                content=f"Error: content too large ({len(content)} chars, max {MAX_CONTENT_SIZE})",
+                preview="Too large",
                 is_error=True,
             )
 
@@ -79,7 +79,7 @@ class WriteScratchpadTool(Tool):
         path.parent.mkdir(parents=True, exist_ok=True)
 
         path.write_text(content, encoding="utf-8")
-        return ToolResult(f"Saved to scratchpad '{key}' ({len(content)} chars)", "Saved")
+        return ToolResult(content=f"Saved to scratchpad '{key}' ({len(content)} chars)", preview="Saved")
 
 
 class ReadScratchpadInput(BaseModel):
@@ -95,10 +95,10 @@ class ReadScratchpadTool(Tool):
         path = _scratchpad_path(execution.ctx.session_id, key)
 
         if not path.exists():
-            return ToolResult(f"No scratchpad found for key '{key}'", "Empty")
+            return ToolResult(content=f"No scratchpad found for key '{key}'", preview="Empty")
 
         content = path.read_text(encoding="utf-8")
-        return ToolResult(content, f"Read {len(content)} chars")
+        return ToolResult(content=content, preview=f"Read {len(content)} chars")
 
 
 class ListScratchpadTool(Tool):
@@ -110,11 +110,11 @@ class ListScratchpadTool(Tool):
         scratch_dir = _scratchpad_dir(execution.ctx.session_id)
 
         if not scratch_dir.exists():
-            return ToolResult("No scratchpad notes found", "Empty")
+            return ToolResult(content="No scratchpad notes found", preview="Empty")
 
         keys = sorted(p.stem for p in scratch_dir.glob("*.md"))
         if not keys:
-            return ToolResult("No scratchpad notes found", "Empty")
+            return ToolResult(content="No scratchpad notes found", preview="Empty")
 
         listing = "\n".join(f"- {k}" for k in keys)
-        return ToolResult(listing, f"{len(keys)} keys")
+        return ToolResult(content=listing, preview=f"{len(keys)} keys")

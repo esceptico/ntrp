@@ -31,7 +31,7 @@ class ReadFileTool(Tool):
         self, execution: Any, path: str = "", offset: int = 1, limit: int = 500, **kwargs: Any
     ) -> ToolResult:
         if not path:
-            return ToolResult("Error: path is required", "Missing path", is_error=True)
+            return ToolResult(content="Error: path is required", preview="Missing path", is_error=True)
 
         if not os.path.isabs(path):
             full_path = os.path.join(self.base_path, path)
@@ -41,11 +41,11 @@ class ReadFileTool(Tool):
         full_path = os.path.normpath(full_path)
 
         if not os.path.exists(full_path):
-            return ToolResult(f"File not found: {path}. Check the path or use bash(ls) to list directory.", "Not found")
+            return ToolResult(content=f"File not found: {path}. Check the path or use bash(ls) to list directory.", preview="Not found")
 
         if not os.path.isfile(full_path):
             return ToolResult(
-                f"Path is a directory, not a file: {path}. Use bash(ls {path}) to list contents.", "Not a file"
+                content=f"Path is a directory, not a file: {path}. Use bash(ls {path}) to list contents.", preview="Not a file"
             )
 
         try:
@@ -53,9 +53,9 @@ class ReadFileTool(Tool):
                 content = f.read()
             formatted = format_lines_with_pagination(content, offset, limit)
             lines = len(content.split("\n"))
-            return ToolResult(formatted, f"Read {lines} lines")
+            return ToolResult(content=formatted, preview=f"Read {lines} lines")
 
         except PermissionError:
-            return ToolResult(f"Permission denied: {path}. File may be protected or require elevated access.", "Denied")
+            return ToolResult(content=f"Permission denied: {path}. File may be protected or require elevated access.", preview="Denied")
         except Exception as e:
-            return ToolResult(f"Error reading file: {e}", "Read failed", is_error=True)
+            return ToolResult(content=f"Error reading file: {e}", preview="Read failed", is_error=True)

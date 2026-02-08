@@ -50,7 +50,7 @@ class ExploreTool(Tool):
         ctx = execution.ctx
 
         if not ctx.spawn_fn:
-            return ToolResult("Error: spawn capability not available", "Error", is_error=True)
+            return ToolResult(content="Error: spawn capability not available", preview="Error", is_error=True)
 
         tools = ctx.registry.get_schemas(names=self.EXPLORE_TOOLS)
         prompt = await self._build_prompt(ctx.memory)
@@ -64,4 +64,4 @@ class ExploreTool(Tool):
             parent_id=execution.tool_id,
             isolation=IsolationLevel.FULL,
         )
-        return ToolResult(result, "Explored")
+        return ToolResult(content=result, preview="Explored")

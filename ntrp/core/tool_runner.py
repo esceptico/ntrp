@@ -56,7 +56,7 @@ class ToolRunner:
         if len(content) > OFFLOAD_PREVIEW_CHARS:
             compact += f"\n\n[...{len(content) - OFFLOAD_PREVIEW_CHARS} chars offloaded → {offload_path}]"
 
-        return ToolResult(compact, result.preview, result.metadata)
+        return ToolResult(content=compact, preview=result.preview, metadata=result.metadata)
 
     def _make_start_event(self, call: PendingToolCall) -> ToolCallEvent:
         return ToolCallEvent(
@@ -74,7 +74,13 @@ class ToolRunner:
         duration_ms: int,
     ) -> ToolResultEvent:
         await self.ctx.channel.publish(
-            ToolExecuted(name=call.name, duration_ms=duration_ms, depth=self.depth, is_error=result.is_error, run_id=self.ctx.run_id)
+            ToolExecuted(
+                name=call.name,
+                duration_ms=duration_ms,
+                depth=self.depth,
+                is_error=result.is_error,
+                run_id=self.ctx.run_id,
+            )
         )
 
         return ToolResultEvent(
@@ -112,7 +118,9 @@ class ToolRunner:
             duration_ms = ms_now() - start_ms
             yield await self._make_result_event(
                 call=call,
-                result=ToolResult(content=f"Error: {type(e).__name__}: {e}", preview=f"Failed: {type(e).__name__}", is_error=True),
+                result=ToolResult(
+                    content=f"Error: {type(e).__name__}: {e}", preview=f"Failed: {type(e).__name__}", is_error=True
+                ),
                 duration_ms=duration_ms,
             )
 
@@ -167,7 +175,7 @@ class ToolRunner:
         async for r in results_queue:
             yield await self._make_result_event(
                 call=r.call,
-                result=ToolResult(r.content, r.preview, r.metadata, r.is_error),
+                result=ToolResult(content=r.content, preview=r.preview, metadata=r.metadata, is_error=r.is_error),
                 duration_ms=r.duration_ms,
             )
 
