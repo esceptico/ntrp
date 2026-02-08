@@ -21,7 +21,6 @@ from ntrp.server.sources import SourceManager
 from ntrp.server.state import RunRegistry
 from ntrp.sources.browser import BrowserHistorySource
 from ntrp.sources.events import SourceChanged
-from ntrp.sources.google.calendar import MultiCalendarSource
 from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.sources.memory import MemoryIndexSource
 from ntrp.tools.executor import ToolExecutor
@@ -56,9 +55,6 @@ class Runtime:
 
     def get_gmail(self) -> MultiGmailSource | None:
         return self.source_mgr.sources.get("email")
-
-    def get_calendar(self) -> MultiCalendarSource | None:
-        return self.source_mgr.sources.get("calendar")
 
     def get_browser(self) -> BrowserHistorySource | None:
         return self.source_mgr.sources.get("browser")

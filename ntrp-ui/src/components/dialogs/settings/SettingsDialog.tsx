@@ -8,16 +8,16 @@ import { Panel, Footer, colors, accentColors, type AccentColor } from "../../ui/
 import {
   getSupportedModels,
   updateConfig,
-  getGmailAccounts,
-  addGmailAccount,
-  removeGmailAccount,
+  getGoogleAccounts,
+  addGoogleAccount,
+  removeGoogleAccount,
   getEmbeddingModels,
   updateEmbeddingModel,
   updateVaultPath,
   updateBrowser,
   getServerConfig,
   type ServerConfig,
-  type GmailAccount,
+  type GoogleAccount,
 } from "../../../api/client.js";
 import { SectionId, SECTION_IDS, SECTION_LABELS, APPEARANCE_ITEMS, LIMIT_ITEMS, CONNECTION_ITEMS, TOGGLEABLE_SOURCES, type ConnectionItem } from "./config.js";
 import { colorOptions } from "./SettingsRows.js";
@@ -62,7 +62,7 @@ export function SettingsDialog({
 
   // Connections state
   const [connectionItem, setConnectionItem] = useState<ConnectionItem>("vault");
-  const [googleAccounts, setGoogleAccounts] = useState<GmailAccount[]>([]);
+  const [googleAccounts, setGoogleAccounts] = useState<GoogleAccount[]>([]);
   const [selectedGoogleIndex, setSelectedGoogleIndex] = useState(0);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
@@ -112,7 +112,7 @@ export function SettingsDialog({
 
   // Fetch google accounts
   useEffect(() => {
-    getGmailAccounts(config)
+    getGoogleAccounts(config)
       .then((result) => setGoogleAccounts(result.accounts))
       .catch(() => {});
   }, [config]);
@@ -150,8 +150,8 @@ export function SettingsDialog({
     if (actionInProgress) return;
     setActionInProgress("Adding account...");
     try {
-      await addGmailAccount(config);
-      const accounts = await getGmailAccounts(config);
+      await addGoogleAccount(config);
+      const accounts = await getGoogleAccounts(config);
       setGoogleAccounts(accounts.accounts);
     } catch {
       // Ignore errors
@@ -167,8 +167,8 @@ export function SettingsDialog({
 
     setActionInProgress("Removing...");
     try {
-      await removeGmailAccount(config, account.token_file);
-      const accounts = await getGmailAccounts(config);
+      await removeGoogleAccount(config, account.token_file);
+      const accounts = await getGoogleAccounts(config);
       setGoogleAccounts(accounts.accounts);
       setSelectedGoogleIndex(Math.max(0, selectedGoogleIndex - 1));
     } catch {

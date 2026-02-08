@@ -8,6 +8,7 @@ from ntrp.constants import EMBEDDING_MODELS, SUPPORTED_MODELS
 from ntrp.context.compression import compress_context_async, count_tokens, find_compressible_range
 from ntrp.logging import get_logger
 from ntrp.server.runtime import get_runtime
+from ntrp.sources.google.auth import discover_gmail_tokens
 
 _logger = get_logger(__name__)
 
@@ -73,21 +74,8 @@ async def clear_session():
 async def get_config():
     runtime = get_runtime()
 
-    gmail_accounts: list[str] = []
-    gmail = runtime.get_gmail()
-    if gmail:
-        try:
-            gmail_accounts = gmail.list_accounts()
-        except Exception:
-            pass
-
-    calendar_accounts: list[str] = []
-    calendar = runtime.get_calendar()
-    if calendar:
-        try:
-            calendar_accounts = calendar.list_accounts()
-        except Exception:
-            pass
+    # Google tokens are the source of truth for gmail/calendar connected state
+    has_google_tokens = len(discover_gmail_tokens()) > 0
 
     return {
         "chat_model": runtime.config.chat_model,
@@ -96,22 +84,18 @@ async def get_config():
         "vault_path": runtime.config.vault_path,
         "browser": runtime.config.browser,
         "gmail_enabled": runtime.config.gmail,
-        "gmail_accounts": gmail_accounts,
         "has_browser": runtime.config.browser is not None,
-        "has_gmail": gmail is not None,
         "has_notes": runtime.config.vault_path is not None and runtime.source_mgr.sources.get("notes") is not None,
         "max_depth": runtime.max_depth,
         "memory_enabled": runtime.memory is not None,
         "sources": {
             "gmail": {
                 "enabled": runtime.config.gmail,
-                "connected": gmail is not None,
-                "accounts": gmail_accounts,
+                "connected": has_google_tokens,
             },
             "calendar": {
                 "enabled": runtime.config.calendar,
-                "connected": calendar is not None,
-                "accounts": calendar_accounts,
+                "connected": has_google_tokens,
             },
             "memory": {"enabled": runtime.config.memory, "connected": runtime.memory is not None},
             "web": {"connected": "web" in runtime.source_mgr.sources},

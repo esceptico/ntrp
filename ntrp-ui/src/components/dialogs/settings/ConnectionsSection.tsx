@@ -2,12 +2,12 @@ import { Box, Text } from "ink";
 import { colors, truncateText, SelectionIndicator } from "../../ui/index.js";
 import { TextInputField } from "../../ui/input/TextInputField.js";
 import { CHECKBOX_CHECKED, CHECKBOX_UNCHECKED } from "../../../lib/constants.js";
-import type { ServerConfig, GmailAccount } from "../../../api/client.js";
+import type { ServerConfig, GoogleAccount } from "../../../api/client.js";
 import { CONNECTION_LABELS, type ConnectionItem } from "./config.js";
 
 interface ConnectionsSectionProps {
   serverConfig: ServerConfig | null;
-  googleAccounts: GmailAccount[];
+  googleAccounts: GoogleAccount[];
   selectedItem: ConnectionItem;
   selectedGoogleIndex: number;
   accent: string;

@@ -144,9 +144,7 @@ export interface ServerConfig {
   vault_path: string;
   browser: string | null;
   gmail_enabled: boolean;
-  gmail_accounts: string[];
   has_browser: boolean;
-  has_gmail: boolean;
   has_notes: boolean;
   max_depth: number;
   memory_enabled: boolean;
@@ -279,22 +277,22 @@ export async function startIndexing(config: Config): Promise<{ status: string }>
   return api.post<{ status: string }>(`${config.serverUrl}/index/start`);
 }
 
-export interface GmailAccount {
+export interface GoogleAccount {
   email: string | null;
   token_file: string;
   has_send_scope?: boolean;
   error?: string;
 }
 
-export async function getGmailAccounts(config: Config): Promise<{ accounts: GmailAccount[] }> {
+export async function getGoogleAccounts(config: Config): Promise<{ accounts: GoogleAccount[] }> {
   return api.get(`${config.serverUrl}/gmail/accounts`);
 }
 
-export async function addGmailAccount(config: Config): Promise<{ email: string; status: string }> {
+export async function addGoogleAccount(config: Config): Promise<{ email: string; status: string }> {
   return api.post(`${config.serverUrl}/gmail/add`);
 }
 
-export async function removeGmailAccount(config: Config, tokenFile: string): Promise<{ email: string | null; status: string }> {
+export async function removeGoogleAccount(config: Config, tokenFile: string): Promise<{ email: string | null; status: string }> {
   return api.delete(`${config.serverUrl}/gmail/${tokenFile}`);
 }
 
