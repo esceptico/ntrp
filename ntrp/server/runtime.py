@@ -1,15 +1,15 @@
 import asyncio
 from datetime import UTC, datetime
-from typing import Self
 
 import litellm.llms.custom_httpx.async_client_cleanup as litellm_cleanup
 import litellm.main as litellm_main
 
-from ntrp.bus import EventBus
+from ntrp.channel import Channel
 from ntrp.config import Config, get_config
-from ntrp.constants import AGENT_MAX_DEPTH, SESSION_EXPIRY_HOURS
+from ntrp.constants import AGENT_MAX_DEPTH, INDEXABLE_SOURCES, SESSION_EXPIRY_HOURS
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
+from ntrp.core.events import RunCompleted, RunStarted, ToolExecuted
 from ntrp.logging import get_logger
 from ntrp.memory.events import FactCreated, FactDeleted, FactUpdated, MemoryCleared
 from ntrp.memory.facts import FactMemory
@@ -31,9 +31,9 @@ _logger = get_logger(__name__)
 class Runtime:
     def __init__(self, config: Config | None = None):
         self.config = config or get_config()
-        self.bus = EventBus()
+        self.channel = Channel()
 
-        self.source_mgr = SourceManager(self.config, self.bus)
+        self.source_mgr = SourceManager(self.config, self.channel)
 
         self.embedding = self.config.embedding
         self.indexer = Indexer(db_path=self.config.search_db_path, embedding=self.embedding)
@@ -71,12 +71,12 @@ class Runtime:
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
                 extraction_model=self.config.memory_model,
-                bus=self.bus,
+                channel=self.channel,
             )
         elif not enabled and self.memory:
             await self.memory.close()
             self.memory = None
-        await self.bus.publish(SourceChanged(source_name="memory"))
+        await self.channel.publish(SourceChanged(source_name="memory"))
 
     def rebuild_executor(self) -> None:
         default_email = self.config.schedule_email
@@ -108,30 +108,26 @@ class Runtime:
         self.schedule_store = ScheduleStore(self.session_store.conn)
         await self.schedule_store.init_schema()
 
-        self.bus.subscribe(FactCreated, self.dashboard.on_fact_created)
-        self.bus.subscribe(FactCreated, self._on_fact_created)
-        self.bus.subscribe(FactUpdated, self._on_fact_updated)
-        self.bus.subscribe(FactDeleted, self._on_fact_deleted)
-        self.bus.subscribe(MemoryCleared, self._on_memory_cleared)
-        self.bus.subscribe(SourceChanged, self._on_source_changed)
+        self.channel.subscribe(ToolExecuted, self.dashboard.on_tool_executed)
+        self.channel.subscribe(RunStarted, self.dashboard.on_run_started)
+        self.channel.subscribe(RunCompleted, self.dashboard.on_run_completed)
+        self.channel.subscribe(FactCreated, self.dashboard.on_fact_created)
+        self.channel.subscribe(FactCreated, self._on_fact_created)
+        self.channel.subscribe(FactUpdated, self._on_fact_updated)
+        self.channel.subscribe(FactDeleted, self._on_fact_deleted)
+        self.channel.subscribe(MemoryCleared, self._on_memory_cleared)
+        self.channel.subscribe(SourceChanged, self._on_source_changed)
 
         if self.config.memory:
             self.memory = await FactMemory.create(
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
                 extraction_model=self.config.memory_model,
-                bus=self.bus,
+                channel=self.channel,
             )
 
         self.rebuild_executor()
         self._connected = True
-
-    async def __aenter__(self) -> Self:
-        await self.connect()
-        return self
-
-    async def __aexit__(self, *exc) -> None:
-        await self.close()
 
     def get_source_details(self) -> dict[str, dict]:
         return self.source_mgr.get_details()
@@ -188,6 +184,7 @@ class Runtime:
                 memory=lambda: self.memory,
                 model=self.config.chat_model,
                 max_depth=self.max_depth,
+                channel=self.channel,
                 source_details=self.get_source_details,
                 create_session=self.create_session,
                 gmail=self.get_gmail,
@@ -235,7 +232,7 @@ class Runtime:
     async def _on_source_changed(self, event: SourceChanged) -> None:
         self.rebuild_executor()
         name = event.source_name
-        if name not in ("notes", "memory"):
+        if name not in INDEXABLE_SOURCES:
             return
         source_active = (
             (name == "notes" and "notes" in self.source_mgr.sources)
@@ -282,6 +279,10 @@ def get_runtime() -> Runtime:
     if not _runtime._connected:
         raise RuntimeError("Runtime not connected. Call await runtime.connect() first.")
     return _runtime
+
+
+def get_run_registry() -> RunRegistry:
+    return get_runtime().run_registry
 
 
 async def reset_runtime() -> None:

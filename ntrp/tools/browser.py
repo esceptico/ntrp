@@ -58,7 +58,7 @@ class SearchBrowserTool(Tool):
 
     async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
         if not query:
-            return ToolResult("Error: query is required", "Missing query")
+            return ToolResult("Error: query is required", "Missing query", is_error=True)
 
         urls = self.source.search(query)
         if not urls:

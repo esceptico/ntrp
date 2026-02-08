@@ -135,3 +135,30 @@ BFS_MAX_FACTS = 50
 
 # V2 Retrieval Recency
 RECENCY_SIGMA_HOURS = 72  # Exponential boost: recency = exp(-hours_since_event / σ)
+
+
+# --- Search & Retrieval ---
+
+RRF_K = 60
+RRF_OVERFETCH_FACTOR = 2
+
+# --- Context Compression (Actual) ---
+
+COMPRESSION_THRESHOLD_ACTUAL = 0.80
+SUMMARY_MIN_TOKENS = 400
+SUMMARY_MAX_TOKENS = 2000
+SUMMARY_COMPRESSION_RATIO = 4
+WORDS_PER_TOKEN = 0.75
+
+# --- Memory Consolidation ---
+
+CONSOLIDATION_MAX_BACKOFF_MULTIPLIER = 16
+USER_ENTITY_NAME = "User"
+
+# --- Schedule ---
+
+FRIDAY_WEEKDAY = 4
+
+# --- Indexing ---
+
+INDEXABLE_SOURCES = {"notes", "memory"}

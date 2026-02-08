@@ -1,6 +1,8 @@
 from collections.abc import Callable
 from pathlib import Path
+from typing import NamedTuple
 
+from ntrp.constants import RRF_K
 from ntrp.database import serialize_embedding
 from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.logging import get_logger
@@ -12,6 +14,14 @@ from ntrp.sources.models import RawItem
 _logger = get_logger(__name__)
 
 
+class SyncResult(NamedTuple):
+    updated: int
+    deleted: int
+
+
+type ProgressCallback = Callable[[int, int], None]
+
+
 class SearchIndex:
     EMBED_SOURCES = {"notes", "memory"}
 
@@ -19,7 +29,7 @@ class SearchIndex:
         self,
         db_path: Path,
         embedding: EmbeddingConfig,
-        rrf_k: int = 60,
+        rrf_k: int = RRF_K,
         vector_weight: float = 0.5,
         fts_weight: float = 0.5,
         store: SearchStore | None = None,
@@ -69,11 +79,11 @@ class SearchIndex:
         self,
         source_name: str,
         items: list[RawItem],
-        progress_callback: Callable[[int, int], None] | None = None,
+        progress_callback: ProgressCallback | None = None,
         batch_size: int = 50,
-    ) -> tuple[int, int]:
+    ) -> SyncResult:
         if not self.should_embed(source_name):
-            return 0, 0
+            return SyncResult(0, 0)
 
         indexed = await self.store.get_indexed_hashes(source_name)
         current_ids = {item.source_id for item in items}
@@ -108,7 +118,7 @@ class SearchIndex:
                 await self.store.upsert(source_name, item.source_id, item.title, item.content, embedding_bytes)
                 updated += 1
 
-        return updated, deleted
+        return SyncResult(updated, deleted)
 
     async def search(
         self,

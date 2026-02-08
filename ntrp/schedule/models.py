@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
+from ntrp.constants import FRIDAY_WEEKDAY
+
 
 class Recurrence(StrEnum):
     ONCE = "once"
@@ -59,8 +61,7 @@ def compute_next_run(
     # Convert UTC 'after' to local time (system timezone)
     after_local = after.astimezone()
 
-    # Parse the time components
-    hour, minute = int(time_of_day[:2]), int(time_of_day[3:5])
+    hour, minute = (int(x) for x in time_of_day.split(":"))
 
     # Create candidate in local time
     candidate = after_local.replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -71,7 +72,7 @@ def compute_next_run(
 
     # Handle recurrence patterns
     if recurrence == Recurrence.WEEKDAYS:
-        while candidate.weekday() > 4:
+        while candidate.weekday() > FRIDAY_WEEKDAY:
             candidate += timedelta(days=1)
     elif recurrence == Recurrence.WEEKLY:
         target_weekday = after_local.weekday()

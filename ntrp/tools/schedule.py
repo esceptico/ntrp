@@ -54,7 +54,7 @@ class ScheduleTaskTool(Tool):
         **kwargs: Any,
     ) -> ToolResult:
         if not description or not time or not recurrence:
-            return ToolResult("Error: description, time, and recurrence are required", "Missing fields")
+            return ToolResult("Error: description, time, and recurrence are required", "Missing fields", is_error=True)
 
         try:
             parts = time.split(":")
@@ -63,7 +63,7 @@ class ScheduleTaskTool(Tool):
                 raise ValueError
             time_normalized = f"{h:02d}:{m:02d}"
         except (ValueError, IndexError):
-            return ToolResult(f"Error: invalid time format '{time}'. Use HH:MM (24h)", "Invalid time")
+            return ToolResult(f"Error: invalid time format '{time}'. Use HH:MM (24h)", "Invalid time", is_error=True)
 
         try:
             rec = Recurrence(recurrence)
@@ -71,6 +71,7 @@ class ScheduleTaskTool(Tool):
             return ToolResult(
                 f"Error: invalid recurrence '{recurrence}'. Use: once, daily, weekdays, weekly",
                 "Invalid recurrence",
+                is_error=True,
             )
 
         email = notify_email or self.default_email
@@ -152,11 +153,11 @@ class CancelScheduleTool(Tool):
 
     async def execute(self, execution: ToolExecution, task_id: str = "", **kwargs: Any) -> ToolResult:
         if not task_id:
-            return ToolResult("Error: task_id is required", "Missing task_id")
+            return ToolResult("Error: task_id is required", "Missing task_id", is_error=True)
 
         task = await self.store.get(task_id)
         if not task:
-            return ToolResult(f"Error: task '{task_id}' not found", "Not found")
+            return ToolResult(f"Error: task '{task_id}' not found", "Not found", is_error=True)
 
         await execution.require_approval(f"Cancel: {task.description}")
         await self.store.delete(task_id)
@@ -178,11 +179,11 @@ class GetScheduleResultTool(Tool):
 
     async def execute(self, execution: ToolExecution, task_id: str = "", **kwargs: Any) -> ToolResult:
         if not task_id:
-            return ToolResult("Error: task_id is required", "Missing task_id")
+            return ToolResult("Error: task_id is required", "Missing task_id", is_error=True)
 
         task = await self.store.get(task_id)
         if not task:
-            return ToolResult(f"Error: task '{task_id}' not found", "Not found")
+            return ToolResult(f"Error: task '{task_id}' not found", "Not found", is_error=True)
 
         if not task.last_result:
             last_run = task.last_run_at.strftime("%Y-%m-%d %H:%M") if task.last_run_at else "never"

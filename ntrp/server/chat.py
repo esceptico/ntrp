@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+from ntrp.constants import RECALL_SEARCH_LIMIT
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.prompts import build_system_prompt
 from ntrp.memory.formatting import format_memory_context
@@ -37,7 +38,7 @@ async def prepare_messages(
         user_facts, recent_facts = await runtime.memory.get_context()
 
         # Query-conditioned recall: inject facts relevant to this specific message
-        query_context = await runtime.memory.recall(user_message, limit=5)
+        query_context = await runtime.memory.recall(user_message, limit=RECALL_SEARCH_LIMIT)
         # Deduplicate against static context
         static_ids = {f.id for f in user_facts} | {f.id for f in recent_facts}
         query_facts = [f for f in query_context.facts if f.id not in static_ids]

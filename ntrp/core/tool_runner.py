@@ -4,6 +4,7 @@ from pathlib import Path
 
 from ntrp.constants import OFFLOAD_PREVIEW_CHARS, OFFLOAD_THRESHOLD
 from ntrp.core.async_queue import AsyncQueue
+from ntrp.core.events import ToolExecuted
 from ntrp.core.models import PendingToolCall, ToolExecutionResult
 from ntrp.events import SSEEvent, ToolCallEvent, ToolResultEvent
 from ntrp.logging import get_logger
@@ -29,11 +30,11 @@ class ToolRunner:
         self.executor = executor
         self.ctx = ctx
         self.depth = depth
-        self.parent_id = parent_id or ""
+        self.parent_id = parent_id or "root"
         self.is_cancelled = is_cancelled
         self._offload_counter = 0
 
-    def _maybe_offload(self, tool_id: str, tool_name: str, result: ToolResult) -> ToolResult:
+    def _maybe_offload(self, tool_name: str, result: ToolResult) -> ToolResult:
         """Offload large tool results to filesystem, return compact reference.
 
         Manus pattern: full representation stored in file, compact reference in context.
@@ -50,12 +51,12 @@ class ToolRunner:
         offload_path = offload_dir / f"{tool_name}_{self._offload_counter}.txt"
         offload_path.write_text(content, encoding="utf-8")
 
-        # Create compact reference
-        preview = content[:OFFLOAD_PREVIEW_CHARS]
+        # Create compact reference for context window
+        compact = content[:OFFLOAD_PREVIEW_CHARS]
         if len(content) > OFFLOAD_PREVIEW_CHARS:
-            preview += f"\n\n[...{len(content) - OFFLOAD_PREVIEW_CHARS} chars offloaded → {offload_path}]"
+            compact += f"\n\n[...{len(content) - OFFLOAD_PREVIEW_CHARS} chars offloaded → {offload_path}]"
 
-        return ToolResult(preview, result.preview, result.metadata)
+        return ToolResult(compact, result.preview, result.metadata)
 
     def _make_start_event(self, call: PendingToolCall) -> ToolCallEvent:
         return ToolCallEvent(
@@ -66,15 +67,15 @@ class ToolRunner:
             parent_id=self.parent_id,
         )
 
-    def _make_result_event(
+    async def _make_result_event(
         self,
         call: PendingToolCall,
         result: ToolResult,
         duration_ms: int,
     ) -> ToolResultEvent:
-        if self.ctx.dashboard:
-            is_error = result.content.startswith("Error:")
-            self.ctx.dashboard.record_tool(call.name, duration_ms, self.depth, is_error)
+        await self.ctx.channel.publish(
+            ToolExecuted(name=call.name, duration_ms=duration_ms, depth=self.depth, is_error=result.is_error, run_id=self.ctx.run_id)
+        )
 
         return ToolResultEvent(
             tool_id=call.tool_call.id,
@@ -104,14 +105,14 @@ class ToolRunner:
         try:
             execution = ToolExecution(call.tool_call.id, call.name, self.ctx)
             result = await self.executor.execute(call.name, call.args, execution)
-            result = self._maybe_offload(call.tool_call.id, call.name, result)
+            result = self._maybe_offload(call.name, result)
             duration_ms = ms_now() - start_ms
-            yield self._make_result_event(call=call, result=result, duration_ms=duration_ms)
+            yield await self._make_result_event(call=call, result=result, duration_ms=duration_ms)
         except Exception as e:
             duration_ms = ms_now() - start_ms
-            yield self._make_result_event(
+            yield await self._make_result_event(
                 call=call,
-                result=ToolResult(f"Error: {type(e).__name__}: {e}", f"Failed: {type(e).__name__}"),
+                result=ToolResult(content=f"Error: {type(e).__name__}: {e}", preview=f"Failed: {type(e).__name__}", is_error=True),
                 duration_ms=duration_ms,
             )
 
@@ -126,7 +127,7 @@ class ToolRunner:
             try:
                 execution = ToolExecution(call.tool_call.id, call.name, self.ctx)
                 result = await self.executor.execute(call.name, call.args, execution)
-                result = self._maybe_offload(call.tool_call.id, call.name, result)
+                result = self._maybe_offload(call.name, result)
                 duration_ms = ms_now() - start_ms
                 results_queue.enqueue(
                     ToolExecutionResult(
@@ -135,6 +136,7 @@ class ToolRunner:
                         preview=result.preview,
                         metadata=result.metadata,
                         duration_ms=duration_ms,
+                        is_error=result.is_error,
                     )
                 )
             except Exception as e:
@@ -146,6 +148,7 @@ class ToolRunner:
                         preview=f"Failed: {type(e).__name__}",
                         metadata=None,
                         duration_ms=duration_ms,
+                        is_error=True,
                     )
                 )
 
@@ -162,9 +165,9 @@ class ToolRunner:
         asyncio.create_task(run_all())
 
         async for r in results_queue:
-            yield self._make_result_event(
+            yield await self._make_result_event(
                 call=r.call,
-                result=ToolResult(r.content, r.preview, r.metadata),
+                result=ToolResult(r.content, r.preview, r.metadata, r.is_error),
                 duration_ms=r.duration_ms,
             )
 

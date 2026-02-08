@@ -71,7 +71,7 @@ class RememberTool(Tool):
         **kwargs: Any,
     ) -> ToolResult:
         if not fact:
-            return ToolResult("Error: fact is required", "Missing fact")
+            return ToolResult("Error: fact is required", "Missing fact", is_error=True)
 
         await execution.require_approval(fact[:100])
 
@@ -133,7 +133,7 @@ class ForgetTool(Tool):
 
     async def execute(self, execution: Any, query: str = "", **kwargs: Any) -> ToolResult:
         if not query:
-            return ToolResult("Error: query is required", "Missing query")
+            return ToolResult("Error: query is required", "Missing query", is_error=True)
 
         await execution.require_approval(query)
 

@@ -1,4 +1,4 @@
-from ntrp.bus import EventBus
+from ntrp.channel import Channel
 from ntrp.config import Config
 from ntrp.logging import get_logger
 from ntrp.sources.base import Source
@@ -9,10 +9,10 @@ _logger = get_logger(__name__)
 
 
 class SourceManager:
-    def __init__(self, config: Config, bus: EventBus):
+    def __init__(self, config: Config, channel: Channel):
         self._sources: dict[str, Source] = {}
         self._errors: dict[str, str] = {}
-        self._bus = bus
+        self._channel = channel
         self._init_sources(config)
 
     @property
@@ -47,13 +47,13 @@ class SourceManager:
         except Exception as e:
             self._errors[name] = str(e)
             return None
-        await self._bus.publish(SourceChanged(source_name=name))
+        await self._channel.publish(SourceChanged(source_name=name))
         return source
 
     async def remove(self, name: str) -> None:
         self._sources.pop(name, None)
         self._errors.pop(name, None)
-        await self._bus.publish(SourceChanged(source_name=name))
+        await self._channel.publish(SourceChanged(source_name=name))
 
     def _init_sources(self, config: Config) -> None:
         for name, (enabled, create) in SOURCES.items():

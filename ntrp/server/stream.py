@@ -1,7 +1,7 @@
 import asyncio
 import json
 from contextlib import suppress
-from ntrp.events import CancelledEvent, SSEEvent
+from ntrp.events import AgentResult, CancelledEvent, SSEEvent
 from ntrp.server.chat import ChatContext
 
 
@@ -23,11 +23,12 @@ type QueueItem = SSEEvent | _Done | _Error
 
 
 async def run_agent_loop(ctx: ChatContext, agent, user_message: str):
-    """Run agent and yield SSE strings. Yields dict with result at end.
+    """Run agent and yield SSE strings. Yields AgentResult at end.
 
     All events (agent, tool, subagent) flow through a single merged queue.
     Tools emit directly into the queue — no polling bridge needed.
     """
+    # Strip the just-appended user message — agent.stream() adds it internally
     history = ctx.messages[:-1] if len(ctx.messages) > 1 else None
 
     merged_queue: asyncio.Queue[QueueItem] = asyncio.Queue()
@@ -107,4 +108,4 @@ async def run_agent_loop(ctx: ChatContext, agent, user_message: str):
     if error:
         raise error
 
-    yield {"_result": result}
+    yield AgentResult(text=result)

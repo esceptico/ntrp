@@ -132,3 +132,8 @@ class ErrorEvent(SSEEvent):
 class CancelledEvent(SSEEvent):
     type: EventType = field(default=EventType.CANCELLED, init=False)
     run_id: str = ""
+
+
+@dataclass(frozen=True)
+class AgentResult:
+    text: str

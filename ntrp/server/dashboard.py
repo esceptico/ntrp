@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 import time
 from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ntrp.constants import CONSOLIDATION_INTERVAL
+from ntrp.core.events import RunCompleted, RunStarted, ToolExecuted
 from ntrp.memory.events import FactCreated
 
 if TYPE_CHECKING:
@@ -47,28 +46,28 @@ class DashboardCollector:
         self.recent_facts: deque[dict] = deque(maxlen=RECENT_FACTS_SIZE)
         self.last_consolidation_at: float | None = None
 
-    def record_tool(self, name: str, duration_ms: int, depth: int, error: bool) -> None:
-        self.tool_history.append(ToolRecord(name, duration_ms, depth, time.time(), error))
-        stats = self.tool_stats.setdefault(name, {"count": 0, "total_ms": 0, "error_count": 0})
+    async def on_tool_executed(self, event: ToolExecuted) -> None:
+        self.tool_history.append(ToolRecord(event.name, event.duration_ms, event.depth, time.time(), event.is_error))
+        stats = self.tool_stats.setdefault(event.name, {"count": 0, "total_ms": 0, "error_count": 0})
         stats["count"] += 1
-        stats["total_ms"] += duration_ms
-        if error:
+        stats["total_ms"] += event.duration_ms
+        if event.is_error:
             stats["error_count"] += 1
 
-    def record_run_completed(self, prompt_tokens: int, completion_tokens: int) -> None:
+    async def on_run_completed(self, event: RunCompleted) -> None:
         self.total_runs += 1
         self.active_runs = max(0, self.active_runs - 1)
-        self.total_prompt_tokens += prompt_tokens
-        self.total_completion_tokens += completion_tokens
-        self.token_history.append(TokenRecord(prompt_tokens, completion_tokens, time.time()))
+        self.total_prompt_tokens += event.prompt_tokens
+        self.total_completion_tokens += event.completion_tokens
+        self.token_history.append(TokenRecord(event.prompt_tokens, event.completion_tokens, time.time()))
 
-    def record_run_started(self) -> None:
+    async def on_run_started(self, _event: RunStarted) -> None:
         self.active_runs += 1
 
     async def on_fact_created(self, event: FactCreated) -> None:
         self.recent_facts.append({"id": event.fact_id, "text": event.text[:80], "ts": time.time()})
 
-    def _snapshot_sync(self, runtime: Runtime) -> dict:
+    def _snapshot_sync(self, runtime: "Runtime") -> dict:
         now = time.time()
 
         system = {
@@ -85,9 +84,8 @@ class DashboardCollector:
             "history": [{"prompt": t.prompt, "completion": t.completion, "ts": t.ts} for t in self.token_history],
         }
 
-        active = runtime.run_registry.active_run_count
         agent = {
-            "active_runs": active,
+            "active_runs": self.active_runs,
             "total_runs": self.total_runs,
             "recent_tools": [
                 {"name": t.name, "duration_ms": t.duration_ms, "depth": t.depth, "ts": t.ts, "error": t.error}
@@ -132,7 +130,7 @@ class DashboardCollector:
             "background": background,
         }
 
-    async def snapshot_async(self, runtime: Runtime) -> dict:
+    async def snapshot_async(self, runtime: "Runtime") -> dict:
         data = self._snapshot_sync(runtime)
 
         if runtime.memory:

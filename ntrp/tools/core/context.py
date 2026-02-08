@@ -3,12 +3,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, TypedDict
 
+from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.events import ApprovalNeededEvent, ChoiceEvent
 
 if TYPE_CHECKING:
     from ntrp.memory.facts import FactMemory
-    from ntrp.server.dashboard import DashboardCollector
     from ntrp.tools.core.registry import ToolRegistry
 
 
@@ -41,7 +41,8 @@ class ToolContext:
     choice_queue: asyncio.Queue[ChoiceResponse] | None = None
     spawn_fn: Callable[..., Awaitable[str]] | None = None
 
-    dashboard: "DashboardCollector | None" = None
+    channel: Channel = field(default_factory=Channel)
+    run_id: str = ""
     extra_auto_approve: set[str] = field(default_factory=set)
 
     @property

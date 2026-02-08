@@ -50,7 +50,7 @@ class WebSearchTool(Tool):
         **kwargs: Any,
     ) -> ToolResult:
         if not query.strip():
-            return ToolResult("Error: query is required", "Missing query")
+            return ToolResult("Error: query is required", "Missing query", is_error=True)
 
         try:
             results = self.source.search_with_details(
@@ -77,7 +77,7 @@ class WebSearchTool(Tool):
             return ToolResult(content, f"{len(formatted)} results")
 
         except Exception as e:
-            return ToolResult(f"Error: Search failed: {e}", "Search failed")
+            return ToolResult(f"Error: Search failed: {e}", "Search failed", is_error=True)
 
 
 class WebFetchInput(BaseModel):
@@ -95,10 +95,10 @@ class WebFetchTool(Tool):
 
     async def execute(self, execution: ToolExecution, url: str = "", **kwargs: Any) -> ToolResult:
         if not url.strip():
-            return ToolResult("Error: url is required", "Missing url")
+            return ToolResult("Error: url is required", "Missing url", is_error=True)
 
         if not url.startswith(("http://", "https://")):
-            return ToolResult(f"Invalid URL: must start with http:// or https://. Got: {url}", "Invalid url")
+            return ToolResult(f"Invalid URL: must start with http:// or https://. Got: {url}", "Invalid url", is_error=True)
 
         try:
             results = self.source.get_contents([url])
@@ -122,4 +122,4 @@ class WebFetchTool(Tool):
                 return ToolResult("\n".join(output), f"Fetched {lines} lines")
             return ToolResult("No content fetched. Page may be empty or require JavaScript.", "Empty")
         except Exception as e:
-            return ToolResult(f"Error fetching URL: {e}", "Fetch failed")
+            return ToolResult(f"Error fetching URL: {e}", "Fetch failed", is_error=True)

@@ -5,15 +5,17 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict
 
-from ntrp.bus import EventBus
+from ntrp.channel import Channel
 from ntrp.constants import (
     CONSOLIDATION_INTERVAL,
+    CONSOLIDATION_MAX_BACKOFF_MULTIPLIER,
     ENTITY_CANDIDATES_LIMIT,
     ENTITY_RESOLUTION_AUTO_MERGE,
     ENTITY_RESOLUTION_NAME_SIM_THRESHOLD,
     FORGET_SEARCH_LIMIT,
     FORGET_SIMILARITY_THRESHOLD,
     RECALL_SEARCH_LIMIT,
+    USER_ENTITY_NAME,
 )
 from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.logging import get_logger
@@ -44,7 +46,7 @@ class FactMemory:
         db_path: Path,
         embedding: EmbeddingConfig,
         extraction_model: str,
-        bus: EventBus,
+        channel: Channel,
         embedder: Embedder | None = None,
         extractor: Extractor | None = None,
     ):
@@ -52,7 +54,7 @@ class FactMemory:
         self.embedder = embedder or Embedder(embedding)
         self.extractor = extractor or Extractor(extraction_model)
         self.extraction_model = extraction_model
-        self.bus = bus
+        self.channel = channel
         self._consolidation_task: asyncio.Task | None = None
         self._db_lock = asyncio.Lock()
 
@@ -66,9 +68,9 @@ class FactMemory:
         db_path: Path,
         embedding: EmbeddingConfig,
         extraction_model: str,
-        bus: EventBus,
+        channel: Channel,
     ) -> Self:
-        instance = cls(db_path, embedding, extraction_model, bus=bus)
+        instance = cls(db_path, embedding, extraction_model, channel=channel)
         await instance.db.connect()
         return instance
 
@@ -78,7 +80,7 @@ class FactMemory:
 
     async def _consolidation_loop(self, interval: float) -> None:
         backoff = interval
-        max_backoff = interval * 16
+        max_backoff = interval * CONSOLIDATION_MAX_BACKOFF_MULTIPLIER
         while True:
             await asyncio.sleep(backoff)
             try:
@@ -174,7 +176,7 @@ class FactMemory:
                 _logger.exception("Remember failed")
                 raise
 
-        await self.bus.publish(FactCreated(fact_id=fact.id, text=text))
+        await self.channel.publish(FactCreated(fact_id=fact.id, text=text))
 
         return RememberFactResult(
             fact=fact,
@@ -206,12 +208,15 @@ class FactMemory:
     ) -> list[str]:
         seen: set[str] = set()
 
+        async def add_ref(name: str, entity_type: str) -> None:
+            await self._add_entity_ref(repo, fact_id, name, entity_type, source_ref, seen)
+
         for entity in extraction.entities:
-            await self._add_entity_ref(repo, fact_id, entity.name, entity.entity_type, source_ref, seen)
+            await add_ref(entity.name, entity.entity_type)
 
         for pair in extraction.entity_pairs:
-            await self._add_entity_ref(repo, fact_id, pair.source, pair.source_type, source_ref, seen)
-            await self._add_entity_ref(repo, fact_id, pair.target, pair.target_type, source_ref, seen)
+            await add_ref(pair.source, pair.source_type)
+            await add_ref(pair.target, pair.target_type)
 
         return list(seen)
 
@@ -326,7 +331,7 @@ class FactMemory:
                 if score >= FORGET_SIMILARITY_THRESHOLD:
                     await repo.delete(fact.id)
                     count += 1
-                    await self.bus.publish(FactDeleted(fact_id=fact.id))
+                    await self.channel.publish(FactDeleted(fact_id=fact.id))
             if count > 0:
                 await repo.cleanup_orphaned_entities()
             return count
@@ -347,9 +352,10 @@ class FactMemory:
             if len(entities) < 2:
                 return 0
 
-            keep = (
-                next((e for e in entities if e.name == canonical_name), entities[0]) if canonical_name else entities[0]
-            )
+            if canonical_name:
+                keep = next((e for e in entities if e.name == canonical_name), entities[0])
+            else:
+                keep = entities[0]
 
             merge_ids = [e.id for e in entities if e.id != keep.id]
 
@@ -364,7 +370,7 @@ class FactMemory:
     async def get_context(self, user_limit: int = 10, recent_limit: int = 10) -> tuple[list[Fact], list[Fact]]:
         repo = FactRepository(self.db.conn)
 
-        user_facts = await repo.get_facts_for_entity("User", limit=user_limit)
+        user_facts = await repo.get_facts_for_entity(USER_ENTITY_NAME, limit=user_limit)
         recent_facts = await repo.list_recent(limit=recent_limit)
 
         return user_facts, recent_facts

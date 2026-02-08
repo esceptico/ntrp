@@ -196,6 +196,14 @@ def _time_gap(last_activity: datetime | None) -> str:
     return f"Note: Last interaction was {hours:.1f} hours ago."
 
 
+SCHEDULED_TASK_SUFFIX = (
+    "\n\nYou are executing a scheduled task autonomously. "
+    "Do the work described directly — gather information, produce output, and return the result. "
+    "Do not schedule new tasks or ask for confirmation. "
+    "Return only the final output — no preamble, no narration, no thinking out loud."
+)
+
+
 def build_system_prompt(
     source_details: dict[str, dict],
     last_activity: datetime | None = None,

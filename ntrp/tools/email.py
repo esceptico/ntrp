@@ -48,7 +48,7 @@ class SendEmailTool(Tool):
         **kwargs: Any,
     ) -> ToolResult:
         if not account or not to:
-            return ToolResult("Error: account and to are required", "Missing fields")
+            return ToolResult("Error: account and to are required", "Missing fields", is_error=True)
 
         await execution.require_approval(to, preview=f"Subject: {subject}\nFrom: {account}")
 
@@ -71,7 +71,7 @@ class ReadEmailTool(Tool):
 
     async def execute(self, execution: ToolExecution, email_id: str = "", **kwargs: Any) -> ToolResult:
         if not email_id:
-            return ToolResult("Error: email_id is required", "Missing email_id")
+            return ToolResult("Error: email_id is required", "Missing email_id", is_error=True)
 
         content = self.source.read(email_id)
         if not content:
@@ -135,7 +135,7 @@ class SearchEmailTool(Tool):
 
     async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
         if not query:
-            return ToolResult("Error: query is required", "Missing query")
+            return ToolResult("Error: query is required", "Missing query", is_error=True)
 
         results = self.source.search(query, limit=limit)
         if not results:

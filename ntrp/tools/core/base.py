@@ -35,6 +35,7 @@ class ToolResult:
     content: str
     preview: str
     metadata: dict | None = None
+    is_error: bool = False
 
 
 class Tool(ABC):

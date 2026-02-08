@@ -31,7 +31,7 @@ class ReadFileTool(Tool):
         self, execution: Any, path: str = "", offset: int = 1, limit: int = 500, **kwargs: Any
     ) -> ToolResult:
         if not path:
-            return ToolResult("Error: path is required", "Missing path")
+            return ToolResult("Error: path is required", "Missing path", is_error=True)
 
         if not os.path.isabs(path):
             full_path = os.path.join(self.base_path, path)
@@ -58,4 +58,4 @@ class ReadFileTool(Tool):
         except PermissionError:
             return ToolResult(f"Permission denied: {path}. File may be protected or require elevated access.", "Denied")
         except Exception as e:
-            return ToolResult(f"Error reading file: {e}", "Read failed")
+            return ToolResult(f"Error reading file: {e}", "Read failed", is_error=True)

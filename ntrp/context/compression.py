@@ -1,23 +1,27 @@
 from ntrp.constants import (
     CHARS_PER_TOKEN,
     COMPRESSION_THRESHOLD,
+    COMPRESSION_THRESHOLD_ACTUAL,
     MASK_PREVIEW_CHARS,
     MASK_THRESHOLD,
+    SUMMARY_COMPRESSION_RATIO,
+    SUMMARY_MAX_TOKENS,
+    SUMMARY_MIN_TOKENS,
     SUPPORTED_MODELS,
     TAIL_TOKEN_BUDGET,
+    WORDS_PER_TOKEN,
 )
 from ntrp.context.prompts import SUMMARIZE_PROMPT_TEMPLATE
 from ntrp.llm import acompletion
 
 
-# TO CLAUDE: do we need this function? looks dirty
 def _get_attr(msg, key: str, default=None):
     if isinstance(msg, dict):
         return msg.get(key, default)
     return getattr(msg, key, default)
 
 
-def _count_message_tokens(msg) -> int:  # TO CLAUDE: this is approx function, do we have real token compute? (litellm must return this info)
+def _count_message_tokens(msg) -> int:
     total_chars = 16
 
     content = _get_attr(msg, "content")
@@ -51,7 +55,7 @@ def should_compress(
     limit = SUPPORTED_MODELS[model]["tokens"]
 
     if actual_input_tokens is not None:
-        return actual_input_tokens > int(limit * 0.80)  # TO CLAUDE: why 0.8 here?
+        return actual_input_tokens > int(limit * COMPRESSION_THRESHOLD_ACTUAL)
 
     threshold = int(limit * COMPRESSION_THRESHOLD)
     current = count_tokens(messages)
@@ -105,11 +109,9 @@ def _build_conversation_text(messages: list, start: int, end: int) -> str:
 
 def _build_summarize_request(conversation_text: str, model: str) -> dict:
     model_params = SUPPORTED_MODELS[model]
-    # Scale budget: ~1 summary token per 4 input tokens, clamped to [400, 2000]
     input_tokens = len(conversation_text) // CHARS_PER_TOKEN
-    max_tokens = max(400, min(2000, input_tokens // 4))
-    # ~0.75 words per token
-    word_budget = int(max_tokens * 0.75)
+    max_tokens = max(SUMMARY_MIN_TOKENS, min(SUMMARY_MAX_TOKENS, input_tokens // SUMMARY_COMPRESSION_RATIO))
+    word_budget = int(max_tokens * WORDS_PER_TOKEN)
     prompt = SUMMARIZE_PROMPT_TEMPLATE.format(budget=word_budget)
     return {
         "model": model,

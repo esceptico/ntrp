@@ -90,7 +90,10 @@ def run(ctx, prompt: str):
 
 
 async def _run_headless(prompt: str):
+    from uuid import uuid4
+
     from ntrp.core.agent import Agent
+    from ntrp.core.events import RunCompleted, RunStarted
     from ntrp.core.prompts import build_system_prompt
     from ntrp.core.spawner import create_spawn_fn
     from ntrp.server.runtime import Runtime
@@ -106,14 +109,15 @@ async def _run_headless(prompt: str):
             memory_context=None,
         )
 
+        run_id = str(uuid4())[:8]
+        session_state = runtime.create_session()
+
         tool_ctx = ToolContext(
-            session_state=runtime.create_session(),
+            session_state=session_state,
             registry=runtime.executor.registry,
             memory=runtime.memory,
-            emit=None,
-            approval_queue=None,
-            choice_queue=None,
-            extra_auto_approve=set(),
+            channel=runtime.channel,
+            run_id=run_id,
         )
 
         tool_ctx.spawn_fn = create_spawn_fn(
@@ -136,8 +140,20 @@ async def _run_headless(prompt: str):
         )
 
         console.print(f"[dim]Running: {prompt}[/dim]\n")
-        result = await agent.run(task=prompt, history=None)
-        console.print(result)
+        await runtime.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
+        result: str | None = None
+        try:
+            result = await agent.run(task=prompt, history=None)
+            console.print(result)
+        finally:
+            await runtime.channel.publish(
+                RunCompleted(
+                    run_id=run_id,
+                    prompt_tokens=agent.total_input_tokens,
+                    completion_tokens=agent.total_output_tokens,
+                    result=result or "",
+                )
+            )
     finally:
         await runtime.close()
 

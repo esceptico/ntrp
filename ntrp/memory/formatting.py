@@ -15,6 +15,7 @@ def format_memory_context(
     lines: list[str] = []
 
     # Priority order: user context > query-conditioned > recent > observations
+
     sections: list[tuple[str, list[str]]] = []
     if user_facts:
         sections.append(("**About user**", [f"- {f.text}" for f in user_facts]))

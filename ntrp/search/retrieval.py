@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+from ntrp.constants import RRF_K, RRF_OVERFETCH_FACTOR
 from ntrp.database import serialize_embedding
 from ntrp.embedder import Embedder
 from ntrp.logging import get_logger
@@ -30,7 +31,7 @@ class HybridRetriever:
         self,
         store: SearchStore,
         embedder: Embedder,
-        rrf_k: int = 60,
+        rrf_k: int = RRF_K,
         vector_weight: float = 0.5,
         fts_weight: float = 0.5,
     ):
@@ -46,7 +47,7 @@ class HybridRetriever:
         sources: list[str] | None = None,
         limit: int = 10,
     ) -> list[ScoredRow]:
-        results = await self.store.vector_search(query_embedding, sources, limit * 2)
+        results = await self.store.vector_search(query_embedding, sources, limit * RRF_OVERFETCH_FACTOR)
         return [ScoredRow(row_id=row_id, score=score, rank=i + 1) for i, (row_id, score) in enumerate(results)]
 
     async def _fts_search(
@@ -55,7 +56,7 @@ class HybridRetriever:
         sources: list[str] | None = None,
         limit: int = 10,
     ) -> list[ScoredRow]:
-        results = await self.store.fts_search(query, sources, limit * 2)
+        results = await self.store.fts_search(query, sources, limit * RRF_OVERFETCH_FACTOR)
         return [ScoredRow(row_id=row_id, score=score, rank=i + 1) for i, (row_id, score) in enumerate(results)]
 
     def _rrf_merge(

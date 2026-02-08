@@ -34,7 +34,7 @@ class ConsolidationResult(BaseModel):
 
 
 class ConsolidationAction(BaseModel):
-    type: str  # "update", "create", "skip"
+    type: Literal["update", "create", "skip"]
     observation_id: int | None = None
     text: str | None = None
     reason: str | None = None
@@ -168,12 +168,12 @@ async def _format_observations(
         # Fetch source facts (limit to 3 for token efficiency)
         source_facts = []
         for fid in obs.source_fact_ids[:3]:
-            f = await fact_repo.get(fid)
-            if f:
+            fact = await fact_repo.get(fid)
+            if fact:
                 source_facts.append(
                     {
-                        "text": f.text,
-                        "created_at": f.created_at.isoformat() if f.created_at else None,
+                        "text": fact.text,
+                        "created_at": fact.created_at.isoformat() if fact.created_at else None,
                     }
                 )
 

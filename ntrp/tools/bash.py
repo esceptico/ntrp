@@ -166,7 +166,7 @@ class BashTool(Tool):
         self, execution: ToolExecution, command: str = "", working_dir: str | None = None, **kwargs: Any
     ) -> ToolResult:
         if not command:
-            return ToolResult("Error: command is required", "Missing command")
+            return ToolResult("Error: command is required", "Missing command", is_error=True)
 
         if is_blocked_command(command):
             return ToolResult(f"Blocked: {command}", "Blocked")

@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException, Request
@@ -9,9 +10,11 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from ntrp.core.agent import Agent
+from ntrp.core.events import RunCompleted, RunStarted
 from ntrp.core.prompts import INIT_INSTRUCTION
 from ntrp.core.spawner import create_spawn_fn
 from ntrp.events import (
+    AgentResult,
     DoneEvent,
     ErrorEvent,
     SessionInfoEvent,
@@ -29,10 +32,13 @@ from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
 from ntrp.server.routers.schedule import router as schedule_router
 from ntrp.server.routers.session import router as session_router
-from ntrp.server.runtime import get_runtime, get_runtime_async, reset_runtime
-from ntrp.server.state import RunStatus, get_run_registry
+from ntrp.server.runtime import get_run_registry, get_runtime, get_runtime_async, reset_runtime
+from ntrp.server.state import RunStatus
 from ntrp.server.stream import run_agent_loop, to_sse
 from ntrp.tools.core.context import ToolContext
+
+
+INIT_AUTO_APPROVE = {"remember", "forget", "reflect", "merge"}
 
 
 class ChatRequest(BaseModel):
@@ -160,7 +166,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         run.approval_queue = asyncio.Queue()
         run.choice_queue = asyncio.Queue()
 
-        extra_auto_approve = {"remember", "forget", "reflect", "merge"} if is_init else set()
+        extra_auto_approve = INIT_AUTO_APPROVE if is_init else set()
         session_state.skip_approvals = request.skip_approvals
         tool_ctx = ToolContext(
             session_state=session_state,
@@ -168,7 +174,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             memory=runtime.memory,
             approval_queue=run.approval_queue,
             choice_queue=run.choice_queue,
-            dashboard=runtime.dashboard,
+            channel=runtime.channel,
+            run_id=run.run_id,
             extra_auto_approve=extra_auto_approve,
         )
 
@@ -183,9 +190,10 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         )
 
         yield to_sse(ThinkingEvent(status="processing..."))
-        runtime.dashboard.record_run_started()
+        await runtime.channel.publish(RunStarted(run_id=run.run_id, session_id=session_id))
 
         agent: Agent | None = None
+        result: str | None = None
         try:
             tool_ctx.spawn_fn = create_spawn_fn(
                 executor=runtime.executor,
@@ -206,11 +214,9 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 cancel_check=lambda: run.cancelled,
             )
 
-            result: str | None = None
-
             async for sse in run_agent_loop(ctx, agent, user_message):
-                if isinstance(sse, dict) and "_result" in sse:
-                    result = sse["_result"]
+                if isinstance(sse, AgentResult):
+                    result = sse.text
                 else:
                     yield sse
 
@@ -223,7 +229,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             run.prompt_tokens = agent.total_input_tokens
             run.completion_tokens = agent.total_output_tokens
 
-            yield to_sse(DoneEvent(run_id=run.run_id, usage=run.get_usage()))
+            yield to_sse(DoneEvent(run_id=run.run_id, usage=asdict(run.get_usage())))
             registry.complete_run(run.run_id)
 
         except Exception as e:
@@ -237,7 +243,14 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 run.messages = agent.messages
             session_state.last_activity = datetime.now(UTC)
             await runtime.save_session(session_state, run.messages)
-            runtime.dashboard.record_run_completed(run.prompt_tokens, run.completion_tokens)
+            await runtime.channel.publish(
+                RunCompleted(
+                    run_id=run.run_id,
+                    prompt_tokens=run.prompt_tokens,
+                    completion_tokens=run.completion_tokens,
+                    result=result or "",
+                )
+            )
 
     return StreamingResponse(
         event_generator(),

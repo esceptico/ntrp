@@ -34,13 +34,13 @@ class AskChoiceTool(Tool):
         allow_multiple = kwargs.get("allow_multiple", False)
 
         if not question:
-            return ToolResult("Error: question is required", "Missing question")
+            return ToolResult("Error: question is required", "Missing question", is_error=True)
         if not options or len(options) < 2:
-            return ToolResult("Error: at least 2 options are required", "Too few options")
+            return ToolResult("Error: at least 2 options are required", "Too few options", is_error=True)
 
         for opt in options:
             if not isinstance(opt, dict) or "id" not in opt or "label" not in opt:
-                return ToolResult("Error: each option must have 'id' and 'label'", "Invalid options")
+                return ToolResult("Error: each option must have 'id' and 'label'", "Invalid options", is_error=True)
 
         selected = await execution.ask_choice(question, options, allow_multiple)
 

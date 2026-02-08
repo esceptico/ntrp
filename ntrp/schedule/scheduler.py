@@ -2,8 +2,11 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from uuid import uuid4
 
+from ntrp.channel import Channel
 from ntrp.context.models import SessionState
+from ntrp.core.events import RunCompleted, RunStarted
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
 from ntrp.schedule.models import Recurrence, ScheduledTask, compute_next_run
@@ -22,6 +25,7 @@ class SchedulerDeps:
     memory: Callable[[], FactMemory | None]
     model: str
     max_depth: int
+    channel: Channel
     source_details: Callable[[], dict[str, dict]]
     create_session: Callable[[], SessionState]
     gmail: Callable[[], MultiGmailSource | None]
@@ -35,9 +39,10 @@ class Scheduler:
         self._running_execution: asyncio.Task | None = None
 
     def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-            _logger.info("Scheduler started (polling every %ds)", POLL_INTERVAL)
+        if self._task is not None:
+            return
+        self._task = asyncio.create_task(self._loop())
+        _logger.info("Scheduler started (polling every %ds)", POLL_INTERVAL)
 
     @property
     def is_running(self) -> bool:
@@ -94,64 +99,71 @@ class Scheduler:
             await self.store.clear_running(task.task_id)
 
     async def _run_agent(self, task: ScheduledTask) -> str | None:
-        deps = self.deps
+        # Delayed imports: scheduler → agent → tools creates a circular import chain
+        from ntrp.core.agent import Agent
+        from ntrp.core.prompts import SCHEDULED_TASK_SUFFIX, build_system_prompt
+        from ntrp.core.spawner import create_spawn_fn
+        from ntrp.memory.formatting import format_memory_context
+        from ntrp.tools.core.context import ToolContext
+
         _logger.info("Executing scheduled task %s: %s", task.task_id, task.description[:80])
 
-        memory = deps.memory()
+        run_id = str(uuid4())[:8]
+        memory = self.deps.memory()
         memory_context = None
         if memory:
-            from ntrp.memory.formatting import format_memory_context
-
             user_facts, recent_facts = await memory.get_context()
             memory_context = format_memory_context(user_facts, recent_facts) or None
 
-        from ntrp.core.prompts import build_system_prompt
-
         system_prompt = build_system_prompt(
-            source_details=deps.source_details(),
+            source_details=self.deps.source_details(),
             memory_context=memory_context,
         )
-        system_prompt += (
-            "\n\nYou are executing a scheduled task autonomously. "
-            "Do the work described directly — gather information, produce output, and return the result. "
-            "Do not schedule new tasks or ask for confirmation. "
-            "Return only the final output — no preamble, no narration, no thinking out loud."
-        )
+        system_prompt += SCHEDULED_TASK_SUFFIX
 
-        session_state = deps.create_session()
-
-        from ntrp.core.spawner import create_spawn_fn
-        from ntrp.tools.core.context import ToolContext
+        session_state = self.deps.create_session()
 
         tool_ctx = ToolContext(
             session_state=session_state,
-            registry=deps.executor.registry,
+            registry=self.deps.executor.registry,
             memory=memory,
+            channel=self.deps.channel,
+            run_id=run_id,
         )
         tool_ctx.spawn_fn = create_spawn_fn(
-            executor=deps.executor,
-            model=deps.model,
-            max_depth=deps.max_depth,
+            executor=self.deps.executor,
+            model=self.deps.model,
+            max_depth=self.deps.max_depth,
             current_depth=0,
             cancel_check=None,
         )
 
-        from ntrp.core.agent import Agent
-
-        tools = deps.executor.get_tools() if task.writable else deps.executor.get_tools(mutates=False)
+        tools = self.deps.executor.get_tools() if task.writable else self.deps.executor.get_tools(mutates=False)
         agent = Agent(
             tools=tools,
-            tool_executor=deps.executor,
-            model=deps.model,
+            tool_executor=self.deps.executor,
+            model=self.deps.model,
             system_prompt=system_prompt,
             ctx=tool_ctx,
-            max_depth=deps.max_depth,
+            max_depth=self.deps.max_depth,
             current_depth=0,
         )
 
-        result = await agent.run(task.description)
+        await self.deps.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
+        result: str | None = None
+        try:
+            result = await agent.run(task.description)
+        finally:
+            await self.deps.channel.publish(
+                RunCompleted(
+                    run_id=run_id,
+                    prompt_tokens=agent.total_input_tokens,
+                    completion_tokens=agent.total_output_tokens,
+                    result=result or "",
+                )
+            )
 
-        gmail = deps.gmail()
+        gmail = self.deps.gmail()
         if task.notify_email and gmail:
             accounts = gmail.list_accounts()
             if accounts:

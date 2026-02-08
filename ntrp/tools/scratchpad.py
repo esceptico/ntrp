@@ -66,12 +66,13 @@ class WriteScratchpadTool(Tool):
         self, execution: ToolExecution, content: str = "", key: str = "default", **kwargs: Any
     ) -> ToolResult:
         if not content:
-            return ToolResult("Error: content is required", "Missing content")
+            return ToolResult("Error: content is required", "Missing content", is_error=True)
 
         if len(content) > MAX_CONTENT_SIZE:
             return ToolResult(
                 f"Error: content too large ({len(content)} chars, max {MAX_CONTENT_SIZE})",
                 "Too large",
+                is_error=True,
             )
 
         path = _scratchpad_path(execution.ctx.session_id, key)

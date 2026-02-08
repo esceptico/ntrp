@@ -13,7 +13,8 @@ def parse_tool_arguments(arguments: str | None) -> dict:
         return {}
 
 
-def sanitize_assistant_message(message: Any) -> dict:
+def normalize_assistant_message(message: Any) -> dict:
+    """Normalize LLM response into a serializable message dict."""
     sanitized: dict[str, Any] = {
         "role": "assistant",
         "content": message.content or "",

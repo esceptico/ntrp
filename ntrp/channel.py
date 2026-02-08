@@ -9,7 +9,7 @@ type Handler[T] = Callable[[T], Coroutine[Any, Any, None]]
 _logger = get_logger(__name__)
 
 
-class EventBus:
+class Channel:
     def __init__(self):
         self._handlers: dict[type, list[Handler]] = defaultdict(list)
 

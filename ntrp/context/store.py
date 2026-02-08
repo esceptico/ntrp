@@ -19,6 +19,25 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
 """
 
+SQL_SAVE_SESSION = """
+INSERT OR REPLACE INTO sessions (
+    session_id, started_at, last_activity,
+    messages, metadata
+) VALUES (?, ?, ?, ?, ?)
+"""
+
+SQL_GET_LATEST = """
+SELECT session_id FROM sessions
+ORDER BY last_activity DESC LIMIT 1
+"""
+
+SQL_LIST_SESSIONS = """
+SELECT session_id, started_at, last_activity
+FROM sessions
+ORDER BY last_activity DESC
+LIMIT ?
+"""
+
 
 class SessionDatabase(Database):
     async def connect(self) -> None:
@@ -37,12 +56,7 @@ class SessionStore(SessionDatabase):
                 serializable_messages.append(msg)
 
         await self.conn.execute(
-            """
-            INSERT OR REPLACE INTO sessions (
-                session_id, started_at, last_activity,
-                messages, metadata
-            ) VALUES (?, ?, ?, ?, ?)
-            """,
+            SQL_SAVE_SESSION,
             (
                 state.session_id,
                 state.started_at.isoformat(),
@@ -76,22 +90,13 @@ class SessionStore(SessionDatabase):
         return SessionData(state=state, messages=messages)
 
     async def get_latest_session(self) -> SessionData | None:
-        rows = await self.conn.execute_fetchall(
-            """SELECT session_id FROM sessions
-               ORDER BY last_activity DESC LIMIT 1""",
-        )
+        rows = await self.conn.execute_fetchall(SQL_GET_LATEST)
         if not rows:
             return None
         return await self.load_session(rows[0]["session_id"])
 
     async def list_sessions(self, limit: int = 10) -> list[dict]:
-        rows = await self.conn.execute_fetchall(
-            """SELECT session_id, started_at, last_activity
-               FROM sessions
-               ORDER BY last_activity DESC
-               LIMIT ?""",
-            (limit,),
-        )
+        rows = await self.conn.execute_fetchall(SQL_LIST_SESSIONS, (limit,))
         return [
             {
                 "session_id": row["session_id"],

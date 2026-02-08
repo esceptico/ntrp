@@ -16,3 +16,4 @@ class ToolExecutionResult:
     preview: str
     metadata: dict | None
     duration_ms: int
+    is_error: bool = False

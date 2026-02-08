@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from uuid import uuid4
 
@@ -11,6 +11,13 @@ class RunStatus(StrEnum):
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     ERROR = "error"
+
+
+@dataclass(frozen=True)
+class UsageStats:
+    prompt: int
+    completion: int
+    total: int
 
 
 @dataclass
@@ -27,12 +34,12 @@ class RunState:
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     cancelled: bool = False
 
-    def get_usage(self) -> dict:
-        return {
-            "prompt": self.prompt_tokens,
-            "completion": self.completion_tokens,
-            "total": self.prompt_tokens + self.completion_tokens,
-        }
+    def get_usage(self) -> UsageStats:
+        return UsageStats(
+            prompt=self.prompt_tokens,
+            completion=self.completion_tokens,
+            total=self.prompt_tokens + self.completion_tokens,
+        )
 
 
 class RunRegistry:
@@ -71,7 +78,7 @@ class RunRegistry:
         to_remove = []
 
         for run_id, run in self._runs.items():
-            age = (now - run.updated_at).total_seconds() / 3600
+            age = (now - run.updated_at) / timedelta(hours=1)
             if age > max_age_hours and run.status in (RunStatus.COMPLETED, RunStatus.CANCELLED, RunStatus.ERROR):
                 to_remove.append(run_id)
 
@@ -79,11 +86,3 @@ class RunRegistry:
             self._runs.pop(run_id, None)
 
         return len(to_remove)
-
-
-def get_run_registry() -> RunRegistry:
-    # RunRegistry lifecycle is managed by Runtime; this is a convenience accessor.
-    # TO CLAUDE: why we have this import here?
-    from ntrp.server.runtime import get_runtime
-
-    return get_runtime().run_registry

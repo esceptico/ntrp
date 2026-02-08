@@ -23,6 +23,25 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_next_run ON scheduled_tasks(next_run_at
 CREATE INDEX IF NOT EXISTS idx_scheduled_enabled ON scheduled_tasks(enabled);
 """
 
+SQL_SAVE = """
+INSERT OR REPLACE INTO scheduled_tasks
+    (task_id, description, time_of_day, recurrence, enabled,
+     created_at, last_run_at, next_run_at, notify_email, last_result, running_since, writable)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
+SQL_LIST_DUE = """
+SELECT * FROM scheduled_tasks
+WHERE enabled = 1 AND next_run_at <= ? AND running_since IS NULL
+ORDER BY next_run_at
+"""
+
+SQL_UPDATE_LAST_RUN = """
+UPDATE scheduled_tasks
+SET last_run_at = ?, next_run_at = ?, last_result = ?
+WHERE task_id = ?
+"""
+
 
 class ScheduleStore(BaseRepository):
     async def init_schema(self) -> None:
@@ -31,10 +50,7 @@ class ScheduleStore(BaseRepository):
 
     async def save(self, task: ScheduledTask) -> None:
         await self.conn.execute(
-            """INSERT OR REPLACE INTO scheduled_tasks
-               (task_id, description, time_of_day, recurrence, enabled,
-                created_at, last_run_at, next_run_at, notify_email, last_result, running_since, writable)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            SQL_SAVE,
             (
                 task.task_id,
                 task.description,
@@ -63,12 +79,7 @@ class ScheduleStore(BaseRepository):
         return [ScheduledTask(**row) for row in rows]
 
     async def list_due(self, now: datetime) -> list[ScheduledTask]:
-        rows = await self.conn.execute_fetchall(
-            """SELECT * FROM scheduled_tasks
-               WHERE enabled = 1 AND next_run_at <= ? AND running_since IS NULL
-               ORDER BY next_run_at""",
-            (now.isoformat(),),
-        )
+        rows = await self.conn.execute_fetchall(SQL_LIST_DUE, (now.isoformat(),))
         return [ScheduledTask(**row) for row in rows]
 
     async def mark_running(self, task_id: str, now: datetime) -> None:
@@ -89,9 +100,7 @@ class ScheduleStore(BaseRepository):
         self, task_id: str, last_run: datetime, next_run: datetime, result: str | None = None
     ) -> None:
         await self.conn.execute(
-            """UPDATE scheduled_tasks
-               SET last_run_at = ?, next_run_at = ?, last_result = ?
-               WHERE task_id = ?""",
+            SQL_UPDATE_LAST_RUN,
             (last_run.isoformat(), next_run.isoformat(), result, task_id),
         )
         await self.conn.commit()

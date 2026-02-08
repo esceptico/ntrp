@@ -52,6 +52,9 @@ def create_spawn_fn(
             memory=executor.memory,
             emit=calling_ctx.emit,
             approval_queue=calling_ctx.approval_queue,
+            choice_queue=calling_ctx.choice_queue,
+            channel=calling_ctx.channel,
+            run_id=calling_ctx.run_id,
             extra_auto_approve=calling_ctx.extra_auto_approve,
         )
         child_ctx.spawn_fn = create_spawn_fn(

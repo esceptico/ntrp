@@ -3,7 +3,7 @@ from typing import Any
 
 from ntrp.constants import AGENT_MAX_ITERATIONS, SUPPORTED_MODELS
 from ntrp.context.compression import compress_context_async, mask_old_tool_results, should_compress
-from ntrp.core.parsing import parse_tool_calls, sanitize_assistant_message
+from ntrp.core.parsing import normalize_assistant_message, parse_tool_calls
 from ntrp.core.state import AgentState, StateCallback
 from ntrp.core.tool_runner import ToolRunner
 from ntrp.events import SSEEvent, TextEvent, ToolResultEvent
@@ -74,18 +74,18 @@ class Agent:
         return await acompletion(
             model=self.model,
             messages=self.messages,
-            tools=self.tools if self.tools else None,
-            tool_choice="auto" if self.tools else None,
+            tools=self.tools,
+            tool_choice="auto",
             **model_params.get("request_kwargs", {}),
         )
 
     def _track_usage(self, response: Any) -> None:
-        if response.usage:
-            prompt_tokens = response.usage.prompt_tokens or 0
-            self.total_input_tokens += prompt_tokens
-            self.total_output_tokens += response.usage.completion_tokens or 0
-            # Track for adaptive compression on next iteration
-            self._last_input_tokens = prompt_tokens
+        if not response.usage:
+            return
+        prompt_tokens = response.usage.prompt_tokens or 0
+        self.total_input_tokens += prompt_tokens
+        self.total_output_tokens += response.usage.completion_tokens or 0
+        self._last_input_tokens = prompt_tokens
 
     async def _maybe_compact(self) -> None:
         # Use actual token count from last LLM response if available (more accurate)
@@ -147,7 +147,7 @@ class Agent:
                 raise
 
             message = response.choices[0].message
-            self.messages.append(sanitize_assistant_message(message))
+            self.messages.append(normalize_assistant_message(message))
             self._track_usage(response)
 
             if self._is_cancelled():
@@ -187,10 +187,11 @@ class Agent:
     async def run(self, task: str, history: list[dict] | None = None) -> str:
         result = ""
         async for item in self.stream(task, history):
-            if isinstance(item, str):
-                result = item
-            elif isinstance(item, TextEvent):
-                pass  # subagent phrases stay internal
-            elif self.ctx.emit:
-                await self.ctx.emit(item)
+            match item:
+                case str():
+                    result = item
+                case TextEvent():
+                    pass
+                case event if self.ctx.emit:
+                    await self.ctx.emit(event)
         return result

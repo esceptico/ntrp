@@ -5,6 +5,7 @@ from ntrp.constants import (
     BFS_MAX_FACTS,
     BFS_SCORE_THRESHOLD,
     RECALL_OBSERVATION_LIMIT,
+    RRF_OVERFETCH_FACTOR,
 )
 from ntrp.memory.decay import decay_score, recency_boost
 from ntrp.memory.models import Embedding, Fact, FactContext, Observation
@@ -19,10 +20,10 @@ async def hybrid_search(
     query_embedding: Embedding,
     limit: int,
 ) -> dict[int, float]:
-    vector_results = await repo.search_facts_vector(query_embedding, limit * 2)
+    vector_results = await repo.search_facts_vector(query_embedding, limit * RRF_OVERFETCH_FACTOR)
     vector_ranking = [(f.id, sim) for f, sim in vector_results]
 
-    fts_results = await repo.search_facts_fts(query_text, limit * 2)
+    fts_results = await repo.search_facts_fts(query_text, limit * RRF_OVERFETCH_FACTOR)
     fts_ranking = [(f.id, 1.0 - i * 0.1) for i, f in enumerate(fts_results)]
 
     return rrf_merge([vector_ranking, fts_ranking])

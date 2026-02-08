@@ -162,7 +162,7 @@ class EditNoteTool(Tool):
         self, execution: ToolExecution, path: str = "", find: str = "", replace: str = "", **kwargs: Any
     ) -> ToolResult:
         if not path or not find:
-            return ToolResult("Error: path and find are required", "Missing fields")
+            return ToolResult("Error: path and find are required", "Missing fields", is_error=True)
 
         original = self.source.read(path)
         if original is None:
@@ -191,7 +191,7 @@ class EditNoteTool(Tool):
                 preview="Edited",
                 metadata={"diff": diff, "lines_changed": max(0, lines_changed)},
             )
-        return ToolResult(f"Error writing to {path}", "Write failed")
+        return ToolResult(f"Error writing to {path}", "Write failed", is_error=True)
 
 
 class CreateNoteInput(BaseModel):
@@ -211,7 +211,7 @@ class CreateNoteTool(Tool):
 
     async def execute(self, execution: ToolExecution, path: str = "", content: str = "", **kwargs: Any) -> ToolResult:
         if not path or not content:
-            return ToolResult("Error: path and content are required", "Missing fields")
+            return ToolResult("Error: path and content are required", "Missing fields", is_error=True)
 
         if not path.endswith(".md"):
             path = path + ".md"
@@ -230,7 +230,7 @@ class CreateNoteTool(Tool):
         success = self.source.write(path, content)
         if success:
             return ToolResult(f"Created note: {path}", "Created")
-        return ToolResult(f"Error creating {path}", "Create failed")
+        return ToolResult(f"Error creating {path}", "Create failed", is_error=True)
 
 
 class DeleteNoteInput(BaseModel):
@@ -249,7 +249,7 @@ class DeleteNoteTool(Tool):
 
     async def execute(self, execution: ToolExecution, path: str = "", **kwargs: Any) -> ToolResult:
         if not path:
-            return ToolResult("Error: path is required", "Missing path")
+            return ToolResult("Error: path is required", "Missing path", is_error=True)
 
         original = self.source.read(path)
         if original is None:
@@ -260,7 +260,7 @@ class DeleteNoteTool(Tool):
         success = self.source.delete(path)
         if success:
             return ToolResult(f"Deleted: {path}", "Deleted")
-        return ToolResult(f"Error deleting {path}", "Delete failed")
+        return ToolResult(f"Error deleting {path}", "Delete failed", is_error=True)
 
 
 class MoveNoteInput(BaseModel):
@@ -280,7 +280,7 @@ class MoveNoteTool(Tool):
 
     async def execute(self, execution: ToolExecution, path: str = "", new_path: str = "", **kwargs: Any) -> ToolResult:
         if not path or not new_path:
-            return ToolResult("Error: path and new_path are required", "Missing fields")
+            return ToolResult("Error: path and new_path are required", "Missing fields", is_error=True)
 
         if not new_path.endswith(".md"):
             new_path = new_path + ".md"
@@ -298,7 +298,7 @@ class MoveNoteTool(Tool):
         success = self.source.move(path, new_path)
         if success:
             return ToolResult(f"Moved: `{path}` → `{new_path}`", "Moved")
-        return ToolResult(f"Error moving {path}", "Move failed")
+        return ToolResult(f"Error moving {path}", "Move failed", is_error=True)
 
 
 class SearchNotesInput(BaseModel):
@@ -322,7 +322,7 @@ class SearchNotesTool(Tool):
 
     async def execute(self, execution: ToolExecution, query: str = "", limit: int = 10, **kwargs: Any) -> ToolResult:
         if not query:
-            return ToolResult("Error: query is required", "Missing query")
+            return ToolResult("Error: query is required", "Missing query", is_error=True)
 
         query = simplify_query(query)
 
