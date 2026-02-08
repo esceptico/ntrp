@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:latest AS build
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS build
 
 ENV UV_LINK_MODE=copy
 
@@ -19,8 +19,6 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
-
 COPY --from=build /app/.venv /app/.venv
 
 COPY ntrp ./ntrp
@@ -33,7 +31,6 @@ ENV PYTHONUNBUFFERED=1 \
 
 EXPOSE 8000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
