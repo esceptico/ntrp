@@ -6,7 +6,6 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict
 
 from ntrp.channel import Channel
-from ntrp.core.events import ConsolidationCompleted
 from ntrp.constants import (
     CONSOLIDATION_INTERVAL,
     CONSOLIDATION_MAX_BACKOFF_MULTIPLIER,
@@ -18,6 +17,7 @@ from ntrp.constants import (
     RECALL_SEARCH_LIMIT,
     USER_ENTITY_NAME,
 )
+from ntrp.core.events import ConsolidationCompleted
 from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.logging import get_logger
 from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decision
@@ -101,10 +101,7 @@ class FactMemory:
             facts = await repo.list_unconsolidated(limit=batch_size)
             if not facts:
                 return 0
-            facts = [
-                fact.model_copy(update={"entity_refs": await repo.get_entity_refs(fact.id)})
-                for fact in facts
-            ]
+            facts = [fact.model_copy(update={"entity_refs": await repo.get_entity_refs(fact.id)}) for fact in facts]
 
         # Phase 2: LLM decisions outside lock (DB reads + LLM calls, no writes)
         decisions = []
@@ -133,9 +130,7 @@ class FactMemory:
                 raise
 
         _logger.info("Consolidated %d facts", count)
-        await self.channel.publish(
-            ConsolidationCompleted(facts_processed=count, observations_created=obs_created)
-        )
+        await self.channel.publish(ConsolidationCompleted(facts_processed=count, observations_created=obs_created))
         return count
 
     async def close(self) -> None:

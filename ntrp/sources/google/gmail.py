@@ -20,7 +20,6 @@ from ntrp.sources.google.auth import (
 )
 from ntrp.sources.models import RawItem
 
-
 EMAIL_HTML_TEMPLATE = """<!DOCTYPE html>
 <html>
 <head>

@@ -88,7 +88,7 @@ class Config(BaseSettings):
     @classmethod
     def _validate_browser_days(cls, v: int) -> int:
         if not 1 <= v <= 365:
-            raise ValueError(f"browser_days must be 1–365, got {v}")
+            raise ValueError(f"browser_days must be 1-365, got {v}")
         return v
 
     @property
@@ -125,8 +125,7 @@ def get_config() -> Config:
         return _config
     config = Config()  # type: ignore - pydantic handles validation
     settings = load_user_settings()
-    for key in ("chat_model", "memory_model", "embedding_model", "embedding_dim",
-                "browser", "browser_days"):
+    for key in ("chat_model", "memory_model", "embedding_model", "embedding_dim", "browser", "browser_days"):
         if key in settings:
             try:
                 setattr(config, key, settings[key])

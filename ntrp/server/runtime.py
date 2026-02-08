@@ -235,9 +235,8 @@ class Runtime:
         name = event.source_name
         if name not in INDEXABLE_SOURCES:
             return
-        source_active = (
-            (name == "notes" and "notes" in self.source_mgr.sources)
-            or (name == "memory" and self.memory is not None)
+        source_active = (name == "notes" and "notes" in self.source_mgr.sources) or (
+            name == "memory" and self.memory is not None
         )
         if source_active:
             self.start_indexing()

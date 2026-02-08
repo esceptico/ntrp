@@ -37,8 +37,7 @@ from ntrp.server.state import RunStatus
 from ntrp.server.stream import run_agent_loop, to_sse
 from ntrp.tools.core.context import ToolContext
 
-
-INIT_AUTO_APPROVE = {"remember", "forget", "reflect", "merge"}
+INIT_AUTO_APPROVE = {"remember", "forget"}
 
 
 class ChatRequest(BaseModel):
@@ -85,6 +84,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):

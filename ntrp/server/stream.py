@@ -1,6 +1,7 @@
 import asyncio
 import json
 from contextlib import suppress
+
 from ntrp.events import AgentResult, CancelledEvent, SSEEvent
 from ntrp.server.chat import ChatContext
 
@@ -11,7 +12,8 @@ def to_sse(event: SSEEvent | dict) -> str:
     return f"data: {json.dumps(event)}\n\n"
 
 
-class _Done: pass
+class _Done:
+    pass
 
 
 class _Error:

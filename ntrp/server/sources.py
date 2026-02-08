@@ -40,9 +40,7 @@ class SourceManager:
                 self._sources.pop(name, None)
             else:
                 if source.errors:
-                    self._errors[name] = "; ".join(
-                        f"{k}: {v}" for k, v in source.errors.items()
-                    )
+                    self._errors[name] = "; ".join(f"{k}: {v}" for k, v in source.errors.items())
                 self._sources[name] = source
         except Exception as e:
             self._errors[name] = str(e)
@@ -64,9 +62,7 @@ class SourceManager:
                 if source is None:
                     continue
                 if source.errors:
-                    self._errors[name] = "; ".join(
-                        f"{k}: {v}" for k, v in source.errors.items()
-                    )
+                    self._errors[name] = "; ".join(f"{k}: {v}" for k, v in source.errors.items())
                 self._sources[name] = source
             except Exception as e:
                 _logger.warning("Failed to init source %s: %s", name, e)

@@ -61,7 +61,7 @@ class ToolCallEvent(SSEEvent):
     description: str = field(init=False)
 
     def __post_init__(self):
-        object.__setattr__(self, 'description', _format_call(self.name, self.args))
+        object.__setattr__(self, "description", _format_call(self.name, self.args))
 
 
 @dataclass(frozen=True)

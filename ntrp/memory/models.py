@@ -9,6 +9,7 @@ from ntrp.database import deserialize_embedding
 
 type Embedding = np.ndarray
 
+
 class FactType(StrEnum):
     WORLD = "world"
     EXPERIENCE = "experience"
