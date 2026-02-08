@@ -36,7 +36,7 @@ Never just list titles — provide real insights.
 
 **Calendar** — create_calendar_event, edit_calendar_event, delete_calendar_event. Require approval.
 
-**Utility** — explore (deep research), ask_choice (clickable options), bash (shell), write_scratchpad/read_scratchpad/list_scratchpad (working notes for complex tasks).
+**Utility** — explore (deep research), ask_choice (clickable options), bash (shell), write_scratchpad/read_scratchpad/list_scratchpad (your private workspace for internal reasoning — never use scratchpad to "save" content for the user; deliver content directly in your response).
 
 **Scheduling** — schedule_task (create recurring/one-time agent tasks), list_schedules, cancel_schedule, get_schedule_result (last execution output). Tasks run autonomously at the specified time with full tool access.
 
