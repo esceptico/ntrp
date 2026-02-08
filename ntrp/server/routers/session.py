@@ -94,11 +94,18 @@ async def get_config():
         "max_depth": runtime.max_depth,
         "memory_enabled": runtime.memory is not None,
         "sources": {
-            "gmail": {"enabled": runtime.config.gmail, "connected": runtime.gmail is not None, "accounts": gmail_accounts},
+            "gmail": {
+                "enabled": runtime.config.gmail,
+                "connected": runtime.gmail is not None,
+                "accounts": gmail_accounts,
+            },
             "calendar": {"enabled": runtime.config.calendar, "connected": "calendar" in runtime._sources},
             "memory": {"enabled": runtime.config.memory, "connected": runtime.memory is not None},
             "web": {"connected": "web" in runtime._sources},
-            "notes": {"connected": "notes" in runtime._sources, "path": str(runtime.config.vault_path) if runtime.config.vault_path else None},
+            "notes": {
+                "connected": "notes" in runtime._sources,
+                "path": str(runtime.config.vault_path) if runtime.config.vault_path else None,
+            },
             "browser": {"connected": "browser" in runtime._sources, "type": runtime.config.browser},
         },
     }

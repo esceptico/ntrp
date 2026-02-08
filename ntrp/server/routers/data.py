@@ -182,8 +182,7 @@ async def update_fact(fact_id: int, request: UpdateFactRequest):
         # Delete existing entity refs and links
         await repo.conn.execute("DELETE FROM entity_refs WHERE fact_id = ?", (fact_id,))
         await repo.conn.execute(
-            "DELETE FROM fact_links WHERE source_fact_id = ? OR target_fact_id = ?",
-            (fact_id, fact_id)
+            "DELETE FROM fact_links WHERE source_fact_id = ? OR target_fact_id = ?", (fact_id, fact_id)
         )
 
         # Update fact text, embedding, and mark for re-consolidation
@@ -194,7 +193,7 @@ async def update_fact(fact_id: int, request: UpdateFactRequest):
             SET text = ?, embedding = ?, consolidated_at = NULL
             WHERE id = ?
             """,
-            (request.text, embedding_bytes, fact_id)
+            (request.text, embedding_bytes, fact_id),
         )
 
         # Update vector index
@@ -226,8 +225,7 @@ async def update_fact(fact_id: int, request: UpdateFactRequest):
             "access_count": fact.access_count,
         },
         "entity_refs": [
-            {"name": e.name, "type": e.entity_type, "canonical_id": e.canonical_id}
-            for e in fact.entity_refs
+            {"name": e.name, "type": e.entity_type, "canonical_id": e.canonical_id} for e in fact.entity_refs
         ],
         "links_created": links_created,
     }
@@ -252,8 +250,7 @@ async def delete_fact(fact_id: int):
         entity_refs_count = entity_refs_rows[0][0] if entity_refs_rows else 0
 
         links_rows = await repo.conn.execute_fetchall(
-            "SELECT COUNT(*) FROM fact_links WHERE source_fact_id = ? OR target_fact_id = ?",
-            (fact_id, fact_id)
+            "SELECT COUNT(*) FROM fact_links WHERE source_fact_id = ? OR target_fact_id = ?", (fact_id, fact_id)
         )
         links_count = links_rows[0][0] if links_rows else 0
 
@@ -268,7 +265,7 @@ async def delete_fact(fact_id: int):
         "cascaded": {
             "entity_refs": entity_refs_count,
             "links": links_count,
-        }
+        },
     }
 
 
@@ -296,14 +293,13 @@ async def update_observation(observation_id: int, request: UpdateObservationRequ
             SET summary = ?, embedding = ?, updated_at = ?
             WHERE id = ?
             """,
-            (request.summary, embedding_bytes, now.isoformat(), observation_id)
+            (request.summary, embedding_bytes, now.isoformat(), observation_id),
         )
 
         # Update vector index
         await obs_repo.conn.execute("DELETE FROM observations_vec WHERE observation_id = ?", (observation_id,))
         await obs_repo.conn.execute(
-            "INSERT INTO observations_vec (observation_id, embedding) VALUES (?, ?)",
-            (observation_id, embedding_bytes)
+            "INSERT INTO observations_vec (observation_id, embedding) VALUES (?, ?)", (observation_id, embedding_bytes)
         )
 
         await obs_repo.conn.commit()

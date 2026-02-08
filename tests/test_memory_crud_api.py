@@ -1,4 +1,5 @@
 """E2E integration tests for memory CRUD API endpoints"""
+
 import asyncio
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -21,6 +22,7 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
 
     # Monkeypatch NTRP_DIR to use temp directory
     import ntrp.config
+
     monkeypatch.setattr(ntrp.config, "NTRP_DIR", tmp_path / "db")
 
     # Create test config
@@ -45,21 +47,26 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
 
     # Replace embedder with mock for tests (must be async)
     if runtime.memory:
+
         async def mock_embed_one(text: str):
             return mock_embedding(text)
+
         runtime.memory.embedder.embed_one = mock_embed_one
 
         # Mock extractor to avoid LLM calls
         from ntrp.memory.models import ExtractedEntity, ExtractionResult
+
         async def mock_extract(text: str):
             # Return simple entities for testing (lowercase text as entity names)
             words = text.lower().split()[:2]  # First 2 words as entities
             entities = [ExtractedEntity(name=word.strip(".,!?"), entity_type="test") for word in words if len(word) > 2]
             return ExtractionResult(entities=entities, entity_pairs=[])
+
         runtime.memory.extractor.extract = mock_extract
 
     # Set global runtime for API endpoints
     import ntrp.server.runtime as runtime_module
+
     runtime_module._runtime = runtime
 
     yield runtime
@@ -116,8 +123,7 @@ class TestFactCRUD:
         """PATCH /facts/{id} should update text, re-extract entities, and recreate links"""
         # Update fact with new text
         response = await test_client.patch(
-            f"/facts/{sample_fact}",
-            json={"text": "Alice is a researcher at Anthropic working on Claude"}
+            f"/facts/{sample_fact}", json={"text": "Alice is a researcher at Anthropic working on Claude"}
         )
 
         assert response.status_code == 200
@@ -141,12 +147,11 @@ class TestFactCRUD:
         assert all("name" in e and "type" in e for e in entity_refs)
 
     @pytest.mark.asyncio
-    async def test_patch_fact_marks_for_reconsolidation(self, test_client: AsyncClient, sample_fact: int, test_runtime: Runtime):
+    async def test_patch_fact_marks_for_reconsolidation(
+        self, test_client: AsyncClient, sample_fact: int, test_runtime: Runtime
+    ):
         """PATCH should set consolidated_at=NULL to trigger re-consolidation"""
-        await test_client.patch(
-            f"/facts/{sample_fact}",
-            json={"text": "Updated text"}
-        )
+        await test_client.patch(f"/facts/{sample_fact}", json={"text": "Updated text"})
 
         # Verify fact is marked unconsolidated
         repo = test_runtime.memory.fact_repo()
@@ -174,7 +179,9 @@ class TestFactCRUD:
         assert response.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_delete_fact_returns_cascade_counts(self, test_client: AsyncClient, sample_fact: int, test_runtime: Runtime):
+    async def test_delete_fact_returns_cascade_counts(
+        self, test_client: AsyncClient, sample_fact: int, test_runtime: Runtime
+    ):
         """DELETE /facts/{id} should return counts of cascaded deletions"""
         # Get counts before deletion
         repo = test_runtime.memory.fact_repo()
@@ -233,6 +240,7 @@ class TestFactCRUD:
         """Multiple updates should be serialized by _db_lock"""
         # Fire two updates concurrently
         import asyncio
+
         responses = await asyncio.gather(
             test_client.patch(f"/facts/{sample_fact}", json={"text": "First update"}),
             test_client.patch(f"/facts/{sample_fact}", json={"text": "Second update"}),
@@ -249,8 +257,7 @@ class TestObservationCRUD:
     async def test_patch_observation_updates_summary(self, test_client: AsyncClient, sample_observation: int):
         """PATCH /observations/{id} should update summary and re-embed"""
         response = await test_client.patch(
-            f"/observations/{sample_observation}",
-            json={"summary": "Updated observation summary"}
+            f"/observations/{sample_observation}", json={"summary": "Updated observation summary"}
         )
 
         assert response.status_code == 200
@@ -264,17 +271,16 @@ class TestObservationCRUD:
         assert "updated_at" in obs
 
     @pytest.mark.asyncio
-    async def test_patch_observation_preserves_facts(self, test_client: AsyncClient, sample_observation: int, test_runtime: Runtime):
+    async def test_patch_observation_preserves_facts(
+        self, test_client: AsyncClient, sample_observation: int, test_runtime: Runtime
+    ):
         """PATCH should preserve source_fact_ids and evidence_count"""
         # Get original observation
         obs_repo = test_runtime.memory.obs_repo()
         original = await obs_repo.get(sample_observation)
 
         # Update observation
-        await test_client.patch(
-            f"/observations/{sample_observation}",
-            json={"summary": "New summary"}
-        )
+        await test_client.patch(f"/observations/{sample_observation}", json={"summary": "New summary"})
 
         # Verify source_fact_ids unchanged
         updated = await obs_repo.get(sample_observation)
@@ -339,6 +345,7 @@ class TestMemoryDisabled:
         await runtime.connect()
 
         import ntrp.server.runtime as runtime_module
+
         runtime_module._runtime = runtime
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

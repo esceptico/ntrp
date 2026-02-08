@@ -98,7 +98,6 @@ class Config(BaseSettings):
         return self.db_dir / "memory.db"
 
 
-
 @lru_cache
 def get_config() -> Config:
     config = Config()  # type: ignore - pydantic handles validation

@@ -83,16 +83,10 @@ class DashboardCollector:
         tokens = {
             "total_prompt": self.total_prompt_tokens,
             "total_completion": self.total_completion_tokens,
-            "history": [
-                {"prompt": t.prompt, "completion": t.completion, "ts": t.ts}
-                for t in self.token_history
-            ],
+            "history": [{"prompt": t.prompt, "completion": t.completion, "ts": t.ts} for t in self.token_history],
         }
 
-        active = sum(
-            1 for r in runtime.run_registry._runs.values()
-            if r.status == RunStatus.RUNNING
-        )
+        active = sum(1 for r in runtime.run_registry._runs.values() if r.status == RunStatus.RUNNING)
         agent = {
             "active_runs": active,
             "total_runs": self.total_runs,
@@ -156,8 +150,7 @@ class DashboardCollector:
                 "observation_count": await obs_repo.count(),
                 "unconsolidated": await repo.count_unconsolidated(),
                 "consolidation_running": (
-                    runtime.memory._consolidation_task is not None
-                    and not runtime.memory._consolidation_task.done()
+                    runtime.memory._consolidation_task is not None and not runtime.memory._consolidation_task.done()
                 ),
                 "last_consolidation_at": self.last_consolidation_at,
                 "recent_facts": list(self.recent_facts),

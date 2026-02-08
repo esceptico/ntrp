@@ -69,29 +69,35 @@ class Runtime:
         source_factories: list[tuple[str, callable]] = []
 
         if self.config.gmail:
-            source_factories.append((
-                "MultiGmailSource",
-                lambda: MultiGmailSource(
-                    token_paths=discover_gmail_tokens(),
-                    days_back=self.config.gmail_days,
-                ),
-            ))
+            source_factories.append(
+                (
+                    "MultiGmailSource",
+                    lambda: MultiGmailSource(
+                        token_paths=discover_gmail_tokens(),
+                        days_back=self.config.gmail_days,
+                    ),
+                )
+            )
 
         if self.config.calendar:
-            source_factories.append((
-                "MultiCalendarSource",
-                lambda: MultiCalendarSource(
-                    token_paths=discover_calendar_tokens(),
-                    days_back=7,
-                    days_ahead=30,
-                ),
-            ))
+            source_factories.append(
+                (
+                    "MultiCalendarSource",
+                    lambda: MultiCalendarSource(
+                        token_paths=discover_calendar_tokens(),
+                        days_back=7,
+                        days_ahead=30,
+                    ),
+                )
+            )
 
         if self.config.exa_api_key:
-            source_factories.append((
-                "WebSource",
-                lambda: WebSource(api_key=self.config.exa_api_key),
-            ))
+            source_factories.append(
+                (
+                    "WebSource",
+                    lambda: WebSource(api_key=self.config.exa_api_key),
+                )
+            )
 
         for name, factory in source_factories:
             try:
@@ -132,7 +138,9 @@ class Runtime:
             self._source_errors["notes"] = str(e)
             return None
 
-    async def reinit_browser(self, browser_name: str | None, days_back: int | None = None) -> BrowserHistorySource | None:
+    async def reinit_browser(
+        self, browser_name: str | None, days_back: int | None = None
+    ) -> BrowserHistorySource | None:
         if browser_name is None:
             self._sources.pop("browser", None)
             self.browser = None

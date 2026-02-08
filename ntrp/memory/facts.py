@@ -56,7 +56,11 @@ class FactMemory:
 
     @classmethod
     async def create(
-        cls, db_path: Path, embedding: EmbeddingConfig, extraction_model: str, bus: EventBus,
+        cls,
+        db_path: Path,
+        embedding: EmbeddingConfig,
+        extraction_model: str,
+        bus: EventBus,
     ) -> Self:
         instance = cls(db_path, embedding, extraction_model, bus=bus)
         await instance.db.connect()
