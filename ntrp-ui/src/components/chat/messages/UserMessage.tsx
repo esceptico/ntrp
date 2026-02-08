@@ -15,13 +15,15 @@ export const UserMessage = memo(function UserMessage({ content }: UserMessagePro
   const lines = content.split("\n");
 
   return (
-    <Box flexDirection="column" width={terminalWidth} overflow="hidden">
-      {lines.map((line, i) => (
-        <Text key={i}>
-          <Text color={accentValue} bold>{i === 0 ? "> " : "  "}</Text>
-          <Text>{truncateText(line, contentWidth)}</Text>
-        </Text>
-      ))}
+    <Box flexDirection="row" width={terminalWidth} overflow="hidden">
+      <Box width={2} flexShrink={0}>
+        <Text color={accentValue} bold>{">"}</Text>
+      </Box>
+      <Box flexDirection="column" flexGrow={1} overflow="hidden">
+        {lines.map((line, i) => (
+          <Text key={i}>{truncateText(line, contentWidth)}</Text>
+        ))}
+      </Box>
     </Box>
   );
 });

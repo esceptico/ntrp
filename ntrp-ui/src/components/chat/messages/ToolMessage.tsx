@@ -108,13 +108,20 @@ export const ToolMessage = memo(function ToolMessage({
         <Text color={accentValue}>{BULLET} </Text>
         <Text>{truncateText(displayName, contentWidth)}</Text>
       </Text>
-      {visibleLines.map((line, i) => (
-        <Text key={i} color={colors.text.secondary}>
-          {i === 0 ? "⎿ " : "  "}{truncateText(line, contentWidth - 2)}
-        </Text>
-      ))}
-      {hiddenCount > 0 && (
-        <Text color={colors.text.muted} dimColor>{"  "}… +{hiddenCount} lines</Text>
+      {(visibleLines.length > 0 || hiddenCount > 0) && (
+        <Box flexDirection="row">
+          <Box width={2} flexShrink={0}>
+            <Text color={colors.text.secondary}>{"⎿"}</Text>
+          </Box>
+          <Box flexDirection="column" flexGrow={1} overflow="hidden">
+            {visibleLines.map((line, i) => (
+              <Text key={i} color={colors.text.secondary}>{truncateText(line, contentWidth - 2)}</Text>
+            ))}
+            {hiddenCount > 0 && (
+              <Text color={colors.text.muted} dimColor>… +{hiddenCount} lines</Text>
+            )}
+          </Box>
+        </Box>
       )}
     </Box>
   );
