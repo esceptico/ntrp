@@ -140,7 +140,7 @@ class CreateCalendarEventTool(Tool):
         start_dt = _parse_datetime(start)
         if not start_dt:
             return ToolResult(
-                content=f"Invalid start time: {start}. Use ISO format: 2024-01-15T14:00:00", 
+                content=f"Invalid start time: {start}. Use ISO format: 2024-01-15T14:00:00",
                 preview="Invalid start",
                 is_error=True,
             )
@@ -267,8 +267,8 @@ class DeleteCalendarEventTool(Tool):
     async def execute(self, execution: ToolExecution, event_id: str = "", **kwargs: Any) -> ToolResult:
         if not event_id:
             return ToolResult(
-                content="Error: event_id is required", 
-                preview="Missing event_id", 
+                content="Error: event_id is required",
+                preview="Missing event_id",
                 is_error=True,
             )
 

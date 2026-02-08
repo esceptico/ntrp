@@ -54,7 +54,11 @@ class ScheduleTaskTool(Tool):
         **kwargs: Any,
     ) -> ToolResult:
         if not description or not time or not recurrence:
-            return ToolResult(content="Error: description, time, and recurrence are required", preview="Missing fields", is_error=True)
+            return ToolResult(
+                content="Error: description, time, and recurrence are required",
+                preview="Missing fields",
+                is_error=True,
+            )
 
         try:
             parts = time.split(":")
@@ -63,7 +67,11 @@ class ScheduleTaskTool(Tool):
                 raise ValueError
             time_normalized = f"{h:02d}:{m:02d}"
         except (ValueError, IndexError):
-            return ToolResult(content=f"Error: invalid time format '{time}'. Use HH:MM (24h)", preview="Invalid time", is_error=True)
+            return ToolResult(
+                content=f"Error: invalid time format '{time}'. Use HH:MM (24h)",
+                preview="Invalid time",
+                is_error=True,
+            )
 
         try:
             rec = Recurrence(recurrence)
@@ -187,7 +195,10 @@ class GetScheduleResultTool(Tool):
 
         if not task.last_result:
             last_run = task.last_run_at.strftime("%Y-%m-%d %H:%M") if task.last_run_at else "never"
-            return ToolResult(content=f"No result yet for '{task.description}' (last run: {last_run})", preview="No result")
+            return ToolResult(
+                content=f"No result yet for '{task.description}' (last run: {last_run})",
+                preview="No result",
+            )
 
         header = (
             f"Task: {task.description}\n"

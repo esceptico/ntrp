@@ -99,7 +99,9 @@ class WebFetchTool(Tool):
 
         if not url.startswith(("http://", "https://")):
             return ToolResult(
-                content=f"Invalid URL: must start with http:// or https://. Got: {url}", preview="Invalid url", is_error=True
+                content=f"Invalid URL: must start with http:// or https://. Got: {url}",
+                preview="Invalid url",
+                is_error=True,
             )
 
         try:

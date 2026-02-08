@@ -36,11 +36,19 @@ class AskChoiceTool(Tool):
         if not question:
             return ToolResult(content="Error: question is required", preview="Missing question", is_error=True)
         if not options or len(options) < 2:
-            return ToolResult(content="Error: at least 2 options are required", preview="Too few options", is_error=True)
+            return ToolResult(
+                content="Error: at least 2 options are required",
+                preview="Too few options",
+                is_error=True,
+            )
 
         for opt in options:
             if not isinstance(opt, dict) or "id" not in opt or "label" not in opt:
-                return ToolResult(content="Error: each option must have 'id' and 'label'", preview="Invalid options", is_error=True)
+                return ToolResult(
+                    content="Error: each option must have 'id' and 'label'",
+                    preview="Invalid options",
+                    is_error=True,
+                )
 
         selected = await execution.ask_choice(question, options, allow_multiple)
 

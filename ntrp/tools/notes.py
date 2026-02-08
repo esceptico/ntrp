@@ -134,7 +134,10 @@ class ReadNoteTool(Tool):
     ) -> ToolResult:
         content = self.source.read(path)
         if content is None:
-            return ToolResult(content=f"Note not found: {path}. Use list_notes to see available notes.", preview="Not found")
+            return ToolResult(
+                content=f"Note not found: {path}. Use list_notes to see available notes.",
+                preview="Not found",
+            )
 
         formatted = format_lines_with_pagination(content, offset, limit)
         lines = len(content.split("\n"))
@@ -166,11 +169,15 @@ class EditNoteTool(Tool):
 
         original = self.source.read(path)
         if original is None:
-            return ToolResult(content=f"Note not found: {path}. Use list_notes to find correct path.", preview="Not found")
+            return ToolResult(
+                content=f"Note not found: {path}. Use list_notes to find correct path.",
+                preview="Not found",
+            )
 
         if find not in original:
             return ToolResult(
-                content=f"Text to replace not found in {path}. Read the note first to get exact text.", preview="Not found"
+                content=f"Text to replace not found in {path}. Read the note first to get exact text.",
+                preview="Not found",
             )
 
         proposed = original.replace(find, replace, 1)
@@ -218,7 +225,8 @@ class CreateNoteTool(Tool):
 
         if self.source.exists(path):
             return ToolResult(
-                content=f"Note already exists: {path}. Use edit_note to modify or choose different path.", preview="Exists"
+                content=f"Note already exists: {path}. Use edit_note to modify or choose different path.",
+                preview="Exists",
             )
 
         preview_content = content[:CONTENT_PREVIEW_LIMIT]
@@ -253,7 +261,10 @@ class DeleteNoteTool(Tool):
 
         original = self.source.read(path)
         if original is None:
-            return ToolResult(content=f"Note not found: {path}. Use list_notes to find correct path.", preview="Not found")
+            return ToolResult(
+                content=f"Note not found: {path}. Use list_notes to find correct path.",
+                preview="Not found",
+            )
 
         await execution.require_approval(path)
 
@@ -286,11 +297,15 @@ class MoveNoteTool(Tool):
             new_path = new_path + ".md"
 
         if not self.source.exists(path):
-            return ToolResult(content=f"Note not found: {path}. Use list_notes to find correct path.", preview="Not found")
+            return ToolResult(
+                content=f"Note not found: {path}. Use list_notes to find correct path.",
+                preview="Not found",
+            )
 
         if self.source.exists(new_path):
             return ToolResult(
-                content=f"Destination already exists: {new_path}. Choose different path or delete existing first.", preview="Exists"
+                content=f"Destination already exists: {new_path}. Choose different path or delete existing first.",
+                preview="Exists",
             )
 
         await execution.require_approval(f"{path} → {new_path}")

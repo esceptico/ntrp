@@ -41,11 +41,15 @@ class ReadFileTool(Tool):
         full_path = os.path.normpath(full_path)
 
         if not os.path.exists(full_path):
-            return ToolResult(content=f"File not found: {path}. Check the path or use bash(ls) to list directory.", preview="Not found")
+            return ToolResult(
+                content=f"File not found: {path}. Check the path or use bash(ls) to list directory.",
+                preview="Not found",
+            )
 
         if not os.path.isfile(full_path):
             return ToolResult(
-                content=f"Path is a directory, not a file: {path}. Use bash(ls {path}) to list contents.", preview="Not a file"
+                content=f"Path is a directory, not a file: {path}. Use bash(ls {path}) to list contents.",
+                preview="Not a file",
             )
 
         try:
@@ -56,6 +60,9 @@ class ReadFileTool(Tool):
             return ToolResult(content=formatted, preview=f"Read {lines} lines")
 
         except PermissionError:
-            return ToolResult(content=f"Permission denied: {path}. File may be protected or require elevated access.", preview="Denied")
+            return ToolResult(
+                content=f"Permission denied: {path}. File may be protected or require elevated access.",
+                preview="Denied",
+            )
         except Exception as e:
             return ToolResult(content=f"Error reading file: {e}", preview="Read failed", is_error=True)

@@ -104,7 +104,10 @@ class ListEmailTool(Tool):
 
         if not emails:
             if accounts:
-                return ToolResult(content=f"No emails in last {days} days from {len(accounts)} accounts", preview="0 emails")
+                return ToolResult(
+                    content=f"No emails in last {days} days from {len(accounts)} accounts",
+                    preview="0 emails",
+                )
             return ToolResult(content=f"No emails in last {days} days", preview="0 emails")
 
         output = []
