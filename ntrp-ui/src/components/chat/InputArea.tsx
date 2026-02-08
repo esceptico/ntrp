@@ -251,7 +251,6 @@ export const InputArea = memo(function InputArea({
   // Always active when focused - even during streaming (messages get queued)
   useKeypress(handleKeypress, { isActive: focus });
 
-  // Simple cursor rendering with inline cursor
   const beforeCursor = value.slice(0, cursorPos);
   const atCursor = value[cursorPos] || " ";
   const afterCursor = value.slice(cursorPos + 1);
@@ -261,14 +260,17 @@ export const InputArea = memo(function InputArea({
       {/* Top divider */}
       <Text color={colors.divider}>{divider}</Text>
 
-      {/* Input row - single Text element */}
-      <Text>
-        <Text color={accentValue} bold>{">"}</Text>
-        <Text> </Text>
-        <Text>{beforeCursor}</Text>
-        <Text inverse>{atCursor}</Text>
-        <Text>{afterCursor}</Text>
-      </Text>
+      {/* Input row — Box layout handles continuation-line indent */}
+      <Box flexDirection="row">
+        <Box width={2} flexShrink={0}>
+          <Text color={accentValue} bold>{">"}</Text>
+        </Box>
+        <Text>
+          <Text>{beforeCursor}</Text>
+          <Text inverse>{atCursor}</Text>
+          <Text>{afterCursor}</Text>
+        </Text>
+      </Box>
 
       {/* Bottom divider */}
       <Text color={colors.divider}>{divider}</Text>
