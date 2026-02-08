@@ -33,26 +33,16 @@ export function SystemPanel({ data, width }: SystemPanelProps) {
   return (
     <Box flexDirection="column" marginTop={1}>
       <Box>
-        <Text color={B}>{"uptime".padEnd(9)}</Text>
+        <Box width={9} flexShrink={0}><Text color={B}>uptime</Text></Box>
         <Text color={colors.text.primary}>[{formatUptime(system.uptime_seconds)}]</Text>
       </Box>
       <Box>
-        <Text color={B}>{"model".padEnd(9)}</Text>
+        <Box width={9} flexShrink={0}><Text color={B}>model</Text></Box>
         <Text color={colors.status.success}>{system.model}</Text>
-      </Box>
-      <Box>
-        <Text color={B}>{"sources".padEnd(9)}</Text>
-        {system.sources.map((s, i) => (
-          <Text key={s}>
-            {i > 0 ? " " : ""}
-            <Text color={colors.text.secondary}>[{s}]</Text>
-          </Text>
-        ))}
-        {system.sources.length === 0 && <Text color={B}>—</Text>}
       </Box>
 
       <Box marginTop={1}>
-        <Text color={B}>{"tokens".padEnd(9)}</Text>
+        <Box width={9} flexShrink={0}><Text color={B}>tokens</Text></Box>
         <Text color={B}>↑ </Text>
         <Text color={colors.text.primary} bold>{formatTokens(tokens.total_prompt)}</Text>
         <Text>   </Text>
@@ -61,7 +51,7 @@ export function SystemPanel({ data, width }: SystemPanelProps) {
       </Box>
       {sparkData.length > 1 && (
         <Box>
-          <Text color={B}>{"trend".padEnd(9)}</Text>
+          <Box width={9} flexShrink={0}><Text color={B}>trend</Text></Box>
           <Sparkline data={sparkData.slice(-sparkW)} width={sparkW} colorScheme="green" />
         </Box>
       )}
