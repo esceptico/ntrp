@@ -9,7 +9,7 @@ from ntrp.search.store import SearchStore
 from ntrp.search.types import SearchResult
 from ntrp.sources.models import RawItem
 
-logger = get_logger(__name__)
+_logger = get_logger(__name__)
 
 
 class SearchIndex:

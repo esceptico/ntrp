@@ -5,7 +5,7 @@ import litellm
 
 from ntrp.logging import get_logger
 
-logger = get_logger(__name__)
+_logger = get_logger(__name__)
 
 MAX_RETRIES = 2
 BASE_DELAY = 0.5
@@ -59,5 +59,5 @@ async def acompletion(**kwargs):
             if not retryable or attempt >= MAX_RETRIES:
                 raise
             wait = _delay(attempt, retry_after)
-            logger.warning("LLM call failed (attempt %d/%d), retrying in %.1fs: %s", attempt + 1, MAX_RETRIES, wait, e)
+            _logger.warning("LLM call failed (attempt %d/%d), retrying in %.1fs: %s", attempt + 1, MAX_RETRIES, wait, e)
             await asyncio.sleep(wait)

@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 from ntrp.logging import get_logger
 
-logger = get_logger(__name__)
+_logger = get_logger(__name__)
 
 POLL_INTERVAL = 60
 
@@ -24,7 +24,7 @@ class Scheduler:
     def start(self) -> None:
         if self._task is None:
             self._task = asyncio.create_task(self._loop())
-            logger.info("Scheduler started (polling every %ds)", POLL_INTERVAL)
+            _logger.info("Scheduler started (polling every %ds)", POLL_INTERVAL)
 
     async def stop(self) -> None:
         if self._task:
@@ -34,7 +34,7 @@ class Scheduler:
             except asyncio.CancelledError:
                 pass
             self._task = None
-            logger.info("Scheduler stopped")
+            _logger.info("Scheduler stopped")
 
     async def _loop(self) -> None:
         while True:
@@ -43,7 +43,7 @@ class Scheduler:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.exception("Scheduler tick failed")
+                _logger.exception("Scheduler tick failed")
             await asyncio.sleep(POLL_INTERVAL)
 
     async def _tick(self) -> None:
@@ -54,13 +54,13 @@ class Scheduler:
             try:
                 await self._execute_task(task)
             except Exception:
-                logger.exception("Failed to execute scheduled task %s", task.task_id)
+                _logger.exception("Failed to execute scheduled task %s", task.task_id)
             finally:
                 await self.store.clear_running(task.task_id)
 
     async def _run_agent(self, task: ScheduledTask) -> str | None:
         runtime = self.runtime
-        logger.info("Executing scheduled task %s: %s", task.task_id, task.description[:80])
+        _logger.info("Executing scheduled task %s: %s", task.task_id, task.description[:80])
 
         memory_context = None
         if runtime.memory:
@@ -130,7 +130,7 @@ class Scheduler:
                         html=True,
                     )
                 except Exception:
-                    logger.exception("Failed to send email for task %s", task.task_id)
+                    _logger.exception("Failed to send email for task %s", task.task_id)
 
         return result
 
@@ -143,7 +143,7 @@ class Scheduler:
         else:
             next_run = compute_next_run(task.time_of_day, task.recurrence, after=now)
             await self.store.update_last_run(task.task_id, now, next_run, result=result)
-        logger.info("Completed scheduled task %s", task.task_id)
+        _logger.info("Completed scheduled task %s", task.task_id)
 
     async def run_now(self, task_id: str) -> str | None:
         task = await self.store.get(task_id)

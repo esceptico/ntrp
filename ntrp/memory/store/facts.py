@@ -1,3 +1,4 @@
+import dataclasses
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
@@ -153,8 +154,8 @@ class FactRepository(BaseRepository):
         if not rows:
             return None
         fact = self._row_to_fact(rows[0])
-        fact.entity_refs = await self.get_entity_refs(fact_id)
-        return fact
+        entity_refs = await self.get_entity_refs(fact_id)
+        return dataclasses.replace(fact, entity_refs=entity_refs)
 
     async def create(
         self,

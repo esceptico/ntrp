@@ -6,7 +6,7 @@ from ntrp.logging import get_logger
 from ntrp.search.store import SearchStore
 from ntrp.search.types import RankedResult, ScoredRow
 
-logger = get_logger(__name__)
+_logger = get_logger(__name__)
 
 
 def rrf_merge(
@@ -110,7 +110,7 @@ class HybridRetriever:
             query_bytes = serialize_embedding(query_embedding)
             vector_results = await self._vector_search(query_bytes, sources, limit)
         except Exception as e:
-            logger.warning("Vector search failed, using FTS only: %s", e)
+            _logger.warning("Vector search failed, using FTS only: %s", e)
 
         fts_results = await self._fts_search(query, sources, limit)
 

@@ -12,7 +12,7 @@ from ntrp.tools.core.context import ToolContext, ToolExecution
 from ntrp.tools.executor import ToolExecutor
 from ntrp.utils import ms_now
 
-logger = get_logger(__name__)
+_logger = get_logger(__name__)
 
 OFFLOAD_BASE = Path("/tmp/ntrp")
 
@@ -155,7 +155,7 @@ class ToolRunner:
                     for call in calls:
                         tg.create_task(execute_tool(call))
             except ExceptionGroup as eg:
-                logger.warning("Tool execution errors: %s", [str(e) for e in eg.exceptions])
+                _logger.warning("Tool execution errors: %s", [str(e) for e in eg.exceptions])
             finally:
                 results_queue.finish()
 

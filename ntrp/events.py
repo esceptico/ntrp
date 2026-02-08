@@ -17,7 +17,7 @@ class EventType(StrEnum):
     CANCELLED = "cancelled"
 
 
-@dataclass
+@dataclass(frozen=True)
 class SSEEvent:
     type: EventType
 
@@ -31,13 +31,13 @@ class SSEEvent:
         return f"event: {sse['event']}\ndata: {sse['data']}\n\n"
 
 
-@dataclass
+@dataclass(frozen=True)
 class ThinkingEvent(SSEEvent):
     type: EventType = field(default=EventType.THINKING, init=False)
     status: str = ""
 
 
-@dataclass
+@dataclass(frozen=True)
 class TextEvent(SSEEvent):
     type: EventType = field(default=EventType.TEXT, init=False)
     content: str = ""
@@ -50,7 +50,7 @@ def _format_call(name: str, args: dict) -> str:
     return f"{name}({', '.join(parts)})"
 
 
-@dataclass
+@dataclass(frozen=True)
 class ToolCallEvent(SSEEvent):
     type: EventType = field(default=EventType.TOOL_CALL, init=False)
     tool_id: str
@@ -61,10 +61,10 @@ class ToolCallEvent(SSEEvent):
     description: str = field(init=False)
 
     def __post_init__(self):
-        self.description = _format_call(self.name, self.args)
+        object.__setattr__(self, 'description', _format_call(self.name, self.args))
 
 
-@dataclass
+@dataclass(frozen=True)
 class ToolResultEvent(SSEEvent):
     type: EventType = field(default=EventType.TOOL_RESULT, init=False)
     tool_id: str
@@ -77,7 +77,7 @@ class ToolResultEvent(SSEEvent):
     metadata: dict | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class ApprovalNeededEvent(SSEEvent):
     type: EventType = field(default=EventType.APPROVAL_NEEDED, init=False)
     tool_id: str = ""
@@ -88,14 +88,14 @@ class ApprovalNeededEvent(SSEEvent):
     content_preview: str | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class QuestionEvent(SSEEvent):
     type: EventType = field(default=EventType.QUESTION, init=False)
     question: str = ""
     tool_id: str = ""  # For tracking
 
 
-@dataclass
+@dataclass(frozen=True)
 class ChoiceEvent(SSEEvent):
     type: EventType = field(default=EventType.CHOICE, init=False)
     question: str = ""
@@ -104,7 +104,7 @@ class ChoiceEvent(SSEEvent):
     tool_id: str = ""
 
 
-@dataclass
+@dataclass(frozen=True)
 class SessionInfoEvent(SSEEvent):
     type: EventType = field(default=EventType.SESSION_INFO, init=False)
     session_id: str = ""
@@ -114,21 +114,21 @@ class SessionInfoEvent(SSEEvent):
     skip_approvals: bool = False
 
 
-@dataclass
+@dataclass(frozen=True)
 class DoneEvent(SSEEvent):
     type: EventType = field(default=EventType.DONE, init=False)
     run_id: str = ""
     usage: dict = field(default_factory=dict)  # {"prompt": N, "completion": N}
 
 
-@dataclass
+@dataclass(frozen=True)
 class ErrorEvent(SSEEvent):
     type: EventType = field(default=EventType.ERROR, init=False)
     message: str = ""
     recoverable: bool = False
 
 
-@dataclass
+@dataclass(frozen=True)
 class CancelledEvent(SSEEvent):
     type: EventType = field(default=EventType.CANCELLED, init=False)
     run_id: str = ""

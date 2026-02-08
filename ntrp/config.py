@@ -11,7 +11,7 @@ from ntrp.logging import get_logger
 NTRP_DIR = Path.home() / ".ntrp"
 SETTINGS_PATH = NTRP_DIR / "settings.json"
 
-logger = get_logger(__name__)
+_logger = get_logger(__name__)
 
 
 def load_user_settings() -> dict:
@@ -20,7 +20,7 @@ def load_user_settings() -> dict:
     try:
         return json.loads(SETTINGS_PATH.read_text())
     except (json.JSONDecodeError, OSError):
-        logger.warning("Failed to load user settings", exc_info=True)
+        _logger.warning("Failed to load user settings", exc_info=True)
         return {}
 
 

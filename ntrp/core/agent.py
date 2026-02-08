@@ -12,7 +12,7 @@ from ntrp.logging import get_logger
 from ntrp.tools.core.context import ToolContext
 from ntrp.tools.executor import ToolExecutor
 
-logger = get_logger(__name__)
+_logger = get_logger(__name__)
 
 
 class Agent:
@@ -142,7 +142,7 @@ class Agent:
             try:
                 response = await self._call_llm()
             except Exception:
-                logger.exception("LLM call failed (model=%s)", self.model)
+                _logger.exception("LLM call failed (model=%s)", self.model)
                 await self._set_state(AgentState.IDLE)
                 raise
 

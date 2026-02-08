@@ -16,7 +16,7 @@ def make_schema(name: str, description: str, properties: dict | None = None, req
     return schema
 
 
-@dataclass
+@dataclass(frozen=True)
 class ToolResult:
     content: str
     preview: str

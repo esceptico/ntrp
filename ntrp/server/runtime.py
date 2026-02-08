@@ -1,8 +1,9 @@
 import asyncio
-from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any
+from typing import Self
+
+import litellm.llms.custom_httpx.async_client_cleanup as litellm_cleanup
+import litellm.main as litellm_main
 
 from ntrp.bus import EventBus
 from ntrp.config import Config, get_config
@@ -16,32 +17,22 @@ from ntrp.schedule.scheduler import Scheduler
 from ntrp.schedule.store import ScheduleStore
 from ntrp.server.dashboard import DashboardCollector
 from ntrp.server.indexer import Indexer
+from ntrp.server.sources import SourceChanged, SourceManager
 from ntrp.server.state import RunRegistry
 from ntrp.sources.browser import BrowserHistorySource
-from ntrp.sources.exa import WebSource
-from ntrp.sources.google.auth import discover_calendar_tokens, discover_gmail_tokens
-from ntrp.sources.google.calendar import MultiCalendarSource
 from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.sources.memory import MemoryIndexSource
-from ntrp.sources.obsidian import ObsidianSource
 from ntrp.tools.executor import ToolExecutor
-from ntrp.tools.schedule import CancelScheduleTool, GetScheduleResultTool, ListSchedulesTool, ScheduleTaskTool
 
-logger = get_logger(__name__)
-
-
-@dataclass
-class SourceChanged:
-    source_name: str
+_logger = get_logger(__name__)
 
 
 class Runtime:
     def __init__(self, config: Config | None = None):
         self.config = config or get_config()
+        self.bus = EventBus()
 
-        self._source_errors: dict[str, str] = {}
-        self._sources: dict[str, Any] = {}
-        self._init_sources()
+        self.source_mgr = SourceManager(self.config, self.bus)
 
         self.embedding = self.config.embedding
         self.indexer = Indexer(db_path=self.config.search_db_path, embedding=self.embedding)
@@ -52,8 +43,8 @@ class Runtime:
         self.executor: ToolExecutor | None = None
         self.tools: list[dict] = []
 
-        self.gmail: MultiGmailSource | None = self._sources.get("email")
-        self.browser: BrowserHistorySource | None = self._sources.get("browser")
+        self.gmail: MultiGmailSource | None = self.source_mgr.sources.get("email")
+        self.browser: BrowserHistorySource | None = self.source_mgr.sources.get("browser")
 
         self.max_depth = AGENT_MAX_DEPTH
         self.schedule_store: ScheduleStore | None = None
@@ -61,125 +52,22 @@ class Runtime:
         self.run_registry = RunRegistry()
 
         self.dashboard = DashboardCollector()
-        self.bus = EventBus()
         self._connected = False
         self._config_lock = asyncio.Lock()
 
-    def _init_sources(self) -> None:
-        source_factories: list[tuple[str, callable]] = []
+    async def reinit_source(self, name: str) -> None:
+        source = await self.source_mgr.reinit(name, self.config)
+        if name == "email":
+            self.gmail = source
+        elif name == "browser":
+            self.browser = source
 
-        if self.config.gmail:
-            source_factories.append(
-                (
-                    "MultiGmailSource",
-                    lambda: MultiGmailSource(
-                        token_paths=discover_gmail_tokens(),
-                        days_back=self.config.gmail_days,
-                    ),
-                )
-            )
-
-        if self.config.calendar:
-            source_factories.append(
-                (
-                    "MultiCalendarSource",
-                    lambda: MultiCalendarSource(
-                        token_paths=discover_calendar_tokens(),
-                        days_back=7,
-                        days_ahead=30,
-                    ),
-                )
-            )
-
-        if self.config.exa_api_key:
-            source_factories.append(
-                (
-                    "WebSource",
-                    lambda: WebSource(api_key=self.config.exa_api_key),
-                )
-            )
-
-        if self.config.vault_path:
-            source_factories.append(
-                (
-                    "ObsidianSource",
-                    lambda: ObsidianSource(vault_path=self.config.vault_path),
-                )
-            )
-
-        for name, factory in source_factories:
-            try:
-                source = factory()
-                if source is None:
-                    continue
-                if source.errors:
-                    self._source_errors[source.name] = "; ".join(f"{k}: {v}" for k, v in source.errors.items())
-                self._sources[source.name] = source
-            except Exception as e:
-                logger.warning("Failed to init source %s: %s", name, e)
-
-    async def reinit_gmail(self) -> MultiGmailSource | None:
-        token_paths = discover_gmail_tokens()
-        if not token_paths:
-            return None
-        gmail = MultiGmailSource(
-            token_paths=token_paths,
-            days_back=self.config.gmail_days,
-        )
-        self.gmail = gmail if gmail.sources else None
-        self._sources["email"] = gmail
-        await self.bus.publish(SourceChanged(source_name="email"))
-        return gmail
-
-    async def reinit_notes(self, vault_path: Path | None) -> ObsidianSource | None:
-        if vault_path is None:
-            self._sources.pop("notes", None)
-            await self.bus.publish(SourceChanged(source_name="notes"))
-            return None
-        try:
-            notes = ObsidianSource(vault_path=vault_path)
-            self._sources["notes"] = notes
-            await self.bus.publish(SourceChanged(source_name="notes"))
-            return notes
-        except Exception as e:
-            logger.warning("Failed to init Obsidian source: %s", e)
-            self._source_errors["notes"] = str(e)
-            return None
-
-    async def reinit_browser(
-        self, browser_name: str | None, days_back: int | None = None
-    ) -> BrowserHistorySource | None:
-        if browser_name is None:
-            self._sources.pop("browser", None)
+    async def remove_source(self, name: str) -> None:
+        await self.source_mgr.remove(name)
+        if name == "email":
+            self.gmail = None
+        elif name == "browser":
             self.browser = None
-            await self.bus.publish(SourceChanged(source_name="browser"))
-            return None
-        try:
-            browser = BrowserHistorySource(
-                browser_name=browser_name,
-                days_back=days_back or self.config.browser_days,
-            )
-            self._sources["browser"] = browser
-            self.browser = browser
-            await self.bus.publish(SourceChanged(source_name="browser"))
-            return browser
-        except Exception as e:
-            logger.warning("Failed to init browser source: %s", e)
-            self._source_errors["browser"] = str(e)
-            return None
-
-    async def reinit_calendar(self) -> MultiCalendarSource | None:
-        token_paths = discover_calendar_tokens()
-        if not token_paths:
-            return None
-        calendar = MultiCalendarSource(
-            token_paths=token_paths,
-            days_back=7,
-            days_ahead=30,
-        )
-        self._sources["calendar"] = calendar
-        await self.bus.publish(SourceChanged(source_name="calendar"))
-        return calendar
 
     async def reinit_memory(self, enabled: bool) -> None:
         if enabled and not self.memory:
@@ -195,22 +83,19 @@ class Runtime:
         await self.bus.publish(SourceChanged(source_name="memory"))
 
     def rebuild_executor(self) -> None:
-        self.executor = ToolExecutor(
-            sources=self._sources,
-            memory=self.memory,
-            model=self.config.chat_model,
-            search_index=self.indexer.index,
-        )
-
         default_email = self.config.schedule_email
         if not default_email and self.gmail:
             accounts = self.gmail.list_accounts()
             default_email = accounts[0] if accounts else None
 
-        self.executor.registry.register(ScheduleTaskTool(self.schedule_store, default_email))
-        self.executor.registry.register(ListSchedulesTool(self.schedule_store))
-        self.executor.registry.register(CancelScheduleTool(self.schedule_store))
-        self.executor.registry.register(GetScheduleResultTool(self.schedule_store))
+        self.executor = ToolExecutor(
+            sources=self.source_mgr.sources,
+            memory=self.memory,
+            model=self.config.chat_model,
+            search_index=self.indexer.index,
+            schedule_store=self.schedule_store,
+            default_email=default_email,
+        )
 
         self.tools = self.executor.get_tools()
 
@@ -244,17 +129,24 @@ class Runtime:
         self.rebuild_executor()
         self._connected = True
 
+    async def __aenter__(self) -> Self:
+        await self.connect()
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        await self.close()
+
     def get_source_details(self) -> dict[str, dict]:
-        return {name: source.details for name, source in self._sources.items()}
+        return self.source_mgr.get_details()
 
     def get_source_errors(self) -> dict[str, str]:
-        errors = dict(self._source_errors)
+        errors = dict(self.source_mgr.errors)
         if self.indexer.error:
             errors["index"] = self.indexer.error
         return errors
 
     def get_available_sources(self) -> list[str]:
-        sources = list(self._sources.keys())
+        sources = self.source_mgr.get_available()
         if self.memory:
             sources.append("memory")
         return sources
@@ -270,7 +162,7 @@ class Runtime:
         try:
             data = await self.session_store.get_latest_session()
         except Exception as e:
-            logger.warning("Failed to restore session: %s", e)
+            _logger.warning("Failed to restore session: %s", e)
             return None
 
         if not data:
@@ -290,7 +182,7 @@ class Runtime:
             session_state.last_activity = datetime.now(UTC)
             await self.session_store.save_session(session_state, messages)
         except Exception as e:
-            logger.warning("Failed to save session: %s", e)
+            _logger.warning("Failed to save session: %s", e)
 
     def start_scheduler(self) -> None:
         if self.schedule_store:
@@ -303,7 +195,7 @@ class Runtime:
 
     def start_indexing(self) -> None:
         sources = []
-        if notes := self._sources.get("notes"):
+        if notes := self.source_mgr.sources.get("notes"):
             sources.append(notes)
         if self.memory:
             sources.append(MemoryIndexSource(self.memory.db))
@@ -348,11 +240,8 @@ class Runtime:
         await self.indexer.stop()
         await self.indexer.close()
 
-        from litellm.llms.custom_httpx.async_client_cleanup import close_litellm_async_clients
-        from litellm.main import base_llm_aiohttp_handler
-
-        await base_llm_aiohttp_handler.close()
-        await close_litellm_async_clients()
+        await litellm_main.base_llm_aiohttp_handler.close()
+        await litellm_cleanup.close_litellm_async_clients()
 
 
 _runtime: Runtime | None = None

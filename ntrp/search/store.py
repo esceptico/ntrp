@@ -9,7 +9,7 @@ import sqlite_vec
 
 from ntrp.logging import get_logger
 
-logger = get_logger(__name__)
+_logger = get_logger(__name__)
 
 SNIPPET_DISPLAY_LIMIT = 500
 
@@ -79,7 +79,7 @@ class SearchStore:
                 src = Path(str(self.db_path) + suffix)
                 if src.exists():
                     src.rename(Path(f"{self.db_path}.bak.{timestamp}{suffix}"))
-            logger.warning("Search DB integrity check failed — backed up to %s.bak.%s", self.db_path, timestamp)
+            _logger.warning("Search DB integrity check failed — backed up to %s.bak.%s", self.db_path, timestamp)
 
             self._conn = await self._open_connection()
 
@@ -141,7 +141,7 @@ class SearchStore:
             """)
             self._has_vec = True
         except Exception as e:
-            logger.warning("Failed to create vec0 table: %s", e)
+            _logger.warning("Failed to create vec0 table: %s", e)
             self._has_vec = False
 
         await self.conn.commit()
@@ -331,7 +331,7 @@ class SearchStore:
 
             return [(row[0], 1 - row[1]) for row in rows]
         except Exception as e:
-            logger.warning("Vector search failed: %s", e)
+            _logger.warning("Vector search failed: %s", e)
             return []
 
     async def fts_search(
@@ -376,5 +376,5 @@ class SearchStore:
 
             return [(row[0], -row[1]) for row in rows]
         except Exception as e:
-            logger.warning("FTS search failed for query '%s': %s", query, e)
+            _logger.warning("FTS search failed for query '%s': %s", query, e)
             return []

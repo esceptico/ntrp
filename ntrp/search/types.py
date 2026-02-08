@@ -19,7 +19,7 @@ class SearchResult:
     rrf_score: float = 0.0
 
 
-@dataclass
+@dataclass(frozen=True)
 class ScoredRow:
     """Internal result from vector/FTS search before hydration."""
 
@@ -28,7 +28,7 @@ class ScoredRow:
     rank: int = 0
 
 
-@dataclass
+@dataclass(frozen=True)
 class RankedResult:
     row_id: int
     rrf_score: float

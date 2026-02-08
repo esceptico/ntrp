@@ -18,13 +18,13 @@ class LinkType(StrEnum):
     ENTITY = "entity"
 
 
-@dataclass
+@dataclass(frozen=True)
 class ExtractedEntity:
     name: str
     entity_type: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class ExtractedEntityPair:
     source: str
     target: str
@@ -32,13 +32,13 @@ class ExtractedEntityPair:
     target_type: str = "other"
 
 
-@dataclass
+@dataclass(frozen=True)
 class ExtractionResult:
     entities: list[ExtractedEntity] = field(default_factory=list)
     entity_pairs: list[ExtractedEntityPair] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(frozen=True)
 class HistoryEntry:
     previous_text: str
     changed_at: datetime
@@ -46,7 +46,7 @@ class HistoryEntry:
     source_fact_id: int
 
 
-@dataclass
+@dataclass(frozen=True)
 class Observation:
     id: int
     summary: str
@@ -60,7 +60,7 @@ class Observation:
     access_count: int
 
 
-@dataclass
+@dataclass(frozen=True)
 class Fact:
     id: int
     text: str
@@ -76,7 +76,7 @@ class Fact:
     entity_refs: list["EntityRef"] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(frozen=True)
 class FactLink:
     id: int
     source_fact_id: int
@@ -86,7 +86,7 @@ class FactLink:
     created_at: datetime
 
 
-@dataclass
+@dataclass(frozen=True)
 class EntityRef:
     id: int
     fact_id: int
@@ -95,7 +95,7 @@ class EntityRef:
     canonical_id: int | None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Entity:
     id: int
     name: str
@@ -106,7 +106,7 @@ class Entity:
     updated_at: datetime
 
 
-@dataclass
+@dataclass(frozen=True)
 class FactContext:
     facts: list[Fact]
     observations: list[Observation] = field(default_factory=list)

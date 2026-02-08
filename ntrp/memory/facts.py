@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,7 +27,7 @@ from ntrp.memory.store.linking import create_links_for_fact
 from ntrp.memory.store.observations import ObservationRepository
 from ntrp.memory.store.retrieval import retrieve_with_observations
 
-logger = get_logger(__name__)
+_logger = get_logger(__name__)
 
 
 @dataclass
@@ -82,7 +83,7 @@ class FactMemory:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.warning("Consolidation batch failed: %s", e)
+                _logger.warning("Consolidation batch failed: %s", e)
                 backoff = min(backoff * 2, max_backoff)
 
     async def _consolidate_pending(self, batch_size: int = 10) -> int:
@@ -95,7 +96,7 @@ class FactMemory:
 
             count = 0
             for fact in facts:
-                fact.entity_refs = await repo.get_entity_refs(fact.id)
+                fact = dataclasses.replace(fact, entity_refs=await repo.get_entity_refs(fact.id))
                 await consolidate_fact(
                     fact=fact,
                     fact_repo=repo,
@@ -104,7 +105,7 @@ class FactMemory:
                     embed_fn=self.embedder.embed_one,
                 )
                 count += 1
-            logger.info("Consolidated %d facts", count)
+            _logger.info("Consolidated %d facts", count)
             return count
 
     async def close(self) -> None:
@@ -144,10 +145,10 @@ class FactMemory:
                 extraction = await self.extractor.extract(text)
                 entities_extracted = await self._process_extraction(repo, fact.id, extraction, source_ref)
 
-                fact.entity_refs = await repo.get_entity_refs(fact.id)
+                fact = dataclasses.replace(fact, entity_refs=await repo.get_entity_refs(fact.id))
                 links_created = await create_links_for_fact(repo, fact)
             except Exception:
-                logger.exception("Remember failed")
+                _logger.exception("Remember failed")
                 raise
 
         await self.bus.publish(FactCreated(fact_id=fact.id, text=text))
@@ -266,7 +267,7 @@ class FactMemory:
         if best_score < ENTITY_RESOLUTION_AUTO_MERGE:
             return await self._create_new_entity(repo, name, entity_type)
 
-        logger.info("Entity resolution: '%s' → '%s' (score=%.2f)", name, best_candidate.name, best_score)
+        _logger.info("Entity resolution: '%s' → '%s' (score=%.2f)", name, best_candidate.name, best_score)
         return best_candidate.id
 
     async def recall(self, query: str, limit: int = RECALL_SEARCH_LIMIT) -> FactContext:
@@ -328,7 +329,7 @@ class FactMemory:
             merge_ids = [e.id for e in entities if e.id != keep.id]
 
             count = await repo.merge_entities(keep.id, merge_ids)
-            logger.info("Merged entities %s → '%s' (%d refs)", [e.name for e in entities], keep.name, count)
+            _logger.info("Merged entities %s → '%s' (%d refs)", [e.name for e in entities], keep.name, count)
             return count
 
     async def count(self) -> int:

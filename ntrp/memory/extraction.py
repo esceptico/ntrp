@@ -6,7 +6,7 @@ from ntrp.logging import get_logger
 from ntrp.memory.models import ExtractedEntity, ExtractedEntityPair, ExtractionResult
 from ntrp.memory.prompts import EXTRACTION_PROMPT
 
-logger = get_logger(__name__)
+_logger = get_logger(__name__)
 
 
 class EntitySchema(BaseModel):
@@ -56,5 +56,5 @@ class Extractor:
                 ],
             )
         except Exception:
-            logger.warning("Extraction failed", exc_info=True)
+            _logger.warning("Extraction failed", exc_info=True)
             return ExtractionResult()

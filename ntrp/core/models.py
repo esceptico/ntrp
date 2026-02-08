@@ -2,14 +2,14 @@ from dataclasses import dataclass
 from typing import Any
 
 
-@dataclass
+@dataclass(frozen=True)
 class PendingToolCall:
     tool_call: Any
     name: str
     args: dict
 
 
-@dataclass
+@dataclass(frozen=True)
 class ToolExecutionResult:
     call: PendingToolCall
     content: str

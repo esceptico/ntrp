@@ -16,7 +16,7 @@ from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.formatting import format_lines_with_pagination
 from ntrp.utils import truncate
 
-logger = get_logger(__name__)
+_logger = get_logger(__name__)
 
 
 READ_NOTE_DESCRIPTION = (
@@ -413,7 +413,7 @@ class SearchNotesTool(Tool):
                             output.append(f"  {truncate(item.snippet, SNIPPET_TRUNCATE)}")
                     return ToolResult("\n".join(output), f"{len(results)} notes")
             except Exception as e:
-                logger.warning("Hybrid search failed, falling back to text search: %s", e)
+                _logger.warning("Hybrid search failed, falling back to text search: %s", e)
 
         seen = set()
         results = []

@@ -9,7 +9,7 @@ from ntrp.context.compression import compress_context_async, count_tokens, find_
 from ntrp.logging import get_logger
 from ntrp.server.runtime import get_runtime
 
-logger = get_logger(__name__)
+_logger = get_logger(__name__)
 
 router = APIRouter(tags=["session"])
 
@@ -90,7 +90,7 @@ async def get_config():
         "gmail_accounts": gmail_accounts,
         "has_browser": runtime.config.browser is not None,
         "has_gmail": runtime.gmail is not None,
-        "has_notes": runtime.config.vault_path is not None and runtime._sources.get("notes") is not None,
+        "has_notes": runtime.config.vault_path is not None and runtime.source_mgr.sources.get("notes") is not None,
         "max_depth": runtime.max_depth,
         "memory_enabled": runtime.memory is not None,
         "sources": {
@@ -99,14 +99,14 @@ async def get_config():
                 "connected": runtime.gmail is not None,
                 "accounts": gmail_accounts,
             },
-            "calendar": {"enabled": runtime.config.calendar, "connected": "calendar" in runtime._sources},
+            "calendar": {"enabled": runtime.config.calendar, "connected": "calendar" in runtime.source_mgr.sources},
             "memory": {"enabled": runtime.config.memory, "connected": runtime.memory is not None},
-            "web": {"connected": "web" in runtime._sources},
+            "web": {"connected": "web" in runtime.source_mgr.sources},
             "notes": {
-                "connected": "notes" in runtime._sources,
+                "connected": "notes" in runtime.source_mgr.sources,
                 "path": str(runtime.config.vault_path) if runtime.config.vault_path else None,
             },
-            "browser": {"connected": "browser" in runtime._sources, "type": runtime.config.browser},
+            "browser": {"connected": "browser" in runtime.source_mgr.sources, "type": runtime.config.browser},
         },
     }
 
@@ -143,14 +143,14 @@ async def update_config(req: UpdateConfigRequest):
         if req.vault_path is not None:
             if req.vault_path == "":
                 runtime.config.vault_path = None
-                await runtime.reinit_notes(None)
+                await runtime.remove_source("notes")
                 settings.pop("vault_path", None)
             else:
                 vault_path = Path(req.vault_path).expanduser()
                 if not vault_path.exists():
                     raise HTTPException(status_code=400, detail=f"Vault path does not exist: {vault_path}")
                 runtime.config.vault_path = vault_path
-                await runtime.reinit_notes(vault_path)
+                await runtime.reinit_source("notes")
                 settings["vault_path"] = str(vault_path)
             save_user_settings(settings)
 
@@ -163,7 +163,10 @@ async def update_config(req: UpdateConfigRequest):
 
             runtime.config.browser = browser
             runtime.config.browser_days = browser_days
-            await runtime.reinit_browser(browser, browser_days)
+            if browser:
+                await runtime.reinit_source("browser")
+            else:
+                await runtime.remove_source("browser")
 
             if browser:
                 settings["browser"] = browser
@@ -179,20 +182,17 @@ async def update_config(req: UpdateConfigRequest):
                 runtime.config.gmail = req.sources.gmail
                 sources_settings["gmail"] = req.sources.gmail
                 if req.sources.gmail:
-                    await runtime.reinit_gmail()
+                    await runtime.reinit_source("email")
                 else:
-                    runtime._sources.pop("email", None)
-                    runtime._source_errors.pop("email", None)
-                    runtime.gmail = None
+                    await runtime.remove_source("email")
 
             if req.sources.calendar is not None:
                 runtime.config.calendar = req.sources.calendar
                 sources_settings["calendar"] = req.sources.calendar
                 if req.sources.calendar:
-                    await runtime.reinit_calendar()
+                    await runtime.reinit_source("calendar")
                 else:
-                    runtime._sources.pop("calendar", None)
-                    runtime._source_errors.pop("calendar", None)
+                    await runtime.remove_source("calendar")
 
             if req.sources.memory is not None:
                 runtime.config.memory = req.sources.memory
@@ -207,7 +207,7 @@ async def update_config(req: UpdateConfigRequest):
         "max_depth": runtime.max_depth,
         "vault_path": str(runtime.config.vault_path) if runtime.config.vault_path else None,
         "browser": runtime.config.browser,
-        "has_notes": runtime.config.vault_path is not None and runtime._sources.get("notes") is not None,
+        "has_notes": runtime.config.vault_path is not None and runtime.source_mgr.sources.get("notes") is not None,
         "has_browser": runtime.config.browser is not None,
     }
 
@@ -253,7 +253,7 @@ async def update_embedding_model(req: UpdateEmbeddingRequest):
     # Memory vectors are now stale — they were embedded with the old model
     warning = None
     if runtime.memory:
-        logger.warning(
+        _logger.warning(
             "Embedding model changed to %s — memory vectors are stale. Run /init or clear memory to re-embed.",
             req.embedding_model,
         )

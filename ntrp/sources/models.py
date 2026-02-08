@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 
 
-@dataclass
+@dataclass(frozen=True)
 class RawItem:
     source: str
     source_id: str

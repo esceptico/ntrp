@@ -16,7 +16,7 @@ from ntrp.memory.prompts import CONSOLIDATION_PROMPT
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
 
-logger = get_logger(__name__)
+_logger = get_logger(__name__)
 
 type EmbedFn = Callable[[str], Coroutine[None, None, Embedding]]
 
@@ -105,7 +105,7 @@ async def _llm_consolidation_decision(
         )
 
     except Exception as e:
-        logger.warning("Consolidation LLM failed: %s", e)
+        _logger.warning("Consolidation LLM failed: %s", e)
         return None
 
 
@@ -120,7 +120,7 @@ async def _execute_action(
 
     if action.type == "update":
         if not action.observation_id or not action.text:
-            logger.debug("Skipped update: missing observation_id or text")
+            _logger.debug("Skipped update: missing observation_id or text")
             return None
 
         embedding = await embed_fn(action.text)
@@ -132,15 +132,15 @@ async def _execute_action(
             reason=action.reason or "",
         )
         if obs:
-            logger.info("Updated observation %d with fact %d: %s", obs.id, fact.id, action.reason)
+            _logger.info("Updated observation %d with fact %d: %s", obs.id, fact.id, action.reason)
             return ConsolidationResult(action="updated", observation_id=obs.id, reason=action.reason)
         else:
-            logger.debug("Observation %s not found for update", action.observation_id)
+            _logger.debug("Observation %s not found for update", action.observation_id)
             return None
 
     if action.type == "create":
         if not action.text:
-            logger.debug("Skipped create: missing text")
+            _logger.debug("Skipped create: missing text")
             return None
 
         embedding = await embed_fn(action.text)
@@ -149,7 +149,7 @@ async def _execute_action(
             embedding=embedding,
             source_fact_id=fact.id,
         )
-        logger.info("Created observation %d from fact %d", obs.id, fact.id)
+        _logger.info("Created observation %d from fact %d", obs.id, fact.id)
         return ConsolidationResult(action="created", observation_id=obs.id)
 
     return None
