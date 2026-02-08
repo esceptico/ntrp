@@ -81,6 +81,14 @@ async def get_config():
         except Exception:
             pass
 
+    calendar_accounts: list[str] = []
+    calendar = runtime.get_calendar()
+    if calendar:
+        try:
+            calendar_accounts = calendar.list_accounts()
+        except Exception:
+            pass
+
     return {
         "chat_model": runtime.config.chat_model,
         "memory_model": runtime.config.memory_model,
@@ -100,7 +108,11 @@ async def get_config():
                 "connected": gmail is not None,
                 "accounts": gmail_accounts,
             },
-            "calendar": {"enabled": runtime.config.calendar, "connected": "calendar" in runtime.source_mgr.sources},
+            "calendar": {
+                "enabled": runtime.config.calendar,
+                "connected": calendar is not None,
+                "accounts": calendar_accounts,
+            },
             "memory": {"enabled": runtime.config.memory, "connected": runtime.memory is not None},
             "web": {"connected": "web" in runtime.source_mgr.sources},
             "notes": {

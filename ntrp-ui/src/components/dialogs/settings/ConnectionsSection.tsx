@@ -109,9 +109,13 @@ export function ConnectionsSection({
       <SourceRow item="calendar" selected={selectedItem === "calendar"} accent={accent}>
         <ToggleIndicator source={sources?.calendar} accent={accent} />
         {sources?.calendar?.enabled ? (
-          <Text color={sources?.calendar?.connected ? colors.text.primary : colors.status.warning}>
-            {sources?.calendar?.connected ? "Connected" : "No tokens"}
-          </Text>
+          sources?.calendar?.connected ? (
+            <Text color={colors.text.primary}>
+              {(sources.calendar.accounts?.length ?? 0)} account{(sources.calendar.accounts?.length ?? 0) !== 1 ? "s" : ""}
+            </Text>
+          ) : (
+            <Text color={colors.status.warning}>No tokens</Text>
+          )
         ) : (
           <Text color={colors.text.muted}>Disabled</Text>
         )}

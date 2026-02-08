@@ -24,7 +24,8 @@ def _create_calendar(config: Config):
     token_paths = discover_calendar_tokens()
     if not token_paths:
         return None
-    return MultiCalendarSource(token_paths=token_paths, days_back=7, days_ahead=30)
+    source = MultiCalendarSource(token_paths=token_paths, days_back=7, days_ahead=30)
+    return source if source.sources else None
 
 
 SOURCES: dict[str, SourceEntry] = {
