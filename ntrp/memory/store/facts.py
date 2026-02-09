@@ -214,7 +214,6 @@ class FactRepository:
             (now.isoformat(), *fact_ids),
         )
 
-
     async def list_recent(self, limit: int = 100) -> list[Fact]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_RECENT, (limit,))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
@@ -241,7 +240,6 @@ class FactRepository:
         await self.conn.execute(_SQL_DELETE_FACT_VEC, (fact_id,))
         await self.conn.execute(_SQL_DELETE_FACT, (fact_id,))
 
-
     async def cleanup_orphaned_entities(self) -> int:
         cursor = await self.conn.execute("""
             DELETE FROM entities WHERE id NOT IN (
@@ -263,7 +261,6 @@ class FactRepository:
     async def mark_consolidated(self, fact_id: int) -> None:
         now = datetime.now(UTC)
         await self.conn.execute(_SQL_MARK_CONSOLIDATED, (now.isoformat(), fact_id))
-
 
     async def add_entity_ref(
         self, fact_id: int, name: str, entity_type: str, canonical_id: int | None = None
@@ -454,6 +451,5 @@ class FactRepository:
         )
         await self.conn.execute(_SQL_DELETE_ENTITIES_VEC.format(placeholders=placeholders), merge_ids)
         cursor = await self.conn.execute(_SQL_DELETE_ENTITIES.format(placeholders=placeholders), merge_ids)
-
 
         return cursor.rowcount

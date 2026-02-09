@@ -117,7 +117,9 @@ class FactMemory:
             facts = await self.facts.list_unconsolidated(limit=batch_size)
             if not facts:
                 return 0
-            facts = [fact.model_copy(update={"entity_refs": await self.facts.get_entity_refs(fact.id)}) for fact in facts]
+            facts = [
+                fact.model_copy(update={"entity_refs": await self.facts.get_entity_refs(fact.id)}) for fact in facts
+            ]
 
         # Phase 2: LLM decisions outside lock (DB reads + LLM calls, no writes)
         decisions = []
@@ -247,9 +249,7 @@ class FactMemory:
 
         return (best_candidate, best_score) if best_candidate else None
 
-    async def _resolve_entity(
-        self, name: str, entity_type: str, source_ref: str | None = None
-    ) -> int | None:
+    async def _resolve_entity(self, name: str, entity_type: str, source_ref: str | None = None) -> int | None:
         existing = await self.facts.get_entity_by_name(name, entity_type)
         if existing:
             return existing.id

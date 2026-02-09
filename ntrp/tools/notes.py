@@ -360,5 +360,3 @@ class MoveNoteTool(Tool):
         if success:
             return ToolResult(content=f"Moved: `{path}` → `{new_path}`", preview="Moved")
         return ToolResult(content=f"Error moving {path}", preview="Move failed", is_error=True)
-
-

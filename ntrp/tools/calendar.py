@@ -321,5 +321,3 @@ class DeleteCalendarEventTool(Tool):
 
         result = self.source.delete_event(event_id)
         return ToolResult(content=result, preview="Deleted")
-
-

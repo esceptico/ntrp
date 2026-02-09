@@ -84,8 +84,6 @@ class ObservationRepository:
         if embedding_bytes is not None:
             await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (obs_id, embedding_bytes))
 
-
-
         return Observation(
             id=obs_id,
             summary=summary,
@@ -151,8 +149,6 @@ class ObservationRepository:
             await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (observation_id,))
             await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (observation_id, embedding_bytes))
 
-
-
         return Observation(
             id=observation_id,
             summary=summary,
@@ -175,7 +171,6 @@ class ObservationRepository:
             _SQL_REINFORCE_OBSERVATIONS.format(placeholders=placeholders),
             (now.isoformat(), *observation_ids),
         )
-
 
     async def get_fact_ids(self, observation_id: int) -> list[int]:
         rows = await self.conn.execute_fetchall(
