@@ -6,7 +6,7 @@ export interface ApiError extends Error {
 }
 
 export interface FetchOptions {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   timeout?: number;
   signal?: AbortSignal;
@@ -107,6 +107,9 @@ export const api = {
 
   post: <T>(url: string, body?: unknown, options?: Omit<FetchOptions, "method" | "body">) =>
     apiFetch<T>(url, { ...options, method: "POST", body }),
+
+  put: <T>(url: string, body?: unknown, options?: Omit<FetchOptions, "method" | "body">) =>
+    apiFetch<T>(url, { ...options, method: "PUT", body }),
 
   patch: <T>(url: string, body?: unknown, options?: Omit<FetchOptions, "method" | "body">) =>
     apiFetch<T>(url, { ...options, method: "PATCH", body }),

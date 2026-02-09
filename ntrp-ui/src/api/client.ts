@@ -353,6 +353,18 @@ export async function runSchedule(config: Config, taskId: string): Promise<{ sta
   return api.post<{ status: string }>(`${config.serverUrl}/schedules/${taskId}/run`);
 }
 
+export async function getNotifiers(config: Config): Promise<{ notifiers: string[] }> {
+  return api.get<{ notifiers: string[] }>(`${config.serverUrl}/notifiers`);
+}
+
+export async function setScheduleNotifiers(
+  config: Config,
+  taskId: string,
+  notifiers: string[]
+): Promise<{ notifiers: string[] }> {
+  return api.put<{ notifiers: string[] }>(`${config.serverUrl}/schedules/${taskId}/notifiers`, { notifiers });
+}
+
 export async function updateFact(
   config: Config,
   factId: number,

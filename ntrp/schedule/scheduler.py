@@ -99,7 +99,7 @@ class Scheduler:
     async def _run_agent(self, task: ScheduledTask) -> str | None:
         # Delayed imports: scheduler → agent → tools creates a circular import chain
         from ntrp.core.agent import Agent
-        from ntrp.core.prompts import SCHEDULED_TASK_SUFFIX, build_system_prompt
+        from ntrp.core.prompts import build_system_prompt, scheduled_task_suffix
         from ntrp.core.spawner import create_spawn_fn
         from ntrp.memory.formatting import format_memory_context
         from ntrp.tools.core.context import ToolContext
@@ -117,7 +117,7 @@ class Scheduler:
             source_details=self.deps.source_details(),
             memory_context=memory_context,
         )
-        system_prompt += SCHEDULED_TASK_SUFFIX
+        system_prompt += scheduled_task_suffix(bool(task.notifiers))
 
         session_state = self.deps.create_session()
 

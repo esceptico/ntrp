@@ -129,6 +129,13 @@ class ScheduleStore:
         )
         await self.conn.commit()
 
+    async def set_notifiers(self, task_id: str, notifiers: list[str]) -> None:
+        await self.conn.execute(
+            "UPDATE scheduled_tasks SET notifiers = ? WHERE task_id = ?",
+            (json.dumps(notifiers), task_id),
+        )
+        await self.conn.commit()
+
     async def update_description(self, task_id: str, description: str) -> None:
         await self.conn.execute(
             "UPDATE scheduled_tasks SET description = ? WHERE task_id = ?",

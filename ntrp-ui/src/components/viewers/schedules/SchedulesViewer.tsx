@@ -45,6 +45,8 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
     handleRun,
     handleViewResult,
     handleSave,
+    handleToggleNotifier,
+    availableNotifiers,
   } = useSchedules(config);
 
   const textInput = useTextInput({
@@ -109,6 +111,8 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
         handleToggleWritable();
       } else if (key.name === "x") {
         handleRun();
+      } else if (key.name === "n") {
+        handleToggleNotifier();
       } else if (key.name === "r") {
         setLoading(true);
         loadSchedules();
@@ -127,6 +131,7 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
       handleRun,
       editMode,
       handleSave,
+      handleToggleNotifier,
       setSelectedIndex,
       setConfirmDelete,
       setEditMode,
@@ -204,7 +209,7 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
       <Footer>
         {confirmDelete
           ? "y: confirm  n: cancel"
-          : "enter: view  space: toggle  e: edit  w: writable  x: run  d: delete  r: refresh  q: close"}
+          : `enter: view  space: toggle  e: edit  w: writable${availableNotifiers.length > 0 ? "  n: notify" : ""}  x: run  d: delete  r: refresh  q: close`}
       </Footer>
     </Panel>
   );

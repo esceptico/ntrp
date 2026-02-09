@@ -12,6 +12,10 @@ class UpdateScheduleRequest(BaseModel):
     description: str = Field(min_length=1, max_length=1000)
 
 
+class SetNotifiersRequest(BaseModel):
+    notifiers: list[str]
+
+
 @router.get("/schedules")
 async def list_schedules():
     runtime = get_runtime()
@@ -123,6 +127,30 @@ async def update_schedule(task_id: str, request: UpdateScheduleRequest):
 
     await runtime.schedule_store.update_description(task_id, request.description)
     return {"description": request.description}
+
+
+@router.get("/notifiers")
+async def list_notifiers():
+    runtime = get_runtime()
+    return {"notifiers": list(runtime.notifiers.keys())}
+
+
+@router.put("/schedules/{task_id}/notifiers")
+async def set_notifiers(task_id: str, request: SetNotifiersRequest):
+    runtime = get_runtime()
+    if not runtime.schedule_store:
+        raise HTTPException(status_code=503, detail="Scheduling not available")
+
+    task = await runtime.schedule_store.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    for name in request.notifiers:
+        if name not in runtime.notifiers:
+            raise HTTPException(status_code=400, detail=f"Unknown notifier: {name}")
+
+    await runtime.schedule_store.set_notifiers(task_id, request.notifiers)
+    return {"notifiers": request.notifiers}
 
 
 @router.delete("/schedules/{task_id}")

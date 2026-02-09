@@ -194,12 +194,22 @@ def _time_gap(last_activity: datetime | None) -> str:
     return f"Note: Last interaction was {hours:.1f} hours ago."
 
 
-SCHEDULED_TASK_SUFFIX = (
+_SCHEDULED_TASK_BASE = (
     "\n\nYou are executing a scheduled task autonomously. "
     "Do the work described directly — gather information, produce output, and return the result. "
     "Do not schedule new tasks or ask for confirmation. "
     "Return only the final output — no preamble, no narration, no thinking out loud."
 )
+
+_SCHEDULED_TASK_NOTIFY = (
+    " Format your output as a concise report suitable for notification."
+)
+
+
+def scheduled_task_suffix(has_notifiers: bool) -> str:
+    if has_notifiers:
+        return _SCHEDULED_TASK_BASE + _SCHEDULED_TASK_NOTIFY
+    return _SCHEDULED_TASK_BASE
 
 
 def build_system_prompt(

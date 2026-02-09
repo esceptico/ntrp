@@ -8,6 +8,8 @@ import {
   deleteSchedule,
   runSchedule,
   toggleWritable,
+  getNotifiers,
+  setScheduleNotifiers,
   type Schedule,
 } from "../api/client.js";
 
@@ -22,6 +24,7 @@ export interface UseSchedulesResult {
   editText: string;
   cursorPos: number;
   saving: boolean;
+  availableNotifiers: string[];
   setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
   setConfirmDelete: React.Dispatch<React.SetStateAction<boolean>>;
   setViewingResult: React.Dispatch<React.SetStateAction<{ description: string; result: string } | null>>;
@@ -38,6 +41,7 @@ export interface UseSchedulesResult {
   handleRun: () => Promise<void>;
   handleViewResult: () => Promise<void>;
   handleSave: () => Promise<void>;
+  handleToggleNotifier: () => Promise<void>;
 }
 
 export function useSchedules(config: Config): UseSchedulesResult {
@@ -51,13 +55,18 @@ export function useSchedules(config: Config): UseSchedulesResult {
   const [editText, setEditText] = useState("");
   const [cursorPos, setCursorPos] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [availableNotifiers, setAvailableNotifiers] = useState<string[]>([]);
 
   const loadedRef = useRef(false);
 
   const loadSchedules = useCallback(async () => {
     try {
-      const data = await getSchedules(config);
+      const [data, notifiersData] = await Promise.all([
+        getSchedules(config),
+        getNotifiers(config),
+      ]);
       setSchedules(data.schedules);
+      setAvailableNotifiers(notifiersData.notifiers);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load schedules");
@@ -160,6 +169,39 @@ export function useSchedules(config: Config): UseSchedulesResult {
     }
   }, [config, schedules, selectedIndex, editText, loadSchedules]);
 
+  const handleToggleNotifier = useCallback(async () => {
+    const task = schedules[selectedIndex];
+    if (!task || availableNotifiers.length === 0) return;
+
+    let newNotifiers: string[];
+    if (availableNotifiers.length === 1) {
+      // Single notifier: toggle on/off
+      const channel = availableNotifiers[0];
+      newNotifiers = task.notifiers.includes(channel)
+        ? task.notifiers.filter((n) => n !== channel)
+        : [...task.notifiers, channel];
+    } else {
+      // Multiple notifiers: cycle through — toggle the next one not yet enabled,
+      // or if all are enabled, clear them all
+      const nextOff = availableNotifiers.find((n) => !task.notifiers.includes(n));
+      if (nextOff) {
+        newNotifiers = [...task.notifiers, nextOff];
+      } else {
+        newNotifiers = [];
+      }
+    }
+
+    // Optimistic update
+    setSchedules((prev) =>
+      prev.map((s) => (s.task_id === task.task_id ? { ...s, notifiers: newNotifiers } : s))
+    );
+    try {
+      await setScheduleNotifiers(config, task.task_id, newNotifiers);
+    } catch {
+      loadSchedules();
+    }
+  }, [config, schedules, selectedIndex, availableNotifiers, loadSchedules]);
+
   return {
     schedules,
     selectedIndex,
@@ -171,6 +213,7 @@ export function useSchedules(config: Config): UseSchedulesResult {
     editText,
     cursorPos,
     saving,
+    availableNotifiers,
     setSelectedIndex,
     setConfirmDelete,
     setViewingResult,
@@ -187,5 +230,6 @@ export function useSchedules(config: Config): UseSchedulesResult {
     handleRun,
     handleViewResult,
     handleSave,
+    handleToggleNotifier,
   };
 }
