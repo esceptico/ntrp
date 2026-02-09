@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ntrp.constants import BASH_OUTPUT_LIMIT
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
 SAFE_COMMANDS = frozenset(
@@ -162,20 +162,20 @@ class BashTool(Tool):
         self.working_dir = working_dir
         self.timeout = timeout
 
+    async def approval_info(self, command: str = "", **kwargs: Any) -> ApprovalInfo | None:
+        if command and not is_safe_command(command) and not is_blocked_command(command):
+            return ApprovalInfo(description=command, preview=None, diff=None)
+        return None
+
     async def execute(
         self, execution: ToolExecution, command: str = "", working_dir: str | None = None, **kwargs: Any
     ) -> ToolResult:
         if not command:
             return ToolResult(content="Error: command is required", preview="Missing command", is_error=True)
-
         if is_blocked_command(command):
-            return ToolResult(content=f"Blocked: {command}", preview="Blocked")
+            return ToolResult(content=f"Blocked: {command}", preview="Blocked", is_error=True)
 
         cwd = working_dir or self.working_dir
-
-        if not is_safe_command(command):
-            await execution.require_approval(command)
-
         output = execute_bash(command, cwd, self.timeout)
         lines = output.count("\n") + 1
         return ToolResult(content=output, preview=f"{lines} lines")

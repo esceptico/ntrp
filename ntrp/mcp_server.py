@@ -26,7 +26,7 @@ from ntrp.context.models import SessionState
 from ntrp.logging import get_logger
 from ntrp.server.runtime import Runtime
 from ntrp.tools.core.base import ToolResult
-from ntrp.tools.core.context import PermissionDenied, ToolContext, ToolExecution
+from ntrp.tools.core.context import ToolContext, ToolExecution
 
 _logger = get_logger(__name__)
 
@@ -107,8 +107,6 @@ async def create_server() -> tuple[Server, Runtime]:
         try:
             result: ToolResult = await runtime.executor.registry.execute(name, execution, **arguments)
             return [TextContent(type="text", text=result.content)]
-        except PermissionDenied as e:
-            return [TextContent(type="text", text=f"Permission denied: {e}")]
         except Exception as e:
             _logger.exception("MCP tool execution failed: %s", name)
             return [TextContent(type="text", text=f"Error executing {name}: {e}")]

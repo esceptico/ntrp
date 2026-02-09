@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 from ntrp.constants import EMAIL_FROM_TRUNCATE, EMAIL_SUBJECT_TRUNCATE
 from ntrp.sources.base import EmailSource
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.utils import truncate
 
@@ -39,6 +39,9 @@ class SendEmailTool(Tool):
     def __init__(self, source: EmailSource):
         self.source = source
 
+    async def approval_info(self, account: str = "", to: str = "", subject: str = "", **kwargs: Any) -> ApprovalInfo | None:
+        return ApprovalInfo(description=to, preview=f"Subject: {subject}\nFrom: {account}", diff=None)
+
     async def execute(
         self,
         execution: ToolExecution,
@@ -50,8 +53,6 @@ class SendEmailTool(Tool):
     ) -> ToolResult:
         if not account or not to:
             return ToolResult(content="Error: account and to are required", preview="Missing fields", is_error=True)
-
-        await execution.require_approval(to, preview=f"Subject: {subject}\nFrom: {account}")
 
         result = self.source.send_email(account=account, to=to, subject=subject, body=body)
         return ToolResult(content=result, preview="Sent")

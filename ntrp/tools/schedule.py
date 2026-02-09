@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from ntrp.schedule.models import Recurrence, ScheduledTask, compute_next_run
 from ntrp.schedule.store import ScheduleStore
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
 SCHEDULE_TASK_DESCRIPTION = (
@@ -42,6 +42,37 @@ class ScheduleTaskTool(Tool):
     def __init__(self, store: ScheduleStore, default_email: str | None = None):
         self.store = store
         self.default_email = default_email
+
+    async def approval_info(
+        self,
+        description: str = "",
+        time: str = "",
+        recurrence: str = "",
+        notify_email: str = "",
+        writable: bool = False,
+        **kwargs: Any,
+    ) -> ApprovalInfo | None:
+        try:
+            parts = time.split(":")
+            h, m = int(parts[0]), int(parts[1])
+            if not (0 <= h <= 23 and 0 <= m <= 59):
+                raise ValueError
+            time_normalized = f"{h:02d}:{m:02d}"
+            rec = Recurrence(recurrence)
+        except (ValueError, IndexError):
+            return None
+
+        email = notify_email or self.default_email
+        now = datetime.now(UTC)
+        next_run = compute_next_run(time_normalized, rec, after=now)
+
+        preview = f"Time: {time_normalized} ({rec.value})\nNext run: {next_run.strftime('%Y-%m-%d %H:%M')}"
+        if email:
+            preview += f"\nEmail: {email}"
+        if writable:
+            preview += "\nWritable: yes"
+
+        return ApprovalInfo(description=description, preview=preview, diff=None)
 
     async def execute(
         self,
@@ -101,13 +132,6 @@ class ScheduleTaskTool(Tool):
             writable=bool(writable),
         )
 
-        preview = f"Time: {time_normalized} ({rec.value})\nNext run: {next_run.strftime('%Y-%m-%d %H:%M')}"
-        if email:
-            preview += f"\nEmail: {email}"
-        if writable:
-            preview += "\nWritable: yes"
-
-        await execution.require_approval(description, preview=preview)
         await self.store.save(task)
 
         return ToolResult(
@@ -159,6 +183,12 @@ class CancelScheduleTool(Tool):
     def __init__(self, store: ScheduleStore):
         self.store = store
 
+    async def approval_info(self, task_id: str = "", **kwargs: Any) -> ApprovalInfo | None:
+        task = await self.store.get(task_id)
+        if not task:
+            return None
+        return ApprovalInfo(description=f"Cancel: {task.description}", preview=None, diff=None)
+
     async def execute(self, execution: ToolExecution, task_id: str = "", **kwargs: Any) -> ToolResult:
         if not task_id:
             return ToolResult(content="Error: task_id is required", preview="Missing task_id", is_error=True)
@@ -167,7 +197,6 @@ class CancelScheduleTool(Tool):
         if not task:
             return ToolResult(content=f"Error: task '{task_id}' not found", preview="Not found", is_error=True)
 
-        await execution.require_approval(f"Cancel: {task.description}")
         await self.store.delete(task_id)
 
         return ToolResult(content=f"Cancelled: {task.description} ({task_id})", preview="Cancelled")

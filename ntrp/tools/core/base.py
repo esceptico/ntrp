@@ -38,6 +38,13 @@ class ToolResult:
     is_error: bool = False
 
 
+@dataclass(frozen=True)
+class ApprovalInfo:
+    description: str
+    preview: str | None
+    diff: str | None
+
+
 class Tool(ABC):
     name: str
     description: str
@@ -48,6 +55,9 @@ class Tool(ABC):
     @property
     def available(self) -> bool:
         return True
+
+    async def approval_info(self, **kwargs: Any) -> ApprovalInfo | None:
+        return None
 
     @abstractmethod
     async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult: ...

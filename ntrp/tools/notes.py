@@ -13,7 +13,7 @@ from ntrp.constants import (
 )
 from ntrp.logging import get_logger
 from ntrp.sources.base import NotesSource
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.formatting import format_lines_with_pagination
 from ntrp.utils import truncate
@@ -207,6 +207,18 @@ class EditNoteTool(Tool):
     def __init__(self, source: NotesSource):
         self.source = source
 
+    async def approval_info(self, path: str = "", find: str = "", replace: str = "", **kwargs: Any) -> ApprovalInfo | None:
+        original = self.source.read(path)
+        if original is None or find not in original:
+            return None
+        proposed = original.replace(find, replace, 1)
+        diff = generate_diff(original, proposed, path)
+        preview_lines = diff.split("\n")[:DIFF_PREVIEW_LINES]
+        diff_preview = "\n".join(preview_lines)
+        if len(diff.split("\n")) > DIFF_PREVIEW_LINES:
+            diff_preview += "\n... (truncated)"
+        return ApprovalInfo(description=path, preview=None, diff=diff_preview)
+
     async def execute(
         self, execution: ToolExecution, path: str = "", find: str = "", replace: str = "", **kwargs: Any
     ) -> ToolResult:
@@ -228,13 +240,6 @@ class EditNoteTool(Tool):
 
         proposed = original.replace(find, replace, 1)
         diff = generate_diff(original, proposed, path)
-
-        preview_lines = diff.split("\n")[:DIFF_PREVIEW_LINES]
-        diff_preview = "\n".join(preview_lines)
-        if len(diff.split("\n")) > DIFF_PREVIEW_LINES:
-            diff_preview += "\n... (truncated)"
-
-        await execution.require_approval(path, diff=diff_preview)
 
         success = self.source.write(path, proposed)
         if success:
@@ -262,6 +267,16 @@ class CreateNoteTool(Tool):
     def __init__(self, source: NotesSource):
         self.source = source
 
+    async def approval_info(self, path: str = "", content: str = "", **kwargs: Any) -> ApprovalInfo | None:
+        if not path.endswith(".md"):
+            path = path + ".md"
+        if self.source.exists(path):
+            return None
+        preview_content = content[:CONTENT_PREVIEW_LIMIT]
+        if len(content) > CONTENT_PREVIEW_LIMIT:
+            preview_content += "\n... (truncated)"
+        return ApprovalInfo(description=path, preview=preview_content, diff=None)
+
     async def execute(self, execution: ToolExecution, path: str = "", content: str = "", **kwargs: Any) -> ToolResult:
         if not path or not content:
             return ToolResult(content="Error: path and content are required", preview="Missing fields", is_error=True)
@@ -274,12 +289,6 @@ class CreateNoteTool(Tool):
                 content=f"Note already exists: {path}. Use edit_note to modify or choose different path.",
                 preview="Exists",
             )
-
-        preview_content = content[:CONTENT_PREVIEW_LIMIT]
-        if len(content) > CONTENT_PREVIEW_LIMIT:
-            preview_content += "\n... (truncated)"
-
-        await execution.require_approval(path, preview=preview_content)
 
         success = self.source.write(path, content)
         if success:
@@ -301,6 +310,11 @@ class DeleteNoteTool(Tool):
     def __init__(self, source: NotesSource):
         self.source = source
 
+    async def approval_info(self, path: str = "", **kwargs: Any) -> ApprovalInfo | None:
+        if self.source.read(path) is None:
+            return None
+        return ApprovalInfo(description=path, preview=None, diff=None)
+
     async def execute(self, execution: ToolExecution, path: str = "", **kwargs: Any) -> ToolResult:
         if not path:
             return ToolResult(content="Error: path is required", preview="Missing path", is_error=True)
@@ -311,8 +325,6 @@ class DeleteNoteTool(Tool):
                 content=f"Note not found: {path}. Use notes() to find correct path.",
                 preview="Not found",
             )
-
-        await execution.require_approval(path)
 
         success = self.source.delete(path)
         if success:
@@ -335,6 +347,11 @@ class MoveNoteTool(Tool):
     def __init__(self, source: NotesSource):
         self.source = source
 
+    async def approval_info(self, path: str = "", new_path: str = "", **kwargs: Any) -> ApprovalInfo | None:
+        if not self.source.exists(path):
+            return None
+        return ApprovalInfo(description=f"{path} → {new_path}", preview=None, diff=None)
+
     async def execute(self, execution: ToolExecution, path: str = "", new_path: str = "", **kwargs: Any) -> ToolResult:
         if not path or not new_path:
             return ToolResult(content="Error: path and new_path are required", preview="Missing fields", is_error=True)
@@ -353,8 +370,6 @@ class MoveNoteTool(Tool):
                 content=f"Destination already exists: {new_path}. Choose different path or delete existing first.",
                 preview="Exists",
             )
-
-        await execution.require_approval(f"{path} → {new_path}")
 
         success = self.source.move(path, new_path)
         if success:

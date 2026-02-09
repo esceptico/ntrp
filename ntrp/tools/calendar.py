@@ -4,7 +4,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ntrp.sources.base import CalendarSource
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
 CALENDAR_DESCRIPTION = """Browse or search calendar events.
@@ -156,6 +156,18 @@ class CreateCalendarEventTool(Tool):
     def __init__(self, source: CalendarSource):
         self.source = source
 
+    async def approval_info(
+        self, summary: str = "", start: str = "", end: str = "", location: str = "", **kwargs: Any
+    ) -> ApprovalInfo | None:
+        start_dt = _parse_datetime(start)
+        if not start_dt:
+            return None
+        time_str = start_dt.strftime("%Y-%m-%d %H:%M")
+        end_dt = _parse_datetime(end)
+        if end_dt:
+            time_str += f" - {end_dt.strftime('%H:%M')}"
+        return ApprovalInfo(description=summary, preview=f"Time: {time_str}\nLocation: {location or 'N/A'}", diff=None)
+
     async def execute(
         self,
         execution: ToolExecution,
@@ -193,12 +205,6 @@ class CreateCalendarEventTool(Tool):
         end_dt = _parse_datetime(end)
         attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
 
-        time_str = start_dt.strftime("%Y-%m-%d %H:%M")
-        if end_dt:
-            time_str += f" - {end_dt.strftime('%H:%M')}"
-
-        await execution.require_approval(summary, preview=f"Time: {time_str}\nLocation: {location or 'N/A'}")
-
         result = self.source.create_event(
             account=account,
             summary=summary,
@@ -233,6 +239,20 @@ class EditCalendarEventTool(Tool):
 
     def __init__(self, source: CalendarSource):
         self.source = source
+
+    async def approval_info(
+        self, event_id: str = "", summary: str = "", start: str = "", end: str = "", location: str = "", **kwargs: Any
+    ) -> ApprovalInfo | None:
+        changes = []
+        if summary:
+            changes.append(f"Title: {summary}")
+        if start:
+            changes.append(f"Start: {start}")
+        if end:
+            changes.append(f"End: {end}")
+        if location:
+            changes.append(f"Location: {location}")
+        return ApprovalInfo(description=event_id, preview="\n".join(changes) if changes else "No changes", diff=None)
 
     async def execute(
         self,
@@ -271,18 +291,6 @@ class EditCalendarEventTool(Tool):
 
         attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
 
-        changes = []
-        if summary:
-            changes.append(f"Title: {summary}")
-        if start:
-            changes.append(f"Start: {start}")
-        if end:
-            changes.append(f"End: {end}")
-        if location:
-            changes.append(f"Location: {location}")
-
-        await execution.require_approval(event_id, preview="\n".join(changes) if changes else "No changes")
-
         result = self.source.update_event(
             event_id=event_id,
             summary=summary if summary else None,
@@ -309,6 +317,9 @@ class DeleteCalendarEventTool(Tool):
     def __init__(self, source: CalendarSource):
         self.source = source
 
+    async def approval_info(self, event_id: str = "", **kwargs: Any) -> ApprovalInfo | None:
+        return ApprovalInfo(description=event_id, preview=None, diff=None)
+
     async def execute(self, execution: ToolExecution, event_id: str = "", **kwargs: Any) -> ToolResult:
         if not event_id:
             return ToolResult(
@@ -316,8 +327,6 @@ class DeleteCalendarEventTool(Tool):
                 preview="Missing event_id",
                 is_error=True,
             )
-
-        await execution.require_approval(event_id)
 
         result = self.source.delete_event(event_id)
         return ToolResult(content=result, preview="Deleted")

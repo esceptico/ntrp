@@ -12,20 +12,24 @@ if TYPE_CHECKING:
     from ntrp.tools.core.registry import ToolRegistry
 
 
-# subset of response from POST /tools/result endpoint in app.py
 class ApprovalResponse(TypedDict):
     approved: bool
+    result: str
 
 
 class ChoiceResponse(TypedDict):
     selected: list[str]
 
 
-class PermissionDenied(Exception):
-    def __init__(self, tool_name: str, description: str):
-        self.tool_name = tool_name
-        self.description = description
-        super().__init__(f"Permission denied: {tool_name} '{description}'")
+@dataclass
+class Rejection:
+    feedback: str | None
+
+    def to_result(self) -> "ToolResult":
+        from ntrp.tools.core.base import ToolResult
+
+        content = f"User rejected this action and said: {self.feedback}" if self.feedback else "User rejected this action"
+        return ToolResult(content=content, preview="Rejected")
 
 
 @dataclass
@@ -66,18 +70,18 @@ class ToolExecution:
     tool_name: str
     ctx: ToolContext
 
-    async def require_approval(
+    async def request_approval(
         self,
         description: str,
         *,
         diff: str | None = None,
         preview: str | None = None,
-    ) -> None:
+    ) -> Rejection | None:
         if self.ctx.skip_approvals or self.tool_name in self.ctx.auto_approve:
-            return
+            return None
 
         if not self.ctx.emit or not self.ctx.approval_queue:
-            return
+            return None
 
         await self.ctx.emit(
             ApprovalNeededEvent(
@@ -89,12 +93,15 @@ class ToolExecution:
             )
         )
 
-        try:
-            response = await asyncio.wait_for(self.ctx.approval_queue.get(), timeout=300)
-        except TimeoutError:
-            raise PermissionDenied(self.tool_name, description)
+        response = await asyncio.wait_for(self.ctx.approval_queue.get(), timeout=300)
+
         if not response["approved"]:
-            raise PermissionDenied(self.tool_name, description)
+            feedback = response.get("result", "")
+            if feedback.startswith("Rejected: "):
+                feedback = feedback[len("Rejected: "):]
+            return Rejection(feedback=feedback or None)
+
+        return None
 
     async def ask_choice(
         self,

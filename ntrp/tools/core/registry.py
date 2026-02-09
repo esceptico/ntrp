@@ -11,7 +11,6 @@ class ToolRegistry:
 
     def register(self, tool: Tool) -> None:
         self._tools[tool.name] = tool
-        # Pre-compute and cache schema at registration time
         self._schemas[tool.name] = tool.to_dict()
 
     def get(self, name: str) -> Tool | None:
@@ -19,6 +18,15 @@ class ToolRegistry:
 
     async def execute(self, name: str, execution: ToolExecution, **kwargs: Any) -> ToolResult:
         tool = self._tools[name]
+
+        info = await tool.approval_info(**kwargs)
+        if info is not None:
+            rejection = await execution.request_approval(
+                info.description, preview=info.preview, diff=info.diff,
+            )
+            if rejection is not None:
+                return rejection.to_result()
+
         return await tool.execute(execution, **kwargs)
 
     def get_schemas(
