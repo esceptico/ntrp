@@ -151,14 +151,8 @@ def _row_dict(row: aiosqlite.Row) -> dict:
 
 
 class FactRepository:
-    def __init__(self, conn: aiosqlite.Connection, auto_commit: bool = True):
+    def __init__(self, conn: aiosqlite.Connection):
         self.conn = conn
-        self._auto_commit = auto_commit
-
-    async def _commit(self) -> None:
-        if self._auto_commit:
-            await self.conn.commit()
-
 
     async def get(self, fact_id: int) -> Fact | None:
         rows = await self.conn.execute_fetchall(_SQL_GET_FACT, (fact_id,))
@@ -196,7 +190,7 @@ class FactRepository:
         fact_id = cursor.lastrowid
         if embedding_bytes:
             await self.conn.execute(_SQL_INSERT_FACT_VEC, (fact_id, embedding_bytes))
-        await self._commit()
+
         return Fact(
             id=fact_id,
             text=text,
@@ -219,7 +213,7 @@ class FactRepository:
             _SQL_REINFORCE_FACTS.format(placeholders=placeholders),
             (now.isoformat(), *fact_ids),
         )
-        await self._commit()
+
 
     async def list_recent(self, limit: int = 100) -> list[Fact]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_RECENT, (limit,))
@@ -246,7 +240,7 @@ class FactRepository:
         await self.conn.execute(_SQL_DELETE_FACT_LINKS, (fact_id, fact_id))
         await self.conn.execute(_SQL_DELETE_FACT_VEC, (fact_id,))
         await self.conn.execute(_SQL_DELETE_FACT, (fact_id,))
-        await self._commit()
+
 
     async def cleanup_orphaned_entities(self) -> int:
         cursor = await self.conn.execute("""
@@ -259,7 +253,7 @@ class FactRepository:
                 SELECT id FROM entities
             )
         """)
-        await self._commit()
+
         return cursor.rowcount
 
     async def list_unconsolidated(self, limit: int = 100) -> list[Fact]:
@@ -269,13 +263,13 @@ class FactRepository:
     async def mark_consolidated(self, fact_id: int) -> None:
         now = datetime.now(UTC)
         await self.conn.execute(_SQL_MARK_CONSOLIDATED, (now.isoformat(), fact_id))
-        await self._commit()
+
 
     async def add_entity_ref(
         self, fact_id: int, name: str, entity_type: str, canonical_id: int | None = None
     ) -> EntityRef:
         cursor = await self.conn.execute(_SQL_INSERT_ENTITY_REF, (fact_id, name, entity_type, canonical_id))
-        await self._commit()
+
         return EntityRef(
             id=cursor.lastrowid,
             fact_id=fact_id,
@@ -315,7 +309,7 @@ class FactRepository:
             _SQL_INSERT_LINK,
             (source_fact_id, target_fact_id, link_type.value, weight, now.isoformat()),
         )
-        await self._commit()
+
         return FactLink(
             id=cursor.lastrowid,
             source_fact_id=source_fact_id,
@@ -334,7 +328,7 @@ class FactRepository:
         now = datetime.now(UTC).isoformat()
         params = [(src, tgt, lt.value, w, now) for src, tgt, lt, w in links]
         await self.conn.executemany(_SQL_INSERT_LINK, params)
-        await self._commit()
+
         return len(links)
 
     async def get_links(self, fact_id: int) -> list[FactLink]:
@@ -419,7 +413,7 @@ class FactRepository:
 
         if embedding_bytes:
             await self.conn.execute(_SQL_INSERT_ENTITY_VEC, (entity_id, embedding_bytes))
-        await self._commit()
+
         return Entity(
             id=entity_id,
             name=name,
@@ -461,5 +455,5 @@ class FactRepository:
         await self.conn.execute(_SQL_DELETE_ENTITIES_VEC.format(placeholders=placeholders), merge_ids)
         cursor = await self.conn.execute(_SQL_DELETE_ENTITIES.format(placeholders=placeholders), merge_ids)
 
-        await self._commit()
+
         return cursor.rowcount

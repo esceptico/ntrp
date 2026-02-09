@@ -29,7 +29,7 @@ def _require_memory():
 @router.get("/facts")
 async def get_facts(limit: int = 100, offset: int = 0):
     runtime = _require_memory()
-    repo = runtime.memory.fact_repo()
+    repo = runtime.memory.facts
 
     total = await repo.count()
     facts = await repo.list_recent(limit=limit + offset)
@@ -53,7 +53,7 @@ async def get_facts(limit: int = 100, offset: int = 0):
 @router.get("/facts/{fact_id}")
 async def get_fact_details(fact_id: int):
     runtime = _require_memory()
-    repo = runtime.memory.fact_repo()
+    repo = runtime.memory.facts
 
     fact = await repo.get(fact_id)
     if not fact:
@@ -102,7 +102,7 @@ async def clear_memory():
 @router.get("/observations")
 async def get_observations(limit: int = 50):
     runtime = _require_memory()
-    obs_repo = runtime.memory.obs_repo()
+    obs_repo = runtime.memory.observations
 
     observations = await obs_repo.list_recent(limit=limit)
 
@@ -124,8 +124,8 @@ async def get_observations(limit: int = 50):
 @router.get("/observations/{observation_id}")
 async def get_observation_details(observation_id: int):
     runtime = _require_memory()
-    obs_repo = runtime.memory.obs_repo()
-    fact_repo = runtime.memory.fact_repo()
+    obs_repo = runtime.memory.observations
+    fact_repo = runtime.memory.facts
 
     obs = await obs_repo.get(observation_id)
     if not obs:
@@ -154,8 +154,8 @@ async def get_observation_details(observation_id: int):
 @router.get("/stats")
 async def get_stats():
     runtime = _require_memory()
-    repo = runtime.memory.fact_repo()
-    obs_repo = runtime.memory.obs_repo()
+    repo = runtime.memory.facts
+    obs_repo = runtime.memory.observations
 
     return {
         "fact_count": await repo.count(),
@@ -168,24 +168,20 @@ async def get_stats():
 async def update_fact(fact_id: int, request: UpdateFactRequest):
     runtime = _require_memory()
 
-    async with runtime.memory._db_lock:
-        repo = runtime.memory.fact_repo()
+    async with runtime.memory.transaction():
+        repo = runtime.memory.facts
 
-        # Check if fact exists
         fact = await repo.get(fact_id)
         if not fact:
             raise HTTPException(status_code=404, detail="Fact not found")
 
-        # Generate new embedding
         new_embedding = await runtime.memory.embedder.embed_one(request.text)
 
-        # Delete existing entity refs and links
         await repo.conn.execute("DELETE FROM entity_refs WHERE fact_id = ?", (fact_id,))
         await repo.conn.execute(
             "DELETE FROM fact_links WHERE source_fact_id = ? OR target_fact_id = ?", (fact_id, fact_id)
         )
 
-        # Update fact text, embedding, and mark for re-consolidation
         embedding_bytes = serialize_embedding(new_embedding)
         await repo.conn.execute(
             """
@@ -196,21 +192,14 @@ async def update_fact(fact_id: int, request: UpdateFactRequest):
             (request.text, embedding_bytes, fact_id),
         )
 
-        # Update vector index
         await repo.conn.execute("DELETE FROM facts_vec WHERE fact_id = ?", (fact_id,))
         await repo.conn.execute("INSERT INTO facts_vec (fact_id, embedding) VALUES (?, ?)", (fact_id, embedding_bytes))
 
-        # Re-extract entities
         extraction = await runtime.memory.extractor.extract(request.text)
-        await runtime.memory._process_extraction(repo, fact_id, extraction, fact.source_ref)
+        await runtime.memory._process_extraction(fact_id, extraction, fact.source_ref)
 
-        # Reload fact with new entity refs
         fact = await repo.get(fact_id)
-
-        # Recreate links
         links_created = await create_links_for_fact(repo, fact)
-
-        await repo.conn.commit()
 
     await runtime.channel.publish(FactUpdated(fact_id=fact_id, text=request.text))
 
@@ -235,15 +224,13 @@ async def update_fact(fact_id: int, request: UpdateFactRequest):
 async def delete_fact(fact_id: int):
     runtime = _require_memory()
 
-    async with runtime.memory._db_lock:
-        repo = runtime.memory.fact_repo()
+    async with runtime.memory.transaction():
+        repo = runtime.memory.facts
 
-        # Check if fact exists
         fact = await repo.get(fact_id)
         if not fact:
             raise HTTPException(status_code=404, detail="Fact not found")
 
-        # Count what we're about to delete
         entity_refs_rows = await repo.conn.execute_fetchall(
             "SELECT COUNT(*) FROM entity_refs WHERE fact_id = ?", (fact_id,)
         )
@@ -254,7 +241,6 @@ async def delete_fact(fact_id: int):
         )
         links_count = links_rows[0][0] if links_rows else 0
 
-        # Delete fact and cascades (uses existing method)
         await repo.delete(fact_id)
 
     await runtime.channel.publish(FactDeleted(fact_id=fact_id))
@@ -273,18 +259,15 @@ async def delete_fact(fact_id: int):
 async def update_observation(observation_id: int, request: UpdateObservationRequest):
     runtime = _require_memory()
 
-    async with runtime.memory._db_lock:
-        obs_repo = runtime.memory.obs_repo()
+    async with runtime.memory.transaction():
+        obs_repo = runtime.memory.observations
 
-        # Check if observation exists
         obs = await obs_repo.get(observation_id)
         if not obs:
             raise HTTPException(status_code=404, detail="Observation not found")
 
-        # Generate new embedding
         new_embedding = await runtime.memory.embedder.embed_one(request.summary)
 
-        # Update observation summary and embedding
         now = datetime.now(UTC)
         embedding_bytes = serialize_embedding(new_embedding)
         await obs_repo.conn.execute(
@@ -296,15 +279,11 @@ async def update_observation(observation_id: int, request: UpdateObservationRequ
             (request.summary, embedding_bytes, now.isoformat(), observation_id),
         )
 
-        # Update vector index
         await obs_repo.conn.execute("DELETE FROM observations_vec WHERE observation_id = ?", (observation_id,))
         await obs_repo.conn.execute(
             "INSERT INTO observations_vec (observation_id, embedding) VALUES (?, ?)", (observation_id, embedding_bytes)
         )
 
-        await obs_repo.conn.commit()
-
-        # Reload observation
         obs = await obs_repo.get(observation_id)
 
     return {
@@ -323,18 +302,15 @@ async def update_observation(observation_id: int, request: UpdateObservationRequ
 async def delete_observation(observation_id: int):
     runtime = _require_memory()
 
-    async with runtime.memory._db_lock:
-        obs_repo = runtime.memory.obs_repo()
+    async with runtime.memory.transaction():
+        obs_repo = runtime.memory.observations
 
-        # Check if observation exists
         obs = await obs_repo.get(observation_id)
         if not obs:
             raise HTTPException(status_code=404, detail="Observation not found")
 
-        # Delete observation and vector embedding
         await obs_repo.conn.execute("DELETE FROM observations_vec WHERE observation_id = ?", (observation_id,))
         await obs_repo.conn.execute("DELETE FROM observations WHERE id = ?", (observation_id,))
-        await obs_repo.conn.commit()
 
     return {
         "status": "deleted",

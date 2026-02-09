@@ -137,8 +137,8 @@ class DashboardCollector:
         data = self._snapshot_sync(runtime)
 
         if runtime.memory:
-            repo = runtime.memory.fact_repo()
-            obs_repo = runtime.memory.obs_repo()
+            repo = runtime.memory.facts
+            obs_repo = runtime.memory.observations
             data["memory"] = {
                 "enabled": True,
                 "fact_count": await repo.count(),

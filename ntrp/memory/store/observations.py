@@ -51,14 +51,8 @@ def _row_dict(row: aiosqlite.Row) -> dict:
 
 
 class ObservationRepository:
-    def __init__(self, conn: aiosqlite.Connection, auto_commit: bool = True):
+    def __init__(self, conn: aiosqlite.Connection):
         self.conn = conn
-        self._auto_commit = auto_commit
-
-    async def _commit(self) -> None:
-        if self._auto_commit:
-            await self.conn.commit()
-
 
     async def create(
         self,
@@ -90,7 +84,7 @@ class ObservationRepository:
         if embedding_bytes is not None:
             await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (obs_id, embedding_bytes))
 
-        await self._commit()
+
 
         return Observation(
             id=obs_id,
@@ -157,7 +151,7 @@ class ObservationRepository:
             await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (observation_id,))
             await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (observation_id, embedding_bytes))
 
-        await self._commit()
+
 
         return Observation(
             id=observation_id,
@@ -181,7 +175,7 @@ class ObservationRepository:
             _SQL_REINFORCE_OBSERVATIONS.format(placeholders=placeholders),
             (now.isoformat(), *observation_ids),
         )
-        await self._commit()
+
 
     async def get_fact_ids(self, observation_id: int) -> list[int]:
         rows = await self.conn.execute_fetchall(

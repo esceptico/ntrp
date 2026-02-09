@@ -98,7 +98,7 @@ async def sample_fact(test_runtime: Runtime) -> int:
 async def sample_observation(test_runtime: Runtime) -> int:
     """Create a sample observation for testing"""
     memory = test_runtime.memory
-    obs_repo = memory.obs_repo()
+    obs_repo = memory.observations
 
     # Create a fact first
     result = await memory.remember(
@@ -154,7 +154,7 @@ class TestFactCRUD:
         await test_client.patch(f"/facts/{sample_fact}", json={"text": "Updated text"})
 
         # Verify fact is marked unconsolidated
-        repo = test_runtime.memory.fact_repo()
+        repo = test_runtime.memory.facts
         fact = await repo.get(sample_fact)
         assert fact.consolidated_at is None
 
@@ -184,7 +184,7 @@ class TestFactCRUD:
     ):
         """DELETE /facts/{id} should return counts of cascaded deletions"""
         # Get counts before deletion
-        repo = test_runtime.memory.fact_repo()
+        repo = test_runtime.memory.facts
         entity_refs = await repo.get_entity_refs(sample_fact)
         links = await repo.get_links(sample_fact)
 
@@ -213,7 +213,7 @@ class TestFactCRUD:
         fact_id = result.fact.id
 
         # Manually add more entity refs
-        repo = memory.fact_repo()
+        repo = memory.facts
         await repo.add_entity_ref(fact_id, "Additional", "test")
 
         entity_refs_before = await repo.get_entity_refs(fact_id)
@@ -276,7 +276,7 @@ class TestObservationCRUD:
     ):
         """PATCH should preserve source_fact_ids and evidence_count"""
         # Get original observation
-        obs_repo = test_runtime.memory.obs_repo()
+        obs_repo = test_runtime.memory.observations
         original = await obs_repo.get(sample_observation)
 
         # Update observation
@@ -311,7 +311,7 @@ class TestObservationCRUD:
         assert data["observation_id"] == sample_observation
 
         # Verify observation is deleted
-        obs_repo = test_runtime.memory.obs_repo()
+        obs_repo = test_runtime.memory.observations
         obs = await obs_repo.get(sample_observation)
         assert obs is None
 
