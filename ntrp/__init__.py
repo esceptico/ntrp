@@ -7,6 +7,6 @@ __version__ = "0.1.0"
 litellm.drop_params = True
 litellm.suppress_debug_info = True
 
-# lunary hooks
-litellm.success_callback = ["lunary"]
-litellm.failure_callback = ["lunary"]
+# langfuse hooks (OTEL integration for langfuse v3)
+litellm.success_callback = ["langfuse_otel"]
+litellm.failure_callback = ["langfuse_otel"]

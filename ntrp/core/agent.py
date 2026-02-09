@@ -94,18 +94,13 @@ class Agent:
         self._last_input_tokens = prompt_tokens
 
     async def _maybe_compact(self) -> None:
-        # Use actual token count from last LLM response if available (more accurate)
+        # Always mask old tool results — no reason to keep 15k char results from 100 messages ago
+        self.messages = mask_old_tool_results(self.messages)
+
+        # Full summarization only when approaching model limit
         if not should_compress(self.messages, self.model, self._last_input_tokens):
             return
 
-        # Phase 1: observation masking — truncate old tool results
-        self.messages = mask_old_tool_results(self.messages)
-
-        # After masking, re-check without actual count (we modified messages)
-        if not should_compress(self.messages, self.model):
-            return
-
-        # Phase 2: full summarization
         self.messages, _ = await compress_context_async(self.messages, self.model)
 
     def _append_tool_results(self, tool_calls: list[Any], results: dict[str, str]) -> None:
