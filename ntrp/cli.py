@@ -158,5 +158,24 @@ async def _run_headless(prompt: str):
         await runtime.close()
 
 
+@main.command()
+@click.option("--http", is_flag=True, help="Use streamable HTTP transport instead of stdio")
+@click.option("--port", default=3000, help="Port for HTTP transport (default: 3000)")
+@click.option("--host", default="127.0.0.1", help="Host for HTTP transport (default: 127.0.0.1)")
+@click.pass_context
+def mcp(ctx, http: bool, port: int, host: str):
+    """Start the ntrp MCP server for external tool access."""
+    if "config_error" in ctx.obj:
+        console.print(f"[red]Error:[/red] {ctx.obj['config_error']}")
+        raise SystemExit(1)
+
+    from ntrp.mcp_server import run_http, run_stdio
+
+    if http:
+        asyncio.run(run_http(host=host, port=port))
+    else:
+        asyncio.run(run_stdio())
+
+
 if __name__ == "__main__":
     main()

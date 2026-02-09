@@ -23,6 +23,7 @@ dependencies = [
     "lunary>=1.4.35",
     "structlog>=24.0.0",
     "markdown>=3.7",
+    "mcp>=1.26.0",
 ]
 
 [project.optional-dependencies]
