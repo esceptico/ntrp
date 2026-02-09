@@ -71,11 +71,17 @@ class Agent:
 
     async def _call_llm(self) -> Any:
         model_params = SUPPORTED_MODELS[self.model]
+        cache_points = [
+            {"location": "tools"},
+            {"location": "message", "role": "system"},
+            {"location": "message", "index": -1},
+        ]
         return await acompletion(
             model=self.model,
             messages=self.messages,
             tools=self.tools,
             tool_choice="auto",
+            cache_control_injection_points=cache_points,
             **model_params.get("request_kwargs", {}),
         )
 
