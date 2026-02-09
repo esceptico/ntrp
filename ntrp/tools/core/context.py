@@ -9,6 +9,7 @@ from ntrp.events import ApprovalNeededEvent, ChoiceEvent
 
 if TYPE_CHECKING:
     from ntrp.memory.facts import FactMemory
+    from ntrp.tools.core.base import ToolResult
     from ntrp.tools.core.registry import ToolRegistry
 
 
