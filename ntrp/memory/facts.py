@@ -1,4 +1,6 @@
 import asyncio
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Self
@@ -61,6 +63,16 @@ class FactMemory:
         self._consolidation_task: asyncio.Task | None = None
         self._db_lock = asyncio.Lock()
 
+    @asynccontextmanager
+    async def transaction(self) -> AsyncGenerator[aiosqlite.Connection]:
+        async with self._db_lock:
+            try:
+                yield self.db.conn
+                await self.db.conn.commit()
+            except Exception:
+                await self.db.conn.rollback()
+                raise
+
     @property
     def is_consolidating(self) -> bool:
         return self._consolidation_task is not None and not self._consolidation_task.done()
@@ -115,22 +127,16 @@ class FactMemory:
             decisions.append((fact, action))
 
         # Phase 3: apply results under lock (single transaction)
-        async with self._db_lock:
-            conn = self.db.conn
+        async with self.transaction() as conn:
             repo = FactRepository(conn, auto_commit=False)
             obs_repo = ObservationRepository(conn, auto_commit=False)
-            try:
-                count = 0
-                obs_created = 0
-                for fact, action in decisions:
-                    result = await apply_consolidation(fact, action, repo, obs_repo, self.embedder.embed_one)
-                    count += 1
-                    if result.action == "created":
-                        obs_created += 1
-                await conn.commit()
-            except Exception:
-                await conn.rollback()
-                raise
+            count = 0
+            obs_created = 0
+            for fact, action in decisions:
+                result = await apply_consolidation(fact, action, repo, obs_repo, self.embedder.embed_one)
+                count += 1
+                if result.action == "created":
+                    obs_created += 1
 
         _logger.info("Consolidated %d facts", count)
         await self.channel.publish(ConsolidationCompleted(facts_processed=count, observations_created=obs_created))
@@ -156,31 +162,23 @@ class FactMemory:
     ) -> RememberFactResult:
         embedding = await self.embedder.embed_one(text)
 
-        async with self._db_lock:
-            conn = self.db.conn
+        async with self.transaction() as conn:
             repo = FactRepository(conn, auto_commit=False)
 
-            try:
-                fact = await repo.create(
-                    text=text,
-                    fact_type=fact_type,
-                    source_type=source_type,
-                    source_ref=source_ref,
-                    embedding=embedding,
-                    happened_at=happened_at,
-                )
+            fact = await repo.create(
+                text=text,
+                fact_type=fact_type,
+                source_type=source_type,
+                source_ref=source_ref,
+                embedding=embedding,
+                happened_at=happened_at,
+            )
 
-                extraction = await self.extractor.extract(text)
-                entities_extracted = await self._process_extraction(repo, fact.id, extraction, source_ref)
+            extraction = await self.extractor.extract(text)
+            entities_extracted = await self._process_extraction(repo, fact.id, extraction, source_ref)
 
-                fact = fact.model_copy(update={"entity_refs": await repo.get_entity_refs(fact.id)})
-                links_created = await create_links_for_fact(repo, fact)
-
-                await conn.commit()
-            except Exception:
-                await conn.rollback()
-                _logger.exception("Remember failed")
-                raise
+            fact = fact.model_copy(update={"entity_refs": await repo.get_entity_refs(fact.id)})
+            links_created = await create_links_for_fact(repo, fact)
 
         await self.channel.publish(FactCreated(fact_id=fact.id, text=text))
 
