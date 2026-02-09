@@ -5,7 +5,7 @@ from pydantic import BaseModel, ValidationError
 
 from ntrp.config import load_user_settings, save_user_settings
 from ntrp.constants import EMBEDDING_MODELS, SUPPORTED_MODELS
-from ntrp.context.compression import compress_context_async, count_tokens, find_compressible_range
+from ntrp.context.compression import compress_context_async, find_compressible_range
 from ntrp.logging import get_logger
 from ntrp.server.runtime import get_runtime
 from ntrp.sources.google.auth import discover_gmail_tokens
@@ -273,43 +273,20 @@ async def update_embedding_model(req: UpdateEmbeddingRequest):
 
 @router.get("/context")
 async def get_context_usage():
-    import json
-
-    from ntrp.core.prompts import build_system_prompt
-
     runtime = get_runtime()
     model = runtime.config.chat_model
     model_limit = SUPPORTED_MODELS.get(model, {}).get("tokens", 128000)
 
-    # Get session messages
     data = await runtime.restore_session()
     messages = data.messages if data else []
-
-    # Build current system prompt
-    system_prompt = build_system_prompt(
-        source_details=runtime.get_source_details(),
-    )
-
-    # Get tool schemas
-    tools = runtime.tools or []
-    tools_json = json.dumps(tools)
-
-    # Count tokens (approximate: chars / 4)
-    system_tokens = len(system_prompt) // 4
-    tools_tokens = len(tools_json) // 4
-    messages_tokens = count_tokens(messages) if messages else 0
-
-    total = system_tokens + tools_tokens + messages_tokens
+    last_input_tokens = data.last_input_tokens if data else None
 
     return {
         "model": model,
         "limit": model_limit,
-        "total": total,
-        "system_prompt": system_tokens,
-        "tools": tools_tokens,
-        "messages": messages_tokens,
+        "total": last_input_tokens,
         "message_count": len(messages),
-        "tool_count": len(tools),
+        "tool_count": len(runtime.tools or []),
     }
 
 
@@ -318,7 +295,6 @@ async def compact_context():
     runtime = get_runtime()
     model = runtime.config.chat_model
 
-    # Try to restore most recent session
     data = await runtime.restore_session()
     if not data:
         return {
@@ -328,21 +304,17 @@ async def compact_context():
 
     session_state = data.state
     messages = data.messages
-
-    before_tokens = count_tokens(messages)
     before_count = len(messages)
+    before_tokens = data.last_input_tokens
 
-    # Check if there's anything to compress
     start, end = find_compressible_range(messages)
     if start == 0 and end == 0:
         return {
             "status": "nothing_to_compact",
-            "message": f"Nothing to compact ({before_tokens:,} tokens, {before_count} messages)",
-            "tokens": before_tokens,
+            "message": f"Nothing to compact ({before_count} messages)",
             "message_count": before_count,
         }
 
-    # Run compression (force=True for manual compaction)
     msg_count = end - start
     new_messages, was_compressed = await compress_context_async(
         messages=messages,
@@ -351,23 +323,20 @@ async def compact_context():
     )
 
     if was_compressed:
-        # Save compacted session
-        await runtime.save_session(session_state, new_messages)
-
-        after_tokens = count_tokens(new_messages)
-        saved = before_tokens - after_tokens
+        # Token count is stale after compression — clear it
+        await runtime.save_session(session_state, new_messages, metadata={"last_input_tokens": None})
 
         return {
             "status": "compacted",
-            "message": f"Compacted: {before_tokens:,} → {after_tokens:,} tokens (saved {saved:,})",
+            "message": f"Compacted {before_count} → {len(new_messages)} messages ({msg_count} summarized)",
             "before_tokens": before_tokens,
-            "after_tokens": after_tokens,
-            "saved_tokens": saved,
+            "before_messages": before_count,
+            "after_messages": len(new_messages),
             "messages_compressed": msg_count,
         }
 
     return {
         "status": "already_optimal",
-        "message": f"Context already optimal ({before_tokens:,} tokens)",
-        "tokens": before_tokens,
+        "message": f"Context already optimal ({before_count} messages)",
+        "message_count": before_count,
     }

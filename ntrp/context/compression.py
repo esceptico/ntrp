@@ -1,15 +1,11 @@
 from ntrp.constants import (
-    CHARS_PER_TOKEN,
     COMPRESSION_THRESHOLD,
-    COMPRESSION_THRESHOLD_ACTUAL,
     MASK_PREVIEW_CHARS,
     MASK_THRESHOLD,
-    SUMMARY_COMPRESSION_RATIO,
+    MAX_MESSAGES,
     SUMMARY_MAX_TOKENS,
-    SUMMARY_MIN_TOKENS,
     SUPPORTED_MODELS,
-    TAIL_TOKEN_BUDGET,
-    WORDS_PER_TOKEN,
+    TAIL_CHAR_BUDGET,
 )
 from ntrp.context.prompts import SUMMARIZE_PROMPT_TEMPLATE
 from ntrp.llm import acompletion
@@ -21,30 +17,22 @@ def _get_attr(msg, key: str, default=None):
     return getattr(msg, key, default)
 
 
-def _count_message_tokens(msg) -> int:
-    total_chars = 16
-
+def _message_chars(msg) -> int:
+    total = 0
     content = _get_attr(msg, "content")
     if isinstance(content, str):
-        total_chars += len(content)
-
+        total += len(content)
     role = _get_attr(msg, "role")
     if role:
-        total_chars += len(role)
-
+        total += len(role)
     tool_calls = _get_attr(msg, "tool_calls")
     if tool_calls:
         for tc in tool_calls:
             func = getattr(tc, "function", None)
             if func:
-                total_chars += len(func.name or "")
-                total_chars += len(func.arguments or "")
-
-    return total_chars // CHARS_PER_TOKEN
-
-
-def count_tokens(messages: list) -> int:
-    return sum(_count_message_tokens(msg) for msg in messages)
+                total += len(func.name or "")
+                total += len(func.arguments or "")
+    return total
 
 
 def should_compress(
@@ -52,31 +40,31 @@ def should_compress(
     model: str,
     actual_input_tokens: int | None = None,
 ) -> bool:
-    limit = SUPPORTED_MODELS[model]["tokens"]
+    if len(messages) > MAX_MESSAGES:
+        return True
 
     if actual_input_tokens is not None:
-        return actual_input_tokens > int(limit * COMPRESSION_THRESHOLD_ACTUAL)
+        limit = SUPPORTED_MODELS[model]["tokens"]
+        return actual_input_tokens > int(limit * COMPRESSION_THRESHOLD)
 
-    threshold = int(limit * COMPRESSION_THRESHOLD)
-    current = count_tokens(messages)
-    return current > threshold
+    return False
 
 
 def find_compressible_range(
     messages: list[dict],
-    tail_token_budget: int = TAIL_TOKEN_BUDGET,
+    tail_char_budget: int = TAIL_CHAR_BUDGET,
 ) -> tuple[int, int]:
     if len(messages) <= 3:
         return (0, 0)
 
-    tail_tokens = 0
+    tail_chars = 0
     tail_start = len(messages)
 
     for i in range(len(messages) - 1, 0, -1):
-        msg_tokens = _count_message_tokens(messages[i])
-        if tail_tokens + msg_tokens > tail_token_budget:
+        msg_chars = _message_chars(messages[i])
+        if tail_chars + msg_chars > tail_char_budget:
             break
-        tail_tokens += msg_tokens
+        tail_chars += msg_chars
         tail_start = i
 
     tail_start = min(tail_start, len(messages) - 4)
@@ -109,9 +97,7 @@ def _build_conversation_text(messages: list, start: int, end: int) -> str:
 
 def _build_summarize_request(conversation_text: str, model: str) -> dict:
     model_params = SUPPORTED_MODELS[model]
-    input_tokens = len(conversation_text) // CHARS_PER_TOKEN
-    max_tokens = max(SUMMARY_MIN_TOKENS, min(SUMMARY_MAX_TOKENS, input_tokens // SUMMARY_COMPRESSION_RATIO))
-    word_budget = int(max_tokens * WORDS_PER_TOKEN)
+    word_budget = int(SUMMARY_MAX_TOKENS * 0.75)
     prompt = SUMMARIZE_PROMPT_TEMPLATE.format(budget=word_budget)
     return {
         "model": model,
@@ -120,7 +106,7 @@ def _build_summarize_request(conversation_text: str, model: str) -> dict:
             {"role": "user", "content": conversation_text},
         ],
         "temperature": 0.3,
-        "max_tokens": max_tokens,
+        "max_tokens": SUMMARY_MAX_TOKENS,
         **model_params.get("request_kwargs", {}),
     }
 

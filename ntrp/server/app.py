@@ -258,7 +258,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 run.completion_tokens = agent.total_output_tokens
                 run.messages = agent.messages
             session_state.last_activity = datetime.now(UTC)
-            await runtime.save_session(session_state, run.messages)
+            metadata = {"last_input_tokens": agent._last_input_tokens} if agent else None
+            await runtime.save_session(session_state, run.messages, metadata=metadata)
             runtime.channel.publish(
                 RunCompleted(
                     run_id=run.run_id,

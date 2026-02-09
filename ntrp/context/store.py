@@ -47,7 +47,9 @@ class SessionStore:
         await self.conn.executescript(SCHEMA)
         await self.conn.commit()
 
-    async def save_session(self, state: SessionState, messages: list[dict | Any]) -> None:
+    async def save_session(
+        self, state: SessionState, messages: list[dict | Any], metadata: dict | None = None
+    ) -> None:
         serializable_messages = []
         for msg in messages:
             if isinstance(msg, BaseModel):
@@ -62,7 +64,7 @@ class SessionStore:
                 state.started_at.isoformat(),
                 state.last_activity.isoformat(),
                 json.dumps(serializable_messages, default=str),
-                json.dumps({}),
+                json.dumps(metadata or {}),
             ),
         )
         await self.conn.commit()
@@ -87,7 +89,12 @@ class SessionStore:
         )
 
         messages = json.loads(row["messages"]) if row["messages"] else []
-        return SessionData(state=state, messages=messages)
+        metadata = json.loads(row["metadata"]) if row["metadata"] else {}
+        return SessionData(
+            state=state,
+            messages=messages,
+            last_input_tokens=metadata.get("last_input_tokens"),
+        )
 
     async def get_latest_session(self) -> SessionData | None:
         rows = await self.conn.execute_fetchall(SQL_GET_LATEST)

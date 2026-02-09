@@ -69,25 +69,32 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   context: async ({ config, addMessage }) => {
     try {
       const ctx = await getContextUsage(config);
-      const pct = ((ctx.total / ctx.limit) * 100).toFixed(1);
       const fmt = (n: number) => n.toLocaleString();
 
-      // Build a simple bar visualization
-      const barLen = 20;
-      const filled = Math.round((ctx.total / ctx.limit) * barLen);
-      const bar = "█".repeat(filled) + "░".repeat(barLen - filled);
+      if (ctx.total != null) {
+        const pct = ((ctx.total / ctx.limit) * 100).toFixed(1);
+        const barLen = 20;
+        const filled = Math.round((ctx.total / ctx.limit) * barLen);
+        const bar = "█".repeat(filled) + "░".repeat(barLen - filled);
 
-      const lines = [
-        `Context Usage [${bar}] ${pct}%`,
-        ``,
-        `${ctx.model} · ${fmt(ctx.total)}/${fmt(ctx.limit)} tokens`,
-        ``,
-        `  System prompt: ${fmt(ctx.system_prompt)} tokens`,
-        `  Tool schemas (${ctx.tool_count}): ${fmt(ctx.tools)} tokens`,
-        `  Messages (${ctx.message_count}): ${fmt(ctx.messages)} tokens`,
-      ];
+        const lines = [
+          `Context Usage [${bar}] ${pct}%`,
+          ``,
+          `${ctx.model} · ${fmt(ctx.total)}/${fmt(ctx.limit)} tokens`,
+          `${ctx.message_count} messages · ${ctx.tool_count} tools`,
+        ];
 
-      addMessage({ role: "assistant", content: lines.join("\n") });
+        addMessage({ role: "assistant", content: lines.join("\n") });
+      } else {
+        const lines = [
+          `Context Usage [no data yet]`,
+          ``,
+          `${ctx.model} · limit ${fmt(ctx.limit)} tokens`,
+          `${ctx.message_count} messages · ${ctx.tool_count} tools`,
+        ];
+
+        addMessage({ role: "assistant", content: lines.join("\n") });
+      }
     } catch (error) {
       addMessage({ role: "error", content: `${error}` });
     }

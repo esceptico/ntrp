@@ -15,3 +15,4 @@ class SessionState:
 class SessionData:
     state: SessionState
     messages: list[dict]
+    last_input_tokens: int | None = None

@@ -6,7 +6,7 @@ from ntrp.context.compression import compress_context_async, mask_old_tool_resul
 from ntrp.core.parsing import normalize_assistant_message, parse_tool_calls
 from ntrp.core.state import AgentState, StateCallback
 from ntrp.core.tool_runner import ToolRunner
-from ntrp.events import SSEEvent, TextEvent, ToolResultEvent
+from ntrp.events import SSEEvent, TextEvent, ThinkingEvent, ToolResultEvent
 from ntrp.llm import acompletion
 from ntrp.logging import get_logger
 from ntrp.tools.core.context import ToolContext
@@ -93,14 +93,13 @@ class Agent:
         self.total_output_tokens += response.usage.completion_tokens or 0
         self._last_input_tokens = prompt_tokens
 
-    async def _maybe_compact(self) -> None:
-        # Always mask old tool results — no reason to keep 15k char results from 100 messages ago
+    async def _maybe_compact(self) -> AsyncGenerator[SSEEvent, None]:
         self.messages = mask_old_tool_results(self.messages)
 
-        # Full summarization only when approaching model limit
         if not should_compress(self.messages, self.model, self._last_input_tokens):
             return
 
+        yield ThinkingEvent(status="compressing context...")
         self.messages, _ = await compress_context_async(self.messages, self.model)
 
     def _append_tool_results(self, tool_calls: list[Any], results: dict[str, str]) -> None:
@@ -138,7 +137,8 @@ class Agent:
                 return
 
             await self._set_state(AgentState.THINKING)
-            await self._maybe_compact()
+            async for event in self._maybe_compact():
+                yield event
 
             try:
                 response = await self._call_llm()

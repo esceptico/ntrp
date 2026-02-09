@@ -176,10 +176,12 @@ class Runtime:
 
         return data
 
-    async def save_session(self, session_state: SessionState, messages: list[dict]) -> None:
+    async def save_session(
+        self, session_state: SessionState, messages: list[dict], metadata: dict | None = None,
+    ) -> None:
         try:
             session_state.last_activity = datetime.now(UTC)
-            await self.session_store.save_session(session_state, messages)
+            await self.session_store.save_session(session_state, messages, metadata=metadata)
         except Exception as e:
             _logger.warning("Failed to save session: %s", e)
 

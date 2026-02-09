@@ -224,10 +224,7 @@ export async function compactContext(config: Config): Promise<{ status: string; 
 export async function getContextUsage(config: Config): Promise<{
   model: string;
   limit: number;
-  total: number;
-  system_prompt: number;
-  tools: number;
-  messages: number;
+  total: number | null;
   message_count: number;
   tool_count: number;
 }> {
