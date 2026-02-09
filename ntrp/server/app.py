@@ -86,14 +86,30 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def auth_middleware(request: Request, call_next):
-    runtime = get_runtime()
-    if runtime.config.api_key and request.url.path != "/health":
-        auth = request.headers.get("authorization", "")
-        if auth != f"Bearer {runtime.config.api_key}":
-            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
-    return await call_next(request)
+class AuthMiddleware:
+    """Pure ASGI middleware — doesn't buffer streaming responses."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope, receive)
+        runtime = get_runtime()
+        if runtime.config.api_key and request.url.path != "/health":
+            auth = request.headers.get("authorization", "")
+            if auth != f"Bearer {runtime.config.api_key}":
+                response = JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+                await response(scope, receive, send)
+                return
+
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(AuthMiddleware)
 
 
 app.include_router(dashboard_router)
