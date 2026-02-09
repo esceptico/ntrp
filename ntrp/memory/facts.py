@@ -138,7 +138,7 @@ class FactMemory:
                     obs_created += 1
 
         _logger.info("Consolidated %d facts", count)
-        await self.channel.publish(ConsolidationCompleted(facts_processed=count, observations_created=obs_created))
+        self.channel.publish(ConsolidationCompleted(facts_processed=count, observations_created=obs_created))
         return count
 
     async def close(self) -> None:
@@ -177,7 +177,7 @@ class FactMemory:
             fact = fact.model_copy(update={"entity_refs": await self.facts.get_entity_refs(fact.id)})
             links_created = await create_links_for_fact(self.facts, fact)
 
-        await self.channel.publish(FactCreated(fact_id=fact.id, text=text))
+        self.channel.publish(FactCreated(fact_id=fact.id, text=text))
 
         return RememberFactResult(
             fact=fact,
@@ -314,7 +314,7 @@ class FactMemory:
                 if score >= FORGET_SIMILARITY_THRESHOLD:
                     await self.facts.delete(fact.id)
                     count += 1
-                    await self.channel.publish(FactDeleted(fact_id=fact.id))
+                    self.channel.publish(FactDeleted(fact_id=fact.id))
             if count > 0:
                 await self.facts.cleanup_orphaned_entities()
             return count

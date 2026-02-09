@@ -45,13 +45,13 @@ class SourceManager:
         except Exception as e:
             self._errors[name] = str(e)
             return None
-        await self._channel.publish(SourceChanged(source_name=name))
+        self._channel.publish(SourceChanged(source_name=name))
         return source
 
     async def remove(self, name: str) -> None:
         self._sources.pop(name, None)
         self._errors.pop(name, None)
-        await self._channel.publish(SourceChanged(source_name=name))
+        self._channel.publish(SourceChanged(source_name=name))
 
     def _init_sources(self, config: Config) -> None:
         for name, (enabled, create) in SOURCES.items():

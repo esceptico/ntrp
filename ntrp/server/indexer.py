@@ -93,7 +93,7 @@ class Indexer:
 
         try:
             self._progress.status = IndexStatus.INDEXING
-            await self.channel.publish(IndexingStarted(sources=[s.name for s in sources]))
+            self.channel.publish(IndexingStarted(sources=[s.name for s in sources]))
 
             for source in sources:
                 items = await source.scan()
@@ -102,7 +102,7 @@ class Indexer:
                 self._progress.deleted += d
 
             self._progress.status = IndexStatus.DONE
-            await self.channel.publish(
+            self.channel.publish(
                 IndexingCompleted(updated=self._progress.updated, deleted=self._progress.deleted)
             )
         except asyncio.CancelledError:

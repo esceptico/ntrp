@@ -140,13 +140,13 @@ async def _run_headless(prompt: str):
         )
 
         console.print(f"[dim]Running: {prompt}[/dim]\n")
-        await runtime.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
+        runtime.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
         result: str | None = None
         try:
             result = await agent.run(task=prompt, history=None)
             console.print(result)
         finally:
-            await runtime.channel.publish(
+            runtime.channel.publish(
                 RunCompleted(
                     run_id=run_id,
                     prompt_tokens=agent.total_input_tokens,

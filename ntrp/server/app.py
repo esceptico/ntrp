@@ -190,7 +190,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         )
 
         yield to_sse(ThinkingEvent(status="processing..."))
-        await runtime.channel.publish(RunStarted(run_id=run.run_id, session_id=session_id))
+        runtime.channel.publish(RunStarted(run_id=run.run_id, session_id=session_id))
 
         agent: Agent | None = None
         result: str | None = None
@@ -243,7 +243,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 run.messages = agent.messages
             session_state.last_activity = datetime.now(UTC)
             await runtime.save_session(session_state, run.messages)
-            await runtime.channel.publish(
+            runtime.channel.publish(
                 RunCompleted(
                     run_id=run.run_id,
                     prompt_tokens=run.prompt_tokens,

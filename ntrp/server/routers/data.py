@@ -95,7 +95,7 @@ async def get_fact_details(fact_id: int):
 async def clear_memory():
     runtime = _require_memory()
     deleted = await runtime.memory.clear()
-    await runtime.channel.publish(MemoryCleared())
+    runtime.channel.publish(MemoryCleared())
     return {"status": "cleared", "deleted": deleted}
 
 
@@ -201,7 +201,7 @@ async def update_fact(fact_id: int, request: UpdateFactRequest):
         fact = await repo.get(fact_id)
         links_created = await create_links_for_fact(repo, fact)
 
-    await runtime.channel.publish(FactUpdated(fact_id=fact_id, text=request.text))
+    runtime.channel.publish(FactUpdated(fact_id=fact_id, text=request.text))
 
     return {
         "fact": {
@@ -243,7 +243,7 @@ async def delete_fact(fact_id: int):
 
         await repo.delete(fact_id)
 
-    await runtime.channel.publish(FactDeleted(fact_id=fact_id))
+    runtime.channel.publish(FactDeleted(fact_id=fact_id))
 
     return {
         "status": "deleted",

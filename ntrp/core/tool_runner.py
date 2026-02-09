@@ -67,13 +67,13 @@ class ToolRunner:
             parent_id=self.parent_id,
         )
 
-    async def _make_result_event(
+    def _make_result_event(
         self,
         call: PendingToolCall,
         result: ToolResult,
         duration_ms: int,
     ) -> ToolResultEvent:
-        await self.ctx.channel.publish(
+        self.ctx.channel.publish(
             ToolExecuted(
                 name=call.name,
                 duration_ms=duration_ms,
@@ -113,10 +113,10 @@ class ToolRunner:
             result = await self.executor.execute(call.name, call.args, execution)
             result = self._maybe_offload(call.name, result)
             duration_ms = ms_now() - start_ms
-            yield await self._make_result_event(call=call, result=result, duration_ms=duration_ms)
+            yield self._make_result_event(call=call, result=result, duration_ms=duration_ms)
         except Exception as e:
             duration_ms = ms_now() - start_ms
-            yield await self._make_result_event(
+            yield self._make_result_event(
                 call=call,
                 result=ToolResult(
                     content=f"Error: {type(e).__name__}: {e}", preview=f"Failed: {type(e).__name__}", is_error=True
@@ -173,7 +173,7 @@ class ToolRunner:
         asyncio.create_task(run_all())
 
         async for r in results_queue:
-            yield await self._make_result_event(
+            yield self._make_result_event(
                 call=r.call,
                 result=ToolResult(content=r.content, preview=r.preview, metadata=r.metadata, is_error=r.is_error),
                 duration_ms=r.duration_ms,

@@ -1,3 +1,4 @@
+import asyncio
 from collections import defaultdict
 from collections.abc import Callable, Coroutine
 from typing import Any
@@ -10,19 +11,30 @@ _logger = get_logger(__name__)
 
 
 class Channel:
-    def __init__(self):
+    """Fire-and-forget pub/sub bus.
+
+    - subscribe(EventType, handler) — register an async handler, called once at setup.
+    - publish(event) — notify all subscribers, returns immediately.
+      Handlers run as independent background tasks. No ordering guarantees.
+      Errors are logged, never propagated.
+    """
+
+    def __init__(self) -> None:
         self._handlers: dict[type, list[Handler]] = defaultdict(list)
 
     def subscribe[T](self, event_type: type[T], handler: Handler[T]) -> None:
         self._handlers[event_type].append(handler)
 
-    async def publish[T](self, event: T) -> None:
+    def publish[T](self, event: T) -> None:
         for handler in self._handlers.get(type(event), []):
-            try:
-                await handler(event)
-            except Exception:
-                _logger.exception(
-                    "Event handler %s failed for %s",
-                    handler.__qualname__,
-                    type(event).__name__,
-                )
+            asyncio.create_task(self._run(handler, event))
+
+    async def _run[T](self, handler: Handler[T], event: T) -> None:
+        try:
+            await handler(event)
+        except Exception:
+            _logger.exception(
+                "Event handler %s failed for %s",
+                handler.__qualname__,
+                type(event).__name__,
+            )

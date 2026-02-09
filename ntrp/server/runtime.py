@@ -78,7 +78,7 @@ class Runtime:
         elif not enabled and self.memory:
             await self.memory.close()
             self.memory = None
-        await self.channel.publish(SourceChanged(source_name="memory"))
+        self.channel.publish(SourceChanged(source_name="memory"))
 
     def rebuild_executor(self) -> None:
         default_email = self.config.schedule_email
@@ -236,7 +236,8 @@ class Runtime:
         await self.indexer.index.clear_source("memory")
 
     async def _on_source_changed(self, event: SourceChanged) -> None:
-        self.rebuild_executor()
+        async with self._config_lock:
+            self.rebuild_executor()
         name = event.source_name
         if name not in INDEXABLE_SOURCES:
             return

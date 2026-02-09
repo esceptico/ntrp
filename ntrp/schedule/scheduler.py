@@ -149,12 +149,12 @@ class Scheduler:
             current_depth=0,
         )
 
-        await self.deps.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
+        self.deps.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
         result: str | None = None
         try:
             result = await agent.run(task.description)
         finally:
-            await self.deps.channel.publish(
+            self.deps.channel.publish(
                 RunCompleted(
                     run_id=run_id,
                     prompt_tokens=agent.total_input_tokens,
