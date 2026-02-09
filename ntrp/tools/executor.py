@@ -18,7 +18,7 @@ class ToolExecutor:
         working_dir: str | None = None,
         search_index: Any | None = None,
         schedule_store: ScheduleStore | None = None,
-        default_email: str | None = None,
+        default_notifiers: list[str] | None = None,
         registry: ToolRegistry | None = None,
     ):
         self.sources = sources
@@ -33,7 +33,7 @@ class ToolExecutor:
             memory=memory,
             search_index=search_index,
             schedule_store=schedule_store,
-            default_email=default_email,
+            default_notifiers=default_notifiers,
             working_dir=working_dir,
         )
         for create_tools in TOOL_FACTORIES:

@@ -72,9 +72,6 @@ class Config(BaseSettings):
     browser: str | None = None
     browser_days: int = 30
 
-    # Scheduling
-    schedule_email: str | None = None
-
     # API authentication (optional — required when exposed to network)
     api_key: str | None = None
 

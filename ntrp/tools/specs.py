@@ -38,7 +38,7 @@ class ToolDeps:
     memory: FactMemory | None = None
     search_index: Any | None = None
     schedule_store: ScheduleStore | None = None
-    default_email: str | None = None
+    default_notifiers: list[str] | None = None
     working_dir: str | None = None
 
 
@@ -119,7 +119,7 @@ def _create_schedule_tools(deps: ToolDeps) -> list[Tool]:
     if not deps.schedule_store:
         return []
     return [
-        ScheduleTaskTool(deps.schedule_store, deps.default_email),
+        ScheduleTaskTool(deps.schedule_store, deps.default_notifiers),
         ListSchedulesTool(deps.schedule_store),
         CancelScheduleTool(deps.schedule_store),
         GetScheduleResultTool(deps.schedule_store),

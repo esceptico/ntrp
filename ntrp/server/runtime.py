@@ -10,10 +10,12 @@ from ntrp.config import Config, get_config
 from ntrp.constants import AGENT_MAX_DEPTH, INDEXABLE_SOURCES, SESSION_EXPIRY_HOURS
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
-from ntrp.core.events import ConsolidationCompleted, RunCompleted, RunStarted, ToolExecuted
+from ntrp.core.events import ConsolidationCompleted, RunCompleted, RunStarted, ScheduleCompleted, ToolExecuted
 from ntrp.logging import get_logger
 from ntrp.memory.events import FactCreated, FactDeleted, FactUpdated, MemoryCleared
 from ntrp.memory.facts import FactMemory
+from ntrp.notifiers import Notifier, make_schedule_dispatcher
+from ntrp.notifiers.email import EmailNotifier
 from ntrp.schedule.scheduler import Scheduler, SchedulerDeps
 from ntrp.schedule.store import ScheduleStore
 from ntrp.server.dashboard import DashboardCollector
@@ -51,6 +53,7 @@ class Runtime:
         self.scheduler: Scheduler | None = None
         self.run_registry = RunRegistry()
 
+        self.notifiers: dict[str, Notifier] = {}
         self.dashboard = DashboardCollector()
         self._connected = False
         self._config_lock = asyncio.Lock()
@@ -81,19 +84,13 @@ class Runtime:
         self.channel.publish(SourceChanged(source_name="memory"))
 
     def rebuild_executor(self) -> None:
-        default_email = self.config.schedule_email
-        gmail = self.get_gmail()
-        if not default_email and gmail:
-            accounts = gmail.list_accounts()
-            default_email = accounts[0] if accounts else None
-
         self.executor = ToolExecutor(
             sources=self.source_mgr.sources,
             memory=self.memory,
             model=self.config.chat_model,
             search_index=self.indexer.index,
             schedule_store=self.schedule_store,
-            default_email=default_email,
+            default_notifiers=list(self.notifiers.keys()) or None,
         )
 
         self.tools = self.executor.get_tools()
@@ -123,6 +120,7 @@ class Runtime:
         self.channel.subscribe(FactDeleted, self._on_fact_deleted)
         self.channel.subscribe(MemoryCleared, self._on_memory_cleared)
         self.channel.subscribe(SourceChanged, self._on_source_changed)
+        self.channel.subscribe(ScheduleCompleted, make_schedule_dispatcher(lambda: self.notifiers))
 
         if self.config.memory:
             self.memory = await FactMemory.create(
@@ -131,6 +129,9 @@ class Runtime:
                 extraction_model=self.config.memory_model,
                 channel=self.channel,
             )
+
+        if self.config.gmail:
+            self.notifiers["email"] = EmailNotifier(self.get_gmail)
 
         self.rebuild_executor()
         self._connected = True
@@ -195,7 +196,6 @@ class Runtime:
                 channel=self.channel,
                 source_details=self.get_source_details,
                 create_session=self.create_session,
-                gmail=self.get_gmail,
             )
             self.scheduler = Scheduler(deps, self.schedule_store)
             self.scheduler.start()

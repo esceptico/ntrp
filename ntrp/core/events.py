@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+from ntrp.schedule.models import ScheduledTask
+
 
 @dataclass(frozen=True)
 class ToolExecuted:
@@ -39,3 +41,9 @@ class IndexingStarted:
 class IndexingCompleted:
     updated: int
     deleted: int
+
+
+@dataclass(frozen=True)
+class ScheduleCompleted:
+    task: ScheduledTask
+    result: str | None

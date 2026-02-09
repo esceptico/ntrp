@@ -12,7 +12,7 @@ from ntrp.tools.core.context import ToolExecution
 SCHEDULE_TASK_DESCRIPTION = (
     "Schedule a task for the agent to run at a specific time. "
     "The task runs autonomously — read-only by default, set writable=true for memory/note writes. "
-    "Results are stored on the task and optionally emailed."
+    "Results are stored on the task and optionally sent via configured notifiers."
 )
 
 LIST_SCHEDULES_DESCRIPTION = "List all scheduled tasks with their status, timing, and next run."
@@ -29,7 +29,7 @@ class ScheduleTaskInput(BaseModel):
         description="How often: once, daily, weekdays (Mon-Fri), weekly",
         json_schema_extra={"enum": ["once", "daily", "weekdays", "weekly"]},
     )
-    notify_email: str | None = Field(default=None, description="Email address to send results to (optional)")
+    notify: bool = Field(default=False, description="Send results via configured notifiers (default: false)")
     writable: bool = Field(default=False, description="Allow task to write to memory and notes (default: false)")
 
 
@@ -39,16 +39,16 @@ class ScheduleTaskTool(Tool):
     mutates = True
     input_model = ScheduleTaskInput
 
-    def __init__(self, store: ScheduleStore, default_email: str | None = None):
+    def __init__(self, store: ScheduleStore, default_notifiers: list[str] | None = None):
         self.store = store
-        self.default_email = default_email
+        self.default_notifiers = default_notifiers or []
 
     async def approval_info(
         self,
         description: str = "",
         time: str = "",
         recurrence: str = "",
-        notify_email: str = "",
+        notify: bool = False,
         writable: bool = False,
         **kwargs: Any,
     ) -> ApprovalInfo | None:
@@ -62,13 +62,12 @@ class ScheduleTaskTool(Tool):
         except (ValueError, IndexError):
             return None
 
-        email = notify_email or self.default_email
         now = datetime.now(UTC)
         next_run = compute_next_run(time_normalized, rec, after=now)
 
         preview = f"Time: {time_normalized} ({rec.value})\nNext run: {next_run.strftime('%Y-%m-%d %H:%M')}"
-        if email:
-            preview += f"\nEmail: {email}"
+        if notify and self.default_notifiers:
+            preview += f"\nNotify: {', '.join(self.default_notifiers)}"
         if writable:
             preview += "\nWritable: yes"
 
@@ -80,7 +79,7 @@ class ScheduleTaskTool(Tool):
         description: str = "",
         time: str = "",
         recurrence: str = "",
-        notify_email: str = "",
+        notify: bool = False,
         writable: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
@@ -113,7 +112,7 @@ class ScheduleTaskTool(Tool):
                 is_error=True,
             )
 
-        email = notify_email or self.default_email
+        notifiers = list(self.default_notifiers) if notify else []
         now = datetime.now(UTC)
         next_run = compute_next_run(time_normalized, rec, after=now)
 
@@ -126,7 +125,7 @@ class ScheduleTaskTool(Tool):
             created_at=now,
             next_run_at=next_run,
             last_run_at=None,
-            notify_email=email,
+            notifiers=notifiers,
             last_result=None,
             running_since=None,
             writable=bool(writable),
@@ -134,11 +133,12 @@ class ScheduleTaskTool(Tool):
 
         await self.store.save(task)
 
+        notify_line = f"\nNotify: {', '.join(notifiers)}" if notifiers else ""
         return ToolResult(
             content=f"Scheduled: {description}\n"
             f"ID: {task.task_id}\n"
             f"Time: {time_normalized} ({rec.value})\n"
-            f"Next run: {next_run.strftime('%Y-%m-%d %H:%M')}" + (f"\nEmail: {email}" if email else ""),
+            f"Next run: {next_run.strftime('%Y-%m-%d %H:%M')}" + notify_line,
             preview=f"Scheduled ({task.task_id})",
         )
 

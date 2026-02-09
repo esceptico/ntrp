@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 import aiosqlite
@@ -14,7 +15,7 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
     created_at TEXT NOT NULL,
     last_run_at TEXT,
     next_run_at TEXT,
-    notify_email TEXT,
+    notifiers TEXT,
     last_result TEXT,
     running_since TEXT,
     writable INTEGER NOT NULL DEFAULT 0
@@ -27,7 +28,7 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_enabled ON scheduled_tasks(enabled);
 SQL_SAVE = """
 INSERT OR REPLACE INTO scheduled_tasks
     (task_id, description, time_of_day, recurrence, enabled,
-     created_at, last_run_at, next_run_at, notify_email, last_result, running_since, writable)
+     created_at, last_run_at, next_run_at, notifiers, last_result, running_since, writable)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
@@ -64,7 +65,7 @@ class ScheduleStore:
                 task.created_at.isoformat(),
                 task.last_run_at.isoformat() if task.last_run_at else None,
                 task.next_run_at.isoformat(),
-                task.notify_email,
+                json.dumps(task.notifiers),
                 task.last_result,
                 task.running_since.isoformat() if task.running_since else None,
                 int(task.writable),

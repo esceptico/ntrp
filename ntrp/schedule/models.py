@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -22,7 +23,7 @@ class ScheduledTask:
     created_at: datetime
     next_run_at: datetime
     last_run_at: datetime | None
-    notify_email: str | None
+    notifiers: list[str]
     last_result: str | None
     running_since: datetime | None
     writable: bool
@@ -38,6 +39,10 @@ class ScheduledTask:
             self.last_run_at = datetime.fromisoformat(self.last_run_at)
         if isinstance(self.running_since, str):
             self.running_since = datetime.fromisoformat(self.running_since)
+        if isinstance(self.notifiers, str):
+            self.notifiers = json.loads(self.notifiers) if self.notifiers else []
+        elif self.notifiers is None:
+            self.notifiers = []
         self.enabled = bool(self.enabled)
         self.writable = bool(self.writable)
 

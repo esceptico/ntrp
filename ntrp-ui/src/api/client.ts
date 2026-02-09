@@ -319,7 +319,7 @@ export interface Schedule {
   created_at: string;
   last_run_at: string | null;
   next_run_at: string | null;
-  notify_email: string | null;
+  notifiers: string[];
   last_result: string | null;
   writable: boolean;
   running_since: string | null;

@@ -30,7 +30,7 @@ async def list_schedules():
                 "created_at": t.created_at.isoformat(),
                 "last_run_at": t.last_run_at.isoformat() if t.last_run_at else None,
                 "next_run_at": t.next_run_at.isoformat() if t.next_run_at else None,
-                "notify_email": t.notify_email,
+                "notifiers": t.notifiers,
                 "writable": t.writable,
                 "running_since": t.running_since.isoformat() if t.running_since else None,
             }
@@ -58,7 +58,7 @@ async def get_schedule(task_id: str):
         "created_at": task.created_at.isoformat(),
         "last_run_at": task.last_run_at.isoformat() if task.last_run_at else None,
         "next_run_at": task.next_run_at.isoformat() if task.next_run_at else None,
-        "notify_email": task.notify_email,
+        "notifiers": task.notifiers,
         "last_result": task.last_result,
         "writable": task.writable,
         "running_since": task.running_since.isoformat() if task.running_since else None,

@@ -6,12 +6,11 @@ from uuid import uuid4
 
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
-from ntrp.core.events import RunCompleted, RunStarted
+from ntrp.core.events import RunCompleted, RunStarted, ScheduleCompleted
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
 from ntrp.schedule.models import Recurrence, ScheduledTask, compute_next_run
 from ntrp.schedule.store import ScheduleStore
-from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.tools.executor import ToolExecutor
 
 _logger = get_logger(__name__)
@@ -28,7 +27,6 @@ class SchedulerDeps:
     channel: Channel
     source_details: Callable[[], dict[str, dict]]
     create_session: Callable[[], SessionState]
-    gmail: Callable[[], MultiGmailSource | None]
 
 
 class Scheduler:
@@ -163,23 +161,7 @@ class Scheduler:
                 )
             )
 
-        gmail = self.deps.gmail()
-        if task.notify_email and gmail:
-            accounts = gmail.list_accounts()
-            if accounts:
-                subject = f"[ntrp] {task.description}"
-                body = result or "(no output)"
-                try:
-                    await asyncio.to_thread(
-                        gmail.send_email,
-                        account=accounts[0],
-                        to=task.notify_email,
-                        subject=subject,
-                        body=body,
-                        html=True,
-                    )
-                except Exception:
-                    _logger.exception("Failed to send email for task %s", task.task_id)
+        self.deps.channel.publish(ScheduleCompleted(task=task, result=result))
 
         return result
 
