@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import litellm.llms.custom_httpx.async_client_cleanup as litellm_cleanup
 import litellm.main as litellm_main
 
+import ntrp.database as database
 from ntrp.channel import Channel
 from ntrp.config import Config, get_config
 from ntrp.constants import AGENT_MAX_DEPTH, INDEXABLE_SOURCES, SESSION_EXPIRY_HOURS
@@ -38,7 +39,8 @@ class Runtime:
         self.embedding = self.config.embedding
         self.indexer = Indexer(db_path=self.config.search_db_path, embedding=self.embedding, channel=self.channel)
 
-        self.session_store = SessionStore(self.config.sessions_db_path)
+        self.session_store: SessionStore | None = None
+        self._sessions_conn = None
 
         self.memory: FactMemory | None = None
         self.executor: ToolExecutor | None = None
@@ -101,12 +103,15 @@ class Runtime:
             return
 
         self.config.db_dir.mkdir(exist_ok=True)
-        await self.session_store.connect()
-        await self.indexer.connect()
 
-        # Schedule store shares sessions DB connection
-        self.schedule_store = ScheduleStore(self.session_store.conn)
+        self._sessions_conn = await database.connect(self.config.sessions_db_path)
+        self.session_store = SessionStore(self._sessions_conn)
+        await self.session_store.init_schema()
+
+        self.schedule_store = ScheduleStore(self._sessions_conn)
         await self.schedule_store.init_schema()
+
+        await self.indexer.connect()
 
         self.channel.subscribe(ToolExecuted, self.dashboard.on_tool_executed)
         self.channel.subscribe(RunStarted, self.dashboard.on_run_started)
@@ -248,7 +253,8 @@ class Runtime:
             await self.scheduler.stop()
         if self.memory:
             await self.memory.close()
-        await self.session_store.close()
+        if self._sessions_conn:
+            await self._sessions_conn.close()
         await self.indexer.stop()
         await self.indexer.close()
 

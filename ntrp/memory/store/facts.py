@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import aiosqlite
 
-from ntrp.database import BaseRepository, serialize_embedding
+from ntrp.database import serialize_embedding
 from ntrp.memory.models import Embedding, Entity, EntityRef, Fact, FactLink, FactType, LinkType
 
 _SQL_GET_FACT = "SELECT * FROM facts WHERE id = ?"
@@ -150,7 +150,16 @@ def _row_dict(row: aiosqlite.Row) -> dict:
     return dict(row)
 
 
-class FactRepository(BaseRepository):
+class FactRepository:
+    def __init__(self, conn: aiosqlite.Connection, auto_commit: bool = True):
+        self.conn = conn
+        self._auto_commit = auto_commit
+
+    async def _commit(self) -> None:
+        if self._auto_commit:
+            await self.conn.commit()
+
+
     async def get(self, fact_id: int) -> Fact | None:
         rows = await self.conn.execute_fetchall(_SQL_GET_FACT, (fact_id,))
         if not rows:

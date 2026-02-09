@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from ntrp.database import BaseRepository
+import aiosqlite
+
 from ntrp.schedule.models import ScheduledTask
 
 SCHEMA = """
@@ -43,7 +44,10 @@ WHERE task_id = ?
 """
 
 
-class ScheduleStore(BaseRepository):
+class ScheduleStore:
+    def __init__(self, conn: aiosqlite.Connection):
+        self.conn = conn
+
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
         await self.conn.commit()

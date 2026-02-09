@@ -3,8 +3,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Self
 
+import aiosqlite
 from pydantic import BaseModel, ConfigDict
 
+import ntrp.database as database
 from ntrp.channel import Channel
 from ntrp.constants import (
     CONSOLIDATION_INTERVAL,
@@ -44,14 +46,14 @@ class RememberFactResult(BaseModel):
 class FactMemory:
     def __init__(
         self,
-        db_path: Path,
+        conn: aiosqlite.Connection,
         embedding: EmbeddingConfig,
         extraction_model: str,
         channel: Channel,
         embedder: Embedder | None = None,
         extractor: Extractor | None = None,
     ):
-        self.db = GraphDatabase(db_path, embedding.dim)
+        self.db = GraphDatabase(conn, embedding.dim)
         self.embedder = embedder or Embedder(embedding)
         self.extractor = extractor or Extractor(extraction_model)
         self.extraction_model = extraction_model
@@ -71,8 +73,9 @@ class FactMemory:
         extraction_model: str,
         channel: Channel,
     ) -> Self:
-        instance = cls(db_path, embedding, extraction_model, channel=channel)
-        await instance.db.connect()
+        conn = await database.connect(db_path, vec=True)
+        instance = cls(conn, embedding, extraction_model, channel=channel)
+        await instance.db.init_schema()
         return instance
 
     def start_consolidation(self, interval: float = CONSOLIDATION_INTERVAL) -> None:
@@ -141,7 +144,7 @@ class FactMemory:
             except asyncio.CancelledError:
                 pass
             self._consolidation_task = None
-        await self.db.close()
+        await self.db.conn.close()
 
     async def remember(
         self,

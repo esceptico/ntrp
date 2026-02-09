@@ -2,10 +2,10 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
+import aiosqlite
 from pydantic import BaseModel
 
 from ntrp.context.models import SessionData, SessionState
-from ntrp.database import Database
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -39,14 +39,14 @@ LIMIT ?
 """
 
 
-class SessionDatabase(Database):
-    async def connect(self) -> None:
-        await super().connect()
+class SessionStore:
+    def __init__(self, conn: aiosqlite.Connection):
+        self.conn = conn
+
+    async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
         await self.conn.commit()
 
-
-class SessionStore(SessionDatabase):
     async def save_session(self, state: SessionState, messages: list[dict | Any]) -> None:
         serializable_messages = []
         for msg in messages:

@@ -1,10 +1,9 @@
 from collections.abc import Callable
-from pathlib import Path
 from typing import NamedTuple
 
 from ntrp.constants import RRF_K
 from ntrp.database import serialize_embedding
-from ntrp.embedder import Embedder, EmbeddingConfig
+from ntrp.embedder import Embedder
 from ntrp.logging import get_logger
 from ntrp.search.retrieval import HybridRetriever
 from ntrp.search.store import SearchStore
@@ -27,16 +26,14 @@ class SearchIndex:
 
     def __init__(
         self,
-        db_path: Path,
-        embedding: EmbeddingConfig,
+        store: SearchStore,
+        embedder: Embedder,
         rrf_k: int = RRF_K,
         vector_weight: float = 0.5,
         fts_weight: float = 0.5,
-        store: SearchStore | None = None,
-        embedder: Embedder | None = None,
     ):
-        self.store = store or SearchStore(db_path, embedding.dim)
-        self.embedder = embedder or Embedder(embedding)
+        self.store = store
+        self.embedder = embedder
         self.retriever = HybridRetriever(
             store=self.store,
             embedder=self.embedder,
@@ -44,12 +41,6 @@ class SearchIndex:
             vector_weight=vector_weight,
             fts_weight=fts_weight,
         )
-
-    async def connect(self) -> None:
-        await self.store.connect()
-
-    async def close(self) -> None:
-        await self.store.close()
 
     def should_embed(self, source: str) -> bool:
         return source in self.EMBED_SOURCES

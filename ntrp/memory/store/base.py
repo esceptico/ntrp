@@ -1,7 +1,4 @@
-from datetime import UTC, datetime
-from pathlib import Path
-
-from ntrp.database import VectorDatabase
+import aiosqlite
 
 SCHEMA = """
 -- Observations (consolidated patterns from facts)
@@ -117,20 +114,12 @@ END;
 """
 
 
-def parse_datetime(value: str | None) -> datetime | None:
-    if value is None:
-        return None
-    dt = datetime.fromisoformat(value)
-    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
-
-
-class GraphDatabase(VectorDatabase):
-    def __init__(self, db_path: Path, embedding_dim: int):
-        super().__init__(db_path)
+class GraphDatabase:
+    def __init__(self, conn: aiosqlite.Connection, embedding_dim: int):
+        self.conn = conn
         self.embedding_dim = embedding_dim
 
-    async def connect(self) -> None:
-        await super().connect()
+    async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
         await self._init_vec_tables()
         await self.conn.commit()

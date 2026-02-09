@@ -2,10 +2,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
-
 import aiosqlite
-import sqlite_vec
 
 from ntrp.logging import get_logger
 
@@ -29,61 +26,15 @@ class Item:
 
 
 class SearchStore:
-    def __init__(self, db_path: Path, embedding_dim: int):
-        self.db_path = db_path
+    def __init__(self, conn: aiosqlite.Connection, embedding_dim: int):
+        self.conn = conn
         self.embedding_dim = embedding_dim
-        self._conn: aiosqlite.Connection | None = None
         self._has_fts = False
         self._has_vec = False
 
-    async def _open_connection(self) -> aiosqlite.Connection:
-        conn = await aiosqlite.connect(self.db_path)
-        conn.row_factory = aiosqlite.Row
-
-        await conn.enable_load_extension(True)
-        await conn.load_extension(sqlite_vec.loadable_path())
-        await conn.enable_load_extension(False)
-
-        await conn.execute("PRAGMA journal_mode=WAL;")
-        await conn.execute("PRAGMA synchronous=NORMAL;")
-        await conn.execute("PRAGMA busy_timeout=30000;")
-
-        return conn
-
-    async def connect(self) -> None:
-        self._conn = await self._open_connection()
-
+    async def init_schema(self) -> None:
         await self._check_integrity()
-        await self._init_schema()
 
-    async def close(self) -> None:
-        if self._conn:
-            await self._conn.close()
-            self._conn = None
-
-    @property
-    def conn(self) -> aiosqlite.Connection:
-        if self._conn is None:
-            raise RuntimeError("SearchStore not connected")
-        return self._conn
-
-    async def _check_integrity(self) -> None:
-        try:
-            rows = await self.conn.execute_fetchall("PRAGMA integrity_check;")
-            if not rows or rows[0][0] != "ok":
-                raise RuntimeError("Integrity check failed")
-        except Exception:
-            await self.conn.close()
-            timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-            for suffix in ("", "-wal", "-shm"):
-                src = Path(str(self.db_path) + suffix)
-                if src.exists():
-                    src.rename(Path(f"{self.db_path}.bak.{timestamp}{suffix}"))
-            _logger.warning("Search DB integrity check failed — backed up to %s.bak.%s", self.db_path, timestamp)
-
-            self._conn = await self._open_connection()
-
-    async def _init_schema(self) -> None:
         await self.conn.executescript("""
             CREATE TABLE IF NOT EXISTS items (
                 id INTEGER PRIMARY KEY,
@@ -145,6 +96,15 @@ class SearchStore:
             self._has_vec = False
 
         await self.conn.commit()
+
+    async def _check_integrity(self) -> None:
+        try:
+            rows = await self.conn.execute_fetchall("PRAGMA integrity_check;")
+            if not rows or rows[0][0] != "ok":
+                raise RuntimeError("Integrity check failed")
+        except Exception:
+            _logger.warning("Search DB integrity check failed")
+            raise
 
     @staticmethod
     def hash_content(content: str) -> str:

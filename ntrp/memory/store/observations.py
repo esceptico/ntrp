@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import aiosqlite
 
-from ntrp.database import BaseRepository, serialize_embedding
+from ntrp.database import serialize_embedding
 from ntrp.memory.models import Embedding, HistoryEntry, Observation
 
 _SQL_GET_OBSERVATION = "SELECT * FROM observations WHERE id = ?"
@@ -50,7 +50,16 @@ def _row_dict(row: aiosqlite.Row) -> dict:
     return d
 
 
-class ObservationRepository(BaseRepository):
+class ObservationRepository:
+    def __init__(self, conn: aiosqlite.Connection, auto_commit: bool = True):
+        self.conn = conn
+        self._auto_commit = auto_commit
+
+    async def _commit(self) -> None:
+        if self._auto_commit:
+            await self.conn.commit()
+
+
     async def create(
         self,
         summary: str,

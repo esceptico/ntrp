@@ -3,11 +3,13 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
 
+import ntrp.database as database
 from ntrp.channel import Channel
 from ntrp.core.events import IndexingCompleted, IndexingStarted
-from ntrp.embedder import EmbeddingConfig
+from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.logging import get_logger
 from ntrp.search.index import SearchIndex
+from ntrp.search.store import SearchStore
 from ntrp.sources.base import IndexableSource
 
 _logger = get_logger(__name__)
@@ -32,15 +34,21 @@ class IndexProgress:
 
 class Indexer:
     def __init__(self, db_path: Path, embedding: EmbeddingConfig, channel: Channel):
-        self.index = SearchIndex(db_path=db_path, embedding=embedding)
+        self.db_path = db_path
+        self.embedding = embedding
         self.channel = channel
+        self.index: SearchIndex | None = None
+        self._conn = None
         self._progress = IndexProgress()
         self._error: str | None = None
         self._running = False
         self._task: asyncio.Task | None = None
 
     async def connect(self) -> None:
-        await self.index.connect()
+        self._conn = await database.connect(self.db_path, vec=True)
+        store = SearchStore(self._conn, self.embedding.dim)
+        await store.init_schema()
+        self.index = SearchIndex(store=store, embedder=Embedder(self.embedding))
 
     async def stop(self) -> None:
         if self._task:
@@ -52,7 +60,9 @@ class Indexer:
             self._task = None
 
     async def close(self) -> None:
-        await self.index.close()
+        if self._conn:
+            await self._conn.close()
+            self._conn = None
 
     @property
     def progress(self) -> IndexProgress:
@@ -113,5 +123,5 @@ class Indexer:
             "indexing": self._running,
             "progress": asdict(self._progress),
             "error": self._error,
-            "stats": await self.index.get_stats(),
+            "stats": await self.index.get_stats() if self.index else {},
         }

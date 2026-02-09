@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 import pytest_asyncio
 
+import ntrp.database as database
 from ntrp.memory.store.base import GraphDatabase
 
 TEST_EMBEDDING_DIM = 768
@@ -21,11 +22,11 @@ def event_loop():
 
 @pytest_asyncio.fixture
 async def db(tmp_path: Path) -> AsyncGenerator[GraphDatabase]:
-    db_path = tmp_path / "test_memory.db"
-    db = GraphDatabase(db_path, TEST_EMBEDDING_DIM)
-    await db.connect()
+    conn = await database.connect(tmp_path / "test_memory.db", vec=True)
+    db = GraphDatabase(conn, TEST_EMBEDDING_DIM)
+    await db.init_schema()
     yield db
-    await db.close()
+    await conn.close()
 
 
 def mock_embedding(text: str) -> np.ndarray:
