@@ -143,19 +143,26 @@ async def retrieve_facts(
     else:
         temporal_ids = {}
 
-    # Merge: seeds keep their RRF score, expansion facts get idf_weight as base
+    # Merge: seeds keep their RRF score, expansion facts weighted by query similarity
     all_scores: dict[int, float] = dict(seeds)
+    fact_cache: dict[int, Fact] = {}
+
     for fid, idf_w in expansion.items():
         if fid not in all_scores:
-            all_scores[fid] = idf_w * 0.5  # expansion facts get attenuated base score
+            fact = await repo.get(fid)
+            if fact:
+                fact_cache[fid] = fact
+                sim = _cosine_similarity(query_embedding, fact.embedding) if fact.embedding is not None else 0.0
+                all_scores[fid] = idf_w * 0.5 * max(sim, 0.0)
+
     for fid, base in temporal_ids.items():
         if fid not in all_scores:
             all_scores[fid] = base
 
-    # Fetch all facts and apply decay/recency scoring
+    # Fetch remaining facts and apply decay/recency scoring
     scored: list[tuple[Fact, float]] = []
     for fid, base in all_scores.items():
-        fact = await repo.get(fid)
+        fact = fact_cache.get(fid) or await repo.get(fid)
         if fact:
             scored.append((fact, score_fact(fact, base, query_time)))
 
