@@ -365,6 +365,51 @@ export async function setScheduleNotifiers(
   return api.put<{ notifiers: string[] }>(`${config.serverUrl}/schedules/${taskId}/notifiers`, { notifiers });
 }
 
+// --- Notifier configs ---
+
+export interface NotifierConfigData {
+  name: string;
+  type: string;
+  config: Record<string, string>;
+  created_at: string;
+}
+
+export interface NotifierTypeInfo {
+  fields: string[];
+  accounts?: string[];
+}
+
+export async function getNotifierConfigs(config: Config): Promise<{ configs: NotifierConfigData[] }> {
+  return api.get<{ configs: NotifierConfigData[] }>(`${config.serverUrl}/notifiers/configs`);
+}
+
+export async function getNotifierTypes(config: Config): Promise<{ types: Record<string, NotifierTypeInfo> }> {
+  return api.get<{ types: Record<string, NotifierTypeInfo> }>(`${config.serverUrl}/notifiers/types`);
+}
+
+export async function createNotifierConfig(
+  config: Config,
+  data: { name: string; type: string; config: Record<string, string> }
+): Promise<NotifierConfigData> {
+  return api.post<NotifierConfigData>(`${config.serverUrl}/notifiers/configs`, data);
+}
+
+export async function updateNotifierConfig(
+  config: Config,
+  name: string,
+  cfg: Record<string, string>
+): Promise<NotifierConfigData> {
+  return api.put<NotifierConfigData>(`${config.serverUrl}/notifiers/configs/${name}`, { config: cfg });
+}
+
+export async function deleteNotifierConfig(config: Config, name: string): Promise<{ status: string }> {
+  return api.delete<{ status: string }>(`${config.serverUrl}/notifiers/configs/${name}`);
+}
+
+export async function testNotifier(config: Config, name: string): Promise<{ status: string }> {
+  return api.post<{ status: string }>(`${config.serverUrl}/notifiers/configs/${name}/test`);
+}
+
 export async function updateFact(
   config: Config,
   factId: number,

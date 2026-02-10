@@ -38,6 +38,9 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
     setEditText,
     setCursorPos,
     setLoading,
+    setEditFocus,
+    setEditNotifiers,
+    setEditNotifierCursor,
     loadSchedules,
     handleToggle,
     handleDelete,
@@ -45,8 +48,10 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
     handleRun,
     handleViewResult,
     handleSave,
-    handleToggleNotifier,
     availableNotifiers,
+    editFocus,
+    editNotifiers,
+    editNotifierCursor,
   } = useSchedules(config);
 
   const textInput = useTextInput({
@@ -68,12 +73,34 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
           setEditMode(false);
           setEditText("");
           setCursorPos(0);
+          setEditFocus("description");
           return;
         }
-        // Delegate all text editing to useTextInput hook
-        if (textInput.handleKey(key)) {
+        if (key.name === "tab") {
+          if (availableNotifiers.length > 0) {
+            setEditFocus((f) => (f === "description" ? "notifiers" : "description"));
+          }
           return;
         }
+
+        if (editFocus === "notifiers") {
+          if (key.name === "up" || key.name === "k") {
+            setEditNotifierCursor((i) => Math.max(0, i - 1));
+          } else if (key.name === "down" || key.name === "j") {
+            setEditNotifierCursor((i) => Math.min(availableNotifiers.length - 1, i + 1));
+          } else if (key.name === "space" || key.name === "return") {
+            const name = availableNotifiers[editNotifierCursor];
+            if (name) {
+              setEditNotifiers((prev) =>
+                prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+              );
+            }
+          }
+          return;
+        }
+
+        // Description focus — delegate to text input
+        textInput.handleKey(key);
         return;
       }
 
@@ -104,6 +131,9 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
           setEditMode(true);
           setEditText(task.description);
           setCursorPos(task.description.length);
+          setEditNotifiers(task.notifiers.filter((n) => availableNotifiers.includes(n)));
+          setEditNotifierCursor(0);
+          setEditFocus("description");
         }
       } else if (key.name === "d") {
         if (schedules.length > 0) setConfirmDelete(true);
@@ -111,8 +141,6 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
         handleToggleWritable();
       } else if (key.name === "x") {
         handleRun();
-      } else if (key.name === "n") {
-        handleToggleNotifier();
       } else if (key.name === "r") {
         setLoading(true);
         loadSchedules();
@@ -130,13 +158,18 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
       handleViewResult,
       handleRun,
       editMode,
+      editFocus,
+      editNotifierCursor,
+      availableNotifiers,
       handleSave,
-      handleToggleNotifier,
       setSelectedIndex,
       setConfirmDelete,
       setEditMode,
       setEditText,
       setCursorPos,
+      setEditFocus,
+      setEditNotifiers,
+      setEditNotifierCursor,
       setLoading,
       textInput,
     ]
@@ -181,6 +214,10 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
         setCursorPos={setCursorPos}
         saving={saving}
         contentWidth={contentWidth}
+        editFocus={editFocus}
+        availableNotifiers={availableNotifiers}
+        editNotifiers={editNotifiers}
+        editNotifierCursor={editNotifierCursor}
       />
     );
   }
@@ -209,7 +246,7 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
       <Footer>
         {confirmDelete
           ? "y: confirm  n: cancel"
-          : `enter: view  space: toggle  e: edit  w: writable${availableNotifiers.length > 0 ? "  n: notify" : ""}  x: run  d: delete  r: refresh  q: close`}
+          : "enter: view  space: toggle  e: edit  w: writable  x: run  d: delete  r: refresh  q: close"}
       </Footer>
     </Panel>
   );

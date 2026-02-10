@@ -24,8 +24,9 @@ import { colorOptions } from "./SettingsRows.js";
 import { ModelDropdown } from "./ModelDropdown.js";
 import { BrowserDropdown } from "./BrowserDropdown.js";
 import { ConnectionsSection } from "./ConnectionsSection.js";
-import { AgentSection, AppearanceSection, LimitsSection } from "./sections/index.js";
+import { AgentSection, AppearanceSection, LimitsSection, NotifiersSection } from "./sections/index.js";
 import { useTextInput } from "../../../hooks/useTextInput.js";
+import { useNotifiers } from "../../../hooks/useNotifiers.js";
 
 function useAccent(accentColor: AccentColor) {
   return useMemo(() => accentColors[accentColor].primary, [accentColor]);
@@ -87,6 +88,8 @@ export function SettingsDialog({
   const [modelUpdating, setModelUpdating] = useState(false);
   const [dropdownTarget, setDropdownTarget] = useState<DropdownTarget>(null);
   const [pendingEmbeddingModel, setPendingEmbeddingModel] = useState<string | null>(null);
+
+  const notifiers = useNotifiers(config);
 
   const contentWidth = Math.max(0, terminalWidth - 4);
   const sidebarWidth = 16;
@@ -260,11 +263,16 @@ export function SettingsDialog({
       if (dropdownTarget || actionInProgress) return;
 
       if (key.name === "escape" || key.name === "q") {
+        if (activeSection === "notifiers" && notifiers.mode !== "list") {
+          notifiers.handleKeypress(key);
+          return;
+        }
         onClose();
         return;
       }
 
       if (key.name === "tab") {
+        if (activeSection === "notifiers" && notifiers.mode !== "list") return;
         const direction = key.shift ? -1 : 1;
         const idx = SECTION_IDS.indexOf(activeSection);
         const next = (idx + direction + SECTION_IDS.length) % SECTION_IDS.length;
@@ -338,6 +346,8 @@ export function SettingsDialog({
             onUpdate("ui", "accentColor", colorOptions[newIdx]);
           }
         }
+      } else if (activeSection === "notifiers") {
+        notifiers.handleKeypress(key);
       } else if (activeSection === "limits") {
         if (key.name === "up" || key.name === "k") {
           setLimitsIndex((i) => Math.max(0, i - 1));
@@ -360,6 +370,7 @@ export function SettingsDialog({
       isColorItem, settings, onUpdate, onClose, dropdownTarget,
       connectionItem, googleAccounts, selectedGoogleIndex, serverConfig,
       handleAddGoogle, handleRemoveGoogle, handleStartVaultEdit, handleToggleSource, actionInProgress,
+      notifiers,
     ]
   );
 
@@ -541,6 +552,10 @@ export function SettingsDialog({
               updatingBrowser={updatingBrowser}
               browserError={browserError}
             />
+          )}
+
+          {activeSection === "notifiers" && (
+            <NotifiersSection notifiers={notifiers} accent={accent} />
           )}
 
           {activeSection === "appearance" && (

@@ -7,6 +7,7 @@ interface TextEditAreaProps {
   onValueChange: (value: string | ((prev: string) => string)) => void;
   onCursorChange: (pos: number | ((prev: number) => number)) => void;
   placeholder?: string;
+  showCursor?: boolean;
 }
 
 /**
@@ -19,6 +20,7 @@ export function TextEditArea({
   onValueChange,
   onCursorChange,
   placeholder = "Type to edit...",
+  showCursor = true,
 }: TextEditAreaProps) {
 
   // Simple cursor rendering - just like chat input
@@ -42,11 +44,11 @@ export function TextEditArea({
       {lines.length === 0 || (lines.length === 1 && lines[0] === "") ? (
         <Text color={colors.text.muted}>
           {placeholder}
-          <Text inverse> </Text>
+          {showCursor && <Text inverse> </Text>}
         </Text>
       ) : (
         lines.map((line, idx) => {
-          if (idx === cursorLine) {
+          if (showCursor && idx === cursorLine) {
             const beforeCursor = line.slice(0, cursorCol);
             const atCursor = line[cursorCol] || " ";
             const afterCursor = line.slice(cursorCol + 1);

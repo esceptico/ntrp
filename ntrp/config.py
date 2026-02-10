@@ -65,6 +65,9 @@ class Config(BaseSettings):
     # Exa.ai for web search (optional) - no prefix, standard env var
     exa_api_key: str | None = Field(default=None, alias="EXA_API_KEY")
 
+    # Telegram bot token (optional) - no prefix, standard env var
+    telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
+
     # Obsidian vault
     vault_path: Path | None = None
 

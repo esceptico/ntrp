@@ -14,8 +14,8 @@ from ntrp.core.events import ConsolidationCompleted, RunCompleted, RunStarted, S
 from ntrp.logging import get_logger
 from ntrp.memory.events import FactCreated, FactDeleted, FactUpdated, MemoryCleared
 from ntrp.memory.facts import FactMemory
-from ntrp.notifiers import Notifier, make_schedule_dispatcher
-from ntrp.notifiers.email import EmailNotifier
+from ntrp.notifiers import Notifier, create_notifier, make_schedule_dispatcher
+from ntrp.notifiers.store import NotifierStore
 from ntrp.schedule.scheduler import Scheduler, SchedulerDeps
 from ntrp.schedule.store import ScheduleStore
 from ntrp.server.dashboard import DashboardCollector
@@ -50,6 +50,7 @@ class Runtime:
 
         self.max_depth = AGENT_MAX_DEPTH
         self.schedule_store: ScheduleStore | None = None
+        self.notifier_store: NotifierStore | None = None
         self.scheduler: Scheduler | None = None
         self.run_registry = RunRegistry()
 
@@ -95,6 +96,18 @@ class Runtime:
 
         self.tools = self.executor.get_tools()
 
+    async def rebuild_notifiers(self) -> None:
+        self.notifiers.clear()
+        if self.notifier_store:
+            for cfg in await self.notifier_store.list_all():
+                try:
+                    self.notifiers[cfg.name] = create_notifier(
+                        cfg, config=self.config, gmail=self.get_gmail,
+                    )
+                except Exception:
+                    _logger.exception("Failed to create notifier %r", cfg.name)
+        self.rebuild_executor()
+
     async def connect(self) -> None:
         if self._connected:
             return
@@ -107,6 +120,9 @@ class Runtime:
 
         self.schedule_store = ScheduleStore(self._sessions_conn)
         await self.schedule_store.init_schema()
+
+        self.notifier_store = NotifierStore(self._sessions_conn)
+        await self.notifier_store.init_schema()
 
         await self.indexer.connect()
 
@@ -130,10 +146,7 @@ class Runtime:
                 channel=self.channel,
             )
 
-        if self.config.gmail:
-            self.notifiers["email"] = EmailNotifier(self.get_gmail)
-
-        self.rebuild_executor()
+        await self.rebuild_notifiers()
         self._connected = True
 
     def get_source_details(self) -> dict[str, dict]:

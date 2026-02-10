@@ -1,9 +1,10 @@
-export const SECTION_IDS = ["agent", "connections", "appearance", "limits"] as const;
+export const SECTION_IDS = ["agent", "connections", "notifiers", "appearance", "limits"] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 
 export const SECTION_LABELS = {
   agent: "Agent",
   connections: "Connections",
+  notifiers: "Notifiers",
   appearance: "Appearance",
   limits: "Limits",
 } satisfies Record<SectionId, string>;

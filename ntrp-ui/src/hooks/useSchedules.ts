@@ -13,6 +13,8 @@ import {
   type Schedule,
 } from "../api/client.js";
 
+export type EditFocus = "description" | "notifiers";
+
 export interface UseSchedulesResult {
   schedules: Schedule[];
   selectedIndex: number;
@@ -25,6 +27,9 @@ export interface UseSchedulesResult {
   cursorPos: number;
   saving: boolean;
   availableNotifiers: string[];
+  editFocus: EditFocus;
+  editNotifiers: string[];
+  editNotifierCursor: number;
   setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
   setConfirmDelete: React.Dispatch<React.SetStateAction<boolean>>;
   setViewingResult: React.Dispatch<React.SetStateAction<{ description: string; result: string } | null>>;
@@ -34,6 +39,9 @@ export interface UseSchedulesResult {
   setSaving: React.Dispatch<React.SetStateAction<boolean>>;
   setSchedules: React.Dispatch<React.SetStateAction<Schedule[]>>;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  setEditFocus: React.Dispatch<React.SetStateAction<EditFocus>>;
+  setEditNotifiers: React.Dispatch<React.SetStateAction<string[]>>;
+  setEditNotifierCursor: React.Dispatch<React.SetStateAction<number>>;
   loadSchedules: () => Promise<void>;
   handleToggle: () => Promise<void>;
   handleDelete: () => Promise<void>;
@@ -41,7 +49,6 @@ export interface UseSchedulesResult {
   handleRun: () => Promise<void>;
   handleViewResult: () => Promise<void>;
   handleSave: () => Promise<void>;
-  handleToggleNotifier: () => Promise<void>;
 }
 
 export function useSchedules(config: Config): UseSchedulesResult {
@@ -56,8 +63,15 @@ export function useSchedules(config: Config): UseSchedulesResult {
   const [cursorPos, setCursorPos] = useState(0);
   const [saving, setSaving] = useState(false);
   const [availableNotifiers, setAvailableNotifiers] = useState<string[]>([]);
+  const [editFocus, setEditFocus] = useState<EditFocus>("description");
+  const [editNotifiers, setEditNotifiers] = useState<string[]>([]);
+  const [editNotifierCursor, setEditNotifierCursor] = useState(0);
 
   const loadedRef = useRef(false);
+  const editTextRef = useRef(editText);
+  editTextRef.current = editText;
+  const editNotifiersRef = useRef(editNotifiers);
+  editNotifiersRef.current = editNotifiers;
 
   const loadSchedules = useCallback(async () => {
     try {
@@ -153,54 +167,27 @@ export function useSchedules(config: Config): UseSchedulesResult {
   const handleSave = useCallback(async () => {
     const task = schedules[selectedIndex];
     if (!task) return;
+    const text = editTextRef.current;
+    const notifiers = editNotifiersRef.current;
     setSaving(true);
     try {
-      await updateSchedule(config, task.task_id, editText);
+      await Promise.all([
+        updateSchedule(config, task.task_id, text),
+        setScheduleNotifiers(config, task.task_id, notifiers),
+      ]);
       setSchedules((prev) =>
-        prev.map((s) => (s.task_id === task.task_id ? { ...s, description: editText } : s))
+        prev.map((s) => (s.task_id === task.task_id ? { ...s, description: text, notifiers } : s))
       );
       setEditMode(false);
       setEditText("");
       setCursorPos(0);
+      setEditFocus("description");
     } catch {
       loadSchedules();
     } finally {
       setSaving(false);
     }
-  }, [config, schedules, selectedIndex, editText, loadSchedules]);
-
-  const handleToggleNotifier = useCallback(async () => {
-    const task = schedules[selectedIndex];
-    if (!task || availableNotifiers.length === 0) return;
-
-    let newNotifiers: string[];
-    if (availableNotifiers.length === 1) {
-      // Single notifier: toggle on/off
-      const channel = availableNotifiers[0];
-      newNotifiers = task.notifiers.includes(channel)
-        ? task.notifiers.filter((n) => n !== channel)
-        : [...task.notifiers, channel];
-    } else {
-      // Multiple notifiers: cycle through — toggle the next one not yet enabled,
-      // or if all are enabled, clear them all
-      const nextOff = availableNotifiers.find((n) => !task.notifiers.includes(n));
-      if (nextOff) {
-        newNotifiers = [...task.notifiers, nextOff];
-      } else {
-        newNotifiers = [];
-      }
-    }
-
-    // Optimistic update
-    setSchedules((prev) =>
-      prev.map((s) => (s.task_id === task.task_id ? { ...s, notifiers: newNotifiers } : s))
-    );
-    try {
-      await setScheduleNotifiers(config, task.task_id, newNotifiers);
-    } catch {
-      loadSchedules();
-    }
-  }, [config, schedules, selectedIndex, availableNotifiers, loadSchedules]);
+  }, [config, schedules, selectedIndex, loadSchedules]);
 
   return {
     schedules,
@@ -214,6 +201,9 @@ export function useSchedules(config: Config): UseSchedulesResult {
     cursorPos,
     saving,
     availableNotifiers,
+    editFocus,
+    editNotifiers,
+    editNotifierCursor,
     setSelectedIndex,
     setConfirmDelete,
     setViewingResult,
@@ -223,6 +213,9 @@ export function useSchedules(config: Config): UseSchedulesResult {
     setSaving,
     setSchedules,
     setLoading,
+    setEditFocus,
+    setEditNotifiers,
+    setEditNotifierCursor,
     loadSchedules,
     handleToggle,
     handleDelete,
@@ -230,6 +223,5 @@ export function useSchedules(config: Config): UseSchedulesResult {
     handleRun,
     handleViewResult,
     handleSave,
-    handleToggleNotifier,
   };
 }
