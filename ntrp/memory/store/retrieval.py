@@ -149,12 +149,8 @@ async def retrieve_facts(
     candidate_ids.update(expansion.keys())
     candidate_ids.update(temporal_ids.keys())
 
-    # Fetch all candidate facts
-    facts_by_id: dict[int, Fact] = {}
-    for fid in candidate_ids:
-        fact = await repo.get(fid)
-        if fact:
-            facts_by_id[fid] = fact
+    # Fetch all candidate facts in one query
+    facts_by_id = await repo.get_batch(list(candidate_ids))
 
     if not facts_by_id:
         return FactContext(facts=[])

@@ -132,6 +132,20 @@ class FactRepository:
         entity_refs = await self.get_entity_refs(fact_id)
         return fact.model_copy(update={"entity_refs": entity_refs})
 
+    async def get_batch(self, fact_ids: list[int]) -> dict[int, Fact]:
+        if not fact_ids:
+            return {}
+        placeholders = ",".join("?" * len(fact_ids))
+        rows = await self.conn.execute_fetchall(
+            _SQL_GET_FACTS_BY_IDS.format(placeholders=placeholders), fact_ids,
+        )
+        facts = {r["id"]: Fact.model_validate(_row_dict(r)) for r in rows}
+        refs = await self.get_entity_refs_batch(list(facts.keys()))
+        for fid, entity_refs in refs.items():
+            if fid in facts:
+                facts[fid] = facts[fid].model_copy(update={"entity_refs": entity_refs})
+        return facts
+
     async def create(
         self,
         text: str,
