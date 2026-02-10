@@ -14,4 +14,6 @@ wheels/
 .claude
 .context/
 data/
+evals/
+scripts/
 node_modules/
