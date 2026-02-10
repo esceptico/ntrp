@@ -23,6 +23,7 @@ GET_SCHEDULE_RESULT_DESCRIPTION = "Get the last execution result of a scheduled 
 
 
 class ScheduleTaskInput(BaseModel):
+    name: str = Field(description="Short human-readable label for the schedule (e.g. 'morning briefing', 'inbox check')")
     description: str = Field(description="What the agent should do (natural language task)")
     time: str = Field(description="Time of day in HH:MM format (24h, local time)")
     recurrence: str = Field(
@@ -45,6 +46,7 @@ class ScheduleTaskTool(Tool):
 
     async def approval_info(
         self,
+        name: str = "",
         description: str = "",
         time: str = "",
         recurrence: str = "",
@@ -76,6 +78,7 @@ class ScheduleTaskTool(Tool):
     async def execute(
         self,
         execution: ToolExecution,
+        name: str = "",
         description: str = "",
         time: str = "",
         recurrence: str = "",
@@ -83,9 +86,9 @@ class ScheduleTaskTool(Tool):
         writable: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
-        if not description or not time or not recurrence:
+        if not name or not description or not time or not recurrence:
             return ToolResult(
-                content="Error: description, time, and recurrence are required",
+                content="Error: name, description, time, and recurrence are required",
                 preview="Missing fields",
                 is_error=True,
             )
@@ -118,6 +121,7 @@ class ScheduleTaskTool(Tool):
 
         task = ScheduledTask(
             task_id=uuid4().hex[:8],
+            name=name,
             description=description,
             time_of_day=time_normalized,
             recurrence=rec,
@@ -161,8 +165,9 @@ class ListSchedulesTool(Tool):
             status = "enabled" if t.enabled else "disabled"
             next_run = t.next_run_at.strftime("%Y-%m-%d %H:%M") if t.next_run_at else "—"
             last_run = t.last_run_at.strftime("%Y-%m-%d %H:%M") if t.last_run_at else "never"
+            label = t.name or t.description[:60]
             lines.append(
-                f"[{t.task_id}] {t.description}\n"
+                f"[{t.task_id}] {label}\n"
                 f"  {t.time_of_day} · {t.recurrence.value} · {status}\n"
                 f"  next: {next_run} · last: {last_run}"
             )

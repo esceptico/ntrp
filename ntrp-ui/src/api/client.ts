@@ -312,6 +312,7 @@ export async function updateBrowser(
 
 export interface Schedule {
   task_id: string;
+  name: string;
   description: string;
   time_of_day: string;
   recurrence: string;
@@ -333,8 +334,8 @@ export async function toggleSchedule(config: Config, taskId: string): Promise<{ 
   return api.post<{ enabled: boolean }>(`${config.serverUrl}/schedules/${taskId}/toggle`);
 }
 
-export async function updateSchedule(config: Config, taskId: string, description: string): Promise<{ description: string }> {
-  return api.patch<{ description: string }>(`${config.serverUrl}/schedules/${taskId}`, { description });
+export async function updateSchedule(config: Config, taskId: string, data: { name?: string; description?: string }): Promise<{ name: string; description: string }> {
+  return api.patch<{ name: string; description: string }>(`${config.serverUrl}/schedules/${taskId}`, data);
 }
 
 export async function deleteSchedule(config: Config, taskId: string): Promise<{ status: string }> {

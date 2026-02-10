@@ -35,7 +35,8 @@ export function ScheduleItem({ item, context, textWidth }: ScheduleItemProps) {
         <Text color={statusColor}>{statusIcon}</Text>
         <Text color={metaColor}>{` ${item.time_of_day}  ${item.recurrence}${item.writable ? "  ✎" : ""}${item.notifiers.length > 0 ? `  → ${item.notifiers.join(", ")}` : ""}`}</Text>
       </Text>
-      <Text color={textColor}>{wrapText(item.description, textWidth).join("\n")}</Text>
+      {item.name ? <Text color={textColor} bold>{item.name}</Text> : null}
+      <Text color={item.name ? metaColor : textColor}>{wrapText(item.description, textWidth).join("\n")}</Text>
       <Text color={metaColor}>{`next: ${nextRun}   last: ${lastRun}`}</Text>
     </Box>
   );

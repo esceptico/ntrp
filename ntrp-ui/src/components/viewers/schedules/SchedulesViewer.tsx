@@ -5,7 +5,7 @@ import { useKeypress, useTextInput, type Key } from "../../../hooks/index.js";
 import { useDimensions } from "../../../contexts/index.js";
 import { Panel, Footer, Loading, colors, BaseSelectionList } from "../../ui/index.js";
 import { VISIBLE_LINES } from "../../../lib/constants.js";
-import { useSchedules } from "../../../hooks/useSchedules.js";
+import { useSchedules, type EditFocus } from "../../../hooks/useSchedules.js";
 import { ScheduleItem } from "./ScheduleItem.js";
 import { ScheduleEditView } from "./ScheduleEditView.js";
 import { ResultViewer } from "./ResultViewer.js";
@@ -14,6 +14,8 @@ interface SchedulesViewerProps {
   config: Config;
   onClose: () => void;
 }
+
+const FOCUS_ORDER: EditFocus[] = ["name", "description", "notifiers"];
 
 export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
   const { width: terminalWidth } = useDimensions();
@@ -28,6 +30,8 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
     confirmDelete,
     viewingResult,
     editMode,
+    editName,
+    editNameCursorPos,
     editText,
     cursorPos,
     saving,
@@ -35,6 +39,8 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
     setConfirmDelete,
     setViewingResult,
     setEditMode,
+    setEditName,
+    setEditNameCursorPos,
     setEditText,
     setCursorPos,
     setLoading,
@@ -54,6 +60,13 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
     editNotifierCursor,
   } = useSchedules(config);
 
+  const nameInput = useTextInput({
+    text: editName,
+    cursorPos: editNameCursorPos,
+    setText: setEditName,
+    setCursorPos: setEditNameCursorPos,
+  });
+
   const textInput = useTextInput({
     text: editText,
     cursorPos,
@@ -71,15 +84,21 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
         }
         if (key.name === "escape") {
           setEditMode(false);
+          setEditName("");
+          setEditNameCursorPos(0);
           setEditText("");
           setCursorPos(0);
-          setEditFocus("description");
+          setEditFocus("name");
           return;
         }
         if (key.name === "tab") {
-          if (availableNotifiers.length > 0) {
-            setEditFocus((f) => (f === "description" ? "notifiers" : "description"));
-          }
+          const sections = availableNotifiers.length > 0
+            ? FOCUS_ORDER
+            : FOCUS_ORDER.filter((f) => f !== "notifiers");
+          setEditFocus((f) => {
+            const idx = sections.indexOf(f);
+            return sections[(idx + 1) % sections.length];
+          });
           return;
         }
 
@@ -95,6 +114,13 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
                 prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
               );
             }
+          }
+          return;
+        }
+
+        if (editFocus === "name") {
+          if (key.name !== "return") {
+            nameInput.handleKey(key);
           }
           return;
         }
@@ -129,11 +155,13 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
         const task = schedules[selectedIndex];
         if (task) {
           setEditMode(true);
+          setEditName(task.name);
+          setEditNameCursorPos(task.name.length);
           setEditText(task.description);
           setCursorPos(task.description.length);
           setEditNotifiers(task.notifiers.filter((n) => availableNotifiers.includes(n)));
           setEditNotifierCursor(0);
-          setEditFocus("description");
+          setEditFocus("name");
         }
       } else if (key.name === "d") {
         if (schedules.length > 0) setConfirmDelete(true);
@@ -165,12 +193,15 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
       setSelectedIndex,
       setConfirmDelete,
       setEditMode,
+      setEditName,
+      setEditNameCursorPos,
       setEditText,
       setCursorPos,
       setEditFocus,
       setEditNotifiers,
       setEditNotifierCursor,
       setLoading,
+      nameInput,
       textInput,
     ]
   );
@@ -208,6 +239,8 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
   if (editMode) {
     return (
       <ScheduleEditView
+        editName={editName}
+        editNameCursorPos={editNameCursorPos}
         editText={editText}
         cursorPos={cursorPos}
         setEditText={setEditText}

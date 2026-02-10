@@ -8,6 +8,7 @@ from ntrp.schedule.models import ScheduledTask
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS scheduled_tasks (
     task_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
     description TEXT NOT NULL,
     time_of_day TEXT NOT NULL,
     recurrence TEXT NOT NULL,
@@ -25,11 +26,15 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_next_run ON scheduled_tasks(next_run_at
 CREATE INDEX IF NOT EXISTS idx_scheduled_enabled ON scheduled_tasks(enabled);
 """
 
+MIGRATIONS = [
+    "ALTER TABLE scheduled_tasks ADD COLUMN name TEXT NOT NULL DEFAULT ''",
+]
+
 SQL_SAVE = """
 INSERT OR REPLACE INTO scheduled_tasks
-    (task_id, description, time_of_day, recurrence, enabled,
+    (task_id, name, description, time_of_day, recurrence, enabled,
      created_at, last_run_at, next_run_at, notifiers, last_result, running_since, writable)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 SQL_LIST_DUE = """
@@ -51,6 +56,11 @@ class ScheduleStore:
 
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
+        for sql in MIGRATIONS:
+            try:
+                await self.conn.execute(sql)
+            except Exception:
+                pass  # already applied
         await self.conn.commit()
 
     async def save(self, task: ScheduledTask) -> None:
@@ -58,6 +68,7 @@ class ScheduleStore:
             SQL_SAVE,
             (
                 task.task_id,
+                task.name,
                 task.description,
                 task.time_of_day,
                 task.recurrence.value,
@@ -133,6 +144,13 @@ class ScheduleStore:
         await self.conn.execute(
             "UPDATE scheduled_tasks SET notifiers = ? WHERE task_id = ?",
             (json.dumps(notifiers), task_id),
+        )
+        await self.conn.commit()
+
+    async def update_name(self, task_id: str, name: str) -> None:
+        await self.conn.execute(
+            "UPDATE scheduled_tasks SET name = ? WHERE task_id = ?",
+            (name, task_id),
         )
         await self.conn.commit()
 

@@ -13,7 +13,7 @@ import {
   type Schedule,
 } from "../api/client.js";
 
-export type EditFocus = "description" | "notifiers";
+export type EditFocus = "name" | "description" | "notifiers";
 
 export interface UseSchedulesResult {
   schedules: Schedule[];
@@ -23,6 +23,8 @@ export interface UseSchedulesResult {
   confirmDelete: boolean;
   viewingResult: { description: string; result: string } | null;
   editMode: boolean;
+  editName: string;
+  editNameCursorPos: number;
   editText: string;
   cursorPos: number;
   saving: boolean;
@@ -34,6 +36,8 @@ export interface UseSchedulesResult {
   setConfirmDelete: React.Dispatch<React.SetStateAction<boolean>>;
   setViewingResult: React.Dispatch<React.SetStateAction<{ description: string; result: string } | null>>;
   setEditMode: React.Dispatch<React.SetStateAction<boolean>>;
+  setEditName: React.Dispatch<React.SetStateAction<string>>;
+  setEditNameCursorPos: React.Dispatch<React.SetStateAction<number>>;
   setEditText: React.Dispatch<React.SetStateAction<string>>;
   setCursorPos: React.Dispatch<React.SetStateAction<number>>;
   setSaving: React.Dispatch<React.SetStateAction<boolean>>;
@@ -59,15 +63,19 @@ export function useSchedules(config: Config): UseSchedulesResult {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [viewingResult, setViewingResult] = useState<{ description: string; result: string } | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editNameCursorPos, setEditNameCursorPos] = useState(0);
   const [editText, setEditText] = useState("");
   const [cursorPos, setCursorPos] = useState(0);
   const [saving, setSaving] = useState(false);
   const [availableNotifiers, setAvailableNotifiers] = useState<string[]>([]);
-  const [editFocus, setEditFocus] = useState<EditFocus>("description");
+  const [editFocus, setEditFocus] = useState<EditFocus>("name");
   const [editNotifiers, setEditNotifiers] = useState<string[]>([]);
   const [editNotifierCursor, setEditNotifierCursor] = useState(0);
 
   const loadedRef = useRef(false);
+  const editNameRef = useRef(editName);
+  editNameRef.current = editName;
   const editTextRef = useRef(editText);
   editTextRef.current = editText;
   const editNotifiersRef = useRef(editNotifiers);
@@ -167,21 +175,24 @@ export function useSchedules(config: Config): UseSchedulesResult {
   const handleSave = useCallback(async () => {
     const task = schedules[selectedIndex];
     if (!task) return;
+    const name = editNameRef.current;
     const text = editTextRef.current;
     const notifiers = editNotifiersRef.current;
     setSaving(true);
     try {
       await Promise.all([
-        updateSchedule(config, task.task_id, text),
+        updateSchedule(config, task.task_id, { name, description: text }),
         setScheduleNotifiers(config, task.task_id, notifiers),
       ]);
       setSchedules((prev) =>
-        prev.map((s) => (s.task_id === task.task_id ? { ...s, description: text, notifiers } : s))
+        prev.map((s) => (s.task_id === task.task_id ? { ...s, name, description: text, notifiers } : s))
       );
       setEditMode(false);
+      setEditName("");
+      setEditNameCursorPos(0);
       setEditText("");
       setCursorPos(0);
-      setEditFocus("description");
+      setEditFocus("name");
     } catch {
       loadSchedules();
     } finally {
@@ -197,6 +208,8 @@ export function useSchedules(config: Config): UseSchedulesResult {
     confirmDelete,
     viewingResult,
     editMode,
+    editName,
+    editNameCursorPos,
     editText,
     cursorPos,
     saving,
@@ -208,6 +221,8 @@ export function useSchedules(config: Config): UseSchedulesResult {
     setConfirmDelete,
     setViewingResult,
     setEditMode,
+    setEditName,
+    setEditNameCursorPos,
     setEditText,
     setCursorPos,
     setSaving,

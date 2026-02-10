@@ -25,7 +25,7 @@ def make_schedule_dispatcher(
             if not notifier:
                 _logger.warning("No notifier registered for channel %r", name)
                 continue
-            subject = f"[ntrp] {event.task.description}"
+            subject = f"[ntrp] {event.task.name}" if event.task.name else "[ntrp]"
             body = event.result or "(no output)"
             try:
                 await notifier.send(subject, body)

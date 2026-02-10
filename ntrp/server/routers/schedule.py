@@ -12,7 +12,8 @@ router = APIRouter(tags=["schedule"])
 
 
 class UpdateScheduleRequest(BaseModel):
-    description: str = Field(min_length=1, max_length=1000)
+    name: str | None = None
+    description: str | None = None
 
 
 class SetNotifiersRequest(BaseModel):
@@ -44,6 +45,7 @@ async def list_schedules():
         "schedules": [
             {
                 "task_id": t.task_id,
+                "name": t.name,
                 "description": t.description,
                 "time_of_day": t.time_of_day,
                 "recurrence": t.recurrence.value,
@@ -72,6 +74,7 @@ async def get_schedule(task_id: str):
 
     return {
         "task_id": task.task_id,
+        "name": task.name,
         "description": task.description,
         "time_of_day": task.time_of_day,
         "recurrence": task.recurrence.value,
@@ -142,8 +145,11 @@ async def update_schedule(task_id: str, request: UpdateScheduleRequest):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    await runtime.schedule_store.update_description(task_id, request.description)
-    return {"description": request.description}
+    if request.name is not None:
+        await runtime.schedule_store.update_name(task_id, request.name)
+    if request.description is not None:
+        await runtime.schedule_store.update_description(task_id, request.description)
+    return {"name": request.name or task.name, "description": request.description or task.description}
 
 
 @router.get("/notifiers")

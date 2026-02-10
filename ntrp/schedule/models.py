@@ -16,6 +16,7 @@ class Recurrence(StrEnum):
 @dataclass
 class ScheduledTask:
     task_id: str
+    name: str
     description: str
     time_of_day: str  # "HH:MM" local time
     recurrence: Recurrence
