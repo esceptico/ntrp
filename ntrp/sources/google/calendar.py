@@ -39,10 +39,12 @@ def format_event_time(start: datetime | None, end: datetime | None, is_all_day: 
             return f"{start.strftime('%Y-%m-%d')} - {end.strftime('%Y-%m-%d')}"
         return start.strftime("%Y-%m-%d") + " (all day)"
 
-    date_str = start.strftime("%Y-%m-%d")
-    time_str = start.strftime("%H:%M")
+    local_start = start.astimezone() if start.tzinfo is not None else start
+    date_str = local_start.strftime("%Y-%m-%d")
+    time_str = local_start.strftime("%H:%M")
     if end:
-        time_str += f" - {end.strftime('%H:%M')}"
+        local_end = end.astimezone() if end.tzinfo is not None else end
+        time_str += f" - {local_end.strftime('%H:%M')}"
     return f"{date_str} {time_str}"
 
 
@@ -61,18 +63,18 @@ def _apply_time_update(
         if is_all_day:
             event["start"] = {"date": start.strftime("%Y-%m-%d")}
         else:
-            event["start"] = {"dateTime": start.isoformat(), "timeZone": "UTC"}
+            event["start"] = {"dateTime": start.isoformat()}
 
     if end is not None:
         if is_all_day:
             event["end"] = {"date": end.strftime("%Y-%m-%d")}
         else:
-            event["end"] = {"dateTime": end.isoformat(), "timeZone": "UTC"}
+            event["end"] = {"dateTime": end.isoformat()}
     elif start is not None:
         if is_all_day:
             event["end"] = {"date": (start + timedelta(days=1)).strftime("%Y-%m-%d")}
         else:
-            event["end"] = {"dateTime": (start + timedelta(hours=1)).isoformat(), "timeZone": "UTC"}
+            event["end"] = {"dateTime": (start + timedelta(hours=1)).isoformat()}
 
 
 class GoogleCalendar:
@@ -246,8 +248,8 @@ class GoogleCalendar:
             event_body["start"] = {"date": start.strftime("%Y-%m-%d")}
             event_body["end"] = {"date": end.strftime("%Y-%m-%d")}
         else:
-            event_body["start"] = {"dateTime": start.isoformat(), "timeZone": "UTC"}
-            event_body["end"] = {"dateTime": end.isoformat(), "timeZone": "UTC"}
+            event_body["start"] = {"dateTime": start.isoformat()}
+            event_body["end"] = {"dateTime": end.isoformat()}
 
         if description:
             event_body["description"] = description

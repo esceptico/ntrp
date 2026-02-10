@@ -35,7 +35,10 @@ def _parse_datetime(value: str) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value)
+        dt = datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt = dt.astimezone()  # naive → local timezone
+        return dt
     except Exception:
         return None
 
@@ -87,6 +90,8 @@ class CalendarTool(Tool):
 
                 if start:
                     dt = datetime.fromisoformat(start)
+                    if dt.tzinfo is not None:
+                        dt = dt.astimezone()
                     time_str = dt.strftime("%Y-%m-%d %H:%M")
                 else:
                     time_str = "No time"
@@ -120,6 +125,8 @@ class CalendarTool(Tool):
 
             if start:
                 dt = datetime.fromisoformat(start)
+                if dt.tzinfo is not None:
+                    dt = dt.astimezone()
                 if meta.get("is_all_day"):
                     time_str = dt.strftime("%a %b %d") + " (all day)"
                 else:
