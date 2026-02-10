@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from enum import StrEnum
 from typing import Any
 
 import numpy as np
@@ -8,17 +7,6 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from ntrp.database import deserialize_embedding
 
 type Embedding = np.ndarray
-
-
-class FactType(StrEnum):
-    WORLD = "world"
-    EXPERIENCE = "experience"
-
-
-class LinkType(StrEnum):
-    TEMPORAL = "temporal"
-    SEMANTIC = "semantic"
-    ENTITY = "entity"
 
 
 def _parse_datetime(value: Any) -> datetime | None:
@@ -38,19 +26,10 @@ class _FrozenModel(BaseModel):
 
 class ExtractedEntity(_FrozenModel):
     name: str
-    entity_type: str
-
-
-class ExtractedEntityPair(_FrozenModel):
-    source: str
-    target: str
-    source_type: str = "other"
-    target_type: str = "other"
 
 
 class ExtractionResult(_FrozenModel):
     entities: list[ExtractedEntity] = []
-    entity_pairs: list[ExtractedEntityPair] = []
 
 
 class HistoryEntry(_FrozenModel):
@@ -106,7 +85,6 @@ class Observation(_FrozenModel):
 class Fact(_FrozenModel):
     id: int
     text: str
-    fact_type: FactType
     embedding: Embedding | None
     source_type: str
     source_ref: str | None
@@ -116,11 +94,6 @@ class Fact(_FrozenModel):
     access_count: int
     consolidated_at: datetime | None = None
     entity_refs: list["EntityRef"] = []
-
-    @field_validator("fact_type", mode="before")
-    @classmethod
-    def _coerce_fact_type(cls, v: Any) -> FactType:
-        return FactType(v) if isinstance(v, str) else v
 
     @field_validator("embedding", mode="before")
     @classmethod
@@ -147,55 +120,18 @@ class Fact(_FrozenModel):
         return data
 
 
-class FactLink(_FrozenModel):
-    id: int
-    source_fact_id: int
-    target_fact_id: int
-    link_type: LinkType
-    weight: float
-    created_at: datetime
-
-    @field_validator("link_type", mode="before")
-    @classmethod
-    def _coerce_link_type(cls, v: Any) -> LinkType:
-        return LinkType(v) if isinstance(v, str) else v
-
-    @field_validator("created_at", mode="before")
-    @classmethod
-    def _parse_dt(cls, v: Any) -> datetime | None:
-        return _parse_datetime(v)
-
-
 class EntityRef(_FrozenModel):
     id: int
     fact_id: int
     name: str
-    entity_type: str
-    canonical_id: int | None
+    entity_id: int | None
 
 
 class Entity(_FrozenModel):
     id: int
     name: str
-    entity_type: str
-    embedding: Embedding | None
-    is_core: bool
     created_at: datetime
     updated_at: datetime
-
-    @field_validator("embedding", mode="before")
-    @classmethod
-    def _deserialize_embedding(cls, v: Any) -> Embedding | None:
-        if v is None or isinstance(v, np.ndarray):
-            return v
-        if isinstance(v, bytes):
-            return deserialize_embedding(v)
-        return v
-
-    @field_validator("is_core", mode="before")
-    @classmethod
-    def _coerce_bool(cls, v: Any) -> bool:
-        return bool(v)
 
     @field_validator("created_at", "updated_at", mode="before")
     @classmethod

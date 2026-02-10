@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 
 from ntrp.database import serialize_embedding
 from ntrp.memory.events import FactDeleted, FactUpdated, MemoryCleared
-from ntrp.memory.store.linking import create_links_for_fact
 from ntrp.server.runtime import get_runtime
 
 router = APIRouter(tags=["data"])
@@ -40,7 +39,6 @@ async def get_facts(limit: int = 100, offset: int = 0):
             {
                 "id": f.id,
                 "text": f.text,
-                "fact_type": f.fact_type.value,
                 "source_type": f.source_type,
                 "created_at": f.created_at.isoformat(),
             }
@@ -59,35 +57,18 @@ async def get_fact_details(fact_id: int):
     if not fact:
         raise HTTPException(status_code=404, detail="Fact not found")
 
-    links = await repo.get_links(fact_id)
     entity_refs = await repo.get_entity_refs(fact_id)
-
-    # Dedupe: keep best link per fact (highest weight)
-    best_links: dict[int, tuple] = {}  # other_id -> (link_type, weight, text)
-    for link in links:
-        other_id = link.target_fact_id if link.source_fact_id == fact_id else link.source_fact_id
-        if other_id not in best_links or link.weight > best_links[other_id][1]:
-            other = await repo.get(other_id)
-            if other:
-                best_links[other_id] = (link.link_type.value, link.weight, other.text)
-
-    linked_facts = [
-        {"id": oid, "text": data[2], "link_type": data[0], "weight": data[1]}
-        for oid, data in sorted(best_links.items(), key=lambda x: x[1][1], reverse=True)
-    ]
 
     return {
         "fact": {
             "id": fact.id,
             "text": fact.text,
-            "fact_type": fact.fact_type.value,
             "source_type": fact.source_type,
             "source_ref": fact.source_ref,
             "created_at": fact.created_at.isoformat(),
             "access_count": fact.access_count,
         },
-        "entities": [{"name": e.name, "type": e.entity_type} for e in entity_refs],
-        "linked_facts": linked_facts,
+        "entities": [{"name": e.name, "entity_id": e.entity_id} for e in entity_refs],
     }
 
 
@@ -159,7 +140,6 @@ async def get_stats():
 
     return {
         "fact_count": await repo.count(),
-        "link_count": await runtime.memory.link_count(),
         "observation_count": await obs_repo.count(),
     }
 
@@ -178,9 +158,6 @@ async def update_fact(fact_id: int, request: UpdateFactRequest):
         new_embedding = await runtime.memory.embedder.embed_one(request.text)
 
         await repo.conn.execute("DELETE FROM entity_refs WHERE fact_id = ?", (fact_id,))
-        await repo.conn.execute(
-            "DELETE FROM fact_links WHERE source_fact_id = ? OR target_fact_id = ?", (fact_id, fact_id)
-        )
 
         embedding_bytes = serialize_embedding(new_embedding)
         await repo.conn.execute(
@@ -193,30 +170,29 @@ async def update_fact(fact_id: int, request: UpdateFactRequest):
         )
 
         await repo.conn.execute("DELETE FROM facts_vec WHERE fact_id = ?", (fact_id,))
-        await repo.conn.execute("INSERT INTO facts_vec (fact_id, embedding) VALUES (?, ?)", (fact_id, embedding_bytes))
+        await repo.conn.execute(
+            "INSERT INTO facts_vec (fact_id, embedding) VALUES (?, ?)",
+            (fact_id, embedding_bytes),
+        )
 
         extraction = await runtime.memory.extractor.extract(request.text)
-        await runtime.memory._process_extraction(fact_id, extraction, fact.source_ref)
+        await runtime.memory._process_extraction(fact_id, extraction)
 
         fact = await repo.get(fact_id)
-        links_created = await create_links_for_fact(repo, fact)
 
     runtime.channel.publish(FactUpdated(fact_id=fact_id, text=request.text))
 
+    entity_refs = await repo.get_entity_refs(fact_id)
     return {
         "fact": {
             "id": fact.id,
             "text": fact.text,
-            "fact_type": fact.fact_type.value,
             "source_type": fact.source_type,
             "source_ref": fact.source_ref,
             "created_at": fact.created_at.isoformat(),
             "access_count": fact.access_count,
         },
-        "entity_refs": [
-            {"name": e.name, "type": e.entity_type, "canonical_id": e.canonical_id} for e in fact.entity_refs
-        ],
-        "links_created": links_created,
+        "entity_refs": [{"name": e.name, "entity_id": e.entity_id} for e in entity_refs],
     }
 
 
@@ -236,11 +212,6 @@ async def delete_fact(fact_id: int):
         )
         entity_refs_count = entity_refs_rows[0][0] if entity_refs_rows else 0
 
-        links_rows = await repo.conn.execute_fetchall(
-            "SELECT COUNT(*) FROM fact_links WHERE source_fact_id = ? OR target_fact_id = ?", (fact_id, fact_id)
-        )
-        links_count = links_rows[0][0] if links_rows else 0
-
         await repo.delete(fact_id)
 
     runtime.channel.publish(FactDeleted(fact_id=fact_id))
@@ -250,7 +221,6 @@ async def delete_fact(fact_id: int):
         "fact_id": fact_id,
         "cascaded": {
             "entity_refs": entity_refs_count,
-            "links": links_count,
         },
     }
 

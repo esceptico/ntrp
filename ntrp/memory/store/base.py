@@ -39,7 +39,6 @@ END;
 CREATE TABLE IF NOT EXISTS facts (
     id INTEGER PRIMARY KEY,
     text TEXT NOT NULL,
-    fact_type TEXT NOT NULL DEFAULT 'world',
     embedding BLOB,
     source_type TEXT NOT NULL,
     source_ref TEXT,
@@ -51,45 +50,24 @@ CREATE TABLE IF NOT EXISTS facts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_facts_created ON facts(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_facts_type ON facts(fact_type);
 
-CREATE TABLE IF NOT EXISTS fact_links (
+CREATE TABLE IF NOT EXISTS entities (
     id INTEGER PRIMARY KEY,
-    source_fact_id INTEGER REFERENCES facts(id),
-    target_fact_id INTEGER REFERENCES facts(id),
-    link_type TEXT NOT NULL,
-    weight REAL NOT NULL,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(source_fact_id, target_fact_id, link_type)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE INDEX IF NOT EXISTS idx_fact_links_source ON fact_links(source_fact_id);
-CREATE INDEX IF NOT EXISTS idx_fact_links_target ON fact_links(target_fact_id);
-CREATE INDEX IF NOT EXISTS idx_fact_links_type ON fact_links(link_type);
 
 CREATE TABLE IF NOT EXISTS entity_refs (
     id INTEGER PRIMARY KEY,
     fact_id INTEGER REFERENCES facts(id),
     name TEXT NOT NULL,
-    entity_type TEXT NOT NULL,
-    canonical_id INTEGER REFERENCES entities(id)
+    entity_id INTEGER REFERENCES entities(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_entity_refs_fact ON entity_refs(fact_id);
 CREATE INDEX IF NOT EXISTS idx_entity_refs_name ON entity_refs(name);
-CREATE INDEX IF NOT EXISTS idx_entity_refs_canonical ON entity_refs(canonical_id);
-
-CREATE TABLE IF NOT EXISTS entities (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    entity_type TEXT NOT NULL,
-    embedding BLOB,
-    is_core BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_name_type ON entities(name, entity_type);
+CREATE INDEX IF NOT EXISTS idx_entity_refs_entity ON entity_refs(entity_id);
 
 CREATE INDEX IF NOT EXISTS idx_facts_consolidated ON facts(consolidated_at);
 
@@ -128,7 +106,7 @@ class GraphDatabase:
         await self.conn.execute("DELETE FROM observations_vec")
         await self.conn.execute("DELETE FROM observations")
         await self.conn.execute("DELETE FROM entity_refs")
-        await self.conn.execute("DELETE FROM fact_links")
+        await self.conn.execute("DELETE FROM entities")
         await self.conn.execute("DELETE FROM facts_vec")
         await self.conn.execute("DELETE FROM facts")
         await self.conn.commit()
@@ -144,12 +122,6 @@ class GraphDatabase:
         await self.conn.execute(f"""
             CREATE VIRTUAL TABLE IF NOT EXISTS facts_vec USING vec0(
                 fact_id INTEGER PRIMARY KEY,
-                embedding float[{dim}] distance_metric=cosine
-            );
-        """)
-        await self.conn.execute(f"""
-            CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec USING vec0(
-                entity_id INTEGER PRIMARY KEY,
                 embedding float[{dim}] distance_metric=cosine
             );
         """)

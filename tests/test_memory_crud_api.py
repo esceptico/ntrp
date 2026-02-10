@@ -9,7 +9,6 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from ntrp.config import Config
-from ntrp.memory.models import FactType
 from ntrp.server.app import app
 from ntrp.server.runtime import Runtime, reset_runtime
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
@@ -57,10 +56,9 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
         from ntrp.memory.models import ExtractedEntity, ExtractionResult
 
         async def mock_extract(text: str):
-            # Return simple entities for testing (lowercase text as entity names)
-            words = text.lower().split()[:2]  # First 2 words as entities
-            entities = [ExtractedEntity(name=word.strip(".,!?"), entity_type="test") for word in words if len(word) > 2]
-            return ExtractionResult(entities=entities, entity_pairs=[])
+            words = text.lower().split()[:2]
+            entities = [ExtractedEntity(name=word.strip(".,!?")) for word in words if len(word) > 2]
+            return ExtractionResult(entities=entities)
 
         runtime.memory.extractor.extract = mock_extract
 
@@ -89,7 +87,6 @@ async def sample_fact(test_runtime: Runtime) -> int:
     result = await memory.remember(
         text="Alice works at Anthropic on AI safety",
         source_type="test",
-        fact_type=FactType.WORLD,
     )
     return result.fact.id
 
@@ -132,19 +129,16 @@ class TestFactCRUD:
         # Verify response structure
         assert "fact" in data
         assert "entity_refs" in data
-        assert "links_created" in data
 
         # Verify fact was updated
         fact = data["fact"]
         assert fact["id"] == sample_fact
         assert fact["text"] == "Alice is a researcher at Anthropic working on Claude"
-        assert fact["fact_type"] == "world"
 
-        # Verify entity refs were extracted (Alice, Anthropic, Claude should be detected)
+        # Verify entity refs were extracted
         entity_refs = data["entity_refs"]
         assert isinstance(entity_refs, list)
-        # Note: Exact entities depend on extraction model, so just check structure
-        assert all("name" in e and "type" in e for e in entity_refs)
+        assert all("name" in e and "entity_id" in e for e in entity_refs)
 
     @pytest.mark.asyncio
     async def test_patch_fact_marks_for_reconsolidation(
@@ -186,7 +180,6 @@ class TestFactCRUD:
         # Get counts before deletion
         repo = test_runtime.memory.facts
         entity_refs = await repo.get_entity_refs(sample_fact)
-        links = await repo.get_links(sample_fact)
 
         # Delete fact
         response = await test_client.delete(f"/facts/{sample_fact}")
@@ -198,7 +191,6 @@ class TestFactCRUD:
         assert data["fact_id"] == sample_fact
         assert "cascaded" in data
         assert data["cascaded"]["entity_refs"] == len(entity_refs)
-        assert data["cascaded"]["links"] == len(links)
 
         # Verify fact is actually deleted
         fact = await repo.get(sample_fact)
@@ -214,7 +206,7 @@ class TestFactCRUD:
 
         # Manually add more entity refs
         repo = memory.facts
-        await repo.add_entity_ref(fact_id, "Additional", "test")
+        await repo.add_entity_ref(fact_id, "Additional")
 
         entity_refs_before = await repo.get_entity_refs(fact_id)
         # Should have entities from mock extractor + manually added

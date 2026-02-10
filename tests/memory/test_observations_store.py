@@ -1,7 +1,6 @@
 import pytest
 import pytest_asyncio
 
-from ntrp.memory.models import FactType
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
@@ -42,7 +41,7 @@ class TestObservationCRUD:
 
     @pytest.mark.asyncio
     async def test_create_with_source_fact_id(self, repo: ObservationRepository, fact_repo: FactRepository):
-        f1 = await fact_repo.create(text="Fact 1", fact_type=FactType.WORLD, source_type="test")
+        f1 = await fact_repo.create(text="Fact 1", source_type="test")
 
         obs = await repo.create(
             summary="Observation from fact",
@@ -85,8 +84,8 @@ class TestUpdate:
 
     @pytest.mark.asyncio
     async def test_update_adds_fact_and_history(self, repo: ObservationRepository, fact_repo: FactRepository):
-        f1 = await fact_repo.create(text="Fact 1", fact_type=FactType.WORLD, source_type="test")
-        f2 = await fact_repo.create(text="Fact 2", fact_type=FactType.WORLD, source_type="test")
+        f1 = await fact_repo.create(text="Fact 1", source_type="test")
+        f2 = await fact_repo.create(text="Fact 2", source_type="test")
 
         obs = await repo.create(summary="Obs", source_fact_id=f1.id)
         assert obs.evidence_count == 1
@@ -112,7 +111,7 @@ class TestUpdate:
 
     @pytest.mark.asyncio
     async def test_update_does_not_duplicate_fact_ids(self, repo: ObservationRepository, fact_repo: FactRepository):
-        f1 = await fact_repo.create(text="Fact 1", fact_type=FactType.WORLD, source_type="test")
+        f1 = await fact_repo.create(text="Fact 1", source_type="test")
 
         obs = await repo.create(summary="Obs", source_fact_id=f1.id)
 

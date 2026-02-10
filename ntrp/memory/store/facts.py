@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 import aiosqlite
 
 from ntrp.database import serialize_embedding
-from ntrp.memory.models import Embedding, Entity, EntityRef, Fact, FactLink, FactType, LinkType
+from ntrp.memory.models import Embedding, Entity, EntityRef, Fact
 
 _SQL_GET_FACT = "SELECT * FROM facts WHERE id = ?"
 _SQL_COUNT_FACTS = "SELECT COUNT(*) FROM facts"
@@ -14,16 +14,23 @@ _SQL_DELETE_FACT = "DELETE FROM facts WHERE id = ?"
 
 _SQL_INSERT_FACT = """
     INSERT INTO facts (
-        text, fact_type, embedding, source_type, source_ref,
+        text, embedding, source_type, source_ref,
         created_at, happened_at, last_accessed_at, access_count
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SQL_LIST_TIME_WINDOW = """
     SELECT * FROM facts
     WHERE created_at BETWEEN ? AND ?
     ORDER BY created_at DESC
+"""
+
+_SQL_SEARCH_FACTS_TEMPORAL = """
+    SELECT * FROM facts
+    WHERE happened_at IS NOT NULL
+    ORDER BY ABS(julianday(happened_at) - julianday(?))
+    LIMIT ?
 """
 
 _SQL_LIST_UNCONSOLIDATED = """
@@ -62,11 +69,10 @@ _SQL_SEARCH_FACTS_FTS = """
     LIMIT ?
 """
 
-_SQL_INSERT_ENTITY_REF = "INSERT INTO entity_refs (fact_id, name, entity_type, canonical_id) VALUES (?, ?, ?, ?)"
+_SQL_INSERT_ENTITY_REF = "INSERT INTO entity_refs (fact_id, name, entity_id) VALUES (?, ?, ?)"
 _SQL_GET_ENTITY_REFS = "SELECT * FROM entity_refs WHERE fact_id = ?"
 _SQL_GET_ENTITY_REFS_BATCH = "SELECT * FROM entity_refs WHERE fact_id IN ({placeholders})"
 _SQL_DELETE_ENTITY_REFS = "DELETE FROM entity_refs WHERE fact_id = ?"
-_SQL_UPDATE_ENTITY_REFS_CANONICAL = "UPDATE entity_refs SET canonical_id = ? WHERE canonical_id IN ({placeholders})"
 
 _SQL_GET_FACTS_FOR_ENTITY = """
     SELECT f.*
@@ -77,72 +83,36 @@ _SQL_GET_FACTS_FOR_ENTITY = """
     LIMIT ?
 """
 
-_SQL_DELETE_FACT_LINKS = "DELETE FROM fact_links WHERE source_fact_id = ? OR target_fact_id = ?"
-
-_SQL_INSERT_LINK = """
-    INSERT OR IGNORE INTO fact_links (
-        source_fact_id, target_fact_id, link_type, weight, created_at
-    )
-    VALUES (?, ?, ?, ?, ?)
-"""
-
-_SQL_GET_LINKS = """
-    SELECT * FROM fact_links
-    WHERE source_fact_id = ? OR target_fact_id = ?
-"""
-
-_SQL_GET_LINKS_BY_TYPE = """
-    SELECT * FROM fact_links
-    WHERE (source_fact_id = ? OR target_fact_id = ?) AND link_type = ?
-"""
-
 _SQL_GET_ENTITY = "SELECT * FROM entities WHERE id = ?"
-_SQL_GET_ENTITY_BY_NAME = "SELECT * FROM entities WHERE name = ?"
-_SQL_GET_ENTITY_BY_NAME_TYPE = "SELECT * FROM entities WHERE name = ? AND entity_type = ?"
+_SQL_GET_ENTITY_BY_NAME = "SELECT * FROM entities WHERE name = ? COLLATE NOCASE"
 _SQL_GET_ENTITIES_BY_IDS = "SELECT * FROM entities WHERE id IN ({placeholders})"
 _SQL_DELETE_ENTITIES = "DELETE FROM entities WHERE id IN ({placeholders})"
 
 _SQL_INSERT_ENTITY = """
-    INSERT OR IGNORE INTO entities (
-        name, entity_type, embedding, is_core, created_at, updated_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?)
-"""
-
-_SQL_LIST_ENTITIES_BY_TYPE = """
-    SELECT * FROM entities
-    WHERE entity_type = ?
-    ORDER BY updated_at DESC
-    LIMIT ?
-"""
-
-_SQL_INSERT_ENTITY_VEC = "INSERT INTO entities_vec (entity_id, embedding) VALUES (?, ?)"
-_SQL_DELETE_ENTITIES_VEC = "DELETE FROM entities_vec WHERE entity_id IN ({placeholders})"
-
-_SQL_SEARCH_ENTITIES_VEC = """
-    SELECT v.entity_id, v.distance
-    FROM entities_vec v
-    WHERE v.embedding MATCH ? AND k = ?
-    ORDER BY v.distance
+    INSERT OR IGNORE INTO entities (name, created_at, updated_at)
+    VALUES (?, ?, ?)
 """
 
 _SQL_COUNT_ENTITY_FACTS = "SELECT COUNT(*) FROM entity_refs WHERE name = ?"
 
-_SQL_ENTITY_LAST_MENTION = """
-    SELECT f.created_at
+_SQL_LIST_ALL_ENTITIES = "SELECT * FROM entities ORDER BY updated_at DESC LIMIT ?"
+
+_SQL_GET_FACTS_FOR_ENTITY_BY_ID = """
+    SELECT f.*
     FROM facts f
     JOIN entity_refs er ON f.id = er.fact_id
-    WHERE er.name = ?
+    WHERE er.entity_id = ?
     ORDER BY f.created_at DESC
-    LIMIT 1
+    LIMIT ?
 """
 
-_SQL_ENTITY_SOURCE_OVERLAP = """
-    SELECT 1
-    FROM facts f
-    JOIN entity_refs er ON f.id = er.fact_id
-    WHERE er.name = ? AND f.source_ref = ?
-    LIMIT 1
+_SQL_COUNT_ENTITY_FACTS_BY_ID = "SELECT COUNT(*) FROM entity_refs WHERE entity_id = ?"
+
+_SQL_GET_ENTITY_IDS_FOR_FACTS = """
+    SELECT DISTINCT er.entity_id
+    FROM entity_refs er
+    WHERE er.fact_id IN ({placeholders})
+    AND er.entity_id IS NOT NULL
 """
 
 
@@ -165,7 +135,6 @@ class FactRepository:
     async def create(
         self,
         text: str,
-        fact_type: FactType,
         source_type: str,
         source_ref: str | None = None,
         embedding: Embedding | None = None,
@@ -175,33 +144,19 @@ class FactRepository:
         embedding_bytes = serialize_embedding(embedding)
         cursor = await self.conn.execute(
             _SQL_INSERT_FACT,
-            (
-                text,
-                fact_type.value,
-                embedding_bytes,
-                source_type,
-                source_ref,
-                now.isoformat(),
-                happened_at.isoformat() if happened_at else None,
-                now.isoformat(),
-                0,
-            ),
+            (text, embedding_bytes, source_type, source_ref,
+             now.isoformat(), happened_at.isoformat() if happened_at else None,
+             now.isoformat(), 0),
         )
         fact_id = cursor.lastrowid
         if embedding_bytes:
             await self.conn.execute(_SQL_INSERT_FACT_VEC, (fact_id, embedding_bytes))
 
         return Fact(
-            id=fact_id,
-            text=text,
-            fact_type=fact_type,
-            embedding=embedding,
-            source_type=source_type,
-            source_ref=source_ref,
-            created_at=now,
-            happened_at=happened_at,
-            last_accessed_at=now,
-            access_count=0,
+            id=fact_id, text=text, embedding=embedding,
+            source_type=source_type, source_ref=source_ref,
+            created_at=now, happened_at=happened_at,
+            last_accessed_at=now, access_count=0,
         )
 
     async def reinforce(self, fact_ids: Sequence[int]) -> None:
@@ -230,28 +185,17 @@ class FactRepository:
         rows = await self.conn.execute_fetchall(_SQL_COUNT_UNCONSOLIDATED)
         return rows[0][0] if rows else 0
 
-    async def link_count(self) -> int:
-        rows = await self.conn.execute_fetchall("SELECT COUNT(*) FROM fact_links")
-        return rows[0][0] if rows else 0
-
     async def delete(self, fact_id: int) -> None:
         await self.conn.execute(_SQL_DELETE_ENTITY_REFS, (fact_id,))
-        await self.conn.execute(_SQL_DELETE_FACT_LINKS, (fact_id, fact_id))
         await self.conn.execute(_SQL_DELETE_FACT_VEC, (fact_id,))
         await self.conn.execute(_SQL_DELETE_FACT, (fact_id,))
 
     async def cleanup_orphaned_entities(self) -> int:
         cursor = await self.conn.execute("""
             DELETE FROM entities WHERE id NOT IN (
-                SELECT DISTINCT canonical_id FROM entity_refs WHERE canonical_id IS NOT NULL
+                SELECT DISTINCT entity_id FROM entity_refs WHERE entity_id IS NOT NULL
             )
         """)
-        await self.conn.execute("""
-            DELETE FROM entities_vec WHERE entity_id NOT IN (
-                SELECT id FROM entities
-            )
-        """)
-
         return cursor.rowcount
 
     async def list_unconsolidated(self, limit: int = 100) -> list[Fact]:
@@ -262,18 +206,9 @@ class FactRepository:
         now = datetime.now(UTC)
         await self.conn.execute(_SQL_MARK_CONSOLIDATED, (now.isoformat(), fact_id))
 
-    async def add_entity_ref(
-        self, fact_id: int, name: str, entity_type: str, canonical_id: int | None = None
-    ) -> EntityRef:
-        cursor = await self.conn.execute(_SQL_INSERT_ENTITY_REF, (fact_id, name, entity_type, canonical_id))
-
-        return EntityRef(
-            id=cursor.lastrowid,
-            fact_id=fact_id,
-            name=name,
-            entity_type=entity_type,
-            canonical_id=canonical_id,
-        )
+    async def add_entity_ref(self, fact_id: int, name: str, entity_id: int | None = None) -> EntityRef:
+        cursor = await self.conn.execute(_SQL_INSERT_ENTITY_REF, (fact_id, name, entity_id))
+        return EntityRef(id=cursor.lastrowid, fact_id=fact_id, name=name, entity_id=entity_id)
 
     async def get_entity_refs(self, fact_id: int) -> list[EntityRef]:
         rows = await self.conn.execute_fetchall(_SQL_GET_ENTITY_REFS, (fact_id,))
@@ -293,48 +228,6 @@ class FactRepository:
     async def get_facts_for_entity(self, name: str, limit: int = 100) -> list[Fact]:
         rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_FOR_ENTITY, (name, limit))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
-
-    async def create_link(
-        self,
-        source_fact_id: int,
-        target_fact_id: int,
-        link_type: LinkType,
-        weight: float,
-    ) -> FactLink:
-        now = datetime.now(UTC)
-        cursor = await self.conn.execute(
-            _SQL_INSERT_LINK,
-            (source_fact_id, target_fact_id, link_type.value, weight, now.isoformat()),
-        )
-
-        return FactLink(
-            id=cursor.lastrowid,
-            source_fact_id=source_fact_id,
-            target_fact_id=target_fact_id,
-            link_type=link_type,
-            weight=weight,
-            created_at=now,
-        )
-
-    async def create_links_batch(
-        self,
-        links: list[tuple[int, int, LinkType, float]],
-    ) -> int:
-        if not links:
-            return 0
-        now = datetime.now(UTC).isoformat()
-        params = [(src, tgt, lt.value, w, now) for src, tgt, lt, w in links]
-        await self.conn.executemany(_SQL_INSERT_LINK, params)
-
-        return len(links)
-
-    async def get_links(self, fact_id: int) -> list[FactLink]:
-        rows = await self.conn.execute_fetchall(_SQL_GET_LINKS, (fact_id, fact_id))
-        return [FactLink.model_validate(_row_dict(r)) for r in rows]
-
-    async def get_links_by_type(self, fact_id: int, link_type: LinkType) -> list[FactLink]:
-        rows = await self.conn.execute_fetchall(_SQL_GET_LINKS_BY_TYPE, (fact_id, fact_id, link_type.value))
-        return [FactLink.model_validate(_row_dict(r)) for r in rows]
 
     async def search_facts_vector(self, query_embedding: Embedding, limit: int = 10) -> list[tuple[Fact, float]]:
         query_bytes = serialize_embedding(query_embedding)
@@ -359,97 +252,69 @@ class FactRepository:
         rows = await self.conn.execute_fetchall(_SQL_SEARCH_FACTS_FTS, (fts_query, limit))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
-    async def search_entities_vector(self, query_embedding: Embedding, limit: int = 10) -> list[tuple[Entity, float]]:
-        query_bytes = serialize_embedding(query_embedding)
-        rows = await self.conn.execute_fetchall(_SQL_SEARCH_ENTITIES_VEC, (query_bytes, limit))
-        if not rows:
-            return []
-
-        entity_ids = [r[0] for r in rows]
-        distances = {r[0]: r[1] for r in rows}
-
-        placeholders = ",".join("?" * len(entity_ids))
-        entity_rows = await self.conn.execute_fetchall(
-            _SQL_GET_ENTITIES_BY_IDS.format(placeholders=placeholders), entity_ids
+    async def search_facts_temporal(self, reference_time: datetime, limit: int = 10) -> list[Fact]:
+        rows = await self.conn.execute_fetchall(
+            _SQL_SEARCH_FACTS_TEMPORAL, (reference_time.isoformat(), limit)
         )
-        entities_by_id = {r["id"]: Entity.model_validate(_row_dict(r)) for r in entity_rows}
-
-        return [(entities_by_id[eid], 1 - distances[eid]) for eid in entity_ids if eid in entities_by_id]
+        return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def get_entity(self, entity_id: int) -> Entity | None:
         rows = await self.conn.execute_fetchall(_SQL_GET_ENTITY, (entity_id,))
         return Entity.model_validate(_row_dict(rows[0])) if rows else None
 
-    async def get_entity_by_name(self, name: str, entity_type: str | None = None) -> Entity | None:
-        if entity_type:
-            rows = await self.conn.execute_fetchall(_SQL_GET_ENTITY_BY_NAME_TYPE, (name, entity_type))
-        else:
-            rows = await self.conn.execute_fetchall(_SQL_GET_ENTITY_BY_NAME, (name,))
+    async def get_entity_by_name(self, name: str) -> Entity | None:
+        rows = await self.conn.execute_fetchall(_SQL_GET_ENTITY_BY_NAME, (name,))
         return Entity.model_validate(_row_dict(rows[0])) if rows else None
 
-    async def create_entity(
-        self,
-        name: str,
-        entity_type: str,
-        embedding: Embedding | None = None,
-        is_core: bool = False,
-    ) -> Entity:
+    async def create_entity(self, name: str) -> Entity:
         now = datetime.now(UTC)
-        embedding_bytes = serialize_embedding(embedding)
         cursor = await self.conn.execute(
-            _SQL_INSERT_ENTITY,
-            (name, entity_type, embedding_bytes, is_core, now.isoformat(), now.isoformat()),
+            _SQL_INSERT_ENTITY, (name, now.isoformat(), now.isoformat()),
         )
         entity_id = cursor.lastrowid
 
         if not entity_id:
-            existing = await self.get_entity_by_name(name, entity_type)
+            existing = await self.get_entity_by_name(name)
             if existing:
                 return existing
-            raise RuntimeError(f"Entity {name}/{entity_type} not found after INSERT OR IGNORE")
+            raise RuntimeError(f"Entity '{name}' not found after INSERT OR IGNORE")
 
-        if embedding_bytes:
-            await self.conn.execute(_SQL_INSERT_ENTITY_VEC, (entity_id, embedding_bytes))
-
-        return Entity(
-            id=entity_id,
-            name=name,
-            entity_type=entity_type,
-            embedding=embedding,
-            is_core=is_core,
-            created_at=now,
-            updated_at=now,
-        )
-
-    async def list_entities_by_type(self, entity_type: str, limit: int = 100) -> list[Entity]:
-        rows = await self.conn.execute_fetchall(_SQL_LIST_ENTITIES_BY_TYPE, (entity_type, limit))
-        return [Entity.model_validate(_row_dict(r)) for r in rows]
-
-    async def get_entity_last_mention(self, name: str) -> datetime | None:
-        from ntrp.memory.models import _parse_datetime
-
-        rows = await self.conn.execute_fetchall(_SQL_ENTITY_LAST_MENTION, (name,))
-        return _parse_datetime(rows[0][0]) if rows else None
+        return Entity(id=entity_id, name=name, created_at=now, updated_at=now)
 
     async def count_entity_facts(self, entity_name: str) -> int:
         rows = await self.conn.execute_fetchall(_SQL_COUNT_ENTITY_FACTS, (entity_name,))
         return rows[0][0] if rows else 0
 
-    async def get_entity_source_overlap(self, entity_name: str, source_ref: str) -> bool:
-        rows = await self.conn.execute_fetchall(_SQL_ENTITY_SOURCE_OVERLAP, (entity_name, source_ref))
-        return len(rows) > 0
-
     async def merge_entities(self, keep_id: int, merge_ids: list[int]) -> int:
         if not merge_ids:
             return 0
-
         placeholders = ",".join("?" * len(merge_ids))
-
         await self.conn.execute(
-            _SQL_UPDATE_ENTITY_REFS_CANONICAL.format(placeholders=placeholders),
+            f"UPDATE entity_refs SET entity_id = ? WHERE entity_id IN ({placeholders})",
             (keep_id, *merge_ids),
         )
-        await self.conn.execute(_SQL_DELETE_ENTITIES_VEC.format(placeholders=placeholders), merge_ids)
-        cursor = await self.conn.execute(_SQL_DELETE_ENTITIES.format(placeholders=placeholders), merge_ids)
-
+        cursor = await self.conn.execute(
+            _SQL_DELETE_ENTITIES.format(placeholders=placeholders), merge_ids,
+        )
         return cursor.rowcount
+
+    async def list_all_entities(self, limit: int = 100) -> list[Entity]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_ALL_ENTITIES, (limit,))
+        return [Entity.model_validate(_row_dict(r)) for r in rows]
+
+    async def get_facts_for_entity_id(self, entity_id: int, limit: int = 100) -> list[Fact]:
+        rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_FOR_ENTITY_BY_ID, (entity_id, limit))
+        return [Fact.model_validate(_row_dict(r)) for r in rows]
+
+    async def count_entity_facts_by_id(self, entity_id: int) -> int:
+        rows = await self.conn.execute_fetchall(_SQL_COUNT_ENTITY_FACTS_BY_ID, (entity_id,))
+        return rows[0][0] if rows else 0
+
+    async def get_entity_ids_for_facts(self, fact_ids: list[int]) -> list[int]:
+        if not fact_ids:
+            return []
+        placeholders = ",".join("?" * len(fact_ids))
+        rows = await self.conn.execute_fetchall(
+            _SQL_GET_ENTITY_IDS_FOR_FACTS.format(placeholders=placeholders), fact_ids,
+        )
+        return [r[0] for r in rows]

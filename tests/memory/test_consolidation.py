@@ -8,13 +8,14 @@ import pytest_asyncio
 
 from ntrp.memory.consolidation import (
     ConsolidationAction,
+    ConsolidationResult,
     ConsolidationSchema,
     _execute_action,
     _format_observations,
     apply_consolidation,
-    get_consolidation_decision,
+    get_consolidation_decisions,
 )
-from ntrp.memory.models import Fact, FactType, Observation
+from ntrp.memory.models import Fact, Observation
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
@@ -26,7 +27,6 @@ def make_fact(id: int, text: str, embedding=None) -> Fact:
     return Fact(
         id=id,
         text=text,
-        fact_type=FactType.WORLD,
         embedding=embedding or mock_embedding(text),
         source_type="test",
         source_ref=None,
@@ -55,9 +55,14 @@ def make_observation(id: int, summary: str, evidence_count: int = 1) -> Observat
 
 
 async def consolidate_fact(fact, fact_repo, obs_repo, model, embed_fn):
-    """Test helper that combines the two-step consolidation API."""
-    action = await get_consolidation_decision(fact, obs_repo, fact_repo, model)
-    return await apply_consolidation(fact, action, fact_repo, obs_repo, embed_fn)
+    """Test helper that combines the multi-action consolidation API."""
+    actions = await get_consolidation_decisions(fact, obs_repo, fact_repo, model)
+    results = []
+    for action in actions:
+        result = await apply_consolidation(fact, action, fact_repo, obs_repo, embed_fn)
+        results.append(result)
+    await fact_repo.mark_consolidated(fact.id)
+    return results[-1] if results else ConsolidationResult(action="skipped", reason="no_actions")
 
 
 @pytest_asyncio.fixture
@@ -80,7 +85,6 @@ class TestFormatObservations:
     async def test_formats_observations(self, fact_repo: FactRepository):
         fact = await fact_repo.create(
             text="Source fact text",
-            fact_type=FactType.WORLD,
             source_type="test",
         )
         obs = make_observation(1, "Test observation", evidence_count=1)
@@ -150,7 +154,7 @@ class TestExecuteAction:
 
     @pytest.mark.asyncio
     async def test_update_action(self, obs_repo: ObservationRepository, fact_repo: FactRepository):
-        f1 = await fact_repo.create(text="Alice prefers Python", fact_type=FactType.WORLD, source_type="test")
+        f1 = await fact_repo.create(text="Alice prefers Python", source_type="test")
         obs = await obs_repo.create(summary="Alice is a Python developer", source_fact_id=f1.id)
 
         fact = make_fact(2, "Alice writes clean code")
@@ -188,7 +192,6 @@ class TestConsolidateFact:
     async def test_fact_without_embedding_skipped(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
         fact = await fact_repo.create(
             text="No embedding",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=None,
         )
@@ -206,7 +209,6 @@ class TestConsolidateFact:
         """LLM returns skip for ephemeral facts."""
         fact = await fact_repo.create(
             text="User is at coffee shop",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=mock_embedding("ephemeral"),
         )
@@ -219,7 +221,7 @@ class TestConsolidateFact:
                     (),
                     {
                         "message": type(
-                            "Message", (), {"content": '{"action": "skip", "reason": "ephemeral location state"}'}
+                            "Message", (), {"content": '[{"action": "skip", "reason": "ephemeral location state"}]'}
                         )()
                     },
                 )()
@@ -239,14 +241,12 @@ class TestConsolidateFact:
         """Fact creates a synthesized observation (higher-level than fact)."""
         fact = await fact_repo.create(
             text="Alice prefers Python",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=mock_embedding("alice python"),
         )
         embed_fn = AsyncMock(return_value=mock_embedding("test"))
 
         with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            # Observation is higher-level than the raw fact
             mock_llm.return_value.choices = [
                 type(
                     "Choice",
@@ -256,7 +256,7 @@ class TestConsolidateFact:
                             "Message",
                             (),
                             {
-                                "content": '{"action": "create", "text": "Alice is a Python-focused developer", "reason": "synthesized preference"}'
+                                "content": '[{"action": "create", "text": "Alice is a Python-focused developer", "reason": "synthesized preference"}]'
                             },
                         )()
                     },
@@ -268,11 +268,10 @@ class TestConsolidateFact:
         assert result.observation_id is not None
 
         obs = await obs_repo.get(result.observation_id)
-        # Observation is higher-level synthesis
         assert obs.summary == "Alice is a Python-focused developer"
 
         obs_count = await obs_repo.count()
-        assert obs_count == 1  # Only ONE observation, not decomposed
+        assert obs_count == 1
 
     @pytest.mark.asyncio
     async def test_fact_updates_existing_observation(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
@@ -280,7 +279,6 @@ class TestConsolidateFact:
         emb = mock_embedding("alice developer")
         f1 = await fact_repo.create(
             text="Alice prefers Python",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=emb,
         )
@@ -288,14 +286,12 @@ class TestConsolidateFact:
 
         fact = await fact_repo.create(
             text="Alice writes clean code",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=emb,
         )
         embed_fn = AsyncMock(return_value=emb)
 
         with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            # UPDATE existing observation with synthesis
             mock_llm.return_value.choices = [
                 type(
                     "Choice",
@@ -305,7 +301,7 @@ class TestConsolidateFact:
                             "Message",
                             (),
                             {
-                                "content": f'{{"action": "update", "observation_id": {obs.id}, "text": "Alice is a Python-focused developer who values code quality", "reason": "synthesis"}}'
+                                "content": f'[{{"action": "update", "observation_id": {obs.id}, "text": "Alice is a Python-focused developer who values code quality", "reason": "synthesis"}}]'
                             },
                         )()
                     },
@@ -320,7 +316,6 @@ class TestConsolidateFact:
         assert updated_obs.summary == "Alice is a Python-focused developer who values code quality"
         assert updated_obs.evidence_count == 2
 
-        # Still only ONE observation
         obs_count = await obs_repo.count()
         assert obs_count == 1
 
@@ -330,7 +325,6 @@ class TestConsolidateFact:
         emb = mock_embedding("alice employment")
         f1 = await fact_repo.create(
             text="Alice works at Google",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=emb,
         )
@@ -338,14 +332,12 @@ class TestConsolidateFact:
 
         fact = await fact_repo.create(
             text="Alice now works at Meta",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=emb,
         )
         embed_fn = AsyncMock(return_value=emb)
 
         with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            # Contradiction updates with history
             mock_llm.return_value.choices = [
                 type(
                     "Choice",
@@ -355,7 +347,7 @@ class TestConsolidateFact:
                             "Message",
                             (),
                             {
-                                "content": f'{{"action": "update", "observation_id": {obs.id}, "text": "Alice works at Meta (previously at Google)", "reason": "contradiction - job change"}}'
+                                "content": f'[{{"action": "update", "observation_id": {obs.id}, "text": "Alice works at Meta (previously at Google)", "reason": "contradiction - job change"}}]'
                             },
                         )()
                     },
@@ -377,24 +369,20 @@ class TestConsolidateFact:
         emb_work = mock_embedding("alice work")
         f1 = await fact_repo.create(
             text="Alice works at Google",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=emb_work,
         )
         await obs_repo.create(summary="Alice works at Google", embedding=emb_work, source_fact_id=f1.id)
 
-        # New fact about different topic (hobbies)
         emb_hobby = mock_embedding("alice hobby")
         fact = await fact_repo.create(
             text="Alice likes hiking",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=emb_hobby,
         )
         embed_fn = AsyncMock(return_value=emb_hobby)
 
         with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            # Different topic = CREATE new observation
             mock_llm.return_value.choices = [
                 type(
                     "Choice",
@@ -404,7 +392,7 @@ class TestConsolidateFact:
                             "Message",
                             (),
                             {
-                                "content": '{"action": "create", "text": "Alice enjoys outdoor activities like hiking", "reason": "new topic - hobbies"}'
+                                "content": '[{"action": "create", "text": "Alice enjoys outdoor activities like hiking", "reason": "new topic - hobbies"}]'
                             },
                         )()
                     },
@@ -414,7 +402,6 @@ class TestConsolidateFact:
 
         assert result.action == "created"
 
-        # Now have 2 observations: work and hobbies
         obs_count = await obs_repo.count()
         assert obs_count == 2
 
@@ -423,7 +410,6 @@ class TestConsolidateFact:
         """Invalid JSON from LLM results in skipped consolidation."""
         fact = await fact_repo.create(
             text="Bob likes pizza",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=mock_embedding("bob pizza"),
         )
@@ -450,7 +436,6 @@ class TestAlwaysConsolidated:
         """Even skipped facts get marked as consolidated."""
         fact = await fact_repo.create(
             text="User walked to the store",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=mock_embedding("ephemeral"),
         )
@@ -461,7 +446,7 @@ class TestAlwaysConsolidated:
                 type(
                     "Choice",
                     (),
-                    {"message": type("Message", (), {"content": '{"action": "skip", "reason": "ephemeral"}'})()},
+                    {"message": type("Message", (), {"content": '[{"action": "skip", "reason": "ephemeral"}]'})()},
                 )()
             ]
             await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
@@ -474,7 +459,6 @@ class TestAlwaysConsolidated:
         """Facts that create observations get marked consolidated."""
         fact = await fact_repo.create(
             text="Bob likes pizza",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=mock_embedding("bob pizza"),
         )
@@ -485,7 +469,7 @@ class TestAlwaysConsolidated:
                 type(
                     "Choice",
                     (),
-                    {"message": type("Message", (), {"content": '{"action": "create", "text": "Bob enjoys pizza"}'})()},
+                    {"message": type("Message", (), {"content": '[{"action": "create", "text": "Bob enjoys pizza"}]'})()},
                 )()
             ]
             await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)

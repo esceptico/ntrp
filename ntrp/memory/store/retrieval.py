@@ -1,11 +1,17 @@
 import heapq
+import math
+from datetime import datetime
+
+import numpy as np
 
 from ntrp.constants import (
-    BFS_DECAY_FACTOR,
-    BFS_MAX_FACTS,
-    BFS_SCORE_THRESHOLD,
+    ENTITY_EXPANSION_IDF_FLOOR,
+    ENTITY_EXPANSION_MAX_FACTS,
+    ENTITY_EXPANSION_PER_ENTITY_LIMIT,
     RECALL_OBSERVATION_LIMIT,
     RRF_OVERFETCH_FACTOR,
+    TEMPORAL_EXPANSION_BASE_SCORE,
+    TEMPORAL_EXPANSION_LIMIT,
 )
 from ntrp.memory.decay import decay_score, recency_boost
 from ntrp.memory.models import Embedding, Fact, FactContext, Observation
@@ -29,50 +35,85 @@ async def hybrid_search(
     return rrf_merge([vector_ranking, fts_ranking])
 
 
-async def expand_graph(
+async def entity_expand(
     repo: FactRepository,
-    seeds: dict[int, float],
-    max_facts: int = BFS_MAX_FACTS,
-    score_threshold: float = BFS_SCORE_THRESHOLD,
-    decay_factor: float = BFS_DECAY_FACTOR,
-) -> dict[int, tuple[Fact, float]]:
-    """BFS expansion from seed facts, propagating scores through links."""
-    collected: dict[int, tuple[Fact, float]] = {}
-    scores: dict[int, float] = dict(seeds)
-    visited: set[int] = set()
+    seed_fact_ids: list[int],
+    max_facts: int = ENTITY_EXPANSION_MAX_FACTS,
+    per_entity_limit: int = ENTITY_EXPANSION_PER_ENTITY_LIMIT,
+) -> dict[int, float]:
+    """One-hop entity expansion: get entities from seeds, get other facts sharing those entities.
 
-    pq: list[tuple[float, int]] = [(-score, fid) for fid, score in seeds.items()]
-    heapq.heapify(pq)
+    Returns {fact_id: idf_weight} for expansion facts (excludes seeds).
+    IDF weighting: rare entities create stronger connections than common ones.
+    weight = 1 / log2(freq + 1)
+    """
+    entity_ids = await repo.get_entity_ids_for_facts(seed_fact_ids)
+    if not entity_ids:
+        return {}
 
-    while pq and len(collected) < max_facts:
-        neg_score, fact_id = heapq.heappop(pq)
-        score = -neg_score
+    expansion_scores: dict[int, float] = {}
+    seed_set = set(seed_fact_ids)
 
-        if fact_id in visited or score < score_threshold:
+    for entity_id in entity_ids:
+        freq = await repo.count_entity_facts_by_id(entity_id)
+        idf_weight = 1.0 / math.log2(freq + 1) if freq > 0 else 1.0
+
+        # Skip high-frequency entities — they connect too many unrelated facts
+        if idf_weight < ENTITY_EXPANSION_IDF_FLOOR:
             continue
-        visited.add(fact_id)
 
-        if fact_id not in collected:
-            fact = await repo.get(fact_id)
-            if fact:
-                collected[fact_id] = (fact, score)
+        facts = await repo.get_facts_for_entity_id(entity_id, limit=per_entity_limit)
+        for fact in facts:
+            if fact.id not in seed_set:
+                expansion_scores[fact.id] = max(
+                    expansion_scores.get(fact.id, 0.0), idf_weight
+                )
 
-        for link in await repo.get_links(fact_id):
-            neighbor_id = link.target_fact_id if link.source_fact_id == fact_id else link.source_fact_id
-            if neighbor_id in visited:
-                continue
+    if len(expansion_scores) > max_facts:
+        top = heapq.nlargest(max_facts, expansion_scores.items(), key=lambda x: x[1])
+        expansion_scores = dict(top)
 
-            new_score = score * link.weight * decay_factor
-            if new_score >= score_threshold and new_score > scores.get(neighbor_id, 0):
-                scores[neighbor_id] = new_score
-                heapq.heappush(pq, (-new_score, neighbor_id))
-
-    return collected
+    return expansion_scores
 
 
-def score_fact(fact: Fact, base_score: float) -> float:
+def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    dot = np.dot(a, b)
+    norm = np.linalg.norm(a) * np.linalg.norm(b)
+    return float(dot / norm) if norm > 0 else 0.0
+
+
+async def _temporal_vector_expand(
+    repo: FactRepository,
+    query_embedding: Embedding,
+    query_time: datetime,
+    limit: int,
+    overfetch: int = 100,
+) -> dict[int, float]:
+    """Fetch temporally proximate facts, rank by vector similarity, return top-K."""
+    candidates = await repo.search_facts_temporal(query_time, overfetch)
+    if not candidates:
+        return {}
+
+    scored = []
+    for fact in candidates:
+        if fact.embedding is not None:
+            sim = _cosine_similarity(query_embedding, fact.embedding)
+            scored.append((fact.id, sim * TEMPORAL_EXPANSION_BASE_SCORE))
+
+    top = heapq.nlargest(limit, scored, key=lambda x: x[1])
+    return dict(top)
+
+
+def score_fact(
+    fact: Fact,
+    base_score: float,
+    query_time: datetime | None = None,
+) -> float:
     decay = decay_score(fact.last_accessed_at, fact.access_count)
-    recency = recency_boost(fact.happened_at or fact.created_at)
+    recency = recency_boost(
+        fact.happened_at or fact.created_at,
+        reference_time=query_time,
+    )
     return base_score * decay * recency
 
 
@@ -81,21 +122,45 @@ async def retrieve_facts(
     query_text: str,
     query_embedding: Embedding,
     seed_limit: int = 5,
+    query_time: datetime | None = None,
 ) -> FactContext:
     rrf_scores = await hybrid_search(repo, query_text, query_embedding, seed_limit)
     if not rrf_scores:
         return FactContext(facts=[])
 
+    # Top-K seeds
     seeds = dict(heapq.nlargest(seed_limit, rrf_scores.items(), key=lambda x: x[1]))
+    seed_ids = list(seeds.keys())
 
-    collected = await expand_graph(repo, seeds)
-    if not collected:
-        return FactContext(facts=[])
+    # Entity expansion
+    expansion = await entity_expand(repo, seed_ids)
 
-    scored = [(fact, score_fact(fact, base)) for fact, base in collected.values()]
+    # Temporal+vector expansion: get temporally close facts, filter by vector similarity
+    if query_time:
+        temporal_ids = await _temporal_vector_expand(
+            repo, query_embedding, query_time, TEMPORAL_EXPANSION_LIMIT,
+        )
+    else:
+        temporal_ids = {}
+
+    # Merge: seeds keep their RRF score, expansion facts get idf_weight as base
+    all_scores: dict[int, float] = dict(seeds)
+    for fid, idf_w in expansion.items():
+        if fid not in all_scores:
+            all_scores[fid] = idf_w * 0.5  # expansion facts get attenuated base score
+    for fid, base in temporal_ids.items():
+        if fid not in all_scores:
+            all_scores[fid] = base
+
+    # Fetch all facts and apply decay/recency scoring
+    scored: list[tuple[Fact, float]] = []
+    for fid, base in all_scores.items():
+        fact = await repo.get(fid)
+        if fact:
+            scored.append((fact, score_fact(fact, base, query_time)))
+
     scored.sort(key=lambda x: x[1], reverse=True)
-
-    return FactContext(facts=[f for f, _ in scored[:BFS_MAX_FACTS]])
+    return FactContext(facts=[f for f, _ in scored[:ENTITY_EXPANSION_MAX_FACTS]])
 
 
 async def retrieve_with_observations(
@@ -104,15 +169,16 @@ async def retrieve_with_observations(
     query_text: str,
     query_embedding: Embedding,
     seed_limit: int = 5,
+    query_time: datetime | None = None,
 ) -> FactContext:
-    context = await retrieve_facts(repo, query_text, query_embedding, seed_limit)
+    context = await retrieve_facts(repo, query_text, query_embedding, seed_limit, query_time)
 
     observations = await obs_repo.search_vector(query_embedding, RECALL_OBSERVATION_LIMIT)
 
     def obs_score(item: tuple[Observation, float]) -> float:
         obs, similarity = item
         decay = decay_score(obs.last_accessed_at, obs.access_count)
-        recency = recency_boost(obs.created_at)
+        recency = recency_boost(obs.created_at, reference_time=query_time)
         return similarity * decay * recency
 
     top_obs = heapq.nlargest(RECALL_OBSERVATION_LIMIT, observations, key=obs_score)

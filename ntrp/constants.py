@@ -101,14 +101,11 @@ MEMORY_DECAY_RATE = 0.99
 CONSOLIDATION_SEARCH_LIMIT = 5  # observation candidates to consider
 
 # Entity Resolution
-ENTITY_RESOLUTION_AUTO_MERGE = 0.85  # score threshold for auto-merging entities
-ENTITY_RESOLUTION_NAME_SIM_THRESHOLD = 0.5  # minimum name similarity to consider candidate
-ENTITY_TEMPORAL_SIGMA_HOURS = 168  # 1 week for temporal proximity scoring
-ENTITY_TEMPORAL_NEUTRAL = 0.5  # neutral score when temporal info unknown
-ENTITY_SCORE_COOCCURRENCE_WEIGHT = 0.5
-ENTITY_SCORE_NAME_WEIGHT = 0.3
-ENTITY_SCORE_TEMPORAL_WEIGHT = 0.2
-ENTITY_CANDIDATES_LIMIT = 50  # max candidates to consider during resolution
+ENTITY_EXPANSION_MAX_FACTS = 50  # max facts returned from entity expansion
+ENTITY_EXPANSION_PER_ENTITY_LIMIT = 20  # max facts per entity during expansion
+ENTITY_EXPANSION_IDF_FLOOR = 0.2  # skip entities with IDF below this (freq > ~30)
+TEMPORAL_EXPANSION_LIMIT = 10  # facts fetched by temporal proximity search
+TEMPORAL_EXPANSION_BASE_SCORE = 0.3  # base score for temporally expanded facts
 
 # LLM temperatures
 EXTRACTION_TEMPERATURE = 0.0  # deterministic extraction
@@ -122,16 +119,6 @@ FORGET_SEARCH_LIMIT = 10
 RECALL_SEARCH_LIMIT = 5  # seed nodes from search
 RECALL_OBSERVATION_LIMIT = 5  # max observations in context
 
-# V2 Fact Linking
-LINK_TEMPORAL_SIGMA_HOURS = 12  # Exponential decay: weight = exp(-Δt / σ), half-life ~8h
-LINK_TEMPORAL_MIN_WEIGHT = 0.01  # Floor to avoid tiny weights
-LINK_SEMANTIC_THRESHOLD = 0.7
-LINK_SEMANTIC_SEARCH_LIMIT = 20
-
-# V2 Scored BFS
-BFS_DECAY_FACTOR = 0.8
-BFS_SCORE_THRESHOLD = 1e-6
-BFS_MAX_FACTS = 50
 
 # V2 Retrieval Recency
 RECENCY_SIGMA_HOURS = 72  # Exponential boost: recency = exp(-hours_since_event / σ)

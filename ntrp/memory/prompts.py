@@ -1,16 +1,14 @@
-EXTRACTION_PROMPT = """Extract entities and entity pairs from the text.
+EXTRACTION_PROMPT = """Extract named entities from this fact. Return ONLY proper nouns:
+- People: "Alice", "Dr. Chen"
+- Organizations: "Google", "Revolut"
+- Projects/products: "ntrp", "Kubernetes"
+- Places: "Yerevan", "Room 203"
 
-Entity types: person, organization, project, concept, place, event, other
-
-Entity pairs capture relationships between entities (source entity and target entity).
-
-Important:
-- Use "User" for first-person references (I, me, my)
-- Only extract explicit information
+DO NOT extract: generic nouns, values/amounts, dates, code identifiers, abstract concepts.
+Use "User" for first-person references.
 
 Text: {text}"""
 
-# Hindsight-style consolidation: synthesize patterns, not decompose
 CONSOLIDATION_PROMPT = """You are a memory consolidation system. Synthesize facts into higher-level observations.
 
 ## OBSERVATIONS ARE HIGHER-LEVEL THAN FACTS
@@ -22,12 +20,10 @@ Examples of synthesis:
 - Facts: "Redis is open source" + "Redis has great community" → Observation: "Redis is an excellent caching solution with strong OSS support"
 - Fact: "User had a good experience at Cafe Roma" → Observation: "Cafe Roma provides good experiences"
 
-## PREFER UPDATE OVER CREATE
+## MULTIPLE ACTIONS ALLOWED
 
-Most facts should UPDATE existing observations, not create new ones.
-- Same person + same topic → UPDATE existing observation
-- Related topic → UPDATE to synthesize broader pattern
-- Only create new when it's a genuinely NEW topic
+You may return MULTIPLE actions for a single fact. For example, a fact mentioning two unrelated topics
+can create/update two separate observations.
 
 ## CONTRADICTION HANDLING
 
@@ -41,13 +37,17 @@ Skip facts that describe temporary state:
 - "User is at the coffee shop" → skip (ephemeral location)
 - "User is currently tired" → skip (temporary state)
 
+## OBSERVATION SIZE
+
+When an observation has 10+ source facts, bias toward CREATE a new sub-topic observation
+rather than growing a single observation indefinitely.
+
 ## CRITICAL RULES
 
-1. ONE fact → typically ONE action (update OR create, rarely both)
-2. Observations are SYNTHESIZED patterns, not decomposed atoms
-3. NEVER merge facts about DIFFERENT people
-4. NEVER merge unrelated topics
-5. Keep observations focused on ONE topic per entity
+1. Observations are SYNTHESIZED patterns, not decomposed atoms
+2. NEVER merge facts about DIFFERENT people
+3. NEVER merge unrelated topics
+4. Keep observations focused on ONE topic per entity
 
 ---
 
@@ -65,12 +65,12 @@ Each observation includes:
 
 ---
 
-Output JSON with ONE action:
+Output a JSON ARRAY of actions:
 
-{{"action": "update", "observation_id": <id>, "text": "synthesized observation", "reason": "..."}}
-OR
-{{"action": "create", "text": "new synthesized observation", "reason": "..."}}
-OR
-{{"action": "skip", "reason": "ephemeral/no durable knowledge"}}
+[
+  {{"action": "update", "observation_id": <id>, "text": "synthesized observation", "reason": "..."}},
+  {{"action": "create", "text": "new synthesized observation", "reason": "..."}},
+  {{"action": "skip", "reason": "ephemeral/no durable knowledge"}}
+]
 
-Return ONLY valid JSON object (not array)."""
+Return ONLY valid JSON array."""

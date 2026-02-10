@@ -3,12 +3,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import pytest_asyncio
 
-from ntrp.memory.models import FactType, LinkType
+from ntrp.memory.models import Fact
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
 from ntrp.memory.store.retrieval import (
-    expand_graph,
+    entity_expand,
     hybrid_search,
     retrieve_facts,
     retrieve_with_observations,
@@ -70,15 +70,12 @@ class TestRrfMerge:
 
 class TestScoreFact:
     def test_recent_fact_scores_higher(self, repo: FactRepository):
-        from ntrp.memory.models import Fact
-
         now = datetime.now(UTC)
         old = now - timedelta(days=30)
 
         recent_fact = Fact(
             id=1,
             text="recent",
-            fact_type=FactType.WORLD,
             embedding=None,
             source_type="test",
             source_ref=None,
@@ -91,7 +88,6 @@ class TestScoreFact:
         old_fact = Fact(
             id=2,
             text="old",
-            fact_type=FactType.WORLD,
             embedding=None,
             source_type="test",
             source_ref=None,
@@ -108,14 +104,11 @@ class TestScoreFact:
         assert recent_score > old_score
 
     def test_frequently_accessed_fact_scores_higher(self):
-        from ntrp.memory.models import Fact
-
         now = datetime.now(UTC)
 
         frequent = Fact(
             id=1,
             text="frequent",
-            fact_type=FactType.WORLD,
             embedding=None,
             source_type="test",
             source_ref=None,
@@ -128,7 +121,6 @@ class TestScoreFact:
         rare = Fact(
             id=2,
             text="rare",
-            fact_type=FactType.WORLD,
             embedding=None,
             source_type="test",
             source_ref=None,
@@ -145,13 +137,10 @@ class TestScoreFact:
         assert frequent_score > rare_score
 
     def test_base_score_multiplied(self):
-        from ntrp.memory.models import Fact
-
         now = datetime.now(UTC)
         fact = Fact(
             id=1,
             text="test",
-            fact_type=FactType.WORLD,
             embedding=None,
             source_type="test",
             source_ref=None,
@@ -174,7 +163,6 @@ class TestHybridSearch:
         emb = mock_embedding("test query")
         await repo.create(
             text="test query content",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=emb,
         )
@@ -191,61 +179,61 @@ class TestHybridSearch:
         assert scores == {}
 
 
-class TestExpandGraph:
+class TestEntityExpand:
     @pytest.mark.asyncio
-    async def test_collects_seed_facts(self, repo: FactRepository):
-        f1 = await repo.create(text="Seed 1", fact_type=FactType.WORLD, source_type="test")
-        f2 = await repo.create(text="Seed 2", fact_type=FactType.WORLD, source_type="test")
+    async def test_expands_through_shared_entities(self, repo: FactRepository):
+        f1 = await repo.create(text="Alice works at Google", source_type="test", embedding=mock_embedding("alice google"))
+        f2 = await repo.create(text="Alice likes hiking", source_type="test")
 
-        seeds = {f1.id: 0.9, f2.id: 0.8}
-        collected = await expand_graph(repo, seeds)
+        e = await repo.create_entity(name="Alice")
+        await repo.add_entity_ref(f1.id, "Alice", e.id)
+        await repo.add_entity_ref(f2.id, "Alice", e.id)
 
-        assert f1.id in collected
-        assert f2.id in collected
+        expansion = await entity_expand(repo, [f1.id])
+        assert f2.id in expansion
 
     @pytest.mark.asyncio
-    async def test_expands_through_links(self, repo: FactRepository):
-        f1 = await repo.create(text="Seed", fact_type=FactType.WORLD, source_type="test")
-        f2 = await repo.create(text="Linked", fact_type=FactType.WORLD, source_type="test")
-        await repo.create_link(f1.id, f2.id, LinkType.ENTITY, weight=0.9)
+    async def test_empty_seeds_returns_empty(self, repo: FactRepository):
+        expansion = await entity_expand(repo, [])
+        assert expansion == {}
 
-        seeds = {f1.id: 1.0}
-        collected = await expand_graph(repo, seeds)
+    @pytest.mark.asyncio
+    async def test_idf_weighting(self, repo: FactRepository):
+        """Rare entities should produce higher expansion weights."""
+        e_rare = await repo.create_entity(name="UniqueEntity")
+        e_common = await repo.create_entity(name="CommonEntity")
 
-        assert f1.id in collected
-        assert f2.id in collected
+        f_seed = await repo.create(text="Seed fact", source_type="test")
+        f_rare = await repo.create(text="Rare fact", source_type="test")
+        f_common = await repo.create(text="Common fact", source_type="test")
+
+        await repo.add_entity_ref(f_seed.id, "UniqueEntity", e_rare.id)
+        await repo.add_entity_ref(f_seed.id, "CommonEntity", e_common.id)
+        await repo.add_entity_ref(f_rare.id, "UniqueEntity", e_rare.id)
+        await repo.add_entity_ref(f_common.id, "CommonEntity", e_common.id)
+
+        # Add many more facts for common entity to increase its frequency
+        for i in range(10):
+            f = await repo.create(text=f"Common fact {i}", source_type="test")
+            await repo.add_entity_ref(f.id, "CommonEntity", e_common.id)
+
+        expansion = await entity_expand(repo, [f_seed.id])
+
+        # Rare entity expansion should have higher weight
+        assert expansion[f_rare.id] > expansion[f_common.id]
 
     @pytest.mark.asyncio
     async def test_respects_max_facts(self, repo: FactRepository):
-        facts = []
-        for i in range(10):
-            f = await repo.create(text=f"Fact {i}", fact_type=FactType.WORLD, source_type="test")
-            facts.append(f)
+        e = await repo.create_entity(name="Alice")
+        seed = await repo.create(text="Seed", source_type="test")
+        await repo.add_entity_ref(seed.id, "Alice", e.id)
 
-        seeds = {f.id: 1.0 - i * 0.05 for i, f in enumerate(facts)}
-        collected = await expand_graph(repo, seeds, max_facts=3)
+        for i in range(20):
+            f = await repo.create(text=f"Fact {i}", source_type="test")
+            await repo.add_entity_ref(f.id, "Alice", e.id)
 
-        assert len(collected) == 3
-
-    @pytest.mark.asyncio
-    async def test_score_decays_through_links(self, repo: FactRepository):
-        f1 = await repo.create(text="Seed", fact_type=FactType.WORLD, source_type="test")
-        f2 = await repo.create(text="Linked", fact_type=FactType.WORLD, source_type="test")
-        await repo.create_link(f1.id, f2.id, LinkType.ENTITY, weight=0.5)
-
-        seeds = {f1.id: 1.0}
-        collected = await expand_graph(repo, seeds, decay_factor=0.8)
-
-        _, seed_score = collected[f1.id]
-        _, linked_score = collected[f2.id]
-
-        assert seed_score > linked_score
-        assert linked_score == pytest.approx(1.0 * 0.5 * 0.8, rel=0.01)
-
-    @pytest.mark.asyncio
-    async def test_empty_seeds(self, repo: FactRepository):
-        collected = await expand_graph(repo, {})
-        assert collected == {}
+        expansion = await entity_expand(repo, [seed.id], max_facts=5)
+        assert len(expansion) <= 5
 
 
 class TestRetrieveFacts:
@@ -254,7 +242,6 @@ class TestRetrieveFacts:
         emb = mock_embedding("guitar music")
         await repo.create(
             text="I play guitar",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=emb,
         )
@@ -272,20 +259,14 @@ class TestRetrieveFacts:
         assert context.facts == []
 
     @pytest.mark.asyncio
-    async def test_follows_links(self, repo: FactRepository):
+    async def test_expands_through_entities(self, repo: FactRepository):
         emb = mock_embedding("main topic")
-        f1 = await repo.create(
-            text="main topic fact",
-            fact_type=FactType.WORLD,
-            source_type="test",
-            embedding=emb,
-        )
-        f2 = await repo.create(
-            text="related fact",
-            fact_type=FactType.WORLD,
-            source_type="test",
-        )
-        await repo.create_link(f1.id, f2.id, LinkType.ENTITY, weight=0.9)
+        f1 = await repo.create(text="main topic fact", source_type="test", embedding=emb)
+        f2 = await repo.create(text="related fact via entity", source_type="test")
+
+        e = await repo.create_entity(name="SharedEntity")
+        await repo.add_entity_ref(f1.id, "SharedEntity", e.id)
+        await repo.add_entity_ref(f2.id, "SharedEntity", e.id)
 
         context = await retrieve_facts(repo, "main topic", emb, seed_limit=5)
 
@@ -300,7 +281,6 @@ class TestRetrieveWithObservations:
         emb = mock_embedding("morning routine")
         await repo.create(
             text="I wake up early",
-            fact_type=FactType.WORLD,
             source_type="test",
             embedding=emb,
         )

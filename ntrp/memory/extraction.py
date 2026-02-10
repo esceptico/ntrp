@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from ntrp.constants import EXTRACTION_TEMPERATURE
 from ntrp.llm import acompletion
 from ntrp.logging import get_logger
-from ntrp.memory.models import ExtractedEntity, ExtractedEntityPair, ExtractionResult
+from ntrp.memory.models import ExtractedEntity, ExtractionResult
 from ntrp.memory.prompts import EXTRACTION_PROMPT
 
 _logger = get_logger(__name__)
@@ -11,19 +11,10 @@ _logger = get_logger(__name__)
 
 class EntitySchema(BaseModel):
     name: str
-    type: str
-
-
-class EntityPairSchema(BaseModel):
-    source: str
-    target: str
-    source_type: str = "other"
-    target_type: str = "other"
 
 
 class ExtractionSchema(BaseModel):
     entities: list[EntitySchema] = []
-    entity_pairs: list[EntityPairSchema] = []
 
 
 class Extractor:
@@ -42,18 +33,13 @@ class Extractor:
             if (content := response.choices[0].message.content) is None:
                 return ExtractionResult()
 
+            content = content.strip()
+            if content.startswith("```"):
+                content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
             parsed = ExtractionSchema.model_validate_json(content)
             return ExtractionResult(
-                entities=[ExtractedEntity(name=e.name, entity_type=e.type) for e in parsed.entities],
-                entity_pairs=[
-                    ExtractedEntityPair(
-                        source=p.source,
-                        target=p.target,
-                        source_type=p.source_type,
-                        target_type=p.target_type,
-                    )
-                    for p in parsed.entity_pairs
-                ],
+                entities=[ExtractedEntity(name=e.name) for e in parsed.entities],
             )
         except Exception:
             _logger.warning("Extraction failed", exc_info=True)

@@ -40,45 +40,42 @@ class ConsolidationAction(BaseModel):
     reason: str | None = None
 
 
-async def get_consolidation_decision(
+async def get_consolidation_decisions(
     fact: Fact,
     obs_repo: ObservationRepository,
     fact_repo: FactRepository,
     model: str,
-) -> ConsolidationAction | None:
+) -> list[ConsolidationAction]:
     if fact.embedding is None:
-        return None
+        return []
 
     candidates = await obs_repo.search_vector(fact.embedding, limit=CONSOLIDATION_SEARCH_LIMIT)
-    return await _llm_consolidation_decision(fact, candidates, fact_repo, model)
+    return await _llm_consolidation_decisions(fact, candidates, fact_repo, model)
 
 
 async def apply_consolidation(
     fact: Fact,
-    action: ConsolidationAction | None,
+    action: ConsolidationAction,
     fact_repo: FactRepository,
     obs_repo: ObservationRepository,
     embed_fn: EmbedFn,
 ) -> ConsolidationResult:
-    if action is None or action.type == "skip":
-        await fact_repo.mark_consolidated(fact.id)
-        return ConsolidationResult(action="skipped", reason=action.reason if action else "no_durable_knowledge")
+    if action.type == "skip":
+        return ConsolidationResult(action="skipped", reason=action.reason)
 
     result = await _execute_action(action, fact, obs_repo, embed_fn)
-    await fact_repo.mark_consolidated(fact.id)
-
     if not result:
         return ConsolidationResult(action="skipped", reason="action_failed")
 
     return result
 
 
-async def _llm_consolidation_decision(
+async def _llm_consolidation_decisions(
     fact: Fact,
     candidates: list[tuple[Observation, float]],
     fact_repo: FactRepository,
     model: str,
-) -> ConsolidationAction | None:
+) -> list[ConsolidationAction]:
     observations_json = await _format_observations(candidates, fact_repo)
 
     prompt = CONSOLIDATION_PROMPT.format(
@@ -90,24 +87,43 @@ async def _llm_consolidation_decision(
         response = await acompletion(
             model=model,
             messages=[{"role": "user", "content": prompt}],
-            response_format=ConsolidationSchema,
             temperature=CONSOLIDATION_TEMPERATURE,
         )
         content = response.choices[0].message.content
         if not content:
-            return None
+            return []
 
-        parsed = ConsolidationSchema.model_validate_json(content)
-        return ConsolidationAction(
-            type=parsed.action,
-            observation_id=parsed.observation_id,
-            text=parsed.text,
-            reason=parsed.reason,
-        )
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+        raw = json.loads(content)
+
+        if isinstance(raw, dict):
+            raw = [raw]
+
+        if not isinstance(raw, list):
+            return []
+
+        actions = []
+        for item in raw:
+            try:
+                parsed = ConsolidationSchema.model_validate(item)
+                actions.append(ConsolidationAction(
+                    type=parsed.action,
+                    observation_id=parsed.observation_id,
+                    text=parsed.text,
+                    reason=parsed.reason,
+                ))
+            except Exception:
+                _logger.debug("Skipping invalid consolidation action: %s", item)
+                continue
+
+        return actions
 
     except Exception as e:
         _logger.warning("Consolidation LLM failed: %s", e)
-        return None
+        return []
 
 
 async def _execute_action(

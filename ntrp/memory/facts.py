@@ -13,9 +13,6 @@ from ntrp.channel import Channel
 from ntrp.constants import (
     CONSOLIDATION_INTERVAL,
     CONSOLIDATION_MAX_BACKOFF_MULTIPLIER,
-    ENTITY_CANDIDATES_LIMIT,
-    ENTITY_RESOLUTION_AUTO_MERGE,
-    ENTITY_RESOLUTION_NAME_SIM_THRESHOLD,
     FORGET_SEARCH_LIMIT,
     FORGET_SIMILARITY_THRESHOLD,
     RECALL_SEARCH_LIMIT,
@@ -24,13 +21,12 @@ from ntrp.constants import (
 from ntrp.core.events import ConsolidationCompleted
 from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.logging import get_logger
-from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decision
+from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decisions
 from ntrp.memory.events import FactCreated, FactDeleted
 from ntrp.memory.extraction import Extractor
-from ntrp.memory.models import ExtractionResult, Fact, FactContext, FactType
+from ntrp.memory.models import ExtractionResult, Fact, FactContext
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
-from ntrp.memory.store.linking import create_links_for_fact
 from ntrp.memory.store.observations import ObservationRepository
 from ntrp.memory.store.retrieval import retrieve_with_observations
 
@@ -41,7 +37,6 @@ class RememberFactResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     fact: Fact
-    links_created: int
     entities_extracted: list[str]
 
 
@@ -112,30 +107,32 @@ class FactMemory:
                 backoff = min(backoff * 2, max_backoff)
 
     async def _consolidate_pending(self, batch_size: int = 10) -> int:
-        # Phase 1: read unconsolidated facts under lock
         async with self._db_lock:
             facts = await self.facts.list_unconsolidated(limit=batch_size)
             if not facts:
                 return 0
             facts = [
-                fact.model_copy(update={"entity_refs": await self.facts.get_entity_refs(fact.id)}) for fact in facts
+                fact.model_copy(update={"entity_refs": await self.facts.get_entity_refs(fact.id)})
+                for fact in facts
             ]
 
-        # Phase 2: LLM decisions outside lock (DB reads + LLM calls, no writes)
+        # LLM decisions outside lock
         decisions = []
         for fact in facts:
-            action = await get_consolidation_decision(fact, self.observations, self.facts, self.extraction_model)
-            decisions.append((fact, action))
+            actions = await get_consolidation_decisions(fact, self.observations, self.facts, self.extraction_model)
+            decisions.append((fact, actions))
 
-        # Phase 3: apply results under lock (single transaction)
+        # Apply under lock
         async with self.transaction():
             count = 0
             obs_created = 0
-            for fact, action in decisions:
-                result = await apply_consolidation(fact, action, self.facts, self.observations, self.embedder.embed_one)
+            for fact, actions in decisions:
+                for action in actions:
+                    result = await apply_consolidation(fact, action, self.facts, self.observations, self.embedder.embed_one)
+                    if result.action == "created":
+                        obs_created += 1
+                await self.facts.mark_consolidated(fact.id)
                 count += 1
-                if result.action == "created":
-                    obs_created += 1
 
         _logger.info("Consolidated %d facts", count)
         self.channel.publish(ConsolidationCompleted(facts_processed=count, observations_created=obs_created))
@@ -156,15 +153,15 @@ class FactMemory:
         text: str,
         source_type: str = "explicit",
         source_ref: str | None = None,
-        fact_type: FactType = FactType.WORLD,
         happened_at: datetime | None = None,
-    ) -> RememberFactResult:
+    ) -> RememberFactResult | None:
+        if not text or not text.strip():
+            return None
         embedding = await self.embedder.embed_one(text)
 
         async with self.transaction():
             fact = await self.facts.create(
                 text=text,
-                fact_type=fact_type,
                 source_type=source_type,
                 source_ref=source_ref,
                 embedding=embedding,
@@ -172,123 +169,53 @@ class FactMemory:
             )
 
             extraction = await self.extractor.extract(text)
-            entities_extracted = await self._process_extraction(fact.id, extraction, source_ref)
-
-            fact = fact.model_copy(update={"entity_refs": await self.facts.get_entity_refs(fact.id)})
-            links_created = await create_links_for_fact(self.facts, fact)
+            entities_extracted = await self._process_extraction(fact.id, extraction)
 
         self.channel.publish(FactCreated(fact_id=fact.id, text=text))
 
-        return RememberFactResult(
-            fact=fact,
-            links_created=links_created,
-            entities_extracted=entities_extracted,
-        )
+        return RememberFactResult(fact=fact, entities_extracted=entities_extracted)
 
     async def _process_extraction(
         self,
         fact_id: int,
         extraction: ExtractionResult,
-        source_ref: str | None,
     ) -> list[str]:
         seen: set[str] = set()
 
-        async def add_ref(name: str, entity_type: str) -> None:
-            if name in seen:
-                return
-            canonical_id = await self._resolve_entity(name, entity_type, source_ref)
-            await self.facts.add_entity_ref(fact_id, name, entity_type, canonical_id)
-            seen.add(name)
-
         for entity in extraction.entities:
-            await add_ref(entity.name, entity.entity_type)
+            name = entity.name.strip()
+            if not name or name.lower() in seen:
+                continue
+            seen.add(name.lower())
 
-        for pair in extraction.entity_pairs:
-            await add_ref(pair.source, pair.source_type)
-            await add_ref(pair.target, pair.target_type)
+            entity_id = await self._resolve_entity(name)
+            await self.facts.add_entity_ref(fact_id, name, entity_id)
 
         return list(seen)
 
-    async def _create_new_entity(self, name: str, entity_type: str) -> int:
-        embedding = await self.embedder.embed_one(f"{name} ({entity_type})")
-        entity = await self.facts.create_entity(name=name, entity_type=entity_type, embedding=embedding)
-        return entity.id
-
-    async def _find_best_candidate(
-        self,
-        name: str,
-        candidates: list,
-        source_ref: str | None,
-    ) -> tuple | None:
-        from ntrp.memory.entity_resolution import (
-            compute_resolution_score,
-            name_similarity,
-            temporal_proximity_score,
-        )
-
-        now = datetime.now(UTC)
-        best_candidate = None
-        best_score = 0.0
-
-        for candidate in candidates:
-            name_sim = name_similarity(name, candidate.name)
-            if name_sim < ENTITY_RESOLUTION_NAME_SIM_THRESHOLD:
-                continue
-
-            co_occurrence = (
-                1.0 if source_ref and await self.facts.get_entity_source_overlap(candidate.name, source_ref) else 0.0
-            )
-
-            candidate_last = await self.facts.get_entity_last_mention(candidate.name)
-            temporal = temporal_proximity_score(now, candidate_last)
-            score = compute_resolution_score(name_sim, co_occurrence, temporal)
-
-            if score > best_score:
-                best_score = score
-                best_candidate = candidate
-
-        return (best_candidate, best_score) if best_candidate else None
-
-    async def _resolve_entity(self, name: str, entity_type: str, source_ref: str | None = None) -> int | None:
-        existing = await self.facts.get_entity_by_name(name, entity_type)
+    async def _resolve_entity(self, name: str) -> int | None:
+        # Exact match (COLLATE NOCASE handles case-insensitivity)
+        existing = await self.facts.get_entity_by_name(name)
         if existing:
             return existing.id
 
-        # Name-based candidates
-        name_candidates = await self.facts.list_entities_by_type(entity_type, limit=ENTITY_CANDIDATES_LIMIT)
+        # Create new entity — no fuzzy matching.
+        # SequenceMatcher can't distinguish similar-but-different entities
+        # ("Avatar 2" vs "Avatar", "Australia" vs "Austria").
+        entity = await self.facts.create_entity(name=name)
+        return entity.id
 
-        # Embedding-based candidates
-        embedding = await self.embedder.embed_one(f"{name} ({entity_type})")
-        vec_results = await self.facts.search_entities_vector(embedding, limit=ENTITY_CANDIDATES_LIMIT)
-        vec_candidates = [entity for entity, _ in vec_results if entity.entity_type == entity_type]
-
-        # Merge and deduplicate
-        seen_ids: set[int] = set()
-        candidates = []
-        for c in [*name_candidates, *vec_candidates]:
-            if c.id not in seen_ids:
-                seen_ids.add(c.id)
-                candidates.append(c)
-
-        if not candidates:
-            return await self._create_new_entity(name, entity_type)
-
-        result = await self._find_best_candidate(name, candidates, source_ref)
-        if not result:
-            return await self._create_new_entity(name, entity_type)
-
-        best_candidate, best_score = result
-        if best_score < ENTITY_RESOLUTION_AUTO_MERGE:
-            return await self._create_new_entity(name, entity_type)
-
-        _logger.info("Entity resolution: '%s' → '%s' (score=%.2f)", name, best_candidate.name, best_score)
-        return best_candidate.id
-
-    async def recall(self, query: str, limit: int = RECALL_SEARCH_LIMIT) -> FactContext:
+    async def recall(
+        self,
+        query: str,
+        limit: int = RECALL_SEARCH_LIMIT,
+        query_time: datetime | None = None,
+    ) -> FactContext:
         query_embedding = await self.embedder.embed_one(query)
 
         context = await retrieve_with_observations(
-            self.facts, self.observations, query, query_embedding, seed_limit=limit
+            self.facts, self.observations, query, query_embedding,
+            seed_limit=limit, query_time=query_time,
         )
 
         async with self.transaction():
@@ -334,14 +261,13 @@ class FactMemory:
                 return 0
 
             if canonical_name:
-                keep = next((e for e in entities if e.name == canonical_name), entities[0])
+                keep = next((e for e in entities if e.name.lower() == canonical_name.lower()), entities[0])
             else:
                 keep = entities[0]
 
             merge_ids = [e.id for e in entities if e.id != keep.id]
-
             count = await self.facts.merge_entities(keep.id, merge_ids)
-            _logger.info("Merged entities %s → '%s' (%d refs)", [e.name for e in entities], keep.name, count)
+            _logger.info("Merged entities %s → '%s' (%d merged)", [e.name for e in entities], keep.name, count)
             return count
 
     async def count(self) -> int:
@@ -352,14 +278,10 @@ class FactMemory:
         recent_facts = await self.facts.list_recent(limit=recent_limit)
         return user_facts, recent_facts
 
-    async def link_count(self) -> int:
-        return await self.facts.link_count()
-
     async def clear(self) -> dict[str, int]:
         async with self.transaction():
             counts = {
                 "facts": await self.facts.count(),
-                "links": await self.facts.link_count(),
                 "observations": await self.observations.count(),
             }
             await self.db.clear_all()

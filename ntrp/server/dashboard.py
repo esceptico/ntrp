@@ -142,7 +142,6 @@ class DashboardCollector:
             data["memory"] = {
                 "enabled": True,
                 "fact_count": await repo.count(),
-                "link_count": await runtime.memory.link_count(),
                 "observation_count": await obs_repo.count(),
                 "unconsolidated": await repo.count_unconsolidated(),
                 "consolidation_running": runtime.memory.is_consolidating,
@@ -153,7 +152,6 @@ class DashboardCollector:
             data["memory"] = {
                 "enabled": False,
                 "fact_count": 0,
-                "link_count": 0,
                 "observation_count": 0,
                 "unconsolidated": 0,
                 "consolidation_running": False,

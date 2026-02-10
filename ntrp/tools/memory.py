@@ -4,7 +4,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ntrp.memory.formatting import format_memory_context
-from ntrp.memory.models import FactType
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 
 RECALL_DESCRIPTION = """Recall stored facts from memory about a topic or entity.
@@ -28,24 +27,12 @@ WHEN TO USE:
 - After discovering a key fact from notes/emails
 - To record user preferences or decisions
 
-FACT TYPES:
-- "world" (default): External facts about users, people, things
-  Examples: "User works at Anthropic", "User completed MATS assessment", "Alice prefers Python"
-- "experience": YOUR (the agent's) own actions
-  Examples: "I sent email to Alice", "I searched for MATS deadlines", "I reminded User about the meeting"
-
-IMPORTANT: User events are WORLD facts, not experiences. "experience" is ONLY for what YOU did.
-
+IMPORTANT: Only store facts that would be useful to recall in 6+ months.
 BAD: "Python is a programming language" (not user-specific)"""
 
 
 class RememberInput(BaseModel):
     fact: str = Field(description="The fact to remember (natural language).")
-    fact_type: str = Field(
-        default="world",
-        description="'world' (default) for facts about users/people/things, 'experience' ONLY for YOUR agent actions.",
-        json_schema_extra={"enum": ["world", "experience"]},
-    )
     source: str | None = Field(default=None, description="Where this fact came from (e.g. file path, email id).")
     happened_at: str | None = Field(
         default=None, description="ISO timestamp of when the event occurred (for temporal linking)."
@@ -68,7 +55,6 @@ class RememberTool(Tool):
         self,
         execution: Any,
         fact: str = "",
-        fact_type: str = "world",
         source: str | None = None,
         happened_at: str | None = None,
         **kwargs: Any,
@@ -77,11 +63,9 @@ class RememberTool(Tool):
             return ToolResult(content="Error: fact is required", preview="Missing fact", is_error=True)
 
         event_time = datetime.fromisoformat(happened_at) if happened_at else None
-        ft = FactType.EXPERIENCE if fact_type == "experience" else FactType.WORLD
 
         result = await self.memory.remember(
             text=fact,
-            fact_type=ft,
             source_type="source" if source else "explicit",
             source_ref=source,
             happened_at=event_time,
@@ -89,7 +73,7 @@ class RememberTool(Tool):
 
         entities = ", ".join(result.entities_extracted) if result.entities_extracted else "none"
         return ToolResult(
-            content=f"Remembered: {result.fact.text}\nEntities: {entities}\nLinks: {result.links_created}",
+            content=f"Remembered: {result.fact.text}\nEntities: {entities}",
             preview="Remembered",
         )
 
