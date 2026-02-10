@@ -153,7 +153,6 @@ export interface ServerConfig {
 
 export interface Stats {
   fact_count: number;
-  link_count: number;
   observation_count: number;
 }
 
@@ -511,7 +510,6 @@ export interface DashboardAgent {
 export interface DashboardMemory {
   enabled: boolean;
   fact_count: number;
-  link_count: number;
   observation_count: number;
   unconsolidated: number;
   consolidation_running: boolean;

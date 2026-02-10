@@ -86,8 +86,6 @@ export function BackgroundPanel({ data, width }: BackgroundPanelProps) {
         <Text color={B}>memory  </Text>
         <Text color={colors.text.primary} bold>{memory.fact_count}</Text>
         <Text color={B}> facts   </Text>
-        <Text color={colors.text.primary} bold>{memory.link_count}</Text>
-        <Text color={B}> links   </Text>
         <Text color={colors.text.primary} bold>{memory.observation_count}</Text>
         <Text color={B}> obs</Text>
       </Box>

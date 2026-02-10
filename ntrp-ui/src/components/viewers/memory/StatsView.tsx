@@ -58,7 +58,6 @@ export function StatsView({ config, width }: StatsViewProps) {
       <Box flexDirection="row" marginTop={1} marginBottom={1}>
         <StatCard label="facts" value={stats.fact_count} accentValue={accentValue} />
         <StatCard label="observations" value={stats.observation_count} accentValue={accentValue} />
-        <StatCard label="links" value={stats.link_count} accentValue={accentValue} />
       </Box>
 
       {!hasData && (

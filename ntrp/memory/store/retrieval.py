@@ -15,6 +15,7 @@ from ntrp.constants import (
 )
 from ntrp.memory.decay import decay_score, recency_boost
 from ntrp.memory.models import Embedding, Fact, FactContext, Observation
+from ntrp.memory.reranker import rerank
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
 from ntrp.search.retrieval import rrf_merge
@@ -143,28 +144,48 @@ async def retrieve_facts(
     else:
         temporal_ids = {}
 
-    # Merge: seeds keep their RRF score, expansion facts weighted by query similarity
-    all_scores: dict[int, float] = dict(seeds)
-    fact_cache: dict[int, Fact] = {}
+    # Collect all candidate fact IDs
+    candidate_ids: set[int] = set(seeds.keys())
+    candidate_ids.update(expansion.keys())
+    candidate_ids.update(temporal_ids.keys())
 
-    for fid, idf_w in expansion.items():
-        if fid not in all_scores:
-            fact = await repo.get(fid)
-            if fact:
-                fact_cache[fid] = fact
-                sim = _cosine_similarity(query_embedding, fact.embedding) if fact.embedding is not None else 0.0
-                all_scores[fid] = idf_w * 0.5 * max(sim, 0.0)
-
-    for fid, base in temporal_ids.items():
-        if fid not in all_scores:
-            all_scores[fid] = base
-
-    # Fetch remaining facts and apply decay/recency scoring
-    scored: list[tuple[Fact, float]] = []
-    for fid, base in all_scores.items():
-        fact = fact_cache.get(fid) or await repo.get(fid)
+    # Fetch all candidate facts
+    facts_by_id: dict[int, Fact] = {}
+    for fid in candidate_ids:
+        fact = await repo.get(fid)
         if fact:
-            scored.append((fact, score_fact(fact, base, query_time)))
+            facts_by_id[fid] = fact
+
+    if not facts_by_id:
+        return FactContext(facts=[])
+
+    # Try cross-encoder reranking
+    ordered_ids = list(facts_by_id.keys())
+    documents = [facts_by_id[fid].text for fid in ordered_ids]
+    rerank_results = await rerank(query_text, documents)
+
+    if rerank_results:
+        # Use reranker scores as base scores
+        base_scores: dict[int, float] = {}
+        for idx, score in rerank_results:
+            base_scores[ordered_ids[idx]] = score
+    else:
+        # Fallback: multi-signal scoring
+        base_scores = dict(seeds)
+        for fid, idf_w in expansion.items():
+            if fid not in base_scores and fid in facts_by_id:
+                fact = facts_by_id[fid]
+                sim = _cosine_similarity(query_embedding, fact.embedding) if fact.embedding is not None else 0.0
+                base_scores[fid] = idf_w * 0.5 * max(sim, 0.0)
+        for fid, base in temporal_ids.items():
+            if fid not in base_scores:
+                base_scores[fid] = base
+
+    # Apply decay/recency on top of base scores
+    scored: list[tuple[Fact, float]] = []
+    for fid, base in base_scores.items():
+        if fid in facts_by_id:
+            scored.append((facts_by_id[fid], score_fact(facts_by_id[fid], base, query_time)))
 
     scored.sort(key=lambda x: x[1], reverse=True)
     return FactContext(facts=[f for f, _ in scored[:ENTITY_EXPANSION_MAX_FACTS]])
