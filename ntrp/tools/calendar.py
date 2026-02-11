@@ -43,8 +43,8 @@ def _parse_datetime(value: str) -> datetime | None:
         return None
 
 
-def _format_event_list(events: list) -> str:
-    output = []
+def _format_events(events: list) -> str:
+    lines = []
     for event in events:
         meta = event.metadata
         start = meta.get("start", "")
@@ -61,26 +61,7 @@ def _format_event_list(events: list) -> str:
             time_str = "No time"
 
         location = f" @ {meta['location']}" if meta.get("location") else ""
-        output.append(f"• {time_str}: {event.title}{location}")
-
-    return "\n".join(output)
-
-
-def _format_event_search(query: str, events: list) -> str:
-    lines = [f"**Events matching '{query}':**\n"]
-    for event in events:
-        meta = event.metadata
-        start = meta.get("start", "")
-
-        if start:
-            dt = datetime.fromisoformat(start)
-            if dt.tzinfo is not None:
-                dt = dt.astimezone()
-            time_str = dt.strftime("%Y-%m-%d %H:%M")
-        else:
-            time_str = "No time"
-
-        lines.append(f"- **{time_str}**: {event.title} `[{event.source_id}]`")
+        lines.append(f"• {time_str}: {event.title}{location} `[{event.source_id}]`")
 
     return "\n".join(lines)
 
@@ -124,7 +105,7 @@ class CalendarTool(Tool):
                     preview="0 events",
                 )
 
-            content = _format_event_search(query, events)
+            content = _format_events(events)
             return ToolResult(content=content, preview=f"{len(events)} events")
         except Exception as e:
             return ToolResult(content=f"Error searching events: {e}", preview="Search failed", is_error=True)
@@ -146,7 +127,7 @@ class CalendarTool(Tool):
         events.sort(key=lambda e: e.metadata.get("start", ""))
         trimmed = events[:limit]
 
-        content = _format_event_list(trimmed)
+        content = _format_events(trimmed)
         return ToolResult(content=content, preview=f"{len(events)} events")
 
 
