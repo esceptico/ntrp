@@ -7,6 +7,7 @@ from ntrp.core.prompts import build_system_prompt
 from ntrp.memory.formatting import format_memory_context
 from ntrp.server.runtime import Runtime
 from ntrp.server.state import RunState
+from ntrp.skills.registry import SkillRegistry
 
 
 @dataclass
@@ -17,6 +18,22 @@ class ChatContext:
     messages: list[dict]
     user_message: str
     is_init: bool
+
+
+def expand_skill_command(message: str, registry: SkillRegistry) -> tuple[str, bool]:
+    stripped = message.strip()
+    if not stripped.startswith("/"):
+        return message, False
+    parts = stripped[1:].split(None, 1)
+    skill_name = parts[0]
+    args = parts[1] if len(parts) > 1 else ""
+    body = registry.load_body(skill_name)
+    if body is None:
+        return message, False
+    expanded = f'<skill name="{skill_name}">\n{body}\n</skill>'
+    if args:
+        expanded += f"\n\nUser request: {args}"
+    return expanded, True
 
 
 async def resolve_session(runtime: Runtime) -> SessionData:
@@ -51,10 +68,13 @@ async def prepare_messages(
         )
         memory_context = formatted_memory_context or None
 
+    skills_context = runtime.skill_registry.to_prompt_xml() if runtime.skill_registry else None
+
     system_prompt = build_system_prompt(
         source_details=runtime.get_source_details(),
         last_activity=last_activity,
         memory_context=memory_context,
+        skills_context=skills_context,
     )
 
     if not messages:

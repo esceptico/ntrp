@@ -24,6 +24,7 @@ from ntrp.events import (
 from ntrp.logging import configure_logging
 from ntrp.server.chat import (
     ChatContext,
+    expand_skill_command,
     prepare_messages,
     resolve_session,
 )
@@ -32,6 +33,7 @@ from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
 from ntrp.server.routers.schedule import router as schedule_router
 from ntrp.server.routers.session import router as session_router
+from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.runtime import get_run_registry, get_runtime, get_runtime_async, reset_runtime
 from ntrp.server.state import RunStatus
 from ntrp.server.stream import run_agent_loop, to_sse
@@ -117,6 +119,7 @@ app.include_router(data_router)
 app.include_router(gmail_router)
 app.include_router(schedule_router)
 app.include_router(session_router)
+app.include_router(skills_router)
 
 
 @app.get("/health")
@@ -161,6 +164,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     is_init = user_message.strip().lower() == "/init"
     if is_init:
         user_message = INIT_INSTRUCTION
+    elif runtime.skill_registry:
+        user_message, _ = expand_skill_command(user_message, runtime.skill_registry)
 
     messages, system_prompt = await prepare_messages(
         runtime, messages, user_message, last_activity=session_state.last_activity

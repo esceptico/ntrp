@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { Box, Text, useApp, Static } from "ink";
 import type { Message, Config } from "./types.js";
 import { defaultConfig } from "./types.js";
@@ -30,6 +30,7 @@ import {
   ErrorBoundary,
 } from "./components/index.js";
 import { COMMANDS } from "./lib/commands.js";
+import { getSkills, type Skill } from "./api/client.js";
 
 type ViewMode = "chat" | "memory" | "settings" | "schedules" | "dashboard";
 
@@ -74,6 +75,12 @@ function AppContent({
   // Track if welcome was shown (don't show again after clear)
   const [welcomeShown, setWelcomeShown] = useState(false);
 
+  // Fetch skills for autocomplete
+  const [skills, setSkills] = useState<Skill[]>([]);
+  useEffect(() => {
+    getSkills(config).then(r => setSkills(r.skills)).catch(() => {});
+  }, [config]);
+
   // Streaming (messages, tool chain, approvals)
   const streaming = useStreaming({
     config,
@@ -117,6 +124,11 @@ function AppContent({
     refreshIndexStatus,
   });
 
+  const allCommands = useMemo(() => [
+    ...COMMANDS,
+    ...skills.map(s => ({ name: s.name, description: s.description })),
+  ], [skills]);
+
   const handleSubmit = useCallback(
     async (value: string) => {
       const trimmed = value.trim();
@@ -127,7 +139,12 @@ function AppContent({
         if (isStreaming || pendingApproval || pendingChoice) return; // Block commands during streaming
         const handled = await handleCommand(trimmed);
         if (handled) return;
-        addMessage({ role: "error", content: `Unknown command: ${trimmed}` });
+        const cmdName = trimmed.slice(1).split(" ")[0];
+        if (skills.some(s => s.name === cmdName)) {
+          sendMessage(trimmed);
+        } else {
+          addMessage({ role: "error", content: `Unknown command: ${trimmed}` });
+        }
         return;
       }
 
@@ -139,7 +156,7 @@ function AppContent({
 
       sendMessage(trimmed);
     },
-    [isStreaming, pendingApproval, pendingChoice, sendMessage, handleCommand, addMessage]
+    [isStreaming, pendingApproval, pendingChoice, sendMessage, handleCommand, addMessage, skills]
   );
 
   // Process queued messages when streaming ends
@@ -276,7 +293,7 @@ function AppContent({
         onSubmit={handleSubmit}
         disabled={!serverConnected || hasOverlay || showSettings || !!pendingApproval || !!pendingChoice}
         focus={isInChatMode && !hasOverlay && !showSettings && !pendingApproval && !pendingChoice}
-        commands={COMMANDS}
+        commands={allCommands}
         queueCount={messageQueue.length}
         skipApprovals={skipApprovals}
         chatModel={serverConfig?.chat_model}

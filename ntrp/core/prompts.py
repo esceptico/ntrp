@@ -262,10 +262,21 @@ def scheduled_task_suffix(has_notifiers: bool) -> str:
     return _SCHEDULED_TASK_BASE
 
 
+SKILLS_TEMPLATE = """## SKILLS
+The following skills are available via `use_skill(skill="name", args="optional context")`.
+
+Skills provide specialized capabilities and domain knowledge. When the user asks you to perform a task that matches an available skill, invoke it BEFORE generating any other response about the task. Do NOT load a skill just because a keyword matches — only when you genuinely need the skill's instructions to complete the task.
+
+If a skill has already been loaded in this conversation (you see a `<skill>` tag in a prior message), follow its instructions directly instead of calling use_skill again.
+
+{skills_xml}"""
+
+
 def build_system_prompt(
     source_details: dict[str, dict],
     last_activity: datetime | None = None,
     memory_context: str | None = None,
+    skills_context: str | None = None,
 ) -> str:
     # Order: static prefix (cacheable) → dynamic suffix
     # BASE_SYSTEM_PROMPT + _sources are stable within a session
@@ -273,9 +284,13 @@ def build_system_prompt(
     sections = [
         BASE_SYSTEM_PROMPT,  # ~800 tokens, fully static
         _sources(source_details),  # semi-static, changes only at session setup
+    ]
+    if skills_context:
+        sections.append(SKILLS_TEMPLATE.format(skills_xml=skills_context))
+    sections.extend([
         _environment(),  # dynamic (date/time), cache break point
         _time_gap(last_activity),  # dynamic, depends on activity
-    ]
+    ])
     if memory_context:
         sections.append(MEMORY_CONTEXT_TEMPLATE.format(memory_content=memory_context))
     return "\n\n".join(s for s in sections if s)

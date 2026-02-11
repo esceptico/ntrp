@@ -24,9 +24,10 @@ import { colorOptions } from "./SettingsRows.js";
 import { ModelDropdown } from "./ModelDropdown.js";
 import { BrowserDropdown } from "./BrowserDropdown.js";
 import { ConnectionsSection } from "./ConnectionsSection.js";
-import { AgentSection, AppearanceSection, LimitsSection, NotifiersSection } from "./sections/index.js";
+import { AgentSection, AppearanceSection, LimitsSection, NotifiersSection, SkillsSection } from "./sections/index.js";
 import { useTextInput } from "../../../hooks/useTextInput.js";
 import { useNotifiers } from "../../../hooks/useNotifiers.js";
+import { useSkills } from "../../../hooks/useSkills.js";
 
 function useAccent(accentColor: AccentColor) {
   return useMemo(() => accentColors[accentColor].primary, [accentColor]);
@@ -90,6 +91,7 @@ export function SettingsDialog({
   const [pendingEmbeddingModel, setPendingEmbeddingModel] = useState<string | null>(null);
 
   const notifiers = useNotifiers(config);
+  const skills = useSkills(config);
 
   const contentWidth = Math.max(0, terminalWidth - 4);
   const sidebarWidth = 16;
@@ -267,12 +269,17 @@ export function SettingsDialog({
           notifiers.handleKeypress(key);
           return;
         }
+        if (activeSection === "skills" && skills.mode !== "list") {
+          skills.handleKeypress(key);
+          return;
+        }
         onClose();
         return;
       }
 
       if (key.name === "tab") {
         if (activeSection === "notifiers" && notifiers.mode !== "list") return;
+        if (activeSection === "skills" && skills.mode !== "list") return;
         const direction = key.shift ? -1 : 1;
         const idx = SECTION_IDS.indexOf(activeSection);
         const next = (idx + direction + SECTION_IDS.length) % SECTION_IDS.length;
@@ -346,6 +353,8 @@ export function SettingsDialog({
             onUpdate("ui", "accentColor", colorOptions[newIdx]);
           }
         }
+      } else if (activeSection === "skills") {
+        skills.handleKeypress(key);
       } else if (activeSection === "notifiers") {
         notifiers.handleKeypress(key);
       } else if (activeSection === "limits") {
@@ -370,7 +379,7 @@ export function SettingsDialog({
       isColorItem, settings, onUpdate, onClose, dropdownTarget,
       connectionItem, googleAccounts, selectedGoogleIndex, serverConfig,
       handleAddGoogle, handleRemoveGoogle, handleStartVaultEdit, handleToggleSource, actionInProgress,
-      notifiers,
+      notifiers, skills,
     ]
   );
 
@@ -534,6 +543,10 @@ export function SettingsDialog({
               accent={accent}
               modelNameWidth={modelNameWidth}
             />
+          )}
+
+          {activeSection === "skills" && (
+            <SkillsSection skills={skills} accent={accent} />
           )}
 
           {activeSection === "connections" && (

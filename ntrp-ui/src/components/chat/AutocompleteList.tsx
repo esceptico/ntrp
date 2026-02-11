@@ -10,10 +10,10 @@ interface AutocompleteListProps {
 
 export function AutocompleteList({ commands, selectedIndex, accentValue }: AutocompleteListProps) {
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="row" flexWrap="wrap" gap={1}>
       {commands.map((cmd, i) => (
         <Text key={cmd.name} color={i === selectedIndex ? accentValue : undefined} bold={i === selectedIndex}>
-          {"  "}/{cmd.name} <Text dimColor>{cmd.description}</Text>
+          /{cmd.name}
         </Text>
       ))}
     </Box>

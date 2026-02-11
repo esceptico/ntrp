@@ -1,12 +1,13 @@
 import asyncio
 from datetime import UTC, datetime
+from pathlib import Path
 
 import litellm.llms.custom_httpx.async_client_cleanup as litellm_cleanup
 import litellm.main as litellm_main
 
 import ntrp.database as database
 from ntrp.channel import Channel
-from ntrp.config import Config, get_config
+from ntrp.config import Config, NTRP_DIR, get_config
 from ntrp.constants import AGENT_MAX_DEPTH, INDEXABLE_SOURCES, SESSION_EXPIRY_HOURS
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
@@ -24,6 +25,7 @@ from ntrp.server.sources import SourceManager
 from ntrp.server.state import RunRegistry
 from ntrp.sources.browser import BrowserHistorySource
 from ntrp.sources.events import SourceChanged
+from ntrp.skills.registry import SkillRegistry
 from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.sources.memory import MemoryIndexSource
 from ntrp.tools.executor import ToolExecutor
@@ -54,6 +56,7 @@ class Runtime:
         self.scheduler: Scheduler | None = None
         self.run_registry = RunRegistry()
 
+        self.skill_registry = SkillRegistry()
         self.notifiers: dict[str, Notifier] = {}
         self.dashboard = DashboardCollector()
         self._connected = False
@@ -92,6 +95,7 @@ class Runtime:
             search_index=self.indexer.index,
             schedule_store=self.schedule_store,
             default_notifiers=list(self.notifiers.keys()) or None,
+            skill_registry=self.skill_registry if self.skill_registry else None,
         )
 
         self.tools = self.executor.get_tools()
@@ -145,6 +149,11 @@ class Runtime:
                 extraction_model=self.config.memory_model,
                 channel=self.channel,
             )
+
+        self.skill_registry.load([
+            (Path.cwd() / ".skills", "project"),
+            (NTRP_DIR / "skills", "global"),
+        ])
 
         await self.rebuild_notifiers()
         self._connected = True

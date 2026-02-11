@@ -2,6 +2,7 @@ from typing import Any
 
 from ntrp.memory.facts import FactMemory
 from ntrp.schedule.store import ScheduleStore
+from ntrp.skills.registry import SkillRegistry
 from ntrp.sources.base import Source
 from ntrp.tools.core.base import ToolResult
 from ntrp.tools.core.context import ToolExecution
@@ -20,6 +21,7 @@ class ToolExecutor:
         schedule_store: ScheduleStore | None = None,
         default_notifiers: list[str] | None = None,
         registry: ToolRegistry | None = None,
+        skill_registry: SkillRegistry | None = None,
     ):
         self.sources = sources
         self.memory = memory
@@ -35,6 +37,7 @@ class ToolExecutor:
             schedule_store=schedule_store,
             default_notifiers=default_notifiers,
             working_dir=working_dir,
+            skill_registry=skill_registry,
         )
         for create_tools in TOOL_FACTORIES:
             for tool in create_tools(deps):

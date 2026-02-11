@@ -4,6 +4,8 @@ from typing import Any
 
 from ntrp.memory.facts import FactMemory
 from ntrp.schedule.store import ScheduleStore
+from ntrp.skills.registry import SkillRegistry
+from ntrp.skills.tool import UseSkillTool
 from ntrp.sources.base import BrowserSource, CalendarSource, EmailSource, NotesSource, Source, WebSearchSource
 from ntrp.tools.ask_choice import AskChoiceTool
 from ntrp.tools.bash import BashTool
@@ -40,6 +42,7 @@ class ToolDeps:
     schedule_store: ScheduleStore | None = None
     default_notifiers: list[str] | None = None
     working_dir: str | None = None
+    skill_registry: SkillRegistry | None = None
 
 
 def _find_source(sources: dict[str, Source], source_type: type) -> Any | None:
@@ -138,6 +141,12 @@ def _create_core_tools(deps: ToolDeps) -> list[Tool]:
     ]
 
 
+def _create_skill_tools(deps: ToolDeps) -> list[Tool]:
+    if not deps.skill_registry:
+        return []
+    return [UseSkillTool(deps.skill_registry)]
+
+
 ToolFactory = Callable[[ToolDeps], list[Tool]]
 
 TOOL_FACTORIES: list[ToolFactory] = [
@@ -149,4 +158,5 @@ TOOL_FACTORIES: list[ToolFactory] = [
     _create_memory_tools,
     _create_schedule_tools,
     _create_core_tools,
+    _create_skill_tools,
 ]
