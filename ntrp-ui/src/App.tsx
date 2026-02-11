@@ -126,7 +126,7 @@ function AppContent({
 
   const allCommands = useMemo(() => [
     ...COMMANDS,
-    ...skills.map(s => ({ name: s.name, description: s.description })),
+    ...skills.map(s => ({ name: s.name, description: `(skill) ${s.description}` })),
   ], [skills]);
 
   const handleSubmit = useCallback(
