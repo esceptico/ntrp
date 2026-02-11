@@ -69,6 +69,7 @@ async def get_fact_details(fact_id: int):
             "access_count": fact.access_count,
         },
         "entities": [{"name": e.name, "entity_id": e.entity_id} for e in entity_refs],
+        "linked_facts": [],
     }
 
 

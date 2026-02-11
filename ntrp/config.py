@@ -39,8 +39,8 @@ class Config(BaseSettings):
         populate_by_name=True,
     )
 
-    # OpenAI (for embeddings) - no prefix, standard env var
-    openai_api_key: str = Field(alias="OPENAI_API_KEY")
+    # OpenAI (optional, for embeddings/models)
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
 
     # LiteLLM model format: provider/model
     # Examples: anthropic/claude-sonnet-4, gemini/gemini-2.0-flash, openai/gpt-4o

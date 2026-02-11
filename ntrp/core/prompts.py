@@ -17,7 +17,7 @@ BASE_SYSTEM_PROMPT = f"""You are ntrp, a personal assistant with deep access to 
 ## EXPLORATION
 
 Use simple natural language queries — no special syntax. If no results, try broader terms.
-explore(task) spawns a read-only research agent. Call multiple in parallel. Max depth: {AGENT_MAX_DEPTH}. Stop when same results keep appearing.
+explore(task, depth) spawns a research agent. depth: "quick" (fast scan), "normal" (default), "deep" (exhaustive). Call multiple in parallel. Max nesting: {AGENT_MAX_DEPTH}.
 Never just list titles — provide real insights.
 
 ## TOOLS
@@ -45,22 +45,60 @@ Facts connect by semantic similarity, temporal proximity, shared entities.
 The more you remember, the richer context becomes."""
 
 
-EXPLORE_PROMPT = """You are a fast exploration agent. Complete within 3-5 search+read cycles.
-
-SEARCH: Use simple natural language queries — never boolean operators, AND/OR, or quoted phrases.
+_EXPLORE_BASE = """SEARCH: Use simple natural language queries — never boolean operators, AND/OR, or quoted phrases.
 If no results, try broader terms or single keywords.
 
-WORKFLOW:
-1. Search with 2-3 query variants
-2. Read the most relevant results with read_note()
-3. Use explore() for sub-topics that need deeper research
-4. Call remember() for user-specific facts you discover
-5. Return findings even if exploration is incomplete
+REMEMBER:
+- Personal facts: name, location, background, roles
+- Preferences and opinions (likes, dislikes, style choices)
+- Projects: what they're building, tech stack, status, goals
+- People: who they know, relationships, collaborations
+- Timeline: when things happened, deadlines, plans
+- Skip general knowledge — only store facts specific to this user
 
 OUTPUT:
 - Key facts with quotes and file paths
 - Connections and patterns discovered
 - Relevant file paths for reference"""
+
+EXPLORE_PROMPTS = {
+    "quick": f"""You are a fast exploration agent. Get the key facts and move on.
+
+WORKFLOW:
+1. Search with 2-3 query variants
+2. Read the top 2-3 results
+3. Call remember() for user-specific facts
+4. Return findings — 3-5 search+read cycles max
+
+{_EXPLORE_BASE}""",
+
+    "normal": f"""You are an exploration agent. Be thorough but focused.
+
+WORKFLOW:
+1. Search with 3-4 query variants (different angles on the topic)
+2. Read every relevant result with read_note() — not just the top one
+3. Follow direct references if a note mentions a related topic
+4. Call remember() for user-specific facts you discover
+5. 5-10 search+read cycles is normal
+
+{_EXPLORE_BASE}""",
+
+    "deep": f"""You are a thorough exploration agent. Explore exhaustively — read every relevant note, not just titles.
+
+WORKFLOW:
+1. Search with 4-6 query variants (different angles, synonyms, related terms)
+2. Read EVERY relevant result with read_note() — not just the top one
+3. Follow references — if a note mentions another project, person, or topic, search for that too
+4. Use explore() for sub-topics that need their own deep dive
+5. Call remember() for every user-specific fact you discover
+6. Keep going until you've exhausted the topic — 10-20 search+read cycles is normal
+7. After your first pass, ask: what did I miss? Then search for gaps.
+
+{_EXPLORE_BASE}""",
+}
+
+# Default for backward compat
+EXPLORE_PROMPT = EXPLORE_PROMPTS["normal"]
 
 
 ENVIRONMENT_TEMPLATE = """## CONTEXT
@@ -80,58 +118,70 @@ MEMORY_CONTEXT_TEMPLATE = """## MEMORY CONTEXT
 {memory_content}"""
 
 
-INIT_INSTRUCTION = """Build a profile of the user by exploring their data. Explore first, present findings, confirm later.
+INIT_INSTRUCTION = """Build a thorough profile of the user by deeply exploring their data. Explore first, present findings, confirm later.
 
 ## STEP 1: BROAD SWEEP
 See what's available — run these in parallel:
 - notes()
-- emails(days=14) (if available)
-- calendar(days_forward=14) (if available)
+- emails(days=30) (if available)
+- calendar(days_forward=30) (if available)
+- browser() (if available)
 
-Output "Let me take a look at your data..." then start.
+Output "Let me take a deep look at your data..." then start.
 
-## STEP 2: DETECT THEMES
-Identify topics from the sweep: work, projects, people, interests, goals.
+## STEP 2: READ BROADLY
+Don't just scan titles. Read the 15-20 most recent/active notes in full using read_note(). Look for:
+- What topics keep coming up
+- What projects are active
+- Who the user interacts with
+- What they care about, struggle with, plan to do
 
 ## STEP 3: DEEP DIVES
-Run explore() for each theme — agents will remember facts as they find them:
-- explore(task="user's work and career")
-- explore(task="projects user is building")
-- explore(task="people user knows")
-- explore(task="user's interests and learning")
+Based on what you found (NOT hardcoded themes), run explore() for each real topic. Examples:
+- explore(task="everything about [specific project name] — tech stack, goals, progress, blockers")
+- explore(task="user's work at [company] — role, team, responsibilities, opinions")
+- explore(task="user's relationship with [person] — who they are, context, interactions")
+- explore(task="user's interests in [specific topic] — what they've written, opinions, learning")
+- explore(task="user's daily routines, habits, and preferences")
+- explore(task="user's goals and plans for [timeframe]")
 
-Only user-specific facts are stored, general knowledge is skipped.
+Run 5-8 explore() calls in parallel with depth="deep". Each one should be specific to what you actually found, not generic.
 
-## STEP 4: PRESENT FINDINGS
+## STEP 4: SECOND PASS
+After the first round of explores, look at what was found. If there are topics that were mentioned but not deeply explored, run more explore() calls. The goal is comprehensive coverage — better to over-explore than miss important context.
+
+## STEP 5: PRESENT FINDINGS
 After ALL exploration is done, output a summary (no more tool calls):
 
 Here's what I learned about you:
 
-**Identity**: [name, location]
-**Work**: [role, employer]
-**Current**: [what they're doing now]
-**Interests**: [topics, technologies]
-**Projects**: [builds, side projects]
-**Network**: [key people if found]
+**Identity**: [name, location, background]
+**Work**: [role, employer, what they do day-to-day]
+**Projects**: [each project with specifics — tech, status, goals]
+**Interests**: [topics, technologies, hobbies]
+**Network**: [key people and relationships]
+**Preferences**: [tools, workflows, opinions, style]
+**Current Focus**: [what they're actively working on]
 
 Does this look right? Let me know if anything needs correction.
 
 STOP here — wait for user response. Do not call ask_choice.
 
-## STEP 5: HANDLE RESPONSE
+## STEP 6: HANDLE RESPONSE
 - "looks good" → say goodbye
 - Corrections → update with remember(), re-summarize
 - More info → incorporate, remember(), continue
 
 ## IF DATA IS SPARSE
-Say "I couldn't find much. Let me ask a few questions."
+Say "I couldn't find much in your data. Let me ask a few questions."
 Ask about their work, projects, and interests, then explore based on answers.
 
 ## PRINCIPLES
-- Minimal user effort — they just confirm or correct
-- Explore in parallel for speed
-- Discover topics dynamically
-- Remember facts as you find them"""
+- Read notes in full, don't skim titles
+- Explore specific topics found in data, not generic categories
+- Remember aggressively — every personal fact, preference, opinion, relationship
+- Multiple exploration rounds — go deep, then fill gaps
+- Minimal user effort — they just confirm or correct"""
 
 
 def _environment() -> str:

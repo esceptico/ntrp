@@ -34,11 +34,12 @@ SUPPORTED_MODELS: dict[str, dict[str, Any]] = {
     "openrouter/arcee-ai/trinity-large-preview:free": {"tokens": 200000},
 }
 
-# Embedding models (OpenAI): model -> dimension
+# Embedding models: model -> dimension
 EMBEDDING_MODELS: dict[str, int] = {
     "text-embedding-3-small": 1536,
     "text-embedding-3-large": 3072,
     "text-embedding-ada-002": 1536,
+    "gemini/gemini-embedding-001": 3072,
 }
 
 
@@ -47,8 +48,8 @@ EMBEDDING_MODELS: dict[str, int] = {
 AGENT_MAX_DEPTH = 8
 AGENT_MAX_ITERATIONS = 50
 
-EXPLORE_TIMEOUT = 180
-SUBAGENT_DEFAULT_TIMEOUT = 180
+EXPLORE_TIMEOUT = 300
+SUBAGENT_DEFAULT_TIMEOUT = 300
 
 
 # --- Text Processing ---

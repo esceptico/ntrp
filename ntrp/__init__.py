@@ -8,5 +8,6 @@ litellm.drop_params = True
 litellm.suppress_debug_info = True
 
 # langfuse hooks (OTEL integration for langfuse v3)
-litellm.success_callback = ["langfuse_otel"]
-litellm.failure_callback = ["langfuse_otel"]
+# Disabled — Langfuse account over quota, re-enable when upgraded
+# litellm.success_callback = ["langfuse_otel"]
+# litellm.failure_callback = ["langfuse_otel"]
