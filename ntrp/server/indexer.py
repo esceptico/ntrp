@@ -50,6 +50,13 @@ class Indexer:
         await store.init_schema()
         self.index = SearchIndex(store=store, embedder=Embedder(self.embedding))
 
+    async def update_embedding(self, embedding: EmbeddingConfig) -> None:
+        self.embedding = embedding
+        store = self.index.store
+        await store.clear_all()
+        await store.rebuild_vec_table(embedding.dim)
+        self.index = SearchIndex(store=store, embedder=Embedder(embedding))
+
     async def stop(self) -> None:
         if self._task:
             self._task.cancel()

@@ -409,6 +409,8 @@ export function SettingsDialog({
       const result = await updateEmbeddingModel(config, pendingEmbeddingModel);
       if (result.status === "reindexing") {
         setEmbeddingModel(pendingEmbeddingModel);
+        const updatedConfig = await getServerConfig(config);
+        onServerConfigChange(updatedConfig);
       }
     } catch {
       // Ignore errors
@@ -416,7 +418,7 @@ export function SettingsDialog({
       setPendingEmbeddingModel(null);
       setActionInProgress(null);
     }
-  }, [config, pendingEmbeddingModel, actionInProgress]);
+  }, [config, pendingEmbeddingModel, actionInProgress, onServerConfigChange]);
 
   const handleEmbeddingKeypress = useCallback(
     (key: Key) => {

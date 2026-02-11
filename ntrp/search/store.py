@@ -50,9 +50,25 @@ class SearchStore:
                 UNIQUE(source, source_id)
             );
 
+            CREATE TABLE IF NOT EXISTS meta (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            );
+
             CREATE INDEX IF NOT EXISTS idx_items_source ON items(source);
             CREATE INDEX IF NOT EXISTS idx_items_hash ON items(source, content_hash);
         """)
+
+        # Check if embedding dimension changed since last run
+        stored_dim = await self._get_meta("embedding_dim")
+        if stored_dim is not None and int(stored_dim) != self.embedding_dim:
+            _logger.info(
+                "Embedding dimension changed (%s → %d), rebuilding vec table",
+                stored_dim, self.embedding_dim,
+            )
+            await self.conn.execute("DROP TABLE IF EXISTS items_vec")
+            await self.conn.execute("DELETE FROM items")
+            await self.conn.commit()
 
         try:
             await self.conn.execute("""
@@ -96,7 +112,39 @@ class SearchStore:
             _logger.warning("Failed to create vec0 table: %s", e)
             self._has_vec = False
 
+        await self._set_meta("embedding_dim", str(self.embedding_dim))
         await self.conn.commit()
+
+    async def _get_meta(self, key: str) -> str | None:
+        try:
+            rows = await self.conn.execute_fetchall(
+                "SELECT value FROM meta WHERE key = ?", (key,)
+            )
+            return rows[0][0] if rows else None
+        except Exception:
+            return None
+
+    async def _set_meta(self, key: str, value: str) -> None:
+        await self.conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value)
+        )
+
+    async def rebuild_vec_table(self, new_dim: int) -> None:
+        self.embedding_dim = new_dim
+        try:
+            await self.conn.execute("DROP TABLE IF EXISTS items_vec")
+            await self.conn.execute(f"""
+                CREATE VIRTUAL TABLE items_vec USING vec0(
+                    item_id INTEGER PRIMARY KEY,
+                    embedding float[{self.embedding_dim}] distance_metric=cosine
+                );
+            """)
+            await self._set_meta("embedding_dim", str(self.embedding_dim))
+            await self.conn.commit()
+            self._has_vec = True
+        except Exception as e:
+            _logger.warning("Failed to recreate vec0 table: %s", e)
+            self._has_vec = False
 
     async def _check_integrity(self) -> None:
         try:

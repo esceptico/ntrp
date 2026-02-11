@@ -250,8 +250,8 @@ async def update_embedding_model(req: UpdateEmbeddingRequest):
     settings["embedding_dim"] = new_dim
     save_user_settings(settings)
 
-    # Clear search index and re-index
-    await runtime.indexer.index.clear()
+    # Rebuild vec table with new dimensions and re-index
+    await runtime.indexer.update_embedding(runtime.config.embedding)
     runtime.start_indexing()
 
     # Memory vectors are now stale — they were embedded with the old model
