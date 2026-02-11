@@ -34,11 +34,7 @@ export interface ToolResultEvent {
   duration_ms: number;
   depth: number;
   parent_id: string;
-  metadata?: {
-    diff?: string;
-    lines_changed?: number;
-    [key: string]: unknown;
-  };
+  data?: Record<string, unknown>;
 }
 
 export interface ApprovalNeededEvent {

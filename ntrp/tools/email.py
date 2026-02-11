@@ -86,6 +86,29 @@ class ReadEmailTool(Tool):
         return ToolResult(content=content, preview=f"Read {lines} lines")
 
 
+def _format_email_list(emails: list) -> str:
+    output = []
+    for email in emails:
+        title = truncate(email.title, EMAIL_SUBJECT_TRUNCATE) if email.title else "(no subject)"
+        preview = truncate(email.preview, EMAIL_FROM_TRUNCATE) if email.preview else ""
+        line = f"• {title}" + (f" ({preview})" if preview else "")
+        if email.identity:
+            line += f"  id: {email.identity}"
+        output.append(line)
+    return "\n".join(output)
+
+
+def _format_email_search(results: list) -> str:
+    output = []
+    for item in results:
+        meta = item.metadata
+        subj = truncate(meta.get("subject", "No subject"), EMAIL_SUBJECT_TRUNCATE)
+        frm = truncate(meta.get("from", ""), EMAIL_FROM_TRUNCATE)
+        output.append(f"• {subj}")
+        output.append(f"  from: {frm}, id: {item.source_id}")
+    return "\n".join(output)
+
+
 class EmailsInput(BaseModel):
     query: str | None = Field(default=None, description="Search query. Omit to list recent emails.")
     days: int = Field(default=7, description="How many days back to look when listing (default: 7)")
@@ -120,28 +143,15 @@ class EmailsTool(Tool):
                 )
             return ToolResult(content=f"No emails in last {days} days", preview="0 emails")
 
-        output = []
-        for email in emails[:limit]:
-            title = truncate(email.title, EMAIL_SUBJECT_TRUNCATE) if email.title else "(no subject)"
-            preview = truncate(email.preview, EMAIL_FROM_TRUNCATE) if email.preview else ""
-            line = f"• {title}" + (f" ({preview})" if preview else "")
-            if email.identity:
-                line += f"  id: {email.identity}"
-            output.append(line)
-
-        return ToolResult(content="\n".join(output), preview=f"{len(emails)} emails")
+        trimmed = emails[:limit]
+        content = _format_email_list(trimmed)
+        return ToolResult(content=content, preview=f"{len(emails)} emails")
 
     def _search(self, query: str, limit: int) -> ToolResult:
         results = self.source.search(query, limit=limit)
         if not results:
             return ToolResult(content=f"No emails found for '{query}'", preview="0 emails")
 
-        output = []
-        for item in results[:limit]:
-            meta = item.metadata
-            subj = truncate(meta.get("subject", "No subject"), EMAIL_SUBJECT_TRUNCATE)
-            frm = truncate(meta.get("from", ""), EMAIL_FROM_TRUNCATE)
-            output.append(f"• {subj}")
-            output.append(f"  from: {frm}, id: {item.source_id}")
-
-        return ToolResult(content="\n".join(output), preview=f"{len(results)} emails")
+        trimmed = results[:limit]
+        content = _format_email_search(trimmed)
+        return ToolResult(content=content, preview=f"{len(results)} emails")

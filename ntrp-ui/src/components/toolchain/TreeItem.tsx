@@ -4,7 +4,7 @@ import { colors } from "../ui/colors.js";
 import { useAccentColor } from "../../hooks/index.js";
 import { truncateText } from "../../lib/utils.js";
 import { BULLET, MAX_TOOL_RESULT_LINE_CHARS } from "../../lib/constants.js";
-import { DiffDisplay } from "./DiffDisplay.js";
+import { StructuredDiffDisplay } from "./DiffDisplay.js";
 import type { ToolChainItem } from "./types.js";
 
 interface TreeNode extends ToolChainItem {
@@ -73,7 +73,8 @@ export function TreeItem({ node, indent, expanded, width }: TreeItemProps) {
   if (!isContainer(node.name)) {
     const preview = node.preview || node.result?.split("\n")[0] || "";
     const resultLine = truncateText(preview, Math.min(MAX_TOOL_RESULT_LINE_CHARS, contentWidth - 2));
-    const hasDiff = node.metadata?.diff && node.status === "done";
+    const diff = node.data?.diff as { path: string; before: string; after: string } | undefined;
+    const hasDiff = diff && node.status === "done";
 
     return (
       <Box flexDirection="column" width={width} overflow="hidden">
@@ -84,7 +85,7 @@ export function TreeItem({ node, indent, expanded, width }: TreeItemProps) {
         {resultLine && node.status === "done" && !hasDiff && (
           <Text color={colors.text.secondary}>{prefix}⎿ {resultLine}</Text>
         )}
-        {hasDiff && <DiffDisplay diff={node.metadata!.diff!} prefix={prefix} width={width - prefix.length} />}
+        {hasDiff && <StructuredDiffDisplay before={diff.before} after={diff.after} path={diff.path} prefix={prefix} width={width - prefix.length} />}
       </Box>
     );
   }

@@ -22,6 +22,21 @@ CANCEL_SCHEDULE_DESCRIPTION = "Cancel (delete) a scheduled task by its ID. Use l
 GET_SCHEDULE_RESULT_DESCRIPTION = "Get the last execution result of a scheduled task by its ID."
 
 
+def _format_schedule_list(tasks: list[ScheduledTask]) -> str:
+    lines = []
+    for t in tasks:
+        status = "enabled" if t.enabled else "disabled"
+        next_run = t.next_run_at.strftime("%Y-%m-%d %H:%M") if t.next_run_at else "—"
+        last_run = t.last_run_at.strftime("%Y-%m-%d %H:%M") if t.last_run_at else "never"
+        label = t.name or t.description[:60]
+        lines.append(
+            f"[{t.task_id}] {label}\n"
+            f"  {t.time_of_day} · {t.recurrence.value} · {status}\n"
+            f"  next: {next_run} · last: {last_run}"
+        )
+    return "\n\n".join(lines)
+
+
 class ScheduleTaskInput(BaseModel):
     name: str = Field(description="Short human-readable label for the schedule (e.g. 'morning briefing', 'inbox check')")
     description: str = Field(description="What the agent should do (natural language task)")
@@ -160,19 +175,8 @@ class ListSchedulesTool(Tool):
         if not tasks:
             return ToolResult(content="No scheduled tasks.", preview="0 schedules")
 
-        lines = []
-        for t in tasks:
-            status = "enabled" if t.enabled else "disabled"
-            next_run = t.next_run_at.strftime("%Y-%m-%d %H:%M") if t.next_run_at else "—"
-            last_run = t.last_run_at.strftime("%Y-%m-%d %H:%M") if t.last_run_at else "never"
-            label = t.name or t.description[:60]
-            lines.append(
-                f"[{t.task_id}] {label}\n"
-                f"  {t.time_of_day} · {t.recurrence.value} · {status}\n"
-                f"  next: {next_run} · last: {last_run}"
-            )
-
-        return ToolResult(content="\n\n".join(lines), preview=f"{len(tasks)} schedules")
+        content = _format_schedule_list(tasks)
+        return ToolResult(content=content, preview=f"{len(tasks)} schedules")
 
 
 class CancelScheduleInput(BaseModel):

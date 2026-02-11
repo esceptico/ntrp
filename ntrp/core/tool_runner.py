@@ -56,7 +56,7 @@ class ToolRunner:
         if len(content) > OFFLOAD_PREVIEW_CHARS:
             compact += f"\n\n[...{len(content) - OFFLOAD_PREVIEW_CHARS} chars offloaded → {offload_path}]"
 
-        return ToolResult(content=compact, preview=result.preview, metadata=result.metadata)
+        return ToolResult(content=compact, preview=result.preview, data=result.data)
 
     def _make_start_event(self, call: PendingToolCall) -> ToolCallEvent:
         return ToolCallEvent(
@@ -91,7 +91,7 @@ class ToolRunner:
             depth=self.depth,
             parent_id=self.parent_id,
             duration_ms=duration_ms,
-            metadata=result.metadata,
+            data=result.data,
         )
 
     def _needs_approval(self, call: PendingToolCall) -> bool:
@@ -142,9 +142,9 @@ class ToolRunner:
                         call=call,
                         content=result.content,
                         preview=result.preview,
-                        metadata=result.metadata,
                         duration_ms=duration_ms,
                         is_error=result.is_error,
+                        data=result.data,
                     )
                 )
             except Exception as e:
@@ -154,7 +154,6 @@ class ToolRunner:
                         call=call,
                         content=f"Error: {type(e).__name__}: {e}",
                         preview=f"Failed: {type(e).__name__}",
-                        metadata=None,
                         duration_ms=duration_ms,
                         is_error=True,
                     )
@@ -175,7 +174,7 @@ class ToolRunner:
         async for r in results_queue:
             yield self._make_result_event(
                 call=r.call,
-                result=ToolResult(content=r.content, preview=r.preview, metadata=r.metadata, is_error=r.is_error),
+                result=ToolResult(content=r.content, preview=r.preview, is_error=r.is_error, data=r.data),
                 duration_ms=r.duration_ms,
             )
 

@@ -153,7 +153,7 @@ export function useStreaming({
         // Subagent tool - mark as done
         return prev.map((item) =>
           item.id === event.tool_id
-            ? { ...item, status: "done" as const, result: event.result, preview: event.preview, metadata: event.metadata }
+            ? { ...item, status: "done" as const, result: event.result, preview: event.preview, data: event.data }
             : item
         );
       }

@@ -43,6 +43,48 @@ def _parse_datetime(value: str) -> datetime | None:
         return None
 
 
+def _format_event_list(events: list) -> str:
+    output = []
+    for event in events:
+        meta = event.metadata
+        start = meta.get("start", "")
+
+        if start:
+            dt = datetime.fromisoformat(start)
+            if dt.tzinfo is not None:
+                dt = dt.astimezone()
+            if meta.get("is_all_day"):
+                time_str = dt.strftime("%a %b %d") + " (all day)"
+            else:
+                time_str = dt.strftime("%a %b %d, %H:%M")
+        else:
+            time_str = "No time"
+
+        location = f" @ {meta['location']}" if meta.get("location") else ""
+        output.append(f"• {time_str}: {event.title}{location}")
+
+    return "\n".join(output)
+
+
+def _format_event_search(query: str, events: list) -> str:
+    lines = [f"**Events matching '{query}':**\n"]
+    for event in events:
+        meta = event.metadata
+        start = meta.get("start", "")
+
+        if start:
+            dt = datetime.fromisoformat(start)
+            if dt.tzinfo is not None:
+                dt = dt.astimezone()
+            time_str = dt.strftime("%Y-%m-%d %H:%M")
+        else:
+            time_str = "No time"
+
+        lines.append(f"- **{time_str}**: {event.title} `[{event.source_id}]`")
+
+    return "\n".join(lines)
+
+
 class CalendarInput(BaseModel):
     query: str | None = Field(default=None, description="Search query. Omit to list events by time range.")
     days_forward: int = Field(default=7, description="Days ahead to look when listing (default: 7)")
@@ -82,23 +124,8 @@ class CalendarTool(Tool):
                     preview="0 events",
                 )
 
-            lines = [f"**Events matching '{query}':**\n"]
-            for event in events:
-                meta = event.metadata
-                start = meta.get("start", "")
-                event_id = event.source_id
-
-                if start:
-                    dt = datetime.fromisoformat(start)
-                    if dt.tzinfo is not None:
-                        dt = dt.astimezone()
-                    time_str = dt.strftime("%Y-%m-%d %H:%M")
-                else:
-                    time_str = "No time"
-
-                lines.append(f"- **{time_str}**: {event.title} `[{event_id}]`")
-
-            return ToolResult(content="\n".join(lines), preview=f"{len(events)} events")
+            content = _format_event_search(query, events)
+            return ToolResult(content=content, preview=f"{len(events)} events")
         except Exception as e:
             return ToolResult(content=f"Error searching events: {e}", preview="Search failed", is_error=True)
 
@@ -117,27 +144,10 @@ class CalendarTool(Tool):
             return ToolResult(content="No calendar events in the specified range", preview="0 events")
 
         events.sort(key=lambda e: e.metadata.get("start", ""))
+        trimmed = events[:limit]
 
-        output = []
-        for event in events[:limit]:
-            meta = event.metadata
-            start = meta.get("start", "")
-
-            if start:
-                dt = datetime.fromisoformat(start)
-                if dt.tzinfo is not None:
-                    dt = dt.astimezone()
-                if meta.get("is_all_day"):
-                    time_str = dt.strftime("%a %b %d") + " (all day)"
-                else:
-                    time_str = dt.strftime("%a %b %d, %H:%M")
-            else:
-                time_str = "No time"
-
-            location = f" @ {meta['location']}" if meta.get("location") else ""
-            output.append(f"• {time_str}: {event.title}{location}")
-
-        return ToolResult(content="\n".join(output), preview=f"{len(events)} events")
+        content = _format_event_list(trimmed)
+        return ToolResult(content=content, preview=f"{len(events)} events")
 
 
 class CreateCalendarEventInput(BaseModel):

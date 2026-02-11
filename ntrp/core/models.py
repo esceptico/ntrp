@@ -14,6 +14,6 @@ class ToolExecutionResult:
     call: PendingToolCall
     content: str
     preview: str
-    metadata: dict | None
     duration_ms: int
     is_error: bool = False
+    data: dict | None = None

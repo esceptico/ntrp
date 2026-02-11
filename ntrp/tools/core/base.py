@@ -34,8 +34,8 @@ def _inline_refs(schema: dict) -> dict:
 class ToolResult:
     content: str
     preview: str
-    metadata: dict | None = None
     is_error: bool = False
+    data: dict | None = None
 
 
 @dataclass(frozen=True)

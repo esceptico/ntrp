@@ -6,7 +6,7 @@ export interface ToolChainItem {
   description?: string;
   result?: string;
   preview?: string;
-  metadata?: { diff?: string; lines_changed?: number };
+  data?: Record<string, unknown>;
   status: "pending" | "running" | "done" | "error";
   seq?: number;
   parentId?: string;

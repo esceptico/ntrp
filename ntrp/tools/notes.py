@@ -247,7 +247,7 @@ class EditNoteTool(Tool):
             return ToolResult(
                 content=f"Applied edit to: {path}",
                 preview="Edited",
-                metadata={"diff": diff, "lines_changed": max(0, lines_changed)},
+                data={"diff": {"path": path, "before": original, "after": proposed}, "lines_changed": max(0, lines_changed)},
             )
         return ToolResult(content=f"Error writing to {path}", preview="Write failed", is_error=True)
 

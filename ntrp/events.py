@@ -74,7 +74,7 @@ class ToolResultEvent(SSEEvent):
     depth: int = 0
     parent_id: str = ""
     duration_ms: int = 0
-    metadata: dict | None = None
+    data: dict | None = None
 
 
 @dataclass(frozen=True)
