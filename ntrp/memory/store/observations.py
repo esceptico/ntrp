@@ -189,6 +189,11 @@ class ObservationRepository:
         rows = await self.conn.execute_fetchall(_SQL_COUNT_OBSERVATIONS)
         return rows[0][0]
 
+    async def clear_all(self) -> int:
+        await self.conn.execute("DELETE FROM observations_vec")
+        cursor = await self.conn.execute("DELETE FROM observations")
+        return cursor.rowcount
+
     async def search_vector(self, query_embedding: Embedding, limit: int = 10) -> list[tuple[Observation, float]]:
         query_bytes = serialize_embedding(query_embedding)
         rows = await self.conn.execute_fetchall(_SQL_SEARCH_OBSERVATIONS_VEC, (query_bytes, limit))

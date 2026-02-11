@@ -11,14 +11,25 @@ Text: {text}"""
 
 CONSOLIDATION_PROMPT = """You are a memory consolidation system. Synthesize facts into higher-level observations.
 
-## OBSERVATIONS ARE HIGHER-LEVEL THAN FACTS
+## OBSERVATIONS ARE A HIGHER ABSTRACTION LEVEL THAN FACTS
 
-Observations capture patterns, preferences, and learnings. They answer "what does this mean?" not just "what happened?"
+Observations are not rephrases — they add insight, pattern recognition, or inference that goes beyond what any single fact states.
 
-Examples of synthesis:
-- Fact: "Alice prefers Python" → Observation: "Alice is a Python-focused developer"
-- Facts: "Redis is open source" + "Redis has great community" → Observation: "Redis is an excellent caching solution with strong OSS support"
-- Fact: "User had a good experience at Cafe Roma" → Observation: "Cafe Roma provides good experiences"
+Good observations (higher abstraction):
+- Fact: "User applied to Anthropic" → "User is exploring AI safety companies" (inference)
+- Facts: "User slept 4h on Mon" + "User slept 3.5h on Wed" + "User's resting HR elevated" → "User has a chronic sleep deprivation pattern correlating with elevated vitals" (pattern)
+- Facts: "User applied to Anthropic" + "User studying mechanistic interpretability" + "User applying to MATS" → "User is pivoting from applied ML toward AI safety/interpretability research" (trajectory)
+
+BAD observations (just rephrasing):
+- Fact: "User likes coffee" → "User enjoys coffee" ← same thing, different words
+- Fact: "User's birthday is Jan 24" → "User was born on January 24" ← no abstraction possible
+- Fact: "User has two cats" → "User is a cat owner" ← trivial restatement
+
+## WHEN TO USE EACH ACTION
+
+- **update**: The fact adds to or refines an existing observation. This is the most common action.
+- **create**: The fact reveals a pattern or allows genuine inference beyond what it literally states. The observation must be at a higher abstraction level than the source fact.
+- **skip**: The fact is ephemeral, or there's no higher-level insight to extract. When in doubt, skip — the fact is still retrievable on its own.
 
 ## MULTIPLE ACTIONS ALLOWED
 
@@ -36,6 +47,7 @@ When facts contradict, preserve history in the observation:
 Skip facts that describe temporary state:
 - "User is at the coffee shop" → skip (ephemeral location)
 - "User is currently tired" → skip (temporary state)
+- "User's HRV was 51.4 ms today" → skip (single data point, not a pattern yet)
 
 ## OBSERVATION SIZE
 
@@ -44,10 +56,11 @@ rather than growing a single observation indefinitely.
 
 ## CRITICAL RULES
 
-1. Observations are SYNTHESIZED patterns, not decomposed atoms
+1. Observations must be at a HIGHER abstraction level than their source facts — never rephrase
 2. NEVER merge facts about DIFFERENT people
 3. NEVER merge unrelated topics
 4. Keep observations focused on ONE topic per entity
+5. When in doubt, SKIP — facts are retrievable on their own, low-quality observations are noise
 
 ---
 

@@ -220,6 +220,10 @@ class FactRepository:
         now = datetime.now(UTC)
         await self.conn.execute(_SQL_MARK_CONSOLIDATED, (now.isoformat(), fact_id))
 
+    async def reset_consolidated(self) -> int:
+        cursor = await self.conn.execute("UPDATE facts SET consolidated_at = NULL WHERE consolidated_at IS NOT NULL")
+        return cursor.rowcount
+
     async def add_entity_ref(self, fact_id: int, name: str, entity_id: int | None = None) -> EntityRef:
         cursor = await self.conn.execute(_SQL_INSERT_ENTITY_REF, (fact_id, name, entity_id))
         return EntityRef(id=cursor.lastrowid, fact_id=fact_id, name=name, entity_id=entity_id)

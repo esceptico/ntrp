@@ -278,6 +278,12 @@ class FactMemory:
         recent_facts = await self.facts.list_recent(limit=recent_limit)
         return user_facts, recent_facts
 
+    async def clear_observations(self) -> dict[str, int]:
+        async with self.transaction():
+            obs_count = await self.observations.clear_all()
+            facts_reset = await self.facts.reset_consolidated()
+            return {"observations_deleted": obs_count, "facts_reset": facts_reset}
+
     async def clear(self) -> dict[str, int]:
         async with self.transaction():
             counts = {

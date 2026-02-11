@@ -81,6 +81,13 @@ async def clear_memory():
     return {"status": "cleared", "deleted": deleted}
 
 
+@router.post("/memory/observations/clear")
+async def clear_observations():
+    runtime = _require_memory()
+    result = await runtime.memory.clear_observations()
+    return {"status": "cleared", **result}
+
+
 @router.get("/observations")
 async def get_observations(limit: int = 50):
     runtime = _require_memory()
