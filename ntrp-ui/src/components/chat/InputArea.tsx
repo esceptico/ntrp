@@ -297,7 +297,7 @@ export const InputArea = memo(function InputArea({
       )}
 
       {showAutocomplete && (
-        <AutocompleteList commands={filteredCommands} selectedIndex={selectedIndex} accentValue={accentValue} />
+        <AutocompleteList commands={filteredCommands} selectedIndex={selectedIndex} accentValue={accentValue} maxDescWidth={(stdout?.columns ?? 80) - Math.max(...filteredCommands.map((c) => c.name.length)) - 8} />
       )}
       {showHelp && <HelpPanel accentValue={accentValue} />}
     </Box>
