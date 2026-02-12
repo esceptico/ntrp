@@ -119,6 +119,7 @@ export interface Message {
   toolCount?: number;
   duration?: number;
   toolChain?: ToolChainItem[];
+  autoApproved?: boolean;
 }
 
 export interface PendingApproval {

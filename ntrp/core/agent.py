@@ -99,7 +99,8 @@ class Agent:
         if not should_compress(self.messages, self.model, self._last_input_tokens):
             return
 
-        yield ThinkingEvent(status="compressing context...")
+        if self.current_depth == 0:
+            yield ThinkingEvent(status="compressing context...")
         self.messages, _ = await compress_context_async(self.messages, self.model)
 
     def _append_tool_results(self, tool_calls: list[Any], results: dict[str, str]) -> None:

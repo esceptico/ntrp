@@ -45,6 +45,7 @@ export function useStreaming({
   const pendingTextRef = useRef("");
   const currentDepthRef = useRef(0);
   const alwaysAllowedToolsRef = useRef<Set<string>>(new Set());
+  const autoApprovedIdsRef = useRef<Set<string>>(new Set());
 
   const [messages, setMessages] = useState<Message[]>([]);
   const historyLoadedRef = useRef(false);
@@ -97,8 +98,8 @@ export function useStreaming({
 
   const handleToolCall = useCallback((event: Extract<ServerEvent, { type: "tool_call" }>) => {
     const text = pendingTextRef.current.trim();
-    if (text) {
-      addMessage({ role: "assistant", content: text, depth: currentDepthRef.current });
+    if (text && currentDepthRef.current === 0) {
+      addMessage({ role: "assistant", content: text });
       pendingTextRef.current = "";
     }
     currentDepthRef.current = event.depth;
@@ -129,6 +130,7 @@ export function useStreaming({
     const startTime = toolStartRef.current.get(event.tool_id);
     const duration = startTime ? Math.round((Date.now() - startTime) / 1000) : undefined;
     toolStartRef.current.delete(event.tool_id);
+    const autoApproved = autoApprovedIdsRef.current.delete(event.tool_id);
 
     if (event.name === "ask_choice") {
       setToolChain((prev) => prev.filter((item) => item.id !== event.tool_id));
@@ -147,6 +149,7 @@ export function useStreaming({
           toolDescription,
           toolCount: childCount,
           duration,
+          autoApproved,
         });
         return prev.filter((item) => item.id !== event.tool_id && item.parentId !== event.tool_id);
       }
@@ -159,7 +162,7 @@ export function useStreaming({
         );
       }
 
-      addMessage({ role: "tool", content: event.result, toolName: event.name, toolDescription });
+      addMessage({ role: "tool", content: event.result, toolName: event.name, toolDescription, autoApproved });
       return prev.filter((item) => item.id !== event.tool_id);
     });
 
@@ -170,8 +173,8 @@ export function useStreaming({
     const currentRunId = runIdRef.current;
 
     if (alwaysAllowedToolsRef.current.has(event.name) && currentRunId) {
+      autoApprovedIdsRef.current.add(event.tool_id);
       await submitToolResult(currentRunId, event.tool_id, "Approved", true, config);
-      addMessage({ role: "status", content: `\u2713 Auto-approved ${event.name} (always)` });
       setStatus(Status.THINKING);
       return;
     }
@@ -271,7 +274,7 @@ export function useStreaming({
 
     const finalContent = truncateText(pendingTextRef.current, MAX_ASSISTANT_CHARS, 'end');
     pendingTextRef.current = "";
-    if (finalContent) addMessage({ role: "assistant", content: finalContent, depth: currentDepthRef.current });
+    if (finalContent && currentDepthRef.current === 0) addMessage({ role: "assistant", content: finalContent });
     currentDepthRef.current = 0;
 
     setIsStreaming(false);

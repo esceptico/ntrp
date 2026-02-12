@@ -48,7 +48,10 @@ interface ToolMessageProps {
   description?: string;
   toolCount?: number;
   duration?: number;
+  autoApproved?: boolean;
 }
+
+const AUTO_SUFFIX = " \u00B7 auto"; // " · auto"
 
 export const ToolMessage = memo(function ToolMessage({
   name,
@@ -56,9 +59,11 @@ export const ToolMessage = memo(function ToolMessage({
   description,
   toolCount,
   duration,
+  autoApproved,
 }: ToolMessageProps) {
   const { width } = useDimensions();
   const contentWidth = Math.max(0, width - 3);
+  const suffix = autoApproved ? AUTO_SUFFIX : "";
 
   if (name === "delegate" || name === "explore") {
     return (
@@ -86,7 +91,8 @@ export const ToolMessage = memo(function ToolMessage({
       <box flexDirection="column" overflow="hidden" paddingLeft={3}>
         <text>
           <span fg={colors.text.disabled}>{TOOL_MARKER} </span>
-          <span fg={colors.text.muted}>{truncateText(displayName, contentWidth - 2)}</span>
+          <span fg={colors.text.muted}>{truncateText(displayName, contentWidth - 2 - suffix.length)}</span>
+          {suffix && <span fg={colors.text.disabled}>{suffix}</span>}
         </text>
         <text>
           <span fg={colors.text.disabled}>
@@ -107,7 +113,8 @@ export const ToolMessage = memo(function ToolMessage({
     <box flexDirection="column" overflow="hidden" paddingLeft={3}>
       <text>
         <span fg={colors.text.disabled}>{TOOL_MARKER} </span>
-        <span fg={colors.text.muted}>{truncateText(displayName, contentWidth - 2)}</span>
+        <span fg={colors.text.muted}>{truncateText(displayName, contentWidth - 2 - suffix.length)}</span>
+        {suffix && <span fg={colors.text.disabled}>{suffix}</span>}
       </text>
       {(visibleLines.length > 0 || hiddenCount > 0) && (
         <box flexDirection="row">

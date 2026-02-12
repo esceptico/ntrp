@@ -24,7 +24,6 @@ export const MessageDisplay = memo(function MessageDisplay({
       return (
         <AssistantMessage
           content={msg.content}
-          depth={msg.depth}
           renderMarkdown={renderMarkdown}
         />
       );
@@ -36,6 +35,7 @@ export const MessageDisplay = memo(function MessageDisplay({
           description={msg.toolDescription}
           toolCount={msg.toolCount}
           duration={msg.duration}
+          autoApproved={msg.autoApproved}
         />
       );
     case "tool_chain":
