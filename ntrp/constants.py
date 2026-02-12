@@ -21,17 +21,17 @@ DEFAULT_LIST_LIMIT = 50
 # "request_kwargs" are merged into litellm completion calls as-is
 
 SUPPORTED_MODELS: dict[str, dict[str, Any]] = {
-    "anthropic/claude-sonnet-4-5-20250929": {"tokens": 200000},
-    "openai/gpt-5.2": {"tokens": 200000},
-    "gemini/gemini-3-pro-preview": {"tokens": 900000},
-    "gemini/gemini-3-flash-preview": {"tokens": 900000},
+    "anthropic/claude-sonnet-4-5-20250929": {"tokens": 128000},
+    "openai/gpt-5.2": {"tokens": 128000},
+    "gemini/gemini-3-pro-preview": {"tokens": 128000},
+    "gemini/gemini-3-flash-preview": {"tokens": 128000},
     "openrouter/moonshotai/kimi-k2.5": {
-        "tokens": 200000,
+        "tokens": 128000,
         "request_kwargs": {
             "extra_body": {"provider": {"order": ["moonshotai"], "allow_fallbacks": False}},
         },
     },
-    "openrouter/arcee-ai/trinity-large-preview:free": {"tokens": 200000},
+    "openrouter/arcee-ai/trinity-large-preview:free": {"tokens": 128000},
 }
 
 # Embedding models: model -> dimension
