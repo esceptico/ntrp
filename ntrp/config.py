@@ -46,9 +46,9 @@ class Config(BaseSettings):
     # Examples: anthropic/claude-sonnet-4, gemini/gemini-2.0-flash, openai/gpt-4o
     # LiteLLM reads API keys from standard env vars:
     #   ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY
-    chat_model: str = "gemini/gemini-3-flash-preview"
-    memory_model: str = "gemini/gemini-2.0-flash"
-    embedding_model: str = "text-embedding-3-small"
+    chat_model: str
+    memory_model: str
+    embedding_model: str
     embedding_dim: int = 1536
     embedding_prefix: bool = False
 
@@ -117,27 +117,32 @@ class Config(BaseSettings):
         return self.db_dir / "memory.db"
 
 
-_config: Config | None = None
+PERSIST_KEYS = frozenset({
+    "chat_model", "memory_model", "embedding_model", "embedding_dim",
+    "embedding_prefix", "browser", "browser_days", "vault_path",
+    "memory", "gmail", "gmail_days", "calendar",
+})
 
 
 def get_config() -> Config:
-    global _config
-    if _config is not None:
-        return _config
-    config = Config()  # type: ignore - pydantic handles validation
     settings = load_user_settings()
-    for key in ("chat_model", "memory_model", "embedding_model", "embedding_dim", "browser", "browser_days"):
-        if key in settings:
-            try:
-                setattr(config, key, settings[key])
-            except Exception:
-                _logger.warning("Ignoring invalid saved setting %s=%r", key, settings[key])
-    if "vault_path" in settings:
-        config.vault_path = Path(settings["vault_path"])
+
+    # Flatten legacy sources nesting
     if "sources" in settings:
-        src = settings["sources"]
         for key in ("gmail", "calendar", "memory"):
-            if key in src:
-                setattr(config, key, src[key])
-    _config = config
-    return _config
+            if key in settings["sources"]:
+                settings.setdefault(key, settings["sources"][key])
+
+    # Build config: init args (settings.json) > env vars > defaults
+    overrides = {k: settings[k] for k in PERSIST_KEYS if k in settings}
+    config = Config(**overrides)  # type: ignore - pydantic handles validation
+
+    # Persist resolved config back so it survives restarts
+    resolved = config.model_dump(include=PERSIST_KEYS)
+    if resolved.get("vault_path") is not None:
+        resolved["vault_path"] = str(resolved["vault_path"])
+    if any(settings.get(k) != v for k, v in resolved.items()):
+        settings.update(resolved)
+        save_user_settings(settings)
+
+    return config
