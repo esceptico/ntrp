@@ -7,7 +7,7 @@ import litellm.main as litellm_main
 
 import ntrp.database as database
 from ntrp.channel import Channel
-from ntrp.config import Config, NTRP_DIR, get_config
+from ntrp.config import NTRP_DIR, Config, get_config
 from ntrp.constants import AGENT_MAX_DEPTH, INDEXABLE_SOURCES, SESSION_EXPIRY_HOURS
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
@@ -23,9 +23,9 @@ from ntrp.server.dashboard import DashboardCollector
 from ntrp.server.indexer import Indexer
 from ntrp.server.sources import SourceManager
 from ntrp.server.state import RunRegistry
+from ntrp.skills.registry import SkillRegistry
 from ntrp.sources.browser import BrowserHistorySource
 from ntrp.sources.events import SourceChanged
-from ntrp.skills.registry import SkillRegistry
 from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.sources.memory import MemoryIndexSource
 from ntrp.tools.executor import ToolExecutor
@@ -106,7 +106,9 @@ class Runtime:
             for cfg in await self.notifier_store.list_all():
                 try:
                     self.notifiers[cfg.name] = create_notifier(
-                        cfg, config=self.config, gmail=self.get_gmail,
+                        cfg,
+                        config=self.config,
+                        gmail=self.get_gmail,
                     )
                 except Exception:
                     _logger.exception("Failed to create notifier %r", cfg.name)
@@ -150,10 +152,12 @@ class Runtime:
                 channel=self.channel,
             )
 
-        self.skill_registry.load([
-            (Path.cwd() / ".skills", "project"),
-            (NTRP_DIR / "skills", "global"),
-        ])
+        self.skill_registry.load(
+            [
+                (Path.cwd() / ".skills", "project"),
+                (NTRP_DIR / "skills", "global"),
+            ]
+        )
 
         await self.rebuild_notifiers()
         self._connected = True
@@ -200,7 +204,10 @@ class Runtime:
         return data
 
     async def save_session(
-        self, session_state: SessionState, messages: list[dict], metadata: dict | None = None,
+        self,
+        session_state: SessionState,
+        messages: list[dict],
+        metadata: dict | None = None,
     ) -> None:
         try:
             session_state.last_activity = datetime.now(UTC)

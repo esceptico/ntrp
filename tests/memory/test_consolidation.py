@@ -469,7 +469,11 @@ class TestAlwaysConsolidated:
                 type(
                     "Choice",
                     (),
-                    {"message": type("Message", (), {"content": '[{"action": "create", "text": "Bob enjoys pizza"}]'})()},
+                    {
+                        "message": type(
+                            "Message", (), {"content": '[{"action": "create", "text": "Bob enjoys pizza"}]'}
+                        )()
+                    },
                 )()
             ]
             await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)

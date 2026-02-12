@@ -39,7 +39,9 @@ class SendEmailTool(Tool):
     def __init__(self, source: EmailSource):
         self.source = source
 
-    async def approval_info(self, account: str = "", to: str = "", subject: str = "", **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(
+        self, account: str = "", to: str = "", subject: str = "", **kwargs: Any
+    ) -> ApprovalInfo | None:
         return ApprovalInfo(description=to, preview=f"Subject: {subject}\nFrom: {account}", diff=None)
 
     async def execute(

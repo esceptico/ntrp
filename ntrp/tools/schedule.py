@@ -38,7 +38,9 @@ def _format_schedule_list(tasks: list[ScheduledTask]) -> str:
 
 
 class ScheduleTaskInput(BaseModel):
-    name: str = Field(description="Short human-readable label for the schedule (e.g. 'morning briefing', 'inbox check')")
+    name: str = Field(
+        description="Short human-readable label for the schedule (e.g. 'morning briefing', 'inbox check')"
+    )
     description: str = Field(description="What the agent should do (natural language task)")
     time: str = Field(description="Time of day in HH:MM format (24h, local time)")
     recurrence: str = Field(

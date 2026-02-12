@@ -45,8 +45,6 @@ class NotifierStore:
         await self.conn.commit()
 
     async def delete(self, name: str) -> bool:
-        cursor = await self.conn.execute(
-            "DELETE FROM notifier_configs WHERE name = ?", (name,)
-        )
+        cursor = await self.conn.execute("DELETE FROM notifier_configs WHERE name = ?", (name,))
         await self.conn.commit()
         return cursor.rowcount > 0

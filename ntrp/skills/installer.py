@@ -43,7 +43,11 @@ async def install_from_github(source: str, target_dir: Path) -> str:
 
 
 async def _download_dir(
-    client: httpx.AsyncClient, owner: str, repo: str, path: str, target: Path,
+    client: httpx.AsyncClient,
+    owner: str,
+    repo: str,
+    path: str,
+    target: Path,
 ) -> None:
     url = f"{GITHUB_API}/repos/{owner}/{repo}/contents/{path}"
     resp = await client.get(url, headers={"Accept": "application/vnd.github.v3+json"})

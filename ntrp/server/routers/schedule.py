@@ -291,7 +291,12 @@ async def update_notifier_config(name: str, request: UpdateNotifierRequest):
     await runtime.notifier_store.save(existing)
     await runtime.rebuild_notifiers()
 
-    return {"name": existing.name, "type": existing.type, "config": existing.config, "created_at": existing.created_at.isoformat()}
+    return {
+        "name": existing.name,
+        "type": existing.type,
+        "config": existing.config,
+        "created_at": existing.created_at.isoformat(),
+    }
 
 
 @router.delete("/notifiers/configs/{name}")

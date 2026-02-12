@@ -207,7 +207,9 @@ class EditNoteTool(Tool):
     def __init__(self, source: NotesSource):
         self.source = source
 
-    async def approval_info(self, path: str = "", find: str = "", replace: str = "", **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(
+        self, path: str = "", find: str = "", replace: str = "", **kwargs: Any
+    ) -> ApprovalInfo | None:
         original = self.source.read(path)
         if original is None or find not in original:
             return None
@@ -247,7 +249,10 @@ class EditNoteTool(Tool):
             return ToolResult(
                 content=f"Applied edit to: {path}",
                 preview="Edited",
-                data={"diff": {"path": path, "before": original, "after": proposed}, "lines_changed": max(0, lines_changed)},
+                data={
+                    "diff": {"path": path, "before": original, "after": proposed},
+                    "lines_changed": max(0, lines_changed),
+                },
             )
         return ToolResult(content=f"Error writing to {path}", preview="Write failed", is_error=True)
 

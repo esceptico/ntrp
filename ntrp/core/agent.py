@@ -93,7 +93,7 @@ class Agent:
         self.total_output_tokens += response.usage.completion_tokens or 0
         self._last_input_tokens = prompt_tokens
 
-    async def _maybe_compact(self) -> AsyncGenerator[SSEEvent, None]:
+    async def _maybe_compact(self) -> AsyncGenerator[SSEEvent]:
         self.messages = mask_old_tool_results(self.messages)
 
         if not should_compress(self.messages, self.model, self._last_input_tokens):

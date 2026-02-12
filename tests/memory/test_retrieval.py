@@ -182,7 +182,9 @@ class TestHybridSearch:
 class TestEntityExpand:
     @pytest.mark.asyncio
     async def test_expands_through_shared_entities(self, repo: FactRepository):
-        f1 = await repo.create(text="Alice works at Google", source_type="test", embedding=mock_embedding("alice google"))
+        f1 = await repo.create(
+            text="Alice works at Google", source_type="test", embedding=mock_embedding("alice google")
+        )
         f2 = await repo.create(text="Alice likes hiking", source_type="test")
 
         e = await repo.create_entity(name="Alice")

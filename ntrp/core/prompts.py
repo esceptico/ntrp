@@ -71,7 +71,6 @@ WORKFLOW:
 4. Return findings — 3-5 search+read cycles max
 
 {_EXPLORE_BASE}""",
-
     "normal": f"""You are an exploration agent. Be thorough but focused.
 
 WORKFLOW:
@@ -82,7 +81,6 @@ WORKFLOW:
 5. 5-10 search+read cycles is normal
 
 {_EXPLORE_BASE}""",
-
     "deep": f"""You are a thorough exploration agent. Explore exhaustively — read every relevant note, not just titles.
 
 WORKFLOW:
@@ -251,9 +249,7 @@ _SCHEDULED_TASK_BASE = (
     "Return only the final output — no preamble, no narration, no thinking out loud."
 )
 
-_SCHEDULED_TASK_NOTIFY = (
-    " Format your output as a concise report suitable for notification."
-)
+_SCHEDULED_TASK_NOTIFY = " Format your output as a concise report suitable for notification."
 
 
 def scheduled_task_suffix(has_notifiers: bool) -> str:
@@ -287,10 +283,12 @@ def build_system_prompt(
     ]
     if skills_context:
         sections.append(SKILLS_TEMPLATE.format(skills_xml=skills_context))
-    sections.extend([
-        _environment(),  # dynamic (date/time), cache break point
-        _time_gap(last_activity),  # dynamic, depends on activity
-    ])
+    sections.extend(
+        [
+            _environment(),  # dynamic (date/time), cache break point
+            _time_gap(last_activity),  # dynamic, depends on activity
+        ]
+    )
     if memory_context:
         sections.append(MEMORY_CONTEXT_TEMPLATE.format(memory_content=memory_context))
     return "\n\n".join(s for s in sections if s)

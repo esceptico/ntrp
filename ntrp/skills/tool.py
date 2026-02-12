@@ -37,7 +37,7 @@ class UseSkillTool(Tool):
                 is_error=True,
             )
 
-        content = f"<skill name=\"{skill}\">\n{body}\n</skill>"
+        content = f'<skill name="{skill}">\n{body}\n</skill>'
         if args:
             content += f"\n\nARGUMENTS: {args}"
 

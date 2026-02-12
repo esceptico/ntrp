@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Self
 
@@ -112,8 +112,7 @@ class FactMemory:
             if not facts:
                 return 0
             facts = [
-                fact.model_copy(update={"entity_refs": await self.facts.get_entity_refs(fact.id)})
-                for fact in facts
+                fact.model_copy(update={"entity_refs": await self.facts.get_entity_refs(fact.id)}) for fact in facts
             ]
 
         # LLM decisions outside lock
@@ -128,7 +127,9 @@ class FactMemory:
             obs_created = 0
             for fact, actions in decisions:
                 for action in actions:
-                    result = await apply_consolidation(fact, action, self.facts, self.observations, self.embedder.embed_one)
+                    result = await apply_consolidation(
+                        fact, action, self.facts, self.observations, self.embedder.embed_one
+                    )
                     if result.action == "created":
                         obs_created += 1
                 await self.facts.mark_consolidated(fact.id)
@@ -214,8 +215,12 @@ class FactMemory:
         query_embedding = await self.embedder.embed_one(query)
 
         context = await retrieve_with_observations(
-            self.facts, self.observations, query, query_embedding,
-            seed_limit=limit, query_time=query_time,
+            self.facts,
+            self.observations,
+            query,
+            query_embedding,
+            seed_limit=limit,
+            query_time=query_time,
         )
 
         async with self.transaction():

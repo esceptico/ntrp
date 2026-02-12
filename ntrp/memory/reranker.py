@@ -46,10 +46,7 @@ async def rerank(
             resp.raise_for_status()
             data = resp.json()
 
-        results = [
-            (r["index"], r["relevance_score"])
-            for r in data["results"]
-        ]
+        results = [(r["index"], r["relevance_score"]) for r in data["results"]]
         results.sort(key=lambda x: x[1], reverse=True)
         return results
 

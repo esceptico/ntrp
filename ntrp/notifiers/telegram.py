@@ -17,8 +17,7 @@ class TelegramNotifier:
         text = f"<b>{subject}</b>\n\n{body}"
         payload = {"chat_id": self._user_id, "text": text, "parse_mode": "HTML"}
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as resp:
-                if resp.status != 200:
-                    detail = await resp.text()
-                    _logger.error("Telegram send failed (%d): %s", resp.status, detail)
+        async with aiohttp.ClientSession() as session, session.post(url, json=payload) as resp:
+            if resp.status != 200:
+                detail = await resp.text()
+                _logger.error("Telegram send failed (%d): %s", resp.status, detail)
