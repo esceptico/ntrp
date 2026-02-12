@@ -57,8 +57,8 @@ export const ToolMessage = memo(function ToolMessage({
   toolCount,
   duration,
 }: ToolMessageProps) {
-  const { width: terminalWidth } = useDimensions();
-  const contentWidth = Math.max(0, terminalWidth - 7);
+  const { width } = useDimensions();
+  const contentWidth = Math.max(0, width - 3);
 
   if (name === "delegate" || name === "explore") {
     return (

@@ -201,12 +201,16 @@ function AppContent({
   const sidebarData = useSidebar(config, showSidebar, messages.length);
 
   const contentHeight = height - 2; // paddingTop + paddingBottom
+  const mainPadding = 4; // paddingLeft(2) + paddingRight(2)
+  const sidebarTotal = showSidebar ? SIDEBAR_WIDTH + 1 : 0; // sidebar + divider
+  const mainWidth = Math.max(0, width - sidebarTotal - mainPadding);
 
   return (
     <ErrorBoundary>
     <box flexDirection="row" width={width} height={height} paddingTop={1} paddingBottom={1} backgroundColor={colors.background.base}>
       {/* Main content */}
       <box flexDirection="column" flexGrow={1} paddingLeft={2} paddingRight={2} gap={1}>
+      <DimensionsProvider padding={0} width={mainWidth}>
         {/* Scrollable message area */}
         <scrollbox flexGrow={1} stickyScroll={true} stickyStart="bottom" style={{ scrollbarOptions: { visible: false } }}>
           {messages.map((item, index) => {
@@ -273,6 +277,7 @@ function AppContent({
             indexStatus={indexStatus}
           />
         </box>
+      </DimensionsProvider>
       </box>
 
       {/* Sidebar */}

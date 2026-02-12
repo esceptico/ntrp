@@ -16,10 +16,12 @@ const DimensionsContext = createContext<Dimensions>({
 interface DimensionsProviderProps {
   children: React.ReactNode;
   padding?: number;
+  width?: number;
 }
 
-export function DimensionsProvider({ children, padding = 2 }: DimensionsProviderProps) {
-  const { width, height } = useTerminalDimensions();
+export function DimensionsProvider({ children, padding = 2, width: overrideWidth }: DimensionsProviderProps) {
+  const { width: terminalWidth, height } = useTerminalDimensions();
+  const width = overrideWidth ?? terminalWidth;
 
   const dimensions = useMemo<Dimensions>(() => ({
     width,

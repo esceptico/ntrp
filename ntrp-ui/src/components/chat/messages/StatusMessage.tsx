@@ -8,8 +8,8 @@ interface StatusMessageProps {
 }
 
 export const StatusMessage = memo(function StatusMessage({ content }: StatusMessageProps) {
-  const { width: terminalWidth } = useDimensions();
-  const contentWidth = Math.max(0, terminalWidth - 4);
+  const { width } = useDimensions();
+  const contentWidth = Math.max(0, width - 3);
 
   return (
     <box paddingLeft={3} width={contentWidth} overflow="hidden">
