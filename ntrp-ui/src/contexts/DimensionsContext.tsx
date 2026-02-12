@@ -1,14 +1,10 @@
-/**
- * Dimensions context for providing terminal dimensions to all components.
- * Based on patterns from Gemini CLI.
- */
 import React, { createContext, useContext, useMemo } from "react";
-import { useTerminalSize } from "../hooks/useTerminalSize.js";
+import { useTerminalDimensions } from "@opentui/react";
 
 interface Dimensions {
   width: number;
   height: number;
-  contentWidth: number;  // width - 2 (for padding)
+  contentWidth: number;
 }
 
 const DimensionsContext = createContext<Dimensions>({
@@ -23,7 +19,7 @@ interface DimensionsProviderProps {
 }
 
 export function DimensionsProvider({ children, padding = 2 }: DimensionsProviderProps) {
-  const { width, height } = useTerminalSize();
+  const { width, height } = useTerminalDimensions();
 
   const dimensions = useMemo<Dimensions>(() => ({
     width,

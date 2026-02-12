@@ -9,7 +9,7 @@ import {
 } from "../api/client.js";
 import { INDEX_STATUS_POLL_MS, INDEX_DONE_HIDE_MS } from "../lib/constants.js";
 
-export interface IndexStatus {
+interface IndexStatus {
   indexing: boolean;
   progress: { total: number; done: number; status: string };
 }
@@ -23,7 +23,6 @@ export function useSession(config: Config) {
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
   const initRef = useRef(false);
 
-  // Initial server check and session load
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
@@ -55,11 +54,9 @@ export function useSession(config: Config) {
     init();
   }, [config]);
 
-  // Poll index status while indexing
   useEffect(() => {
     if (!serverConnected) return;
 
-    // Clear status after indexing completes
     if (indexStatus && !indexStatus.indexing) {
       const timeout = setTimeout(() => {
         setIndexStatus(null);
@@ -67,7 +64,6 @@ export function useSession(config: Config) {
       return () => clearTimeout(timeout);
     }
 
-    // Poll while indexing
     if (!indexStatus?.indexing) return;
 
     const interval = setInterval(async () => {

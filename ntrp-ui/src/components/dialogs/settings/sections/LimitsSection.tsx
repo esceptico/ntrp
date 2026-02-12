@@ -1,4 +1,3 @@
-import { Box } from "ink";
 import { NumberRow } from "../SettingsRows.js";
 import { LIMIT_ITEMS } from "../config.js";
 import type { AgentSettings } from "../../../../hooks/useSettings.js";
@@ -15,7 +14,7 @@ export function LimitsSection({
   accent,
 }: LimitsSectionProps) {
   return (
-    <Box flexDirection="column">
+    <box flexDirection="column">
       {LIMIT_ITEMS.map((item, idx) => (
         <NumberRow
           key={item.key}
@@ -25,6 +24,6 @@ export function LimitsSection({
           accent={accent}
         />
       ))}
-    </Box>
+    </box>
   );
 }

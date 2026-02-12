@@ -1,9 +1,8 @@
-import React, { Component, type ReactNode, type ErrorInfo } from "react";
-import { Box, Text } from "ink";
+import { Component, createElement, type ReactNode, type ErrorInfo } from "react";
 import { colors } from "./ui/colors.js";
 
 interface Props {
-  children: ReactNode;
+  children?: ReactNode;
   fallback?: ReactNode;
   onError?: (error: Error, errorInfo: ErrorInfo) => void;
 }
@@ -13,7 +12,7 @@ interface State {
   error: Error | null;
 }
 
-export class ErrorBoundary extends Component<Props, State> {
+class ErrorBoundaryClass extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -35,13 +34,18 @@ export class ErrorBoundary extends Component<Props, State> {
 
       const errorMsg = this.state.error?.message || "Unknown error";
       return (
-        <Box flexDirection="column" marginY={1} overflow="hidden">
-          <Text color={colors.status.error} bold>Something went wrong</Text>
-          <Text color={colors.text.muted} wrap="truncate">{errorMsg}</Text>
-        </Box>
+        <box flexDirection="column" marginY={1} overflow="hidden">
+          <text><span fg={colors.status.error}><strong>Something went wrong</strong></span></text>
+          <text><span fg={colors.text.muted}>{errorMsg}</span></text>
+        </box>
       );
     }
 
     return this.props.children;
   }
+}
+
+// Wrapper: OpenTUI's JSX types don't match React class components
+export function ErrorBoundary({ children, fallback, onError }: Props) {
+  return createElement(ErrorBoundaryClass, { fallback, onError }, children);
 }

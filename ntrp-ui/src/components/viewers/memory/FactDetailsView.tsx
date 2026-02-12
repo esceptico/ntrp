@@ -1,4 +1,3 @@
-import { Box, Text } from "ink";
 import type { FactDetails } from "../../../api/client.js";
 import { colors, truncateText, ExpandableText, ScrollableList, TextEditArea } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
@@ -17,6 +16,7 @@ interface FactDetailsViewProps {
   details: FactDetails | null;
   loading: boolean;
   width: number;
+  height: number;
   isFocused: boolean;
   // Section navigation state
   focusedSection: FactDetailSection;
@@ -34,19 +34,13 @@ interface FactDetailsViewProps {
   saving: boolean;
 }
 
-// Fixed heights for each section
-const SECTION_HEIGHTS = {
-  TEXT_COLLAPSED: 1,
-  TEXT_EXPANDED: 5,
-  METADATA: 2,
-  ENTITIES: 4, // header + 3 items
-  LINKED: 5, // header + 4 items
-};
+const TEXT_VISIBLE_LINES = 5;
 
 export function FactDetailsView({
   details,
   loading,
   width,
+  height,
   isFocused,
   focusedSection,
   textExpanded,
@@ -62,14 +56,14 @@ export function FactDetailsView({
   saving,
 }: FactDetailsViewProps) {
   if (loading) {
-    return <Text color={colors.text.muted}>Loading...</Text>;
+    return <text><span fg={colors.text.muted}>Loading...</span></text>;
   }
 
   if (!details) {
     return (
-      <Box flexDirection="column" paddingLeft={1}>
-        <Text color={colors.text.muted}>Select a fact to view details</Text>
-      </Box>
+      <box flexDirection="column" paddingLeft={1}>
+        <text><span fg={colors.text.muted}>Select a fact to view details</span></text>
+      </box>
     );
   }
 
@@ -85,28 +79,26 @@ export function FactDetailsView({
   const sectionFocused = (section: FactDetailSection) => isFocused && focusedSection === section;
   const textWidth = width - 2;
 
-  // Calculate visible items for scrollable lists
-  const entitiesVisible = SECTION_HEIGHTS.ENTITIES - 1; // minus header
-  const linkedVisible = SECTION_HEIGHTS.LINKED - 1; // minus header
-
   if (confirmDelete) {
     return (
-      <Box flexDirection="column" width={width} paddingLeft={1}>
-        <Text color={colors.status.warning}>
-          Delete this fact? This will remove {details.entities.length} entities, {details.linked_facts.length} links.
-        </Text>
-        <Box marginTop={1}>
-          <Text color={colors.text.muted}>Press y to confirm, any other key to cancel</Text>
-        </Box>
-      </Box>
+      <box flexDirection="column" width={width} paddingLeft={1}>
+        <text>
+          <span fg={colors.status.warning}>
+            Delete this fact? This will remove {details.entities.length} entities, {details.linked_facts.length} links.
+          </span>
+        </text>
+        <box marginTop={1}>
+          <text><span fg={colors.text.muted}>Press y to confirm, any other key to cancel</span></text>
+        </box>
+      </box>
     );
   }
 
   if (editMode) {
     return (
-      <Box flexDirection="column" width={width} paddingLeft={1}>
-        <Text color={colors.text.muted}>EDIT FACT</Text>
-        <Box marginTop={1}>
+      <box flexDirection="column" width={width} paddingLeft={1}>
+        <text><span fg={colors.text.muted}>EDIT FACT</span></text>
+        <box marginTop={1}>
           <TextEditArea
             value={editText}
             cursorPos={cursorPos}
@@ -114,83 +106,88 @@ export function FactDetailsView({
             onCursorChange={setCursorPos}
             placeholder="Type to edit..."
           />
-        </Box>
+        </box>
         {saving && (
-          <Box marginTop={1}>
-            <Text color={colors.tool.running}>Saving...</Text>
-          </Box>
+          <box marginTop={1}>
+            <text><span fg={colors.tool.running}>Saving...</span></text>
+          </box>
         )}
-      </Box>
+      </box>
     );
   }
 
   return (
-    <Box flexDirection="column" width={width} paddingLeft={1}>
+    <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       {/* Text section - expandable */}
-      <Box>
+      <box>
         <ExpandableText
           text={fact.text}
           width={textWidth}
           expanded={textExpanded}
           scrollOffset={textScrollOffset}
-          visibleLines={SECTION_HEIGHTS.TEXT_EXPANDED}
+          visibleLines={TEXT_VISIBLE_LINES}
           isFocused={sectionFocused(FACT_SECTIONS.TEXT)}
           boldFirstLine
         />
-      </Box>
+      </box>
 
       {/* Metadata - fixed, non-interactive */}
-      <Box flexDirection="column" height={SECTION_HEIGHTS.METADATA} marginTop={1}>
-        <Text>
-          <Text color={labelColor}>TYPE </Text>
-          <Text color={typeColor}>{typeLabel}</Text>
-          <Text color={colors.text.muted}> │ </Text>
-          <Text color={labelColor}>SRC </Text>
-          <Text color={valueColor}>{fact.source_type}</Text>
-          <Text color={colors.text.muted}> │ </Text>
-          <Text color={labelColor}>×</Text>
-          <Text color={valueColor}>{fact.access_count}</Text>
-        </Text>
-        <Text>
-          <Text color={labelColor}>CREATED </Text>
-          <Text color={colors.text.secondary}>{formatTimeAgo(fact.created_at)}</Text>
-        </Text>
-      </Box>
+      <box flexDirection="column" marginTop={1}>
+        <text>
+          <span fg={labelColor}>TYPE </span>
+          <span fg={typeColor}>{typeLabel}</span>
+          <span fg={colors.text.muted}> {"\u2502"} </span>
+          <span fg={labelColor}>SRC </span>
+          <span fg={valueColor}>{fact.source_type}</span>
+          <span fg={colors.text.muted}> {"\u2502"} </span>
+          <span fg={labelColor}>{"\u00D7"}</span>
+          <span fg={valueColor}>{fact.access_count}</span>
+        </text>
+        <text>
+          <span fg={labelColor}>CREATED </span>
+          <span fg={colors.text.secondary}>{formatTimeAgo(fact.created_at)}</span>
+        </text>
+      </box>
 
-      {/* Entities section - scrollable list */}
-      <Box flexDirection="column" height={SECTION_HEIGHTS.ENTITIES} marginTop={1}>
-        <Text color={labelColor}>
-          ENTITIES {entities.length > 0 && `(${entities.length})`}
-        </Text>
+      {/* Entities section */}
+      <box flexDirection="column" marginTop={1}>
+        <text>
+          <span fg={labelColor}>
+            ENTITIES {entities.length > 0 && `(${entities.length})`}
+          </span>
+        </text>
         {entities.length > 0 ? (
           <ScrollableList
             items={entities}
             selectedIndex={entitiesIndex}
-            visibleLines={entitiesVisible}
+            visibleLines={Math.min(entities.length, 6)}
             renderItem={(entity, _idx, selected) => (
-              <Text color={selected && sectionFocused(FACT_SECTIONS.ENTITIES) ? textColor : colors.text.secondary}>
-                • {entity.name}{" "}
-                <Text color={colors.text.muted}>({entity.type})</Text>
-              </Text>
+              <text>
+                <span fg={selected && sectionFocused(FACT_SECTIONS.ENTITIES) ? textColor : colors.text.secondary}>
+                  {"\u2022"} {entity.name}{" "}
+                </span>
+                <span fg={colors.text.muted}>({entity.type})</span>
+              </text>
             )}
-
             width={textWidth}
           />
         ) : (
-          <Text color={colors.text.muted}>No entities</Text>
+          <text><span fg={colors.text.muted}>No entities</span></text>
         )}
-      </Box>
+      </box>
 
-      {/* Linked facts section - scrollable list */}
-      <Box flexDirection="column" height={SECTION_HEIGHTS.LINKED} marginTop={1}>
-        <Text color={labelColor}>
-          LINKED {linked_facts.length > 0 && `(${linked_facts.length})`}
-        </Text>
+      {/* Linked facts section */}
+      <box flexDirection="column" marginTop={1}>
+        <text>
+          <span fg={labelColor}>
+            LINKED {linked_facts.length > 0 && `(${linked_facts.length})`}
+          </span>
+        </text>
         {linked_facts.length > 0 ? (
           <ScrollableList
             items={linked_facts}
             selectedIndex={linkedIndex}
-            visibleLines={linkedVisible}
+            visibleLines={Math.min(linked_facts.length, 6)}
             renderItem={(lf, _idx, selected) => {
               const linkColor =
                 lf.link_type === "semantic"
@@ -199,22 +196,21 @@ export function FactDetailsView({
                     ? accentValue
                     : colors.status.warning;
               return (
-                <Text>
-                  <Text color={linkColor}>[{lf.link_type.charAt(0)}]</Text>
-                  <Text color={selected && sectionFocused(FACT_SECTIONS.LINKED) ? textColor : colors.text.secondary}>
+                <text>
+                  <span fg={linkColor}>[{lf.link_type.charAt(0)}]</span>
+                  <span fg={selected && sectionFocused(FACT_SECTIONS.LINKED) ? textColor : colors.text.secondary}>
                     {" "}{truncateText(lf.text, textWidth - 4)}
-                  </Text>
-                </Text>
+                  </span>
+                </text>
               );
             }}
-
             width={textWidth}
           />
         ) : (
-          <Text color={colors.text.muted}>No linked facts</Text>
+          <text><span fg={colors.text.muted}>No linked facts</span></text>
         )}
-      </Box>
-    </Box>
+      </box>
+    </box>
   );
 }
 

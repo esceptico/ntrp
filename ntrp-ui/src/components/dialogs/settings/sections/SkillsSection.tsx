@@ -1,101 +1,87 @@
-import { Box, Text } from "ink";
-import { colors, TextInputField } from "../../../ui/index.js";
+import { colors, truncateText, TextInputField, Hints } from "../../../ui/index.js";
 import type { UseSkillsResult } from "../../../../hooks/useSkills.js";
-import { INDICATOR_SELECTED, INDICATOR_UNSELECTED } from "../../../../lib/constants.js";
 
 interface SkillsSectionProps {
   skills: UseSkillsResult;
   accent: string;
+  width: number;
 }
 
-const LOCATION_COLORS: Record<string, string> = {
-  project: "#7AA2F7",
-  global: "#9ECE6A",
-};
-
-function ListMode({ skills: s, accent }: SkillsSectionProps) {
+function ListMode({ skills: s, accent, width }: SkillsSectionProps) {
   if (s.skills.length === 0) {
     return (
-      <Box flexDirection="column">
-        <Text color={colors.text.muted}>No skills installed</Text>
-        <Box marginTop={1}>
-          <Text color={colors.text.disabled}>a: install from GitHub</Text>
-        </Box>
-      </Box>
+      <box flexDirection="column">
+        <text><span fg={colors.text.muted}>No skills installed</span></text>
+        <box marginTop={1}>
+          <Hints items={[["a", "install from GitHub"]]} />
+        </box>
+      </box>
     );
   }
 
+  const descWidth = Math.max(10, width - 4);
+
   return (
-    <Box flexDirection="column">
+    <box flexDirection="column" width={width}>
       {s.skills.map((skill, idx) => {
         const selected = idx === s.selectedIndex;
         return (
-          <Box key={skill.name} flexDirection="column">
-            <Box flexDirection="row">
-              <Box width={2} flexShrink={0}>
-                <Text color={selected ? accent : colors.text.disabled}>
-                  {selected ? INDICATOR_SELECTED.trimEnd() : INDICATOR_UNSELECTED.trimEnd()}
-                </Text>
-              </Box>
-              <Box width={10} flexShrink={0} marginLeft={1}>
-                <Text color={LOCATION_COLORS[skill.location] ?? colors.text.secondary} bold>
-                  {skill.location}
-                </Text>
-              </Box>
-              <Text color={selected ? accent : colors.text.primary}>{skill.name}</Text>
-            </Box>
-            {selected && (
-              <Box marginLeft={13}>
-                <Text color={colors.text.muted} wrap="truncate">{skill.description}</Text>
-              </Box>
-            )}
-          </Box>
+          <box key={skill.name} flexDirection="column">
+            <text>
+              <span fg={selected ? accent : colors.text.disabled}>{selected ? "▸ " : "  "}</span>
+              <span fg={selected ? accent : colors.text.primary}>{skill.name}</span>
+              <span fg={colors.text.disabled}> {skill.location}</span>
+            </text>
+            <text>
+              <span fg={colors.text.muted}>{"  "}{truncateText(skill.description, descWidth)}</span>
+            </text>
+          </box>
         );
       })}
       {s.error && (
-        <Box marginTop={1}>
-          <Text color={colors.status.error}>{s.error}</Text>
-        </Box>
+        <box marginTop={1}>
+          <text><span fg={colors.status.error}>{s.error}</span></text>
+        </box>
       )}
-      <Box marginTop={s.error ? 0 : 1}>
-        <Text color={colors.text.disabled}>a: install  d: remove</Text>
-      </Box>
-    </Box>
+      <box marginTop={1}>
+        <Hints items={[["a", "install"], ["d", "remove"]]} />
+      </box>
+    </box>
   );
 }
 
 function InstallMode({ skills: s, accent }: SkillsSectionProps) {
   return (
-    <Box flexDirection="column">
-      <Text color={accent} bold>INSTALL FROM GITHUB</Text>
-      <Box marginTop={1} flexDirection="row">
-        <Box width={8} flexShrink={0}>
-          <Text color={colors.text.secondary}>Source</Text>
-        </Box>
+    <box flexDirection="column">
+      <text><span fg={accent}><strong>INSTALL FROM GITHUB</strong></span></text>
+      <box marginTop={1} flexDirection="row">
+        <box width={8} flexShrink={0}>
+          <text><span fg={colors.text.secondary}>Source</span></text>
+        </box>
         <TextInputField
           value={s.installSource}
           cursorPos={s.installCursor}
           placeholder="owner/repo/path/to/skill"
           showCursor={true}
         />
-      </Box>
-      <Box marginTop={1}>
-        <Text color={colors.text.muted}>e.g. anthropics/skills/skills/pdf</Text>
-      </Box>
+      </box>
+      <box marginTop={1}>
+        <text><span fg={colors.text.muted}>e.g. anthropics/skills/skills/pdf</span></text>
+      </box>
       {s.installing && (
-        <Box marginTop={1}>
-          <Text color={colors.status.warning}>Installing...</Text>
-        </Box>
+        <box marginTop={1}>
+          <text><span fg={colors.status.warning}>Installing...</span></text>
+        </box>
       )}
       {s.error && (
-        <Box marginTop={1}>
-          <Text color={colors.status.error}>{s.error}</Text>
-        </Box>
+        <box marginTop={1}>
+          <text><span fg={colors.status.error}>{s.error}</span></text>
+        </box>
       )}
-      <Box marginTop={1}>
-        <Text color={colors.text.disabled}>Enter: install  Esc: cancel</Text>
-      </Box>
-    </Box>
+      <box marginTop={1}>
+        <Hints items={[["enter", "install"], ["esc", "cancel"]]} />
+      </box>
+    </box>
   );
 }
 
@@ -104,14 +90,16 @@ function ConfirmDeleteMode({ skills: s, accent }: SkillsSectionProps) {
   if (!skill) return null;
 
   return (
-    <Box flexDirection="column">
-      <Text color={colors.status.warning}>
-        Remove skill <Text bold color={accent}>{skill.name}</Text>?
-      </Text>
-      <Box marginTop={1}>
-        <Text color={colors.text.disabled}>y: confirm  n/Esc: cancel</Text>
-      </Box>
-    </Box>
+    <box flexDirection="column">
+      <text>
+        <span fg={colors.status.warning}>Remove skill </span>
+        <span fg={accent}><strong>{skill.name}</strong></span>
+        <span fg={colors.status.warning}>?</span>
+      </text>
+      <box marginTop={1}>
+        <Hints items={[["y", "confirm"], ["n/esc", "cancel"]]} />
+      </box>
+    </box>
   );
 }
 
@@ -119,7 +107,7 @@ export function SkillsSection(props: SkillsSectionProps) {
   const { mode, loading } = props.skills;
 
   if (loading) {
-    return <Text color={colors.text.muted}>Loading...</Text>;
+    return <text><span fg={colors.text.muted}>Loading...</span></text>;
   }
 
   if (mode === "list") return <ListMode {...props} />;

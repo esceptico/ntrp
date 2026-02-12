@@ -1,22 +1,35 @@
 /**
- * NTRP Color System - Monochrome + Configurable Accent
- * Minimalist: white text, single accent, gray muted.
+ * NTRP Color System — Monochrome
+ * No colors. Just gray.
+ *
+ * Base scale (perceptually even, dark→light):
+ *   0: #101010   1: #181818   2: #212121   3: #2c2c2c
+ *   4: #3a3a3a   5: #505050   6: #6a6a6a   7: #888888
+ *   8: #a8a8a8   9: #c8c8c8  10: #e0e0e0  11: #f0f0f0
  */
 
+const g = {
+  0: "#101010",
+  1: "#181818",
+  2: "#212121",
+  3: "#2c2c2c",
+  4: "#3a3a3a",
+  5: "#505050",
+  6: "#6a6a6a",
+  7: "#888888",
+  8: "#a8a8a8",
+  9: "#c8c8c8",
+  10: "#e0e0e0",
+  11: "#f0f0f0",
+} as const;
+
 export const accentColors = {
-  blue: { primary: "#7AA2F7", shimmer: "#B4D0FF" },
-  green: { primary: "#9ECE6A", shimmer: "#C3E88D" },
-  purple: { primary: "#BB9AF7", shimmer: "#D4BFFF" },
-  pink: { primary: "#F7768E", shimmer: "#FFB2C1" },
-  orange: { primary: "#FF9E64", shimmer: "#FFCB9E" },
-  cyan: { primary: "#7DCFFF", shimmer: "#B4E4FF" },
-  yellow: { primary: "#E0AF68", shimmer: "#FFD699" },
-  red: { primary: "#F28B82", shimmer: "#FFBBB5" },
+  gray: { primary: g[9], shimmer: g[10] },
 } as const;
 
 export type AccentColor = keyof typeof accentColors;
 
-let currentAccent: AccentColor = "blue";
+let currentAccent: AccentColor = "gray";
 
 export function syncAccentColor(color: AccentColor) {
   currentAccent = color;
@@ -24,62 +37,71 @@ export function syncAccentColor(color: AccentColor) {
 
 export const colors = {
   text: {
-    primary: "#FAFAFA",    // Zinc 50
-    secondary: "#A1A1AA",  // Zinc 400
-    muted: "#71717A",      // Zinc 500
-    disabled: "#52525B",   // Zinc 600
+    primary: g[9],
+    secondary: g[7],
+    muted: g[6],
+    disabled: g[5],
   },
 
   status: {
-    get success() { return accentColors[currentAccent].primary; },
-    error: "#EF4444",      // Red 500
-    warning: "#FBBF24",    // Amber 400
-    get processing() { return accentColors[currentAccent].primary; },
-    get processingShimmer() { return accentColors[currentAccent].shimmer; },
+    success: g[7],
+    error: g[7],
+    warning: g[7],
+    processing: g[9],
+    processingShimmer: g[10],
   },
 
   selection: {
-    get active() { return accentColors[currentAccent].primary; },
-    get indicator() { return accentColors[currentAccent].primary; },
+    active: g[9],
+    indicator: g[9],
   },
 
   panel: {
-    get title() { return accentColors[currentAccent].primary; },
-    subtitle: "#A1A1AA",
+    title: g[9],
+    subtitle: g[7],
   },
 
   tabs: {
-    get active() { return accentColors[currentAccent].primary; },
-    inactive: "#71717A",
-    separator: "#3F3F46",  // Zinc 700
+    active: g[9],
+    inactive: g[6],
+    separator: g[4],
   },
 
   list: {
-    itemText: "#FAFAFA",
-    get itemTextSelected() { return accentColors[currentAccent].primary; },
-    itemDetail: "#71717A",
-    scrollArrow: "#71717A",
+    itemText: g[9],
+    itemTextSelected: g[9],
+    itemDetail: g[6],
+    scrollArrow: g[6],
   },
 
   keyValue: {
-    label: "#FAFAFA",
-    get value() { return accentColors[currentAccent].primary; },
+    label: g[9],
+    value: g[7],
   },
 
-  divider: "#3F3F46",
-  footer: "#71717A",
+  background: {
+    base: g[1],
+    panel: g[0],
+    element: g[3],
+    menu: g[3],
+  },
+
+  border: g[4],
+
+  divider: g[4],
+  footer: g[6],
 
   diff: {
-    added: "#4ADE80",
-    addedBg: "#14532D",
-    removed: "#F87171",
-    removedBg: "#7F1D1D",
+    added: g[7],
+    addedBg: g[3],
+    removed: g[6],
+    removedBg: g[2],
   },
 
   tool: {
-    pending: "#A1A1AA",
-    running: "#FBBF24",
-    get completed() { return accentColors[currentAccent].primary; },
-    error: "#EF4444",
+    pending: g[6],
+    running: g[7],
+    completed: g[9],
+    error: g[7],
   },
 } as const;

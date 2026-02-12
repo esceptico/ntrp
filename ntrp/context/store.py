@@ -47,9 +47,7 @@ class SessionStore:
         await self.conn.executescript(SCHEMA)
         await self.conn.commit()
 
-    async def save_session(
-        self, state: SessionState, messages: list[dict | Any], metadata: dict | None = None
-    ) -> None:
+    async def save_session(self, state: SessionState, messages: list[dict | Any], metadata: dict | None = None) -> None:
         serializable_messages = []
         for msg in messages:
             if isinstance(msg, BaseModel):

@@ -64,7 +64,8 @@ class SearchStore:
         if stored_dim is not None and int(stored_dim) != self.embedding_dim:
             _logger.info(
                 "Embedding dimension changed (%s → %d), rebuilding vec table",
-                stored_dim, self.embedding_dim,
+                stored_dim,
+                self.embedding_dim,
             )
             await self.conn.execute("DROP TABLE IF EXISTS items_vec")
             await self.conn.execute("DELETE FROM items")
@@ -117,17 +118,13 @@ class SearchStore:
 
     async def _get_meta(self, key: str) -> str | None:
         try:
-            rows = await self.conn.execute_fetchall(
-                "SELECT value FROM meta WHERE key = ?", (key,)
-            )
+            rows = await self.conn.execute_fetchall("SELECT value FROM meta WHERE key = ?", (key,))
             return rows[0][0] if rows else None
         except Exception:
             return None
 
     async def _set_meta(self, key: str, value: str) -> None:
-        await self.conn.execute(
-            "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value)
-        )
+        await self.conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
 
     async def rebuild_vec_table(self, new_dim: int) -> None:
         self.embedding_dim = new_dim

@@ -16,7 +16,7 @@ export function formatTimeAgo(isoDate: string): string {
 }
 
 export function formatRelativeTime(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "\u2014";
 
   const date = new Date(iso);
   const now = new Date();

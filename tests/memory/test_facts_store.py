@@ -1,7 +1,6 @@
 import pytest
 import pytest_asyncio
 
-from ntrp.memory.models import Fact
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
 from tests.conftest import mock_embedding

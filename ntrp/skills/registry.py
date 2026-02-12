@@ -29,7 +29,7 @@ def _parse_skill_md(content: str) -> tuple[dict, str] | None:
         return None
     if not isinstance(frontmatter, dict):
         return None
-    return frontmatter, content[m.end():]
+    return frontmatter, content[m.end() :]
 
 
 class SkillRegistry:

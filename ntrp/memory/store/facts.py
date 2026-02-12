@@ -137,7 +137,8 @@ class FactRepository:
             return {}
         placeholders = ",".join("?" * len(fact_ids))
         rows = await self.conn.execute_fetchall(
-            _SQL_GET_FACTS_BY_IDS.format(placeholders=placeholders), fact_ids,
+            _SQL_GET_FACTS_BY_IDS.format(placeholders=placeholders),
+            fact_ids,
         )
         facts = {r["id"]: Fact.model_validate(_row_dict(r)) for r in rows}
         refs = await self.get_entity_refs_batch(list(facts.keys()))
@@ -158,19 +159,31 @@ class FactRepository:
         embedding_bytes = serialize_embedding(embedding)
         cursor = await self.conn.execute(
             _SQL_INSERT_FACT,
-            (text, embedding_bytes, source_type, source_ref,
-             now.isoformat(), happened_at.isoformat() if happened_at else None,
-             now.isoformat(), 0),
+            (
+                text,
+                embedding_bytes,
+                source_type,
+                source_ref,
+                now.isoformat(),
+                happened_at.isoformat() if happened_at else None,
+                now.isoformat(),
+                0,
+            ),
         )
         fact_id = cursor.lastrowid
         if embedding_bytes:
             await self.conn.execute(_SQL_INSERT_FACT_VEC, (fact_id, embedding_bytes))
 
         return Fact(
-            id=fact_id, text=text, embedding=embedding,
-            source_type=source_type, source_ref=source_ref,
-            created_at=now, happened_at=happened_at,
-            last_accessed_at=now, access_count=0,
+            id=fact_id,
+            text=text,
+            embedding=embedding,
+            source_type=source_type,
+            source_ref=source_ref,
+            created_at=now,
+            happened_at=happened_at,
+            last_accessed_at=now,
+            access_count=0,
         )
 
     async def reinforce(self, fact_ids: Sequence[int]) -> None:
@@ -271,9 +284,7 @@ class FactRepository:
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def search_facts_temporal(self, reference_time: datetime, limit: int = 10) -> list[Fact]:
-        rows = await self.conn.execute_fetchall(
-            _SQL_SEARCH_FACTS_TEMPORAL, (reference_time.isoformat(), limit)
-        )
+        rows = await self.conn.execute_fetchall(_SQL_SEARCH_FACTS_TEMPORAL, (reference_time.isoformat(), limit))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def get_entity(self, entity_id: int) -> Entity | None:
@@ -287,7 +298,8 @@ class FactRepository:
     async def create_entity(self, name: str) -> Entity:
         now = datetime.now(UTC)
         cursor = await self.conn.execute(
-            _SQL_INSERT_ENTITY, (name, now.isoformat(), now.isoformat()),
+            _SQL_INSERT_ENTITY,
+            (name, now.isoformat(), now.isoformat()),
         )
         entity_id = cursor.lastrowid
 
@@ -312,7 +324,8 @@ class FactRepository:
             (keep_id, *merge_ids),
         )
         cursor = await self.conn.execute(
-            _SQL_DELETE_ENTITIES.format(placeholders=placeholders), merge_ids,
+            _SQL_DELETE_ENTITIES.format(placeholders=placeholders),
+            merge_ids,
         )
         return cursor.rowcount
 
@@ -333,6 +346,7 @@ class FactRepository:
             return []
         placeholders = ",".join("?" * len(fact_ids))
         rows = await self.conn.execute_fetchall(
-            _SQL_GET_ENTITY_IDS_FOR_FACTS.format(placeholders=placeholders), fact_ids,
+            _SQL_GET_ENTITY_IDS_FOR_FACTS.format(placeholders=placeholders),
+            fact_ids,
         )
         return [r[0] for r in rows]

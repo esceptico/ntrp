@@ -1,5 +1,3 @@
-import { Box, Text } from "ink";
-import { colors } from "../../../ui/index.js";
 import { ModelSelector } from "../SettingsRows.js";
 
 interface AgentSectionProps {
@@ -20,7 +18,7 @@ export function AgentSection({
   modelNameWidth,
 }: AgentSectionProps) {
   return (
-    <Box flexDirection="column">
+    <box flexDirection="column">
       <ModelSelector
         label="Agent"
         currentModel={chatModel}
@@ -42,6 +40,6 @@ export function AgentSection({
         accent={accent}
         maxWidth={modelNameWidth}
       />
-    </Box>
+    </box>
   );
 }

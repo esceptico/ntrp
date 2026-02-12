@@ -1,20 +1,20 @@
-import React, { useState, useCallback, useEffect, useMemo } from "react";
-import { Box, Text, useApp, Static } from "ink";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { useRenderer } from "@opentui/react";
 import type { Message, Config } from "./types.js";
 import { defaultConfig } from "./types.js";
 import { colors } from "./components/ui/colors.js";
 import { BULLET } from "./lib/constants.js";
 import {
   useSettings,
-  KeypressProvider,
   useKeypress,
   useCommands,
   useSession,
   useStreaming,
+  useSidebar,
   AccentColorProvider,
   type Key,
 } from "./hooks/index.js";
-import { DimensionsProvider } from "./contexts/index.js";
+import { DimensionsProvider, useDimensions } from "./contexts/index.js";
 import {
   InputArea,
   MessageDisplay,
@@ -25,10 +25,10 @@ import {
   DashboardViewer,
   ToolChainDisplay,
   Welcome,
-  ThinkingIndicator,
   ApprovalDialog,
   ErrorBoundary,
 } from "./components/index.js";
+import { Sidebar } from "./components/Sidebar.js";
 import { COMMANDS } from "./lib/commands.js";
 import { getSkills, type Skill } from "./api/client.js";
 
@@ -53,9 +53,8 @@ function AppContent({
   toggleSettings,
   showSettings
 }: AppContentProps) {
-  const { exit } = useApp();
+  const renderer = useRenderer();
 
-  // Session management (server connection, config, index status)
   const session = useSession(config);
   const {
     sessionId,
@@ -69,19 +68,16 @@ function AppContent({
     updateServerConfig,
   } = session;
 
-  // Local state for UI
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
-  // Track if welcome was shown (don't show again after clear)
   const [welcomeShown, setWelcomeShown] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
 
-  // Fetch skills for autocomplete
   const [skills, setSkills] = useState<Skill[]>([]);
   useEffect(() => {
     getSkills(config).then(r => setSkills(r.skills)).catch(() => {});
   }, [config]);
 
-  // Streaming (messages, tool chain, approvals)
   const streaming = useStreaming({
     config,
     sessionId,
@@ -95,7 +91,6 @@ function AppContent({
     toolChain,
     pendingApproval,
     pendingChoice,
-    clearCount,
     addMessage,
     clearMessages,
     sendMessage,
@@ -105,10 +100,8 @@ function AppContent({
     cancel,
   } = streaming;
 
-  // Only handle input when in chat mode (not when viewer is open)
   const isInChatMode = viewMode === "chat" && !showSettings;
 
-  // Command handler via registry pattern
   const { handleCommand } = useCommands({
     config,
     sessionId,
@@ -117,10 +110,9 @@ function AppContent({
     updateSessionInfo,
     addMessage: (msg) => addMessage(msg as Message),
     clearMessages,
-    clearMessageQueue: () => setMessageQueue([]),
     sendMessage,
     toggleSettings,
-    exit,
+    exit: () => renderer.destroy(),
     refreshIndexStatus,
   });
 
@@ -134,9 +126,8 @@ function AppContent({
       const trimmed = value.trim();
       if (!trimmed) return;
 
-      // Handle commands immediately (don't queue)
       if (trimmed.startsWith("/")) {
-        if (isStreaming || pendingApproval || pendingChoice) return; // Block commands during streaming
+        if (isStreaming || pendingApproval || pendingChoice) return;
         const handled = await handleCommand(trimmed);
         if (handled) return;
         const cmdName = trimmed.slice(1).split(" ")[0];
@@ -148,7 +139,6 @@ function AppContent({
         return;
       }
 
-      // Queue messages during streaming
       if (isStreaming || pendingApproval || pendingChoice) {
         setMessageQueue((prev) => [...prev, trimmed]);
         return;
@@ -159,7 +149,6 @@ function AppContent({
     [isStreaming, pendingApproval, pendingChoice, sendMessage, handleCommand, addMessage, skills]
   );
 
-  // Process queued messages when streaming ends
   useEffect(() => {
     if (!isStreaming && !pendingApproval && !pendingChoice && messageQueue.length > 0) {
       const [firstMessage, ...rest] = messageQueue;
@@ -172,145 +161,138 @@ function AppContent({
 
   const closeView = useCallback(() => setViewMode("chat"), []);
 
-  // Global keypress handler for exit, cancel, and skip approvals toggle
-  // Scrolling uses native terminal scrollback
   const handleGlobalKeypress = useCallback(
     async (key: Key) => {
       if (key.ctrl && key.name === "c") {
-        exit();
+        renderer.destroy();
       }
-      // Escape cancels the current run
+      if (key.ctrl && key.name === "l") {
+        setSidebarVisible(v => !v);
+        return;
+      }
       if (key.name === "escape" && isStreaming) {
         cancel();
       }
-      // Shift+Tab toggles skip approvals mode (guard: not in settings overlay)
       if (key.shift && key.name === "tab" && !showSettings) {
         toggleSkipApprovals();
       }
     },
-    [exit, isStreaming, cancel, toggleSkipApprovals, showSettings]
+    [renderer, isStreaming, cancel, toggleSkipApprovals, showSettings]
   );
 
   useKeypress(handleGlobalKeypress, { isActive: true });
 
-  // All overlays render in same tree, never early return
+  const { width, height } = useDimensions();
   const hasOverlay = viewMode !== "chat";
 
-  // Main chat view: use Static for all completed messages
-  // Native terminal scrollback handles scrolling
-  // Reset welcome after /clear (clearCount changes → show welcome again)
-  React.useEffect(() => {
-    if (clearCount > 0) setWelcomeShown(false);
-  }, [clearCount]);
+  const SIDEBAR_WIDTH = 28;
+  const showSidebar = sidebarVisible && width >= 94 && serverConnected;
+  const sidebarData = useSidebar(config, showSidebar);
 
-  type StaticItem = Message | { id: "__welcome__"; isWelcome: true };
+  // Show welcome on first load
   const showWelcome = serverConfig && !welcomeShown;
-  const welcomeItem: StaticItem | null = showWelcome ? { id: "__welcome__", isWelcome: true } : null;
-  const staticItems: StaticItem[] = welcomeItem ? [welcomeItem, ...messages] : messages;
-
-  React.useEffect(() => {
+  useEffect(() => {
     if (serverConfig && !welcomeShown) setWelcomeShown(true);
   }, [serverConfig, welcomeShown]);
-  
+
+  const contentHeight = height - 2; // paddingTop + paddingBottom
+
   return (
     <ErrorBoundary>
-    <Box flexDirection="column">
-      {/* Static items - rendered once and frozen. Key on clearCount to force remount on /clear */}
-      <Box key={`static-${clearCount}`} flexDirection="column">
-        <Static items={staticItems}>
-          {(item: StaticItem, index: number) => {
-            if ("isWelcome" in item) {
-              return (
-                <Box key="welcome">
-                  <Welcome />
-                </Box>
-              );
-            }
-            // Spacing: 1 newline between all messages, except consecutive tools (0)
-            const prevItem = staticItems[index - 1];
+    <box flexDirection="row" width={width} height={height} paddingTop={1} paddingBottom={1} backgroundColor={colors.background.base}>
+      {/* Main content */}
+      <box flexDirection="column" flexGrow={1} paddingLeft={2} paddingRight={2} gap={1}>
+        {/* Scrollable message area */}
+        <scrollbox flexGrow={1} stickyScroll={true} stickyStart="bottom" style={{ scrollbarOptions: { visible: false } }}>
+          {showWelcome && <Welcome />}
+
+          {messages.map((item, index) => {
+            const prevItem = messages[index - 1];
             const isToolMessage = item.role === "tool" || item.role === "tool_chain";
-            const prevIsToolMessage = prevItem && !("isWelcome" in prevItem) &&
+            const prevIsToolMessage = prevItem &&
               (prevItem.role === "tool" || prevItem.role === "tool_chain");
             const needsMargin = index > 0 && !(isToolMessage && prevIsToolMessage);
 
             return (
-              <Box key={item.id} marginTop={needsMargin ? 1 : 0}>
+              <box key={item.id} marginTop={needsMargin ? 1 : 0}>
                 <MessageDisplay
                   msg={item}
                   renderMarkdown={settings.ui.renderMarkdown}
                 />
-              </Box>
+              </box>
             );
-          }}
-        </Static>
-      </Box>
+          })}
 
-      {/* Live content - tool calls, status */}
-      {toolChain.length > 0 && (
-        <Box marginTop={messages[messages.length - 1]?.role === "user" ? 1 : 0}>
-          <ToolChainDisplay items={toolChain} />
-        </Box>
+          {toolChain.length > 0 && (
+            <box marginTop={messages[messages.length - 1]?.role === "user" ? 1 : 0}>
+              <ToolChainDisplay items={toolChain} />
+            </box>
+          )}
+
+          {pendingApproval && (
+            <ApprovalDialog
+              approval={pendingApproval}
+              onResult={handleApproval}
+            />
+          )}
+
+          {pendingChoice && (
+            <ChoiceSelector
+              question={pendingChoice.question}
+              options={pendingChoice.options}
+              allowMultiple={pendingChoice.allowMultiple}
+              onSelect={handleChoice}
+              onCancel={cancelChoice}
+              isActive={!pendingApproval}
+            />
+          )}
+        </scrollbox>
+
+        {/* Connection status — pinned above input */}
+        {!serverConnected && (
+          <box flexShrink={0}>
+            <text><span fg={colors.status.error}>{BULLET} Server not connected. Run: ntrp serve</span></text>
+          </box>
+        )}
+
+        {/* Input — pinned to bottom */}
+        <box flexShrink={0}>
+          <InputArea
+            onSubmit={handleSubmit}
+            disabled={!serverConnected || hasOverlay || showSettings || !!pendingApproval || !!pendingChoice}
+            focus={isInChatMode && !hasOverlay && !showSettings && !pendingApproval && !pendingChoice}
+            isStreaming={isStreaming}
+            status={status}
+            commands={allCommands}
+            queueCount={messageQueue.length}
+            skipApprovals={skipApprovals}
+            chatModel={serverConfig?.chat_model}
+            indexStatus={indexStatus}
+          />
+        </box>
+      </box>
+
+      {/* Sidebar */}
+      {showSidebar && (
+        <>
+          <box width={1} height={contentHeight} flexShrink={0} flexDirection="column">
+            {Array.from({ length: contentHeight }).map((_, i) => (
+              <text key={i}><span fg={colors.divider}>{"\u2502"}</span></text>
+            ))}
+          </box>
+          <Sidebar
+            serverConfig={serverConfig}
+            data={sidebarData}
+            width={SIDEBAR_WIDTH}
+            height={contentHeight}
+          />
+        </>
       )}
 
-      {/* Thinking indicator — margin when content exists above */}
-      {status && (
-        <Box marginTop={messages.length > 0 || toolChain.length > 0 ? 1 : 0}>
-          <ThinkingIndicator status={status} />
-        </Box>
-      )}
-
-      {/* Approval dialog - takes priority over choice */}
-      {pendingApproval && (
-        <ApprovalDialog
-          approval={pendingApproval}
-          onResult={handleApproval}
-        />
-      )}
-
-      {/* Choice selector - waits if approval is pending */}
-      {pendingChoice && (
-        <ChoiceSelector
-          question={pendingChoice.question}
-          options={pendingChoice.options}
-          allowMultiple={pendingChoice.allowMultiple}
-          onSelect={handleChoice}
-          onCancel={cancelChoice}
-          isActive={!pendingApproval}
-        />
-      )}
-
-      {/* Connection status */}
-      {!serverConnected && (
-        <Box marginBottom={1}>
-          <Text color={colors.status.error}>{BULLET} Server not connected. Run: ntrp serve</Text>
-        </Box>
-      )}
-
-
-      {/* Input - always visible, can type during streaming (messages get queued) */}
-      <Box marginTop={1}>
-      <InputArea
-        onSubmit={handleSubmit}
-        disabled={!serverConnected || hasOverlay || showSettings || !!pendingApproval || !!pendingChoice}
-        focus={isInChatMode && !hasOverlay && !showSettings && !pendingApproval && !pendingChoice}
-        commands={allCommands}
-        queueCount={messageQueue.length}
-        skipApprovals={skipApprovals}
-        chatModel={serverConfig?.chat_model}
-        indexStatus={indexStatus}
-      />
-      </Box>
-
-      {/* Overlays - rendered below input */}
-      {viewMode === "memory" && (
-        <MemoryViewer config={config} onClose={closeView} />
-      )}
-      {viewMode === "schedules" && (
-        <SchedulesViewer config={config} onClose={closeView} />
-      )}
-      {viewMode === "dashboard" && (
-        <DashboardViewer config={config} onClose={closeView} />
-      )}
+      {/* Overlays — Dialog handles absolute positioning and dimming */}
+      {viewMode === "memory" && <MemoryViewer config={config} onClose={closeView} />}
+      {viewMode === "schedules" && <SchedulesViewer config={config} onClose={closeView} />}
+      {viewMode === "dashboard" && <DashboardViewer config={config} onClose={closeView} />}
       {showSettings && (
         <SettingsDialog
           config={config}
@@ -322,12 +304,11 @@ function AppContent({
           onClose={closeSettings}
         />
       )}
-    </Box>
+    </box>
     </ErrorBoundary>
   );
 }
 
-// Inner component that has access to settings for AccentColorProvider
 function AppWithAccent({ config }: { config: Config }) {
   const { settings, updateSetting, closeSettings, toggleSettings, showSettings } = useSettings(config);
 
@@ -345,13 +326,10 @@ function AppWithAccent({ config }: { config: Config }) {
   );
 }
 
-// Wrap with KeypressProvider for custom keyboard handling
 export default function App({ config = defaultConfig }: { config?: Config }) {
   return (
-    <KeypressProvider>
-      <DimensionsProvider>
-        <AppWithAccent config={config} />
-      </DimensionsProvider>
-    </KeypressProvider>
+    <DimensionsProvider>
+      <AppWithAccent config={config} />
+    </DimensionsProvider>
   );
 }

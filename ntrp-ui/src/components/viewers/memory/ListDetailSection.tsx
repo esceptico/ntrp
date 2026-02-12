@@ -1,5 +1,4 @@
 import React, { type ReactNode } from "react";
-import { Box, Text } from "ink";
 import {
   SplitView,
   BaseSelectionList,
@@ -14,7 +13,7 @@ interface ListDetailSectionProps<T> {
   getKey: (item: T) => string | number;
   emptyMessage: string;
   searchQuery: string;
-  visibleLines: number;
+  height: number;
   width: number;
   details: ReactNode;
   focusPane?: "list" | "details";
@@ -27,20 +26,23 @@ export function ListDetailSection<T>({
   getKey,
   emptyMessage,
   searchQuery,
-  visibleLines,
+  height,
   width,
   details,
   focusPane = "list",
 }: ListDetailSectionProps<T>) {
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
+  const visibleLines = Math.max(1, height - 4);
 
   const sidebar = (
-    <Box flexDirection="column">
-      <Box marginBottom={1}>
-        <Text color={searchQuery ? colors.text.muted : colors.text.disabled}>
-          {searchQuery ? `/${searchQuery}` : focusPane === "list" ? "type to search" : " "}
-        </Text>
-      </Box>
+    <box flexDirection="column">
+      <box marginBottom={1}>
+        <text>
+          <span fg={searchQuery ? colors.text.muted : colors.text.disabled}>
+            {searchQuery ? `/${searchQuery}` : focusPane === "list" ? "type to search" : " "}
+          </span>
+        </text>
+      </box>
       <BaseSelectionList
         items={items}
         selectedIndex={selectedIndex}
@@ -52,18 +54,18 @@ export function ListDetailSection<T>({
         width={listWidth}
       />
       {items.length > 0 && (
-        <Box marginTop={1}>
-          <Text color={colors.text.muted}>
-            {selectedIndex + 1}/{items.length}
-          </Text>
-        </Box>
+        <box marginTop={1}>
+          <text>
+            <span fg={colors.text.muted}>
+              {selectedIndex + 1}/{items.length}
+            </span>
+          </text>
+        </box>
       )}
-    </Box>
+    </box>
   );
 
   return (
-    <Box marginY={1} height={visibleLines + 4}>
-      <SplitView sidebarWidth={listWidth} sidebar={sidebar} main={details} />
-    </Box>
+    <SplitView sidebarWidth={listWidth} sidebar={sidebar} main={details} width={width} height={height} />
   );
 }

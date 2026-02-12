@@ -1,4 +1,3 @@
-import { Text } from "ink";
 import { colors } from "../colors.js";
 import { CURSOR_CHAR } from "../../../lib/constants.js";
 
@@ -21,18 +20,22 @@ export function TextInputField({
 }: TextInputFieldProps) {
   if (value) {
     return (
-      <Text color={textColor}>
-        {value.slice(0, cursorPos)}
-        {showCursor && CURSOR_CHAR}
-        {value.slice(cursorPos)}
-      </Text>
+      <text>
+        <span fg={textColor}>
+          {value.slice(0, cursorPos)}
+          {showCursor && CURSOR_CHAR}
+          {value.slice(cursorPos)}
+        </span>
+      </text>
     );
   }
 
   return (
-    <Text color={placeholderColor}>
-      {placeholder}
-      {showCursor && CURSOR_CHAR}
-    </Text>
+    <text>
+      <span fg={placeholderColor}>
+        {placeholder}
+        {showCursor && CURSOR_CHAR}
+      </span>
+    </text>
   );
 }

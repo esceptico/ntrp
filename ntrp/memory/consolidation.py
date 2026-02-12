@@ -109,12 +109,14 @@ async def _llm_consolidation_decisions(
         for item in raw:
             try:
                 parsed = ConsolidationSchema.model_validate(item)
-                actions.append(ConsolidationAction(
-                    type=parsed.action,
-                    observation_id=parsed.observation_id,
-                    text=parsed.text,
-                    reason=parsed.reason,
-                ))
+                actions.append(
+                    ConsolidationAction(
+                        type=parsed.action,
+                        observation_id=parsed.observation_id,
+                        text=parsed.text,
+                        reason=parsed.reason,
+                    )
+                )
             except Exception:
                 _logger.debug("Skipping invalid consolidation action: %s", item)
                 continue

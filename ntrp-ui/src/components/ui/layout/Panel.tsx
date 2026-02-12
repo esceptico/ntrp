@@ -1,5 +1,4 @@
 import React from "react";
-import { Box, Text } from "ink";
 import { useAccentColor } from "../../../hooks/useAccentColor.js";
 import { useContentWidth } from "../../../contexts/index.js";
 import { colors } from "../colors.js";
@@ -17,16 +16,16 @@ export function Panel({ children, title, subtitle, width }: PanelProps) {
   const effectiveWidth = width ?? contentWidth;
 
   return (
-    <Box flexDirection="column" width={effectiveWidth} paddingX={1} paddingY={1}>
+    <box flexDirection="column" width={effectiveWidth} paddingX={1} paddingY={1}>
       {title && (
-        <Box marginBottom={1}>
-          <Text color={accentValue} bold>
-            {title}
-            {subtitle && <Text bold={false} color={colors.panel.subtitle}> {subtitle}</Text>}
-          </Text>
-        </Box>
+        <box marginBottom={1}>
+          <text>
+            <span fg={accentValue}><strong>{title}</strong></span>
+            {subtitle && <span fg={colors.panel.subtitle}> {subtitle}</span>}
+          </text>
+        </box>
       )}
       {children}
-    </Box>
+    </box>
   );
 }

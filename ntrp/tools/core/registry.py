@@ -22,7 +22,9 @@ class ToolRegistry:
         info = await tool.approval_info(**kwargs)
         if info is not None:
             rejection = await execution.request_approval(
-                info.description, preview=info.preview, diff=info.diff,
+                info.description,
+                preview=info.preview,
+                diff=info.diff,
             )
             if rejection is not None:
                 return rejection.to_result()

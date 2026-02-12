@@ -1,36 +1,64 @@
-import React from "react";
-import { Box, Text } from "ink";
+import { useRef } from "react";
 import type { SlashCommand } from "../../types.js";
+import { colors } from "../ui/index.js";
+import { SplitBorder } from "../ui/border.js";
 
 interface AutocompleteListProps {
   commands: readonly SlashCommand[];
   selectedIndex: number;
   accentValue: string;
-  maxDescWidth?: number;
 }
 
-export function AutocompleteList({ commands, selectedIndex, accentValue, maxDescWidth }: AutocompleteListProps) {
-  const nameCol = Math.max(...commands.map((c) => c.name.length)) + 4;
+const MAX_VISIBLE = 10;
+
+export function AutocompleteList({ commands, selectedIndex, accentValue }: AutocompleteListProps) {
+  const maxName = Math.max(...commands.map((c) => c.name.length));
+  const visibleCount = Math.min(MAX_VISIBLE, commands.length);
+  const scrollTopRef = useRef(0);
+
+  // Keep selected item in view by adjusting the window
+  let scrollTop = scrollTopRef.current;
+  if (selectedIndex < scrollTop) {
+    scrollTop = selectedIndex;
+  } else if (selectedIndex >= scrollTop + visibleCount) {
+    scrollTop = selectedIndex - visibleCount + 1;
+  }
+  scrollTopRef.current = scrollTop;
+
+  const visible = commands.slice(scrollTop, scrollTop + visibleCount);
 
   return (
-    <Box flexDirection="column">
-      {commands.map((cmd, i) => {
-        let desc = cmd.description;
-        if (maxDescWidth && desc.length > maxDescWidth) {
-          desc = desc.slice(0, maxDescWidth - 3) + "...";
-        }
+    <box
+      border={SplitBorder.border}
+      borderColor={colors.border}
+      customBorderChars={SplitBorder.customBorderChars}
+    >
+      <box flexDirection="column" backgroundColor={colors.background.menu}>
+        {visible.map((cmd, vi) => {
+          const i = scrollTop + vi;
+          const isSelected = i === selectedIndex;
+          const display = `/${cmd.name}`.padEnd(maxName + 3);
 
-        return (
-          <Box key={cmd.name} gap={2}>
-            <Box width={nameCol} flexShrink={0}>
-              <Text color={i === selectedIndex ? accentValue : undefined} bold={i === selectedIndex}>
-                /{cmd.name}
-              </Text>
-            </Box>
-            <Text dimColor>{desc}</Text>
-          </Box>
-        );
-      })}
-    </Box>
+          return (
+            <box
+              key={cmd.name}
+              paddingLeft={2}
+              paddingRight={2}
+              backgroundColor={isSelected ? accentValue : undefined}
+              flexDirection="row"
+            >
+              <text fg={isSelected ? "#000000" : colors.text.primary} flexShrink={0}>
+                {display}
+              </text>
+              {cmd.description ? (
+                <text fg={isSelected ? "#000000" : colors.text.muted} wrapMode="none">
+                  {cmd.description}
+                </text>
+              ) : null}
+            </box>
+          );
+        })}
+      </box>
+    </box>
   );
 }

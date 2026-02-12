@@ -1,5 +1,4 @@
-import React, { memo } from "react";
-import { Box, Text } from "ink";
+import { memo } from "react";
 import { colors } from "../../ui/colors.js";
 import { useDimensions } from "../../../contexts/index.js";
 import { truncateText } from "../../ui/index.js";
@@ -13,10 +12,10 @@ export const StatusMessage = memo(function StatusMessage({ content }: StatusMess
   const contentWidth = Math.max(0, terminalWidth - 4);
 
   return (
-    <Box marginLeft={2} width={contentWidth} overflow="hidden">
-      <Text color={colors.text.muted} italic>
-        {truncateText(content, contentWidth)}
-      </Text>
-    </Box>
+    <box paddingLeft={3} width={contentWidth} overflow="hidden">
+      <text>
+        <span fg={colors.text.muted}><em>{truncateText(content, contentWidth)}</em></span>
+      </text>
+    </box>
   );
 });

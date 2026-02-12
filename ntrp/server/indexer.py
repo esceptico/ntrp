@@ -109,9 +109,7 @@ class Indexer:
                 self._progress.deleted += d
 
             self._progress.status = IndexStatus.DONE
-            self.channel.publish(
-                IndexingCompleted(updated=self._progress.updated, deleted=self._progress.deleted)
-            )
+            self.channel.publish(IndexingCompleted(updated=self._progress.updated, deleted=self._progress.deleted))
         except asyncio.CancelledError:
             self._progress.status = IndexStatus.ERROR
             raise

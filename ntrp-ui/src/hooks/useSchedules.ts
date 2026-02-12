@@ -15,13 +15,13 @@ import {
 
 export type EditFocus = "name" | "description" | "notifiers";
 
-export interface UseSchedulesResult {
+interface UseSchedulesResult {
   schedules: Schedule[];
   selectedIndex: number;
   loading: boolean;
   error: string | null;
   confirmDelete: boolean;
-  viewingResult: { description: string; result: string } | null;
+  viewingResult: Schedule | null;
   editMode: boolean;
   editName: string;
   editNameCursorPos: number;
@@ -34,7 +34,7 @@ export interface UseSchedulesResult {
   editNotifierCursor: number;
   setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
   setConfirmDelete: React.Dispatch<React.SetStateAction<boolean>>;
-  setViewingResult: React.Dispatch<React.SetStateAction<{ description: string; result: string } | null>>;
+  setViewingResult: React.Dispatch<React.SetStateAction<Schedule | null>>;
   setEditMode: React.Dispatch<React.SetStateAction<boolean>>;
   setEditName: React.Dispatch<React.SetStateAction<string>>;
   setEditNameCursorPos: React.Dispatch<React.SetStateAction<number>>;
@@ -61,7 +61,7 @@ export function useSchedules(config: Config): UseSchedulesResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [viewingResult, setViewingResult] = useState<{ description: string; result: string } | null>(null);
+  const [viewingResult, setViewingResult] = useState<Schedule | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [editName, setEditName] = useState("");
   const [editNameCursorPos, setEditNameCursorPos] = useState(0);
@@ -164,9 +164,7 @@ export function useSchedules(config: Config): UseSchedulesResult {
     if (!task) return;
     try {
       const detail = await getScheduleDetail(config, task.task_id);
-      if (detail.last_result) {
-        setViewingResult({ description: detail.description, result: detail.last_result });
-      }
+      setViewingResult(detail);
     } catch {
       // ignore
     }
@@ -201,42 +199,13 @@ export function useSchedules(config: Config): UseSchedulesResult {
   }, [config, schedules, selectedIndex, loadSchedules]);
 
   return {
-    schedules,
-    selectedIndex,
-    loading,
-    error,
-    confirmDelete,
-    viewingResult,
-    editMode,
-    editName,
-    editNameCursorPos,
-    editText,
-    cursorPos,
-    saving,
-    availableNotifiers,
-    editFocus,
-    editNotifiers,
-    editNotifierCursor,
-    setSelectedIndex,
-    setConfirmDelete,
-    setViewingResult,
-    setEditMode,
-    setEditName,
-    setEditNameCursorPos,
-    setEditText,
-    setCursorPos,
-    setSaving,
-    setSchedules,
-    setLoading,
-    setEditFocus,
-    setEditNotifiers,
-    setEditNotifierCursor,
-    loadSchedules,
-    handleToggle,
-    handleDelete,
-    handleToggleWritable,
-    handleRun,
-    handleViewResult,
-    handleSave,
+    schedules, selectedIndex, loading, error, confirmDelete, viewingResult,
+    editMode, editName, editNameCursorPos, editText, cursorPos, saving,
+    availableNotifiers, editFocus, editNotifiers, editNotifierCursor,
+    setSelectedIndex, setConfirmDelete, setViewingResult, setEditMode,
+    setEditName, setEditNameCursorPos, setEditText, setCursorPos, setSaving,
+    setSchedules, setLoading, setEditFocus, setEditNotifiers, setEditNotifierCursor,
+    loadSchedules, handleToggle, handleDelete, handleToggleWritable,
+    handleRun, handleViewResult, handleSave,
   };
 }

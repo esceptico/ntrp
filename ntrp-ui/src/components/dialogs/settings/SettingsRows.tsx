@@ -1,53 +1,11 @@
-import { Text } from "ink";
-import { colors, accentColors, type AccentColor, SelectionIndicator } from "../../ui/index.js";
-import { CHECKBOX_CHECKED, CHECKBOX_UNCHECKED } from "../../../lib/constants.js";
-import type { BooleanItem, NumberItem } from "./config.js";
-
-export const colorOptions = Object.keys(accentColors) as AccentColor[];
+import { colors, SelectionIndicator } from "../../ui/index.js";
+import type { NumberItem } from "./config.js";
 
 const LABEL_WIDTH = 14;
 
 interface RowProps {
   selected: boolean;
   accent: string;
-}
-
-interface BooleanRowProps extends RowProps {
-  item: BooleanItem;
-  value: boolean;
-}
-
-export function BooleanRow({ item, value, selected, accent }: BooleanRowProps) {
-  return (
-    <Text>
-      <SelectionIndicator selected={selected} accent={accent} />
-      <Text color={value ? accent : colors.text.muted}>{value ? CHECKBOX_CHECKED : CHECKBOX_UNCHECKED}</Text>
-      <Text color={selected ? colors.text.primary : colors.text.secondary}>{item.label}</Text>
-    </Text>
-  );
-}
-
-interface ColorPickerProps extends RowProps {
-  currentColor: AccentColor;
-}
-
-export function ColorPicker({ currentColor, selected, accent }: ColorPickerProps) {
-  return (
-    <Text>
-      <SelectionIndicator selected={selected} accent={accent} />
-      <Text color={colors.text.secondary}>Accent  </Text>
-      {colorOptions.map((color) => {
-        const isCurrent = currentColor === color;
-        return (
-          <Text key={color}>
-            <Text color={accentColors[color].primary} inverse={isCurrent}>
-              {isCurrent ? ` ${color} ` : ` ${color} `}
-            </Text>
-          </Text>
-        );
-      })}
-    </Text>
-  );
 }
 
 interface NumberRowProps extends RowProps {
@@ -66,17 +24,17 @@ export function NumberRow({ item, value, selected, accent, sliderWidth = 16 }: N
   const knob = "●";
 
   return (
-    <Text>
+    <text>
       <SelectionIndicator selected={selected} accent={accent} />
-      <Text color={selected ? colors.text.primary : colors.text.secondary}>{label}</Text>
-      <Text color={selected ? accent : colors.text.primary} bold>{String(value).padStart(2)}</Text>
-      <Text color={colors.text.muted}>  [</Text>
-      <Text color={colors.text.disabled}>{before}</Text>
-      <Text color={selected ? accent : colors.text.primary}>{knob}</Text>
-      <Text color={colors.text.disabled}>{after}</Text>
-      <Text color={colors.text.muted}>]  </Text>
-      <Text color={colors.text.disabled}>({item.min}..{item.max})</Text>
-    </Text>
+      <span fg={selected ? colors.text.primary : colors.text.secondary}>{label}</span>
+      <span fg={selected ? accent : colors.text.primary}><strong>{String(value).padStart(2)}</strong></span>
+      <span fg={colors.text.muted}>  [</span>
+      <span fg={colors.text.disabled}>{before}</span>
+      <span fg={selected ? accent : colors.text.primary}>{knob}</span>
+      <span fg={colors.text.disabled}>{after}</span>
+      <span fg={colors.text.muted}>]  </span>
+      <span fg={colors.text.disabled}>({item.min}..{item.max})</span>
+    </text>
   );
 }
 
@@ -93,12 +51,12 @@ export function ModelSelector({ label, currentModel, selected, accent, maxWidth 
   const paddedLabel = label.padEnd(LABEL_WIDTH);
 
   return (
-    <Text>
+    <text>
       <SelectionIndicator selected={selected} accent={accent} />
-      <Text color={selected ? colors.text.primary : colors.text.secondary}>{paddedLabel}</Text>
-      <Text color={colors.text.muted}>[</Text>
-      <Text color={selected ? accent : colors.text.primary}> {displayName} </Text>
-      <Text color={colors.text.muted}>▾]</Text>
-    </Text>
+      <span fg={selected ? colors.text.primary : colors.text.secondary}>{paddedLabel}</span>
+      <span fg={colors.text.muted}>[</span>
+      <span fg={selected ? accent : colors.text.primary}> {displayName} </span>
+      <span fg={colors.text.muted}>▾]</span>
+    </text>
   );
 }

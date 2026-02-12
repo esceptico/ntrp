@@ -1,5 +1,4 @@
-import React, { useMemo } from "react";
-import { Box, Text } from "ink";
+import { useMemo } from "react";
 import { colors } from "../ui/colors.js";
 import { truncateText } from "../ui/index.js";
 import { MAX_DIFF_LINES } from "../../lib/constants.js";
@@ -38,19 +37,21 @@ export function DiffView({ diff, width }: DiffViewProps) {
   const lineWidth = Math.max(0, width - 2);
 
   return (
-    <Box flexDirection="column" width={width} overflow="hidden">
-      <Text>
-        <Text color={colors.diff.added}>+{added}</Text>
-        <Text color={colors.text.disabled}>/</Text>
-        <Text color={colors.diff.removed}>-{removed}</Text>
-        <Text color={colors.text.disabled}> lines</Text>
-      </Text>
+    <box flexDirection="column" width={width} overflow="hidden">
+      <text>
+        <span fg={colors.diff.added}>+{added}</span>
+        <span fg={colors.text.disabled}>/</span>
+        <span fg={colors.diff.removed}>-{removed}</span>
+        <span fg={colors.text.disabled}> lines</span>
+      </text>
       {displayLines.map((line, i) => (
-        <Text key={i} color={line.type === "added" ? colors.diff.added : line.type === "removed" ? colors.diff.removed : colors.text.disabled}>
-          {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "} {truncateText(line.content, lineWidth)}
-        </Text>
+        <text key={i}>
+          <span fg={line.type === "added" ? colors.diff.added : line.type === "removed" ? colors.diff.removed : colors.text.disabled}>
+            {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "} {truncateText(line.content, lineWidth)}
+          </span>
+        </text>
       ))}
-      {skipped > 0 && <Text color={colors.text.disabled}>  ⋯ {skipped} more</Text>}
-    </Box>
+      {skipped > 0 && <text><span fg={colors.text.disabled}>  ⋯ {skipped} more</span></text>}
+    </box>
   );
 }

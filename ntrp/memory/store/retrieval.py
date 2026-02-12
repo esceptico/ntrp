@@ -66,9 +66,7 @@ async def entity_expand(
         facts = await repo.get_facts_for_entity_id(entity_id, limit=per_entity_limit)
         for fact in facts:
             if fact.id not in seed_set:
-                expansion_scores[fact.id] = max(
-                    expansion_scores.get(fact.id, 0.0), idf_weight
-                )
+                expansion_scores[fact.id] = max(expansion_scores.get(fact.id, 0.0), idf_weight)
 
     if len(expansion_scores) > max_facts:
         top = heapq.nlargest(max_facts, expansion_scores.items(), key=lambda x: x[1])
@@ -139,7 +137,10 @@ async def retrieve_facts(
     # Temporal+vector expansion: get temporally close facts, filter by vector similarity
     if query_time:
         temporal_ids = await _temporal_vector_expand(
-            repo, query_embedding, query_time, TEMPORAL_EXPANSION_LIMIT,
+            repo,
+            query_embedding,
+            query_time,
+            TEMPORAL_EXPANSION_LIMIT,
         )
     else:
         temporal_ids = {}

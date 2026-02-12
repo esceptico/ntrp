@@ -1,5 +1,3 @@
-import React from "react";
-import { Text } from "ink";
 import type { Observation, ObservationDetails } from "../../../api/client.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
@@ -13,7 +11,7 @@ interface ObservationsSectionProps {
   detailsLoading: boolean;
   searchQuery: string;
   focusPane: "list" | "details";
-  visibleLines: number;
+  height: number;
   width: number;
   detailSection: ObsDetailSection;
   textExpanded: boolean;
@@ -35,7 +33,7 @@ export function ObservationsSection({
   detailsLoading,
   searchQuery,
   focusPane,
-  visibleLines,
+  height,
   width,
   detailSection,
   textExpanded,
@@ -58,10 +56,10 @@ export function ObservationsSection({
     const countColor = ctx.isSelected ? accentValue : colors.text.muted;
 
     return (
-      <Text>
-        <Text color={countColor}>[{obs.evidence_count}]</Text>
-        <Text color={ctx.colors.text}> {truncateText(obs.summary, textWidth)}</Text>
-      </Text>
+      <text>
+        <span fg={countColor}>[{obs.evidence_count}]</span>
+        <span fg={ctx.colors.text}> {truncateText(obs.summary, textWidth)}</span>
+      </text>
     );
   };
 
@@ -74,13 +72,14 @@ export function ObservationsSection({
       emptyMessage="No observations synthesized yet"
       searchQuery={searchQuery}
       focusPane={focusPane}
-      visibleLines={visibleLines}
+      height={height}
       width={width}
       details={
         <ObservationDetailsView
           details={obsDetails}
           loading={detailsLoading}
           width={detailWidth}
+          height={height}
           isFocused={focusPane === "details"}
           focusedSection={detailSection}
           textExpanded={textExpanded}

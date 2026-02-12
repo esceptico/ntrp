@@ -20,9 +20,9 @@ export interface ToolCallEvent {
   tool_id: string;
   name: string;
   args: Record<string, unknown>;
-  description: string;  // Formatted: name(key=value, ...)
-  depth: number;        // 0 = top-level, >0 = subagent
-  parent_id: string;    // Parent tool_call_id for grouping subagent calls
+  description: string;
+  depth: number;
+  parent_id: string;
 }
 
 export interface ToolResultEvent {
@@ -113,8 +113,9 @@ export interface Message {
   id?: string;
   role: "user" | "assistant" | "tool" | "status" | "error" | "thinking" | "tool_chain";
   content: string;
+  depth?: number;
   toolName?: string;
-  toolDescription?: string; // Server-formatted: name(key=value, ...)
+  toolDescription?: string;
   toolCount?: number;
   duration?: number;
   toolChain?: ToolChainItem[];

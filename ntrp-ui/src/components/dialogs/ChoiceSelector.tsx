@@ -1,5 +1,4 @@
-import React, { useState, useCallback } from "react";
-import { Box, Text } from "ink";
+import { useState, useCallback } from "react";
 import { colors } from "../ui/colors.js";
 import { useDimensions } from "../../contexts/index.js";
 import { truncateText, SelectionIndicator, TextInputField } from "../ui/index.js";
@@ -34,7 +33,7 @@ export function ChoiceSelector({
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const textInput = useInlineTextInput();
 
-  const contentWidth = Math.max(0, terminalWidth - 8);
+  const contentWidth = Math.max(0, terminalWidth - 4);
   const labelWidth = Math.max(0, contentWidth - 15);
   const isOnOther = selectedIndex === otherIndex;
 
@@ -129,43 +128,53 @@ export function ChoiceSelector({
       : "↑↓ navigate · Enter select · Esc cancel";
 
   return (
-    <Box flexDirection="column" marginY={1} width={terminalWidth - 2} overflow="hidden">
-      <Text color={colors.text.primary} bold>
-        {" "}{truncateText(question, contentWidth)}
-      </Text>
-      <Box height={1} />
+    <box
+      flexDirection="column"
+      marginY={1}
+      width={terminalWidth}
+      overflow="hidden"
+      border={["left"]}
+      borderStyle="heavy"
+      borderColor={accentValue}
+      paddingLeft={1}
+    >
+      <text>
+        <span fg={colors.text.primary}><strong>{truncateText(question, contentWidth)}</strong></span>
+      </text>
 
-      <Box flexDirection="column" marginLeft={2} width={contentWidth} overflow="hidden">
+      <box flexDirection="column" marginTop={1} width={contentWidth} overflow="hidden">
         {options.map((opt, i) => {
           const isSelected = i === selectedIndex;
           const isChecked = checked.has(opt.id);
 
           return (
-            <Text key={opt.id}>
+            <text key={opt.id}>
               <SelectionIndicator selected={isSelected} accent={accentValue} />
               {allowMultiple && (
-                <Text color={isChecked ? accentValue : colors.text.disabled}>
+                <span fg={isChecked ? accentValue : colors.text.disabled}>
                   {isChecked ? "◉ " : "○ "}
-                </Text>
+                </span>
               )}
-              <Text color={colors.text.disabled}>{i + 1}. </Text>
-              <Text color={isSelected ? colors.text.primary : colors.text.secondary}>
+              <span fg={colors.text.disabled}>{i + 1}. </span>
+              <span fg={isSelected ? colors.text.primary : colors.text.secondary}>
                 {truncateText(opt.label, labelWidth)}
-              </Text>
+              </span>
               {opt.description && (
-                <Text color={colors.text.muted}> — {truncateText(opt.description, labelWidth - opt.label.length - 3)}</Text>
+                <span fg={colors.text.muted}> — {truncateText(opt.description, labelWidth - opt.label.length - 3)}</span>
               )}
-            </Text>
+            </text>
           );
         })}
 
         {allowOther && (
-          <Text>
-            <SelectionIndicator selected={isOnOther} accent={accentValue} />
-            {allowMultiple && (
-              <Text color={colors.text.disabled}>{"○ "}</Text>
-            )}
-            <Text color={colors.text.disabled}>{options.length + 1}. </Text>
+          <box flexDirection="row">
+            <text>
+              <SelectionIndicator selected={isOnOther} accent={accentValue} />
+              {allowMultiple && (
+                <span fg={colors.text.disabled}>{"○ "}</span>
+              )}
+              <span fg={colors.text.disabled}>{options.length + 1}. </span>
+            </text>
             <TextInputField
               value={textInput.value}
               cursorPos={textInput.cursorPos}
@@ -173,13 +182,13 @@ export function ChoiceSelector({
               showCursor={isOnOther}
               placeholderColor={isOnOther ? colors.text.secondary : colors.text.muted}
             />
-          </Text>
+          </box>
         )}
-      </Box>
+      </box>
 
-      <Box height={1} />
-
-      <Text color={colors.text.disabled}> {hintText}</Text>
-    </Box>
+      <box marginTop={1}>
+        <text><span fg={colors.text.disabled}>{hintText}</span></text>
+      </box>
+    </box>
   );
 }

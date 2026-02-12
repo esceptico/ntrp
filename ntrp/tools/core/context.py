@@ -29,7 +29,9 @@ class Rejection:
     def to_result(self) -> "ToolResult":
         from ntrp.tools.core.base import ToolResult
 
-        content = f"User rejected this action and said: {self.feedback}" if self.feedback else "User rejected this action"
+        content = (
+            f"User rejected this action and said: {self.feedback}" if self.feedback else "User rejected this action"
+        )
         return ToolResult(content=content, preview="Rejected")
 
 
@@ -97,10 +99,8 @@ class ToolExecution:
         response = await asyncio.wait_for(self.ctx.approval_queue.get(), timeout=300)
 
         if not response["approved"]:
-            feedback = response.get("result", "")
-            if feedback.startswith("Rejected: "):
-                feedback = feedback[len("Rejected: "):]
-            return Rejection(feedback=feedback or None)
+            feedback = response.get("result", "").strip() or None
+            return Rejection(feedback=feedback)
 
         return None
 

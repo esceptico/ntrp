@@ -15,14 +15,12 @@ export function useScrollOffset(
 
   let offset = offsetRef.current;
 
-  // Only scroll when selection goes beyond the visible window
   if (selectedIndex < offset) {
     offset = selectedIndex;
   } else if (selectedIndex >= offset + visibleLines) {
     offset = selectedIndex - visibleLines + 1;
   }
 
-  // Clamp to valid range
   offset = Math.max(0, Math.min(totalItems - visibleLines, offset));
   offsetRef.current = offset;
 
