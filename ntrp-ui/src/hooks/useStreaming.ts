@@ -296,12 +296,7 @@ export function useStreaming({
       alwaysAllowedToolsRef.current.add(pendingApproval.name);
     }
 
-    const resultText = approved
-      ? "Approved"
-      : feedback
-        ? `Rejected: ${feedback}`
-        : "Rejected";
-    await submitToolResult(currentRunId, pendingApproval.toolId, resultText, approved, config);
+    await submitToolResult(currentRunId, pendingApproval.toolId, feedback ?? "", approved, config);
 
     const statusIcon = result === "reject" ? "✗" : "✓";
     const statusText = result === "always" ? "Always allowed" : result === "once" ? "Allowed" : "Rejected";

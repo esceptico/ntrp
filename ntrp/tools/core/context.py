@@ -97,10 +97,8 @@ class ToolExecution:
         response = await asyncio.wait_for(self.ctx.approval_queue.get(), timeout=300)
 
         if not response["approved"]:
-            feedback = response.get("result", "")
-            if feedback.startswith("Rejected: "):
-                feedback = feedback[len("Rejected: "):]
-            return Rejection(feedback=feedback or None)
+            feedback = response.get("result", "").strip() or None
+            return Rejection(feedback=feedback)
 
         return None
 
