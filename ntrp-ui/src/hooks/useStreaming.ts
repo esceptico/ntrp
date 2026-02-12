@@ -355,6 +355,7 @@ export function useStreaming({
     addMessage,
     clearMessages,
     sendMessage,
+    setStatus,
     handleApproval,
     handleChoice,
     cancelChoice,

@@ -240,7 +240,7 @@ export const InputArea = memo(function InputArea({
         </box>
         {/* Footer */}
         <box flexDirection="row" justifyContent="space-between">
-          {isStreaming ? (
+          {isStreaming || status === Status.COMPRESSING ? (
             <>
               <box flexDirection="row" gap={1} flexGrow={1}>
                 <box marginLeft={3}>
@@ -256,10 +256,12 @@ export const InputArea = memo(function InputArea({
                   <CyclingStatus status={status} isStreaming={isStreaming} />
                 )}
               </box>
-              <text>
-                <span fg={colors.footer}>esc</span>
-                <span fg={colors.text.disabled}> interrupt</span>
-              </text>
+              {isStreaming && (
+                <text>
+                  <span fg={colors.footer}>esc</span>
+                  <span fg={colors.text.disabled}> interrupt</span>
+                </text>
+              )}
             </>
           ) : (
             <>

@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 import type { Config } from "../types.js";
+import { Status, type Status as StatusType } from "../lib/constants.js";
 import {
   clearSession,
   purgeMemory,
@@ -18,6 +19,7 @@ interface CommandContext {
   addMessage: (msg: { role: string; content: string }) => void;
   clearMessages: () => void;
   sendMessage: (msg: string) => void;
+  setStatus: (status: StatusType) => void;
   toggleSettings: () => void;
   exit: () => void;
   refreshIndexStatus: () => Promise<void>;
@@ -35,13 +37,15 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   dashboard: ({ setViewMode }) => { setViewMode("dashboard"); return true; },
   settings: ({ toggleSettings }) => { toggleSettings(); return true; },
 
-  compact: async ({ config, addMessage }) => {
+  compact: async ({ config, addMessage, setStatus }) => {
     try {
-      addMessage({ role: "status", content: "Compacting context..." });
+      setStatus(Status.COMPRESSING);
       const result = await compactContext(config);
       addMessage({ role: "status", content: result.message });
     } catch (error) {
       addMessage({ role: "error", content: `${error}` });
+    } finally {
+      setStatus(Status.IDLE);
     }
     return true;
   },

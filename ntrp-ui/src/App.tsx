@@ -107,6 +107,7 @@ function AppContent({
     cancelChoice,
     handleApproval,
     cancel,
+    setStatus,
   } = streaming;
 
   const isInChatMode = viewMode === "chat" && !showSettings;
@@ -120,6 +121,7 @@ function AppContent({
     addMessage: (msg) => addMessage(msg as Message),
     clearMessages,
     sendMessage,
+    setStatus,
     toggleSettings,
     exit: () => renderer.destroy(),
     refreshIndexStatus,
