@@ -249,7 +249,7 @@ export async function purgeMemory(config: Config): Promise<{ status: string; del
   return api.post<{ status: string; deleted: Record<string, number> }>(`${config.serverUrl}/memory/clear`);
 }
 
-export interface IndexStatus {
+interface IndexStatus {
   indexing: boolean;
   progress: {
     total: number;
@@ -485,7 +485,7 @@ export interface DashboardSystem {
   source_errors: Record<string, string>;
 }
 
-export interface TokenDataPoint {
+interface TokenDataPoint {
   prompt: number;
   completion: number;
   ts: number;
@@ -497,7 +497,7 @@ export interface DashboardTokens {
   history: TokenDataPoint[];
 }
 
-export interface RecentToolCall {
+interface RecentToolCall {
   name: string;
   duration_ms: number;
   depth: number;
@@ -505,7 +505,7 @@ export interface RecentToolCall {
   error: boolean;
 }
 
-export interface ToolStats {
+interface ToolStats {
   count: number;
   avg_ms: number;
   error_count: number;
@@ -528,14 +528,14 @@ export interface DashboardMemory {
   recent_facts: Array<{ id: number; text: string; ts: number }>;
 }
 
-export interface DashboardIndexer {
+interface DashboardIndexer {
   status: string;
   progress_done: number;
   progress_total: number;
   error: string | null;
 }
 
-export interface DashboardScheduler {
+interface DashboardScheduler {
   running: boolean;
   active_task: string | null;
   total_scheduled: number;

@@ -1,14 +1,14 @@
 import { useCallback, useRef } from "react";
 import type { Key } from "./useKeypress.js";
 
-export interface UseTextInputOptions {
+interface UseTextInputOptions {
   text: string;
   cursorPos: number;
   setText: (text: string | ((prev: string) => string)) => void;
   setCursorPos: (pos: number | ((prev: number) => number)) => void;
 }
 
-export interface UseTextInputResult {
+interface UseTextInputResult {
   handleKey: (key: Key) => boolean;
   findPrevWordBoundary: (pos: number) => number;
   findNextWordBoundary: (pos: number) => number;

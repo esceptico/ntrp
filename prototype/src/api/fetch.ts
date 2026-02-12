@@ -1,11 +1,11 @@
-export interface ApiError extends Error {
+interface ApiError extends Error {
   status?: number;
   statusText?: string;
   isNetworkError: boolean;
   isTimeout: boolean;
 }
 
-export interface FetchOptions {
+interface FetchOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   timeout?: number;

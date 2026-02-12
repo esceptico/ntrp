@@ -15,7 +15,7 @@ import {
 
 export type EditFocus = "name" | "description" | "notifiers";
 
-export interface UseSchedulesResult {
+interface UseSchedulesResult {
   schedules: Schedule[];
   selectedIndex: number;
   loading: boolean;

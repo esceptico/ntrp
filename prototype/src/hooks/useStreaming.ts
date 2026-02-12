@@ -7,10 +7,12 @@ import {
   MAX_TOOL_MESSAGE_CHARS,
   MAX_TOOL_DESCRIPTION_CHARS,
   MAX_ASSISTANT_CHARS,
+  Status,
+  type Status as StatusType,
 } from "../lib/constants.js";
 import { truncateText } from "../lib/utils.js";
 
-export interface PendingChoice {
+interface PendingChoice {
   toolId: string;
   question: string;
   options: { id: string; label: string; description?: string }[];
@@ -44,7 +46,7 @@ export function useStreaming({
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState<StatusType>(Status.IDLE);
   const [toolChain, setToolChain] = useState<ToolChainItem[]>([]);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [pendingChoice, setPendingChoice] = useState<PendingChoice | null>(null);
@@ -90,7 +92,7 @@ export function useStreaming({
     }
     currentDepthRef.current = event.depth;
 
-    setStatus(`${event.name}...`);
+    setStatus(Status.TOOL);
     const description = truncateText(event.description, MAX_TOOL_DESCRIPTION_CHARS, 'end');
     toolDescRef.current.set(event.tool_id, description);
     toolStartRef.current.set(event.tool_id, Date.now());
@@ -119,7 +121,7 @@ export function useStreaming({
 
     if (event.name === "ask_choice") {
       setToolChain((prev) => prev.filter((item) => item.id !== event.tool_id));
-      setStatus("thinking...");
+      setStatus(Status.THINKING);
       return;
     }
 
@@ -150,7 +152,7 @@ export function useStreaming({
       return prev.filter((item) => item.id !== event.tool_id);
     });
 
-    setStatus("thinking...");
+    setStatus(Status.THINKING);
   }, [addMessage]);
 
   const handleApprovalNeeded = useCallback(async (event: Extract<ServerEvent, { type: "approval_needed" }>) => {
@@ -159,7 +161,7 @@ export function useStreaming({
     if (alwaysAllowedToolsRef.current.has(event.name) && currentRunId) {
       await submitToolResult(currentRunId, event.tool_id, "Approved", true, config);
       addMessage({ role: "status", content: `\u2713 Auto-approved ${event.name} (always)` });
-      setStatus("thinking...");
+      setStatus(Status.THINKING);
       return;
     }
 
@@ -170,7 +172,7 @@ export function useStreaming({
       diff: event.diff,
       preview: event.content_preview || "",
     });
-    setStatus("awaiting approval...");
+    setStatus(Status.AWAITING_APPROVAL);
   }, [config, addMessage]);
 
   const handleEvent = useCallback(async (event: ServerEvent) => {
@@ -179,7 +181,7 @@ export function useStreaming({
         handleSessionInfo(event);
         break;
       case "thinking":
-        setStatus(event.status);
+        setStatus(Status.THINKING);
         break;
       case "text":
         pendingTextRef.current = event.content;
@@ -198,7 +200,7 @@ export function useStreaming({
           prompt: prev.prompt + event.usage.prompt,
           completion: prev.completion + event.usage.completion,
         }));
-        setStatus("");
+        setStatus(Status.IDLE);
         setToolChain((prev) =>
           prev.map((item) =>
             item.status === "running" ? { ...item, status: "done" as const } : item
@@ -207,11 +209,11 @@ export function useStreaming({
         break;
       case "error":
         addMessage({ role: "error", content: event.message });
-        setStatus("");
+        setStatus(Status.IDLE);
         break;
       case "cancelled":
         setToolChain([]);
-        setStatus("");
+        setStatus(Status.IDLE);
         setIsStreaming(false);
         break;
       case "question":
@@ -224,7 +226,7 @@ export function useStreaming({
           options: event.options,
           allowMultiple: event.allow_multiple,
         });
-        setStatus("awaiting choice...");
+        setStatus(Status.AWAITING_CHOICE);
         break;
       default: {
         const _exhaustive: never = event;
@@ -243,7 +245,7 @@ export function useStreaming({
     addMessage({ role: "user", content: message });
     setIsStreaming(true);
     pendingTextRef.current = "";
-    setStatus("thinking...");
+    setStatus(Status.THINKING);
     setToolChain([]);
     toolDescRef.current.clear();
     toolSeqRef.current = 0;
@@ -262,7 +264,7 @@ export function useStreaming({
     currentDepthRef.current = 0;
 
     setIsStreaming(false);
-    setStatus("");
+    setStatus(Status.IDLE);
   }, [sessionId, config, skipApprovals, handleEvent, addMessage]);
 
   const handleApproval = useCallback(async (
@@ -290,7 +292,7 @@ export function useStreaming({
     addMessage({ role: "status", content: `${statusIcon} ${statusText}: ${pendingApproval.name}` });
 
     setPendingApproval(null);
-    setStatus("thinking...");
+    setStatus(Status.THINKING);
   }, [pendingApproval, config, addMessage]);
 
   const handleChoice = useCallback(async (selected: string[]) => {
@@ -306,7 +308,7 @@ export function useStreaming({
     addMessage({ role: "status", content: `Selected: ${labels.join(", ")}` });
 
     setPendingChoice(null);
-    setStatus("thinking...");
+    setStatus(Status.THINKING);
   }, [pendingChoice, config, addMessage]);
 
   const cancelChoice = useCallback(async () => {
@@ -317,7 +319,7 @@ export function useStreaming({
     addMessage({ role: "status", content: "Choice cancelled" });
 
     setPendingChoice(null);
-    setStatus("thinking...");
+    setStatus(Status.THINKING);
   }, [pendingChoice, config, addMessage]);
 
   const cancel = useCallback(async () => {

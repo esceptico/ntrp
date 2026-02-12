@@ -1,10 +1,12 @@
 import { useState, useCallback, useRef, useMemo, memo, useEffect } from "react";
 import type { TextareaRenderable, KeyEvent } from "@opentui/core";
 import type { SlashCommand } from "../../types.js";
+import type { Status } from "../../lib/constants.js";
 import { colors } from "../ui/colors.js";
 import { useAccentColor } from "../../hooks/index.js";
-import { useDimensions } from "../../contexts/index.js";
-import { EmptyBorder, SplitBorder } from "../ui/border.js";
+import { EmptyBorder } from "../ui/border.js";
+import { BraillePendulum } from "../ui/BraillePendulum.js";
+import { CyclingStatus } from "../ui/CyclingStatus.js";
 import { AutocompleteList } from "./AutocompleteList.js";
 
 function formatModel(model?: string): string {
@@ -13,15 +15,12 @@ function formatModel(model?: string): string {
   return parts[parts.length - 1];
 }
 
-
-const SCANNER_WIDTH = 8;
-
-export interface InputAreaProps {
+interface InputAreaProps {
   onSubmit: (v: string) => void;
   disabled: boolean;
   focus: boolean;
   isStreaming: boolean;
-  status?: string;
+  status: Status;
   commands: readonly SlashCommand[];
   queueCount?: number;
   skipApprovals?: boolean;
@@ -41,40 +40,12 @@ export const InputArea = memo(function InputArea({
   chatModel,
   indexStatus = null,
 }: InputAreaProps) {
-  const { width: columns } = useDimensions();
   const { accentValue } = useAccentColor();
 
   const inputRef = useRef<TextareaRenderable>(null);
   const [value, setValue] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [escHint, setEscHint] = useState(false);
-
-  // Knight Rider scanner animation
-  const [scanPos, setScanPos] = useState(0);
-  const scanDirRef = useRef(1);
-
-  useEffect(() => {
-    if (!isStreaming) {
-      setScanPos(0);
-      scanDirRef.current = 1;
-      return;
-    }
-    const interval = setInterval(() => {
-      setScanPos(prev => {
-        const next = prev + scanDirRef.current;
-        if (next >= SCANNER_WIDTH - 1) {
-          scanDirRef.current = -1;
-          return SCANNER_WIDTH - 1;
-        }
-        if (next <= 0) {
-          scanDirRef.current = 1;
-          return 0;
-        }
-        return next;
-      });
-    }, 40);
-    return () => clearInterval(interval);
-  }, [isStreaming]);
 
   const escPendingRef = useRef(false);
   const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -274,28 +245,9 @@ export const InputArea = memo(function InputArea({
             <>
               <box flexDirection="row" gap={1} flexGrow={1}>
                 <box marginLeft={3}>
-                  <text>
-                    {Array.from({ length: SCANNER_WIDTH }, (_, i) => {
-                      const dist = Math.abs(i - scanPos);
-                      return (
-                        <span
-                          key={i}
-                          fg={
-                            dist === 0 ? accentValue
-                            : dist === 1 ? colors.text.secondary
-                            : dist === 2 ? colors.text.muted
-                            : colors.text.disabled
-                          }
-                        >
-                          {dist === 0 ? "\u25A0" : "\u2B1D"}
-                        </span>
-                      );
-                    })}
-                  </text>
+                  <BraillePendulum width={8} color={accentValue} spread={1} interval={20}/>
                 </box>
-                {status ? (
-                  <text><span fg={colors.text.muted}>{status.replace(/\.{3}$/, "")}</span></text>
-                ) : null}
+                <CyclingStatus status={status} isStreaming={isStreaming} />
               </box>
               <text>
                 <span fg={colors.footer}>esc</span>

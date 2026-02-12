@@ -9,7 +9,7 @@ import {
 } from "../api/client.js";
 import { INDEX_STATUS_POLL_MS, INDEX_DONE_HIDE_MS } from "../lib/constants.js";
 
-export interface IndexStatus {
+interface IndexStatus {
   indexing: boolean;
   progress: { total: number; done: number; status: string };
 }

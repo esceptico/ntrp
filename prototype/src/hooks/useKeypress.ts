@@ -17,7 +17,7 @@ export interface Key {
   isPasted?: boolean;
 }
 
-export type KeypressHandler = (key: Key) => void;
+type KeypressHandler = (key: Key) => void;
 
 function toKey(event: KeyEvent): Key {
   const isModifier = event.ctrl || event.meta;
