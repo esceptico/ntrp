@@ -51,7 +51,7 @@ class ToolExecutor:
                 preview="Unknown tool",
             )
 
-        return await self.registry.execute(tool_name, execution, **arguments)
+        return await self.registry.execute(tool_name, execution, arguments)
 
     def get_tools(self, mutates: bool | None = None) -> list[dict]:
         return self.registry.get_schemas(mutates=mutates)

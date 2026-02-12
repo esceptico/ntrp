@@ -16,10 +16,10 @@ class ToolRegistry:
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
 
-    async def execute(self, name: str, execution: ToolExecution, **kwargs: Any) -> ToolResult:
+    async def execute(self, name: str, execution: ToolExecution, arguments: dict[str, Any]) -> ToolResult:
         tool = self._tools[name]
 
-        info = await tool.approval_info(**kwargs)
+        info = await tool.approval_info(**arguments)
         if info is not None:
             rejection = await execution.request_approval(
                 info.description,
@@ -29,7 +29,7 @@ class ToolRegistry:
             if rejection is not None:
                 return rejection.to_result()
 
-        return await tool.execute(execution, **kwargs)
+        return await tool.execute(execution, **arguments)
 
     def get_schemas(
         self,

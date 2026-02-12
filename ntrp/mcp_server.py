@@ -105,7 +105,7 @@ async def create_server() -> tuple[Server, Runtime]:
         )
 
         try:
-            result: ToolResult = await runtime.executor.registry.execute(name, execution, **arguments)
+            result: ToolResult = await runtime.executor.registry.execute(name, execution, arguments)
             return [TextContent(type="text", text=result.content)]
         except Exception as e:
             _logger.exception("MCP tool execution failed: %s", name)
