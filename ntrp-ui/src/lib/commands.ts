@@ -7,7 +7,6 @@ export const COMMANDS = [
   { name: "schedules", description: "View and manage scheduled tasks" },
   { name: "settings", description: "Model, connections, and UI settings" },
   { name: "dashboard", description: "Server dashboard and diagnostics" },
-  { name: "context", description: "Show token usage breakdown" },
   { name: "compact", description: "Summarize old messages to save tokens" },
   { name: "clear", description: "Clear chat history" },
   { name: "purge", description: "Clear graph memory (keeps note embeddings)" },

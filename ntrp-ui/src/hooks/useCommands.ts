@@ -4,7 +4,6 @@ import {
   clearSession,
   purgeMemory,
   compactContext,
-  getContextUsage,
   startIndexing,
 } from "../api/client.js";
 
@@ -35,41 +34,6 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   schedule: ({ setViewMode }) => { setViewMode("schedules"); return true; },
   dashboard: ({ setViewMode }) => { setViewMode("dashboard"); return true; },
   settings: ({ toggleSettings }) => { toggleSettings(); return true; },
-
-  context: async ({ config, addMessage }) => {
-    try {
-      const ctx = await getContextUsage(config);
-      const fmt = (n: number) => n.toLocaleString();
-
-      if (ctx.total != null) {
-        const pct = ((ctx.total / ctx.limit) * 100).toFixed(1);
-        const barLen = 20;
-        const filled = Math.round((ctx.total / ctx.limit) * barLen);
-        const bar = "\u2588".repeat(filled) + "\u2591".repeat(barLen - filled);
-
-        const lines = [
-          `Context Usage [${bar}] ${pct}%`,
-          ``,
-          `${ctx.model} \u00B7 ${fmt(ctx.total)}/${fmt(ctx.limit)} tokens`,
-          `${ctx.message_count} messages \u00B7 ${ctx.tool_count} tools`,
-        ];
-
-        addMessage({ role: "assistant", content: lines.join("\n") });
-      } else {
-        const lines = [
-          `Context Usage [no data yet]`,
-          ``,
-          `${ctx.model} \u00B7 limit ${fmt(ctx.limit)} tokens`,
-          `${ctx.message_count} messages \u00B7 ${ctx.tool_count} tools`,
-        ];
-
-        addMessage({ role: "assistant", content: lines.join("\n") });
-      }
-    } catch (error) {
-      addMessage({ role: "error", content: `${error}` });
-    }
-    return true;
-  },
 
   compact: async ({ config, addMessage }) => {
     try {
