@@ -1,9 +1,7 @@
-import { useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import type { Config } from "../../../types.js";
 import { useKeypress, useTextInput, type Key } from "../../../hooks/index.js";
-import { useDimensions } from "../../../contexts/index.js";
-import { Panel, Footer, Loading, colors, BaseSelectionList } from "../../ui/index.js";
-import { VISIBLE_LINES } from "../../../lib/constants.js";
+import { Dialog, Loading, colors, BaseSelectionList, Hints } from "../../ui/index.js";
 import { useSchedules, type EditFocus } from "../../../hooks/useSchedules.js";
 import { ScheduleItem } from "./ScheduleItem.js";
 import { ScheduleEditView } from "./ScheduleEditView.js";
@@ -17,10 +15,6 @@ interface SchedulesViewerProps {
 const FOCUS_ORDER: EditFocus[] = ["name", "description", "notifiers"];
 
 export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
-  const { width: terminalWidth } = useDimensions();
-  const contentWidth = Math.max(0, terminalWidth - 4);
-  const textWidth = contentWidth - 2;
-
   const {
     schedules,
     selectedIndex,
@@ -59,6 +53,8 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
     editNotifierCursor,
   } = useSchedules(config);
 
+  const [detailScroll, setDetailScroll] = useState(0);
+
   const nameInput = useTextInput({
     text: editName,
     cursorPos: editNameCursorPos,
@@ -75,6 +71,22 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
 
   const handleKeypress = useCallback(
     (key: Key) => {
+      // Detail view mode
+      if (viewingResult) {
+        if (key.name === "escape" || key.name === "q") {
+          setViewingResult(null);
+          setDetailScroll(0);
+          return;
+        }
+        if (key.name === "up" || key.name === "k") {
+          setDetailScroll((s) => Math.max(0, s - 1));
+        } else if (key.name === "down" || key.name === "j") {
+          setDetailScroll((s) => s + 1);
+        }
+        return;
+      }
+
+      // Edit mode
       if (editMode) {
         if (key.ctrl && key.name === "s") {
           handleSave();
@@ -127,6 +139,7 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
         return;
       }
 
+      // Delete confirmation
       if (confirmDelete) {
         if (key.name === "y") {
           handleDelete();
@@ -136,6 +149,7 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
         return;
       }
 
+      // List mode
       if (key.name === "escape" || key.name === "q") {
         onClose();
       } else if (key.name === "up" || key.name === "k") {
@@ -173,89 +187,108 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
       onClose, schedules, selectedIndex, handleToggle, handleToggleWritable,
       confirmDelete, handleDelete, loadSchedules, handleViewResult, handleRun,
       editMode, editFocus, editNotifierCursor, availableNotifiers, handleSave,
-      setSelectedIndex, setConfirmDelete, setEditMode, setEditName, setEditNameCursorPos,
+      viewingResult,
+      setSelectedIndex, setConfirmDelete, setViewingResult, setEditMode, setEditName, setEditNameCursorPos,
       setEditText, setCursorPos, setEditFocus, setEditNotifiers, setEditNotifierCursor,
       setLoading, nameInput, textInput,
     ]
   );
 
-  useKeypress(handleKeypress, { isActive: !viewingResult });
+  useKeypress(handleKeypress, { isActive: true });
+
+  const getFooter = (): React.ReactNode => {
+    if (viewingResult) return <Hints items={[["j/k", "scroll"], ["q", "back"]]} />;
+    if (editMode) return saving
+      ? <text><span fg={colors.text.muted}>Saving...</span></text>
+      : <Hints items={[["^S", "save"], ["esc", "cancel"], ["tab", "next"]]} />;
+    if (confirmDelete) return <Hints items={[["y", "confirm"], ["n", "cancel"]]} />;
+    return <Hints items={[["enter", "detail"], ["spc", "toggle"], ["e", "edit"], ["x", "run"], ["d", "del"]]} />;
+  };
 
   if (loading) {
     return (
-      <Panel title="SCHEDULES" width={contentWidth}>
-        <Loading message="Loading schedules..." />
-      </Panel>
+      <Dialog title="SCHEDULES" size="large" onClose={onClose}>
+        {() => <Loading message="Loading schedules..." />}
+      </Dialog>
     );
   }
 
   if (error) {
     return (
-      <Panel title="SCHEDULES" width={contentWidth}>
-        <text><span fg={colors.status.error}>{error}</span></text>
-        <Footer>q: close</Footer>
-      </Panel>
-    );
-  }
-
-  if (viewingResult) {
-    return (
-      <ResultViewer
-        description={viewingResult.description}
-        result={viewingResult.result}
-        contentWidth={contentWidth}
-        onClose={() => setViewingResult(null)}
-      />
-    );
-  }
-
-  if (editMode) {
-    return (
-      <ScheduleEditView
-        editName={editName}
-        editNameCursorPos={editNameCursorPos}
-        editText={editText}
-        cursorPos={cursorPos}
-        setEditText={setEditText}
-        setCursorPos={setCursorPos}
-        saving={saving}
-        contentWidth={contentWidth}
-        editFocus={editFocus}
-        availableNotifiers={availableNotifiers}
-        editNotifiers={editNotifiers}
-        editNotifierCursor={editNotifierCursor}
-      />
+      <Dialog title="SCHEDULES" size="large" onClose={onClose}>
+        {() => <text><span fg={colors.status.error}>{error}</span></text>}
+      </Dialog>
     );
   }
 
   return (
-    <Panel title="SCHEDULES" width={contentWidth}>
-      <BaseSelectionList
-        items={schedules}
-        selectedIndex={selectedIndex}
-        renderItem={(item, context) => <ScheduleItem item={item} context={context} textWidth={textWidth} />}
-        visibleLines={VISIBLE_LINES}
-        emptyMessage="No scheduled tasks. Use chat to create one."
-        getKey={(item) => item.task_id}
-        width={contentWidth}
-        indicator="▶"
-      />
+    <Dialog
+      title="SCHEDULES"
+      size="large"
+      onClose={onClose}
+      footer={getFooter()}
+    >
+      {({ width, height }) => {
+        if (viewingResult) {
+          return (
+            <ResultViewer
+              schedule={viewingResult}
+              scroll={detailScroll}
+              setScroll={setDetailScroll}
+              width={width}
+              height={height}
+            />
+          );
+        }
 
-      {confirmDelete && schedules[selectedIndex] && (
-        <box marginTop={1}>
-          <text>
-            <span fg={colors.status.warning}>
-              Delete "{schedules[selectedIndex].description}"? (y/n)
-            </span>
-          </text>
-        </box>
-      )}
+        if (editMode) {
+          return (
+            <ScheduleEditView
+              editName={editName}
+              editNameCursorPos={editNameCursorPos}
+              editText={editText}
+              cursorPos={cursorPos}
+              setEditText={setEditText}
+              setCursorPos={setCursorPos}
+              saving={saving}
+              width={width}
+              editFocus={editFocus}
+              availableNotifiers={availableNotifiers}
+              editNotifiers={editNotifiers}
+              editNotifierCursor={editNotifierCursor}
+            />
+          );
+        }
 
-      <Footer>
-        {confirmDelete
-          ? "y: confirm  n: cancel"
-          : "enter: view  space: toggle  e: edit  w: writable  x: run  d: delete  r: refresh  q: close"}
-      </Footer>
-    </Panel>
+        const visibleLines = Math.max(1, Math.floor((height - 2) / 4));
+
+        return (
+          <box flexDirection="column" height={height} overflow="hidden">
+            <BaseSelectionList
+              items={schedules}
+              selectedIndex={selectedIndex}
+              renderItem={(item, context) => <ScheduleItem item={item} context={context} textWidth={width - 2} />}
+              visibleLines={visibleLines}
+              emptyMessage="No scheduled tasks. Use chat to create one."
+              getKey={(item) => item.task_id}
+              width={width}
+              indicator="▶"
+              showScrollArrows
+              showCount
+            />
+
+            {confirmDelete && schedules[selectedIndex] && (
+              <box marginTop={1}>
+                <text>
+                  <span fg={colors.status.warning}>
+                    Delete "{schedules[selectedIndex].description}"? (y/n)
+                  </span>
+                </text>
+              </box>
+            )}
+          </box>
+        );
+      }}
+    </Dialog>
   );
 }

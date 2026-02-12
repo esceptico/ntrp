@@ -17,3 +17,6 @@ export { TextInputField } from "./input/index.js";
 export { TextEditArea } from "./TextEditArea.js";
 
 export { EmptyBorder, SplitBorder } from "./border.js";
+
+export { Dialog } from "./Dialog.js";
+export { Hints } from "./Hints.js";

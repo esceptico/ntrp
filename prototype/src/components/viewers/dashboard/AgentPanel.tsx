@@ -35,7 +35,7 @@ export function AgentPanel({ data, width }: AgentPanelProps) {
   return (
     <box flexDirection="column" marginTop={1}>
       {/* Runs */}
-      <box>
+      <box flexDirection="row">
         <text><span fg={B}>{"runs "}</span></text>
         <text><span fg={colors.text.primary}><strong>{agent.total_runs}</strong></span></text>
         {agent.active_runs > 0 && (
@@ -47,7 +47,7 @@ export function AgentPanel({ data, width }: AgentPanelProps) {
       {recentTools.length > 0 && (
         <box flexDirection="column" marginTop={1}>
           {recentTools.map((tool) => (
-            <box key={`${tool.name}-${tool.ts}`}>
+            <box flexDirection="row" key={`${tool.name}-${tool.ts}`}>
               <text>
                 <span fg={tool.error ? colors.status.error : B}>
                   {tool.error ? "✗" : "·"}
@@ -70,7 +70,7 @@ export function AgentPanel({ data, width }: AgentPanelProps) {
         <box flexDirection="column" marginTop={1}>
           <text><span fg={B}>stats</span></text>
           {toolStats.slice(0, 5).map(([name, stats]) => (
-            <box key={name}>
+            <box flexDirection="row" key={name}>
               <text><span fg={colors.text.muted}>{name.padEnd(16)}</span></text>
               <text><span fg={colors.text.secondary}>{`×${stats.count}`.padStart(4)}</span></text>
               <text><span fg={B}>{" avg "}</span></text>

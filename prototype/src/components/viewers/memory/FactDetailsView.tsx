@@ -16,6 +16,7 @@ interface FactDetailsViewProps {
   details: FactDetails | null;
   loading: boolean;
   width: number;
+  height: number;
   isFocused: boolean;
   // Section navigation state
   focusedSection: FactDetailSection;
@@ -33,19 +34,13 @@ interface FactDetailsViewProps {
   saving: boolean;
 }
 
-// Fixed heights for each section
-const SECTION_HEIGHTS = {
-  TEXT_COLLAPSED: 1,
-  TEXT_EXPANDED: 5,
-  METADATA: 2,
-  ENTITIES: 4, // header + 3 items
-  LINKED: 5, // header + 4 items
-};
+const TEXT_VISIBLE_LINES = 5;
 
 export function FactDetailsView({
   details,
   loading,
   width,
+  height,
   isFocused,
   focusedSection,
   textExpanded,
@@ -83,10 +78,6 @@ export function FactDetailsView({
 
   const sectionFocused = (section: FactDetailSection) => isFocused && focusedSection === section;
   const textWidth = width - 2;
-
-  // Calculate visible items for scrollable lists
-  const entitiesVisible = SECTION_HEIGHTS.ENTITIES - 1; // minus header
-  const linkedVisible = SECTION_HEIGHTS.LINKED - 1; // minus header
 
   if (confirmDelete) {
     return (
@@ -126,7 +117,7 @@ export function FactDetailsView({
   }
 
   return (
-    <box flexDirection="column" width={width} paddingLeft={1}>
+    <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       {/* Text section - expandable */}
       <box>
         <ExpandableText
@@ -134,14 +125,14 @@ export function FactDetailsView({
           width={textWidth}
           expanded={textExpanded}
           scrollOffset={textScrollOffset}
-          visibleLines={SECTION_HEIGHTS.TEXT_EXPANDED}
+          visibleLines={TEXT_VISIBLE_LINES}
           isFocused={sectionFocused(FACT_SECTIONS.TEXT)}
           boldFirstLine
         />
       </box>
 
       {/* Metadata - fixed, non-interactive */}
-      <box flexDirection="column" height={SECTION_HEIGHTS.METADATA} marginTop={1}>
+      <box flexDirection="column" marginTop={1}>
         <text>
           <span fg={labelColor}>TYPE </span>
           <span fg={typeColor}>{typeLabel}</span>
@@ -158,8 +149,8 @@ export function FactDetailsView({
         </text>
       </box>
 
-      {/* Entities section - scrollable list */}
-      <box flexDirection="column" height={SECTION_HEIGHTS.ENTITIES} marginTop={1}>
+      {/* Entities section */}
+      <box flexDirection="column" marginTop={1}>
         <text>
           <span fg={labelColor}>
             ENTITIES {entities.length > 0 && `(${entities.length})`}
@@ -169,7 +160,7 @@ export function FactDetailsView({
           <ScrollableList
             items={entities}
             selectedIndex={entitiesIndex}
-            visibleLines={entitiesVisible}
+            visibleLines={Math.min(entities.length, 6)}
             renderItem={(entity, _idx, selected) => (
               <text>
                 <span fg={selected && sectionFocused(FACT_SECTIONS.ENTITIES) ? textColor : colors.text.secondary}>
@@ -185,8 +176,8 @@ export function FactDetailsView({
         )}
       </box>
 
-      {/* Linked facts section - scrollable list */}
-      <box flexDirection="column" height={SECTION_HEIGHTS.LINKED} marginTop={1}>
+      {/* Linked facts section */}
+      <box flexDirection="column" marginTop={1}>
         <text>
           <span fg={labelColor}>
             LINKED {linked_facts.length > 0 && `(${linked_facts.length})`}
@@ -196,7 +187,7 @@ export function FactDetailsView({
           <ScrollableList
             items={linked_facts}
             selectedIndex={linkedIndex}
-            visibleLines={linkedVisible}
+            visibleLines={Math.min(linked_facts.length, 6)}
             renderItem={(lf, _idx, selected) => {
               const linkColor =
                 lf.link_type === "semantic"

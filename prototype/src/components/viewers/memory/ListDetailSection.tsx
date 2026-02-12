@@ -13,7 +13,7 @@ interface ListDetailSectionProps<T> {
   getKey: (item: T) => string | number;
   emptyMessage: string;
   searchQuery: string;
-  visibleLines: number;
+  height: number;
   width: number;
   details: ReactNode;
   focusPane?: "list" | "details";
@@ -26,12 +26,13 @@ export function ListDetailSection<T>({
   getKey,
   emptyMessage,
   searchQuery,
-  visibleLines,
+  height,
   width,
   details,
   focusPane = "list",
 }: ListDetailSectionProps<T>) {
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
+  const visibleLines = Math.max(1, height - 4);
 
   const sidebar = (
     <box flexDirection="column">
@@ -65,8 +66,6 @@ export function ListDetailSection<T>({
   );
 
   return (
-    <box marginY={1} height={visibleLines + 4}>
-      <SplitView sidebarWidth={listWidth} sidebar={sidebar} main={details} />
-    </box>
+    <SplitView sidebarWidth={listWidth} sidebar={sidebar} main={details} width={width} height={height} />
   );
 }

@@ -88,7 +88,7 @@ export function BaseSelectionList<T>({
         };
 
         return (
-          <box key={key}>
+          <box flexDirection="row" key={key}>
             {showIndicator && (
               <box width={2} flexShrink={0}>
                 <text><span fg={indicatorColor}>{indicatorText}</span></text>

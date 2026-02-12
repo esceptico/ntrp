@@ -1,6 +1,5 @@
 import type { Schedule } from "../../../api/client.js";
-import { colors, type RenderItemContext } from "../../ui/index.js";
-import { wrapText } from "../../../lib/utils.js";
+import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
 import { formatRelativeTime } from "../../../lib/format.js";
 
 interface ScheduleItemProps {
@@ -9,6 +8,7 @@ interface ScheduleItemProps {
   textWidth: number;
 }
 
+// Fixed 3-line layout: status+meta, description, timing
 export function ScheduleItem({ item, context, textWidth }: ScheduleItemProps) {
   const enabled = item.enabled;
   const isRunning = !!item.running_since;
@@ -34,8 +34,10 @@ export function ScheduleItem({ item, context, textWidth }: ScheduleItemProps) {
         <span fg={statusColor}>{statusIcon}</span>
         <span fg={metaColor}>{` ${item.time_of_day}  ${item.recurrence}${item.writable ? "  \u270E" : ""}${item.notifiers.length > 0 ? `  \u2192 ${item.notifiers.join(", ")}` : ""}`}</span>
       </text>
-      {item.name ? <text><strong><span fg={textColor}>{item.name}</span></strong></text> : null}
-      <text><span fg={item.name ? metaColor : textColor}>{wrapText(item.description, textWidth).join("\n")}</span></text>
+      {item.name
+        ? <text><strong><span fg={textColor}>{item.name}</span></strong> <span fg={metaColor}>{truncateText(item.description, textWidth - item.name.length - 1)}</span></text>
+        : <text><span fg={textColor}>{truncateText(item.description, textWidth)}</span></text>
+      }
       <text><span fg={metaColor}>{`next: ${nextRun}   last: ${lastRun}`}</span></text>
     </box>
   );

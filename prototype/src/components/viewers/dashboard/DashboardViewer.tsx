@@ -2,8 +2,7 @@ import { useCallback } from "react";
 import type { Config } from "../../../types.js";
 import { useKeypress, type Key } from "../../../hooks/index.js";
 import { useDashboard } from "../../../hooks/useDashboard.js";
-import { useDimensions } from "../../../contexts/index.js";
-import { Loading, colors } from "../../ui/index.js";
+import { Dialog, Loading, colors, Hints } from "../../ui/index.js";
 import { SystemPanel } from "./SystemPanel.js";
 import { AgentPanel } from "./AgentPanel.js";
 import { BackgroundPanel } from "./BackgroundPanel.js";
@@ -14,7 +13,6 @@ interface DashboardViewerProps {
 }
 
 const B = colors.text.disabled;
-const MAX_WIDTH = 100;
 const COL_GAP = 3;
 
 function Section({ title, width, grow, children }: { title: string; width: number; grow?: boolean; children: React.ReactNode }) {
@@ -35,11 +33,6 @@ function Section({ title, width, grow, children }: { title: string; width: numbe
 }
 
 export function DashboardViewer({ config, onClose }: DashboardViewerProps) {
-  const { width: terminalWidth } = useDimensions();
-  const w = Math.min(terminalWidth, MAX_WIDTH);
-  const colWidth = Math.floor((w - 6 - COL_GAP) / 2);
-  const totalWidth = colWidth * 2 + COL_GAP;
-
   const { data, loading, refresh } = useDashboard(config);
 
   const handleKeypress = useCallback(
@@ -52,55 +45,48 @@ export function DashboardViewer({ config, onClose }: DashboardViewerProps) {
 
   useKeypress(handleKeypress, { isActive: true });
 
-  if (loading || !data) return <Loading message="Loading dashboard..." />;
+  if (loading || !data) {
+    return (
+      <Dialog title="DASHBOARD" size="large" onClose={onClose}>
+        {() => <Loading message="Loading dashboard..." />}
+      </Dialog>
+    );
+  }
 
   return (
-    <box flexDirection="column" width={w}>
-      {/* Top corners */}
-      <box justifyContent="space-between" width={w}>
-        <text><span fg={B}>╭───</span></text>
-        <text><span fg={B}>───╮</span></text>
-      </box>
+    <Dialog
+      title="DASHBOARD"
+      size="large"
+      onClose={onClose}
+      footer={<Hints items={[["r", "refresh"], ["esc", "close"]]} />}
+    >
+      {({ width, height }) => {
+        const colWidth = Math.floor((width - COL_GAP) / 2);
+        const totalWidth = colWidth * 2 + COL_GAP;
 
-      {/* Content */}
-      <box flexDirection="column" paddingX={3}>
-        {/* Header */}
-        <box justifyContent="space-between">
-          <text>
-            <span fg={colors.status.success}><strong>ntrp</strong></span>
-            <span fg={B}> ▸ </span>
-            <span fg={colors.text.primary}>dashboard</span>
-          </text>
-          <text><span fg={B}>r refresh · esc close</span></text>
-        </box>
+        return (
+          <box flexDirection="column" height={height} overflow="hidden">
+            <box flexDirection="row">
+              <box flexDirection="column" width={colWidth} marginRight={COL_GAP}>
+                <Section title="SYSTEM" width={colWidth} grow>
+                  <SystemPanel data={data} width={colWidth - 4} />
+                </Section>
+              </box>
+              <box flexDirection="column" width={colWidth}>
+                <Section title="AGENT" width={colWidth} grow>
+                  <AgentPanel data={data} width={colWidth - 4} />
+                </Section>
+              </box>
+            </box>
 
-        {/* System + Agent columns */}
-        <box marginTop={1}>
-          <box flexDirection="column" width={colWidth} marginRight={COL_GAP}>
-            <Section title="SYSTEM" width={colWidth} grow>
-              <SystemPanel data={data} width={colWidth - 4} />
-            </Section>
+            <box flexDirection="column" marginTop={1}>
+              <Section title="BACKGROUND" width={totalWidth}>
+                <BackgroundPanel data={data} width={totalWidth - 4} />
+              </Section>
+            </box>
           </box>
-          <box flexDirection="column" width={colWidth}>
-            <Section title="AGENT" width={colWidth} grow>
-              <AgentPanel data={data} width={colWidth - 4} />
-            </Section>
-          </box>
-        </box>
-
-        {/* Background */}
-        <box flexDirection="column" marginTop={1}>
-          <Section title="BACKGROUND" width={totalWidth}>
-            <BackgroundPanel data={data} width={totalWidth - 4} />
-          </Section>
-        </box>
-      </box>
-
-      {/* Bottom corners */}
-      <box justifyContent="space-between" width={w}>
-        <text><span fg={B}>╰───</span></text>
-        <text><span fg={B}>───╯</span></text>
-      </box>
-    </box>
+        );
+      }}
+    </Dialog>
   );
 }

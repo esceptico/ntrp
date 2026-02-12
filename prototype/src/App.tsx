@@ -10,6 +10,7 @@ import {
   useCommands,
   useSession,
   useStreaming,
+  useSidebar,
   AccentColorProvider,
   type Key,
 } from "./hooks/index.js";
@@ -27,6 +28,7 @@ import {
   ApprovalDialog,
   ErrorBoundary,
 } from "./components/index.js";
+import { Sidebar } from "./components/Sidebar.js";
 import { COMMANDS } from "./lib/commands.js";
 import { getSkills, type Skill } from "./api/client.js";
 
@@ -69,6 +71,7 @@ function AppContent({
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
   const [welcomeShown, setWelcomeShown] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
 
   const [skills, setSkills] = useState<Skill[]>([]);
   useEffect(() => {
@@ -163,6 +166,10 @@ function AppContent({
       if (key.ctrl && key.name === "c") {
         renderer.destroy();
       }
+      if (key.ctrl && key.name === "l") {
+        setSidebarVisible(v => !v);
+        return;
+      }
       if (key.name === "escape" && isStreaming) {
         cancel();
       }
@@ -178,112 +185,124 @@ function AppContent({
   const { width, height } = useDimensions();
   const hasOverlay = viewMode !== "chat";
 
+  const SIDEBAR_WIDTH = 28;
+  const showSidebar = sidebarVisible && width >= 94 && serverConnected;
+  const sidebarData = useSidebar(config, showSidebar);
+
   // Show welcome on first load
   const showWelcome = serverConfig && !welcomeShown;
   useEffect(() => {
     if (serverConfig && !welcomeShown) setWelcomeShown(true);
   }, [serverConfig, welcomeShown]);
 
+  const contentHeight = height - 2; // paddingTop + paddingBottom
+
   return (
     <ErrorBoundary>
-    <box flexDirection="column" width={width} height={height} paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} gap={1} backgroundColor={colors.background.base}>
-      {/* Scrollable message area */}
-      <scrollbox flexGrow={1} stickyScroll={true} stickyStart="bottom" style={{ scrollbarOptions: { visible: false } }}>
-        {showWelcome && <Welcome />}
+    <box flexDirection="row" width={width} height={height} paddingTop={1} paddingBottom={1} backgroundColor={colors.background.base}>
+      {/* Main content */}
+      <box flexDirection="column" flexGrow={1} paddingLeft={2} paddingRight={2} gap={1}>
+        {/* Scrollable message area */}
+        <scrollbox flexGrow={1} stickyScroll={true} stickyStart="bottom" style={{ scrollbarOptions: { visible: false } }}>
+          {showWelcome && <Welcome />}
 
-        {messages.map((item, index) => {
-          const prevItem = messages[index - 1];
-          const isToolMessage = item.role === "tool" || item.role === "tool_chain";
-          const prevIsToolMessage = prevItem &&
-            (prevItem.role === "tool" || prevItem.role === "tool_chain");
-          const needsMargin = index > 0 && !(isToolMessage && prevIsToolMessage);
+          {messages.map((item, index) => {
+            const prevItem = messages[index - 1];
+            const isToolMessage = item.role === "tool" || item.role === "tool_chain";
+            const prevIsToolMessage = prevItem &&
+              (prevItem.role === "tool" || prevItem.role === "tool_chain");
+            const needsMargin = index > 0 && !(isToolMessage && prevIsToolMessage);
 
-          return (
-            <box key={item.id} marginTop={needsMargin ? 1 : 0}>
-              <MessageDisplay
-                msg={item}
-                renderMarkdown={settings.ui.renderMarkdown}
-              />
+            return (
+              <box key={item.id} marginTop={needsMargin ? 1 : 0}>
+                <MessageDisplay
+                  msg={item}
+                  renderMarkdown={settings.ui.renderMarkdown}
+                />
+              </box>
+            );
+          })}
+
+          {toolChain.length > 0 && (
+            <box marginTop={messages[messages.length - 1]?.role === "user" ? 1 : 0}>
+              <ToolChainDisplay items={toolChain} />
             </box>
-          );
-        })}
+          )}
 
-        {toolChain.length > 0 && (
-          <box marginTop={messages[messages.length - 1]?.role === "user" ? 1 : 0}>
-            <ToolChainDisplay items={toolChain} />
+          {pendingApproval && (
+            <ApprovalDialog
+              approval={pendingApproval}
+              onResult={handleApproval}
+            />
+          )}
+
+          {pendingChoice && (
+            <ChoiceSelector
+              question={pendingChoice.question}
+              options={pendingChoice.options}
+              allowMultiple={pendingChoice.allowMultiple}
+              onSelect={handleChoice}
+              onCancel={cancelChoice}
+              isActive={!pendingApproval}
+            />
+          )}
+        </scrollbox>
+
+        {/* Connection status — pinned above input */}
+        {!serverConnected && (
+          <box flexShrink={0}>
+            <text><span fg={colors.status.error}>{BULLET} Server not connected. Run: ntrp serve</span></text>
           </box>
         )}
 
-        {pendingApproval && (
-          <ApprovalDialog
-            approval={pendingApproval}
-            onResult={handleApproval}
-          />
-        )}
-
-        {pendingChoice && (
-          <ChoiceSelector
-            question={pendingChoice.question}
-            options={pendingChoice.options}
-            allowMultiple={pendingChoice.allowMultiple}
-            onSelect={handleChoice}
-            onCancel={cancelChoice}
-            isActive={!pendingApproval}
-          />
-        )}
-      </scrollbox>
-
-      {/* Connection status — pinned above input */}
-      {!serverConnected && (
+        {/* Input — pinned to bottom */}
         <box flexShrink={0}>
-          <text><span fg={colors.status.error}>{BULLET} Server not connected. Run: ntrp serve</span></text>
+          <InputArea
+            onSubmit={handleSubmit}
+            disabled={!serverConnected || hasOverlay || showSettings || !!pendingApproval || !!pendingChoice}
+            focus={isInChatMode && !hasOverlay && !showSettings && !pendingApproval && !pendingChoice}
+            isStreaming={isStreaming}
+            status={status}
+            commands={allCommands}
+            queueCount={messageQueue.length}
+            skipApprovals={skipApprovals}
+            chatModel={serverConfig?.chat_model}
+            indexStatus={indexStatus}
+          />
         </box>
-      )}
-
-      {/* Input — pinned to bottom */}
-      <box flexShrink={0}>
-        <InputArea
-          onSubmit={handleSubmit}
-          disabled={!serverConnected || hasOverlay || showSettings || !!pendingApproval || !!pendingChoice}
-          focus={isInChatMode && !hasOverlay && !showSettings && !pendingApproval && !pendingChoice}
-          isStreaming={isStreaming}
-          status={status}
-          commands={allCommands}
-          queueCount={messageQueue.length}
-          skipApprovals={skipApprovals}
-          chatModel={serverConfig?.chat_model}
-          indexStatus={indexStatus}
-        />
       </box>
 
-      {/* Overlays — absolute positioned to cover full screen */}
-      {viewMode === "memory" && (
-        <box position="absolute" top={0} left={0} width={width} height={height}>
-          <MemoryViewer config={config} onClose={closeView} />
-        </box>
-      )}
-      {viewMode === "schedules" && (
-        <box position="absolute" top={0} left={0} width={width} height={height}>
-          <SchedulesViewer config={config} onClose={closeView} />
-        </box>
-      )}
-      {viewMode === "dashboard" && (
-        <box position="absolute" top={0} left={0} width={width} height={height}>
-          <DashboardViewer config={config} onClose={closeView} />
-        </box>
-      )}
-      {showSettings && (
-        <box position="absolute" top={0} left={0} width={width} height={height}>
-          <SettingsDialog
-            config={config}
+      {/* Sidebar */}
+      {showSidebar && (
+        <>
+          <box width={1} height={contentHeight} flexShrink={0} flexDirection="column">
+            {Array.from({ length: contentHeight }).map((_, i) => (
+              <text key={i}><span fg={colors.divider}>{"\u2502"}</span></text>
+            ))}
+          </box>
+          <Sidebar
             serverConfig={serverConfig}
-            settings={settings}
-            onUpdate={updateSetting}
-            onModelChange={(type: "chat" | "memory", model: string) => updateServerConfig({ [`${type}_model`]: model })}
-            onServerConfigChange={(newConfig) => updateServerConfig(newConfig)}
-            onClose={closeSettings}
+            data={sidebarData}
+            width={SIDEBAR_WIDTH}
+            height={contentHeight}
           />
-        </box>
+        </>
+      )}
+
+      {/* Overlays — Dialog handles absolute positioning and dimming */}
+      {viewMode === "memory" && <MemoryViewer config={config} onClose={closeView} />}
+      {viewMode === "schedules" && <SchedulesViewer config={config} onClose={closeView} />}
+      {viewMode === "dashboard" && <DashboardViewer config={config} onClose={closeView} />}
+      {showSettings && (
+        <SettingsDialog
+          config={config}
+          serverConfig={serverConfig}
+          settings={settings}
+          onUpdate={updateSetting}
+          onModelChange={(type: "chat" | "memory", model: string) => updateServerConfig({ [`${type}_model`]: model })}
+          onServerConfigChange={(newConfig) => updateServerConfig(newConfig)}
+          onClose={closeSettings}
+        />
       )}
     </box>
     </ErrorBoundary>

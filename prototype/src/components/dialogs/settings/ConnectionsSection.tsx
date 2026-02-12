@@ -1,4 +1,4 @@
-import { colors, truncateText, SelectionIndicator } from "../../ui/index.js";
+import { colors, truncateText, SelectionIndicator, Hints } from "../../ui/index.js";
 import { TextInputField } from "../../ui/input/TextInputField.js";
 import { CHECKBOX_CHECKED, CHECKBOX_UNCHECKED } from "../../../lib/constants.js";
 import type { ServerConfig, GoogleAccount } from "../../../api/client.js";
@@ -48,7 +48,7 @@ export function ConnectionsSection({
       {/* Vault / Notes */}
       <SourceRow item="vault" selected={selectedItem === "vault"} accent={accent}>
         {editingVault ? (
-          <box>
+          <box flexDirection="row">
             <text>
               <span fg={colors.text.muted}>[</span>
             </text>
@@ -152,29 +152,29 @@ export function ConnectionsSection({
 
       {/* Help text */}
       <box marginTop={1}>
-        <text>
-          <span fg={colors.text.disabled}>
-            {getHelpText(selectedItem, editingVault, sourceEnabled)}
-          </span>
-        </text>
+        {getHints(selectedItem, editingVault, sourceEnabled)}
       </box>
     </box>
   );
 }
 
-function getHelpText(item: ConnectionItem, editingVault: boolean, sourceEnabled?: boolean): string {
+function getHints(item: ConnectionItem, editingVault: boolean, sourceEnabled?: boolean): React.ReactNode {
   switch (item) {
     case "vault":
-      return editingVault ? "Enter: save · Esc: cancel" : "Enter: edit path";
+      return editingVault
+        ? <Hints items={[["enter", "save"], ["esc", "cancel"]]} />
+        : <Hints items={[["enter", "edit path"]]} />;
     case "gmail":
     case "calendar":
-      return sourceEnabled ? "Enter: toggle · a: add account · d: remove" : "Enter: toggle";
+      return sourceEnabled
+        ? <Hints items={[["enter", "toggle"], ["a", "add account"], ["d", "remove"]]} />
+        : <Hints items={[["enter", "toggle"]]} />;
     case "memory":
-      return "Enter: toggle";
+      return <Hints items={[["enter", "toggle"]]} />;
     case "browser":
-      return "Enter: change browser";
+      return <Hints items={[["enter", "change browser"]]} />;
     case "web":
-      return "";
+      return null;
   }
 }
 
@@ -246,7 +246,7 @@ interface SourceRowProps {
 function SourceRow({ item, selected, accent, children }: SourceRowProps) {
   const label = CONNECTION_LABELS[item].padEnd(14);
   return (
-    <box>
+    <box flexDirection="row">
       <text>
         <SelectionIndicator selected={selected} accent={accent} />
         <span fg={selected ? colors.text.primary : colors.text.secondary}>{label}</span>

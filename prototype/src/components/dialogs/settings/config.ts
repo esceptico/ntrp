@@ -1,4 +1,4 @@
-export const SECTION_IDS = ["agent", "connections", "skills", "notifiers", "appearance", "limits"] as const;
+export const SECTION_IDS = ["agent", "connections", "skills", "notifiers", "limits"] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 
 export const SECTION_LABELS = {
@@ -6,15 +6,8 @@ export const SECTION_LABELS = {
   connections: "Connections",
   skills: "Skills",
   notifiers: "Notifiers",
-  appearance: "Appearance",
   limits: "Limits",
 } satisfies Record<SectionId, string>;
-
-export interface BooleanItem {
-  key: string;
-  label: string;
-  description: string;
-}
 
 export interface NumberItem {
   key: string;
@@ -23,10 +16,6 @@ export interface NumberItem {
   min: number;
   max: number;
 }
-
-export const APPEARANCE_ITEMS: BooleanItem[] = [
-  { key: "renderMarkdown", label: "Markdown", description: "Format messages with markdown styling" },
-];
 
 export const LIMIT_ITEMS: NumberItem[] = [
   { key: "maxDepth", label: "Subagent depth", description: "Maximum nesting level", min: 1, max: 16 },

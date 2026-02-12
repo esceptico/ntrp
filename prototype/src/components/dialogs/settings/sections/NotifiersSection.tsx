@@ -1,5 +1,5 @@
 import type React from "react";
-import { colors, SelectionIndicator, TextInputField } from "../../../ui/index.js";
+import { colors, SelectionIndicator, TextInputField, Hints } from "../../../ui/index.js";
 import type { UseNotifiersResult } from "../../../../hooks/useNotifiers.js";
 import { TYPE_ORDER, TYPE_LABELS, TYPE_DESCRIPTIONS } from "../../../../hooks/useNotifiers.js";
 import { INDICATOR_SELECTED, INDICATOR_UNSELECTED } from "../../../../lib/constants.js";
@@ -9,11 +9,7 @@ interface NotifiersSectionProps {
   accent: string;
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  email: colors.text.primary,
-  telegram: colors.text.secondary,
-  bash: colors.text.muted,
-};
+const TYPE_COLOR = colors.text.secondary;
 
 function ListMode({ notifiers, accent }: NotifiersSectionProps) {
   const { configs, selectedIndex, testing, testResult } = notifiers;
@@ -23,7 +19,7 @@ function ListMode({ notifiers, accent }: NotifiersSectionProps) {
       <box flexDirection="column">
         <text><span fg={colors.text.muted}>No notifiers configured</span></text>
         <box marginTop={1}>
-          <text><span fg={colors.text.disabled}>a: add</span></text>
+          <Hints items={[["a", "add"]]} />
         </box>
       </box>
     );
@@ -44,7 +40,7 @@ function ListMode({ notifiers, accent }: NotifiersSectionProps) {
             </box>
             <box width={10} flexShrink={0} marginLeft={1}>
               <text>
-                <span fg={TYPE_COLORS[cfg.type] ?? colors.text.secondary}><strong>{TYPE_LABELS[cfg.type] ?? cfg.type}</strong></span>
+                <span fg={TYPE_COLOR}><strong>{TYPE_LABELS[cfg.type] ?? cfg.type}</strong></span>
               </text>
             </box>
             <text><span fg={selected ? accent : colors.text.primary}>{cfg.name}</span></text>
@@ -66,7 +62,7 @@ function ListMode({ notifiers, accent }: NotifiersSectionProps) {
         </box>
       )}
       <box marginTop={testing || testResult ? 0 : 1}>
-        <text><span fg={colors.text.disabled}>a: add  e: edit  t: test  d: delete</span></text>
+        <Hints items={[["a", "add"], ["e", "edit"], ["t", "test"], ["d", "delete"]]} />
       </box>
     </box>
   );
@@ -96,7 +92,7 @@ function AddTypeMode({ notifiers, accent }: NotifiersSectionProps) {
         );
       })}
       <box marginTop={1}>
-        <text><span fg={colors.text.disabled}>Enter: select  Esc: cancel</span></text>
+        <Hints items={[["enter", "select"], ["esc", "cancel"]]} />
       </box>
     </box>
   );
@@ -209,7 +205,7 @@ function FormMode({ notifiers, accent }: NotifiersSectionProps) {
         </box>
       )}
       <box marginTop={1}>
-        <text><span fg={colors.text.disabled}>↑↓: field  Enter: next/save  Ctrl+S: save  Esc: cancel</span></text>
+        <Hints items={[["↑↓", "field"], ["enter", "next/save"], ["^S", "save"], ["esc", "cancel"]]} />
       </box>
     </box>
   );
@@ -227,7 +223,7 @@ function ConfirmDeleteMode({ notifiers, accent }: NotifiersSectionProps) {
         <span fg={colors.status.warning}>?</span>
       </text>
       <box marginTop={1}>
-        <text><span fg={colors.text.disabled}>y: confirm  n/Esc: cancel</span></text>
+        <Hints items={[["y", "confirm"], ["n/esc", "cancel"]]} />
       </box>
     </box>
   );

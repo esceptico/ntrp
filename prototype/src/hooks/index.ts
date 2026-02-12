@@ -10,3 +10,4 @@ export { useTextInput, type UseTextInputOptions, type UseTextInputResult } from 
 export { useDashboard } from "./useDashboard.js";
 export { useFactsTab, type FactsTabState } from "./useFactsTab.js";
 export { useObservationsTab, type ObservationsTabState } from "./useObservationsTab.js";
+export { useSidebar, type SidebarData } from "./useSidebar.js";

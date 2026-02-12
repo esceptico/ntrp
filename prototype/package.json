@@ -7,8 +7,7 @@
   },
   "dependencies": {
     "@opentui/core": "latest",
-    "@opentui/react": "latest",
-"react": ">=19.0.0"
+    "@opentui/react": "latest"
   },
   "devDependencies": {
     "@types/bun": "latest",

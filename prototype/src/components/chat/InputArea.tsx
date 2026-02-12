@@ -6,7 +6,6 @@ import { useAccentColor } from "../../hooks/index.js";
 import { useDimensions } from "../../contexts/index.js";
 import { EmptyBorder, SplitBorder } from "../ui/border.js";
 import { AutocompleteList } from "./AutocompleteList.js";
-import { HelpPanel } from "./HelpPanel.js";
 
 function formatModel(model?: string): string {
   if (!model) return "";
@@ -14,13 +13,6 @@ function formatModel(model?: string): string {
   return parts[parts.length - 1];
 }
 
-function formatProvider(model?: string): string {
-  if (!model) return "";
-  const parts = model.split("/");
-  if (parts.length < 2) return "";
-  const raw = parts[0];
-  return raw.charAt(0).toUpperCase() + raw.slice(1);
-}
 
 const SCANNER_WIDTH = 8;
 
@@ -116,7 +108,6 @@ export const InputArea = memo(function InputArea({
   }, [commands, value]);
 
   const showAutocomplete = value.startsWith("/") && filteredCommands.length > 0;
-  const showHelp = value === "?";
 
   // Keep refs for stable access in callbacks
   const valueRef = useRef(value);
@@ -203,7 +194,6 @@ export const InputArea = memo(function InputArea({
     setSelectedIndex(0);
   }, []);
 
-  const provider = formatProvider(chatModel);
   const modelName = formatModel(chatModel);
 
   return (
@@ -216,7 +206,6 @@ export const InputArea = memo(function InputArea({
           accentValue={accentValue}
         />
       )}
-      {showHelp && <HelpPanel accentValue={accentValue} />}
 
       {/* Prompt container — matches OpenCode's structure exactly */}
       <box>
@@ -254,10 +243,7 @@ export const InputArea = memo(function InputArea({
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
               {chatModel ? (
-                <>
-                  <text flexShrink={0} fg={colors.text.muted}>{modelName}</text>
-                  {provider ? <text fg={colors.text.disabled}>{provider}</text> : null}
-                </>
+                <text flexShrink={0} fg={colors.text.muted}>{modelName}</text>
               ) : null}
               {skipApprovals ? (
                 <text><span fg={colors.status.warning}><strong>skip approvals</strong></span></text>
@@ -336,12 +322,12 @@ export const InputArea = memo(function InputArea({
               </text>
               <box gap={2} flexDirection="row">
                 <text>
-                  <span fg={colors.footer}>shift+tab</span>
-                  <span fg={colors.text.disabled}> approvals</span>
+                  <span fg={colors.footer}>ctrl+l</span>
+                  <span fg={colors.text.disabled}> panel</span>
                 </text>
                 <text>
-                  <span fg={colors.footer}>?</span>
-                  <span fg={colors.text.disabled}> help</span>
+                  <span fg={colors.footer}>shift+tab</span>
+                  <span fg={colors.text.disabled}> approvals</span>
                 </text>
               </box>
             </>

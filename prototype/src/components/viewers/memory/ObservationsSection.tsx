@@ -11,7 +11,7 @@ interface ObservationsSectionProps {
   detailsLoading: boolean;
   searchQuery: string;
   focusPane: "list" | "details";
-  visibleLines: number;
+  height: number;
   width: number;
   detailSection: ObsDetailSection;
   textExpanded: boolean;
@@ -33,7 +33,7 @@ export function ObservationsSection({
   detailsLoading,
   searchQuery,
   focusPane,
-  visibleLines,
+  height,
   width,
   detailSection,
   textExpanded,
@@ -72,13 +72,14 @@ export function ObservationsSection({
       emptyMessage="No observations synthesized yet"
       searchQuery={searchQuery}
       focusPane={focusPane}
-      visibleLines={visibleLines}
+      height={height}
       width={width}
       details={
         <ObservationDetailsView
           details={obsDetails}
           loading={detailsLoading}
           width={detailWidth}
+          height={height}
           isFocused={focusPane === "details"}
           focusedSection={detailSection}
           textExpanded={textExpanded}

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Panel, Footer, colors } from "../../ui/index.js";
+import { colors } from "../../ui/index.js";
 import { useKeypress, type Key } from "../../../hooks/useKeypress.js";
 import { BaseSelectionList } from "../../ui/list/BaseSelectionList.js";
 
@@ -51,25 +51,22 @@ export function BrowserDropdown({
   useKeypress(handleKeypress, { isActive: true });
 
   return (
-    <Panel title="SELECT BROWSER" width={width}>
-      <box marginTop={1}>
-        <BaseSelectionList
-          items={BROWSER_OPTIONS}
-          selectedIndex={selectedIndex}
-          renderItem={(option, context) => {
-            const isCurrent = option.value === currentBrowser;
-            return (
-              <text>
-                <span fg={context.isSelected ? context.colors.indicator : isCurrent ? colors.text.primary : colors.text.secondary}>
-                  {option.label}
-                </span>
-                {isCurrent && <span fg={colors.text.disabled}> (current)</span>}
-              </text>
-            );
-          }}
-        />
-      </box>
-      <Footer>↑↓ navigate · Enter select · Esc cancel</Footer>
-    </Panel>
+    <box flexDirection="column">
+      <BaseSelectionList
+        items={BROWSER_OPTIONS}
+        selectedIndex={selectedIndex}
+        renderItem={(option, context) => {
+          const isCurrent = option.value === currentBrowser;
+          return (
+            <text>
+              <span fg={context.isSelected ? context.colors.indicator : isCurrent ? colors.text.primary : colors.text.secondary}>
+                {option.label}
+              </span>
+              {isCurrent && <span fg={colors.text.disabled}> (current)</span>}
+            </text>
+          );
+        }}
+      />
+    </box>
   );
 }

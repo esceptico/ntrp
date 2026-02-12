@@ -11,7 +11,7 @@ interface FactsSectionProps {
   detailsLoading: boolean;
   searchQuery: string;
   focusPane: "list" | "details";
-  visibleLines: number;
+  height: number;
   width: number;
   detailSection: FactDetailSection;
   textExpanded: boolean;
@@ -34,7 +34,7 @@ export function FactsSection({
   detailsLoading,
   searchQuery,
   focusPane,
-  visibleLines,
+  height,
   width,
   detailSection,
   textExpanded,
@@ -75,13 +75,14 @@ export function FactsSection({
       emptyMessage="No facts stored yet"
       searchQuery={searchQuery}
       focusPane={focusPane}
-      visibleLines={visibleLines}
+      height={height}
       width={width}
       details={
         <FactDetailsView
           details={factDetails}
           loading={detailsLoading}
           width={detailWidth}
+          height={height}
           isFocused={focusPane === "details"}
           focusedSection={detailSection}
           textExpanded={textExpanded}

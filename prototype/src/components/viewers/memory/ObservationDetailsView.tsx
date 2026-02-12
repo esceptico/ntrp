@@ -15,6 +15,7 @@ interface ObservationDetailsViewProps {
   details: ObservationDetails | null;
   loading: boolean;
   width: number;
+  height: number;
   isFocused: boolean;
   // Section navigation state
   focusedSection: ObsDetailSection;
@@ -31,18 +32,13 @@ interface ObservationDetailsViewProps {
   saving: boolean;
 }
 
-// Fixed heights for each section
-const SECTION_HEIGHTS = {
-  TEXT_COLLAPSED: 1,
-  TEXT_EXPANDED: 5,
-  METADATA: 2,
-  FACTS: 8, // header + 7 items
-};
+const TEXT_VISIBLE_LINES = 5;
 
 export function ObservationDetailsView({
   details,
   loading,
   width,
+  height,
   isFocused,
   focusedSection,
   textExpanded,
@@ -76,9 +72,6 @@ export function ObservationDetailsView({
 
   const sectionFocused = (section: ObsDetailSection) => isFocused && focusedSection === section;
   const textWidth = width - 2;
-
-  // Calculate visible items for scrollable list
-  const factsVisible = SECTION_HEIGHTS.FACTS - 1; // minus header
 
   if (confirmDelete) {
     return (
@@ -118,7 +111,7 @@ export function ObservationDetailsView({
   }
 
   return (
-    <box flexDirection="column" width={width} paddingLeft={1}>
+    <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       {/* Summary section - expandable */}
       <box>
         <ExpandableText
@@ -126,14 +119,14 @@ export function ObservationDetailsView({
           width={textWidth}
           expanded={textExpanded}
           scrollOffset={textScrollOffset}
-          visibleLines={SECTION_HEIGHTS.TEXT_EXPANDED}
+          visibleLines={TEXT_VISIBLE_LINES}
           isFocused={sectionFocused(OBS_SECTIONS.TEXT)}
           boldFirstLine
         />
       </box>
 
       {/* Metadata - fixed, non-interactive */}
-      <box flexDirection="column" height={SECTION_HEIGHTS.METADATA} marginTop={1}>
+      <box flexDirection="column" marginTop={1}>
         <text>
           <span fg={labelColor}>EVIDENCE </span>
           <span fg={valueColor}>{observation.evidence_count}</span>
@@ -151,8 +144,8 @@ export function ObservationDetailsView({
         </text>
       </box>
 
-      {/* Supporting facts section - scrollable list */}
-      <box flexDirection="column" height={SECTION_HEIGHTS.FACTS} marginTop={1}>
+      {/* Supporting facts section */}
+      <box flexDirection="column" marginTop={1}>
         <text>
           <span fg={labelColor}>
             SUPPORTING FACTS {supporting_facts.length > 0 && `(${supporting_facts.length})`}
@@ -162,7 +155,7 @@ export function ObservationDetailsView({
           <ScrollableList
             items={supporting_facts}
             selectedIndex={factsIndex}
-            visibleLines={factsVisible}
+            visibleLines={Math.min(supporting_facts.length, 8)}
             renderItem={(fact, _idx, selected) => (
               <text>
                 <span fg={selected && sectionFocused(OBS_SECTIONS.FACTS) ? textColor : colors.text.secondary}>

@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Config } from "../../../types.js";
 import type { Settings } from "../../../hooks/useSettings.js";
 import { useKeypress, type Key } from "../../../hooks/useKeypress.js";
-import { useDimensions } from "../../../contexts/index.js";
-import { Panel, Footer, colors, accentColors, type AccentColor } from "../../ui/index.js";
+import { Dialog, colors, accentColors, Hints, type AccentColor } from "../../ui/index.js";
 import {
   getSupportedModels,
   updateConfig,
@@ -18,12 +17,11 @@ import {
   type ServerConfig,
   type GoogleAccount,
 } from "../../../api/client.js";
-import { SectionId, SECTION_IDS, SECTION_LABELS, APPEARANCE_ITEMS, LIMIT_ITEMS, CONNECTION_ITEMS, TOGGLEABLE_SOURCES, type ConnectionItem } from "./config.js";
-import { colorOptions } from "./SettingsRows.js";
+import { SectionId, SECTION_IDS, SECTION_LABELS, LIMIT_ITEMS, CONNECTION_ITEMS, TOGGLEABLE_SOURCES, type ConnectionItem } from "./config.js";
 import { ModelDropdown } from "./ModelDropdown.js";
 import { BrowserDropdown } from "./BrowserDropdown.js";
 import { ConnectionsSection } from "./ConnectionsSection.js";
-import { AgentSection, AppearanceSection, LimitsSection, NotifiersSection, SkillsSection } from "./sections/index.js";
+import { AgentSection, LimitsSection, NotifiersSection, SkillsSection } from "./sections/index.js";
 import { useTextInput } from "../../../hooks/useTextInput.js";
 import { useNotifiers } from "../../../hooks/useNotifiers.js";
 import { useSkills } from "../../../hooks/useSkills.js";
@@ -53,12 +51,10 @@ export function SettingsDialog({
   onServerConfigChange,
   onClose,
 }: SettingsDialogProps) {
-  const { width: terminalWidth } = useDimensions();
   const accent = useAccent(settings.ui.accentColor);
 
   const [activeSection, setActiveSection] = useState<SectionId>("agent");
   const [agentIndex, setAgentIndex] = useState(0);
-  const [appearanceIndex, setAppearanceIndex] = useState(0);
   const [limitsIndex, setLimitsIndex] = useState(0);
 
   const [connectionItem, setConnectionItem] = useState<ConnectionItem>("vault");
@@ -88,11 +84,6 @@ export function SettingsDialog({
   const notifiers = useNotifiers(config);
   const skills = useSkills(config);
 
-  const contentWidth = Math.max(0, terminalWidth - 4);
-  const sidebarWidth = 16;
-  const detailWidth = Math.max(0, contentWidth - sidebarWidth - 3);
-  const modelNameWidth = Math.max(0, detailWidth - 20);
-
   useEffect(() => {
     getSupportedModels(config)
       .then((result) => {
@@ -116,9 +107,7 @@ export function SettingsDialog({
   }, [config]);
 
   const agentTotalItems = 3;
-  const appearanceTotalItems = APPEARANCE_ITEMS.length + 1;
   const limitsTotalItems = LIMIT_ITEMS.length;
-  const isColorItem = activeSection === "appearance" && appearanceIndex === APPEARANCE_ITEMS.length;
 
   const selectModel = useCallback(
     (modelType: "chat" | "memory", modelName: string) => {
@@ -318,29 +307,6 @@ export function SettingsDialog({
         } else if ((key.sequence === "d" || key.name === "delete") && isGoogleSource && sourceEnabled) {
           handleRemoveGoogle();
         }
-      } else if (activeSection === "appearance") {
-        if (key.name === "up" || key.name === "k") {
-          setAppearanceIndex((i) => Math.max(0, i - 1));
-        } else if (key.name === "down" || key.name === "j") {
-          setAppearanceIndex((i) => Math.min(appearanceTotalItems - 1, i + 1));
-        } else if (key.name === "return" || key.name === "space") {
-          if (!isColorItem) {
-            const item = APPEARANCE_ITEMS[appearanceIndex];
-            onUpdate("ui", item.key, !settings.ui[item.key as keyof typeof settings.ui]);
-          }
-        } else if (key.name === "left" || key.name === "h") {
-          if (isColorItem) {
-            const currentIdx = colorOptions.indexOf(settings.ui.accentColor);
-            const newIdx = (currentIdx - 1 + colorOptions.length) % colorOptions.length;
-            onUpdate("ui", "accentColor", colorOptions[newIdx]);
-          }
-        } else if (key.name === "right" || key.name === "l") {
-          if (isColorItem) {
-            const currentIdx = colorOptions.indexOf(settings.ui.accentColor);
-            const newIdx = (currentIdx + 1) % colorOptions.length;
-            onUpdate("ui", "accentColor", colorOptions[newIdx]);
-          }
-        }
       } else if (activeSection === "skills") {
         skills.handleKeypress(key);
       } else if (activeSection === "notifiers") {
@@ -362,9 +328,9 @@ export function SettingsDialog({
       }
     },
     [
-      activeSection, agentIndex, appearanceIndex, limitsIndex,
-      agentTotalItems, appearanceTotalItems, limitsTotalItems,
-      isColorItem, settings, onUpdate, onClose, dropdownTarget,
+      activeSection, agentIndex, limitsIndex,
+      agentTotalItems, limitsTotalItems,
+      settings, onUpdate, onClose, dropdownTarget,
       connectionItem, googleAccounts, selectedGoogleIndex, serverConfig,
       handleAddGoogle, handleRemoveGoogle, handleStartVaultEdit, handleToggleSource, actionInProgress,
       notifiers, skills,
@@ -421,9 +387,9 @@ export function SettingsDialog({
 
   if (pendingEmbeddingModel) {
     return (
-      <box flexDirection="column" alignItems="center" paddingY={1}>
-        <Panel title="CONFIRM RE-INDEX" width={Math.min(50, contentWidth)}>
-          <box flexDirection="column" paddingX={1} paddingY={1}>
+      <Dialog title="CONFIRM RE-INDEX" size="medium" onClose={() => setPendingEmbeddingModel(null)}>
+        {() => (
+          <box flexDirection="column">
             <text><span fg={colors.text.primary}>Change embedding model to:</span></text>
             <text><span fg={accent}><strong> {pendingEmbeddingModel}</strong></span></text>
             <box marginTop={1}>
@@ -435,12 +401,12 @@ export function SettingsDialog({
               </box>
             ) : (
               <box marginTop={1}>
-                <text><span fg={colors.text.disabled}>y: confirm · n/Esc: cancel</span></text>
+                <Hints items={[["y", "confirm"], ["n/esc", "cancel"]]} />
               </box>
             )}
           </box>
-        </Panel>
-      </box>
+        )}
+      </Dialog>
     );
   }
 
@@ -451,134 +417,141 @@ export function SettingsDialog({
     const modelList = isEmbedding ? embeddingModels : models;
 
     return (
-      <box flexDirection="column" alignItems="center" paddingY={1}>
-        <ModelDropdown
-          title={title}
-          models={modelList}
-          currentModel={currentModel}
-          width={Math.min(50, contentWidth)}
-          onSelect={(model) => {
-            if (isEmbedding) {
-              if (model !== embeddingModel) {
-                setPendingEmbeddingModel(model);
+      <Dialog title={title} size="medium" onClose={() => setDropdownTarget(null)}>
+        {({ width }) => (
+          <ModelDropdown
+            models={modelList}
+            currentModel={currentModel}
+            width={Math.min(50, width)}
+            onSelect={(model) => {
+              if (isEmbedding) {
+                if (model !== embeddingModel) {
+                  setPendingEmbeddingModel(model);
+                }
+              } else {
+                selectModel(dropdownTarget as "chat" | "memory", model);
               }
-            } else {
-              selectModel(dropdownTarget as "chat" | "memory", model);
-            }
-            setDropdownTarget(null);
-          }}
-          onClose={() => setDropdownTarget(null)}
-        />
-      </box>
+              setDropdownTarget(null);
+            }}
+            onClose={() => setDropdownTarget(null)}
+          />
+        )}
+      </Dialog>
     );
   }
 
   if (showingBrowserDropdown) {
     return (
-      <box flexDirection="column" alignItems="center" paddingY={1}>
-        <BrowserDropdown
-          currentBrowser={serverConfig?.browser || null}
-          width={Math.min(50, contentWidth)}
-          onSelect={handleSelectBrowser}
-          onClose={() => setShowingBrowserDropdown(false)}
-        />
-      </box>
+      <Dialog title="Browser" size="medium" onClose={() => setShowingBrowserDropdown(false)}>
+        {({ width }) => (
+          <BrowserDropdown
+            currentBrowser={serverConfig?.browser || null}
+            width={Math.min(50, width)}
+            onSelect={handleSelectBrowser}
+            onClose={() => setShowingBrowserDropdown(false)}
+          />
+        )}
+      </Dialog>
     );
   }
 
-  const contentHeight = 12;
-
   return (
-    <Panel title="PREFERENCES" width={contentWidth}>
-      <box flexDirection="row" marginTop={1}>
-        {/* Sidebar */}
-        <box flexDirection="column" width={sidebarWidth}>
-          {SECTION_IDS.map((section) => {
-            const isActive = section === activeSection;
-            return (
-              <text key={section}>
-                <span fg={isActive ? accent : colors.text.disabled}>{isActive ? "▸ " : "  "}</span>
-                {isActive ? (
-                  <span fg={accent}><strong>{SECTION_LABELS[section]}</strong></span>
-                ) : (
-                  <span fg={colors.text.secondary}>{SECTION_LABELS[section]}</span>
+    <Dialog
+      title="PREFERENCES"
+      size="large"
+      onClose={onClose}
+      footer={<Hints items={[["tab", "section"], ["↑↓", "navigate"], ["enter", "select"], ["←→", "adjust"], ["esc", "close"]]} />}
+    >
+      {({ width, height }) => {
+        const sidebarWidth = 16;
+        const detailWidth = Math.max(0, width - sidebarWidth - 3);
+        const modelNameWidth = Math.max(0, detailWidth - 20);
+        const contentHeight = Math.max(1, height - 1);
+
+        return (
+          <>
+            <box flexDirection="row">
+              {/* Sidebar */}
+              <box flexDirection="column" width={sidebarWidth}>
+                {SECTION_IDS.map((section) => {
+                  const isActive = section === activeSection;
+                  return (
+                    <text key={section}>
+                      <span fg={isActive ? accent : colors.text.disabled}>{isActive ? "▸ " : "  "}</span>
+                      {isActive ? (
+                        <span fg={accent}><strong>{SECTION_LABELS[section]}</strong></span>
+                      ) : (
+                        <span fg={colors.text.secondary}>{SECTION_LABELS[section]}</span>
+                      )}
+                    </text>
+                  );
+                })}
+              </box>
+
+              {/* Divider */}
+              <box flexDirection="column" width={1} marginX={1}>
+                {Array.from({ length: contentHeight }).map((_, i) => (
+                  <text key={i}><span fg={colors.divider}>│</span></text>
+                ))}
+              </box>
+
+              {/* Detail pane */}
+              <box flexDirection="column" width={detailWidth} height={contentHeight} overflow="hidden">
+                {activeSection === "agent" && (
+                  <AgentSection
+                    chatModel={chatModel}
+                    memoryModel={memoryModel}
+                    embeddingModel={embeddingModel}
+                    selectedIndex={agentIndex}
+                    accent={accent}
+                    modelNameWidth={modelNameWidth}
+                  />
                 )}
-              </text>
-            );
-          })}
-        </box>
 
-        {/* Divider */}
-        <box flexDirection="column" width={1} marginX={1}>
-          {Array.from({ length: contentHeight }).map((_, i) => (
-            <text key={i}><span fg={colors.divider}>│</span></text>
-          ))}
-        </box>
+                {activeSection === "skills" && (
+                  <SkillsSection skills={skills} accent={accent} width={detailWidth} />
+                )}
 
-        {/* Detail pane */}
-        <box flexDirection="column" width={detailWidth} minHeight={contentHeight}>
-          {activeSection === "agent" && (
-            <AgentSection
-              chatModel={chatModel}
-              memoryModel={memoryModel}
-              embeddingModel={embeddingModel}
-              selectedIndex={agentIndex}
-              accent={accent}
-              modelNameWidth={modelNameWidth}
-            />
-          )}
+                {activeSection === "connections" && (
+                  <ConnectionsSection
+                    serverConfig={serverConfig}
+                    googleAccounts={googleAccounts}
+                    selectedItem={connectionItem}
+                    selectedGoogleIndex={selectedGoogleIndex}
+                    accent={accent}
+                    width={detailWidth}
+                    editingVault={editingVault}
+                    vaultPath={vaultPath}
+                    vaultCursorPos={vaultCursorPos}
+                    updatingVault={updatingVault}
+                    vaultError={vaultError}
+                    updatingBrowser={updatingBrowser}
+                    browserError={browserError}
+                  />
+                )}
 
-          {activeSection === "skills" && (
-            <SkillsSection skills={skills} accent={accent} />
-          )}
+                {activeSection === "notifiers" && (
+                  <NotifiersSection notifiers={notifiers} accent={accent} />
+                )}
 
-          {activeSection === "connections" && (
-            <ConnectionsSection
-              serverConfig={serverConfig}
-              googleAccounts={googleAccounts}
-              selectedItem={connectionItem}
-              selectedGoogleIndex={selectedGoogleIndex}
-              accent={accent}
-              width={detailWidth}
-              editingVault={editingVault}
-              vaultPath={vaultPath}
-              vaultCursorPos={vaultCursorPos}
-              updatingVault={updatingVault}
-              vaultError={vaultError}
-              updatingBrowser={updatingBrowser}
-              browserError={browserError}
-            />
-          )}
+                {activeSection === "limits" && (
+                  <LimitsSection
+                    settings={settings.agent}
+                    selectedIndex={limitsIndex}
+                    accent={accent}
+                  />
+                )}
+              </box>
+            </box>
 
-          {activeSection === "notifiers" && (
-            <NotifiersSection notifiers={notifiers} accent={accent} />
-          )}
-
-          {activeSection === "appearance" && (
-            <AppearanceSection
-              settings={settings.ui}
-              selectedIndex={appearanceIndex}
-              accent={accent}
-            />
-          )}
-
-          {activeSection === "limits" && (
-            <LimitsSection
-              settings={settings.agent}
-              selectedIndex={limitsIndex}
-              accent={accent}
-            />
-          )}
-        </box>
-      </box>
-
-      {actionInProgress && (
-        <box marginTop={1}>
-          <text><span fg={colors.status.warning}>{actionInProgress}</span></text>
-        </box>
-      )}
-
-      <Footer>Tab section · ↑↓ navigate · Enter select · ←→ adjust · Esc close</Footer>
-    </Panel>
+            {actionInProgress && (
+              <box marginTop={1}>
+                <text><span fg={colors.status.warning}>{actionInProgress}</span></text>
+              </box>
+            )}
+          </>
+        );
+      }}
+    </Dialog>
   );
 }

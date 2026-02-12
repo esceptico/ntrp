@@ -1,9 +1,8 @@
 import { useState, useCallback, useMemo } from "react";
-import { colors, SelectionIndicator } from "../../ui/index.js";
+import { colors, SelectionIndicator, Hints } from "../../ui/index.js";
 import { useKeypress, useAccentColor, type Key } from "../../../hooks/index.js";
 
 interface ModelDropdownProps {
-  title: string;
   models: string[];
   currentModel: string;
   onSelect: (model: string) => void;
@@ -18,7 +17,6 @@ function getShortModelName(model: string): string {
 }
 
 export function ModelDropdown({
-  title,
   models,
   currentModel,
   onSelect,
@@ -90,17 +88,12 @@ export function ModelDropdown({
 
   useKeypress(handleKeypress, { isActive: true });
 
-  const contentWidth = Math.max(0, width - 6);
+  const contentWidth = Math.max(0, width - 4);
 
   return (
-    <box flexDirection="column" border borderStyle="rounded" borderColor={accentValue} width={width} paddingX={1}>
-      {/* Title */}
-      <box justifyContent="center">
-        <text><span fg={accentValue}><strong> {title} </strong></span></text>
-      </box>
-
+    <box flexDirection="column" width={width}>
       {/* Search */}
-      <box marginY={1}>
+      <box marginBottom={1}>
         <text>
           <span fg={colors.text.muted}>/ </span>
           <span fg={colors.text.primary}>{search}</span>
@@ -144,7 +137,7 @@ export function ModelDropdown({
 
       {/* Footer */}
       <box marginTop={1}>
-        <text><span fg={colors.text.disabled}>↑↓ move · Enter select · Esc {search ? "clear" : "back"}</span></text>
+        <Hints items={[["↑↓", "move"], ["enter", "select"], ["esc", search ? "clear" : "back"]]} />
       </box>
     </box>
   );

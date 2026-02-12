@@ -38,16 +38,16 @@ export function SystemPanel({ data, width }: SystemPanelProps) {
 
   return (
     <box flexDirection="column" marginTop={1}>
-      <box>
+      <box flexDirection="row">
         <box width={9} flexShrink={0}><text><span fg={B}>uptime</span></text></box>
         <text><span fg={colors.text.primary}>[{formatUptime(system.uptime_seconds)}]</span></text>
       </box>
-      <box>
+      <box flexDirection="row">
         <box width={9} flexShrink={0}><text><span fg={B}>model</span></text></box>
         <text><span fg={colors.status.success}>{system.model}</span></text>
       </box>
 
-      <box marginTop={1}>
+      <box flexDirection="row" marginTop={1}>
         <box width={9} flexShrink={0}><text><span fg={B}>tokens</span></text></box>
         <text><span fg={B}>{"↑ "}</span></text>
         <text><span fg={colors.text.primary}><strong>{formatTokens(tokens.total_prompt)}</strong></span></text>
@@ -56,14 +56,14 @@ export function SystemPanel({ data, width }: SystemPanelProps) {
         <text><span fg={colors.text.primary}><strong>{formatTokens(tokens.total_completion)}</strong></span></text>
       </box>
       {sparkData.length > 1 && (
-        <box>
+        <box flexDirection="row">
           <box width={9} flexShrink={0}><text><span fg={B}>trend</span></text></box>
           <text><span fg={colors.status.success}>{sparkline(sparkData.slice(-sparkW))}</span></text>
         </box>
       )}
 
       {Object.keys(system.source_errors).length > 0 && (
-        <box marginTop={1}>
+        <box flexDirection="row" marginTop={1}>
           {Object.entries(system.source_errors).map(([k, v]) => (
             <text key={k}><span fg={colors.status.error}>{k}: {v} </span></text>
           ))}

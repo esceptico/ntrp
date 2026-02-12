@@ -42,7 +42,7 @@ export function BackgroundPanel({ data, width }: BackgroundPanelProps) {
 
   return (
     <box flexDirection="column" marginTop={1}>
-      <box>
+      <box flexDirection="row">
         <text><span fg={B}>{"indexer".padEnd(18)}</span></text>
         <text><span fg={pillColor(idxStatus)}>[{idxStatus}]</span></text>
         {indexer.status === "indexing" && (
@@ -50,7 +50,7 @@ export function BackgroundPanel({ data, width }: BackgroundPanelProps) {
         )}
         {indexer.error && <text><span fg={colors.status.error}>{" "}{indexer.error}</span></text>}
       </box>
-      <box>
+      <box flexDirection="row">
         <text><span fg={B}>{"scheduler".padEnd(18)}</span></text>
         <text>
           <span fg={pillColor(scheduler.running ? "active" : "idle")}>
@@ -69,7 +69,7 @@ export function BackgroundPanel({ data, width }: BackgroundPanelProps) {
           <text><span fg={colors.status.warning}>{"→ "}{scheduler.active_task}</span></text>
         </box>
       )}
-      <box>
+      <box flexDirection="row">
         <text><span fg={B}>{"consolidation".padEnd(18)}</span></text>
         <text>
           <span fg={pillColor(consolidation.running ? "active" : "idle")}>
@@ -84,7 +84,7 @@ export function BackgroundPanel({ data, width }: BackgroundPanelProps) {
         )}
       </box>
 
-      <box marginTop={1}>
+      <box flexDirection="row" marginTop={1}>
         <text><span fg={B}>{"memory  "}</span></text>
         <text><span fg={colors.text.primary}><strong>{memory.fact_count}</strong></span></text>
         <text><span fg={B}>{" facts   "}</span></text>
@@ -95,7 +95,7 @@ export function BackgroundPanel({ data, width }: BackgroundPanelProps) {
       {memory.recent_facts.length > 0 && (
         <box flexDirection="column" marginTop={1}>
           {memory.recent_facts.map((fact) => (
-            <box key={fact.id}>
+            <box flexDirection="row" key={fact.id}>
               <text><span fg={B}>{relativeTime(fact.ts).padEnd(10)}</span></text>
               <text><span fg={colors.text.muted}>{fact.text}</span></text>
             </box>

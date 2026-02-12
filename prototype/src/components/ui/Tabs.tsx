@@ -9,7 +9,7 @@ interface TabsProps<T extends string> {
 
 export function Tabs<T extends string>({ tabs, activeTab, labels }: TabsProps<T>) {
   return (
-    <box marginBottom={1}>
+    <box flexDirection="row" marginBottom={1}>
       {tabs.map((tab, i) => {
         const isActive = tab === activeTab;
         const label = labels?.[tab] || tab.charAt(0).toUpperCase() + tab.slice(1);

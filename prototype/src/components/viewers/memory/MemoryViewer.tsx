@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { Config } from "../../../types.js";
 import { useKeypress, useTextInput, type Key } from "../../../hooks/index.js";
 import { useFactsTab } from "../../../hooks/useFactsTab.js";
@@ -13,14 +13,11 @@ import {
   type Fact,
   type Observation,
 } from "../../../api/client.js";
-import { useDimensions } from "../../../contexts/index.js";
-import { Panel, Divider, Footer, Loading, Tabs, colors } from "../../ui/index.js";
-import { VISIBLE_LINES } from "../../../lib/constants.js";
-import { StatsView } from "./StatsView.js";
+import { Dialog, Loading, Tabs, colors, Hints } from "../../ui/index.js";
 import { FactsSection } from "./FactsSection.js";
 import { ObservationsSection } from "./ObservationsSection.js";
 
-const TABS = ["facts", "observations", "stats"] as const;
+const TABS = ["facts", "observations"] as const;
 type TabType = (typeof TABS)[number];
 
 interface MemoryViewerProps {
@@ -29,10 +26,6 @@ interface MemoryViewerProps {
 }
 
 export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
-  const { width: terminalWidth } = useDimensions();
-  const contentWidth = Math.max(0, terminalWidth - 4);
-  const viewHeight = VISIBLE_LINES;
-
   const [activeTab, setActiveTab] = useState<TabType>("facts");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +35,8 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
 
   const loadedRef = useRef(false);
 
-  const factsTab = useFactsTab(config, facts, contentWidth);
-  const obsTab = useObservationsTab(config, observations, contentWidth);
+  const factsTab = useFactsTab(config, facts, 80);
+  const obsTab = useObservationsTab(config, observations, 80);
 
   const factsTextInput = useTextInput({
     text: factsTab.editText,
@@ -259,11 +252,9 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
 
       if (key.name === "1") { setActiveTab("facts"); return; }
       if (key.name === "2") { setActiveTab("observations"); return; }
-      if (key.name === "3") { setActiveTab("stats"); return; }
       if (key.name === "r") { reload(); return; }
 
       if (key.name === "escape" || key.name === "q") {
-        if (activeTab === "stats") { setActiveTab("facts"); return; }
         if (activeTab === "observations") {
           if (obsTab.focusPane === "details") {
             obsTab.setFocusPane("list");
@@ -292,7 +283,6 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
         return;
       }
 
-      if (activeTab === "stats") return;
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
@@ -301,107 +291,103 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
 
   useKeypress(handleKeypress, { isActive: true });
 
-  if (loading) return <Loading message="Loading memory..." />;
+  const getFooter = (): React.ReactNode => {
+    const tab = activeTab === "facts" ? factsTab : obsTab;
 
-  if (error) {
+    if (tab.editMode) return <Hints items={[["^S", "save"], ["esc", "cancel"], ["←→", "cursor"]]} />;
+    if (tab.confirmDelete) return <Hints items={[["y", "confirm"], ["any", "cancel"]]} />;
+    if (tab.focusPane === "details") {
+      return <Hints items={[["1-2", "tabs"], ["↑↓", "navigate"], ["tab", "list"], ["enter", "expand"], ["e", "edit"], ["d", "del"]]} />;
+    }
+    return <Hints items={[["1-2", "tabs"], ["↑↓", "navigate"], ["tab", "details"], ["e", "edit"], ["d", "del"], ["type", "search"]]} />;
+  };
+
+  if (loading) {
     return (
-      <Panel title="MEMORY" width={contentWidth}>
-        <text><span fg={colors.text.muted}>{error}</span></text>
-        <Footer>Esc: close</Footer>
-      </Panel>
+      <Dialog title="MEMORY" size="full" onClose={onClose}>
+        {() => <Loading message="Loading memory..." />}
+      </Dialog>
     );
   }
 
-  const getFooterText = (): string => {
-    if (activeTab === "stats") return "1-3: tabs │ Esc: back";
-
-    if (activeTab === "facts") {
-      if (factsTab.editMode) return "Ctrl+S: save │ Esc: cancel │ ←→: move cursor │ Home/End: start/end";
-      if (factsTab.confirmDelete) return "y: confirm │ any key: cancel";
-      if (factsTab.focusPane === "details") {
-        return "1-3: tabs │ ↑↓: navigate │ Tab: list │ Enter: expand │ e: edit │ d: delete │ Esc: back";
-      }
-      return "1-3: tabs │ ↑↓: navigate │ Tab: details │ e: edit │ d: delete │ Type: search │ Esc: close";
-    }
-
-    if (activeTab === "observations") {
-      if (obsTab.editMode) return "Ctrl+S: save │ Esc: cancel │ ←→: move cursor │ Home/End: start/end";
-      if (obsTab.confirmDelete) return "y: confirm │ any key: cancel";
-      if (obsTab.focusPane === "details") {
-        return "1-3: tabs │ ↑↓: navigate │ Tab: list │ Enter: expand │ e: edit │ d: delete │ Esc: back";
-      }
-      return "1-3: tabs │ ↑↓: navigate │ Tab: details │ e: edit │ d: delete │ Type: search │ Esc: close";
-    }
-
-    return "";
-  };
+  if (error) {
+    return (
+      <Dialog title="MEMORY" size="full" onClose={onClose}>
+        {() => <text><span fg={colors.text.muted}>{error}</span></text>}
+      </Dialog>
+    );
+  }
 
   return (
-    <Panel title="MEMORY" width={contentWidth}>
-      <Tabs
-        tabs={TABS}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        labels={{ facts: "Facts", observations: "Observations", stats: "Stats" }}
-      />
+    <Dialog
+      title="MEMORY"
+      size="full"
+      onClose={onClose}
+      footer={getFooter()}
+    >
+      {({ width, height }) => {
+        const sectionHeight = height - 1;
+        return (
+          <>
+            <Tabs
+              tabs={TABS}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              labels={{ facts: "Facts", observations: "Observations" }}
+            />
 
-      {activeTab === "facts" && (
-        <FactsSection
-          facts={factsTab.filteredFacts}
-          selectedIndex={factsTab.selectedIndex}
-          factDetails={factsTab.factDetails}
-          detailsLoading={factsTab.detailsLoading}
-          searchQuery={factsTab.searchQuery}
-          focusPane={factsTab.focusPane}
-          visibleLines={viewHeight}
-          width={contentWidth}
-          detailSection={factsTab.detailSection}
-          textExpanded={factsTab.textExpanded}
-          textScrollOffset={factsTab.textScrollOffset}
-          entitiesIndex={factsTab.entitiesIndex}
-          linkedIndex={factsTab.linkedIndex}
-          editMode={factsTab.editMode}
-          editText={factsTab.editText}
-          cursorPos={factsTab.cursorPos}
-          setEditText={factsTab.setEditText}
-          setCursorPos={factsTab.setCursorPos}
-          confirmDelete={factsTab.confirmDelete}
-          saving={saving}
-        />
-      )}
+            {activeTab === "facts" && (
+              <FactsSection
+                facts={factsTab.filteredFacts}
+                selectedIndex={factsTab.selectedIndex}
+                factDetails={factsTab.factDetails}
+                detailsLoading={factsTab.detailsLoading}
+                searchQuery={factsTab.searchQuery}
+                focusPane={factsTab.focusPane}
+                height={sectionHeight}
+                width={width}
+                detailSection={factsTab.detailSection}
+                textExpanded={factsTab.textExpanded}
+                textScrollOffset={factsTab.textScrollOffset}
+                entitiesIndex={factsTab.entitiesIndex}
+                linkedIndex={factsTab.linkedIndex}
+                editMode={factsTab.editMode}
+                editText={factsTab.editText}
+                cursorPos={factsTab.cursorPos}
+                setEditText={factsTab.setEditText}
+                setCursorPos={factsTab.setCursorPos}
+                confirmDelete={factsTab.confirmDelete}
+                saving={saving}
+              />
+            )}
 
-      {activeTab === "observations" && (
-        <ObservationsSection
-          observations={obsTab.filteredObservations}
-          selectedIndex={obsTab.selectedIndex}
-          obsDetails={obsTab.obsDetails}
-          detailsLoading={obsTab.detailsLoading}
-          searchQuery={obsTab.searchQuery}
-          focusPane={obsTab.focusPane}
-          visibleLines={viewHeight}
-          width={contentWidth}
-          detailSection={obsTab.detailSection}
-          textExpanded={obsTab.textExpanded}
-          textScrollOffset={obsTab.textScrollOffset}
-          factsIndex={obsTab.factsIndex}
-          editMode={obsTab.editMode}
-          editText={obsTab.editText}
-          cursorPos={obsTab.cursorPos}
-          setEditText={obsTab.setEditText}
-          setCursorPos={obsTab.setCursorPos}
-          confirmDelete={obsTab.confirmDelete}
-          saving={saving}
-        />
-      )}
+            {activeTab === "observations" && (
+              <ObservationsSection
+                observations={obsTab.filteredObservations}
+                selectedIndex={obsTab.selectedIndex}
+                obsDetails={obsTab.obsDetails}
+                detailsLoading={obsTab.detailsLoading}
+                searchQuery={obsTab.searchQuery}
+                focusPane={obsTab.focusPane}
+                height={sectionHeight}
+                width={width}
+                detailSection={obsTab.detailSection}
+                textExpanded={obsTab.textExpanded}
+                textScrollOffset={obsTab.textScrollOffset}
+                factsIndex={obsTab.factsIndex}
+                editMode={obsTab.editMode}
+                editText={obsTab.editText}
+                cursorPos={obsTab.cursorPos}
+                setEditText={obsTab.setEditText}
+                setCursorPos={obsTab.setCursorPos}
+                confirmDelete={obsTab.confirmDelete}
+                saving={saving}
+              />
+            )}
 
-      {activeTab === "stats" && (
-        <box height={viewHeight + 4} marginY={1}>
-          <StatsView config={config} width={contentWidth} />
-        </box>
-      )}
-
-      <Divider width={contentWidth - 2} />
-      <Footer>{getFooterText()}</Footer>
-    </Panel>
+          </>
+        );
+      }}
+    </Dialog>
   );
 }
