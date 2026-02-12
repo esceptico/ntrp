@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import type { Config } from "../types.js";
 import { getStats, getContextUsage, getSchedules, type Stats, type Schedule } from "../api/client.js";
 
-const POLL_INTERVAL = 10_000;
+const POLL_INTERVAL = 60_000;
 
 export interface SidebarData {
   stats: Stats | null;
@@ -18,11 +18,11 @@ export interface SidebarData {
 
 const EMPTY: SidebarData = { stats: null, context: null, nextSchedules: [] };
 
-export function useSidebar(config: Config, active: boolean) {
+export function useSidebar(config: Config, active: boolean, messageCount: number) {
   const [data, setData] = useState<SidebarData>(EMPTY);
   const activeRef = useRef(true);
 
-  const poll = useCallback(async () => {
+  const refresh = useCallback(async () => {
     if (!activeRef.current) return;
     try {
       const [stats, context, schedulesResult] = await Promise.all([
@@ -43,16 +43,21 @@ export function useSidebar(config: Config, active: boolean) {
     }
   }, [config]);
 
+  // Refresh on message changes
+  useEffect(() => {
+    if (active) refresh();
+  }, [active, messageCount, refresh]);
+
+  // Fallback poll for external changes (schedules, etc.)
   useEffect(() => {
     if (!active) return;
     activeRef.current = true;
-    poll();
-    const interval = setInterval(poll, POLL_INTERVAL);
+    const interval = setInterval(refresh, POLL_INTERVAL);
     return () => {
       activeRef.current = false;
       clearInterval(interval);
     };
-  }, [poll, active]);
+  }, [refresh, active]);
 
   return data;
 }

@@ -47,15 +47,15 @@ export function DashboardViewer({ config, onClose }: DashboardViewerProps) {
 
   if (loading || !data) {
     return (
-      <Dialog title="DASHBOARD" size="large" onClose={onClose}>
-        {() => <Loading message="Loading dashboard..." />}
+      <Dialog title="SERVER DASHBOARD" size="large" onClose={onClose}>
+        {() => <Loading message="Loading server dashboard..." />}
       </Dialog>
     );
   }
 
   return (
     <Dialog
-      title="DASHBOARD"
+      title="SERVER DASHBOARD"
       size="large"
       onClose={onClose}
       footer={<Hints items={[["r", "refresh"], ["esc", "close"]]} />}

@@ -1,6 +1,7 @@
 import React from "react";
 import { colors } from "./ui/colors.js";
 import { truncateText } from "../lib/utils.js";
+import { useAccentColor } from "../hooks/index.js";
 import type { ServerConfig, Schedule } from "../api/client.js";
 import type { SidebarData } from "../hooks/useSidebar.js";
 
@@ -120,6 +121,7 @@ function ScheduleRow({ schedule, width }: { schedule: Schedule; width: number })
 }
 
 export function Sidebar({ serverConfig, data, width, height }: SidebarProps) {
+  const { accentValue } = useAccentColor();
   const contentWidth = width - 2; // padding
 
   return (
@@ -132,6 +134,12 @@ export function Sidebar({ serverConfig, data, width, height }: SidebarProps) {
       gap={1}
       overflow="hidden"
     >
+      {/* Title */}
+      <text>
+        <span fg={accentValue}>ntrp</span>
+        <span fg={D}> v0.1.0</span>
+      </text>
+
       {/* Models */}
       {serverConfig && (
         <box flexDirection="column">

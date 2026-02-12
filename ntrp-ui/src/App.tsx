@@ -24,7 +24,6 @@ import {
   SchedulesViewer,
   DashboardViewer,
   ToolChainDisplay,
-  Welcome,
   ApprovalDialog,
   ErrorBoundary,
 } from "./components/index.js";
@@ -70,7 +69,6 @@ function AppContent({
 
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
-  const [welcomeShown, setWelcomeShown] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
 
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -187,13 +185,7 @@ function AppContent({
 
   const SIDEBAR_WIDTH = 28;
   const showSidebar = sidebarVisible && width >= 94 && serverConnected;
-  const sidebarData = useSidebar(config, showSidebar);
-
-  // Show welcome on first load
-  const showWelcome = serverConfig && !welcomeShown;
-  useEffect(() => {
-    if (serverConfig && !welcomeShown) setWelcomeShown(true);
-  }, [serverConfig, welcomeShown]);
+  const sidebarData = useSidebar(config, showSidebar, messages.length);
 
   const contentHeight = height - 2; // paddingTop + paddingBottom
 
@@ -204,8 +196,6 @@ function AppContent({
       <box flexDirection="column" flexGrow={1} paddingLeft={2} paddingRight={2} gap={1}>
         {/* Scrollable message area */}
         <scrollbox flexGrow={1} stickyScroll={true} stickyStart="bottom" style={{ scrollbarOptions: { visible: false } }}>
-          {showWelcome && <Welcome />}
-
           {messages.map((item, index) => {
             const prevItem = messages[index - 1];
             const isToolMessage = item.role === "tool" || item.role === "tool_chain";
