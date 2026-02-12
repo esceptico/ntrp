@@ -192,7 +192,7 @@ export function useStreaming({
         handleSessionInfo(event);
         break;
       case "thinking":
-        setStatus(Status.THINKING);
+        setStatus(event.status?.includes("compress") ? Status.COMPRESSING : Status.THINKING);
         break;
       case "text":
         pendingTextRef.current = event.content;

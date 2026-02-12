@@ -1,12 +1,11 @@
 import { useState, useCallback, useRef, useMemo, memo, useEffect } from "react";
 import type { TextareaRenderable, KeyEvent } from "@opentui/core";
 import type { SlashCommand } from "../../types.js";
-import type { Status } from "../../lib/constants.js";
+import { Status, type Status as StatusType } from "../../lib/constants.js";
 import { colors } from "../ui/colors.js";
 import { useAccentColor } from "../../hooks/index.js";
 import { EmptyBorder } from "../ui/border.js";
-import { BraillePendulum } from "../ui/BraillePendulum.js";
-import { CyclingStatus } from "../ui/CyclingStatus.js";
+import { BraillePendulum, BrailleCompress, CyclingStatus } from "../ui/spinners/index.js";
 import { AutocompleteList } from "./AutocompleteList.js";
 
 function formatModel(model?: string): string {
@@ -20,7 +19,7 @@ interface InputAreaProps {
   disabled: boolean;
   focus: boolean;
   isStreaming: boolean;
-  status: Status;
+  status: StatusType;
   commands: readonly SlashCommand[];
   queueCount?: number;
   skipApprovals?: boolean;
@@ -245,9 +244,17 @@ export const InputArea = memo(function InputArea({
             <>
               <box flexDirection="row" gap={1} flexGrow={1}>
                 <box marginLeft={3}>
-                  <BraillePendulum width={8} color={accentValue} spread={1} interval={20}/>
+                  {status === Status.COMPRESSING ? (
+                    <BrailleCompress width={8} color={accentValue} interval={30} />
+                  ) : (
+                    <BraillePendulum width={8} color={accentValue} spread={1} interval={20} />
+                  )}
                 </box>
-                <CyclingStatus status={status} isStreaming={isStreaming} />
+                {status === Status.COMPRESSING ? (
+                  <text><span fg={colors.text.muted}>compressing context</span></text>
+                ) : (
+                  <CyclingStatus status={status} isStreaming={isStreaming} />
+                )}
               </box>
               <text>
                 <span fg={colors.footer}>esc</span>

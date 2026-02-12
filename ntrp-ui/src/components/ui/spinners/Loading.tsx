@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Panel } from "./layout/Panel.js";
-import { colors } from "./colors.js";
+import { Panel } from "../layout/Panel.js";
+import { colors } from "../colors.js";
 
 interface LoadingProps {
   message?: string;

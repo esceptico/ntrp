@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { colors } from "./colors.js";
-import { Status, type Status as StatusType } from "../../lib/constants.js";
+import { colors } from "../colors.js";
+import { Status, type Status as StatusType } from "../../../lib/constants.js";
 
 const VERBS = [
   "thinking",
@@ -13,6 +13,7 @@ const VERBS = [
 ];
 
 const LABELS: Partial<Record<StatusType, string>> = {
+  [Status.COMPRESSING]: "compressing context",
   [Status.AWAITING_APPROVAL]: "awaiting approval",
   [Status.AWAITING_CHOICE]: "awaiting choice",
 };

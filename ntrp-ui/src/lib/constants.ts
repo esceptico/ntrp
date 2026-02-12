@@ -23,6 +23,7 @@ export const INDEX_DONE_HIDE_MS = 2000;
 export const Status = {
   IDLE: "idle",
   THINKING: "thinking",
+  COMPRESSING: "compressing",
   TOOL: "tool",
   AWAITING_APPROVAL: "awaiting_approval",
   AWAITING_CHOICE: "awaiting_choice",
