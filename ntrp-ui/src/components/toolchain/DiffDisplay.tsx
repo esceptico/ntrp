@@ -1,5 +1,4 @@
-import React, { useMemo } from "react";
-import { Box, Text } from "ink";
+import { useMemo } from "react";
 import { truncateText } from "../../lib/utils.js";
 import { colors } from "../ui/index.js";
 
@@ -17,7 +16,6 @@ function computeUnifiedDiff(before: string, after: string): string[] {
   const newLines = after.split('\n');
   const result: string[] = [];
 
-  // Simple line-by-line diff: find changed regions
   let i = 0;
   let j = 0;
   while (i < oldLines.length || j < newLines.length) {
@@ -26,8 +24,6 @@ function computeUnifiedDiff(before: string, after: string): string[] {
       j++;
       continue;
     }
-    // Find the extent of the change
-    // Look ahead for next matching line
     let matchI = -1;
     let matchJ = -1;
     const searchLimit = Math.max(oldLines.length - i, newLines.length - j);
@@ -44,17 +40,14 @@ function computeUnifiedDiff(before: string, after: string): string[] {
     }
     if (matchI < 0) { matchI = oldLines.length; matchJ = newLines.length; }
 
-    // Emit context line before change
     const ctxStart = Math.max(0, i - 1);
     if (ctxStart < i && result.length === 0) {
       result.push(` ${oldLines[ctxStart]}`);
     }
 
-    // Emit removed lines
     for (let k = i; k < matchI; k++) {
       result.push(`-${oldLines[k]}`);
     }
-    // Emit added lines
     for (let k = j; k < matchJ; k++) {
       result.push(`+${newLines[k]}`);
     }
@@ -81,24 +74,28 @@ export function StructuredDiffDisplay({ before, after, path, prefix, width, maxL
   const lineWidth = Math.max(0, width - prefix.length - 2);
 
   return (
-    <Box flexDirection="column" marginLeft={2} width={width} overflow="hidden">
-      <Text dimColor>{prefix}{path}</Text>
+    <box flexDirection="column" marginLeft={2} width={width} overflow="hidden">
+      <text><span fg={colors.text.muted}>{prefix}{path}</span></text>
       {lines.map((line, i) => (
-        <Text
-          key={i}
-          color={
+        <text key={i}>
+          <span fg={
             line.startsWith('+') ? colors.diff.added :
             line.startsWith('-') ? colors.diff.removed :
             undefined
-          }
-        >
-          {prefix}{truncateText(line, lineWidth)}
-        </Text>
+          }>
+            {prefix}{truncateText(line, lineWidth)}
+          </span>
+        </text>
       ))}
       {totalLines > maxLines && (
-        <Text dimColor>{prefix}  ... {totalLines - maxLines} more lines</Text>
+        <text><span fg={colors.text.muted}>{prefix}  ... {totalLines - maxLines} more lines</span></text>
       )}
-      <Text dimColor>{prefix}  <Text color={colors.diff.added}>+{added}</Text> <Text color={colors.diff.removed}>-{removed}</Text></Text>
-    </Box>
+      <text>
+        <span fg={colors.text.muted}>{prefix}  </span>
+        <span fg={colors.diff.added}>+{added}</span>
+        <span fg={colors.text.muted}> </span>
+        <span fg={colors.diff.removed}>-{removed}</span>
+      </text>
+    </box>
   );
 }

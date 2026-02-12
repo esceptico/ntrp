@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { Box, Text } from "ink";
 import { truncateText, wrapText } from "../../lib/utils.js";
 import { colors } from "./colors.js";
 
@@ -30,33 +29,38 @@ export function ExpandableText({
   const lines = useMemo(() => wrapText(text, effectiveWidth), [text, effectiveWidth]);
   const needsExpansion = lines.length > 1;
 
-  // If text fits on one line, just show it
   if (!needsExpansion) {
     return (
-      <Box width={width} height={1}>
-        <Text color={textColor} bold={boldFirstLine}>
-          {text}
-        </Text>
-      </Box>
+      <box width={width} height={1}>
+        <text>
+          {boldFirstLine ? (
+            <span fg={textColor}><strong>{text}</strong></span>
+          ) : (
+            <span fg={textColor}>{text}</span>
+          )}
+        </text>
+      </box>
     );
   }
 
-  // Text needs multiple lines - show collapsed or expanded
   if (!expanded) {
     const truncated = truncateText(text, effectiveWidth);
     return (
-      <Box width={width} height={1}>
-        <Text color={textColor} bold={boldFirstLine}>
-          {truncated}
-        </Text>
-        {isFocused && <Text color={colors.text.muted}> ↵</Text>}
-      </Box>
+      <box width={width} height={1}>
+        <text>
+          {boldFirstLine ? (
+            <span fg={textColor}><strong>{truncated}</strong></span>
+          ) : (
+            <span fg={textColor}>{truncated}</span>
+          )}
+          {isFocused && <span fg={colors.text.muted}> {"\u21B5"}</span>}
+        </text>
+      </box>
     );
   }
 
-  // Expanded view with scrolling
   const needsScroll = lines.length > visibleLines;
-  const actualVisibleLines = needsScroll ? visibleLines - 1 : visibleLines; // Reserve 1 line for indicator
+  const actualVisibleLines = needsScroll ? visibleLines - 1 : visibleLines;
   const maxScroll = Math.max(0, lines.length - actualVisibleLines);
   const safeOffset = Math.min(scrollOffset, maxScroll);
   const displayLines = lines.slice(safeOffset, safeOffset + actualVisibleLines);
@@ -64,22 +68,27 @@ export function ExpandableText({
   const canScrollDown = safeOffset < maxScroll;
 
   return (
-    <Box flexDirection="column" width={width} height={visibleLines}>
+    <box flexDirection="column" width={width} height={visibleLines}>
       {displayLines.map((line, i) => (
-        <Text key={i} color={textColor} bold={boldFirstLine && safeOffset === 0 && i === 0}>
-          {line}
-        </Text>
+        <text key={i}>
+          {boldFirstLine && safeOffset === 0 && i === 0 ? (
+            <span fg={textColor}><strong>{line}</strong></span>
+          ) : (
+            <span fg={textColor}>{line}</span>
+          )}
+        </text>
       ))}
       {needsScroll && (
-        <Text color={colors.text.muted}>
-          {canScrollUp ? "▲" : " "} {safeOffset + 1}-{safeOffset + displayLines.length}/{lines.length} {canScrollDown ? "▼" : " "}
-        </Text>
+        <text>
+          <span fg={colors.text.muted}>
+            {canScrollUp ? "\u25B2" : " "} {safeOffset + 1}-{safeOffset + displayLines.length}/{lines.length} {canScrollDown ? "\u25BC" : " "}
+          </span>
+        </text>
       )}
-    </Box>
+    </box>
   );
 }
 
-// Helper to get max scroll offset for text
 export function getTextMaxScroll(text: string, width: number, visibleLines: number): number {
   const lines = wrapText(text, width - 2);
   const needsScroll = lines.length > visibleLines;

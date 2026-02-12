@@ -1,21 +1,26 @@
-import React, { useState, useCallback, useRef, useMemo, memo, useEffect } from "react";
-import { Box, Text, useStdout } from "ink";
+import { useState, useCallback, useRef, useMemo, memo, useEffect } from "react";
+import type { TextareaRenderable, KeyEvent } from "@opentui/core";
 import type { SlashCommand } from "../../types.js";
+import type { Status } from "../../lib/constants.js";
 import { colors } from "../ui/colors.js";
-import { useKeypress, useAccentColor, type Key } from "../../hooks/index.js";
+import { useAccentColor } from "../../hooks/index.js";
+import { EmptyBorder } from "../ui/border.js";
+import { BraillePendulum } from "../ui/BraillePendulum.js";
+import { CyclingStatus } from "../ui/CyclingStatus.js";
 import { AutocompleteList } from "./AutocompleteList.js";
-import { HelpPanel } from "./HelpPanel.js";
 
-function formatModel(model?: string) {
+function formatModel(model?: string): string {
   if (!model) return "";
   const parts = model.split("/");
   return parts[parts.length - 1];
 }
 
-export interface InputAreaProps {
+interface InputAreaProps {
   onSubmit: (v: string) => void;
   disabled: boolean;
   focus: boolean;
+  isStreaming: boolean;
+  status: Status;
   commands: readonly SlashCommand[];
   queueCount?: number;
   skipApprovals?: boolean;
@@ -27,29 +32,23 @@ export const InputArea = memo(function InputArea({
   onSubmit,
   disabled,
   focus,
+  isStreaming,
+  status,
   commands,
   queueCount = 0,
   skipApprovals = false,
   chatModel,
   indexStatus = null,
 }: InputAreaProps) {
-  const { stdout } = useStdout();
-  const columns = stdout?.columns ?? 80;
-  const divider = "─".repeat(columns - 2);
   const { accentValue } = useAccentColor();
 
+  const inputRef = useRef<TextareaRenderable>(null);
   const [value, setValue] = useState("");
-  const [cursorPos, setCursorPos] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [escHint, setEscHint] = useState(false);
 
-  // Refs for stable access in callbacks
-  const cursorRef = useRef(0);
-  cursorRef.current = cursorPos;
-  const valueRef = useRef(value);
-  valueRef.current = value;
   const escPendingRef = useRef(false);
-  const escTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
@@ -62,14 +61,14 @@ export const InputArea = memo(function InputArea({
       clearTimeout(escTimeoutRef.current);
       escTimeoutRef.current = null;
     }
+    inputRef.current?.clear();
     setValue("");
-    setCursorPos(0);
     setSelectedIndex(0);
     escPendingRef.current = false;
     setEscHint(false);
   }, []);
 
-  // Get filtered commands for autocomplete
+  // Filtered commands for autocomplete
   const filteredCommands = useMemo(() => {
     if (!value.startsWith("/")) return [];
     const query = value.slice(1).toLowerCase();
@@ -80,226 +79,213 @@ export const InputArea = memo(function InputArea({
   }, [commands, value]);
 
   const showAutocomplete = value.startsWith("/") && filteredCommands.length > 0;
-  const showHelp = value === "?";
 
-  // Word boundary navigation helpers (use ref for fresh value)
-  const findPrevWordBoundary = useCallback((pos: number) => {
-    const v = valueRef.current;
-    let p = pos - 1;
-    while (p > 0 && /\s/.test(v[p])) p--;
-    while (p > 0 && /\S/.test(v[p - 1])) p--;
-    return Math.max(0, p);
-  }, []);
+  // Keep refs for stable access in callbacks
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const showAutocompleteRef = useRef(showAutocomplete);
+  showAutocompleteRef.current = showAutocomplete;
+  const filteredCommandsRef = useRef(filteredCommands);
+  filteredCommandsRef.current = filteredCommands;
+  const selectedIndexRef = useRef(selectedIndex);
+  selectedIndexRef.current = selectedIndex;
 
-  const findNextWordBoundary = useCallback((pos: number) => {
-    const v = valueRef.current;
-    let p = pos;
-    while (p < v.length && /\S/.test(v[p])) p++;
-    while (p < v.length && /\s/.test(v[p])) p++;
-    return p;
-  }, []);
+  const doSubmit = useCallback(() => {
+    if (disabled) return;
+    const text = inputRef.current?.plainText ?? "";
+    if (!text.trim()) return;
 
-  const moveCursor = (newPos: number) => {
-    setCursorPos(newPos);
-    cursorRef.current = newPos;
-  };
+    if (showAutocompleteRef.current && filteredCommandsRef.current[selectedIndexRef.current]) {
+      onSubmit(`/${filteredCommandsRef.current[selectedIndexRef.current].name}`);
+      resetInput();
+      return;
+    }
 
-  const insertAt = (pos: number, text: string) => {
-    setValue((v) => v.slice(0, pos) + text + v.slice(pos));
-    moveCursor(pos + text.length);
+    onSubmit(text);
+    resetInput();
+  }, [disabled, onSubmit, resetInput]);
+
+  const handleKeyDown = useCallback((e: KeyEvent) => {
+    if (disabled) {
+      e.preventDefault();
+      return;
+    }
+
+    // Enter = submit, Shift+Enter = newline (let textarea handle it)
+    if (e.name === "return" && !e.shift) {
+      e.preventDefault();
+      doSubmit();
+      return;
+    }
+
+    // Autocomplete navigation
+    if (showAutocompleteRef.current) {
+      if (e.name === "up") {
+        e.preventDefault();
+        setSelectedIndex((i) => Math.max(0, i - 1));
+        return;
+      }
+      if (e.name === "down") {
+        e.preventDefault();
+        setSelectedIndex((i) => Math.min(filteredCommandsRef.current.length - 1, i + 1));
+        return;
+      }
+      if (e.name === "tab" && filteredCommandsRef.current[selectedIndexRef.current]) {
+        e.preventDefault();
+        const cmd = filteredCommandsRef.current[selectedIndexRef.current];
+        const newText = `/${cmd.name} `;
+        inputRef.current?.setText(newText);
+        setValue(newText);
+        setSelectedIndex(0);
+        return;
+      }
+    }
+
+    // Escape: double-tap to clear
+    if (e.name === "escape") {
+      if (!valueRef.current) return;
+      if (escPendingRef.current) {
+        resetInput();
+      } else {
+        escPendingRef.current = true;
+        setEscHint(true);
+        if (escTimeoutRef.current) clearTimeout(escTimeoutRef.current);
+        escTimeoutRef.current = setTimeout(() => {
+          escPendingRef.current = false;
+          setEscHint(false);
+        }, 2000);
+      }
+      return;
+    }
+  }, [disabled, doSubmit, resetInput]);
+
+  const handleContentChange = useCallback(() => {
+    const text = inputRef.current?.plainText ?? "";
+    setValue(text);
     setSelectedIndex(0);
-  };
+  }, []);
 
-  const handleKeypress = useCallback(
-    (key: Key) => {
-      if (disabled) return;
-      const pos = cursorRef.current;
-
-      // Paste
-      if (key.isPasted && key.sequence) {
-        insertAt(pos, key.sequence);
-        return;
-      }
-
-      // Autocomplete navigation
-      if (showAutocomplete) {
-        if (key.name === "up") { setSelectedIndex((i) => Math.max(0, i - 1)); return; }
-        if (key.name === "down") { setSelectedIndex((i) => Math.min(filteredCommands.length - 1, i + 1)); return; }
-        if (key.name === "tab" && filteredCommands[selectedIndex]) {
-          const cmd = filteredCommands[selectedIndex];
-          const newPos = cmd.name.length + 2;
-          setValue(`/${cmd.name} `);
-          moveCursor(newPos);
-          setSelectedIndex(0);
-          return;
-        }
-      }
-
-      // Escape: double-tap to clear input
-      if (key.name === "escape") {
-        if (!value) return;
-        if (escPendingRef.current) {
-          resetInput();
-        } else {
-          escPendingRef.current = true;
-          setEscHint(true);
-          if (escTimeoutRef.current) clearTimeout(escTimeoutRef.current);
-          escTimeoutRef.current = setTimeout(() => {
-            escPendingRef.current = false;
-            setEscHint(false);
-          }, 2000);
-        }
-        return;
-      }
-
-      if (key.name === "return") {
-        // Newline: Shift+Enter (kitty protocol) or trailing backslash (fallback)
-        // Shift+Enter works in: iTerm2, Kitty, Alacritty, WezTerm
-        // Backslash fallback for: Cursor terminal, Terminal.app
-        if (key.shift || value.endsWith("\\")) {
-          if (value.endsWith("\\")) {
-            // Remove backslash and insert newline at the end
-            const newValue = value.slice(0, -1) + "\n";
-            setValue(newValue);
-            moveCursor(newValue.length);
-          } else {
-            insertAt(pos, "\n");
-          }
-          return;
-        }
-        if (showAutocomplete && filteredCommands[selectedIndex]) {
-          onSubmit(`/${filteredCommands[selectedIndex].name}`);
-          resetInput();
-          return;
-        }
-        if (value.trim()) { onSubmit(value); resetInput(); }
-        return;
-      }
-
-      // Delete word backward: Option+Backspace (requires terminal config) or Ctrl+W (universal)
-      // Option+Backspace requires: macOptionIsMeta (Cursor) or "Option as Esc+" (iTerm2)
-      if ((key.name === "backspace" && key.meta) || (key.name === "w" && key.ctrl)) {
-        if (pos === 0) return;
-        const newPos = findPrevWordBoundary(pos);
-        setValue((v) => v.slice(0, newPos) + v.slice(pos));
-        moveCursor(newPos);
-        return;
-      }
-      if (key.name === "backspace") {
-        if (pos > 0) {
-          setValue((v) => v.slice(0, pos - 1) + v.slice(pos));
-          moveCursor(pos - 1);
-        }
-        return;
-      }
-      if (key.name === "delete") {
-        setValue((v) => v.slice(0, pos) + v.slice(pos + 1));
-        return;
-      }
-      if (key.name === "k" && key.ctrl) {
-        setValue((v) => v.slice(0, pos));
-        return;
-      }
-      if (key.name === "u" && key.ctrl) {
-        setValue((v) => v.slice(pos));
-        moveCursor(0);
-        return;
-      }
-      // Navigation - must sync cursorRef for next keypress
-      // Word navigation: meta+arrows (Mac), ctrl+arrows (Linux/Windows)
-      if ((key.name === "left" && key.meta) || (key.name === "left" && key.ctrl)) {
-        moveCursor(findPrevWordBoundary(pos));
-        return;
-      }
-      if ((key.name === "right" && key.meta) || (key.name === "right" && key.ctrl)) {
-        moveCursor(findNextWordBoundary(pos));
-        return;
-      }
-      if (key.name === "b" && key.meta) {
-        moveCursor(findPrevWordBoundary(pos));
-        return;
-      }
-      if (key.name === "f" && key.meta) {
-        moveCursor(findNextWordBoundary(pos));
-        return;
-      }
-      if (key.name === "left") {
-        moveCursor(Math.max(0, pos - 1));
-        return;
-      }
-      if (key.name === "right") {
-        moveCursor(Math.min(value.length, pos + 1));
-        return;
-      }
-      if (key.name === "home" || (key.name === "a" && key.ctrl)) {
-        moveCursor(0);
-        return;
-      }
-      if (key.name === "end" || (key.name === "e" && key.ctrl)) {
-        moveCursor(value.length);
-        return;
-      }
-
-      // Insert printable
-      if (key.insertable && key.sequence && !key.ctrl && !key.meta) {
-        insertAt(pos, key.sequence);
-      }
-    },
-    [disabled, value, onSubmit, showAutocomplete, filteredCommands, selectedIndex, resetInput]
-  );
-
-  // Always active when focused - even during streaming (messages get queued)
-  useKeypress(handleKeypress, { isActive: focus });
-
-  const beforeCursor = value.slice(0, cursorPos);
-  const atCursor = value[cursorPos] || " ";
-  const afterCursor = value.slice(cursorPos + 1);
+  const modelName = formatModel(chatModel);
 
   return (
-    <Box flexDirection="column">
-      {/* Top divider */}
-      <Text color={colors.divider}>{divider}</Text>
-
-      {/* Input row — Box layout handles continuation-line indent */}
-      <Box flexDirection="row">
-        <Box width={2} flexShrink={0}>
-          <Text color={accentValue} bold>{">"}</Text>
-        </Box>
-        <Text>
-          <Text>{beforeCursor}</Text>
-          <Text inverse>{atCursor}</Text>
-          <Text>{afterCursor}</Text>
-        </Text>
-      </Box>
-
-      {/* Bottom divider */}
-      <Text color={colors.divider}>{divider}</Text>
-
-      {/* Footer */}
-      {!showAutocomplete && !showHelp && (
-        <Box flexDirection="column" width={columns - 2} overflow="hidden">
-          {chatModel && <Text dimColor>{formatModel(chatModel)}</Text>}
-          <Text>
-            {skipApprovals && <Text color={colors.status.warning} bold>skip approvals</Text>}
-            {indexStatus?.indexing && <Text dimColor>{skipApprovals ? "  ·  " : ""}indexing {indexStatus.progress.done}/{indexStatus.progress.total}</Text>}
-            {escHint && <Text dimColor>{skipApprovals || indexStatus?.indexing ? "  ·  " : ""}esc to clear</Text>}
-            {queueCount > 0 && (
-              <Text color={colors.status.warning}>{escHint || skipApprovals || indexStatus?.indexing ? "  ·  " : ""}{queueCount} queued</Text>
-            )}
-            {!value && !skipApprovals && !indexStatus?.indexing && !escHint && queueCount === 0 && (
-              <Text color={colors.text.disabled}>? for help</Text>
-            )}
-          </Text>
-        </Box>
-      )}
-      {(showAutocomplete || showHelp) && escHint && (
-        <Text dimColor>esc to clear</Text>
-      )}
-
+    <box flexDirection="column" flexShrink={0}>
+      {/* Autocomplete / Help — above input */}
       {showAutocomplete && (
-        <AutocompleteList commands={filteredCommands} selectedIndex={selectedIndex} accentValue={accentValue} maxDescWidth={(stdout?.columns ?? 80) - Math.max(...filteredCommands.map((c) => c.name.length)) - 8} />
+        <AutocompleteList
+          commands={filteredCommands}
+          selectedIndex={selectedIndex}
+          accentValue={accentValue}
+        />
       )}
-      {showHelp && <HelpPanel accentValue={accentValue} />}
-    </Box>
+
+      {/* Prompt container — matches OpenCode's structure exactly */}
+      <box>
+        {/* Input box with left accent border */}
+        <box
+          border={["left"]}
+          borderColor={accentValue}
+          customBorderChars={{
+            ...EmptyBorder,
+            vertical: "\u2503",
+            bottomLeft: "\u2579",
+          }}
+        >
+          <box
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            flexShrink={0}
+            backgroundColor={colors.background.element}
+            flexGrow={1}
+          >
+            <textarea
+              ref={inputRef as any}
+              minHeight={1}
+              maxHeight={6}
+              placeholder="Message ntrp..."
+              focused={focus}
+              textColor={colors.text.primary}
+              focusedBackgroundColor={colors.background.element}
+              keyBindings={[
+                { name: "return", shift: true, action: "newline" },
+              ]}
+              onKeyDown={handleKeyDown}
+              onContentChange={handleContentChange}
+            />
+            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
+              {chatModel ? (
+                <text flexShrink={0} fg={colors.text.muted}>{modelName}</text>
+              ) : null}
+              {skipApprovals ? (
+                <text><span fg={colors.status.warning}><strong>skip approvals</strong></span></text>
+              ) : null}
+              {queueCount > 0 ? (
+                <text><span fg={colors.status.warning}>{queueCount} queued</span></text>
+              ) : null}
+            </box>
+          </box>
+        </box>
+        {/* Bottom cap — half-block transition */}
+        <box
+          height={1}
+          border={["left"]}
+          borderColor={accentValue}
+          customBorderChars={{ ...EmptyBorder, vertical: "\u2579" }}
+        >
+          <box
+            height={1}
+            border={["bottom"]}
+            borderColor={colors.background.element}
+            customBorderChars={{ ...EmptyBorder, horizontal: "\u2580" }}
+          />
+        </box>
+        {/* Footer */}
+        <box flexDirection="row" justifyContent="space-between">
+          {isStreaming ? (
+            <>
+              <box flexDirection="row" gap={1} flexGrow={1}>
+                <box marginLeft={3}>
+                  <BraillePendulum width={8} color={accentValue} spread={1} interval={20}/>
+                </box>
+                <CyclingStatus status={status} isStreaming={isStreaming} />
+              </box>
+              <text>
+                <span fg={colors.footer}>esc</span>
+                <span fg={colors.text.disabled}> interrupt</span>
+              </text>
+            </>
+          ) : (
+            <>
+              <text marginLeft={3}>
+                {indexStatus?.indexing ? (
+                  <>
+                    <span fg={accentValue}>
+                      {"\u2588".repeat(Math.max(1, Math.round(3 * indexStatus.progress.done / Math.max(1, indexStatus.progress.total))))}
+                    </span>
+                    <span fg={colors.text.disabled}>
+                      {"\u00B7".repeat(Math.max(0, 3 - Math.round(3 * indexStatus.progress.done / Math.max(1, indexStatus.progress.total))))}
+                    </span>
+                    {"  "}
+                  </>
+                ) : null}
+                {escHint ? (
+                  <span fg={accentValue}>esc again to clear</span>
+                ) : null}
+              </text>
+              <box gap={2} flexDirection="row">
+                <text>
+                  <span fg={colors.footer}>ctrl+l</span>
+                  <span fg={colors.text.disabled}> panel</span>
+                </text>
+                <text>
+                  <span fg={colors.footer}>shift+tab</span>
+                  <span fg={colors.text.disabled}> approvals</span>
+                </text>
+              </box>
+            </>
+          )}
+        </box>
+      </box>
+    </box>
   );
 });

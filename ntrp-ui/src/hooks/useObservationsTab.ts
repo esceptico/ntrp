@@ -13,7 +13,7 @@ import {
   getObsSectionMaxIndex,
 } from "../components/viewers/memory/ObservationDetailsView.js";
 
-export interface ObservationsTabState {
+interface ObservationsTabState {
   filteredObservations: Observation[];
   selectedIndex: number;
   obsDetails: ObservationDetails | null;

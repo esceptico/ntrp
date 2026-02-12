@@ -49,9 +49,9 @@ function emptyForm(): FormFields {
 }
 
 function fieldCountForType(type: string): number {
-  if (type === "email") return 3; // name + from + to
-  if (type === "telegram") return 2; // name + user_id
-  return 2; // bash: name + command
+  if (type === "email") return 3;
+  if (type === "telegram") return 2;
+  return 2;
 }
 
 export interface UseNotifiersResult {
@@ -109,7 +109,6 @@ export function useNotifiers(config: Config): UseNotifiersResult {
     }
   }, [loadData]);
 
-  // Text input handlers for each text field
   const nameInput = useTextInput({
     text: form.name,
     cursorPos: form.nameCursor,
@@ -139,7 +138,6 @@ export function useNotifiers(config: Config): UseNotifiersResult {
   });
 
   const getActiveTextInput = useCallback(() => {
-    // In edit mode, activeField is offset by -1 (name is not editable)
     const fieldIdx = mode === "edit-form" ? activeField + 1 : activeField;
 
     if (formType === "email") {
@@ -232,15 +230,11 @@ export function useNotifiers(config: Config): UseNotifiersResult {
           const accounts = types[cfg.type]?.accounts;
           setFormType(cfg.type);
           setForm({
-            name: cfg.name,
-            nameCursor: cfg.name.length,
+            name: cfg.name, nameCursor: cfg.name.length,
             fromAccount: cfg.config.from_account || (accounts?.[0] ?? ""),
-            toAddress: cfg.config.to_address || "",
-            toAddressCursor: (cfg.config.to_address || "").length,
-            userId: cfg.config.user_id || "",
-            userIdCursor: (cfg.config.user_id || "").length,
-            command: cfg.config.command || "",
-            commandCursor: (cfg.config.command || "").length,
+            toAddress: cfg.config.to_address || "", toAddressCursor: (cfg.config.to_address || "").length,
+            userId: cfg.config.user_id || "", userIdCursor: (cfg.config.user_id || "").length,
+            command: cfg.config.command || "", commandCursor: (cfg.config.command || "").length,
           });
           setActiveField(0);
           setError(null);
@@ -254,20 +248,14 @@ export function useNotifiers(config: Config): UseNotifiersResult {
       }
 
       if (mode === "add-type") {
-        if (key.name === "escape") {
-          setMode("list");
-        } else if (key.name === "j" || key.name === "down") {
-          setTypeSelectIndex((i) => Math.min(TYPE_ORDER.length - 1, i + 1));
-        } else if (key.name === "k" || key.name === "up") {
-          setTypeSelectIndex((i) => Math.max(0, i - 1));
-        } else if (key.name === "return") {
+        if (key.name === "escape") { setMode("list"); }
+        else if (key.name === "j" || key.name === "down") { setTypeSelectIndex((i) => Math.min(TYPE_ORDER.length - 1, i + 1)); }
+        else if (key.name === "k" || key.name === "up") { setTypeSelectIndex((i) => Math.max(0, i - 1)); }
+        else if (key.name === "return") {
           const type = TYPE_ORDER[typeSelectIndex];
           const accounts = types[type]?.accounts;
           setFormType(type);
-          setForm({
-            ...emptyForm(),
-            fromAccount: accounts?.[0] ?? "",
-          });
+          setForm({ ...emptyForm(), fromAccount: accounts?.[0] ?? "" });
           setActiveField(0);
           setMode("add-form");
         }
@@ -275,11 +263,8 @@ export function useNotifiers(config: Config): UseNotifiersResult {
       }
 
       if (mode === "confirm-delete") {
-        if (key.sequence === "y") {
-          handleDelete();
-        } else if (key.sequence === "n" || key.name === "escape") {
-          setMode("list");
-        }
+        if (key.sequence === "y") { handleDelete(); }
+        else if (key.sequence === "n" || key.name === "escape") { setMode("list"); }
         return;
       }
 
@@ -292,32 +277,19 @@ export function useNotifiers(config: Config): UseNotifiersResult {
         return;
       }
 
-      if (key.name === "s" && key.ctrl) {
-        handleSave();
-        return;
-      }
+      if (key.name === "s" && key.ctrl) { handleSave(); return; }
 
       const fieldCount = fieldCountForType(formType) - (mode === "edit-form" ? 1 : 0);
 
-      if (key.name === "up" || (key.name === "k" && key.ctrl)) {
-        setActiveField((i) => Math.max(0, i - 1));
-        return;
-      }
-      if (key.name === "down" || (key.name === "j" && key.ctrl)) {
-        setActiveField((i) => Math.min(fieldCount - 1, i + 1));
-        return;
-      }
+      if (key.name === "up" || (key.name === "k" && key.ctrl)) { setActiveField((i) => Math.max(0, i - 1)); return; }
+      if (key.name === "down" || (key.name === "j" && key.ctrl)) { setActiveField((i) => Math.min(fieldCount - 1, i + 1)); return; }
 
       if (key.name === "return") {
-        if (activeField < fieldCount - 1) {
-          setActiveField((i) => i + 1);
-        } else {
-          handleSave();
-        }
+        if (activeField < fieldCount - 1) { setActiveField((i) => i + 1); }
+        else { handleSave(); }
         return;
       }
 
-      // For email from_account field: cycle with tab or left/right
       const fromAccountField = mode === "edit-form" ? 0 : 1;
       if (formType === "email" && activeField === fromAccountField) {
         const accounts = types.email?.accounts ?? [];
@@ -330,11 +302,8 @@ export function useNotifiers(config: Config): UseNotifiersResult {
         }
       }
 
-      // Delegate to active text input
       const textInput = getActiveTextInput();
-      if (textInput) {
-        textInput.handleKey(key);
-      }
+      if (textInput) { textInput.handleKey(key); }
     },
     [
       mode, configs, selectedIndex, types, typeSelectIndex, formType, activeField,
@@ -343,19 +312,8 @@ export function useNotifiers(config: Config): UseNotifiersResult {
   );
 
   return {
-    configs,
-    types,
-    selectedIndex,
-    mode,
-    form,
-    formType,
-    activeField,
-    error,
-    typeSelectIndex,
-    loading,
-    testing,
-    testResult,
-    handleKeypress,
+    configs, types, selectedIndex, mode, form, formType, activeField,
+    error, typeSelectIndex, loading, testing, testResult, handleKeypress,
   };
 }
 

@@ -1,5 +1,5 @@
-import { Box, Text } from "ink";
-import { colors, SelectionIndicator, TextInputField } from "../../../ui/index.js";
+import type React from "react";
+import { colors, SelectionIndicator, TextInputField, Hints } from "../../../ui/index.js";
 import type { UseNotifiersResult } from "../../../../hooks/useNotifiers.js";
 import { TYPE_ORDER, TYPE_LABELS, TYPE_DESCRIPTIONS } from "../../../../hooks/useNotifiers.js";
 import { INDICATOR_SELECTED, INDICATOR_UNSELECTED } from "../../../../lib/constants.js";
@@ -9,62 +9,62 @@ interface NotifiersSectionProps {
   accent: string;
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  email: "#7AA2F7",
-  telegram: "#7DCFFF",
-  bash: "#9ECE6A",
-};
+const TYPE_COLOR = colors.text.secondary;
 
 function ListMode({ notifiers, accent }: NotifiersSectionProps) {
   const { configs, selectedIndex, testing, testResult } = notifiers;
 
   if (configs.length === 0) {
     return (
-      <Box flexDirection="column">
-        <Text color={colors.text.muted}>No notifiers configured</Text>
-        <Box marginTop={1}>
-          <Text color={colors.text.disabled}>a: add</Text>
-        </Box>
-      </Box>
+      <box flexDirection="column">
+        <text><span fg={colors.text.muted}>No notifiers configured</span></text>
+        <box marginTop={1}>
+          <Hints items={[["a", "add"]]} />
+        </box>
+      </box>
     );
   }
 
   return (
-    <Box flexDirection="column">
+    <box flexDirection="column">
       {configs.map((cfg, idx) => {
         const selected = idx === selectedIndex;
         return (
-          <Box key={cfg.name} flexDirection="row">
-            <Box width={2} flexShrink={0}>
-              <Text color={selected ? accent : colors.text.disabled}>
-                {selected ? INDICATOR_SELECTED.trimEnd() : INDICATOR_UNSELECTED.trimEnd()}
-              </Text>
-            </Box>
-            <Box width={10} flexShrink={0} marginLeft={1}>
-              <Text color={TYPE_COLORS[cfg.type] ?? colors.text.secondary} bold>
-                {TYPE_LABELS[cfg.type] ?? cfg.type}
-              </Text>
-            </Box>
-            <Text color={selected ? accent : colors.text.primary}>{cfg.name}</Text>
-          </Box>
+          <box key={cfg.name} flexDirection="row">
+            <box width={2} flexShrink={0}>
+              <text>
+                <span fg={selected ? accent : colors.text.disabled}>
+                  {selected ? INDICATOR_SELECTED.trimEnd() : INDICATOR_UNSELECTED.trimEnd()}
+                </span>
+              </text>
+            </box>
+            <box width={10} flexShrink={0} marginLeft={1}>
+              <text>
+                <span fg={TYPE_COLOR}><strong>{TYPE_LABELS[cfg.type] ?? cfg.type}</strong></span>
+              </text>
+            </box>
+            <text><span fg={selected ? accent : colors.text.primary}>{cfg.name}</span></text>
+          </box>
         );
       })}
       {testing && (
-        <Box marginTop={1}>
-          <Text color={colors.status.warning}>Sending test...</Text>
-        </Box>
+        <box marginTop={1}>
+          <text><span fg={colors.status.warning}>Sending test...</span></text>
+        </box>
       )}
       {!testing && testResult && (
-        <Box marginTop={1}>
-          <Text color={testResult.ok ? colors.status.success : colors.status.error}>
-            {testResult.ok ? `✓ Sent to ${testResult.name}` : `✗ ${testResult.error}`}
-          </Text>
-        </Box>
+        <box marginTop={1}>
+          <text>
+            <span fg={testResult.ok ? colors.status.success : colors.status.error}>
+              {testResult.ok ? `✓ Sent to ${testResult.name}` : `✗ ${testResult.error}`}
+            </span>
+          </text>
+        </box>
       )}
-      <Box marginTop={testing || testResult ? 0 : 1}>
-        <Text color={colors.text.disabled}>a: add  e: edit  t: test  d: delete</Text>
-      </Box>
-    </Box>
+      <box marginTop={testing || testResult ? 0 : 1}>
+        <Hints items={[["a", "add"], ["e", "edit"], ["t", "test"], ["d", "delete"]]} />
+      </box>
+    </box>
   );
 }
 
@@ -72,25 +72,29 @@ function AddTypeMode({ notifiers, accent }: NotifiersSectionProps) {
   const { typeSelectIndex } = notifiers;
 
   return (
-    <Box flexDirection="column">
+    <box flexDirection="column">
       {TYPE_ORDER.map((type, idx) => {
         const selected = idx === typeSelectIndex;
         return (
-          <Box key={type} flexDirection="row">
-            <SelectionIndicator selected={selected} accent={accent} />
-            <Box width={12} flexShrink={0}>
-              <Text color={selected ? accent : colors.text.primary} bold={selected}>
-                {TYPE_LABELS[type]}
-              </Text>
-            </Box>
-            <Text color={colors.text.muted}>{TYPE_DESCRIPTIONS[type]}</Text>
-          </Box>
+          <box key={type} flexDirection="row">
+            <text><SelectionIndicator selected={selected} accent={accent} /></text>
+            <box width={12} flexShrink={0}>
+              <text>
+                {selected ? (
+                  <span fg={accent}><strong>{TYPE_LABELS[type]}</strong></span>
+                ) : (
+                  <span fg={colors.text.primary}>{TYPE_LABELS[type]}</span>
+                )}
+              </text>
+            </box>
+            <text><span fg={colors.text.muted}>{TYPE_DESCRIPTIONS[type]}</span></text>
+          </box>
         );
       })}
-      <Box marginTop={1}>
-        <Text color={colors.text.disabled}>Enter: select  Esc: cancel</Text>
-      </Box>
-    </Box>
+      <box marginTop={1}>
+        <Hints items={[["enter", "select"], ["esc", "cancel"]]} />
+      </box>
+    </box>
   );
 }
 
@@ -101,11 +105,10 @@ function FormMode({ notifiers, accent }: NotifiersSectionProps) {
 
   const fields: Array<{ label: string; content: React.ReactNode }> = [];
 
-  // Name field (non-editable in edit mode)
   if (isEdit) {
     fields.push({
       label: "Name",
-      content: <Text color={colors.text.muted}>{form.name}</Text>,
+      content: <text><span fg={colors.text.muted}>{form.name}</span></text>,
     });
   } else {
     fields.push({
@@ -126,10 +129,12 @@ function FormMode({ notifiers, accent }: NotifiersSectionProps) {
     fields.push({
       label: "From",
       content: (
-        <Text color={activeField === 1 ? accent : colors.text.primary}>
-          {form.fromAccount || (accounts.length > 0 ? accounts[0] : "no accounts")}
-          {activeField === 1 && accounts.length > 1 ? "  ◂▸" : ""}
-        </Text>
+        <text>
+          <span fg={activeField === 1 ? accent : colors.text.primary}>
+            {form.fromAccount || (accounts.length > 0 ? accounts[0] : "no accounts")}
+            {activeField === 1 && accounts.length > 1 ? "  ◂▸" : ""}
+          </span>
+        </text>
       ),
     });
     fields.push({
@@ -169,39 +174,40 @@ function FormMode({ notifiers, accent }: NotifiersSectionProps) {
     });
   }
 
-  // In edit mode, field indices shift (name is not editable, so field 0 = first editable)
   const editOffset = isEdit ? 1 : 0;
 
   return (
-    <Box flexDirection="column">
-      <Text color={accent} bold>{title}</Text>
-      <Box flexDirection="column" marginTop={1}>
+    <box flexDirection="column">
+      <text><span fg={accent}><strong>{title}</strong></span></text>
+      <box flexDirection="column" marginTop={1}>
         {fields.map((field, idx) => {
           const isActive = isEdit ? idx === activeField + editOffset : idx === activeField;
           return (
-            <Box key={field.label} flexDirection="row">
-              <Box width={2} flexShrink={0}>
-                <Text color={isActive ? accent : colors.text.disabled}>
-                  {isActive ? "›" : " "}
-                </Text>
-              </Box>
-              <Box width={6} flexShrink={0}>
-                <Text color={colors.text.secondary}>{field.label}</Text>
-              </Box>
+            <box key={field.label} flexDirection="row">
+              <box width={2} flexShrink={0}>
+                <text>
+                  <span fg={isActive ? accent : colors.text.disabled}>
+                    {isActive ? "›" : " "}
+                  </span>
+                </text>
+              </box>
+              <box width={6} flexShrink={0}>
+                <text><span fg={colors.text.secondary}>{field.label}</span></text>
+              </box>
               {field.content}
-            </Box>
+            </box>
           );
         })}
-      </Box>
+      </box>
       {error && (
-        <Box marginTop={1}>
-          <Text color={colors.status.error}>{error}</Text>
-        </Box>
+        <box marginTop={1}>
+          <text><span fg={colors.status.error}>{error}</span></text>
+        </box>
       )}
-      <Box marginTop={1}>
-        <Text color={colors.text.disabled}>↑↓: field  Enter: next/save  Ctrl+S: save  Esc: cancel</Text>
-      </Box>
-    </Box>
+      <box marginTop={1}>
+        <Hints items={[["↑↓", "field"], ["enter", "next/save"], ["^S", "save"], ["esc", "cancel"]]} />
+      </box>
+    </box>
   );
 }
 
@@ -210,14 +216,16 @@ function ConfirmDeleteMode({ notifiers, accent }: NotifiersSectionProps) {
   if (!cfg) return null;
 
   return (
-    <Box flexDirection="column">
-      <Text color={colors.status.warning}>
-        Delete notifier <Text bold color={accent}>{cfg.name}</Text>?
-      </Text>
-      <Box marginTop={1}>
-        <Text color={colors.text.disabled}>y: confirm  n/Esc: cancel</Text>
-      </Box>
-    </Box>
+    <box flexDirection="column">
+      <text>
+        <span fg={colors.status.warning}>Delete notifier </span>
+        <span fg={accent}><strong>{cfg.name}</strong></span>
+        <span fg={colors.status.warning}>?</span>
+      </text>
+      <box marginTop={1}>
+        <Hints items={[["y", "confirm"], ["n/esc", "cancel"]]} />
+      </box>
+    </box>
   );
 }
 
@@ -225,7 +233,7 @@ export function NotifiersSection(props: NotifiersSectionProps) {
   const { mode, loading } = props.notifiers;
 
   if (loading) {
-    return <Text color={colors.text.muted}>Loading...</Text>;
+    return <text><span fg={colors.text.muted}>Loading...</span></text>;
   }
 
   if (mode === "list") return <ListMode {...props} />;

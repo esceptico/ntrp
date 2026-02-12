@@ -1,5 +1,3 @@
-import React from "react";
-import { Box, Text } from "ink";
 import type { DashboardOverview } from "../../../api/client.js";
 import { colors } from "../../ui/colors.js";
 
@@ -43,63 +41,67 @@ export function BackgroundPanel({ data, width }: BackgroundPanelProps) {
     : "idle";
 
   return (
-    <Box flexDirection="column" marginTop={1}>
-      <Box>
-        <Text color={B}>{"indexer".padEnd(18)}</Text>
-        <Text color={pillColor(idxStatus)}>[{idxStatus}]</Text>
+    <box flexDirection="column" marginTop={1}>
+      <box flexDirection="row">
+        <text><span fg={B}>{"indexer".padEnd(18)}</span></text>
+        <text><span fg={pillColor(idxStatus)}>[{idxStatus}]</span></text>
         {indexer.status === "indexing" && (
-          <Text color={B}> {indexer.progress_done}/{indexer.progress_total}</Text>
+          <text><span fg={B}>{" "}{indexer.progress_done}/{indexer.progress_total}</span></text>
         )}
-        {indexer.error && <Text color={colors.status.error}> {indexer.error}</Text>}
-      </Box>
-      <Box>
-        <Text color={B}>{"scheduler".padEnd(18)}</Text>
-        <Text color={pillColor(scheduler.running ? "active" : "idle")}>
-          [{scheduler.running ? "active" : "idle"}]
-        </Text>
+        {indexer.error && <text><span fg={colors.status.error}>{" "}{indexer.error}</span></text>}
+      </box>
+      <box flexDirection="row">
+        <text><span fg={B}>{"scheduler".padEnd(18)}</span></text>
+        <text>
+          <span fg={pillColor(scheduler.running ? "active" : "idle")}>
+            [{scheduler.running ? "active" : "idle"}]
+          </span>
+        </text>
         {scheduler.enabled_count > 0 && (
-          <Text color={B}> {scheduler.enabled_count} tasks</Text>
+          <text><span fg={B}>{" "}{scheduler.enabled_count} tasks</span></text>
         )}
         {scheduler.next_run_at && (
-          <Text color={B}> · next {formatTime(scheduler.next_run_at)}</Text>
+          <text><span fg={B}>{" · next "}{formatTime(scheduler.next_run_at)}</span></text>
         )}
-      </Box>
+      </box>
       {scheduler.active_task && (
-        <Box marginLeft={18}>
-          <Text color={colors.status.warning}>→ {scheduler.active_task}</Text>
-        </Box>
+        <box marginLeft={18}>
+          <text><span fg={colors.status.warning}>{"→ "}{scheduler.active_task}</span></text>
+        </box>
       )}
-      <Box>
-        <Text color={B}>{"consolidation".padEnd(18)}</Text>
-        <Text color={pillColor(consolidation.running ? "active" : "idle")}>
-          [{consolidation.running ? "active" : "idle"}]
-        </Text>
+      <box flexDirection="row">
+        <text><span fg={B}>{"consolidation".padEnd(18)}</span></text>
+        <text>
+          <span fg={pillColor(consolidation.running ? "active" : "idle")}>
+            [{consolidation.running ? "active" : "idle"}]
+          </span>
+        </text>
         {memory.unconsolidated > 0 && (
-          <Text color={B}> {memory.unconsolidated} pending</Text>
+          <text><span fg={B}>{" "}{memory.unconsolidated} pending</span></text>
         )}
         {memory.last_consolidation_at && (
-          <Text color={B}> · {relativeTime(memory.last_consolidation_at)}</Text>
+          <text><span fg={B}>{" · "}{relativeTime(memory.last_consolidation_at)}</span></text>
         )}
-      </Box>
+      </box>
 
-      <Box marginTop={1}>
-        <Text color={B}>memory  </Text>
-        <Text color={colors.text.primary} bold>{memory.fact_count}</Text>
-        <Text color={B}> facts   </Text>
-        <Text color={colors.text.primary} bold>{memory.observation_count}</Text>
-        <Text color={B}> obs</Text>
-      </Box>
+      <box flexDirection="row" marginTop={1}>
+        <text><span fg={B}>{"memory  "}</span></text>
+        <text><span fg={colors.text.primary}><strong>{memory.fact_count}</strong></span></text>
+        <text><span fg={B}>{" facts   "}</span></text>
+        <text><span fg={colors.text.primary}><strong>{memory.observation_count}</strong></span></text>
+        <text><span fg={B}>{" obs"}</span></text>
+      </box>
 
       {memory.recent_facts.length > 0 && (
-        <Box flexDirection="column" marginTop={1}>
+        <box flexDirection="column" marginTop={1}>
           {memory.recent_facts.map((fact) => (
-            <Box key={fact.id}>
-              <Text color={B}>{relativeTime(fact.ts).padEnd(10)}</Text>
-              <Text color={colors.text.muted}>{fact.text}</Text>
-            </Box>
+            <box flexDirection="row" key={fact.id}>
+              <text><span fg={B}>{relativeTime(fact.ts).padEnd(10)}</span></text>
+              <text><span fg={colors.text.muted}>{fact.text}</span></text>
+            </box>
           ))}
-        </Box>
+        </box>
       )}
-    </Box>
+    </box>
   );
 }

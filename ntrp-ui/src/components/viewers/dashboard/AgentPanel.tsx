@@ -1,5 +1,3 @@
-import React from "react";
-import { Box, Text } from "ink";
 import type { DashboardOverview } from "../../../api/client.js";
 import { colors } from "../../ui/colors.js";
 
@@ -35,57 +33,61 @@ export function AgentPanel({ data, width }: AgentPanelProps) {
   const toolStats = Object.entries(agent.tool_stats).sort(([, a], [, b]) => b.count - a.count);
 
   return (
-    <Box flexDirection="column" marginTop={1}>
+    <box flexDirection="column" marginTop={1}>
       {/* Runs */}
-      <Box>
-        <Text color={B}>runs </Text>
-        <Text color={colors.text.primary} bold>{agent.total_runs}</Text>
+      <box flexDirection="row">
+        <text><span fg={B}>{"runs "}</span></text>
+        <text><span fg={colors.text.primary}><strong>{agent.total_runs}</strong></span></text>
         {agent.active_runs > 0 && (
-          <Text color={colors.status.warning}> [{agent.active_runs} active]</Text>
+          <text><span fg={colors.status.warning}>{" "}[{agent.active_runs} active]</span></text>
         )}
-      </Box>
+      </box>
 
       {/* Recent tool calls */}
       {recentTools.length > 0 && (
-        <Box flexDirection="column" marginTop={1}>
+        <box flexDirection="column" marginTop={1}>
           {recentTools.map((tool) => (
-            <Box key={`${tool.name}-${tool.ts}`}>
-              <Text color={tool.error ? colors.status.error : B}>
-                {tool.error ? "✗" : "·"}
-              </Text>
-              <Text color={colors.text.secondary}> {tool.name.padEnd(16)}</Text>
-              <Text color={durationColor(tool.duration_ms)}>
-                {formatDuration(tool.duration_ms).padStart(7)}
-              </Text>
-              <Text color={B}> {relativeTime(tool.ts).padStart(4)}</Text>
-            </Box>
+            <box flexDirection="row" key={`${tool.name}-${tool.ts}`}>
+              <text>
+                <span fg={tool.error ? colors.status.error : B}>
+                  {tool.error ? "✗" : "·"}
+                </span>
+              </text>
+              <text><span fg={colors.text.secondary}>{" "}{tool.name.padEnd(16)}</span></text>
+              <text>
+                <span fg={durationColor(tool.duration_ms)}>
+                  {formatDuration(tool.duration_ms).padStart(7)}
+                </span>
+              </text>
+              <text><span fg={B}>{" "}{relativeTime(tool.ts).padStart(4)}</span></text>
+            </box>
           ))}
-        </Box>
+        </box>
       )}
 
       {/* Tool stats */}
       {toolStats.length > 0 && (
-        <Box flexDirection="column" marginTop={1}>
-          <Text color={B} dimColor>stats</Text>
+        <box flexDirection="column" marginTop={1}>
+          <text><span fg={B}>stats</span></text>
           {toolStats.slice(0, 5).map(([name, stats]) => (
-            <Box key={name}>
-              <Text color={colors.text.muted}>{name.padEnd(16)}</Text>
-              <Text color={colors.text.secondary}>{`×${stats.count}`.padStart(4)}</Text>
-              <Text color={B}> avg </Text>
-              <Text color={durationColor(stats.avg_ms)}>{formatDuration(stats.avg_ms).padStart(7)}</Text>
+            <box flexDirection="row" key={name}>
+              <text><span fg={colors.text.muted}>{name.padEnd(16)}</span></text>
+              <text><span fg={colors.text.secondary}>{`×${stats.count}`.padStart(4)}</span></text>
+              <text><span fg={B}>{" avg "}</span></text>
+              <text><span fg={durationColor(stats.avg_ms)}>{formatDuration(stats.avg_ms).padStart(7)}</span></text>
               {stats.error_count > 0 && (
-                <Text color={colors.status.error}> {stats.error_count}err</Text>
+                <text><span fg={colors.status.error}>{" "}{stats.error_count}err</span></text>
               )}
-            </Box>
+            </box>
           ))}
-        </Box>
+        </box>
       )}
 
       {recentTools.length === 0 && (
-        <Box marginTop={1}>
-          <Text color={B}>no calls yet</Text>
-        </Box>
+        <box marginTop={1}>
+          <text><span fg={B}>no calls yet</span></text>
+        </box>
       )}
-    </Box>
+    </box>
   );
 }

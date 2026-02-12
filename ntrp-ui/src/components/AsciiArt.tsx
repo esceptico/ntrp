@@ -1,9 +1,5 @@
-import { createRequire } from "module";
-import { Box, Text } from "ink";
 import { useAccentColor } from "../hooks/index.js";
-
-const require = createRequire(import.meta.url);
-const { version: VERSION } = require("../../package.json");
+import { colors } from "./ui/colors.js";
 
 const LOGO_TOP = "█▄ █ ▀█▀ █▀▄ █▀▄";
 const LOGO_BOT = "█ ▀█  █  █▀▄ █▀▀";
@@ -12,12 +8,12 @@ export function Welcome() {
   const { accentValue } = useAccentColor();
 
   return (
-    <Box flexDirection="column" marginTop={1} marginLeft={1} marginBottom={1}>
-      <Text color={accentValue}>{LOGO_TOP}</Text>
-      <Text>
-        <Text color={accentValue}>{LOGO_BOT}</Text>
-        <Text dimColor> v{VERSION}</Text>
-      </Text>
-    </Box>
+    <box flexDirection="column" marginTop={1} marginLeft={1} marginBottom={1}>
+      <text><span fg={accentValue}>{LOGO_TOP}</span></text>
+      <text>
+        <span fg={accentValue}>{LOGO_BOT}</span>
+        <span fg={colors.text.muted}> v0.1.0</span>
+      </text>
+    </box>
   );
 }

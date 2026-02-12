@@ -32,9 +32,8 @@ export async function* streamChat(
 
       buffer += decoder.decode(value, { stream: true });
 
-      // Parse SSE events
       const lines = buffer.split("\n");
-      buffer = lines.pop() || ""; // Keep incomplete line in buffer
+      buffer = lines.pop() || "";
 
       for (const line of lines) {
         if (line.startsWith("data: ")) {
@@ -50,9 +49,7 @@ export async function* streamChat(
       }
     }
   } catch (error) {
-    // Handle connection termination gracefully
     if (error instanceof TypeError && (error.message === "terminated" || error.message.includes("terminated"))) {
-      // Connection was terminated - yield an error event for the UI
       const errorEvent: ServerEvent = { type: "error", message: "Connection to server was terminated unexpectedly", recoverable: false };
       yield errorEvent;
       return;
@@ -252,7 +249,7 @@ export async function purgeMemory(config: Config): Promise<{ status: string; del
   return api.post<{ status: string; deleted: Record<string, number> }>(`${config.serverUrl}/memory/clear`);
 }
 
-export interface IndexStatus {
+interface IndexStatus {
   indexing: boolean;
   progress: {
     total: number;
@@ -365,8 +362,6 @@ export async function setScheduleNotifiers(
   return api.put<{ notifiers: string[] }>(`${config.serverUrl}/schedules/${taskId}/notifiers`, { notifiers });
 }
 
-// --- Notifier configs ---
-
 export interface NotifierConfigData {
   name: string;
   type: string;
@@ -464,8 +459,6 @@ export async function deleteObservation(
   return api.delete(`${config.serverUrl}/observations/${observationId}`);
 }
 
-// --- Skills ---
-
 export interface Skill {
   name: string;
   description: string;
@@ -484,8 +477,6 @@ export async function removeSkill(config: Config, name: string): Promise<{ statu
   return api.delete(`${config.serverUrl}/skills/${name}`);
 }
 
-// --- Dashboard ---
-
 export interface DashboardSystem {
   uptime_seconds: number;
   model: string;
@@ -494,7 +485,7 @@ export interface DashboardSystem {
   source_errors: Record<string, string>;
 }
 
-export interface TokenDataPoint {
+interface TokenDataPoint {
   prompt: number;
   completion: number;
   ts: number;
@@ -506,7 +497,7 @@ export interface DashboardTokens {
   history: TokenDataPoint[];
 }
 
-export interface RecentToolCall {
+interface RecentToolCall {
   name: string;
   duration_ms: number;
   depth: number;
@@ -514,7 +505,7 @@ export interface RecentToolCall {
   error: boolean;
 }
 
-export interface ToolStats {
+interface ToolStats {
   count: number;
   avg_ms: number;
   error_count: number;
@@ -537,14 +528,14 @@ export interface DashboardMemory {
   recent_facts: Array<{ id: number; text: string; ts: number }>;
 }
 
-export interface DashboardIndexer {
+interface DashboardIndexer {
   status: string;
   progress_done: number;
   progress_total: number;
   error: string | null;
 }
 
-export interface DashboardScheduler {
+interface DashboardScheduler {
   running: boolean;
   active_task: string | null;
   total_scheduled: number;

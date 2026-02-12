@@ -1,10 +1,8 @@
 import { useState, useCallback, useMemo } from "react";
-import { Box, Text } from "ink";
-import { colors, SelectionIndicator } from "../../ui/index.js";
+import { colors, SelectionIndicator, Hints } from "../../ui/index.js";
 import { useKeypress, useAccentColor, type Key } from "../../../hooks/index.js";
 
 interface ModelDropdownProps {
-  title: string;
   models: string[];
   currentModel: string;
   onSelect: (model: string) => void;
@@ -19,7 +17,6 @@ function getShortModelName(model: string): string {
 }
 
 export function ModelDropdown({
-  title,
   models,
   currentModel,
   onSelect,
@@ -91,29 +88,25 @@ export function ModelDropdown({
 
   useKeypress(handleKeypress, { isActive: true });
 
-  const contentWidth = Math.max(0, width - 6);
+  const contentWidth = Math.max(0, width - 4);
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={accentValue} width={width} paddingX={1}>
-      {/* Title */}
-      <Box justifyContent="center">
-        <Text color={accentValue} bold> {title} </Text>
-      </Box>
-
+    <box flexDirection="column" width={width}>
       {/* Search */}
-      <Box marginY={1}>
-        <Text color={colors.text.muted}>/ </Text>
-        <Text color={colors.text.primary}>{search}</Text>
-        <Text color={accentValue}>_</Text>
-      </Box>
+      <box marginBottom={1}>
+        <text>
+          <span fg={colors.text.muted}>/ </span>
+          <span fg={colors.text.primary}>{search}</span>
+          <span fg={accentValue}>_</span>
+        </text>
+      </box>
 
-      {/* Scroll indicator up */}
       {hasScrollUp && (
-        <Text color={colors.text.disabled}>  ↑ more</Text>
+        <text><span fg={colors.text.disabled}>  ↑ more</span></text>
       )}
 
       {/* Model list */}
-      <Box flexDirection="column">
+      <box flexDirection="column">
         {visibleModels.map((model, idx) => {
           const actualIdx = scrollOffset + idx;
           const isSelected = actualIdx === selectedIndex;
@@ -122,32 +115,30 @@ export function ModelDropdown({
           const displayName = shortName.length > contentWidth ? shortName.slice(0, contentWidth - 1) + "…" : shortName;
 
           return (
-            <Text key={model}>
+            <text key={model}>
               <SelectionIndicator selected={isSelected} accent={accentValue} />
-              <Text
-                color={isCurrent ? accentValue : isSelected ? colors.text.primary : colors.text.secondary}
-                bold={isCurrent}
-              >
-                {displayName}
-              </Text>
-              {isCurrent && <Text color={colors.text.muted}> •</Text>}
-            </Text>
+              {isCurrent ? (
+                <span fg={accentValue}><strong>{displayName}</strong></span>
+              ) : (
+                <span fg={isSelected ? colors.text.primary : colors.text.secondary}>{displayName}</span>
+              )}
+              {isCurrent && <span fg={colors.text.muted}> •</span>}
+            </text>
           );
         })}
         {filteredModels.length === 0 && (
-          <Text color={colors.text.muted}>  No matches</Text>
+          <text><span fg={colors.text.muted}>  No matches</span></text>
         )}
-      </Box>
+      </box>
 
-      {/* Scroll indicator down */}
       {hasScrollDown && (
-        <Text color={colors.text.disabled}>  ↓ more</Text>
+        <text><span fg={colors.text.disabled}>  ↓ more</span></text>
       )}
 
       {/* Footer */}
-      <Box marginTop={1}>
-        <Text color={colors.text.disabled}>↑↓ move · Enter select · Esc {search ? "clear" : "back"}</Text>
-      </Box>
-    </Box>
+      <box marginTop={1}>
+        <Hints items={[["↑↓", "move"], ["enter", "select"], ["esc", search ? "clear" : "back"]]} />
+      </box>
+    </box>
   );
 }

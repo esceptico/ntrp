@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import type { AccentColor } from "../components/ui/colors.js";
+import { accentColors, type AccentColor } from "../components/ui/colors.js";
 import { updateConfig } from "../api/client.js";
 import type { Config } from "../types.js";
 import * as fs from "fs";
@@ -23,7 +23,7 @@ export interface Settings {
 const defaultSettings: Settings = {
   ui: {
     renderMarkdown: true,
-    accentColor: "blue",
+    accentColor: "gray",
   },
   agent: {
     maxDepth: 8,
@@ -32,14 +32,17 @@ const defaultSettings: Settings = {
 
 const SETTINGS_DIR = path.join(os.homedir(), ".ntrp");
 const SETTINGS_FILE = path.join(SETTINGS_DIR, "settings.json");
+
 function loadSettings(): Settings {
   try {
     if (fs.existsSync(SETTINGS_FILE)) {
       const data = fs.readFileSync(SETTINGS_FILE, "utf-8");
       const parsed = JSON.parse(data);
       if (typeof parsed !== "object" || parsed === null) return defaultSettings;
+      const ui = { ...defaultSettings.ui, ...parsed.ui };
+      if (!(ui.accentColor in accentColors)) ui.accentColor = defaultSettings.ui.accentColor;
       return {
-        ui: { ...defaultSettings.ui, ...parsed.ui },
+        ui,
         agent: { ...defaultSettings.agent, ...parsed.agent },
       };
     }
@@ -65,7 +68,6 @@ export function useSettings(config: Config) {
   const [showSettings, setShowSettings] = useState(false);
   const initializedRef = useRef(false);
 
-  // Save settings on change (accent color synced by AccentColorProvider)
   useEffect(() => {
     if (initializedRef.current) {
       saveSettings(settings);
@@ -74,7 +76,6 @@ export function useSettings(config: Config) {
     }
   }, [settings]);
 
-  // Sync agent settings to server on mount
   useEffect(() => {
     updateConfig(config, {
       max_depth: settings.agent.maxDepth,
@@ -89,7 +90,6 @@ export function useSettings(config: Config) {
           [category]: { ...prev[category], [key]: value },
         };
 
-        // Sync agent settings to server
         if (category === "agent") {
           const agentPatch: Record<string, unknown> = {};
           if (key === "maxDepth") agentPatch.max_depth = value;

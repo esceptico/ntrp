@@ -14,13 +14,10 @@ interface CommandContext {
   config: Config;
   sessionId: string | null;
   messages: { role: string; content: string; id?: string }[];
-  // State setters
   setViewMode: (mode: ViewMode) => void;
   updateSessionInfo: (info: { session_id: string; sources: string[] }) => void;
-  // Actions
   addMessage: (msg: { role: string; content: string }) => void;
   clearMessages: () => void;
-  clearMessageQueue: () => void;
   sendMessage: (msg: string) => void;
   toggleSettings: () => void;
   exit: () => void;
@@ -29,43 +26,16 @@ interface CommandContext {
 
 type CommandHandler = (ctx: CommandContext) => boolean | Promise<boolean>;
 
-// Command registry - maps command names to handlers
 const COMMAND_HANDLERS: Record<string, CommandHandler> = {
-  // View commands
-  memory: ({ setViewMode }) => {
-    setViewMode("memory");
-    return true;
-  },
-  memories: ({ setViewMode }) => {
-    setViewMode("memory");
-    return true;
-  },
-  graph: ({ setViewMode }) => {
-    setViewMode("memory");
-    return true;
-  },
-  entities: ({ setViewMode }) => {
-    setViewMode("memory");
-    return true;
-  },
-  schedules: ({ setViewMode }) => {
-    setViewMode("schedules");
-    return true;
-  },
-  schedule: ({ setViewMode }) => {
-    setViewMode("schedules");
-    return true;
-  },
-  dashboard: ({ setViewMode }) => {
-    setViewMode("dashboard");
-    return true;
-  },
-  settings: ({ toggleSettings }) => {
-    toggleSettings();
-    return true;
-  },
+  memory: ({ setViewMode }) => { setViewMode("memory"); return true; },
+  memories: ({ setViewMode }) => { setViewMode("memory"); return true; },
+  graph: ({ setViewMode }) => { setViewMode("memory"); return true; },
+  entities: ({ setViewMode }) => { setViewMode("memory"); return true; },
+  schedules: ({ setViewMode }) => { setViewMode("schedules"); return true; },
+  schedule: ({ setViewMode }) => { setViewMode("schedules"); return true; },
+  dashboard: ({ setViewMode }) => { setViewMode("dashboard"); return true; },
+  settings: ({ toggleSettings }) => { toggleSettings(); return true; },
 
-  // Actions
   context: async ({ config, addMessage }) => {
     try {
       const ctx = await getContextUsage(config);
@@ -75,13 +45,13 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
         const pct = ((ctx.total / ctx.limit) * 100).toFixed(1);
         const barLen = 20;
         const filled = Math.round((ctx.total / ctx.limit) * barLen);
-        const bar = "█".repeat(filled) + "░".repeat(barLen - filled);
+        const bar = "\u2588".repeat(filled) + "\u2591".repeat(barLen - filled);
 
         const lines = [
           `Context Usage [${bar}] ${pct}%`,
           ``,
-          `${ctx.model} · ${fmt(ctx.total)}/${fmt(ctx.limit)} tokens`,
-          `${ctx.message_count} messages · ${ctx.tool_count} tools`,
+          `${ctx.model} \u00B7 ${fmt(ctx.total)}/${fmt(ctx.limit)} tokens`,
+          `${ctx.message_count} messages \u00B7 ${ctx.tool_count} tools`,
         ];
 
         addMessage({ role: "assistant", content: lines.join("\n") });
@@ -89,8 +59,8 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
         const lines = [
           `Context Usage [no data yet]`,
           ``,
-          `${ctx.model} · limit ${fmt(ctx.limit)} tokens`,
-          `${ctx.message_count} messages · ${ctx.tool_count} tools`,
+          `${ctx.model} \u00B7 limit ${fmt(ctx.limit)} tokens`,
+          `${ctx.message_count} messages \u00B7 ${ctx.tool_count} tools`,
         ];
 
         addMessage({ role: "assistant", content: lines.join("\n") });
@@ -112,11 +82,10 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  clear: async ({ config, updateSessionInfo, clearMessages, clearMessageQueue, addMessage }) => {
+  clear: async ({ config, updateSessionInfo, clearMessages, addMessage }) => {
     try {
       const result = await clearSession(config);
       updateSessionInfo({ session_id: result.session_id, sources: [] });
-      clearMessageQueue();
       clearMessages();
     } catch (error) {
       addMessage({ role: "error", content: `Failed to clear session: ${error}` });
@@ -153,21 +122,9 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  // Model is now in settings
-  model: ({ toggleSettings }) => {
-    toggleSettings();
-    return true;
-  },
-
-  // Exit commands
-  exit: ({ exit }) => {
-    exit();
-    return true;
-  },
-  quit: ({ exit }) => {
-    exit();
-    return true;
-  },
+  model: ({ toggleSettings }) => { toggleSettings(); return true; },
+  exit: ({ exit }) => { exit(); return true; },
+  quit: ({ exit }) => { exit(); return true; },
 };
 
 export function useCommands(context: CommandContext) {

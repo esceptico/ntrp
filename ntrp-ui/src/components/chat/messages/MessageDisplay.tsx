@@ -1,4 +1,4 @@
-import React, { memo } from "react";
+import { memo } from "react";
 import type { Message } from "../../../types.js";
 import { ToolChainDisplay, type ToolChainItem } from "../../ToolChain.js";
 import { UserMessage } from "./UserMessage.js";
@@ -24,6 +24,7 @@ export const MessageDisplay = memo(function MessageDisplay({
       return (
         <AssistantMessage
           content={msg.content}
+          depth={msg.depth}
           renderMarkdown={renderMarkdown}
         />
       );

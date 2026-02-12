@@ -1,7 +1,5 @@
-import { Box, Text } from "ink";
 import type { DashboardOverview } from "../../../api/client.js";
 import { colors } from "../../ui/colors.js";
-import { Sparkline } from "@pppp606/ink-chart";
 
 interface SystemPanelProps {
   data: DashboardOverview;
@@ -9,6 +7,8 @@ interface SystemPanelProps {
 }
 
 const B = colors.text.disabled;
+
+const SPARK_CHARS = "▁▂▃▄▅▆▇█";
 
 function formatUptime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -25,44 +25,50 @@ function formatTokens(n: number): string {
   return `${n}`;
 }
 
+function sparkline(data: number[]): string {
+  const max = Math.max(...data);
+  if (max === 0) return SPARK_CHARS[0].repeat(data.length);
+  return data.map((v) => SPARK_CHARS[Math.min(Math.round((v / max) * 7), 7)]).join("");
+}
+
 export function SystemPanel({ data, width }: SystemPanelProps) {
   const { system, tokens } = data;
   const sparkData = tokens.history.map((h) => h.prompt + h.completion);
   const sparkW = Math.min(width - 10, 20);
 
   return (
-    <Box flexDirection="column" marginTop={1}>
-      <Box>
-        <Box width={9} flexShrink={0}><Text color={B}>uptime</Text></Box>
-        <Text color={colors.text.primary}>[{formatUptime(system.uptime_seconds)}]</Text>
-      </Box>
-      <Box>
-        <Box width={9} flexShrink={0}><Text color={B}>model</Text></Box>
-        <Text color={colors.status.success}>{system.model}</Text>
-      </Box>
+    <box flexDirection="column" marginTop={1}>
+      <box flexDirection="row">
+        <box width={9} flexShrink={0}><text><span fg={B}>uptime</span></text></box>
+        <text><span fg={colors.text.primary}>[{formatUptime(system.uptime_seconds)}]</span></text>
+      </box>
+      <box flexDirection="row">
+        <box width={9} flexShrink={0}><text><span fg={B}>model</span></text></box>
+        <text><span fg={colors.status.success}>{system.model}</span></text>
+      </box>
 
-      <Box marginTop={1}>
-        <Box width={9} flexShrink={0}><Text color={B}>tokens</Text></Box>
-        <Text color={B}>↑ </Text>
-        <Text color={colors.text.primary} bold>{formatTokens(tokens.total_prompt)}</Text>
-        <Text>   </Text>
-        <Text color={B}>↓ </Text>
-        <Text color={colors.text.primary} bold>{formatTokens(tokens.total_completion)}</Text>
-      </Box>
+      <box flexDirection="row" marginTop={1}>
+        <box width={9} flexShrink={0}><text><span fg={B}>tokens</span></text></box>
+        <text><span fg={B}>{"↑ "}</span></text>
+        <text><span fg={colors.text.primary}><strong>{formatTokens(tokens.total_prompt)}</strong></span></text>
+        <text>{"   "}</text>
+        <text><span fg={B}>{"↓ "}</span></text>
+        <text><span fg={colors.text.primary}><strong>{formatTokens(tokens.total_completion)}</strong></span></text>
+      </box>
       {sparkData.length > 1 && (
-        <Box>
-          <Box width={9} flexShrink={0}><Text color={B}>trend</Text></Box>
-          <Sparkline data={sparkData.slice(-sparkW)} width={sparkW} colorScheme="green" />
-        </Box>
+        <box flexDirection="row">
+          <box width={9} flexShrink={0}><text><span fg={B}>trend</span></text></box>
+          <text><span fg={colors.status.success}>{sparkline(sparkData.slice(-sparkW))}</span></text>
+        </box>
       )}
 
       {Object.keys(system.source_errors).length > 0 && (
-        <Box marginTop={1}>
+        <box flexDirection="row" marginTop={1}>
           {Object.entries(system.source_errors).map(([k, v]) => (
-            <Text key={k} color={colors.status.error}>{k}: {v} </Text>
+            <text key={k}><span fg={colors.status.error}>{k}: {v} </span></text>
           ))}
-        </Box>
+        </box>
       )}
-    </Box>
+    </box>
   );
 }

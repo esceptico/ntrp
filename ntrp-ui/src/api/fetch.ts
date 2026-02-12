@@ -1,11 +1,11 @@
-export interface ApiError extends Error {
+interface ApiError extends Error {
   status?: number;
   statusText?: string;
   isNetworkError: boolean;
   isTimeout: boolean;
 }
 
-export interface FetchOptions {
+interface FetchOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   timeout?: number;
@@ -30,11 +30,9 @@ function createApiError(
 async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> {
   const { method = "GET", body, timeout = DEFAULT_TIMEOUT, signal } = options;
 
-  // Create timeout controller
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-  // Combine with external signal if provided
   const combinedSignal = signal
     ? AbortSignal.any([controller.signal, signal])
     : controller.signal;
@@ -50,7 +48,6 @@ async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> 
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      // Try to parse error message from response
       let errorMessage = `Request failed: ${response.status}`;
       try {
         const errorBody = await response.json();
@@ -69,7 +66,6 @@ async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> 
       });
     }
 
-    // Handle empty responses
     const contentType = response.headers.get("content-type");
     if (!contentType?.includes("application/json")) {
       return undefined as T;
@@ -80,23 +76,19 @@ async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> 
     clearTimeout(timeoutId);
 
     if (error instanceof Error) {
-      // Handle abort (timeout)
       if (error.name === "AbortError") {
         throw createApiError(`Request timed out after ${timeout}ms`, { isTimeout: true });
       }
 
-      // Handle network errors
       if (error.name === "TypeError" && error.message.includes("fetch")) {
         throw createApiError("Network error: Unable to reach server", { isNetworkError: true });
       }
 
-      // Re-throw ApiErrors as-is
       if ((error as ApiError).isNetworkError !== undefined) {
         throw error;
       }
     }
 
-    // Wrap unknown errors
     throw createApiError(`Unexpected error: ${error}`, { isNetworkError: true });
   }
 }

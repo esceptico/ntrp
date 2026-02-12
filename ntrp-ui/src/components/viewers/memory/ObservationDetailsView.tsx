@@ -1,4 +1,3 @@
-import { Box, Text } from "ink";
 import type { ObservationDetails } from "../../../api/client.js";
 import { colors, truncateText, ExpandableText, ScrollableList, TextEditArea } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
@@ -16,6 +15,7 @@ interface ObservationDetailsViewProps {
   details: ObservationDetails | null;
   loading: boolean;
   width: number;
+  height: number;
   isFocused: boolean;
   // Section navigation state
   focusedSection: ObsDetailSection;
@@ -32,18 +32,13 @@ interface ObservationDetailsViewProps {
   saving: boolean;
 }
 
-// Fixed heights for each section
-const SECTION_HEIGHTS = {
-  TEXT_COLLAPSED: 1,
-  TEXT_EXPANDED: 5,
-  METADATA: 2,
-  FACTS: 8, // header + 7 items
-};
+const TEXT_VISIBLE_LINES = 5;
 
 export function ObservationDetailsView({
   details,
   loading,
   width,
+  height,
   isFocused,
   focusedSection,
   textExpanded,
@@ -58,14 +53,14 @@ export function ObservationDetailsView({
   saving,
 }: ObservationDetailsViewProps) {
   if (loading) {
-    return <Text color={colors.text.muted}>Loading...</Text>;
+    return <text><span fg={colors.text.muted}>Loading...</span></text>;
   }
 
   if (!details) {
     return (
-      <Box flexDirection="column" paddingLeft={1}>
-        <Text color={colors.text.muted}>Select an observation to view details</Text>
-      </Box>
+      <box flexDirection="column" paddingLeft={1}>
+        <text><span fg={colors.text.muted}>Select an observation to view details</span></text>
+      </box>
     );
   }
 
@@ -78,27 +73,26 @@ export function ObservationDetailsView({
   const sectionFocused = (section: ObsDetailSection) => isFocused && focusedSection === section;
   const textWidth = width - 2;
 
-  // Calculate visible items for scrollable list
-  const factsVisible = SECTION_HEIGHTS.FACTS - 1; // minus header
-
   if (confirmDelete) {
     return (
-      <Box flexDirection="column" width={width} paddingLeft={1}>
-        <Text color={colors.status.warning}>
-          Delete this observation? This will remove the observation and {details.supporting_facts.length} supporting fact references.
-        </Text>
-        <Box marginTop={1}>
-          <Text color={colors.text.muted}>Press y to confirm, any other key to cancel</Text>
-        </Box>
-      </Box>
+      <box flexDirection="column" width={width} paddingLeft={1}>
+        <text>
+          <span fg={colors.status.warning}>
+            Delete this observation? This will remove the observation and {details.supporting_facts.length} supporting fact references.
+          </span>
+        </text>
+        <box marginTop={1}>
+          <text><span fg={colors.text.muted}>Press y to confirm, any other key to cancel</span></text>
+        </box>
+      </box>
     );
   }
 
   if (editMode) {
     return (
-      <Box flexDirection="column" width={width} paddingLeft={1}>
-        <Text color={colors.text.muted}>EDIT OBSERVATION</Text>
-        <Box marginTop={1}>
+      <box flexDirection="column" width={width} paddingLeft={1}>
+        <text><span fg={colors.text.muted}>EDIT OBSERVATION</span></text>
+        <box marginTop={1}>
           <TextEditArea
             value={editText}
             cursorPos={cursorPos}
@@ -106,72 +100,76 @@ export function ObservationDetailsView({
             onCursorChange={setCursorPos}
             placeholder="Type to edit..."
           />
-        </Box>
+        </box>
         {saving && (
-          <Box marginTop={1}>
-            <Text color={colors.tool.running}>Saving...</Text>
-          </Box>
+          <box marginTop={1}>
+            <text><span fg={colors.tool.running}>Saving...</span></text>
+          </box>
         )}
-      </Box>
+      </box>
     );
   }
 
   return (
-    <Box flexDirection="column" width={width} paddingLeft={1}>
+    <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       {/* Summary section - expandable */}
-      <Box>
+      <box>
         <ExpandableText
           text={observation.summary}
           width={textWidth}
           expanded={textExpanded}
           scrollOffset={textScrollOffset}
-          visibleLines={SECTION_HEIGHTS.TEXT_EXPANDED}
+          visibleLines={TEXT_VISIBLE_LINES}
           isFocused={sectionFocused(OBS_SECTIONS.TEXT)}
           boldFirstLine
         />
-      </Box>
+      </box>
 
       {/* Metadata - fixed, non-interactive */}
-      <Box flexDirection="column" height={SECTION_HEIGHTS.METADATA} marginTop={1}>
-        <Text>
-          <Text color={labelColor}>EVIDENCE </Text>
-          <Text color={valueColor}>{observation.evidence_count}</Text>
-          <Text color={labelColor}> facts</Text>
-          <Text color={colors.text.muted}> │ </Text>
-          <Text color={labelColor}>×</Text>
-          <Text color={valueColor}>{observation.access_count}</Text>
-        </Text>
-        <Text>
-          <Text color={labelColor}>CREATED </Text>
-          <Text color={colors.text.secondary}>{formatTimeAgo(observation.created_at)}</Text>
-          <Text color={colors.text.muted}> │ </Text>
-          <Text color={labelColor}>UPDATED </Text>
-          <Text color={colors.text.secondary}>{formatTimeAgo(observation.updated_at)}</Text>
-        </Text>
-      </Box>
+      <box flexDirection="column" marginTop={1}>
+        <text>
+          <span fg={labelColor}>EVIDENCE </span>
+          <span fg={valueColor}>{observation.evidence_count}</span>
+          <span fg={labelColor}> facts</span>
+          <span fg={colors.text.muted}> {"\u2502"} </span>
+          <span fg={labelColor}>{"\u00D7"}</span>
+          <span fg={valueColor}>{observation.access_count}</span>
+        </text>
+        <text>
+          <span fg={labelColor}>CREATED </span>
+          <span fg={colors.text.secondary}>{formatTimeAgo(observation.created_at)}</span>
+          <span fg={colors.text.muted}> {"\u2502"} </span>
+          <span fg={labelColor}>UPDATED </span>
+          <span fg={colors.text.secondary}>{formatTimeAgo(observation.updated_at)}</span>
+        </text>
+      </box>
 
-      {/* Supporting facts section - scrollable list */}
-      <Box flexDirection="column" height={SECTION_HEIGHTS.FACTS} marginTop={1}>
-        <Text color={labelColor}>
-          SUPPORTING FACTS {supporting_facts.length > 0 && `(${supporting_facts.length})`}
-        </Text>
+      {/* Supporting facts section */}
+      <box flexDirection="column" marginTop={1}>
+        <text>
+          <span fg={labelColor}>
+            SUPPORTING FACTS {supporting_facts.length > 0 && `(${supporting_facts.length})`}
+          </span>
+        </text>
         {supporting_facts.length > 0 ? (
           <ScrollableList
             items={supporting_facts}
             selectedIndex={factsIndex}
-            visibleLines={factsVisible}
+            visibleLines={Math.min(supporting_facts.length, 8)}
             renderItem={(fact, _idx, selected) => (
-              <Text color={selected && sectionFocused(OBS_SECTIONS.FACTS) ? textColor : colors.text.secondary}>
-                • {truncateText(fact.text, textWidth - 4)}
-              </Text>
+              <text>
+                <span fg={selected && sectionFocused(OBS_SECTIONS.FACTS) ? textColor : colors.text.secondary}>
+                  {"\u2022"} {truncateText(fact.text, textWidth - 4)}
+                </span>
+              </text>
             )}
             width={textWidth}
           />
         ) : (
-          <Text color={colors.text.muted}>No supporting facts</Text>
+          <text><span fg={colors.text.muted}>No supporting facts</span></text>
         )}
-      </Box>
-    </Box>
+      </box>
+    </box>
   );
 }
 

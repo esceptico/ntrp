@@ -1,7 +1,5 @@
-import { Box, Text } from "ink";
 import type { Schedule } from "../../../api/client.js";
-import { colors, type RenderItemContext } from "../../ui/index.js";
-import { wrapText } from "../../../lib/utils.js";
+import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
 import { formatRelativeTime } from "../../../lib/format.js";
 
 interface ScheduleItemProps {
@@ -10,10 +8,11 @@ interface ScheduleItemProps {
   textWidth: number;
 }
 
+// Fixed 3-line layout: status+meta, description, timing
 export function ScheduleItem({ item, context, textWidth }: ScheduleItemProps) {
   const enabled = item.enabled;
   const isRunning = !!item.running_since;
-  const statusIcon = isRunning ? "▶" : enabled ? "✓" : "⏸";
+  const statusIcon = isRunning ? "\u25B6" : enabled ? "\u2713" : "\u23F8";
   const statusColor = isRunning
     ? colors.tool.running
     : enabled
@@ -30,14 +29,16 @@ export function ScheduleItem({ item, context, textWidth }: ScheduleItemProps) {
   const lastRun = formatRelativeTime(item.last_run_at);
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
-      <Text>
-        <Text color={statusColor}>{statusIcon}</Text>
-        <Text color={metaColor}>{` ${item.time_of_day}  ${item.recurrence}${item.writable ? "  ✎" : ""}${item.notifiers.length > 0 ? `  → ${item.notifiers.join(", ")}` : ""}`}</Text>
-      </Text>
-      {item.name ? <Text color={textColor} bold>{item.name}</Text> : null}
-      <Text color={item.name ? metaColor : textColor}>{wrapText(item.description, textWidth).join("\n")}</Text>
-      <Text color={metaColor}>{`next: ${nextRun}   last: ${lastRun}`}</Text>
-    </Box>
+    <box flexDirection="column" marginBottom={1}>
+      <text>
+        <span fg={statusColor}>{statusIcon}</span>
+        <span fg={metaColor}>{` ${item.time_of_day}  ${item.recurrence}${item.writable ? "  \u270E" : ""}${item.notifiers.length > 0 ? `  \u2192 ${item.notifiers.join(", ")}` : ""}`}</span>
+      </text>
+      {item.name
+        ? <text><strong><span fg={textColor}>{item.name}</span></strong> <span fg={metaColor}>{truncateText(item.description, textWidth - item.name.length - 1)}</span></text>
+        : <text><span fg={textColor}>{truncateText(item.description, textWidth)}</span></text>
+      }
+      <text><span fg={metaColor}>{`next: ${nextRun}   last: ${lastRun}`}</span></text>
+    </box>
   );
 }

@@ -1,26 +1,19 @@
 import { useCallback, useRef } from "react";
 import type { Key } from "./useKeypress.js";
 
-export interface UseTextInputOptions {
+interface UseTextInputOptions {
   text: string;
   cursorPos: number;
   setText: (text: string | ((prev: string) => string)) => void;
   setCursorPos: (pos: number | ((prev: number) => number)) => void;
 }
 
-export interface UseTextInputResult {
+interface UseTextInputResult {
   handleKey: (key: Key) => boolean;
   findPrevWordBoundary: (pos: number) => number;
   findNextWordBoundary: (pos: number) => number;
 }
 
-/**
- * Reusable text input logic with advanced cursor navigation
- * - Word boundary navigation (option+arrows, ctrl+arrows)
- * - Delete word (option+backspace, ctrl+w)
- * - Kill line (ctrl+k, ctrl+u)
- * - Paste support
- */
 export function useTextInput({
   text,
   cursorPos,
@@ -68,13 +61,11 @@ export function useTextInput({
     (key: Key): boolean => {
       const pos = cursorRef.current;
 
-      // Paste
       if (key.isPasted && key.sequence) {
         insertAt(pos, key.sequence);
         return true;
       }
 
-      // Delete word backward: Option+Backspace or Ctrl+W
       if ((key.name === "backspace" && key.meta) || (key.name === "w" && key.ctrl)) {
         if (pos === 0) return true;
         const newPos = findPrevWordBoundary(pos);
@@ -83,7 +74,6 @@ export function useTextInput({
         return true;
       }
 
-      // Backspace
       if (key.name === "backspace") {
         if (pos > 0) {
           setText((v) => v.slice(0, pos - 1) + v.slice(pos));
@@ -92,7 +82,6 @@ export function useTextInput({
         return true;
       }
 
-      // Delete
       if (key.name === "delete") {
         if (pos < text.length) {
           setText((v) => v.slice(0, pos) + v.slice(pos + 1));
@@ -100,20 +89,17 @@ export function useTextInput({
         return true;
       }
 
-      // Ctrl+K: kill line from cursor
       if (key.name === "k" && key.ctrl) {
         setText((v) => v.slice(0, pos));
         return true;
       }
 
-      // Ctrl+U: kill line before cursor
       if (key.name === "u" && key.ctrl) {
         setText((v) => v.slice(pos));
         moveCursor(0);
         return true;
       }
 
-      // Word navigation: meta+arrows (Mac), ctrl+arrows (Linux/Windows)
       if ((key.name === "left" && key.meta) || (key.name === "left" && key.ctrl)) {
         moveCursor(findPrevWordBoundary(pos));
         return true;
@@ -131,7 +117,6 @@ export function useTextInput({
         return true;
       }
 
-      // Arrow navigation
       if (key.name === "left") {
         moveCursor(Math.max(0, pos - 1));
         return true;
@@ -141,7 +126,6 @@ export function useTextInput({
         return true;
       }
 
-      // Home/End
       if (key.name === "home" || (key.name === "a" && key.ctrl)) {
         moveCursor(0);
         return true;
@@ -151,7 +135,6 @@ export function useTextInput({
         return true;
       }
 
-      // Insert printable characters
       if (key.insertable && key.sequence && !key.ctrl && !key.meta) {
         const char = key.name === "return" ? "\n" : key.name === "space" ? " " : key.sequence;
         insertAt(pos, char);

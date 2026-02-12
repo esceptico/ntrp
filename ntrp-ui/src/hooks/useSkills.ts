@@ -117,14 +117,7 @@ export function useSkills(config: Config): UseSkillsResult {
   );
 
   return {
-    mode,
-    skills,
-    selectedIndex,
-    loading,
-    installing,
-    error,
-    installSource,
-    installCursor,
-    handleKeypress,
+    mode, skills, selectedIndex, loading, installing, error,
+    installSource, installCursor, handleKeypress,
   };
 }

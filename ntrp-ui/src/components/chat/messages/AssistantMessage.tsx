@@ -1,35 +1,30 @@
-import React, { memo } from "react";
-import { Box, Text } from "ink";
+import { memo } from "react";
+import { colors } from "../../ui/colors.js";
 import { Markdown } from "../../Markdown.js";
-import { useDimensions } from "../../../contexts/index.js";
-import { useAccentColor } from "../../../hooks/index.js";
-import { BULLET } from "../../../lib/constants.js";
 
 interface AssistantMessageProps {
   content: string;
+  depth?: number;
   renderMarkdown?: boolean;
 }
 
 export const AssistantMessage = memo(function AssistantMessage({
   content,
+  depth = 0,
   renderMarkdown = true,
 }: AssistantMessageProps) {
-  const { width: terminalWidth } = useDimensions();
-  const { accentValue } = useAccentColor();
-  const contentWidth = Math.max(0, terminalWidth - 4);
-
   return (
-    <Box flexDirection="row" width={terminalWidth} overflow="hidden">
-      <Box width={2} flexShrink={0}>
-        <Text color={accentValue}>{BULLET}</Text>
-      </Box>
-      <Box width={contentWidth} flexGrow={1} flexDirection="column" overflow="hidden">
+    <box paddingLeft={3} flexShrink={0} overflow="hidden">
+      <box flexGrow={1} flexDirection="column" overflow="hidden">
+        {depth > 0 && (
+          <text><span fg={colors.text.disabled}>{"▸".repeat(depth)} depth {depth}</span></text>
+        )}
         {renderMarkdown ? (
           <Markdown>{content}</Markdown>
         ) : (
-          <Text wrap="wrap">{content}</Text>
+          <text>{content}</text>
         )}
-      </Box>
-    </Box>
+      </box>
+    </box>
   );
 });

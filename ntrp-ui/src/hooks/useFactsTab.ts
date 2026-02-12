@@ -13,7 +13,7 @@ import {
   getFactSectionMaxIndex,
 } from "../components/viewers/memory/FactDetailsView.js";
 
-export interface FactsTabState {
+interface FactsTabState {
   filteredFacts: Fact[];
   selectedIndex: number;
   factDetails: FactDetails | null;

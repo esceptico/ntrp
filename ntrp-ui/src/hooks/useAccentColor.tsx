@@ -8,9 +8,9 @@ interface AccentColorContextValue {
 }
 
 const AccentColorContext = createContext<AccentColorContextValue>({
-  accent: "blue",
-  accentValue: accentColors.blue.primary,
-  shimmerValue: accentColors.blue.shimmer,
+  accent: "gray",
+  accentValue: accentColors.gray.primary,
+  shimmerValue: accentColors.gray.shimmer,
 });
 
 interface AccentColorProviderProps {

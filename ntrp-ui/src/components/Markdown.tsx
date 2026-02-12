@@ -1,24 +1,28 @@
-import React, { memo, useMemo } from "react";
-import { Text } from "ink";
-import markdownToCli from "cli-markdown";
+import { memo } from "react";
+import { RGBA, SyntaxStyle } from "@opentui/core";
+import { colors } from "./ui/colors.js";
+
+const defaultSyntaxStyle = SyntaxStyle.fromStyles({
+  default: { fg: RGBA.fromHex(colors.text.primary) },
+});
+
+const dimmedSyntaxStyle = SyntaxStyle.fromStyles({
+  default: { fg: RGBA.fromHex(colors.text.muted) },
+});
 
 interface MarkdownProps {
   children: string;
   dimmed?: boolean;
 }
 
-// Use cli-markdown for proper terminal markdown rendering
 export const Markdown = memo(function Markdown({ children, dimmed }: MarkdownProps) {
-  const rendered = useMemo(() => {
-    try {
-      const output = markdownToCli(children);
-      if (typeof output !== "string") return "";
-      // Strip trailing newlines and ANSI reset codes
-      return output.replace(/(\r?\n|\x1b\[0m)+$/g, "").trim();
-    } catch {
-      return children;
-    }
-  }, [children]);
+  const content = children.trim();
+  if (!content) return null;
 
-  return <Text dimColor={dimmed}>{rendered}</Text>;
+  return (
+    <markdown
+      content={content}
+      syntaxStyle={dimmed ? dimmedSyntaxStyle : defaultSyntaxStyle}
+    />
+  );
 });

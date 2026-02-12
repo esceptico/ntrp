@@ -1,25 +1,25 @@
-import React from "react";
-import { Box, Text } from "ink";
 import { colors } from "../ui/colors.js";
-import { useAccentColor } from "../../hooks/index.js";
 import { truncateText } from "../../lib/utils.js";
-import { BULLET, MAX_TOOL_RESULT_LINE_CHARS } from "../../lib/constants.js";
+import { MAX_TOOL_RESULT_LINE_CHARS } from "../../lib/constants.js";
 import { StructuredDiffDisplay } from "./DiffDisplay.js";
 import type { ToolChainItem } from "./types.js";
+
+const TOOL_MARKER = "\u2192"; // →
 
 interface TreeNode extends ToolChainItem {
   children: TreeNode[];
 }
 
-function getStatusColor(status: ToolChainItem["status"], accentValue: string): string {
+function getStatusColor(status: ToolChainItem["status"]): string {
   switch (status) {
     case "error":
-      return colors.status.error;
-    case "running":
-    case "done":
-      return accentValue;
-    case "pending":
       return colors.text.muted;
+    case "running":
+      return colors.text.secondary;
+    case "done":
+      return colors.text.disabled;
+    case "pending":
+      return colors.text.disabled;
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
@@ -63,12 +63,11 @@ interface TreeItemProps {
 }
 
 export function TreeItem({ node, indent, expanded, width }: TreeItemProps) {
-  const { accentValue } = useAccentColor();
-  const color = getStatusColor(node.status, accentValue);
-  const icon = `${BULLET} `;
+  const color = getStatusColor(node.status);
+  const icon = `${TOOL_MARKER} `;
   const label = node.description || node.name;
   const prefix = indent > 0 ? "  ".repeat(indent) : "";
-  const contentWidth = Math.max(0, width - prefix.length - 4);
+  const contentWidth = Math.max(0, width - prefix.length - 2);
 
   if (!isContainer(node.name)) {
     const preview = node.preview || node.result?.split("\n")[0] || "";
@@ -77,16 +76,18 @@ export function TreeItem({ node, indent, expanded, width }: TreeItemProps) {
     const hasDiff = diff && node.status === "done";
 
     return (
-      <Box flexDirection="column" width={width} overflow="hidden">
-        <Text>
-          <Text color={color}>{prefix}{icon}</Text>
-          <Text>{truncateText(label, contentWidth)}</Text>
-        </Text>
+      <box flexDirection="column" width={width} overflow="hidden">
+        <text>
+          <span fg={color}>{prefix}{icon}</span>
+          <span fg={colors.text.secondary}>{truncateText(label, contentWidth)}</span>
+        </text>
         {resultLine && node.status === "done" && !hasDiff && (
-          <Text color={colors.text.secondary}>{prefix}⎿ {resultLine}</Text>
+          <text>
+            <span fg={colors.text.muted}>{prefix}⎿ {resultLine}</span>
+          </text>
         )}
         {hasDiff && <StructuredDiffDisplay before={diff.before} after={diff.after} path={diff.path} prefix={prefix} width={width - prefix.length} />}
-      </Box>
+      </box>
     );
   }
 
@@ -97,32 +98,34 @@ export function TreeItem({ node, indent, expanded, width }: TreeItemProps) {
 
   if (!expanded) {
     return (
-      <Box flexDirection="column" width={width} overflow="hidden">
-        <Text>
-          <Text color={color}>{prefix}{icon}</Text>
-          <Text>{truncateText(label, contentWidth - 15)}</Text>
-          {stats && <Text color={colors.text.muted}>{stats}</Text>}
-        </Text>
+      <box flexDirection="column" width={width} overflow="hidden">
+        <text>
+          <span fg={color}>{prefix}{icon}</span>
+          <span fg={colors.text.secondary}>{truncateText(label, contentWidth - 15)}</span>
+          {stats && <span fg={colors.text.muted}>{stats}</span>}
+        </text>
         {currentLabel && (
-          <Text color={colors.text.secondary}>{prefix}⎿ – {truncateText(currentLabel, contentWidth - 4)}</Text>
+          <text>
+            <span fg={colors.text.muted}>{prefix}⎿ – {truncateText(currentLabel, contentWidth - 4)}</span>
+          </text>
         )}
         {node.children.filter((c) => isContainer(c.name)).map((child) => (
           <TreeItem key={child.id} node={child} indent={indent + 1} expanded={false} width={width} />
         ))}
-      </Box>
+      </box>
     );
   }
 
   return (
-    <Box flexDirection="column" width={width} overflow="hidden">
-      <Text>
-        <Text color={color}>{prefix}{icon}</Text>
-        <Text>{truncateText(label, contentWidth - 15)}</Text>
-        {stats && <Text color={colors.text.muted}>{stats}</Text>}
-      </Text>
+    <box flexDirection="column" width={width} overflow="hidden">
+      <text>
+        <span fg={color}>{prefix}{icon}</span>
+        <span fg={colors.text.secondary}>{truncateText(label, contentWidth - 15)}</span>
+        {stats && <span fg={colors.text.muted}>{stats}</span>}
+      </text>
       {node.children.map((child) => (
         <TreeItem key={child.id} node={child} indent={indent + 1} expanded={true} width={width} />
       ))}
-    </Box>
+    </box>
   );
 }

@@ -1,5 +1,4 @@
 import React from "react";
-import { Box, Text } from "ink";
 import { useScrollOffset } from "../../../hooks/useScrollOffset.js";
 import { useContentWidth } from "../../../contexts/index.js";
 import { colors } from "../colors.js";
@@ -15,7 +14,7 @@ export interface RenderItemContext {
 }
 
 interface BaseSelectionListProps<T> {
-  items: T[];
+  items: readonly T[];
   selectedIndex: number;
   renderItem: (item: T, context: RenderItemContext) => React.ReactNode;
   visibleLines?: number;
@@ -54,11 +53,11 @@ export function BaseSelectionList<T>({
   const numberWidth = String(items.length).length;
 
   if (items.length === 0) {
-    return <Text color={colors.text.muted}>{emptyMessage}</Text>;
+    return <text><span fg={colors.text.muted}>{emptyMessage}</span></text>;
   }
 
   return (
-    <Box flexDirection="column" width={effectiveWidth} overflow="hidden">
+    <box flexDirection="column" width={effectiveWidth} overflow="hidden">
       {visibleItems.map((item, i) => {
         const actualIndex = scrollOffset + i;
         const isSelected = actualIndex === selectedIndex;
@@ -72,10 +71,10 @@ export function BaseSelectionList<T>({
           indicatorText = `${indicator ?? BULLET}`;
           indicatorColor = colors.selection.active;
         } else if (showScrollArrows && isFirst && canScrollUp) {
-          indicatorText = "▲ ";
+          indicatorText = "\u25B2 ";
           indicatorColor = colors.list.scrollArrow;
         } else if (showScrollArrows && isLast && canScrollDown) {
-          indicatorText = "▼ ";
+          indicatorText = "\u25BC ";
           indicatorColor = colors.list.scrollArrow;
         }
 
@@ -89,27 +88,35 @@ export function BaseSelectionList<T>({
         };
 
         return (
-          <Box key={key}>
-            {showIndicator && <Text color={indicatorColor}>{indicatorText}</Text>}
+          <box flexDirection="row" key={key}>
+            {showIndicator && (
+              <box width={2} flexShrink={0}>
+                <text><span fg={indicatorColor}>{indicatorText}</span></text>
+              </box>
+            )}
             {showNumbers && (
-              <Text color={context.colors.indicator}>
-                {String(actualIndex + 1).padStart(numberWidth)}.{" "}
-              </Text>
+              <text>
+                <span fg={context.colors.indicator}>
+                  {String(actualIndex + 1).padStart(numberWidth)}.{" "}
+                </span>
+              </text>
             )}
             {renderItem(item, context)}
-          </Box>
+          </box>
         );
       })}
 
       {showCount && items.length > 0 && (
-        <Box marginTop={1}>
-          <Text color={colors.text.muted}>
-            {items.length <= visibleLines
-              ? `${items.length} item${items.length !== 1 ? "s" : ""}`
-              : `${scrollOffset + 1}-${Math.min(scrollOffset + visibleLines, items.length)} of ${items.length}`}
-          </Text>
-        </Box>
+        <box marginTop={1}>
+          <text>
+            <span fg={colors.text.muted}>
+              {items.length <= visibleLines
+                ? `${items.length} item${items.length !== 1 ? "s" : ""}`
+                : `${scrollOffset + 1}-${Math.min(scrollOffset + visibleLines, items.length)} of ${items.length}`}
+            </span>
+          </text>
+        </box>
       )}
-    </Box>
+    </box>
   );
 }

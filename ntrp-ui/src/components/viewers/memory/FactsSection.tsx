@@ -1,5 +1,3 @@
-import React from "react";
-import { Text } from "ink";
 import type { Fact, FactDetails } from "../../../api/client.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
@@ -13,7 +11,7 @@ interface FactsSectionProps {
   detailsLoading: boolean;
   searchQuery: string;
   focusPane: "list" | "details";
-  visibleLines: number;
+  height: number;
   width: number;
   detailSection: FactDetailSection;
   textExpanded: boolean;
@@ -36,7 +34,7 @@ export function FactsSection({
   detailsLoading,
   searchQuery,
   focusPane,
-  visibleLines,
+  height,
   width,
   detailSection,
   textExpanded,
@@ -61,10 +59,10 @@ export function FactsSection({
     const textWidth = listWidth - 10;
 
     return (
-      <Text>
-        <Text color={ctx.isSelected ? typeColor : colors.text.muted}>[{typeChar}]</Text>
-        <Text color={ctx.colors.text}> {truncateText(fact.text, textWidth)}</Text>
-      </Text>
+      <text>
+        <span fg={ctx.isSelected ? typeColor : colors.text.muted}>[{typeChar}]</span>
+        <span fg={ctx.colors.text}> {truncateText(fact.text, textWidth)}</span>
+      </text>
     );
   };
 
@@ -77,13 +75,14 @@ export function FactsSection({
       emptyMessage="No facts stored yet"
       searchQuery={searchQuery}
       focusPane={focusPane}
-      visibleLines={visibleLines}
+      height={height}
       width={width}
       details={
         <FactDetailsView
           details={factDetails}
           loading={detailsLoading}
           width={detailWidth}
+          height={height}
           isFocused={focusPane === "details"}
           focusedSection={detailSection}
           textExpanded={textExpanded}
