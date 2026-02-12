@@ -3,9 +3,9 @@
  * Maps OpenTUI's KeyEvent to our Key type for backward compatibility with hooks.
  * No provider needed — OpenTUI handles raw mode, kitty protocol, etc.
  */
-import { useCallback, useEffect, useRef } from "react";
-import { useKeyboard } from "@opentui/react";
-import type { KeyEvent } from "@opentui/core";
+import { useEffect, useRef } from "react";
+import { useKeyboard, useAppContext } from "@opentui/react";
+import type { KeyEvent, PasteEvent } from "@opentui/core";
 
 export interface Key {
   name: string;
@@ -37,6 +37,7 @@ function toKey(event: KeyEvent): Key {
 /**
  * Drop-in replacement for the old useKeypress(handler, { isActive }).
  * Uses OpenTUI's useKeyboard under the hood.
+ * Also handles bracketed paste — synthesizes a Key with isPasted: true.
  */
 export function useKeypress(
   onKeypress: KeypressHandler,
@@ -51,4 +52,24 @@ export function useKeypress(
     if (!activeRef.current) return;
     handlerRef.current(toKey(event));
   });
+
+  const { keyHandler } = useAppContext();
+
+  useEffect(() => {
+    if (!keyHandler) return;
+    const listener = (event: PasteEvent) => {
+      if (!activeRef.current) return;
+      handlerRef.current({
+        name: "paste",
+        ctrl: false,
+        meta: false,
+        shift: false,
+        insertable: false,
+        sequence: event.text,
+        isPasted: true,
+      });
+    };
+    keyHandler.on("paste", listener);
+    return () => { keyHandler.off("paste", listener); };
+  }, [keyHandler]);
 }

@@ -62,7 +62,8 @@ export function useTextInput({
       const pos = cursorRef.current;
 
       if (key.isPasted && key.sequence) {
-        insertAt(pos, key.sequence);
+        const clean = key.sequence.replace(/[\r\n]/g, " ");
+        insertAt(pos, clean);
         return true;
       }
 

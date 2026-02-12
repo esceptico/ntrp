@@ -401,9 +401,12 @@ export async function createNotifierConfig(
 export async function updateNotifierConfig(
   config: Config,
   name: string,
-  cfg: Record<string, string>
+  cfg: Record<string, string>,
+  newName?: string,
 ): Promise<NotifierConfigData> {
-  return api.put<NotifierConfigData>(`${config.serverUrl}/notifiers/configs/${name}`, { config: cfg });
+  const body: { config: Record<string, string>; name?: string } = { config: cfg };
+  if (newName && newName !== name) body.name = newName;
+  return api.put<NotifierConfigData>(`${config.serverUrl}/notifiers/configs/${name}`, body);
 }
 
 export async function deleteNotifierConfig(config: Config, name: string): Promise<{ status: string }> {

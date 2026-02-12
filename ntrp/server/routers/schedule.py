@@ -28,6 +28,7 @@ class CreateNotifierRequest(BaseModel):
 
 class UpdateNotifierRequest(BaseModel):
     config: dict
+    name: str | None = None
 
 
 VALID_TYPES = {"email", "telegram", "bash"}
@@ -286,6 +287,16 @@ async def update_notifier_config(name: str, request: UpdateNotifierRequest):
         raise HTTPException(status_code=404, detail="Notifier not found")
 
     _validate_notifier_config(existing.type, request.config)
+
+    new_name = request.name
+    if new_name and new_name != name:
+        if not NAME_RE.match(new_name):
+            raise HTTPException(status_code=400, detail="Name must be alphanumeric with hyphens")
+        conflict = await runtime.notifier_store.get(new_name)
+        if conflict:
+            raise HTTPException(status_code=409, detail=f"Notifier '{new_name}' already exists")
+        await runtime.notifier_store.delete(name)
+        existing.name = new_name
 
     existing.config = request.config
     await runtime.notifier_store.save(existing)

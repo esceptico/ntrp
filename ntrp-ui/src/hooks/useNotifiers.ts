@@ -84,6 +84,7 @@ export function useNotifiers(config: Config): UseNotifiersResult {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ name: string; ok: boolean; error?: string } | null>(null);
+  const originalNameRef = useRef("");
 
   const loadedRef = useRef(false);
 
@@ -138,20 +139,18 @@ export function useNotifiers(config: Config): UseNotifiersResult {
   });
 
   const getActiveTextInput = useCallback(() => {
-    const fieldIdx = mode === "edit-form" ? activeField + 1 : activeField;
-
     if (formType === "email") {
-      if (fieldIdx === 0) return nameInput;
-      if (fieldIdx === 2) return toAddressInput;
+      if (activeField === 0) return nameInput;
+      if (activeField === 2) return toAddressInput;
     } else if (formType === "telegram") {
-      if (fieldIdx === 0) return nameInput;
-      if (fieldIdx === 1) return userIdInput;
+      if (activeField === 0) return nameInput;
+      if (activeField === 1) return userIdInput;
     } else {
-      if (fieldIdx === 0) return nameInput;
-      if (fieldIdx === 1) return commandInput;
+      if (activeField === 0) return nameInput;
+      if (activeField === 1) return commandInput;
     }
     return null;
-  }, [mode, formType, activeField, nameInput, toAddressInput, userIdInput, commandInput]);
+  }, [formType, activeField, nameInput, toAddressInput, userIdInput, commandInput]);
 
   const buildConfig = useCallback((): Record<string, string> => {
     if (formType === "email") return { from_account: form.fromAccount, to_address: form.toAddress };
@@ -169,7 +168,7 @@ export function useNotifiers(config: Config): UseNotifiersResult {
       if (mode === "add-form") {
         await createNotifierConfig(config, { name: form.name, type: formType, config: cfg });
       } else {
-        await updateNotifierConfig(config, form.name, cfg);
+        await updateNotifierConfig(config, originalNameRef.current, cfg, form.name);
       }
       await loadData();
       setMode("list");
@@ -228,6 +227,7 @@ export function useNotifiers(config: Config): UseNotifiersResult {
           const cfg = configs[selectedIndex];
           if (!cfg) return;
           const accounts = types[cfg.type]?.accounts;
+          originalNameRef.current = cfg.name;
           setFormType(cfg.type);
           setForm({
             name: cfg.name, nameCursor: cfg.name.length,
@@ -279,7 +279,7 @@ export function useNotifiers(config: Config): UseNotifiersResult {
 
       if (key.name === "s" && key.ctrl) { handleSave(); return; }
 
-      const fieldCount = fieldCountForType(formType) - (mode === "edit-form" ? 1 : 0);
+      const fieldCount = fieldCountForType(formType);
 
       if (key.name === "up" || (key.name === "k" && key.ctrl)) { setActiveField((i) => Math.max(0, i - 1)); return; }
       if (key.name === "down" || (key.name === "j" && key.ctrl)) { setActiveField((i) => Math.min(fieldCount - 1, i + 1)); return; }
@@ -290,7 +290,7 @@ export function useNotifiers(config: Config): UseNotifiersResult {
         return;
       }
 
-      const fromAccountField = mode === "edit-form" ? 0 : 1;
+      const fromAccountField = 1;
       if (formType === "email" && activeField === fromAccountField) {
         const accounts = types.email?.accounts ?? [];
         if (accounts.length > 0 && (key.name === "tab" || key.name === "left" || key.name === "right")) {

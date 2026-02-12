@@ -105,34 +105,28 @@ function FormMode({ notifiers, accent }: NotifiersSectionProps) {
 
   const fields: Array<{ label: string; content: React.ReactNode }> = [];
 
-  if (isEdit) {
-    fields.push({
-      label: "Name",
-      content: <text><span fg={colors.text.muted}>{form.name}</span></text>,
-    });
-  } else {
-    fields.push({
-      label: "Name",
-      content: (
-        <TextInputField
-          value={form.name}
-          cursorPos={form.nameCursor}
-          placeholder="notifier-name"
-          showCursor={activeField === 0}
-        />
-      ),
-    });
-  }
+  fields.push({
+    label: "Name",
+    content: (
+      <TextInputField
+        value={form.name}
+        cursorPos={form.nameCursor}
+        placeholder="notifier-name"
+        showCursor={activeField === 0}
+      />
+    ),
+  });
 
   if (formType === "email") {
     const accounts = notifiers.types.email?.accounts ?? [];
+    const fromActive = activeField === 1;
     fields.push({
       label: "From",
       content: (
         <text>
-          <span fg={activeField === 1 ? accent : colors.text.primary}>
+          <span fg={fromActive ? accent : colors.text.primary}>
             {form.fromAccount || (accounts.length > 0 ? accounts[0] : "no accounts")}
-            {activeField === 1 && accounts.length > 1 ? "  ◂▸" : ""}
+            {fromActive && accounts.length > 1 ? "  ◂▸" : ""}
           </span>
         </text>
       ),
@@ -174,14 +168,12 @@ function FormMode({ notifiers, accent }: NotifiersSectionProps) {
     });
   }
 
-  const editOffset = isEdit ? 1 : 0;
-
   return (
     <box flexDirection="column">
       <text><span fg={accent}><strong>{title}</strong></span></text>
       <box flexDirection="column" marginTop={1}>
         {fields.map((field, idx) => {
-          const isActive = isEdit ? idx === activeField + editOffset : idx === activeField;
+          const isActive = idx === activeField;
           return (
             <box key={field.label} flexDirection="row">
               <box width={2} flexShrink={0}>
@@ -205,7 +197,7 @@ function FormMode({ notifiers, accent }: NotifiersSectionProps) {
         </box>
       )}
       <box marginTop={1}>
-        <Hints items={[["↑↓", "field"], ["enter", "next/save"], ["^S", "save"], ["esc", "cancel"]]} />
+        <Hints items={[["↑↓", "field"], ["enter", "next/save"], ["ctrl+s", "save"], ["esc", "cancel"]]} />
       </box>
     </box>
   );
