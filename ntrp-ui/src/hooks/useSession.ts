@@ -5,7 +5,9 @@ import {
   getSession,
   getServerConfig,
   getIndexStatus,
+  getHistory,
   type ServerConfig,
+  type HistoryMessage,
 } from "../api/client.js";
 import { INDEX_STATUS_POLL_MS, INDEX_DONE_HIDE_MS } from "../lib/constants.js";
 
@@ -21,6 +23,7 @@ export function useSession(config: Config) {
   const [serverConnected, setServerConnected] = useState(false);
   const [serverConfig, setServerConfig] = useState<ServerConfig | null>(null);
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
+  const [history, setHistory] = useState<HistoryMessage[]>([]);
   const initRef = useRef(false);
 
   useEffect(() => {
@@ -33,15 +36,17 @@ export function useSession(config: Config) {
         setServerConnected(healthy);
 
         if (healthy) {
-          const [session, configData, idxStatus] = await Promise.all([
+          const [session, configData, idxStatus, historyData] = await Promise.all([
             getSession(config),
             getServerConfig(config),
             getIndexStatus(config).catch(() => null),
+            getHistory(config).catch(() => ({ messages: [] })),
           ]);
 
           setSessionId(session.session_id);
           setSources(session.sources);
           setServerConfig(configData);
+          setHistory(historyData.messages);
 
           if (idxStatus?.indexing) {
             setIndexStatus(idxStatus);
@@ -107,6 +112,7 @@ export function useSession(config: Config) {
     serverConnected,
     serverConfig,
     indexStatus,
+    history,
     refreshIndexStatus,
     updateSessionInfo,
     toggleSkipApprovals,

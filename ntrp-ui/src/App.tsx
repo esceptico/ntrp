@@ -61,11 +61,21 @@ function AppContent({
     serverConnected,
     serverConfig,
     indexStatus,
+    history,
     refreshIndexStatus,
     updateSessionInfo,
     toggleSkipApprovals,
     updateServerConfig,
   } = session;
+
+  const initialMessages = useMemo(() =>
+    history.map((msg, i): Message => ({
+      id: `h-${i}`,
+      role: msg.role,
+      content: msg.content,
+    })),
+    [history]
+  );
 
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
@@ -81,6 +91,7 @@ function AppContent({
     sessionId,
     skipApprovals,
     onSessionInfo: updateSessionInfo,
+    initialMessages,
   });
   const {
     messages,

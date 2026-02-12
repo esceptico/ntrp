@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { Message, ServerEvent, Config, PendingApproval } from "../types.js";
 import type { ToolChainItem } from "../components/toolchain/types.js";
 import { streamChat, submitToolResult, submitChoiceResult, cancelRun } from "../api/client.js";
@@ -26,6 +26,7 @@ interface UseStreamingOptions {
   sessionId: string | null;
   skipApprovals: boolean;
   onSessionInfo?: (info: { session_id: string; sources: string[] }) => void;
+  initialMessages?: Message[];
 }
 
 export function useStreaming({
@@ -33,6 +34,7 @@ export function useStreaming({
   sessionId,
   skipApprovals,
   onSessionInfo,
+  initialMessages,
 }: UseStreamingOptions) {
   const messageIdRef = useRef(0);
   const runIdRef = useRef<string | null>(null);
@@ -45,6 +47,15 @@ export function useStreaming({
   const alwaysAllowedToolsRef = useRef<Set<string>>(new Set());
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const historyLoadedRef = useRef(false);
+
+  useEffect(() => {
+    if (initialMessages && initialMessages.length > 0 && !historyLoadedRef.current) {
+      historyLoadedRef.current = true;
+      setMessages(initialMessages);
+    }
+  }, [initialMessages]);
+
   const [isStreaming, setIsStreaming] = useState(false);
   const [status, setStatus] = useState<StatusType>(Status.IDLE);
   const [toolChain, setToolChain] = useState<ToolChainItem[]>([]);
@@ -72,8 +83,8 @@ export function useStreaming({
   }, [generateId]);
 
   const clearMessages = useCallback(() => {
-    // OpenTUI handles screen clearing via renderer
     setMessages([]);
+    historyLoadedRef.current = true; // Don't reload history after clear
   }, []);
 
   const handleSessionInfo = useCallback((event: Extract<ServerEvent, { type: "session_info" }>) => {

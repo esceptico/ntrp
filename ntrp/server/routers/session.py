@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
 from ntrp.config import load_user_settings, save_user_settings
-from ntrp.constants import EMBEDDING_MODELS, SUPPORTED_MODELS
+from ntrp.constants import EMBEDDING_MODELS, HISTORY_MESSAGE_LIMIT, SUPPORTED_MODELS
 from ntrp.context.compression import compress_context_async, find_compressible_range
 from ntrp.logging import get_logger
 from ntrp.server.runtime import get_runtime
@@ -35,6 +35,28 @@ class UpdateConfigRequest(BaseModel):
     browser: str | None = None
     browser_days: int | None = None
     sources: SourceToggles | None = None
+
+
+@router.get("/session/history")
+async def get_session_history():
+    runtime = get_runtime()
+    data = await runtime.restore_session()
+    if not data:
+        return {"messages": []}
+
+    history = []
+    for msg in data.messages:
+        role = msg.get("role")
+        if role not in ("user", "assistant"):
+            continue
+
+        content = msg.get("content", "")
+        if not content or not isinstance(content, str) or not content.strip():
+            continue
+
+        history.append({"role": role, "content": content})
+
+    return {"messages": history[-HISTORY_MESSAGE_LIMIT:]}
 
 
 @router.get("/session")

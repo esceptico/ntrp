@@ -90,6 +90,15 @@ export async function getSession(config: Config): Promise<{
   return api.get(`${config.serverUrl}/session`);
 }
 
+export interface HistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export async function getHistory(config: Config): Promise<{ messages: HistoryMessage[] }> {
+  return api.get(`${config.serverUrl}/session/history`);
+}
+
 export async function checkHealth(config: Config): Promise<boolean> {
   try {
     await api.get(`${config.serverUrl}/health`);
