@@ -9,7 +9,7 @@ Personal AI assistant with persistent memory, scheduling, and multi-source knowl
 git clone https://github.com/your-username/ntrp.git
 cd ntrp
 uv sync
-cd ntrp-ui && npm install && cd ..
+cd ntrp-ui && bun install && cd ..
 
 # Configure
 cp .env.example .env
@@ -17,10 +17,10 @@ cp .env.example .env
 
 # Start
 uv run ntrp serve              # backend
-cd ntrp-ui && npm start         # UI (new terminal)
+cd ntrp-ui && bun run src/index.tsx  # UI
 ```
 
-**Standalone mode** (no UI):
+**Headless mode**:
 ```bash
 uv run ntrp run -p "your prompt here"
 ```
