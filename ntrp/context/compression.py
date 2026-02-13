@@ -1,8 +1,6 @@
 from ntrp.constants import (
     COMPRESSION_KEEP_RATIO,
     COMPRESSION_THRESHOLD,
-    MASK_PREVIEW_CHARS,
-    MASK_THRESHOLD,
     MAX_MESSAGES,
     SUMMARY_MAX_TOKENS,
     SUPPORTED_MODELS,
@@ -65,9 +63,11 @@ def _build_conversation_text(messages: list, start: int, end: int) -> str:
     text_parts = []
     for msg in messages[start:end]:
         role = _get_attr(msg, "role") or "unknown"
+        # Skip tool results — assistant responses already capture the meaning
+        if role == "tool":
+            continue
         content = _get_attr(msg, "content") or ""
         if isinstance(content, str) and content:
-            # Preserve previous summaries verbatim — don't let them get re-summarized
             if content.startswith("[Session State Handoff]"):
                 text_parts.append(f"[PRIOR SUMMARY — preserve key points]\n{content}")
             else:
@@ -133,22 +133,3 @@ async def compress_context_async(
     return _build_compressed_messages(messages, end, summary), True
 
 
-def mask_old_tool_results(messages: list[dict], preserve_recent: int = 6) -> list[dict]:
-    tool_indices = [i for i, m in enumerate(messages) if m.get("role") == "tool"]
-    if not tool_indices:
-        return messages
-
-    recent = set(tool_indices[-preserve_recent:])
-
-    result = []
-    for i, msg in enumerate(messages):
-        if msg.get("role") == "tool" and i not in recent:
-            content = msg.get("content", "")
-            if len(content) > MASK_THRESHOLD:
-                masked = content[:MASK_PREVIEW_CHARS] + f"\n[...{len(content) - MASK_PREVIEW_CHARS} chars masked]"
-                result.append({**msg, "content": masked})
-            else:
-                result.append(msg)
-        else:
-            result.append(msg)
-    return result

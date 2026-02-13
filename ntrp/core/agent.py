@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 from ntrp.constants import AGENT_MAX_ITERATIONS, SUPPORTED_MODELS
-from ntrp.context.compression import compress_context_async, mask_old_tool_results, should_compress
+from ntrp.context.compression import compress_context_async, should_compress
 from ntrp.core.parsing import normalize_assistant_message, parse_tool_calls
 from ntrp.core.state import AgentState, StateCallback
 from ntrp.core.tool_runner import ToolRunner
@@ -94,8 +94,6 @@ class Agent:
         self._last_input_tokens = prompt_tokens
 
     async def _maybe_compact(self) -> AsyncGenerator[SSEEvent]:
-        self.messages = mask_old_tool_results(self.messages)
-
         if not should_compress(self.messages, self.model, self._last_input_tokens):
             return
 
