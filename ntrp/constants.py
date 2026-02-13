@@ -49,6 +49,7 @@ AGENT_MAX_DEPTH = 8
 AGENT_MAX_ITERATIONS = 50
 
 EXPLORE_TIMEOUT = 300
+EXPLORE_MODEL = "gemini/gemini-3-flash-preview"
 SUBAGENT_DEFAULT_TIMEOUT = 300
 
 
@@ -73,7 +74,7 @@ CONSOLIDATION_INTERVAL = 30.0  # seconds between consolidation batches
 
 COMPRESSION_THRESHOLD = 0.80  # % of model token limit to trigger compaction
 MAX_MESSAGES = 80  # message count ceiling — compress regardless of tokens
-TAIL_CHAR_BUDGET = 32000  # chars kept verbatim during compaction
+COMPRESSION_KEEP_RATIO = 0.50  # keep most recent 50% of messages, compress the rest
 MASK_THRESHOLD = 300  # chars — tool results below this are left as-is
 MASK_PREVIEW_CHARS = 200  # chars kept when masking old tool results
 

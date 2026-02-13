@@ -1,11 +1,11 @@
 from ntrp.constants import (
+    COMPRESSION_KEEP_RATIO,
     COMPRESSION_THRESHOLD,
     MASK_PREVIEW_CHARS,
     MASK_THRESHOLD,
     MAX_MESSAGES,
     SUMMARY_MAX_TOKENS,
     SUPPORTED_MODELS,
-    TAIL_CHAR_BUDGET,
 )
 from ntrp.context.prompts import SUMMARIZE_PROMPT_TEMPLATE
 from ntrp.llm import acompletion
@@ -15,24 +15,6 @@ def _get_attr(msg, key: str, default=None):
     if isinstance(msg, dict):
         return msg.get(key, default)
     return getattr(msg, key, default)
-
-
-def _message_chars(msg) -> int:
-    total = 0
-    content = _get_attr(msg, "content")
-    if isinstance(content, str):
-        total += len(content)
-    role = _get_attr(msg, "role")
-    if role:
-        total += len(role)
-    tool_calls = _get_attr(msg, "tool_calls")
-    if tool_calls:
-        for tc in tool_calls:
-            func = getattr(tc, "function", None)
-            if func:
-                total += len(func.name or "")
-                total += len(func.arguments or "")
-    return total
 
 
 def should_compress(
@@ -50,44 +32,33 @@ def should_compress(
     return False
 
 
-TAIL_MESSAGE_LIMIT = 30  # max messages to keep verbatim in tail
-
-
 def find_compressible_range(
     messages: list[dict],
-    tail_char_budget: int = TAIL_CHAR_BUDGET,
+    keep_ratio: float = COMPRESSION_KEEP_RATIO,
 ) -> tuple[int, int]:
-    if len(messages) <= 3:
+    """Find (start, end) range of messages to summarize.
+
+    Keeps the most recent `keep_ratio` fraction of messages (excluding system),
+    snapping the boundary forward past tool messages to avoid splitting a turn.
+    Returns (0, 0) if there's nothing worth compressing.
+    """
+    n = len(messages)
+    if n <= 4:
         return (0, 0)
 
-    tail_chars = 0
-    tail_start = len(messages)
+    # messages[0] is system — compressible range starts at 1
+    compressible = n - 1  # messages after system
+    keep_count = max(4, int(compressible * keep_ratio))
+    tail_start = n - keep_count
 
-    for i in range(len(messages) - 1, 0, -1):
-        msg_chars = _message_chars(messages[i])
-        if tail_chars + msg_chars > tail_char_budget:
-            break
-        tail_chars += msg_chars
-        tail_start = i
-
-    # Also cap by message count — don't keep more than TAIL_MESSAGE_LIMIT
-    # messages even if they're all short (e.g. after prior compaction + masking)
-    max_tail_start = len(messages) - TAIL_MESSAGE_LIMIT
-    if max_tail_start > tail_start:
-        tail_start = max_tail_start
-
-    tail_start = min(tail_start, len(messages) - 4)
-
-    while tail_start < len(messages) and messages[tail_start].get("role") == "tool":
+    # Snap forward past tool messages to avoid splitting mid-turn
+    while tail_start < n and messages[tail_start].get("role") == "tool":
         tail_start += 1
 
-    start = 1
-    end = tail_start
-
-    if end <= start:
+    if tail_start <= 1:
         return (0, 0)
 
-    return (start, end)
+    return (1, tail_start)
 
 
 def _build_conversation_text(messages: list, start: int, end: int) -> str:
