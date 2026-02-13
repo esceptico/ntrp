@@ -149,6 +149,10 @@ export function Sidebar({ serverConfig, data, width, height }: SidebarProps) {
             <span fg={S}>{truncateText(formatModel(serverConfig.chat_model), contentWidth - 5)}</span>
           </text>
           <text>
+            <span fg={D}>expl </span>
+            <span fg={S}>{truncateText(formatModel(serverConfig.explore_model), contentWidth - 5)}</span>
+          </text>
+          <text>
             <span fg={D}>mem  </span>
             <span fg={S}>{truncateText(formatModel(serverConfig.memory_model), contentWidth - 5)}</span>
           </text>

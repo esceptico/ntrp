@@ -196,7 +196,7 @@ function AppContent({
   const { width, height } = useDimensions();
   const hasOverlay = viewMode !== "chat";
 
-  const SIDEBAR_WIDTH = 28;
+  const SIDEBAR_WIDTH = 32;
   const showSidebar = sidebarVisible && width >= 94 && serverConnected;
   const sidebarData = useSidebar(config, showSidebar, messages.length);
 
