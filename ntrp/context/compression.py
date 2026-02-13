@@ -50,6 +50,9 @@ def should_compress(
     return False
 
 
+TAIL_MESSAGE_LIMIT = 30  # max messages to keep verbatim in tail
+
+
 def find_compressible_range(
     messages: list[dict],
     tail_char_budget: int = TAIL_CHAR_BUDGET,
@@ -66,6 +69,12 @@ def find_compressible_range(
             break
         tail_chars += msg_chars
         tail_start = i
+
+    # Also cap by message count — don't keep more than TAIL_MESSAGE_LIMIT
+    # messages even if they're all short (e.g. after prior compaction + masking)
+    max_tail_start = len(messages) - TAIL_MESSAGE_LIMIT
+    if max_tail_start > tail_start:
+        tail_start = max_tail_start
 
     tail_start = min(tail_start, len(messages) - 4)
 
