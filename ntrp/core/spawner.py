@@ -56,6 +56,9 @@ def create_spawn_fn(
             channel=calling_ctx.channel,
             run_id=calling_ctx.run_id,
             extra_auto_approve=calling_ctx.extra_auto_approve,
+            current_depth=current_depth + 1,
+            max_depth=max_depth,
+            explore_model=calling_ctx.explore_model,
         )
         child_ctx.spawn_fn = create_spawn_fn(
             executor=executor,

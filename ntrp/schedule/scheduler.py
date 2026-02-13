@@ -27,6 +27,7 @@ class SchedulerDeps:
     channel: Channel
     source_details: Callable[[], dict[str, dict]]
     create_session: Callable[[], SessionState]
+    explore_model: str | None = None
 
 
 class Scheduler:
@@ -127,6 +128,8 @@ class Scheduler:
             memory=memory,
             channel=self.deps.channel,
             run_id=run_id,
+            max_depth=self.deps.max_depth,
+            explore_model=self.deps.explore_model,
         )
         tool_ctx.spawn_fn = create_spawn_fn(
             executor=self.deps.executor,

@@ -24,6 +24,7 @@ class AskChoiceInput(BaseModel):
 
 class AskChoiceTool(Tool):
     name = "ask_choice"
+    display_name = "AskChoice"
     description = ASK_CHOICE_DESCRIPTION
     mutates = False
     input_model = AskChoiceInput

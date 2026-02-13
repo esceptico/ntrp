@@ -31,20 +31,30 @@ class ExploreInput(BaseModel):
 
 class ExploreTool(Tool):
     name = "explore"
+    display_name = "Explore"
     description = EXPLORE_DESCRIPTION
     input_model = ExploreInput
 
-    async def _build_prompt(self, memory, depth: str) -> str:
+    async def _build_prompt(self, memory, depth: str, remaining_depth: int) -> str:
         base = EXPLORE_PROMPTS[depth]
-        if not memory:
-            return base
 
-        user_facts, _ = await memory.get_context(user_limit=5, recent_limit=0)
-        if not user_facts:
-            return base
+        parts = [base]
 
-        context = "\n".join(f"- {f.text}" for f in user_facts)
-        return f"{base}\n\nUSER CONTEXT:\n{context}"
+        if remaining_depth > 1:
+            parts.append(
+                f"DEPTH BUDGET: You can spawn {remaining_depth - 1} more levels of sub-agents. "
+                "Use explore() to delegate sub-topics — don't try to cover everything yourself."
+            )
+        elif remaining_depth == 1:
+            parts.append("DEPTH BUDGET: You are at the last level — no more sub-agents. Do all work directly.")
+
+        if memory:
+            user_facts, _ = await memory.get_context(user_limit=5, recent_limit=0)
+            if user_facts:
+                context = "\n".join(f"- {f.text}" for f in user_facts)
+                parts.append(f"USER CONTEXT:\n{context}")
+
+        return "\n\n".join(parts)
 
     EXPLORE_TOOLS = {
         "notes",
@@ -54,7 +64,6 @@ class ExploreTool(Tool):
         "calendar",
         "browser",
         "recall",
-        "remember",
         "web_search",
         "web_fetch",
         "explore",
@@ -66,8 +75,13 @@ class ExploreTool(Tool):
         if not ctx.spawn_fn:
             return ToolResult(content="Error: spawn capability not available", preview="Error", is_error=True)
 
-        tools = ctx.registry.get_schemas(names=self.EXPLORE_TOOLS)
-        prompt = await self._build_prompt(ctx.memory, depth)
+        remaining = ctx.max_depth - ctx.current_depth - 1
+        tool_names = set(self.EXPLORE_TOOLS)
+        if depth == "quick" or remaining <= 1:
+            tool_names.discard("explore")
+
+        tools = ctx.registry.get_schemas(names=tool_names)
+        prompt = await self._build_prompt(ctx.memory, depth, remaining)
         timeout = DEPTH_TIMEOUTS[depth]
 
         result = await ctx.spawn_fn(
@@ -76,6 +90,7 @@ class ExploreTool(Tool):
             system_prompt=prompt,
             tools=tools,
             timeout=timeout,
+            model_override=ctx.explore_model,
             parent_id=execution.tool_id,
             isolation=IsolationLevel.FULL,
         )

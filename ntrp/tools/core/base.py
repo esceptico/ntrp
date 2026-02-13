@@ -47,6 +47,7 @@ class ApprovalInfo:
 
 class Tool(ABC):
     name: str
+    display_name: str
     description: str
     mutates: bool = False
     source_type: ClassVar[type | None] = None

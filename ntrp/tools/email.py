@@ -31,6 +31,7 @@ class SendEmailInput(BaseModel):
 
 class SendEmailTool(Tool):
     name = "send_email"
+    display_name = "SendEmail"
     description = SEND_EMAIL_DESCRIPTION
     mutates = True
     source_type = EmailSource
@@ -66,6 +67,7 @@ class ReadEmailInput(BaseModel):
 
 class ReadEmailTool(Tool):
     name = "read_email"
+    display_name = "ReadEmail"
     description = READ_EMAIL_DESCRIPTION
     source_type = EmailSource
     input_model = ReadEmailInput
@@ -119,6 +121,7 @@ class EmailsInput(BaseModel):
 
 class EmailsTool(Tool):
     name = "emails"
+    display_name = "Emails"
     description = EMAILS_DESCRIPTION
     source_type = EmailSource
     input_model = EmailsInput

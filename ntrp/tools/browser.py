@@ -24,6 +24,7 @@ class BrowserInput(BaseModel):
 
 class BrowserTool(Tool):
     name = "browser"
+    display_name = "Browser"
     description = BROWSER_DESCRIPTION
     source_type = BrowserSource
     input_model = BrowserInput

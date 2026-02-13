@@ -198,6 +198,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             channel=runtime.channel,
             run_id=run.run_id,
             extra_auto_approve=extra_auto_approve,
+            max_depth=runtime.max_depth,
+            explore_model=runtime.config.explore_model,
         )
 
         yield to_sse(

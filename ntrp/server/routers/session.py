@@ -29,6 +29,7 @@ class SourceToggles(BaseModel):
 
 class UpdateConfigRequest(BaseModel):
     chat_model: str | None = None
+    explore_model: str | None = None
     memory_model: str | None = None
     max_depth: int | None = None
     vault_path: str | None = None
@@ -101,6 +102,7 @@ async def get_config():
 
     return {
         "chat_model": runtime.config.chat_model,
+        "explore_model": runtime.config.explore_model,
         "memory_model": runtime.config.memory_model,
         "embedding_model": runtime.config.embedding_model,
         "vault_path": runtime.config.vault_path,
@@ -136,6 +138,7 @@ async def list_models():
     return {
         "models": list(SUPPORTED_MODELS.keys()),
         "chat_model": runtime.config.chat_model,
+        "explore_model": runtime.config.explore_model,
         "memory_model": runtime.config.memory_model,
     }
 
@@ -157,10 +160,13 @@ async def _apply_config(runtime, req: UpdateConfigRequest):
         if req.chat_model:
             runtime.config.chat_model = req.chat_model
             settings["chat_model"] = req.chat_model
+        if req.explore_model:
+            runtime.config.explore_model = req.explore_model
+            settings["explore_model"] = req.explore_model
         if req.memory_model:
             runtime.config.memory_model = req.memory_model
             settings["memory_model"] = req.memory_model
-        if req.chat_model or req.memory_model:
+        if req.chat_model or req.explore_model or req.memory_model:
             save_user_settings(settings)
 
         if req.max_depth is not None:

@@ -59,6 +59,7 @@ class WriteScratchpadInput(BaseModel):
 
 class WriteScratchpadTool(Tool):
     name = "write_scratchpad"
+    display_name = "WriteScratchpad"
     description = _WRITE_SCRATCHPAD_DESCRIPTION
     input_model = WriteScratchpadInput
 
@@ -88,6 +89,7 @@ class ReadScratchpadInput(BaseModel):
 
 class ReadScratchpadTool(Tool):
     name = "read_scratchpad"
+    display_name = "ReadScratchpad"
     description = _READ_SCRATCHPAD_DESCRIPTION
     input_model = ReadScratchpadInput
 
@@ -103,6 +105,7 @@ class ReadScratchpadTool(Tool):
 
 class ListScratchpadTool(Tool):
     name = "list_scratchpad"
+    display_name = "ListScratchpad"
     description = _LIST_SCRATCHPAD_DESCRIPTION
     input_model = None
 

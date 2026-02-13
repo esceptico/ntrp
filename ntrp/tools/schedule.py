@@ -53,6 +53,7 @@ class ScheduleTaskInput(BaseModel):
 
 class ScheduleTaskTool(Tool):
     name = "schedule_task"
+    display_name = "ScheduleTask"
     description = SCHEDULE_TASK_DESCRIPTION
     mutates = True
     input_model = ScheduleTaskInput
@@ -166,6 +167,7 @@ class ScheduleTaskTool(Tool):
 
 class ListSchedulesTool(Tool):
     name = "list_schedules"
+    display_name = "ListSchedules"
     description = LIST_SCHEDULES_DESCRIPTION
     input_model = None
 
@@ -187,6 +189,7 @@ class CancelScheduleInput(BaseModel):
 
 class CancelScheduleTool(Tool):
     name = "cancel_schedule"
+    display_name = "CancelSchedule"
     description = CANCEL_SCHEDULE_DESCRIPTION
     mutates = True
     input_model = CancelScheduleInput
@@ -219,6 +222,7 @@ class GetScheduleResultInput(BaseModel):
 
 class GetScheduleResultTool(Tool):
     name = "get_schedule_result"
+    display_name = "ScheduleResult"
     description = GET_SCHEDULE_RESULT_DESCRIPTION
     input_model = GetScheduleResultInput
 

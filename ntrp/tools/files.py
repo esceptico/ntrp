@@ -21,6 +21,7 @@ class ReadFileInput(BaseModel):
 
 class ReadFileTool(Tool):
     name = "read_file"
+    display_name = "ReadFile"
     description = READ_FILE_DESCRIPTION
     input_model = ReadFileInput
 

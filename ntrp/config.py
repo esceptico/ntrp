@@ -4,7 +4,7 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from ntrp.constants import SUPPORTED_MODELS
+from ntrp.constants import EXPLORE_MODEL_DEFAULT, SUPPORTED_MODELS
 from ntrp.embedder import EmbeddingConfig
 from ntrp.logging import get_logger
 
@@ -47,6 +47,7 @@ class Config(BaseSettings):
     # LiteLLM reads API keys from standard env vars:
     #   ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY
     chat_model: str
+    explore_model: str = EXPLORE_MODEL_DEFAULT
     memory_model: str
     embedding_model: str
     embedding_dim: int = 1536
@@ -78,7 +79,7 @@ class Config(BaseSettings):
     # API authentication (optional — required when exposed to network)
     api_key: str | None = None
 
-    @field_validator("chat_model")
+    @field_validator("chat_model", "explore_model")
     @classmethod
     def _validate_chat_model(cls, v: str) -> str:
         if v not in SUPPORTED_MODELS:
@@ -118,7 +119,7 @@ class Config(BaseSettings):
 
 
 PERSIST_KEYS = frozenset({
-    "chat_model", "memory_model", "embedding_model", "embedding_dim",
+    "chat_model", "explore_model", "memory_model", "embedding_model", "embedding_dim",
     "embedding_prefix", "browser", "browser_days", "vault_path",
     "memory", "gmail", "gmail_days", "calendar",
 })

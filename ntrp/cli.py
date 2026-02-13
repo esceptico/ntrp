@@ -118,6 +118,8 @@ async def _run_headless(prompt: str):
             memory=runtime.memory,
             channel=runtime.channel,
             run_id=run_id,
+            max_depth=runtime.max_depth,
+            explore_model=runtime.config.explore_model,
         )
 
         tool_ctx.spawn_fn = create_spawn_fn(

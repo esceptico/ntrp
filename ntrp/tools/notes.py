@@ -79,6 +79,7 @@ class NotesInput(BaseModel):
 
 class NotesTool(Tool):
     name = "notes"
+    display_name = "Notes"
     description = NOTES_DESCRIPTION
     source_type = NotesSource
     input_model = NotesInput
@@ -168,6 +169,7 @@ class ReadNoteInput(BaseModel):
 
 class ReadNoteTool(Tool):
     name = "read_note"
+    display_name = "ReadNote"
     description = READ_NOTE_DESCRIPTION
     source_type = NotesSource
     input_model = ReadNoteInput
@@ -199,6 +201,7 @@ class EditNoteInput(BaseModel):
 
 class EditNoteTool(Tool):
     name = "edit_note"
+    display_name = "EditNote"
     description = EDIT_NOTE_DESCRIPTION
     mutates = True
     source_type = NotesSource
@@ -264,6 +267,7 @@ class CreateNoteInput(BaseModel):
 
 class CreateNoteTool(Tool):
     name = "create_note"
+    display_name = "CreateNote"
     description = CREATE_NOTE_DESCRIPTION
     mutates = True
     source_type = NotesSource
@@ -307,6 +311,7 @@ class DeleteNoteInput(BaseModel):
 
 class DeleteNoteTool(Tool):
     name = "delete_note"
+    display_name = "DeleteNote"
     description = DELETE_NOTE_DESCRIPTION
     mutates = True
     source_type = NotesSource
@@ -344,6 +349,7 @@ class MoveNoteInput(BaseModel):
 
 class MoveNoteTool(Tool):
     name = "move_note"
+    display_name = "MoveNote"
     description = MOVE_NOTE_DESCRIPTION
     mutates = True
     source_type = NotesSource

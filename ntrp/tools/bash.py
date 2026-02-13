@@ -153,6 +153,7 @@ class BashInput(BaseModel):
 
 class BashTool(Tool):
     name = "bash"
+    display_name = "Bash"
     description = BASH_DESCRIPTION
     input_model = BashInput
 

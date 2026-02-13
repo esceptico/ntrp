@@ -12,6 +12,7 @@ class UseSkillInput(BaseModel):
 
 class UseSkillTool(Tool):
     name = "use_skill"
+    display_name = "UseSkill"
     description = (
         "Activate a skill to get specialized instructions for a task. "
         "Available skills are listed in the system prompt under <available_skills>. "

@@ -225,6 +225,7 @@ class Runtime:
                 channel=self.channel,
                 source_details=self.get_source_details,
                 create_session=self.create_session,
+                explore_model=self.config.explore_model,
             )
             self.scheduler = Scheduler(deps, self.schedule_store)
             self.scheduler.start()

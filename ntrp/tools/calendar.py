@@ -75,6 +75,7 @@ class CalendarInput(BaseModel):
 
 class CalendarTool(Tool):
     name = "calendar"
+    display_name = "Calendar"
     description = CALENDAR_DESCRIPTION
     source_type = CalendarSource
     input_model = CalendarInput
@@ -146,6 +147,7 @@ class CreateCalendarEventInput(BaseModel):
 
 class CreateCalendarEventTool(Tool):
     name = "create_calendar_event"
+    display_name = "CreateEvent"
     description = CREATE_CALENDAR_EVENT_DESCRIPTION
     mutates = True
     source_type = CalendarSource
@@ -230,6 +232,7 @@ class EditCalendarEventInput(BaseModel):
 
 class EditCalendarEventTool(Tool):
     name = "edit_calendar_event"
+    display_name = "EditEvent"
     description = EDIT_CALENDAR_EVENT_DESCRIPTION
     mutates = True
     source_type = CalendarSource
@@ -307,6 +310,7 @@ class DeleteCalendarEventInput(BaseModel):
 
 class DeleteCalendarEventTool(Tool):
     name = "delete_calendar_event"
+    display_name = "DeleteEvent"
     description = DELETE_CALENDAR_EVENT_DESCRIPTION
     mutates = True
     source_type = CalendarSource

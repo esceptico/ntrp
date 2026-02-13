@@ -51,6 +51,9 @@ class ToolContext:
     channel: Channel = field(default_factory=Channel)
     run_id: str = ""
     extra_auto_approve: set[str] = field(default_factory=set)
+    current_depth: int = 0
+    max_depth: int = 0
+    explore_model: str | None = None
 
     @property
     def session_id(self) -> str:

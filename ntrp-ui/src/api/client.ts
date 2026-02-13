@@ -145,6 +145,7 @@ export interface SourceInfo {
 
 export interface ServerConfig {
   chat_model: string;
+  explore_model: string;
   memory_model: string;
   embedding_model: string;
   vault_path: string;
@@ -193,7 +194,7 @@ export async function getServerConfig(config: Config): Promise<ServerConfig> {
 
 export async function updateConfig(
   config: Config,
-  patch: Partial<Pick<ServerConfig, "chat_model" | "memory_model" | "max_depth">> & {
+  patch: Partial<Pick<ServerConfig, "chat_model" | "explore_model" | "memory_model" | "max_depth">> & {
     sources?: Record<string, boolean>;
   }
 ): Promise<Record<string, unknown>> {
@@ -203,6 +204,7 @@ export async function updateConfig(
 export async function getSupportedModels(config: Config): Promise<{
   models: string[];
   chat_model: string;
+  explore_model: string;
   memory_model: string;
 }> {
   return api.get(`${config.serverUrl}/models`);

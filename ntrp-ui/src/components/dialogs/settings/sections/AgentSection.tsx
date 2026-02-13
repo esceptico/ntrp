@@ -2,6 +2,7 @@ import { ModelSelector } from "../SettingsRows.js";
 
 interface AgentSectionProps {
   chatModel: string;
+  exploreModel: string;
   memoryModel: string;
   embeddingModel: string;
   selectedIndex: number;
@@ -11,6 +12,7 @@ interface AgentSectionProps {
 
 export function AgentSection({
   chatModel,
+  exploreModel,
   memoryModel,
   embeddingModel,
   selectedIndex,
@@ -27,16 +29,23 @@ export function AgentSection({
         maxWidth={modelNameWidth}
       />
       <ModelSelector
+        label="Explore"
+        currentModel={exploreModel}
+        selected={selectedIndex === 1}
+        accent={accent}
+        maxWidth={modelNameWidth}
+      />
+      <ModelSelector
         label="Memory"
         currentModel={memoryModel}
-        selected={selectedIndex === 1}
+        selected={selectedIndex === 2}
         accent={accent}
         maxWidth={modelNameWidth}
       />
       <ModelSelector
         label="Embedding"
         currentModel={embeddingModel}
-        selected={selectedIndex === 2}
+        selected={selectedIndex === 3}
         accent={accent}
         maxWidth={modelNameWidth}
       />

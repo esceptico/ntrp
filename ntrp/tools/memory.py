@@ -41,6 +41,7 @@ class RememberInput(BaseModel):
 
 class RememberTool(Tool):
     name = "remember"
+    display_name = "Remember"
     description = REMEMBER_DESCRIPTION
     mutates = True
     input_model = RememberInput
@@ -85,6 +86,7 @@ class RecallInput(BaseModel):
 
 class RecallTool(Tool):
     name = "recall"
+    display_name = "Recall"
     description = RECALL_DESCRIPTION
     input_model = RecallInput
 
@@ -109,6 +111,7 @@ class ForgetInput(BaseModel):
 
 class ForgetTool(Tool):
     name = "forget"
+    display_name = "Forget"
     description = FORGET_DESCRIPTION
     mutates = True
     input_model = ForgetInput

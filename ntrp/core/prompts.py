@@ -48,13 +48,15 @@ The more you remember, the richer context becomes."""
 _EXPLORE_BASE = """SEARCH: Use simple natural language queries — never boolean operators, AND/OR, or quoted phrases.
 If no results, try broader terms or single keywords.
 
-REMEMBER:
+LOOK FOR:
 - Personal facts: name, location, background, roles
 - Preferences and opinions (likes, dislikes, style choices)
 - Projects: what they're building, tech stack, status, goals
 - People: who they know, relationships, collaborations
 - Timeline: when things happened, deadlines, plans
-- Skip general knowledge — only store facts specific to this user
+- Skip general knowledge — only facts specific to this user
+
+You are read-only. Report what you find — the caller decides what to remember.
 
 OUTPUT:
 - Key facts with quotes and file paths
@@ -67,8 +69,7 @@ EXPLORE_PROMPTS = {
 WORKFLOW:
 1. Search with 2-3 query variants
 2. Read the top 2-3 results
-3. Call remember() for user-specific facts
-4. Return findings — 3-5 search+read cycles max
+3. Return findings — 3-5 search+read cycles max
 
 {_EXPLORE_BASE}""",
     "normal": f"""You are an exploration agent. Be thorough but focused.
@@ -76,9 +77,8 @@ WORKFLOW:
 WORKFLOW:
 1. Search with 3-4 query variants (different angles on the topic)
 2. Read every relevant result with read_note() — not just the top one
-3. Follow direct references if a note mentions a related topic
-4. Call remember() for user-specific facts you discover
-5. 5-10 search+read cycles is normal
+3. When a topic branches, use explore() to delegate sub-topics in parallel rather than chasing everything yourself
+4. 5-10 search+read cycles is normal
 
 {_EXPLORE_BASE}""",
     "deep": f"""You are a thorough exploration agent. Explore exhaustively — read every relevant note, not just titles.
@@ -87,10 +87,9 @@ WORKFLOW:
 1. Search with 4-6 query variants (different angles, synonyms, related terms)
 2. Read EVERY relevant result with read_note() — not just the top one
 3. Follow references — if a note mentions another project, person, or topic, search for that too
-4. Use explore() for sub-topics that need their own deep dive
-5. Call remember() for every user-specific fact you discover
-6. Keep going until you've exhausted the topic — 10-20 search+read cycles is normal
-7. After your first pass, ask: what did I miss? Then search for gaps.
+4. Delegate sub-topics with explore() — spawn multiple in parallel for breadth. Don't try to do everything sequentially yourself.
+5. Keep going until you've exhausted the topic — 10-20 search+read cycles is normal
+6. After your first pass, ask: what did I miss? Then search for gaps.
 
 {_EXPLORE_BASE}""",
 }

@@ -58,10 +58,13 @@ class ToolCallEvent(SSEEvent):
     args: dict
     depth: int = 0  # 0 = top-level, >0 = subagent
     parent_id: str = ""  # Parent tool_call_id for grouping subagent calls
-    description: str = field(init=False)
+    display_name: str = ""
 
-    def __post_init__(self):
-        object.__setattr__(self, "description", _format_call(self.name, self.args))
+    def to_sse(self) -> dict:
+        data = asdict(self)
+        data["type"] = self.type.value
+        data["description"] = _format_call(self.display_name, self.args)
+        return {"event": self.type.value, "data": json.dumps(data)}
 
 
 @dataclass(frozen=True)
@@ -75,6 +78,7 @@ class ToolResultEvent(SSEEvent):
     parent_id: str = ""
     duration_ms: int = 0
     data: dict | None = None
+    display_name: str = ""
 
 
 @dataclass(frozen=True)

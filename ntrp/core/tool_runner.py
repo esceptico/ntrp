@@ -58,6 +58,10 @@ class ToolRunner:
 
         return ToolResult(content=compact, preview=result.preview, data=result.data)
 
+    def _display_name(self, name: str) -> str:
+        tool = self.executor.registry.get(name)
+        return tool.display_name if tool else name
+
     def _make_start_event(self, call: PendingToolCall) -> ToolCallEvent:
         return ToolCallEvent(
             tool_id=call.tool_call.id,
@@ -65,6 +69,7 @@ class ToolRunner:
             args=call.args,
             depth=self.depth,
             parent_id=self.parent_id,
+            display_name=self._display_name(call.name),
         )
 
     def _make_result_event(
@@ -92,6 +97,7 @@ class ToolRunner:
             parent_id=self.parent_id,
             duration_ms=duration_ms,
             data=result.data,
+            display_name=self._display_name(call.name),
         )
 
     def _needs_approval(self, call: PendingToolCall) -> bool:

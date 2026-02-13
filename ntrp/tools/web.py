@@ -34,6 +34,7 @@ class WebSearchInput(BaseModel):
 
 class WebSearchTool(Tool):
     name = "web_search"
+    display_name = "WebSearch"
     description = WEB_SEARCH_DESCRIPTION
     source_type = WebSearchSource
     input_model = WebSearchInput
@@ -86,6 +87,7 @@ class WebFetchInput(BaseModel):
 
 class WebFetchTool(Tool):
     name = "web_fetch"
+    display_name = "WebFetch"
     description = WEB_FETCH_DESCRIPTION
     source_type = WebSearchSource
     input_model = WebFetchInput

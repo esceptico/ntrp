@@ -30,14 +30,14 @@ function useAccent(accentColor: AccentColor) {
   return useMemo(() => accentColors[accentColor].primary, [accentColor]);
 }
 
-type DropdownTarget = "chat" | "memory" | "embedding" | null;
+type DropdownTarget = "chat" | "explore" | "memory" | "embedding" | null;
 
 interface SettingsDialogProps {
   config: Config;
   serverConfig: ServerConfig | null;
   settings: Settings;
   onUpdate: (category: keyof Settings, key: string, value: unknown) => void;
-  onModelChange: (type: "chat" | "memory", model: string) => void;
+  onModelChange: (type: "chat" | "explore" | "memory", model: string) => void;
   onServerConfigChange: (config: ServerConfig) => void;
   onClose: () => void;
 }
@@ -74,6 +74,7 @@ export function SettingsDialog({
 
   const [models, setModels] = useState<string[]>([]);
   const [chatModel, setChatModel] = useState(serverConfig?.chat_model ?? "");
+  const [exploreModel, setExploreModel] = useState(serverConfig?.explore_model ?? "");
   const [memoryModel, setMemoryModel] = useState(serverConfig?.memory_model ?? "");
   const [embeddingModels, setEmbeddingModels] = useState<string[]>([]);
   const [embeddingModel, setEmbeddingModel] = useState(serverConfig?.embedding_model ?? "");
@@ -89,6 +90,7 @@ export function SettingsDialog({
       .then((result) => {
         setModels(result.models);
         if (!chatModel) setChatModel(result.chat_model);
+        if (!exploreModel) setExploreModel(result.explore_model);
         if (!memoryModel) setMemoryModel(result.memory_model);
       })
       .catch(() => {});
@@ -106,11 +108,11 @@ export function SettingsDialog({
       .catch(() => {});
   }, [config]);
 
-  const agentTotalItems = 3;
+  const agentTotalItems = 4;
   const limitsTotalItems = LIMIT_ITEMS.length;
 
   const selectModel = useCallback(
-    (modelType: "chat" | "memory", modelName: string) => {
+    (modelType: "chat" | "explore" | "memory", modelName: string) => {
       if (modelUpdating) return;
       if (modelType === "chat") {
         if (modelName === chatModel) return;
@@ -118,6 +120,14 @@ export function SettingsDialog({
         onModelChange("chat", modelName);
         setModelUpdating(true);
         updateConfig(config, { chat_model: modelName })
+          .catch(() => {})
+          .finally(() => setModelUpdating(false));
+      } else if (modelType === "explore") {
+        if (modelName === exploreModel) return;
+        setExploreModel(modelName);
+        onModelChange("explore", modelName);
+        setModelUpdating(true);
+        updateConfig(config, { explore_model: modelName })
           .catch(() => {})
           .finally(() => setModelUpdating(false));
       } else {
@@ -130,7 +140,7 @@ export function SettingsDialog({
           .finally(() => setModelUpdating(false));
       }
     },
-    [config, chatModel, memoryModel, modelUpdating, onModelChange]
+    [config, chatModel, exploreModel, memoryModel, modelUpdating, onModelChange]
   );
 
   const handleAddGoogle = useCallback(async () => {
@@ -271,8 +281,9 @@ export function SettingsDialog({
           setAgentIndex((i) => Math.min(agentTotalItems - 1, i + 1));
         } else if (key.name === "return" || key.name === "space") {
           if (agentIndex === 0) setDropdownTarget("chat");
-          else if (agentIndex === 1) setDropdownTarget("memory");
-          else if (agentIndex === 2) setDropdownTarget("embedding");
+          else if (agentIndex === 1) setDropdownTarget("explore");
+          else if (agentIndex === 2) setDropdownTarget("memory");
+          else if (agentIndex === 3) setDropdownTarget("embedding");
         }
       } else if (activeSection === "connections") {
         const connIdx = CONNECTION_ITEMS.indexOf(connectionItem);
@@ -412,8 +423,8 @@ export function SettingsDialog({
 
   if (dropdownTarget) {
     const isEmbedding = dropdownTarget === "embedding";
-    const title = dropdownTarget === "chat" ? "Agent Model" : dropdownTarget === "memory" ? "Memory Model" : "Embedding Model";
-    const currentModel = dropdownTarget === "chat" ? chatModel : dropdownTarget === "memory" ? memoryModel : embeddingModel;
+    const title = dropdownTarget === "chat" ? "Agent Model" : dropdownTarget === "explore" ? "Explore Model" : dropdownTarget === "memory" ? "Memory Model" : "Embedding Model";
+    const currentModel = dropdownTarget === "chat" ? chatModel : dropdownTarget === "explore" ? exploreModel : dropdownTarget === "memory" ? memoryModel : embeddingModel;
     const modelList = isEmbedding ? embeddingModels : models;
 
     return (
@@ -429,7 +440,7 @@ export function SettingsDialog({
                   setPendingEmbeddingModel(model);
                 }
               } else {
-                selectModel(dropdownTarget as "chat" | "memory", model);
+                selectModel(dropdownTarget as "chat" | "explore" | "memory", model);
               }
               setDropdownTarget(null);
             }}
@@ -500,6 +511,7 @@ export function SettingsDialog({
                 {activeSection === "agent" && (
                   <AgentSection
                     chatModel={chatModel}
+                    exploreModel={exploreModel}
                     memoryModel={memoryModel}
                     embeddingModel={embeddingModel}
                     selectedIndex={agentIndex}
