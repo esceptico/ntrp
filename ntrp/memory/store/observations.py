@@ -172,6 +172,16 @@ class ObservationRepository:
             (now.isoformat(), *observation_ids),
         )
 
+    async def add_source_facts(self, observation_id: int, fact_ids: list[int]) -> None:
+        if not fact_ids:
+            return
+        existing = await self.get_fact_ids(observation_id)
+        merged = existing + [fid for fid in fact_ids if fid not in existing]
+        await self.conn.execute(
+            "UPDATE observations SET source_fact_ids = ?, evidence_count = ? WHERE id = ?",
+            (json.dumps(merged), len(merged), observation_id),
+        )
+
     async def get_fact_ids(self, observation_id: int) -> list[int]:
         rows = await self.conn.execute_fetchall(
             "SELECT source_fact_ids FROM observations WHERE id = ?", (observation_id,)

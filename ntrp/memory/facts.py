@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Self
 
@@ -22,6 +22,7 @@ from ntrp.core.events import ConsolidationCompleted
 from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.logging import get_logger
 from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decisions
+from ntrp.memory.temporal import temporal_consolidation_pass
 from ntrp.memory.events import FactCreated, FactDeleted
 from ntrp.memory.extraction import Extractor
 from ntrp.memory.models import ExtractionResult, Fact, FactContext
@@ -59,6 +60,7 @@ class FactMemory:
         self.channel = channel
         self._consolidation_task: asyncio.Task | None = None
         self._db_lock = asyncio.Lock()
+        self._last_temporal_pass: datetime | None = None
 
     @asynccontextmanager
     async def transaction(self) -> AsyncGenerator[None]:
@@ -100,6 +102,7 @@ class FactMemory:
                 count = await self._consolidate_pending()
                 if count > 0:
                     backoff = interval
+                await self._maybe_run_temporal_pass()
             except asyncio.CancelledError:
                 raise
             except Exception as e:
@@ -138,6 +141,25 @@ class FactMemory:
         _logger.info("Consolidated %d facts", count)
         self.channel.publish(ConsolidationCompleted(facts_processed=count, observations_created=obs_created))
         return count
+
+    async def _maybe_run_temporal_pass(self) -> None:
+        now = datetime.now()
+        if self._last_temporal_pass and (now - self._last_temporal_pass) < timedelta(days=1):
+            return
+
+        try:
+            async with self.transaction():
+                created = await temporal_consolidation_pass(
+                    self.facts,
+                    self.observations,
+                    self.extraction_model,
+                    self.embedder.embed_one,
+                )
+            if created > 0:
+                _logger.info("Temporal pass created %d observations", created)
+            self._last_temporal_pass = now
+        except Exception as e:
+            _logger.warning("Temporal consolidation pass failed: %s", e)
 
     async def close(self) -> None:
         if self._consolidation_task:

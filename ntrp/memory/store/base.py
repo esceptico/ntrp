@@ -71,6 +71,13 @@ CREATE INDEX IF NOT EXISTS idx_entity_refs_entity ON entity_refs(entity_id);
 
 CREATE INDEX IF NOT EXISTS idx_facts_consolidated ON facts(consolidated_at);
 
+CREATE TABLE IF NOT EXISTS temporal_checkpoints (
+    entity_id INTEGER REFERENCES entities(id),
+    window_end TIMESTAMP,
+    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (entity_id, window_end)
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
     text,
     content='facts',
@@ -103,6 +110,7 @@ class GraphDatabase:
         await self.conn.commit()
 
     async def clear_all(self) -> None:
+        await self.conn.execute("DELETE FROM temporal_checkpoints")
         await self.conn.execute("DELETE FROM observations_vec")
         await self.conn.execute("DELETE FROM observations")
         await self.conn.execute("DELETE FROM entity_refs")

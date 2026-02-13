@@ -3,6 +3,16 @@ from ntrp.memory.models import Fact, Observation
 MEMORY_CONTEXT_CHAR_BUDGET = 3000
 
 
+def _format_observation(obs: Observation) -> str:
+    line = f"- {obs.summary}"
+    if obs.history:
+        # Show the most recent transition (last 1-2 entries)
+        for entry in obs.history[-2:]:
+            month = entry.changed_at.strftime("%b %Y")
+            line += f' (previously: "{entry.previous_text}", changed {month})'
+    return line
+
+
 def format_memory_context(
     user_facts: list[Fact] | None = None,
     recent_facts: list[Fact] | None = None,
@@ -24,7 +34,7 @@ def format_memory_context(
     if recent_facts:
         sections.append(("**Recent**", [f"- {f.text}" for f in recent_facts]))
     if query_observations:
-        sections.append(("**Patterns**", [f"- {obs.summary}" for obs in query_observations]))
+        sections.append(("**Patterns**", [_format_observation(obs) for obs in query_observations]))
 
     budget = MEMORY_CONTEXT_CHAR_BUDGET
     for header, items in sections:

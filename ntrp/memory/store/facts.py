@@ -115,6 +115,40 @@ _SQL_GET_ENTITY_IDS_FOR_FACTS = """
     AND er.entity_id IS NOT NULL
 """
 
+_SQL_GET_FACTS_FOR_ENTITY_TEMPORAL = """
+    SELECT f.*
+    FROM facts f
+    JOIN entity_refs er ON f.id = er.fact_id
+    WHERE er.entity_id = ?
+      AND COALESCE(f.happened_at, f.created_at) >= datetime('now', '-' || ? || ' days')
+      AND COALESCE(f.happened_at, f.created_at) <= datetime('now')
+    ORDER BY COALESCE(f.happened_at, f.created_at) ASC
+    LIMIT ?
+"""
+
+_SQL_CHECK_TEMPORAL_CHECKPOINT = """
+    SELECT 1 FROM temporal_checkpoints
+    WHERE entity_id = ? AND window_end = ?
+"""
+
+_SQL_INSERT_TEMPORAL_CHECKPOINT = """
+    INSERT OR IGNORE INTO temporal_checkpoints (entity_id, window_end, processed_at)
+    VALUES (?, ?, ?)
+"""
+
+_SQL_GET_ENTITIES_WITH_FACT_COUNT = """
+    SELECT er.entity_id, e.name, COUNT(*) as fact_count
+    FROM entity_refs er
+    JOIN entities e ON er.entity_id = e.id
+    JOIN facts f ON er.fact_id = f.id
+    WHERE COALESCE(f.happened_at, f.created_at) >= datetime('now', '-' || ? || ' days')
+      AND COALESCE(f.happened_at, f.created_at) <= datetime('now')
+      AND er.entity_id IS NOT NULL
+    GROUP BY er.entity_id
+    HAVING COUNT(*) >= ?
+    ORDER BY fact_count DESC
+"""
+
 
 def _row_dict(row: aiosqlite.Row) -> dict:
     return dict(row)
@@ -350,3 +384,31 @@ class FactRepository:
             fact_ids,
         )
         return [r[0] for r in rows]
+
+    async def get_facts_for_entity_temporal(
+        self, entity_id: int, days: int = 30, limit: int = 50
+    ) -> list[Fact]:
+        rows = await self.conn.execute_fetchall(
+            _SQL_GET_FACTS_FOR_ENTITY_TEMPORAL, (entity_id, days, limit)
+        )
+        return [Fact.model_validate(_row_dict(r)) for r in rows]
+
+    async def get_entities_with_fact_count(
+        self, days: int = 30, min_count: int = 3
+    ) -> list[tuple[int, str, int]]:
+        rows = await self.conn.execute_fetchall(
+            _SQL_GET_ENTITIES_WITH_FACT_COUNT, (days, min_count)
+        )
+        return [(r[0], r[1], r[2]) for r in rows]
+
+    async def has_temporal_checkpoint(self, entity_id: int, window_end: str) -> bool:
+        rows = await self.conn.execute_fetchall(
+            _SQL_CHECK_TEMPORAL_CHECKPOINT, (entity_id, window_end)
+        )
+        return bool(rows)
+
+    async def set_temporal_checkpoint(self, entity_id: int, window_end: str) -> None:
+        now = datetime.now(UTC)
+        await self.conn.execute(
+            _SQL_INSERT_TEMPORAL_CHECKPOINT, (entity_id, window_end, now.isoformat())
+        )

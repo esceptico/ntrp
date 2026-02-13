@@ -1,6 +1,6 @@
 """Tests for Hindsight-style per-fact consolidation (synthesis, not decomposition)."""
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -8,21 +8,21 @@ import pytest_asyncio
 
 from ntrp.memory.consolidation import (
     ConsolidationAction,
+    ConsolidationResponse,
     ConsolidationResult,
-    ConsolidationSchema,
     _execute_action,
     _format_observations,
     apply_consolidation,
     get_consolidation_decisions,
 )
-from ntrp.memory.models import Fact, Observation
+from ntrp.memory.models import Fact, HistoryEntry, Observation
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
 from tests.conftest import mock_embedding
 
 
-def make_fact(id: int, text: str, embedding=None) -> Fact:
+def make_fact(id: int, text: str, embedding=None, happened_at: datetime | None = None) -> Fact:
     now = datetime.now()
     return Fact(
         id=id,
@@ -31,27 +31,49 @@ def make_fact(id: int, text: str, embedding=None) -> Fact:
         source_type="test",
         source_ref=None,
         created_at=now,
-        happened_at=None,
+        happened_at=happened_at,
         last_accessed_at=now,
         access_count=0,
         consolidated_at=None,
     )
 
 
-def make_observation(id: int, summary: str, evidence_count: int = 1) -> Observation:
+def make_observation(
+    id: int,
+    summary: str,
+    evidence_count: int = 1,
+    source_fact_ids: list[int] | None = None,
+    history: list[HistoryEntry] | None = None,
+) -> Observation:
     now = datetime.now()
     return Observation(
         id=id,
         summary=summary,
         embedding=mock_embedding(summary),
         evidence_count=evidence_count,
-        source_fact_ids=[1],
-        history=[],
+        source_fact_ids=source_fact_ids or [1],
+        history=history or [],
         created_at=now,
         updated_at=now,
         last_accessed_at=now,
         access_count=0,
     )
+
+
+def mock_llm_response(content: str):
+    return type(
+        "Response",
+        (),
+        {
+            "choices": [
+                type(
+                    "Choice",
+                    (),
+                    {"message": type("Message", (), {"content": content})()},
+                )()
+            ]
+        },
+    )()
 
 
 async def consolidate_fact(fact, fact_repo, obs_repo, model, embed_fn):
@@ -101,12 +123,12 @@ class TestFormatObservations:
 
 class TestConsolidationSchema:
     def test_parse_create(self):
-        parsed = ConsolidationSchema.model_validate_json('{"action": "create", "text": "New observation"}')
+        parsed = ConsolidationAction.model_validate_json('{"action": "create", "text": "New observation"}')
         assert parsed.action == "create"
         assert parsed.text == "New observation"
 
     def test_parse_update(self):
-        parsed = ConsolidationSchema.model_validate_json(
+        parsed = ConsolidationAction.model_validate_json(
             '{"action": "update", "observation_id": 1, "text": "Updated", "reason": "refinement"}'
         )
         assert parsed.action == "update"
@@ -115,7 +137,7 @@ class TestConsolidationSchema:
         assert parsed.reason == "refinement"
 
     def test_parse_skip(self):
-        parsed = ConsolidationSchema.model_validate_json('{"action": "skip", "reason": "ephemeral state"}')
+        parsed = ConsolidationAction.model_validate_json('{"action": "skip", "reason": "ephemeral state"}')
         assert parsed.action == "skip"
         assert parsed.reason == "ephemeral state"
 
@@ -123,14 +145,22 @@ class TestConsolidationSchema:
         import pydantic
 
         with pytest.raises(pydantic.ValidationError):
-            ConsolidationSchema.model_validate_json('{"action": "invalid"}')
+            ConsolidationAction.model_validate_json('{"action": "invalid"}')
+
+    def test_parse_response_wrapper(self):
+        parsed = ConsolidationResponse.model_validate_json(
+            '{"actions": [{"action": "create", "text": "obs"}, {"action": "skip", "reason": "ephemeral"}]}'
+        )
+        assert len(parsed.actions) == 2
+        assert parsed.actions[0].action == "create"
+        assert parsed.actions[1].action == "skip"
 
 
 class TestExecuteAction:
     @pytest.mark.asyncio
     async def test_skip_action_returns_none(self, obs_repo: ObservationRepository):
         fact = make_fact(1, "Test fact")
-        action = ConsolidationAction(type="skip", reason="ephemeral")
+        action = ConsolidationAction(action="skip", reason="ephemeral")
         embed_fn = AsyncMock(return_value=mock_embedding("test"))
 
         result = await _execute_action(action, fact, obs_repo, embed_fn)
@@ -140,7 +170,7 @@ class TestExecuteAction:
     @pytest.mark.asyncio
     async def test_create_action(self, obs_repo: ObservationRepository):
         fact = make_fact(1, "Test fact")
-        action = ConsolidationAction(type="create", text="Alice is a Python developer")
+        action = ConsolidationAction(action="create", text="Alice is a Python developer")
         embed_fn = AsyncMock(return_value=mock_embedding("test"))
 
         result = await _execute_action(action, fact, obs_repo, embed_fn)
@@ -159,7 +189,7 @@ class TestExecuteAction:
 
         fact = make_fact(2, "Alice writes clean code")
         action = ConsolidationAction(
-            type="update",
+            action="update",
             observation_id=obs.id,
             text="Alice is a Python developer who values code quality",
             reason="synthesis",
@@ -179,7 +209,7 @@ class TestExecuteAction:
     @pytest.mark.asyncio
     async def test_update_without_id_returns_none(self, obs_repo: ObservationRepository):
         fact = make_fact(1, "Test fact")
-        action = ConsolidationAction(type="update", text="New text", observation_id=None)
+        action = ConsolidationAction(action="update", text="New text", observation_id=None)
         embed_fn = AsyncMock()
 
         result = await _execute_action(action, fact, obs_repo, embed_fn)
@@ -221,7 +251,7 @@ class TestConsolidateFact:
                     (),
                     {
                         "message": type(
-                            "Message", (), {"content": '[{"action": "skip", "reason": "ephemeral location state"}]'}
+                            "Message", (), {"content": '{"actions": [{"action": "skip", "reason": "ephemeral location state"}]}'}
                         )()
                     },
                 )()
@@ -256,7 +286,7 @@ class TestConsolidateFact:
                             "Message",
                             (),
                             {
-                                "content": '[{"action": "create", "text": "Alice is a Python-focused developer", "reason": "synthesized preference"}]'
+                                "content": '{"actions": [{"action": "create", "text": "Alice is a Python-focused developer", "reason": "synthesized preference"}]}'
                             },
                         )()
                     },
@@ -301,7 +331,7 @@ class TestConsolidateFact:
                             "Message",
                             (),
                             {
-                                "content": f'[{{"action": "update", "observation_id": {obs.id}, "text": "Alice is a Python-focused developer who values code quality", "reason": "synthesis"}}]'
+                                "content": f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, "text": "Alice is a Python-focused developer who values code quality", "reason": "synthesis"}}]}}'
                             },
                         )()
                     },
@@ -347,7 +377,7 @@ class TestConsolidateFact:
                             "Message",
                             (),
                             {
-                                "content": f'[{{"action": "update", "observation_id": {obs.id}, "text": "Alice works at Meta (previously at Google)", "reason": "contradiction - job change"}}]'
+                                "content": f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, "text": "Alice works at Meta (previously at Google)", "reason": "contradiction - job change"}}]}}'
                             },
                         )()
                     },
@@ -392,7 +422,7 @@ class TestConsolidateFact:
                             "Message",
                             (),
                             {
-                                "content": '[{"action": "create", "text": "Alice enjoys outdoor activities like hiking", "reason": "new topic - hobbies"}]'
+                                "content": '{"actions": [{"action": "create", "text": "Alice enjoys outdoor activities like hiking", "reason": "new topic - hobbies"}]}'
                             },
                         )()
                     },
@@ -446,7 +476,7 @@ class TestAlwaysConsolidated:
                 type(
                     "Choice",
                     (),
-                    {"message": type("Message", (), {"content": '[{"action": "skip", "reason": "ephemeral"}]'})()},
+                    {"message": type("Message", (), {"content": '{"actions": [{"action": "skip", "reason": "ephemeral"}]}'})()},
                 )()
             ]
             await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
@@ -471,7 +501,7 @@ class TestAlwaysConsolidated:
                     (),
                     {
                         "message": type(
-                            "Message", (), {"content": '[{"action": "create", "text": "Bob enjoys pizza"}]'}
+                            "Message", (), {"content": '{"actions": [{"action": "create", "text": "Bob enjoys pizza"}]}'}
                         )()
                     },
                 )()
@@ -480,3 +510,216 @@ class TestAlwaysConsolidated:
 
         updated = await fact_repo.get(fact.id)
         assert updated.consolidated_at is not None
+
+
+class TestTemporalConsolidation:
+    """Tests for temporally-aware consolidation (Layer 1)."""
+
+    @pytest.mark.asyncio
+    async def test_simple_transition(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
+        """Consolidation detects supersession and produces an evolution narrative.
+
+        Noise facts (all-hands presentation, Bob joining mobile) share the entity or timing
+        but should NOT trigger transition detection.
+        """
+        emb = mock_embedding("alice team lead")
+
+        # Source fact for the existing observation
+        jan_10 = datetime(2026, 1, 10, tzinfo=UTC)
+        f1 = await fact_repo.create(
+            text="Alice is leading the mobile team",
+            source_type="test",
+            embedding=emb,
+            happened_at=jan_10,
+        )
+        obs = await obs_repo.create(
+            summary="Alice is the mobile app lead",
+            embedding=emb,
+            source_fact_id=f1.id,
+        )
+
+        # Noise facts
+        await fact_repo.create(
+            text="Alice presented at the all-hands meeting",
+            source_type="test",
+            embedding=mock_embedding("alice all-hands"),
+            happened_at=datetime(2026, 2, 15, tzinfo=UTC),
+        )
+        await fact_repo.create(
+            text="Bob joined the mobile team",
+            source_type="test",
+            embedding=mock_embedding("bob mobile"),
+            happened_at=datetime(2026, 3, 1, tzinfo=UTC),
+        )
+
+        # New fact: Alice transitions to backend
+        mar_5 = datetime(2026, 3, 5, tzinfo=UTC)
+        new_fact = await fact_repo.create(
+            text="Alice is now leading the backend rewrite",
+            source_type="test",
+            embedding=emb,
+            happened_at=mar_5,
+        )
+        embed_fn = AsyncMock(return_value=emb)
+
+        with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
+            mock_llm.return_value = mock_llm_response(
+                f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, '
+                f'"text": "Alice leads the backend rewrite (previously mobile, transitioned ~March 2026)", '
+                f'"reason": "role transition — newer fact supersedes mobile leadership"}}]}}'
+            )
+            result = await consolidate_fact(new_fact, fact_repo, obs_repo, "test-model", embed_fn)
+
+        assert result.action == "updated"
+
+        updated_obs = await obs_repo.get(obs.id)
+        assert "backend" in updated_obs.summary
+        assert "mobile" in updated_obs.summary or "previously" in updated_obs.summary
+        assert len(updated_obs.history) == 1
+        assert updated_obs.history[0].previous_text == "Alice is the mobile app lead"
+
+        # Verify the LLM received temporal context — happened_at in source facts
+        call_args = mock_llm.call_args
+        prompt_content = call_args[1]["messages"][0]["content"]
+        assert "happened_at" in prompt_content
+        assert jan_10.isoformat() in prompt_content
+
+    @pytest.mark.asyncio
+    async def test_addition_not_contradiction(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
+        """Consolidation distinguishes expansion from supersession.
+
+        Noise: "Alice stopped using Flutter" looks like contradiction but is about a tool, not role.
+        "The backend team is hiring" is unrelated context.
+        """
+        emb = mock_embedding("alice development")
+
+        jan_10 = datetime(2026, 1, 10, tzinfo=UTC)
+        f1 = await fact_repo.create(
+            text="Alice is building the iOS app",
+            source_type="test",
+            embedding=emb,
+            happened_at=jan_10,
+        )
+        obs = await obs_repo.create(
+            summary="Alice is focused on mobile development",
+            embedding=emb,
+            source_fact_id=f1.id,
+        )
+
+        # Noise
+        await fact_repo.create(
+            text="Alice stopped using Flutter",
+            source_type="test",
+            embedding=mock_embedding("alice flutter"),
+            happened_at=datetime(2026, 2, 18, tzinfo=UTC),
+        )
+        await fact_repo.create(
+            text="The backend team is hiring",
+            source_type="test",
+            embedding=mock_embedding("backend hiring"),
+            happened_at=datetime(2026, 2, 22, tzinfo=UTC),
+        )
+
+        new_fact = await fact_repo.create(
+            text="Alice is also helping with the backend API",
+            source_type="test",
+            embedding=emb,
+            happened_at=datetime(2026, 2, 20, tzinfo=UTC),
+        )
+        embed_fn = AsyncMock(return_value=emb)
+
+        with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
+            mock_llm.return_value = mock_llm_response(
+                f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, '
+                f'"text": "Alice works across mobile and backend development", '
+                f'"reason": "expanded scope — addition, not replacement"}}]}}'
+            )
+            result = await consolidate_fact(new_fact, fact_repo, obs_repo, "test-model", embed_fn)
+
+        assert result.action == "updated"
+
+        updated_obs = await obs_repo.get(obs.id)
+        # Should NOT contain transition language
+        assert "previously" not in updated_obs.summary.lower()
+        assert "transitioned" not in updated_obs.summary.lower()
+        # Should reflect both areas
+        assert "mobile" in updated_obs.summary.lower()
+        assert "backend" in updated_obs.summary.lower()
+
+    @pytest.mark.asyncio
+    async def test_partial_update(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
+        """Only the contradicted part of an observation changes; unrelated parts survive.
+
+        Noise: mentee promotion and mobile v2.0 are related context but shouldn't merge.
+        """
+        emb = mock_embedding("alice leadership mentoring")
+
+        jan = datetime(2026, 1, 15, tzinfo=UTC)
+        feb = datetime(2026, 2, 10, tzinfo=UTC)
+
+        f1 = await fact_repo.create(
+            text="Alice runs mobile team",
+            source_type="test",
+            embedding=emb,
+            happened_at=jan,
+        )
+        f2 = await fact_repo.create(
+            text="Alice mentors two juniors",
+            source_type="test",
+            embedding=emb,
+            happened_at=feb,
+        )
+        obs = await obs_repo.create(
+            summary="Alice leads mobile and mentors junior engineers",
+            embedding=emb,
+            source_fact_id=f1.id,
+        )
+        # Add f2 as source
+        await obs_repo.update(
+            observation_id=obs.id,
+            summary=obs.summary,
+            embedding=emb,
+            new_fact_id=f2.id,
+            reason="added mentoring evidence",
+        )
+
+        # Noise
+        await fact_repo.create(
+            text="Alice's mentee got promoted",
+            source_type="test",
+            embedding=mock_embedding("mentee promoted"),
+            happened_at=datetime(2026, 3, 15, tzinfo=UTC),
+        )
+        await fact_repo.create(
+            text="Mobile team shipped v2.0",
+            source_type="test",
+            embedding=mock_embedding("mobile v2"),
+            happened_at=datetime(2026, 3, 20, tzinfo=UTC),
+        )
+
+        new_fact = await fact_repo.create(
+            text="Alice transitioned off the mobile team",
+            source_type="test",
+            embedding=emb,
+            happened_at=datetime(2026, 4, 1, tzinfo=UTC),
+        )
+        embed_fn = AsyncMock(return_value=emb)
+
+        with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
+            mock_llm.return_value = mock_llm_response(
+                f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, '
+                f'"text": "Alice mentors junior engineers (previously also led mobile, left ~April 2026)", '
+                f'"reason": "partial update — mobile role ended but mentoring continues"}}]}}'
+            )
+            result = await consolidate_fact(new_fact, fact_repo, obs_repo, "test-model", embed_fn)
+
+        assert result.action == "updated"
+
+        updated_obs = await obs_repo.get(obs.id)
+        # Mentoring preserved
+        assert "mentor" in updated_obs.summary.lower()
+        # Mobile transition captured
+        assert "mobile" in updated_obs.summary.lower()
+        assert "previously" in updated_obs.summary.lower() or "left" in updated_obs.summary.lower()
+        # History records the change
+        assert len(updated_obs.history) >= 2  # one from f2 addition, one from this update

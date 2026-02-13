@@ -36,6 +36,16 @@ BAD observations (just rephrasing):
 You may return MULTIPLE actions for a single fact. For example, a fact mentioning two unrelated topics
 can create/update two separate observations.
 
+## TEMPORAL AWARENESS
+
+Observations now include their change history (previous versions with timestamps and reasons).
+Source facts include `happened_at` timestamps showing when events actually occurred.
+
+- When source facts span different time periods, consider whether newer facts supersede older ones
+- When updating due to a transition, include temporal context in the observation text (e.g. "transitioned in March", "as of Q1 2026")
+- A fact with a later `happened_at` generally reflects the current state; earlier facts are historical context
+- Use the observation's `history` field to understand how it evolved — avoid repeating transitions already captured
+
 ## CONTRADICTION HANDLING
 
 When facts contradict, preserve history in the observation:
@@ -74,16 +84,50 @@ Each observation includes:
 - text: the observation content
 - evidence_count: number of supporting facts
 - similarity: how similar to the new fact
-- source_facts: array of supporting facts
+- source_facts: array of supporting facts (with happened_at and created_at timestamps, sorted chronologically)
+- history (optional): array of previous versions with changed_at timestamps and reasons — shows how this observation evolved
 
 ---
 
-Output a JSON ARRAY of actions:
+Return your actions as a JSON object with an "actions" array:
 
-[
+{{"actions": [
   {{"action": "update", "observation_id": <id>, "text": "synthesized observation", "reason": "..."}},
   {{"action": "create", "text": "new synthesized observation", "reason": "..."}},
   {{"action": "skip", "reason": "ephemeral/no durable knowledge"}}
-]
+]}}"""
 
-Return ONLY valid JSON array."""
+TEMPORAL_PATTERN_PROMPT = """You are a temporal pattern detector for a memory system. Given chronological facts about an entity, identify temporal patterns that no single fact captures.
+
+## WHAT TO LOOK FOR
+
+- **Trends**: Values or states changing consistently over time (declining sleep, increasing workload)
+- **Transitions**: Role/state changes across facts (moved teams, changed jobs, shifted focus)
+- **Cycles**: Recurring patterns (weekly energy dips, monthly reviews)
+- **Correlations**: Co-occurring changes across different domains (sleep declining + stress rising)
+
+## RULES
+
+1. Only report patterns supported by 3+ facts — two facts are coincidence, not a pattern
+2. Ignore facts that don't contribute to any temporal pattern (social events, one-off activities)
+3. Each pattern must span a meaningful time range — same-day facts are not a trend
+4. Be specific about the time range and direction of the pattern
+5. Do NOT rephrase individual facts — patterns must synthesize across multiple facts
+
+---
+
+ENTITY: {entity_name}
+
+CHRONOLOGICAL FACTS:
+{facts_json}
+
+---
+
+Return your actions as a JSON object with an "actions" array:
+
+{{"actions": [
+  {{"action": "create", "text": "pattern observation text", "reason": "which facts support this", "source_fact_ids": [1, 2, 3]}},
+  {{"action": "skip", "reason": "no temporal patterns found"}}
+]}}
+
+If no meaningful patterns exist: {{"actions": [{{"action": "skip", "reason": "no temporal patterns found"}}]}}"""

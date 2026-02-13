@@ -20,23 +20,20 @@ _logger = get_logger(__name__)
 type EmbedFn = Callable[[str], Coroutine[None, None, Embedding]]
 
 
-class ConsolidationSchema(BaseModel):
+class ConsolidationAction(BaseModel):
     action: Literal["update", "create", "skip"]
     observation_id: int | None = None
     text: str | None = None
     reason: str | None = None
 
 
+class ConsolidationResponse(BaseModel):
+    actions: list[ConsolidationAction]
+
+
 class ConsolidationResult(BaseModel):
     action: str  # "created", "updated", "skipped"
     observation_id: int | None = None
-    reason: str | None = None
-
-
-class ConsolidationAction(BaseModel):
-    type: Literal["update", "create", "skip"]
-    observation_id: int | None = None
-    text: str | None = None
     reason: str | None = None
 
 
@@ -60,7 +57,7 @@ async def apply_consolidation(
     obs_repo: ObservationRepository,
     embed_fn: EmbedFn,
 ) -> ConsolidationResult:
-    if action.type == "skip":
+    if action.action == "skip":
         return ConsolidationResult(action="skipped", reason=action.reason)
 
     result = await _execute_action(action, fact, obs_repo, embed_fn)
@@ -87,41 +84,15 @@ async def _llm_consolidation_decisions(
         response = await acompletion(
             model=model,
             messages=[{"role": "user", "content": prompt}],
+            response_format=ConsolidationResponse,
             temperature=CONSOLIDATION_TEMPERATURE,
         )
         content = response.choices[0].message.content
         if not content:
             return []
 
-        content = content.strip()
-        if content.startswith("```"):
-            content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-
-        raw = json.loads(content)
-
-        if isinstance(raw, dict):
-            raw = [raw]
-
-        if not isinstance(raw, list):
-            return []
-
-        actions = []
-        for item in raw:
-            try:
-                parsed = ConsolidationSchema.model_validate(item)
-                actions.append(
-                    ConsolidationAction(
-                        type=parsed.action,
-                        observation_id=parsed.observation_id,
-                        text=parsed.text,
-                        reason=parsed.reason,
-                    )
-                )
-            except Exception:
-                _logger.debug("Skipping invalid consolidation action: %s", item)
-                continue
-
-        return actions
+        parsed = ConsolidationResponse.model_validate_json(content)
+        return parsed.actions
 
     except Exception as e:
         _logger.warning("Consolidation LLM failed: %s", e)
@@ -134,10 +105,10 @@ async def _execute_action(
     obs_repo: ObservationRepository,
     embed_fn: EmbedFn,
 ) -> ConsolidationResult | None:
-    if action.type == "skip":
+    if action.action == "skip":
         return None
 
-    if action.type == "update":
+    if action.action == "update":
         if not action.observation_id or not action.text:
             _logger.debug("Skipped update: missing observation_id or text")
             return None
@@ -157,7 +128,7 @@ async def _execute_action(
             _logger.debug("Observation %s not found for update", action.observation_id)
             return None
 
-    if action.type == "create":
+    if action.action == "create":
         if not action.text:
             _logger.debug("Skipped create: missing text")
             return None
@@ -183,28 +154,44 @@ async def _format_observations(
 
     obs_list = []
     for obs, similarity in candidates:
-        # Fetch source facts (limit to 3 for token efficiency)
+        # Fetch source facts (limit to 5 for token efficiency)
         source_facts = []
-        for fid in obs.source_fact_ids[:3]:
+        for fid in obs.source_fact_ids[:5]:
             fact = await fact_repo.get(fid)
             if fact:
                 source_facts.append(
                     {
                         "text": fact.text,
+                        "happened_at": fact.happened_at.isoformat() if fact.happened_at else None,
                         "created_at": fact.created_at.isoformat() if fact.created_at else None,
                     }
                 )
 
-        obs_list.append(
+        # Sort source facts chronologically (happened_at, fallback created_at)
+        source_facts.sort(key=lambda f: f["happened_at"] or f["created_at"] or "")
+
+        # Include observation change history
+        history = [
             {
-                "id": obs.id,
-                "text": obs.summary,
-                "evidence_count": obs.evidence_count,
-                "similarity": round(similarity, 3),
-                "source_facts": source_facts,
-                "created_at": obs.created_at.isoformat() if obs.created_at else None,
-                "updated_at": obs.updated_at.isoformat() if obs.updated_at else None,
+                "previous_text": h.previous_text,
+                "changed_at": h.changed_at.isoformat(),
+                "reason": h.reason,
             }
-        )
+            for h in obs.history[-3:]  # last 3 entries max
+        ]
+
+        entry: dict = {
+            "id": obs.id,
+            "text": obs.summary,
+            "evidence_count": obs.evidence_count,
+            "similarity": round(similarity, 3),
+            "source_facts": source_facts,
+            "created_at": obs.created_at.isoformat() if obs.created_at else None,
+            "updated_at": obs.updated_at.isoformat() if obs.updated_at else None,
+        }
+        if history:
+            entry["history"] = history
+
+        obs_list.append(entry)
 
     return json.dumps(obs_list, indent=2)
