@@ -10,7 +10,6 @@ interface ExpandableTextProps {
   visibleLines?: number;
   isFocused?: boolean;
   color?: string;
-  boldFirstLine?: boolean;
 }
 
 export function ExpandableText({
@@ -21,44 +20,46 @@ export function ExpandableText({
   visibleLines = 5,
   isFocused = false,
   color,
-  boldFirstLine = false,
 }: ExpandableTextProps) {
   const textColor = color ?? (isFocused ? colors.text.primary : colors.text.secondary);
   const effectiveWidth = width - 2;
 
   const lines = useMemo(() => wrapText(text, effectiveWidth), [text, effectiveWidth]);
-  const needsExpansion = lines.length > 1;
 
-  if (!needsExpansion) {
+  // Single line — just render it
+  if (lines.length <= 1) {
     return (
       <box width={width} height={1}>
-        <text>
-          {boldFirstLine ? (
-            <span fg={textColor}><strong>{text}</strong></span>
-          ) : (
-            <span fg={textColor}>{text}</span>
-          )}
-        </text>
+        <text><span fg={textColor}>{text}</span></text>
       </box>
     );
   }
 
+  // Fits within visibleLines — show all lines, no expand needed
+  if (lines.length <= visibleLines) {
+    return (
+      <box flexDirection="column" width={width} height={lines.length}>
+        {lines.map((line, i) => (
+          <text key={i}><span fg={textColor}>{line}</span></text>
+        ))}
+      </box>
+    );
+  }
+
+  // Exceeds visibleLines — collapsed by default, expandable
   if (!expanded) {
     const truncated = truncateText(text, effectiveWidth);
     return (
       <box width={width} height={1}>
         <text>
-          {boldFirstLine ? (
-            <span fg={textColor}><strong>{truncated}</strong></span>
-          ) : (
-            <span fg={textColor}>{truncated}</span>
-          )}
+          <span fg={textColor}>{truncated}</span>
           {isFocused && <span fg={colors.text.muted}> {"\u21B5"}</span>}
         </text>
       </box>
     );
   }
 
+  // Expanded with scroll
   const needsScroll = lines.length > visibleLines;
   const actualVisibleLines = needsScroll ? visibleLines - 1 : visibleLines;
   const maxScroll = Math.max(0, lines.length - actualVisibleLines);
@@ -70,13 +71,7 @@ export function ExpandableText({
   return (
     <box flexDirection="column" width={width} height={visibleLines}>
       {displayLines.map((line, i) => (
-        <text key={i}>
-          {boldFirstLine && safeOffset === 0 && i === 0 ? (
-            <span fg={textColor}><strong>{line}</strong></span>
-          ) : (
-            <span fg={textColor}>{line}</span>
-          )}
-        </text>
+        <text key={i}><span fg={textColor}>{line}</span></text>
       ))}
       {needsScroll && (
         <text>

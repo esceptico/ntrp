@@ -18,13 +18,11 @@ interface FactDetailsViewProps {
   width: number;
   height: number;
   isFocused: boolean;
-  // Section navigation state
   focusedSection: FactDetailSection;
   textExpanded: boolean;
   textScrollOffset: number;
   entitiesIndex: number;
   linkedIndex: number;
-  // Edit/delete state
   editMode: boolean;
   editText: string;
   cursorPos: number;
@@ -34,7 +32,7 @@ interface FactDetailsViewProps {
   saving: boolean;
 }
 
-const TEXT_VISIBLE_LINES = 5;
+const TEXT_VISIBLE_LINES = 10;
 
 export function FactDetailsView({
   details,
@@ -71,9 +69,8 @@ export function FactDetailsView({
   const { fact, entities, linked_facts } = details;
   const textColor = isFocused ? colors.text.primary : colors.text.secondary;
   const labelColor = colors.text.muted;
-  const valueColor = isFocused ? accentValue : colors.text.secondary;
 
-  const typeLabel = fact.fact_type === "world" ? "WORLD" : "EXPERIENCE";
+  const typeLabel = fact.fact_type === "world" ? "world" : "experience";
   const typeColor = fact.fact_type === "world" ? colors.status.warning : accentValue;
 
   const sectionFocused = (section: FactDetailSection) => isFocused && focusedSection === section;
@@ -118,7 +115,7 @@ export function FactDetailsView({
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
-      {/* Text section - expandable */}
+      {/* Full text */}
       <box>
         <ExpandableText
           text={fact.text}
@@ -127,36 +124,26 @@ export function FactDetailsView({
           scrollOffset={textScrollOffset}
           visibleLines={TEXT_VISIBLE_LINES}
           isFocused={sectionFocused(FACT_SECTIONS.TEXT)}
-          boldFirstLine
         />
       </box>
 
-      {/* Metadata - fixed, non-interactive */}
-      <box flexDirection="column" marginTop={1}>
+      {/* Metadata — single line */}
+      <box marginTop={1}>
         <text>
-          <span fg={labelColor}>TYPE </span>
           <span fg={typeColor}>{typeLabel}</span>
-          <span fg={colors.text.muted}> {"\u2502"} </span>
-          <span fg={labelColor}>SRC </span>
-          <span fg={valueColor}>{fact.source_type}</span>
-          <span fg={colors.text.muted}> {"\u2502"} </span>
-          <span fg={labelColor}>{"\u00D7"}</span>
-          <span fg={valueColor}>{fact.access_count}</span>
-        </text>
-        <text>
-          <span fg={labelColor}>CREATED </span>
-          <span fg={colors.text.secondary}>{formatTimeAgo(fact.created_at)}</span>
+          <span fg={colors.text.disabled}> {"\u2502"} </span>
+          <span fg={labelColor}>{fact.source_type}</span>
+          <span fg={colors.text.disabled}> {"\u2502"} </span>
+          <span fg={labelColor}>{"\u00D7"}{fact.access_count}</span>
+          <span fg={colors.text.disabled}> {"\u2502"} </span>
+          <span fg={labelColor}>{formatTimeAgo(fact.created_at)}</span>
         </text>
       </box>
 
-      {/* Entities section */}
-      <box flexDirection="column" marginTop={1}>
-        <text>
-          <span fg={labelColor}>
-            ENTITIES {entities.length > 0 && `(${entities.length})`}
-          </span>
-        </text>
-        {entities.length > 0 ? (
+      {/* Entities — only if non-empty */}
+      {entities.length > 0 && (
+        <box flexDirection="column" marginTop={1}>
+          <text><span fg={labelColor}>ENTITIES ({entities.length})</span></text>
           <ScrollableList
             items={entities}
             selectedIndex={entitiesIndex}
@@ -171,19 +158,13 @@ export function FactDetailsView({
             )}
             width={textWidth}
           />
-        ) : (
-          <text><span fg={colors.text.muted}>No entities</span></text>
-        )}
-      </box>
+        </box>
+      )}
 
-      {/* Linked facts section */}
-      <box flexDirection="column" marginTop={1}>
-        <text>
-          <span fg={labelColor}>
-            LINKED {linked_facts.length > 0 && `(${linked_facts.length})`}
-          </span>
-        </text>
-        {linked_facts.length > 0 ? (
+      {/* Linked facts — only if non-empty */}
+      {linked_facts.length > 0 && (
+        <box flexDirection="column" marginTop={1}>
+          <text><span fg={labelColor}>LINKED ({linked_facts.length})</span></text>
           <ScrollableList
             items={linked_facts}
             selectedIndex={linkedIndex}
@@ -206,10 +187,8 @@ export function FactDetailsView({
             }}
             width={textWidth}
           />
-        ) : (
-          <text><span fg={colors.text.muted}>No linked facts</span></text>
-        )}
-      </box>
+        </box>
+      )}
     </box>
   );
 }

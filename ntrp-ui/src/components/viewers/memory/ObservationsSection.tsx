@@ -1,6 +1,7 @@
 import type { Observation, ObservationDetails } from "../../../api/client.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
+import { formatTimeAgo } from "../../../lib/format.js";
 import { ObservationDetailsView, type ObsDetailSection } from "./ObservationDetailsView.js";
 import { ListDetailSection } from "./ListDetailSection.js";
 
@@ -10,6 +11,7 @@ interface ObservationsSectionProps {
   obsDetails: ObservationDetails | null;
   detailsLoading: boolean;
   searchQuery: string;
+  searchMode: boolean;
   focusPane: "list" | "details";
   height: number;
   width: number;
@@ -26,12 +28,18 @@ interface ObservationsSectionProps {
   saving: boolean;
 }
 
+function shortTime(iso: string): string {
+  const full = formatTimeAgo(iso);
+  return full.replace(" ago", "");
+}
+
 export function ObservationsSection({
   observations,
   selectedIndex,
   obsDetails,
   detailsLoading,
   searchQuery,
+  searchMode,
   focusPane,
   height,
   width,
@@ -52,14 +60,19 @@ export function ObservationsSection({
   const detailWidth = Math.max(0, width - listWidth - 1);
 
   const renderItem = (obs: Observation, ctx: RenderItemContext) => {
-    const textWidth = listWidth - 10;
-    const countColor = ctx.isSelected ? accentValue : colors.text.muted;
+    const textWidth = listWidth - 4;
+    const tagColor = ctx.isSelected ? colors.text.secondary : colors.text.disabled;
 
     return (
-      <text>
-        <span fg={countColor}>[{obs.evidence_count}]</span>
-        <span fg={ctx.colors.text}> {truncateText(obs.summary, textWidth)}</span>
-      </text>
+      <box flexDirection="column" marginBottom={1}>
+        <text>
+          <span fg={ctx.colors.text}>{truncateText(obs.summary, textWidth)}</span>
+        </text>
+        <text>
+          <span fg={ctx.isSelected ? accentValue : tagColor}>[{obs.evidence_count}]</span>
+          <span fg={tagColor}> [{shortTime(obs.created_at)}]</span>
+        </text>
+      </box>
     );
   };
 
@@ -71,9 +84,11 @@ export function ObservationsSection({
       getKey={(o) => o.id}
       emptyMessage="No observations synthesized yet"
       searchQuery={searchQuery}
+      searchMode={searchMode}
       focusPane={focusPane}
       height={height}
       width={width}
+      itemHeight={3}
       details={
         <ObservationDetailsView
           details={obsDetails}

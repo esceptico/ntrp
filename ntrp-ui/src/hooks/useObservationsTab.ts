@@ -13,12 +13,15 @@ import {
   getObsSectionMaxIndex,
 } from "../components/viewers/memory/ObservationDetailsView.js";
 
+export type SortOrder = "recent" | "oldest";
+
 interface ObservationsTabState {
   filteredObservations: Observation[];
   selectedIndex: number;
   obsDetails: ObservationDetails | null;
   detailsLoading: boolean;
   searchQuery: string;
+  searchMode: boolean;
   focusPane: "list" | "details";
   detailSection: ObsDetailSection;
   textExpanded: boolean;
@@ -28,6 +31,7 @@ interface ObservationsTabState {
   editText: string;
   cursorPos: number;
   confirmDelete: boolean;
+  sortOrder: SortOrder;
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
   setSelectedIndex: (i: number) => void;
@@ -48,7 +52,9 @@ export function useObservationsTab(
   const [obsDetails, setObsDetails] = useState<ObservationDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchMode, setSearchMode] = useState(false);
   const [focusPane, setFocusPane] = useState<"list" | "details">("list");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("recent");
 
   const [detailSection, setDetailSection] = useState<ObsDetailSection>(OBS_SECTIONS.TEXT);
   const [textExpanded, setTextExpanded] = useState(false);
@@ -59,13 +65,17 @@ export function useObservationsTab(
   const [cursorPos, setCursorPos] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const filteredObservations = useMemo(
-    () =>
-      searchQuery
-        ? observations.filter((o) => o.summary.toLowerCase().includes(searchQuery.toLowerCase()))
-        : observations,
-    [observations, searchQuery]
-  );
+  const filteredObservations = useMemo(() => {
+    let result = observations;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((o) => o.summary.toLowerCase().includes(q));
+    }
+    if (sortOrder === "oldest") {
+      result = [...result].reverse();
+    }
+    return result;
+  }, [observations, searchQuery, sortOrder]);
 
   const selectedObsId = filteredObservations[selectedIndex]?.id;
 
@@ -129,7 +139,7 @@ export function useObservationsTab(
             if (textExpanded && obsDetails) {
               const listWidth = Math.min(45, Math.max(30, Math.floor(contentWidth * 0.4)));
               const detailWidth = Math.max(0, contentWidth - listWidth - 1) - 2;
-              const maxScroll = getTextMaxScroll(obsDetails.observation.summary, detailWidth, 5);
+              const maxScroll = getTextMaxScroll(obsDetails.observation.summary, detailWidth, 10);
               if (textScrollOffset < maxScroll) {
                 setTextScrollOffset((s) => s + 1);
                 return;
@@ -149,9 +159,40 @@ export function useObservationsTab(
         }
         return;
       }
-      // List pane focused
-      if (key.name === "backspace") {
-        setSearchQuery((q) => q.slice(0, -1));
+      // List pane focused — search mode
+      if (searchMode) {
+        if (key.name === "escape") {
+          if (searchQuery) {
+            setSearchQuery("");
+            setSelectedIndex(0);
+          } else {
+            setSearchMode(false);
+          }
+          return;
+        }
+        if (key.name === "backspace") {
+          setSearchQuery((q) => q.slice(0, -1));
+          setSelectedIndex(0);
+          return;
+        }
+        if (key.name === "return") {
+          setSearchMode(false);
+          return;
+        }
+        if (key.insertable && !key.ctrl && !key.meta && key.sequence) {
+          const char = key.name === "space" ? " " : key.sequence;
+          setSearchQuery((q) => q + char);
+          setSelectedIndex(0);
+        }
+        return;
+      }
+      // List pane focused — normal mode
+      if (key.sequence === "/") {
+        setSearchMode(true);
+        return;
+      }
+      if (key.name === "o") {
+        setSortOrder((current) => (current === "recent" ? "oldest" : "recent"));
         setSelectedIndex(0);
         return;
       }
@@ -162,11 +203,6 @@ export function useObservationsTab(
       if (key.name === "down" || key.name === "j") {
         setSelectedIndex((i) => Math.min(filteredObservations.length - 1, i + 1));
         return;
-      }
-      if (key.insertable && !key.ctrl && !key.meta && key.sequence) {
-        const char = key.name === "space" ? " " : key.sequence;
-        setSearchQuery((q) => q + char);
-        setSelectedIndex(0);
       }
     },
     [
@@ -179,6 +215,8 @@ export function useObservationsTab(
       filteredObservations.length,
       contentWidth,
       resetDetailState,
+      searchMode,
+      searchQuery,
     ]
   );
 
@@ -188,6 +226,7 @@ export function useObservationsTab(
     obsDetails,
     detailsLoading,
     searchQuery,
+    searchMode,
     focusPane,
     detailSection,
     textExpanded,
@@ -197,6 +236,7 @@ export function useObservationsTab(
     editText,
     cursorPos,
     confirmDelete,
+    sortOrder,
     handleKeys,
     setSearchQuery,
     setSelectedIndex,

@@ -17,12 +17,10 @@ interface ObservationDetailsViewProps {
   width: number;
   height: number;
   isFocused: boolean;
-  // Section navigation state
   focusedSection: ObsDetailSection;
   textExpanded: boolean;
   textScrollOffset: number;
   factsIndex: number;
-  // Edit/delete state
   editMode: boolean;
   editText: string;
   cursorPos: number;
@@ -32,7 +30,7 @@ interface ObservationDetailsViewProps {
   saving: boolean;
 }
 
-const TEXT_VISIBLE_LINES = 5;
+const TEXT_VISIBLE_LINES = 10;
 
 export function ObservationDetailsView({
   details,
@@ -68,7 +66,6 @@ export function ObservationDetailsView({
   const { observation, supporting_facts } = details;
   const textColor = isFocused ? colors.text.primary : colors.text.secondary;
   const labelColor = colors.text.muted;
-  const valueColor = isFocused ? accentValue : colors.text.secondary;
 
   const sectionFocused = (section: ObsDetailSection) => isFocused && focusedSection === section;
   const textWidth = width - 2;
@@ -112,7 +109,7 @@ export function ObservationDetailsView({
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
-      {/* Summary section - expandable */}
+      {/* Full text */}
       <box>
         <ExpandableText
           text={observation.summary}
@@ -121,37 +118,26 @@ export function ObservationDetailsView({
           scrollOffset={textScrollOffset}
           visibleLines={TEXT_VISIBLE_LINES}
           isFocused={sectionFocused(OBS_SECTIONS.TEXT)}
-          boldFirstLine
         />
       </box>
 
-      {/* Metadata - fixed, non-interactive */}
-      <box flexDirection="column" marginTop={1}>
+      {/* Metadata — single line */}
+      <box marginTop={1}>
         <text>
-          <span fg={labelColor}>EVIDENCE </span>
-          <span fg={valueColor}>{observation.evidence_count}</span>
-          <span fg={labelColor}> facts</span>
-          <span fg={colors.text.muted}> {"\u2502"} </span>
-          <span fg={labelColor}>{"\u00D7"}</span>
-          <span fg={valueColor}>{observation.access_count}</span>
-        </text>
-        <text>
-          <span fg={labelColor}>CREATED </span>
-          <span fg={colors.text.secondary}>{formatTimeAgo(observation.created_at)}</span>
-          <span fg={colors.text.muted}> {"\u2502"} </span>
-          <span fg={labelColor}>UPDATED </span>
-          <span fg={colors.text.secondary}>{formatTimeAgo(observation.updated_at)}</span>
+          <span fg={accentValue}>observation</span>
+          <span fg={colors.text.disabled}> {"\u2502"} </span>
+          <span fg={labelColor}>{observation.evidence_count} facts</span>
+          <span fg={colors.text.disabled}> {"\u2502"} </span>
+          <span fg={labelColor}>{"\u00D7"}{observation.access_count}</span>
+          <span fg={colors.text.disabled}> {"\u2502"} </span>
+          <span fg={labelColor}>{formatTimeAgo(observation.created_at)}</span>
         </text>
       </box>
 
-      {/* Supporting facts section */}
-      <box flexDirection="column" marginTop={1}>
-        <text>
-          <span fg={labelColor}>
-            SUPPORTING FACTS {supporting_facts.length > 0 && `(${supporting_facts.length})`}
-          </span>
-        </text>
-        {supporting_facts.length > 0 ? (
+      {/* Supporting facts — only if non-empty */}
+      {supporting_facts.length > 0 && (
+        <box flexDirection="column" marginTop={1}>
+          <text><span fg={labelColor}>SUPPORTING FACTS ({supporting_facts.length})</span></text>
           <ScrollableList
             items={supporting_facts}
             selectedIndex={factsIndex}
@@ -165,10 +151,8 @@ export function ObservationDetailsView({
             )}
             width={textWidth}
           />
-        ) : (
-          <text><span fg={colors.text.muted}>No supporting facts</span></text>
-        )}
-      </box>
+        </box>
+      )}
     </box>
   );
 }

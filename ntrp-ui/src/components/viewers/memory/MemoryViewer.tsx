@@ -255,28 +255,20 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
       if (key.name === "r") { reload(); return; }
 
       if (key.name === "escape" || key.name === "q") {
-        if (activeTab === "observations") {
-          if (obsTab.focusPane === "details") {
-            obsTab.setFocusPane("list");
-            obsTab.resetDetailState();
-            return;
-          }
-          if (obsTab.searchQuery) {
-            obsTab.setSearchQuery("");
-            obsTab.setSelectedIndex(0);
-            return;
-          }
-          onClose();
+        const tab = activeTab === "facts" ? factsTab : obsTab;
+        // Search mode handles its own escape
+        if (tab.searchMode) {
+          tab.handleKeys(key);
           return;
         }
-        if (factsTab.focusPane === "details") {
-          factsTab.setFocusPane("list");
-          factsTab.resetDetailState();
+        if (tab.focusPane === "details") {
+          tab.setFocusPane("list");
+          tab.resetDetailState();
           return;
         }
-        if (factsTab.searchQuery) {
-          factsTab.setSearchQuery("");
-          factsTab.setSelectedIndex(0);
+        if (tab.searchQuery) {
+          tab.setSearchQuery("");
+          tab.setSelectedIndex(0);
           return;
         }
         onClose();
@@ -297,9 +289,19 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     if (tab.editMode) return <Hints items={[["^S", "save"], ["esc", "cancel"], ["←→", "cursor"]]} />;
     if (tab.confirmDelete) return <Hints items={[["y", "confirm"], ["any", "cancel"]]} />;
     if (tab.focusPane === "details") {
-      return <Hints items={[["1-2", "tabs"], ["↑↓", "navigate"], ["tab", "list"], ["enter", "expand"], ["e", "edit"], ["d", "del"]]} />;
+      return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ["enter", "expand"], ["e", "edit"], ["d", "del"]]} />;
     }
-    return <Hints items={[["1-2", "tabs"], ["↑↓", "navigate"], ["tab", "details"], ["e", "edit"], ["d", "del"], ["type", "search"]]} />;
+    if (tab.searchMode) return <Hints items={[["type", "search"], ["esc", "clear/exit"], ["enter", "done"]]} />;
+    const listHints: [string, string][] = [
+      ["↑↓", "navigate"],
+      ["tab", "details"],
+      ["/", "search"],
+      ["e", "edit"],
+      ["d", "del"],
+      ...(activeTab === "facts" ? [["s", "source"] as [string, string]] : []),
+      ["o", "sort"],
+    ];
+    return <Hints items={listHints} />;
   };
 
   if (loading) {
@@ -326,15 +328,28 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
       footer={getFooter()}
     >
       {({ width, height }) => {
-        const sectionHeight = height - 1;
+        const sectionHeight = height - 2;
+        const tab = activeTab === "facts" ? factsTab : obsTab;
+        const sourceDisplay = activeTab === "facts" ? `src: ${factsTab.sourceFilter}` : "";
+        const sortDisplay = `sort: ${tab.sortOrder}`;
+
         return (
           <>
-            <Tabs
-              tabs={TABS}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              labels={{ facts: "Facts", observations: "Observations" }}
-            />
+            <box flexDirection="row" marginBottom={1} marginTop={1}>
+              <Tabs
+                tabs={TABS}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                labels={{ facts: "Facts", observations: "Observations" }}
+              />
+              <box flexGrow={1} />
+              {sourceDisplay && (
+                <box marginRight={3}>
+                  <text><span fg={colors.text.disabled}>{sourceDisplay}</span></text>
+                </box>
+              )}
+              <text><span fg={colors.text.disabled}>{sortDisplay}</span></text>
+            </box>
 
             {activeTab === "facts" && (
               <FactsSection
@@ -343,6 +358,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 factDetails={factsTab.factDetails}
                 detailsLoading={factsTab.detailsLoading}
                 searchQuery={factsTab.searchQuery}
+                searchMode={factsTab.searchMode}
                 focusPane={factsTab.focusPane}
                 height={sectionHeight}
                 width={width}
@@ -368,6 +384,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 obsDetails={obsTab.obsDetails}
                 detailsLoading={obsTab.detailsLoading}
                 searchQuery={obsTab.searchQuery}
+                searchMode={obsTab.searchMode}
                 focusPane={obsTab.focusPane}
                 height={sectionHeight}
                 width={width}

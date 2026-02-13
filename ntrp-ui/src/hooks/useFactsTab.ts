@@ -13,12 +13,15 @@ import {
   getFactSectionMaxIndex,
 } from "../components/viewers/memory/FactDetailsView.js";
 
+export type SortOrder = "recent" | "oldest";
+
 interface FactsTabState {
   filteredFacts: Fact[];
   selectedIndex: number;
   factDetails: FactDetails | null;
   detailsLoading: boolean;
   searchQuery: string;
+  searchMode: boolean;
   focusPane: "list" | "details";
   detailSection: FactDetailSection;
   textExpanded: boolean;
@@ -29,6 +32,9 @@ interface FactsTabState {
   editText: string;
   cursorPos: number;
   confirmDelete: boolean;
+  sourceFilter: string;
+  sortOrder: SortOrder;
+  availableSources: string[];
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
   setSelectedIndex: (i: number) => void;
@@ -49,7 +55,10 @@ export function useFactsTab(
   const [factDetails, setFactDetails] = useState<FactDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchMode, setSearchMode] = useState(false);
   const [focusPane, setFocusPane] = useState<"list" | "details">("list");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("recent");
 
   const [detailSection, setDetailSection] = useState<FactDetailSection>(FACT_SECTIONS.TEXT);
   const [textExpanded, setTextExpanded] = useState(false);
@@ -61,13 +70,25 @@ export function useFactsTab(
   const [cursorPos, setCursorPos] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const filteredFacts = useMemo(
-    () =>
-      searchQuery
-        ? facts.filter((f) => f.text.toLowerCase().includes(searchQuery.toLowerCase()))
-        : facts,
-    [facts, searchQuery]
-  );
+  const availableSources = useMemo(() => {
+    const sources = new Set(facts.map((f) => f.source_type));
+    return ["all", ...Array.from(sources).sort()];
+  }, [facts]);
+
+  const filteredFacts = useMemo(() => {
+    let result = facts;
+    if (sourceFilter !== "all") {
+      result = result.filter((f) => f.source_type === sourceFilter);
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((f) => f.text.toLowerCase().includes(q));
+    }
+    if (sortOrder === "oldest") {
+      result = [...result].reverse();
+    }
+    return result;
+  }, [facts, searchQuery, sourceFilter, sortOrder]);
 
   const selectedFactId = filteredFacts[selectedIndex]?.id;
 
@@ -142,7 +163,7 @@ export function useFactsTab(
             if (textExpanded && factDetails) {
               const listWidth = Math.min(45, Math.max(30, Math.floor(contentWidth * 0.4)));
               const detailWidth = Math.max(0, contentWidth - listWidth - 1) - 2;
-              const maxScroll = getTextMaxScroll(factDetails.fact.text, detailWidth, 5);
+              const maxScroll = getTextMaxScroll(factDetails.fact.text, detailWidth, 10);
               if (textScrollOffset < maxScroll) {
                 setTextScrollOffset((s) => s + 1);
                 return;
@@ -172,9 +193,48 @@ export function useFactsTab(
         }
         return;
       }
-      // List pane focused
-      if (key.name === "backspace") {
-        setSearchQuery((q) => q.slice(0, -1));
+      // List pane focused — search mode
+      if (searchMode) {
+        if (key.name === "escape") {
+          if (searchQuery) {
+            setSearchQuery("");
+            setSelectedIndex(0);
+          } else {
+            setSearchMode(false);
+          }
+          return;
+        }
+        if (key.name === "backspace") {
+          setSearchQuery((q) => q.slice(0, -1));
+          setSelectedIndex(0);
+          return;
+        }
+        if (key.name === "return") {
+          setSearchMode(false);
+          return;
+        }
+        if (key.insertable && !key.ctrl && !key.meta && key.sequence) {
+          const char = key.name === "space" ? " " : key.sequence;
+          setSearchQuery((q) => q + char);
+          setSelectedIndex(0);
+        }
+        return;
+      }
+      // List pane focused — normal mode
+      if (key.sequence === "/") {
+        setSearchMode(true);
+        return;
+      }
+      if (key.name === "s") {
+        setSourceFilter((current) => {
+          const idx = availableSources.indexOf(current);
+          return availableSources[(idx + 1) % availableSources.length];
+        });
+        setSelectedIndex(0);
+        return;
+      }
+      if (key.name === "o") {
+        setSortOrder((current) => (current === "recent" ? "oldest" : "recent"));
         setSelectedIndex(0);
         return;
       }
@@ -185,11 +245,6 @@ export function useFactsTab(
       if (key.name === "down" || key.name === "j") {
         setSelectedIndex((i) => Math.min(filteredFacts.length - 1, i + 1));
         return;
-      }
-      if (key.insertable && !key.ctrl && !key.meta && key.sequence) {
-        const char = key.name === "space" ? " " : key.sequence;
-        setSearchQuery((q) => q + char);
-        setSelectedIndex(0);
       }
     },
     [
@@ -203,6 +258,9 @@ export function useFactsTab(
       filteredFacts.length,
       contentWidth,
       resetDetailState,
+      availableSources,
+      searchMode,
+      searchQuery,
     ]
   );
 
@@ -212,6 +270,7 @@ export function useFactsTab(
     factDetails,
     detailsLoading,
     searchQuery,
+    searchMode,
     focusPane,
     detailSection,
     textExpanded,
@@ -222,6 +281,9 @@ export function useFactsTab(
     editText,
     cursorPos,
     confirmDelete,
+    sourceFilter,
+    sortOrder,
+    availableSources,
     handleKeys,
     setSearchQuery,
     setSelectedIndex,
