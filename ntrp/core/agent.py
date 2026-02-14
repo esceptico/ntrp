@@ -129,7 +129,13 @@ class Agent:
         self._init_messages(task, history)
         runner = self._create_tool_runner()
 
-        for _ in range(AGENT_MAX_ITERATIONS):
+        iteration = 0
+        while True:
+            if AGENT_MAX_ITERATIONS is not None and iteration >= AGENT_MAX_ITERATIONS:
+                await self._set_state(AgentState.IDLE)
+                yield f"Stopped: reached max iterations ({AGENT_MAX_ITERATIONS})."
+                return
+
             if self._is_cancelled():
                 await self._set_state(AgentState.IDLE)
                 yield "Cancelled."
@@ -182,8 +188,7 @@ class Agent:
             finally:
                 self._append_tool_results(message.tool_calls, results)
 
-        await self._set_state(AgentState.IDLE)
-        yield f"Stopped: reached max iterations ({AGENT_MAX_ITERATIONS})."
+            iteration += 1
 
     async def run(self, task: str, history: list[dict] | None = None) -> str:
         result = ""

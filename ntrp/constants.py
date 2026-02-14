@@ -46,7 +46,7 @@ EMBEDDING_MODELS: dict[str, int] = {
 # --- Agent Limits ---
 
 AGENT_MAX_DEPTH = 8
-AGENT_MAX_ITERATIONS = 50
+AGENT_MAX_ITERATIONS = None
 
 EXPLORE_TIMEOUT = 300
 EXPLORE_MODEL_DEFAULT = "gemini/gemini-3-flash-preview"
