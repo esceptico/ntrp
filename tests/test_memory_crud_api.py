@@ -14,46 +14,41 @@ from ntrp.server.runtime import Runtime, reset_runtime
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
 
 
+async def _mock_embed_one(text: str):
+    return mock_embedding(text)
+
+
 @pytest_asyncio.fixture
 async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
     """Create isolated runtime with memory enabled for testing"""
     await reset_runtime()
 
-    # Monkeypatch NTRP_DIR to use temp directory
     import ntrp.config
     from ntrp.constants import EMBEDDING_MODELS
 
     monkeypatch.setattr(ntrp.config, "NTRP_DIR", tmp_path / "db")
     monkeypatch.setitem(EMBEDDING_MODELS, "test-embedding", TEST_EMBEDDING_DIM)
 
-    # Create test config
     test_config = Config(
         vault_path=tmp_path / "vault",
-        openai_api_key="test-key",  # Required but not used with mock
+        openai_api_key="test-key",
         memory=True,
         embedding_model="test-embedding",
         memory_model="gemini/gemini-3-flash-preview",
         chat_model="gemini/gemini-3-flash-preview",
-        browser=None,  # Disable browser to avoid profile issues
-        exa_api_key=None,  # Disable web search
+        browser=None,
+        exa_api_key=None,
     )
 
-    # Create temp directories
     test_config.vault_path.mkdir(parents=True, exist_ok=True)
     test_config.db_dir.mkdir(parents=True, exist_ok=True)
 
     runtime = Runtime(config=test_config)
     await runtime.connect()
 
-    # Replace embedder with mock for tests (must be async)
     if runtime.memory:
+        runtime.memory.embedder.embed_one = _mock_embed_one
 
-        async def mock_embed_one(text: str):
-            return mock_embedding(text)
-
-        runtime.memory.embedder.embed_one = mock_embed_one
-
-        # Mock extractor to avoid LLM calls
         from ntrp.memory.models import ExtractedEntity, ExtractionResult
 
         async def mock_extract(text: str):
@@ -63,7 +58,9 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
 
         runtime.memory.extractor.extract = mock_extract
 
-    # Set global runtime for API endpoints
+    # Mock indexer embedder to prevent real API calls from channel events
+    runtime.indexer.index.embedder.embed_one = _mock_embed_one
+
     import ntrp.server.runtime as runtime_module
 
     runtime_module._runtime = runtime
@@ -98,13 +95,11 @@ async def sample_observation(test_runtime: Runtime) -> int:
     memory = test_runtime.memory
     obs_repo = memory.observations
 
-    # Create a fact first
     result = await memory.remember(
         text="Test fact for observation",
         source_type="test",
     )
 
-    # Create observation
     obs = await obs_repo.create(
         summary="Test observation summary",
         embedding=mock_embedding("test observation"),
@@ -119,7 +114,6 @@ class TestFactCRUD:
     @pytest.mark.asyncio
     async def test_patch_fact_updates_text_and_reextracts(self, test_client: AsyncClient, sample_fact: int):
         """PATCH /facts/{id} should update text, re-extract entities, and recreate links"""
-        # Update fact with new text
         response = await test_client.patch(
             f"/facts/{sample_fact}", json={"text": "Alice is a researcher at Anthropic working on Claude"}
         )
@@ -127,16 +121,13 @@ class TestFactCRUD:
         assert response.status_code == 200
         data = response.json()
 
-        # Verify response structure
         assert "fact" in data
         assert "entity_refs" in data
 
-        # Verify fact was updated
         fact = data["fact"]
         assert fact["id"] == sample_fact
         assert fact["text"] == "Alice is a researcher at Anthropic working on Claude"
 
-        # Verify entity refs were extracted
         entity_refs = data["entity_refs"]
         assert isinstance(entity_refs, list)
         assert all("name" in e and "entity_id" in e for e in entity_refs)
@@ -148,7 +139,6 @@ class TestFactCRUD:
         """PATCH should set consolidated_at=NULL to trigger re-consolidation"""
         await test_client.patch(f"/facts/{sample_fact}", json={"text": "Updated text"})
 
-        # Verify fact is marked unconsolidated
         repo = test_runtime.memory.facts
         fact = await repo.get(sample_fact)
         assert fact.consolidated_at is None
@@ -178,11 +168,9 @@ class TestFactCRUD:
         self, test_client: AsyncClient, sample_fact: int, test_runtime: Runtime
     ):
         """DELETE /facts/{id} should return counts of cascaded deletions"""
-        # Get counts before deletion
         repo = test_runtime.memory.facts
         entity_refs = await repo.get_entity_refs(sample_fact)
 
-        # Delete fact
         response = await test_client.delete(f"/facts/{sample_fact}")
 
         assert response.status_code == 200
@@ -193,31 +181,25 @@ class TestFactCRUD:
         assert "cascaded" in data
         assert data["cascaded"]["entity_refs"] == len(entity_refs)
 
-        # Verify fact is actually deleted
         fact = await repo.get(sample_fact)
         assert fact is None
 
     @pytest.mark.asyncio
     async def test_delete_fact_cascades_to_entity_refs(self, test_client: AsyncClient, test_runtime: Runtime):
         """DELETE should cascade to entity_refs table"""
-        # Create fact
         memory = test_runtime.memory
         result = await memory.remember(text="Bob works at Google", source_type="test")
         fact_id = result.fact.id
 
-        # Manually add more entity refs
         repo = memory.facts
         await repo.add_entity_ref(fact_id, "Additional")
 
         entity_refs_before = await repo.get_entity_refs(fact_id)
-        # Should have entities from mock extractor + manually added
         assert len(entity_refs_before) > 0
 
-        # Delete fact
         response = await test_client.delete(f"/facts/{fact_id}")
         assert response.status_code == 200
 
-        # Verify entity_refs are deleted (cascade)
         entity_refs_after = await repo.get_entity_refs(fact_id)
         assert len(entity_refs_after) == 0
 
@@ -231,15 +213,11 @@ class TestFactCRUD:
     @pytest.mark.asyncio
     async def test_concurrent_fact_updates(self, test_client: AsyncClient, sample_fact: int):
         """Multiple updates should be serialized by _db_lock"""
-        # Fire two updates concurrently
-        import asyncio
-
         responses = await asyncio.gather(
             test_client.patch(f"/facts/{sample_fact}", json={"text": "First update"}),
             test_client.patch(f"/facts/{sample_fact}", json={"text": "Second update"}),
         )
 
-        # Both should succeed (one will win)
         assert all(r.status_code == 200 for r in responses)
 
 
@@ -268,14 +246,11 @@ class TestObservationCRUD:
         self, test_client: AsyncClient, sample_observation: int, test_runtime: Runtime
     ):
         """PATCH should preserve source_fact_ids and evidence_count"""
-        # Get original observation
         obs_repo = test_runtime.memory.observations
         original = await obs_repo.get(sample_observation)
 
-        # Update observation
         await test_client.patch(f"/observations/{sample_observation}", json={"summary": "New summary"})
 
-        # Verify source_fact_ids unchanged
         updated = await obs_repo.get(sample_observation)
         assert updated.source_fact_ids == original.source_fact_ids
         assert updated.evidence_count == original.evidence_count
@@ -303,7 +278,6 @@ class TestObservationCRUD:
         assert data["status"] == "deleted"
         assert data["observation_id"] == sample_observation
 
-        # Verify observation is deleted
         obs_repo = test_runtime.memory.observations
         obs = await obs_repo.get(sample_observation)
         assert obs is None
@@ -324,11 +298,10 @@ class TestMemoryDisabled:
         """All CRUD endpoints should return 503 when memory is disabled"""
         await reset_runtime()
 
-        # Create runtime with memory disabled
         test_config = Config(
             vault_path=tmp_path / "vault",
             openai_api_key="test-key",
-            memory=False,  # Memory disabled
+            memory=False,
             browser=None,
             exa_api_key=None,
         )
@@ -342,7 +315,6 @@ class TestMemoryDisabled:
         runtime_module._runtime = runtime
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            # Test all CRUD endpoints
             responses = await asyncio.gather(
                 client.patch("/facts/1", json={"text": "test"}),
                 client.delete("/facts/1"),
@@ -350,7 +322,6 @@ class TestMemoryDisabled:
                 client.delete("/observations/1"),
             )
 
-            # All should return 503
             assert all(r.status_code == 503 for r in responses)
             assert all("Memory is disabled" in r.json()["detail"] for r in responses)
 
