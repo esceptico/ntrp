@@ -78,6 +78,14 @@ CREATE TABLE IF NOT EXISTS temporal_checkpoints (
     PRIMARY KEY (entity_id, window_end)
 );
 
+CREATE TABLE IF NOT EXISTS dreams (
+    id INTEGER PRIMARY KEY,
+    bridge TEXT NOT NULL,
+    insight TEXT NOT NULL,
+    source_fact_ids TEXT DEFAULT '[]',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
     text,
     content='facts',
@@ -110,6 +118,7 @@ class GraphDatabase:
         await self.conn.commit()
 
     async def clear_all(self) -> None:
+        await self.conn.execute("DELETE FROM dreams")
         await self.conn.execute("DELETE FROM temporal_checkpoints")
         await self.conn.execute("DELETE FROM observations_vec")
         await self.conn.execute("DELETE FROM observations")

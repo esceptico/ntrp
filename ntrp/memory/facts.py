@@ -22,11 +22,13 @@ from ntrp.core.events import ConsolidationCompleted
 from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.logging import get_logger
 from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decisions
+from ntrp.memory.dreams import run_dream_pass
 from ntrp.memory.temporal import temporal_consolidation_pass
 from ntrp.memory.events import FactCreated, FactDeleted
 from ntrp.memory.extraction import Extractor
 from ntrp.memory.models import ExtractionResult, Fact, FactContext
 from ntrp.memory.store.base import GraphDatabase
+from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
 from ntrp.memory.store.retrieval import retrieve_with_observations
@@ -54,6 +56,7 @@ class FactMemory:
         self.db = GraphDatabase(conn, embedding.dim)
         self.facts = FactRepository(conn)
         self.observations = ObservationRepository(conn)
+        self.dreams = DreamRepository(conn)
         self.embedder = embedder or Embedder(embedding)
         self.extractor = extractor or Extractor(extraction_model)
         self.extraction_model = extraction_model
@@ -61,6 +64,7 @@ class FactMemory:
         self._consolidation_task: asyncio.Task | None = None
         self._db_lock = asyncio.Lock()
         self._last_temporal_pass: datetime | None = None
+        self._last_dream_pass: datetime | None = None
 
     @asynccontextmanager
     async def transaction(self) -> AsyncGenerator[None]:
@@ -103,6 +107,7 @@ class FactMemory:
                 if count > 0:
                     backoff = interval
                 await self._maybe_run_temporal_pass()
+                await self._maybe_run_dream_pass()
             except asyncio.CancelledError:
                 raise
             except Exception as e:
@@ -160,6 +165,24 @@ class FactMemory:
             self._last_temporal_pass = now
         except Exception as e:
             _logger.warning("Temporal consolidation pass failed: %s", e)
+
+    async def _maybe_run_dream_pass(self) -> None:
+        now = datetime.now()
+        if self._last_dream_pass and (now - self._last_dream_pass) < timedelta(days=1):
+            return
+
+        try:
+            async with self.transaction():
+                created = await run_dream_pass(
+                    self.facts,
+                    self.dreams,
+                    self.extraction_model,
+                )
+            if created > 0:
+                _logger.info("Dream pass created %d dreams", created)
+            self._last_dream_pass = now
+        except Exception as e:
+            _logger.warning("Dream pass failed: %s", e)
 
     async def close(self) -> None:
         if self._consolidation_task:

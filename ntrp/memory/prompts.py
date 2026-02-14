@@ -97,6 +97,41 @@ Return your actions as a JSON object with an "actions" array:
   {{"action": "skip", "reason": "ephemeral/no durable knowledge"}}
 ]}}"""
 
+DREAM_PROMPT = """Two clusters of facts from different life domains of the same person:
+
+DOMAIN A:
+  Core: "{core_a}"
+  Supporting:
+{supporters_a}
+
+DOMAIN B:
+  Core: "{core_b}"
+  Supporting:
+{supporters_b}
+
+Find the deepest structural pattern, hidden dependency, or ironic contradiction connecting these domains.
+
+Reply ONLY with valid JSON:
+{{"bridge": "<2-4 word abstract concept>", "insight": "<one vivid, specific sentence — should feel like a genuine insight, not a fortune cookie>"}}
+
+If no genuine insight exists, reply: {{"bridge": null, "insight": null}}"""
+
+DREAM_EVALUATOR_PROMPT = """You are a strict quality filter for a dream/insight generation system. Below are {n} candidate dreams generated from cross-domain fact pairs about one person.
+
+Your job: pick ONLY the 1-3 dreams that would genuinely surprise or provoke thought in the person. Reject anything that is:
+- Generic (could apply to anyone: "balances work and health")
+- Obvious (just restating what the facts say)
+- Forced (the connection is a stretch)
+- Fortune-cookie wisdom ("the real journey is within")
+
+CANDIDATES:
+{candidates}
+
+Reply ONLY with valid JSON:
+{{"selected": [<list of dream indices (0-based) that pass quality filter>], "reasoning": "<1 sentence on why these stood out>"}}
+
+If NONE are good enough: {{"selected": [], "reasoning": "..."}}"""
+
 TEMPORAL_PATTERN_PROMPT = """You are a temporal pattern detector for a memory system. Given chronological facts about an entity, identify temporal patterns that no single fact captures.
 
 ## WHAT TO LOOK FOR

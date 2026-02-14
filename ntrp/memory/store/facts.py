@@ -412,3 +412,9 @@ class FactRepository:
         await self.conn.execute(
             _SQL_INSERT_TEMPORAL_CHECKPOINT, (entity_id, window_end, now.isoformat())
         )
+
+    async def list_all_with_embeddings(self) -> list[Fact]:
+        rows = await self.conn.execute_fetchall(
+            "SELECT * FROM facts WHERE embedding IS NOT NULL ORDER BY created_at DESC"
+        )
+        return [Fact.model_validate(_row_dict(r)) for r in rows]

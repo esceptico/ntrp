@@ -140,6 +140,68 @@ async def get_observation_details(observation_id: int):
     }
 
 
+@router.get("/dreams")
+async def get_dreams(limit: int = 50):
+    runtime = _require_memory()
+    dream_repo = runtime.memory.dreams
+
+    dreams = await dream_repo.list_recent(limit=limit)
+
+    return {
+        "dreams": [
+            {
+                "id": d.id,
+                "bridge": d.bridge,
+                "insight": d.insight,
+                "created_at": d.created_at.isoformat(),
+            }
+            for d in dreams
+        ],
+    }
+
+
+@router.get("/dreams/{dream_id}")
+async def get_dream_details(dream_id: int):
+    runtime = _require_memory()
+    dream_repo = runtime.memory.dreams
+    fact_repo = runtime.memory.facts
+
+    dream = await dream_repo.get(dream_id)
+    if not dream:
+        raise HTTPException(status_code=404, detail="Dream not found")
+
+    source_facts = []
+    for fid in dream.source_fact_ids:
+        fact = await fact_repo.get(fid)
+        if fact:
+            source_facts.append({"id": fact.id, "text": fact.text})
+
+    return {
+        "dream": {
+            "id": dream.id,
+            "bridge": dream.bridge,
+            "insight": dream.insight,
+            "created_at": dream.created_at.isoformat(),
+        },
+        "source_facts": source_facts,
+    }
+
+
+@router.delete("/dreams/{dream_id}")
+async def delete_dream(dream_id: int):
+    runtime = _require_memory()
+    dream_repo = runtime.memory.dreams
+
+    dream = await dream_repo.get(dream_id)
+    if not dream:
+        raise HTTPException(status_code=404, detail="Dream not found")
+
+    async with runtime.memory.transaction():
+        await dream_repo.delete(dream_id)
+
+    return {"status": "deleted", "dream_id": dream_id}
+
+
 @router.get("/stats")
 async def get_stats():
     runtime = _require_memory()

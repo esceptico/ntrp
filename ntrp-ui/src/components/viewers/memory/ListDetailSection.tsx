@@ -78,7 +78,13 @@ export function ListDetailSection<T>({
     </box>
   );
 
+  const main = (
+    <box flexDirection="column" marginTop={2}>
+      {details}
+    </box>
+  );
+
   return (
-    <SplitView sidebarWidth={listWidth} sidebar={sidebar} main={details} width={width} height={height} />
+    <SplitView sidebarWidth={listWidth} sidebar={sidebar} main={main} width={width} height={height} />
   );
 }

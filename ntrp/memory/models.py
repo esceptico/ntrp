@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -137,6 +138,28 @@ class Entity(_FrozenModel):
     @classmethod
     def _parse_dt(cls, v: Any) -> datetime | None:
         return _parse_datetime(v)
+
+
+class Dream(_FrozenModel):
+    id: int
+    bridge: str
+    insight: str
+    source_fact_ids: list[int]
+    created_at: datetime
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _parse_dt(cls, v: Any) -> datetime | None:
+        return _parse_datetime(v)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_source_fact_ids(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            raw = data.get("source_fact_ids")
+            if isinstance(raw, str):
+                data["source_fact_ids"] = json.loads(raw)
+        return data
 
 
 class FactContext(_FrozenModel):

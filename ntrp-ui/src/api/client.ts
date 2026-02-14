@@ -419,6 +419,32 @@ export async function testNotifier(config: Config, name: string): Promise<{ stat
   return api.post<{ status: string }>(`${config.serverUrl}/notifiers/configs/${name}/test`);
 }
 
+export interface Dream {
+  id: number;
+  bridge: string;
+  insight: string;
+  created_at: string;
+}
+
+export interface DreamDetails {
+  dream: Dream;
+  source_facts: Array<{ id: number; text: string }>;
+}
+
+export async function getDreams(config: Config, limit = 50): Promise<{
+  dreams: Dream[];
+}> {
+  return api.get<{ dreams: Dream[] }>(`${config.serverUrl}/dreams?limit=${limit}`);
+}
+
+export async function getDreamDetails(config: Config, dreamId: number): Promise<DreamDetails> {
+  return api.get<DreamDetails>(`${config.serverUrl}/dreams/${dreamId}`);
+}
+
+export async function deleteDream(config: Config, dreamId: number): Promise<{ status: string }> {
+  return api.delete<{ status: string }>(`${config.serverUrl}/dreams/${dreamId}`);
+}
+
 export async function updateFact(
   config: Config,
   factId: number,

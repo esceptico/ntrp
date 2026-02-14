@@ -3,21 +3,26 @@ import type { Config } from "../../../types.js";
 import { useKeypress, useTextInput, type Key } from "../../../hooks/index.js";
 import { useFactsTab } from "../../../hooks/useFactsTab.js";
 import { useObservationsTab } from "../../../hooks/useObservationsTab.js";
+import { useDreamsTab } from "../../../hooks/useDreamsTab.js";
 import {
   getFacts,
   getObservations,
+  getDreams,
   updateFact,
   deleteFact,
   updateObservation,
   deleteObservation,
+  deleteDream,
   type Fact,
   type Observation,
+  type Dream,
 } from "../../../api/client.js";
 import { Dialog, Loading, Tabs, colors, Hints } from "../../ui/index.js";
 import { FactsSection } from "./FactsSection.js";
 import { ObservationsSection } from "./ObservationsSection.js";
+import { DreamsSection } from "./DreamsSection.js";
 
-const TABS = ["facts", "observations"] as const;
+const TABS = ["facts", "observations", "dreams"] as const;
 type TabType = (typeof TABS)[number];
 
 interface MemoryViewerProps {
@@ -31,12 +36,14 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const [error, setError] = useState<string | null>(null);
   const [facts, setFacts] = useState<Fact[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
+  const [dreams, setDreams] = useState<Dream[]>([]);
   const [saving, setSaving] = useState(false);
 
   const loadedRef = useRef(false);
 
   const factsTab = useFactsTab(config, facts, 80);
   const obsTab = useObservationsTab(config, observations, 80);
+  const dreamsTab = useDreamsTab(config, dreams, 80);
 
   const factsTextInput = useTextInput({
     text: factsTab.editText,
@@ -59,12 +66,14 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     (async () => {
       setLoading(true);
       try {
-        const [factsData, obsData] = await Promise.all([
+        const [factsData, obsData, dreamsData] = await Promise.all([
           getFacts(config, 200),
           getObservations(config, 100),
+          getDreams(config, 50),
         ]);
         setFacts(factsData.facts || []);
         setObservations(obsData.observations || []);
+        setDreams(dreamsData.dreams || []);
       } catch (e) {
         setError(`Failed to load: ${e}`);
       } finally {
@@ -78,12 +87,14 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     setLoading(true);
     (async () => {
       try {
-        const [factsData, obsData] = await Promise.all([
+        const [factsData, obsData, dreamsData] = await Promise.all([
           getFacts(config, 200),
           getObservations(config, 100),
+          getDreams(config, 50),
         ]);
         setFacts(factsData.facts || []);
         setObservations(obsData.observations || []);
+        setDreams(dreamsData.dreams || []);
       } catch (e) {
         setError(`Failed to load: ${e}`);
       } finally {
@@ -250,13 +261,47 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
         }
       }
 
+      // Dreams tab — delete only (no edit)
+      if (activeTab === "dreams" && dreamsTab.focusPane === "details" && dreamsTab.dreamDetails) {
+        if (dreamsTab.confirmDelete) {
+          if (key.name === "y") {
+            setSaving(true);
+            deleteDream(config, dreamsTab.dreamDetails.dream.id)
+              .then(() => {
+                setDreams((prev) => prev.filter((d) => d.id !== dreamsTab.dreamDetails?.dream.id));
+                dreamsTab.setConfirmDelete(false);
+                dreamsTab.setFocusPane("list");
+                dreamsTab.resetDetailState();
+              })
+              .catch((e) => setError(`Delete failed: ${e}`))
+              .finally(() => setSaving(false));
+          } else {
+            dreamsTab.setConfirmDelete(false);
+          }
+          return;
+        }
+
+        if (key.name === "d" || key.name === "delete") {
+          dreamsTab.setConfirmDelete(true);
+          return;
+        }
+      }
+
+      if (activeTab === "dreams" && dreamsTab.focusPane === "list" && dreamsTab.filteredDreams.length > 0) {
+        if (key.name === "d" || key.name === "delete") {
+          dreamsTab.setFocusPane("details");
+          dreamsTab.setConfirmDelete(true);
+          return;
+        }
+      }
+
       if (key.name === "1") { setActiveTab("facts"); return; }
       if (key.name === "2") { setActiveTab("observations"); return; }
+      if (key.name === "3") { setActiveTab("dreams"); return; }
       if (key.name === "r") { reload(); return; }
 
       if (key.name === "escape" || key.name === "q") {
-        const tab = activeTab === "facts" ? factsTab : obsTab;
-        // Search mode handles its own escape
+        const tab = activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : dreamsTab;
         if (tab.searchMode) {
           tab.handleKeys(key);
           return;
@@ -275,15 +320,25 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
         return;
       }
 
+      if (activeTab === "dreams") { dreamsTab.handleKeys(key); return; }
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
-    [activeTab, factsTab, obsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setError]
+    [activeTab, factsTab, obsTab, dreamsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setDreams, setError]
   );
 
   useKeypress(handleKeypress, { isActive: true });
 
   const getFooter = (): React.ReactNode => {
+    if (activeTab === "dreams") {
+      if (dreamsTab.confirmDelete) return <Hints items={[["y", "confirm"], ["any", "cancel"]]} />;
+      if (dreamsTab.focusPane === "details") {
+        return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ["enter", "expand"], ["d", "del"]]} />;
+      }
+      if (dreamsTab.searchMode) return <Hints items={[["type", "search"], ["esc", "clear/exit"], ["enter", "done"]]} />;
+      return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["d", "del"], ["o", "sort"]]} />;
+    }
+
     const tab = activeTab === "facts" ? factsTab : obsTab;
 
     if (tab.editMode) return <Hints items={[["^S", "save"], ["esc", "cancel"], ["←→", "cursor"]]} />;
@@ -329,7 +384,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     >
       {({ width, height }) => {
         const sectionHeight = height - 2;
-        const tab = activeTab === "facts" ? factsTab : obsTab;
+        const tab = activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : dreamsTab;
         const sourceDisplay = activeTab === "facts" ? `src: ${factsTab.sourceFilter}` : "";
         const sortDisplay = `sort: ${tab.sortOrder}`;
 
@@ -340,7 +395,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 tabs={TABS}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                labels={{ facts: "Facts", observations: "Observations" }}
+                labels={{ facts: "Facts", observations: "Observations", dreams: "Dreams" }}
               />
               <box flexGrow={1} />
               {sourceDisplay && (
@@ -399,6 +454,25 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 setCursorPos={obsTab.setCursorPos}
                 confirmDelete={obsTab.confirmDelete}
                 saving={saving}
+              />
+            )}
+
+            {activeTab === "dreams" && (
+              <DreamsSection
+                dreams={dreamsTab.filteredDreams}
+                selectedIndex={dreamsTab.selectedIndex}
+                dreamDetails={dreamsTab.dreamDetails}
+                detailsLoading={dreamsTab.detailsLoading}
+                searchQuery={dreamsTab.searchQuery}
+                searchMode={dreamsTab.searchMode}
+                focusPane={dreamsTab.focusPane}
+                height={sectionHeight}
+                width={width}
+                detailSection={dreamsTab.detailSection}
+                textExpanded={dreamsTab.textExpanded}
+                textScrollOffset={dreamsTab.textScrollOffset}
+                factsIndex={dreamsTab.factsIndex}
+                confirmDelete={dreamsTab.confirmDelete}
               />
             )}
 
