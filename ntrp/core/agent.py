@@ -169,17 +169,18 @@ class Agent:
 
             results: dict[str, str] = {}
 
-            async for event in runner.execute_all(calls):
-                if isinstance(event, ToolResultEvent):
-                    results[event.tool_id] = event.result
-                yield event
+            try:
+                async for event in runner.execute_all(calls):
+                    if isinstance(event, ToolResultEvent):
+                        results[event.tool_id] = event.result
+                    yield event
 
-            if self._is_cancelled():
-                await self._set_state(AgentState.IDLE)
-                yield "Cancelled."
-                return
-
-            self._append_tool_results(message.tool_calls, results)
+                if self._is_cancelled():
+                    await self._set_state(AgentState.IDLE)
+                    yield "Cancelled."
+                    return
+            finally:
+                self._append_tool_results(message.tool_calls, results)
 
         await self._set_state(AgentState.IDLE)
         yield f"Stopped: reached max iterations ({AGENT_MAX_ITERATIONS})."

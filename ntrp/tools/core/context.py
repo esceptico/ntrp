@@ -97,7 +97,10 @@ class ToolExecution:
             )
         )
 
-        response = await asyncio.wait_for(self.ctx.approval_queue.get(), timeout=300)
+        try:
+            response = await asyncio.wait_for(self.ctx.approval_queue.get(), timeout=300)
+        except TimeoutError:
+            return Rejection(feedback="Approval timed out")
 
         if not response["approved"]:
             feedback = response.get("result", "").strip() or None
