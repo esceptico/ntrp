@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRenderer } from "@opentui/react";
+import type { Selection } from "@opentui/core";
 import type { Message, Config } from "./types.js";
 import { defaultConfig } from "./types.js";
 import { colors } from "./components/ui/colors.js";
@@ -109,6 +110,26 @@ function AppContent({
     cancel,
     setStatus,
   } = streaming;
+
+  const [copiedFlash, setCopiedFlash] = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const onSelection = (selection: Selection) => {
+      const text = selection.getSelectedText();
+      if (text) {
+        renderer.copyToClipboardOSC52(text);
+        if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+        setCopiedFlash(true);
+        copiedTimerRef.current = setTimeout(() => setCopiedFlash(false), 1500);
+      }
+    };
+    renderer.on("selection", onSelection);
+    return () => {
+      renderer.off("selection", onSelection);
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    };
+  }, [renderer]);
 
   const isInChatMode = viewMode === "chat" && !showSettings;
 
@@ -255,7 +276,7 @@ function AppContent({
           )}
         </scrollbox>
 
-        {/* Connection status — pinned above input */}
+        {/* Status — pinned above input */}
         {!serverConnected && (
           <box flexShrink={0}>
             <text><span fg={colors.status.error}>{BULLET} Server not connected. Run: ntrp serve</span></text>
@@ -275,6 +296,7 @@ function AppContent({
             skipApprovals={skipApprovals}
             chatModel={serverConfig?.chat_model}
             indexStatus={indexStatus}
+            copiedFlash={copiedFlash}
           />
         </box>
       </DimensionsProvider>

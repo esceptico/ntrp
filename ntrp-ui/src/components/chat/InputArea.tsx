@@ -25,6 +25,7 @@ interface InputAreaProps {
   skipApprovals?: boolean;
   chatModel?: string;
   indexStatus?: { indexing: boolean; progress: { total: number; done: number } } | null;
+  copiedFlash?: boolean;
 }
 
 export const InputArea = memo(function InputArea({
@@ -38,6 +39,7 @@ export const InputArea = memo(function InputArea({
   skipApprovals = false,
   chatModel,
   indexStatus = null,
+  copiedFlash = false,
 }: InputAreaProps) {
   const { accentValue } = useAccentColor();
 
@@ -277,7 +279,9 @@ export const InputArea = memo(function InputArea({
                     {"  "}
                   </>
                 ) : null}
-                {escHint ? (
+                {copiedFlash ? (
+                  <span fg={colors.text.muted}>Copied to clipboard</span>
+                ) : escHint ? (
                   <span fg={accentValue}>esc again to clear</span>
                 ) : null}
               </text>
