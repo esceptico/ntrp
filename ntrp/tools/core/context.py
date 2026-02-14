@@ -29,9 +29,7 @@ class Rejection:
     def to_result(self) -> "ToolResult":
         from ntrp.tools.core.base import ToolResult
 
-        content = (
-            f"User rejected this action and said: {self.feedback}" if self.feedback else "User rejected this action"
-        )
+        content = f"User rejected this action and said: {self.feedback}" if self.feedback else "User rejected this action"
         return ToolResult(content=content, preview="Rejected")
 
 
