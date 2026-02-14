@@ -80,10 +80,8 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
 
   index: async ({ config, addMessage, refreshIndexStatus }) => {
     try {
-      addMessage({ role: "status", content: "Starting indexing..." });
       await startIndexing(config);
       await refreshIndexStatus();
-      addMessage({ role: "status", content: "Indexing started. Progress shown in footer." });
     } catch (error) {
       addMessage({ role: "error", content: `Failed to start indexing: ${error}` });
     }
