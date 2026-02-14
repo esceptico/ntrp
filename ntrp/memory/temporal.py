@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from ntrp.constants import CONSOLIDATION_TEMPERATURE
+from ntrp.constants import CONSOLIDATION_TEMPERATURE, OBSERVATION_MERGE_SIMILARITY_THRESHOLD
 from ntrp.llm import acompletion
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding
@@ -73,6 +73,19 @@ async def temporal_consolidation_pass(
         for action in actions:
             if action.action == "create" and action.text:
                 embedding = await embed_fn(action.text)
+
+                # Check if a very similar observation already exists
+                similar = await obs_repo.search_vector(embedding, limit=1)
+                if similar and similar[0][1] >= OBSERVATION_MERGE_SIMILARITY_THRESHOLD:
+                    existing_obs, sim = similar[0]
+                    if action.source_fact_ids:
+                        await obs_repo.add_source_facts(existing_obs.id, action.source_fact_ids)
+                    _logger.info(
+                        "Temporal: skipped duplicate for %s (sim=%.2f with obs %d)",
+                        entity_name, sim, existing_obs.id,
+                    )
+                    continue
+
                 source_fact_id = action.source_fact_ids[0] if action.source_fact_ids else None
                 obs = await obs_repo.create(
                     summary=action.text,

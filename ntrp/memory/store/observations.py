@@ -8,6 +8,7 @@ from ntrp.database import serialize_embedding
 from ntrp.memory.models import Embedding, HistoryEntry, Observation
 
 _SQL_GET_OBSERVATION = "SELECT * FROM observations WHERE id = ?"
+_SQL_LIST_ALL_WITH_EMBEDDINGS = "SELECT * FROM observations WHERE embedding IS NOT NULL"
 _SQL_COUNT_OBSERVATIONS = "SELECT COUNT(*) FROM observations"
 _SQL_LIST_RECENT_OBSERVATIONS = "SELECT * FROM observations ORDER BY updated_at DESC LIMIT ?"
 _SQL_GET_OBSERVATIONS_BY_IDS = "SELECT * FROM observations WHERE id IN ({placeholders})"
@@ -191,6 +192,84 @@ class ObservationRepository:
         raw = rows[0]["source_fact_ids"]
         return json.loads(raw) if raw else []
 
+    async def list_all_with_embeddings(self) -> list[Observation]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_ALL_WITH_EMBEDDINGS)
+        return [Observation.model_validate(_row_dict(r)) for r in rows]
+
+    async def delete(self, observation_id: int) -> None:
+        await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (observation_id,))
+        await self.conn.execute("DELETE FROM observations WHERE id = ?", (observation_id,))
+
+    async def merge(
+        self,
+        keeper_id: int,
+        removed_id: int,
+        merged_text: str,
+        embedding: "Embedding",
+        reason: str = "",
+    ) -> Observation | None:
+        keeper = await self.get(keeper_id)
+        removed = await self.get(removed_id)
+        if not keeper or not removed:
+            return None
+
+        now = datetime.now(UTC)
+
+        # Merge source fact IDs
+        merged_fids = keeper.source_fact_ids.copy()
+        for fid in removed.source_fact_ids:
+            if fid not in merged_fids:
+                merged_fids.append(fid)
+
+        # History entry for the merge
+        history = list(keeper.history)
+        history.append(
+            HistoryEntry(
+                previous_text=keeper.summary,
+                changed_at=now,
+                reason=reason or f"merged with observation {removed_id}",
+                source_fact_id=removed.source_fact_ids[0] if removed.source_fact_ids else 0,
+                absorbed_text=removed.summary,
+            )
+        )
+
+        evidence_count = len(merged_fids)
+        embedding_bytes = serialize_embedding(embedding)
+
+        await self.conn.execute(
+            _SQL_UPDATE_OBSERVATION,
+            (
+                merged_text,
+                embedding_bytes,
+                evidence_count,
+                json.dumps(merged_fids),
+                json.dumps([_history_to_dict(h) for h in history]),
+                now.isoformat(),
+                keeper_id,
+            ),
+        )
+
+        # Update vec table
+        if embedding_bytes is not None:
+            await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (keeper_id,))
+            await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (keeper_id, embedding_bytes))
+
+        # Delete the removed observation
+        await self.delete(removed_id)
+
+        return Observation(
+            id=keeper_id,
+            summary=merged_text,
+            embedding=embedding,
+            evidence_count=evidence_count,
+            source_fact_ids=merged_fids,
+            history=history,
+            created_at=keeper.created_at,
+            updated_at=now,
+            last_accessed_at=keeper.last_accessed_at,
+            access_count=keeper.access_count,
+        )
+
     async def list_recent(self, limit: int = 100) -> list[Observation]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_RECENT_OBSERVATIONS, (limit,))
         return [Observation.model_validate(_row_dict(r)) for r in rows]
@@ -223,9 +302,12 @@ class ObservationRepository:
 
 
 def _history_to_dict(h: HistoryEntry) -> dict:
-    return {
+    d = {
         "previous_text": h.previous_text,
         "changed_at": h.changed_at.isoformat(),
         "reason": h.reason,
         "source_fact_id": h.source_fact_id,
     }
+    if h.absorbed_text is not None:
+        d["absorbed_text"] = h.absorbed_text
+    return d

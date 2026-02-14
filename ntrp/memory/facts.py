@@ -23,6 +23,7 @@ from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.logging import get_logger
 from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decisions
 from ntrp.memory.dreams import run_dream_pass
+from ntrp.memory.observation_merge import observation_merge_pass
 from ntrp.memory.temporal import temporal_consolidation_pass
 from ntrp.memory.events import FactCreated, FactDeleted
 from ntrp.memory.extraction import Extractor
@@ -65,6 +66,7 @@ class FactMemory:
         self._db_lock = asyncio.Lock()
         self._last_temporal_pass: datetime | None = None
         self._last_dream_pass: datetime | None = None
+        self._last_merge_pass: datetime | None = None
 
     @asynccontextmanager
     async def transaction(self) -> AsyncGenerator[None]:
@@ -107,6 +109,7 @@ class FactMemory:
                 if count > 0:
                     backoff = interval
                 await self._maybe_run_temporal_pass()
+                await self._maybe_run_observation_merge()
                 await self._maybe_run_dream_pass()
             except asyncio.CancelledError:
                 raise
@@ -165,6 +168,24 @@ class FactMemory:
             self._last_temporal_pass = now
         except Exception as e:
             _logger.warning("Temporal consolidation pass failed: %s", e)
+
+    async def _maybe_run_observation_merge(self) -> None:
+        now = datetime.now()
+        if self._last_merge_pass and (now - self._last_merge_pass) < timedelta(days=1):
+            return
+
+        try:
+            async with self.transaction():
+                merged = await observation_merge_pass(
+                    self.observations,
+                    self.extraction_model,
+                    self.embedder.embed_one,
+                )
+            if merged > 0:
+                _logger.info("Observation merge pass: %d merges", merged)
+            self._last_merge_pass = now
+        except Exception as e:
+            _logger.warning("Observation merge pass failed: %s", e)
 
     async def _maybe_run_dream_pass(self) -> None:
         now = datetime.now()

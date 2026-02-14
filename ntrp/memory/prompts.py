@@ -132,6 +132,20 @@ Reply ONLY with valid JSON:
 
 If NONE are good enough: {{"selected": [], "reasoning": "..."}}"""
 
+OBSERVATION_MERGE_PROMPT = """You are merging two similar observations from a memory system into one.
+
+OBSERVATION A (id={id_a}, {evidence_a} supporting facts):
+{text_a}
+
+OBSERVATION B (id={id_b}, {evidence_b} supporting facts):
+{text_b}
+
+Rules:
+- If these describe the SAME topic: merge into ONE observation that preserves all specific details, dates, and context from both. Don't lose information.
+- If these are RELATED but genuinely DISTINCT topics: skip.
+- The merged observation should be at least as specific as the more detailed of the two.
+- Keep it concise — one clear statement, not a paragraph."""
+
 TEMPORAL_PATTERN_PROMPT = """You are a temporal pattern detector for a memory system. Given chronological facts about an entity, identify temporal patterns that no single fact captures.
 
 ## WHAT TO LOOK FOR

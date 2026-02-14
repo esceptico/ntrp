@@ -38,6 +38,7 @@ class HistoryEntry(_FrozenModel):
     changed_at: datetime
     reason: str
     source_fact_id: int
+    absorbed_text: str | None = None
 
     @field_validator("changed_at", mode="before")
     @classmethod
