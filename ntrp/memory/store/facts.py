@@ -418,3 +418,9 @@ class FactRepository:
             "SELECT * FROM facts WHERE embedding IS NOT NULL ORDER BY created_at DESC"
         )
         return [Fact.model_validate(_row_dict(r)) for r in rows]
+
+    async def update_embedding(self, fact_id: int, embedding: Embedding) -> None:
+        embedding_bytes = serialize_embedding(embedding)
+        await self.conn.execute("UPDATE facts SET embedding = ? WHERE id = ?", (embedding_bytes, fact_id))
+        await self.conn.execute(_SQL_DELETE_FACT_VEC, (fact_id,))
+        await self.conn.execute(_SQL_INSERT_FACT_VEC, (fact_id, embedding_bytes))

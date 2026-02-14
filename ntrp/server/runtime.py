@@ -243,7 +243,11 @@ class Runtime:
         self.indexer.start(sources)
 
     async def get_index_status(self) -> dict:
-        return await self.indexer.get_status()
+        status = await self.indexer.get_status()
+        if self.memory:
+            status["reembedding"] = self.memory.reembed_running
+            status["reembed_progress"] = self.memory._reembed_progress
+        return status
 
     async def _on_fact_created(self, event: FactCreated) -> None:
         await self.indexer.index.upsert(

@@ -269,6 +269,8 @@ interface IndexStatus {
     updated?: number;
     deleted?: number;
   };
+  reembedding?: boolean;
+  reembed_progress?: { total: number; done: number } | null;
   error?: string;
   stats: Record<string, number>;
 }

@@ -63,6 +63,8 @@ class FactMemory:
         self.extraction_model = extraction_model
         self.channel = channel
         self._consolidation_task: asyncio.Task | None = None
+        self._reembed_task: asyncio.Task | None = None
+        self._reembed_progress: dict | None = None
         self._db_lock = asyncio.Lock()
         self._last_temporal_pass: datetime | None = None
         self._last_dream_pass: datetime | None = None
@@ -93,6 +95,9 @@ class FactMemory:
         conn = await database.connect(db_path, vec=True)
         instance = cls(conn, embedding, extraction_model, channel=channel)
         await instance.db.init_schema()
+        if instance.db.dim_changed:
+            _logger.info("Embedding dimension changed — starting background re-embed")
+            instance.start_reembed(embedding)
         return instance
 
     def start_consolidation(self, interval: float = CONSOLIDATION_INTERVAL) -> None:
@@ -205,14 +210,58 @@ class FactMemory:
         except Exception as e:
             _logger.warning("Dream pass failed: %s", e)
 
+    @property
+    def reembed_running(self) -> bool:
+        return self._reembed_task is not None and not self._reembed_task.done()
+
+    def start_reembed(self, embedding: EmbeddingConfig) -> None:
+        if self._reembed_task and not self._reembed_task.done():
+            self._reembed_task.cancel()
+        self._reembed_task = asyncio.create_task(self._run_reembed(embedding))
+
+    async def _run_reembed(self, embedding: EmbeddingConfig) -> None:
+        try:
+            new_embedder = Embedder(embedding)
+            await self.db.rebuild_vec_tables(embedding.dim)
+
+            facts = await self.facts.list_all_with_embeddings()
+            observations = await self.observations.list_all_with_embeddings()
+            total = len(facts) + len(observations)
+            self._reembed_progress = {"total": total, "done": 0}
+
+            done = 0
+            for fact in facts:
+                new_emb = await new_embedder.embed_one(fact.text)
+                await self.facts.update_embedding(fact.id, new_emb)
+                done += 1
+                self._reembed_progress["done"] = done
+
+            for obs in observations:
+                new_emb = await new_embedder.embed_one(obs.summary)
+                await self.observations.update_embedding(obs.id, new_emb)
+                done += 1
+                self._reembed_progress["done"] = done
+
+            await self.db.conn.commit()
+            self.embedder = new_embedder
+            _logger.info("Re-embedded %d memory vectors", total)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            _logger.warning("Memory re-embed failed", exc_info=True)
+        finally:
+            self._reembed_progress = None
+
     async def close(self) -> None:
-        if self._consolidation_task:
-            self._consolidation_task.cancel()
-            try:
-                await self._consolidation_task
-            except asyncio.CancelledError:
-                pass
-            self._consolidation_task = None
+        for task in (self._consolidation_task, self._reembed_task):
+            if task:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        self._consolidation_task = None
+        self._reembed_task = None
         await self.db.conn.close()
 
     async def remember(

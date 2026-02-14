@@ -39,6 +39,7 @@ interface SettingsDialogProps {
   onUpdate: (category: keyof Settings, key: string, value: unknown) => void;
   onModelChange: (type: "chat" | "explore" | "memory", model: string) => void;
   onServerConfigChange: (config: ServerConfig) => void;
+  onRefreshIndexStatus: () => Promise<void>;
   onClose: () => void;
 }
 
@@ -49,6 +50,7 @@ export function SettingsDialog({
   onUpdate,
   onModelChange,
   onServerConfigChange,
+  onRefreshIndexStatus,
   onClose,
 }: SettingsDialogProps) {
   const accent = useAccent(settings.ui.accentColor);
@@ -375,13 +377,15 @@ export function SettingsDialog({
         setEmbeddingModel(pendingEmbeddingModel);
         const updatedConfig = await getServerConfig(config);
         onServerConfigChange(updatedConfig);
+        await onRefreshIndexStatus();
+        onClose();
       }
     } catch {
     } finally {
       setPendingEmbeddingModel(null);
       setActionInProgress(null);
     }
-  }, [config, pendingEmbeddingModel, actionInProgress, onServerConfigChange]);
+  }, [config, pendingEmbeddingModel, actionInProgress, onServerConfigChange, onRefreshIndexStatus, onClose]);
 
   const handleEmbeddingKeypress = useCallback(
     (key: Key) => {

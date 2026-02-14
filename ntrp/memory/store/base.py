@@ -1,5 +1,9 @@
 import aiosqlite
 
+from ntrp.logging import get_logger
+
+_logger = get_logger(__name__)
+
 SCHEMA = """
 -- Observations (consolidated patterns from facts)
 CREATE TABLE IF NOT EXISTS observations (
@@ -111,10 +115,27 @@ class GraphDatabase:
     def __init__(self, conn: aiosqlite.Connection, embedding_dim: int):
         self.conn = conn
         self.embedding_dim = embedding_dim
+        self.dim_changed = False
 
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
+        await self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
+        )
+
+        stored_dim = await self._get_meta("embedding_dim")
+        if stored_dim is not None and int(stored_dim) != self.embedding_dim:
+            _logger.info(
+                "Memory embedding dimension changed (%s → %d), rebuilding vec tables",
+                stored_dim,
+                self.embedding_dim,
+            )
+            await self.conn.execute("DROP TABLE IF EXISTS observations_vec")
+            await self.conn.execute("DROP TABLE IF EXISTS facts_vec")
+            self.dim_changed = True
+
         await self._init_vec_tables()
+        await self._set_meta("embedding_dim", str(self.embedding_dim))
         await self.conn.commit()
 
     async def clear_all(self) -> None:
@@ -142,3 +163,21 @@ class GraphDatabase:
                 embedding float[{dim}] distance_metric=cosine
             );
         """)
+
+    async def _get_meta(self, key: str) -> str | None:
+        try:
+            rows = await self.conn.execute_fetchall("SELECT value FROM meta WHERE key = ?", (key,))
+            return rows[0][0] if rows else None
+        except Exception:
+            return None
+
+    async def _set_meta(self, key: str, value: str) -> None:
+        await self.conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
+
+    async def rebuild_vec_tables(self, new_dim: int) -> None:
+        self.embedding_dim = new_dim
+        await self.conn.execute("DROP TABLE IF EXISTS observations_vec")
+        await self.conn.execute("DROP TABLE IF EXISTS facts_vec")
+        await self._init_vec_tables()
+        await self._set_meta("embedding_dim", str(new_dim))
+        await self.conn.commit()

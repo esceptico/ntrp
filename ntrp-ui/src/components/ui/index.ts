@@ -8,7 +8,7 @@ export { SplitView } from "./layout/index.js";
 
 export { ScrollableList, BaseSelectionList, type RenderItemContext } from "./list/index.js";
 
-export { Loading, BraillePendulum, BrailleCompress, CyclingStatus } from "./spinners/index.js";
+export { Loading, BraillePendulum, BrailleCompress, BrailleSort, CyclingStatus } from "./spinners/index.js";
 
 export { Tabs } from "./Tabs.js";
 export { SelectionIndicator } from "./SelectionIndicator.js";

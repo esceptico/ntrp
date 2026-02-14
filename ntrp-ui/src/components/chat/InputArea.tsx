@@ -5,7 +5,7 @@ import { Status, type Status as StatusType } from "../../lib/constants.js";
 import { colors } from "../ui/colors.js";
 import { useAccentColor } from "../../hooks/index.js";
 import { EmptyBorder } from "../ui/border.js";
-import { BraillePendulum, BrailleCompress, CyclingStatus } from "../ui/spinners/index.js";
+import { BraillePendulum, BrailleCompress, BrailleSort, CyclingStatus } from "../ui/spinners/index.js";
 import { AutocompleteList } from "./AutocompleteList.js";
 
 function formatModel(model?: string): string {
@@ -24,7 +24,7 @@ interface InputAreaProps {
   queueCount?: number;
   skipApprovals?: boolean;
   chatModel?: string;
-  indexStatus?: { indexing: boolean; progress: { total: number; done: number } } | null;
+  indexStatus?: { indexing: boolean; progress: { total: number; done: number }; reembedding?: boolean; reembed_progress?: { total: number; done: number } | null } | null;
   copiedFlash?: boolean;
 }
 
@@ -267,24 +267,21 @@ export const InputArea = memo(function InputArea({
             </>
           ) : (
             <>
-              <text marginLeft={3}>
-                {indexStatus?.indexing ? (
-                  <>
-                    <span fg={accentValue}>
-                      {"\u2588".repeat(Math.max(1, Math.round(3 * indexStatus.progress.done / Math.max(1, indexStatus.progress.total))))}
-                    </span>
-                    <span fg={colors.text.disabled}>
-                      {"\u00B7".repeat(Math.max(0, 3 - Math.round(3 * indexStatus.progress.done / Math.max(1, indexStatus.progress.total))))}
-                    </span>
-                    {"  "}
-                  </>
+              <box flexDirection="row" marginLeft={3}>
+                {indexStatus?.indexing || indexStatus?.reembedding ? (
+                  <box flexDirection="row" gap={1}>
+                    <BrailleSort width={8} color={accentValue} interval={40} />
+                    <text><span fg={colors.text.muted}>{indexStatus.reembedding ? "re-embedding" : "indexing"}</span></text>
+                  </box>
                 ) : null}
-                {copiedFlash ? (
-                  <span fg={colors.text.muted}>Copied to clipboard</span>
-                ) : escHint ? (
-                  <span fg={accentValue}>esc again to clear</span>
-                ) : null}
-              </text>
+                <text>
+                  {copiedFlash ? (
+                    <span fg={colors.text.muted}>Copied to clipboard</span>
+                  ) : escHint ? (
+                    <span fg={accentValue}>esc again to clear</span>
+                  ) : null}
+                </text>
+              </box>
               <box gap={2} flexDirection="row">
                 <text>
                   <span fg={colors.footer}>ctrl+l</span>

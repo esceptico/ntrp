@@ -14,6 +14,8 @@ import { INDEX_STATUS_POLL_MS, INDEX_DONE_HIDE_MS } from "../lib/constants.js";
 interface IndexStatus {
   indexing: boolean;
   progress: { total: number; done: number; status: string };
+  reembedding?: boolean;
+  reembed_progress?: { total: number; done: number } | null;
 }
 
 export function useSession(config: Config) {
@@ -48,7 +50,7 @@ export function useSession(config: Config) {
           setServerConfig(configData);
           setHistory(historyData.messages);
 
-          if (idxStatus?.indexing) {
+          if (idxStatus?.indexing || idxStatus?.reembedding) {
             setIndexStatus(idxStatus);
           }
         }
@@ -62,14 +64,16 @@ export function useSession(config: Config) {
   useEffect(() => {
     if (!serverConnected) return;
 
-    if (indexStatus && !indexStatus.indexing) {
+    const isActive = indexStatus?.indexing || indexStatus?.reembedding;
+
+    if (indexStatus && !isActive) {
       const timeout = setTimeout(() => {
         setIndexStatus(null);
       }, INDEX_DONE_HIDE_MS);
       return () => clearTimeout(timeout);
     }
 
-    if (!indexStatus?.indexing) return;
+    if (!isActive) return;
 
     const interval = setInterval(async () => {
       try {
