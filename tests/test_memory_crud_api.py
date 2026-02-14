@@ -21,8 +21,10 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
 
     # Monkeypatch NTRP_DIR to use temp directory
     import ntrp.config
+    from ntrp.constants import EMBEDDING_MODELS
 
     monkeypatch.setattr(ntrp.config, "NTRP_DIR", tmp_path / "db")
+    monkeypatch.setitem(EMBEDDING_MODELS, "test-embedding", TEST_EMBEDDING_DIM)
 
     # Create test config
     test_config = Config(
@@ -30,7 +32,6 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
         openai_api_key="test-key",  # Required but not used with mock
         memory=True,
         embedding_model="test-embedding",
-        embedding_dim=TEST_EMBEDDING_DIM,
         memory_model="gemini/gemini-3-flash-preview",
         chat_model="gemini/gemini-3-flash-preview",
         browser=None,  # Disable browser to avoid profile issues

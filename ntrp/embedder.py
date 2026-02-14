@@ -10,7 +10,6 @@ from ntrp.constants import EMBEDDING_TEXT_LIMIT
 class EmbeddingConfig:
     model: str
     dim: int
-    prefix: bool = False
 
 
 class Embedder:
@@ -30,10 +29,7 @@ class Embedder:
         if not texts:
             return np.array([])
         truncated = [t[:EMBEDDING_TEXT_LIMIT] for t in texts]
-        kwargs = {"model": self.config.model, "input": truncated}
-        if self.config.prefix:
-            kwargs["dimensions"] = self.config.dim
-        response = await litellm.aembedding(**kwargs)
+        response = await litellm.aembedding(model=self.config.model, input=truncated)
         return self._parse_response(response)
 
     async def embed_one(self, text: str) -> np.ndarray:

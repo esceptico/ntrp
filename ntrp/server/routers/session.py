@@ -268,14 +268,11 @@ async def update_embedding_model(req: UpdateEmbeddingRequest):
         return {"status": "unchanged", "embedding_model": req.embedding_model}
 
     # Update config
-    new_dim = EMBEDDING_MODELS[req.embedding_model]
     runtime.config.embedding_model = req.embedding_model
-    runtime.config.embedding_dim = new_dim
 
     # Persist to user settings
     settings = load_user_settings()
     settings["embedding_model"] = req.embedding_model
-    settings["embedding_dim"] = new_dim
     save_user_settings(settings)
 
     # Rebuild vec table with new dimensions and re-index
@@ -294,7 +291,7 @@ async def update_embedding_model(req: UpdateEmbeddingRequest):
     return {
         "status": "reindexing",
         "embedding_model": req.embedding_model,
-        "embedding_dim": new_dim,
+        "embedding_dim": runtime.config.embedding_dim,
         "warning": warning,
     }
 

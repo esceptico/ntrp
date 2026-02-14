@@ -4,7 +4,7 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from ntrp.constants import EXPLORE_MODEL_DEFAULT, SUPPORTED_MODELS
+from ntrp.constants import EMBEDDING_MODELS, EXPLORE_MODEL_DEFAULT, SUPPORTED_MODELS
 from ntrp.embedder import EmbeddingConfig
 from ntrp.logging import get_logger
 
@@ -50,8 +50,6 @@ class Config(BaseSettings):
     explore_model: str = EXPLORE_MODEL_DEFAULT
     memory_model: str
     embedding_model: str
-    embedding_dim: int = 1536
-    embedding_prefix: bool = False
 
     # Memory (graph-based knowledge store)
     memory: bool = True
@@ -94,11 +92,14 @@ class Config(BaseSettings):
         return v
 
     @property
+    def embedding_dim(self) -> int:
+        return EMBEDDING_MODELS[self.embedding_model]
+
+    @property
     def embedding(self) -> EmbeddingConfig:
         return EmbeddingConfig(
             model=self.embedding_model,
             dim=self.embedding_dim,
-            prefix=self.embedding_prefix,
         )
 
     @property
@@ -119,8 +120,8 @@ class Config(BaseSettings):
 
 
 PERSIST_KEYS = frozenset({
-    "chat_model", "explore_model", "memory_model", "embedding_model", "embedding_dim",
-    "embedding_prefix", "browser", "browser_days", "vault_path",
+    "chat_model", "explore_model", "memory_model", "embedding_model",
+    "browser", "browser_days", "vault_path",
     "memory", "gmail", "gmail_days", "calendar",
 })
 
