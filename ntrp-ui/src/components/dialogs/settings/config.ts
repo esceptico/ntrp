@@ -1,8 +1,9 @@
-export const SECTION_IDS = ["agent", "connections", "skills", "notifiers", "limits"] as const;
+export const SECTION_IDS = ["agent", "directives", "connections", "skills", "notifiers", "limits"] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 
 export const SECTION_LABELS = {
   agent: "Agent",
+  directives: "Directives",
   connections: "Connections",
   skills: "Skills",
   notifiers: "Notifiers",

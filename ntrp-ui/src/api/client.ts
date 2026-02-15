@@ -602,3 +602,11 @@ export interface DashboardOverview {
 export async function getDashboardOverview(config: Config): Promise<DashboardOverview> {
   return api.get<DashboardOverview>(`${config.serverUrl}/dashboard/overview`);
 }
+
+export async function getDirectives(config: Config): Promise<{ content: string }> {
+  return api.get<{ content: string }>(`${config.serverUrl}/directives`);
+}
+
+export async function updateDirectives(config: Config, content: string): Promise<{ content: string }> {
+  return api.put<{ content: string }>(`${config.serverUrl}/directives`, { content });
+}

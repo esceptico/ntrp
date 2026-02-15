@@ -36,6 +36,8 @@ Never just list titles — provide real insights.
 
 **Utility** — explore (deep research), ask_choice (clickable options), bash (shell), write_scratchpad/read_scratchpad/list_scratchpad (your private workspace for internal reasoning — never use scratchpad to "save" content for the user; deliver content directly in your response).
 
+**Directives** — set_directives updates persistent rules injected into your system prompt. When the user tells you how to behave, what to do or avoid, or asks you to change your style/tone — call set_directives. Read current directives first, then write the full updated version.
+
 **Scheduling** — schedule_task (create recurring/one-time agent tasks), list_schedules, cancel_schedule, get_schedule_result (last execution output). Tasks run autonomously at the specified time with full tool access.
 
 ## MEMORY
@@ -110,6 +112,9 @@ BROWSER_TEMPLATE = """**Browser** — {browser_type} history (last {days} days)"
 EMAIL_TEMPLATE = """**Email**{accounts_info} (last {days} days)"""
 
 CALENDAR_TEMPLATE = """**Calendar**{accounts_info}"""
+
+DIRECTIVES_TEMPLATE = """## DIRECTIVES
+{directives}"""
 
 MEMORY_CONTEXT_TEMPLATE = """## MEMORY CONTEXT
 {memory_content}"""
@@ -270,8 +275,12 @@ If a skill has already been loaded in this conversation (you see a `<skill>` tag
 def _static_text(
     source_details: dict[str, dict],
     skills_context: str | None = None,
+    directives: str | None = None,
 ) -> str:
-    parts = [BASE_SYSTEM_PROMPT, _sources(source_details)]
+    parts = [BASE_SYSTEM_PROMPT]
+    if directives:
+        parts.append(DIRECTIVES_TEMPLATE.format(directives=directives))
+    parts.append(_sources(source_details))
     if skills_context:
         parts.append(SKILLS_TEMPLATE.format(skills_xml=skills_context))
     return "\n\n".join(s for s in parts if s)
@@ -287,6 +296,7 @@ def build_system_blocks(
     last_activity: datetime | None = None,
     memory_context: str | None = None,
     skills_context: str | None = None,
+    directives: str | None = None,
     use_cache_control: bool = False,
 ) -> list[dict]:
     """Build system prompt as a list of content blocks.
@@ -295,7 +305,7 @@ def build_system_blocks(
     to stable blocks for prompt caching. Other providers ignore this or
     break on it (Gemini), so it must be opt-in.
     """
-    static = _static_text(source_details, skills_context)
+    static = _static_text(source_details, skills_context, directives)
 
     static_block: dict = {"type": "text", "text": static}
     if use_cache_control:
@@ -324,9 +334,10 @@ def build_system_prompt(
     last_activity: datetime | None = None,
     memory_context: str | None = None,
     skills_context: str | None = None,
+    directives: str | None = None,
 ) -> str:
     """Build system prompt as a single string (for non-chat callers like scheduler/CLI)."""
-    parts = [_static_text(source_details, skills_context), _dynamic_text(last_activity)]
+    parts = [_static_text(source_details, skills_context, directives), _dynamic_text(last_activity)]
     if memory_context:
         parts.append(MEMORY_CONTEXT_TEMPLATE.format(memory_content=memory_context))
     return "\n\n".join(s for s in parts if s)

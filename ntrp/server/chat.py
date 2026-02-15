@@ -9,6 +9,7 @@ from ntrp.memory.formatting import format_session_memory
 from ntrp.server.runtime import Runtime
 from ntrp.server.state import RunState
 from ntrp.skills.registry import SkillRegistry
+from ntrp.tools.directives import load_directives
 
 
 @dataclass
@@ -60,12 +61,14 @@ async def prepare_messages(
         memory_context = format_session_memory(user_facts, recent_facts) or None
 
     skills_context = runtime.skill_registry.to_prompt_xml() if runtime.skill_registry else None
+    directives = load_directives()
 
     system_blocks = build_system_blocks(
         source_details=runtime.get_source_details(),
         last_activity=last_activity,
         memory_context=memory_context,
         skills_context=skills_context,
+        directives=directives,
         use_cache_control=_is_anthropic(runtime.config.chat_model),
     )
 

@@ -14,6 +14,8 @@ import {
   updateVaultPath,
   updateBrowser,
   getServerConfig,
+  getDirectives,
+  updateDirectives,
   type ServerConfig,
   type GoogleAccount,
 } from "../../../api/client.js";
@@ -21,7 +23,7 @@ import { SectionId, SECTION_IDS, SECTION_LABELS, LIMIT_ITEMS, CONNECTION_ITEMS, 
 import { ModelDropdown } from "./ModelDropdown.js";
 import { BrowserDropdown } from "./BrowserDropdown.js";
 import { ConnectionsSection } from "./ConnectionsSection.js";
-import { AgentSection, LimitsSection, NotifiersSection, SkillsSection } from "./sections/index.js";
+import { AgentSection, DirectivesSection, LimitsSection, NotifiersSection, SkillsSection } from "./sections/index.js";
 import { useTextInput } from "../../../hooks/useTextInput.js";
 import { useNotifiers } from "../../../hooks/useNotifiers.js";
 import { useSkills } from "../../../hooks/useSkills.js";
@@ -84,6 +86,12 @@ export function SettingsDialog({
   const [dropdownTarget, setDropdownTarget] = useState<DropdownTarget>(null);
   const [pendingEmbeddingModel, setPendingEmbeddingModel] = useState<string | null>(null);
 
+  const [directivesContent, setDirectivesContent] = useState("");
+  const [directivesSaved, setDirectivesSaved] = useState("");
+  const [directivesCursorPos, setDirectivesCursorPos] = useState(0);
+  const [editingDirectives, setEditingDirectives] = useState(false);
+  const [savingDirectives, setSavingDirectives] = useState(false);
+
   const notifiers = useNotifiers(config);
   const skills = useSkills(config);
 
@@ -107,6 +115,12 @@ export function SettingsDialog({
   useEffect(() => {
     getGoogleAccounts(config)
       .then((result) => setGoogleAccounts(result.accounts))
+      .catch(() => {});
+    getDirectives(config)
+      .then((result) => {
+        setDirectivesContent(result.content);
+        setDirectivesSaved(result.content);
+      })
       .catch(() => {});
   }, [config]);
 
@@ -174,6 +188,38 @@ export function SettingsDialog({
       setActionInProgress(null);
     }
   }, [config, googleAccounts, selectedGoogleIndex, actionInProgress]);
+
+  const { handleKey: handleDirectivesKey } = useTextInput({
+    text: directivesContent,
+    cursorPos: directivesCursorPos,
+    setText: setDirectivesContent,
+    setCursorPos: setDirectivesCursorPos,
+  });
+
+  const handleSaveDirectives = useCallback(async () => {
+    if (savingDirectives) return;
+    setSavingDirectives(true);
+    try {
+      const result = await updateDirectives(config, directivesContent);
+      setDirectivesSaved(result.content);
+      setDirectivesContent(result.content);
+      setEditingDirectives(false);
+    } catch {
+    } finally {
+      setSavingDirectives(false);
+    }
+  }, [config, directivesContent, savingDirectives]);
+
+  const handleCancelDirectives = useCallback(() => {
+    setDirectivesContent(directivesSaved);
+    setDirectivesCursorPos(0);
+    setEditingDirectives(false);
+  }, [directivesSaved]);
+
+  const handleStartDirectivesEdit = useCallback(() => {
+    setDirectivesCursorPos(directivesContent.length);
+    setEditingDirectives(true);
+  }, [directivesContent]);
 
   const { handleKey: handleVaultKey } = useTextInput({
     text: vaultPath,
@@ -262,6 +308,10 @@ export function SettingsDialog({
           skills.handleKeypress(key);
           return;
         }
+        if (activeSection === "directives" && editingDirectives) {
+          handleCancelDirectives();
+          return;
+        }
         onClose();
         return;
       }
@@ -269,6 +319,7 @@ export function SettingsDialog({
       if (key.name === "tab") {
         if (activeSection === "notifiers" && notifiers.mode !== "list") return;
         if (activeSection === "skills" && skills.mode !== "list") return;
+        if (activeSection === "directives" && editingDirectives) return;
         const direction = key.shift ? -1 : 1;
         const idx = SECTION_IDS.indexOf(activeSection);
         const next = (idx + direction + SECTION_IDS.length) % SECTION_IDS.length;
@@ -286,6 +337,16 @@ export function SettingsDialog({
           else if (agentIndex === 1) setDropdownTarget("explore");
           else if (agentIndex === 2) setDropdownTarget("memory");
           else if (agentIndex === 3) setDropdownTarget("embedding");
+        }
+      } else if (activeSection === "directives") {
+        if (editingDirectives) {
+          if (key.name === "s" && key.ctrl) {
+            handleSaveDirectives();
+          } else {
+            handleDirectivesKey(key);
+          }
+        } else if (key.name === "return" || key.name === "space") {
+          handleStartDirectivesEdit();
         }
       } else if (activeSection === "connections") {
         const connIdx = CONNECTION_ITEMS.indexOf(connectionItem);
@@ -347,6 +408,7 @@ export function SettingsDialog({
       connectionItem, googleAccounts, selectedGoogleIndex, serverConfig,
       handleAddGoogle, handleRemoveGoogle, handleStartVaultEdit, handleToggleSource, actionInProgress,
       notifiers, skills,
+      editingDirectives, handleDirectivesKey, handleSaveDirectives, handleCancelDirectives, handleStartDirectivesEdit,
     ]
   );
 
@@ -521,6 +583,17 @@ export function SettingsDialog({
                     selectedIndex={agentIndex}
                     accent={accent}
                     modelNameWidth={modelNameWidth}
+                  />
+                )}
+
+                {activeSection === "directives" && (
+                  <DirectivesSection
+                    content={directivesContent}
+                    cursorPos={directivesCursorPos}
+                    editing={editingDirectives}
+                    saving={savingDirectives}
+                    accent={accent}
+                    height={contentHeight}
                   />
                 )}
 

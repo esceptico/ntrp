@@ -17,6 +17,7 @@ from ntrp.tools.calendar import (
     EditCalendarEventTool,
 )
 from ntrp.tools.core.base import Tool
+from ntrp.tools.directives import SetDirectivesTool
 from ntrp.tools.email import EmailsTool, ReadEmailTool, SendEmailTool
 from ntrp.tools.explore import ExploreTool
 from ntrp.tools.files import ReadFileTool
@@ -138,6 +139,7 @@ def _create_core_tools(deps: ToolDeps) -> list[Tool]:
         WriteScratchpadTool(),
         ReadScratchpadTool(),
         ListScratchpadTool(),
+        SetDirectivesTool(),
     ]
 
 

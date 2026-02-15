@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
 from ntrp.config import load_user_settings, save_user_settings
+from ntrp.tools.directives import DIRECTIVES_PATH, load_directives
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
 from ntrp.llm.models import get_model, list_models
 from ntrp.llm.models import EMBEDDING_DEFAULTS
@@ -362,3 +363,26 @@ async def compact_context():
         "message": f"Context already optimal ({before_count} messages)",
         "message_count": before_count,
     }
+
+
+@router.get("/directives")
+async def get_directives():
+    return {"content": load_directives() or ""}
+
+
+class UpdateDirectivesRequest(BaseModel):
+    content: str
+
+
+@router.put("/directives")
+async def update_directives(req: UpdateDirectivesRequest):
+    import json
+
+    content = req.content.strip()
+    if not content:
+        if DIRECTIVES_PATH.exists():
+            DIRECTIVES_PATH.unlink()
+        return {"content": ""}
+
+    DIRECTIVES_PATH.write_text(json.dumps({"content": content}))
+    return {"content": content}

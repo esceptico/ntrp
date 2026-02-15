@@ -104,6 +104,7 @@ class Scheduler:
         from ntrp.core.spawner import create_spawn_fn
         from ntrp.memory.formatting import format_session_memory
         from ntrp.tools.core.context import ToolContext
+        from ntrp.tools.directives import load_directives
 
         _logger.info("Executing scheduled task %s: %s", task.task_id, task.description[:80])
 
@@ -117,6 +118,7 @@ class Scheduler:
         system_prompt = build_system_prompt(
             source_details=self.deps.source_details(),
             memory_context=memory_context,
+            directives=load_directives(),
         )
         system_prompt += scheduled_task_suffix(bool(task.notifiers))
 
