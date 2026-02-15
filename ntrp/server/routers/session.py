@@ -290,7 +290,7 @@ async def update_embedding_model(req: UpdateEmbeddingRequest):
     return {
         "status": "reindexing",
         "embedding_model": req.embedding_model,
-        "embedding_dim": runtime.config.embedding_dim,
+        "embedding_dim": runtime.config.embedding.dim,
     }
 
 
