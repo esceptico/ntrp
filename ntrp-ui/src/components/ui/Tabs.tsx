@@ -18,7 +18,7 @@ export function Tabs<T extends string>({ tabs, activeTab, labels }: TabsProps<T>
           <box key={tab} marginRight={1}>
             <text>
               {isActive ? (
-                <span fg="#000000" bg={colors.tabs.active}><strong> {label.toUpperCase()} </strong></span>
+                <span fg={colors.contrast} bg={colors.tabs.active}><strong> {label.toUpperCase()} </strong></span>
               ) : (
                 <span fg={colors.tabs.inactive}> {label.toUpperCase()} </span>
               )}

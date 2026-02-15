@@ -1,4 +1,4 @@
-export { colors, accentColors, type AccentColor } from "./colors.js";
+export { colors, accentColors, palettes, setTheme, themeNames, type AccentColor, type Theme } from "./colors.js";
 
 export { truncateText } from "../../lib/utils.js";
 

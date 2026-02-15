@@ -1,5 +1,6 @@
 import { memo } from "react";
 import type { Message } from "../../../types.js";
+import type { Theme } from "../../ui/colors.js";
 import { ToolChainDisplay, type ToolChainItem } from "../../ToolChain.js";
 import { UserMessage } from "./UserMessage.js";
 import { AssistantMessage } from "./AssistantMessage.js";
@@ -11,6 +12,7 @@ import { ThinkingMessage } from "./ThinkingMessage.js";
 interface MessageDisplayProps {
   msg: Message;
   renderMarkdown?: boolean;
+  theme?: Theme;
 }
 
 export const MessageDisplay = memo(function MessageDisplay({

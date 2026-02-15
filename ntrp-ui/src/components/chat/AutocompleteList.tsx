@@ -47,11 +47,11 @@ export function AutocompleteList({ commands, selectedIndex, accentValue }: Autoc
               backgroundColor={isSelected ? accentValue : undefined}
               flexDirection="row"
             >
-              <text fg={isSelected ? "#000000" : colors.text.primary} flexShrink={0}>
+              <text fg={isSelected ? colors.contrast : colors.text.primary} flexShrink={0}>
                 {display}
               </text>
               {cmd.description ? (
-                <text fg={isSelected ? "#000000" : colors.text.muted} wrapMode="none">
+                <text fg={isSelected ? colors.contrast : colors.text.muted} wrapMode="none">
                   {cmd.description}
                 </text>
               ) : null}

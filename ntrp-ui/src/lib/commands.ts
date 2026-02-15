@@ -5,6 +5,7 @@ export const COMMANDS = [
   { name: "index", description: "Re-index notes for semantic search" },
   { name: "memory", description: "View memory (facts, observations)" },
   { name: "schedules", description: "View and manage scheduled tasks" },
+  { name: "theme", description: "Choose a theme" },
   { name: "settings", description: "Model, connections, and UI settings" },
   { name: "dashboard", description: "Server dashboard and diagnostics" },
   { name: "compact", description: "Summarize old messages to save tokens" },

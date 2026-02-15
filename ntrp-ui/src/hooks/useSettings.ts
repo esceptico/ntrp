@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { accentColors, type AccentColor } from "../components/ui/colors.js";
+import { accentColors, themeNames, type AccentColor, type Theme } from "../components/ui/colors.js";
 import { updateConfig } from "../api/client.js";
 import type { Config } from "../types.js";
 import * as fs from "fs";
@@ -9,6 +9,7 @@ import * as os from "os";
 export interface UiSettings {
   renderMarkdown: boolean;
   accentColor: AccentColor;
+  theme: Theme;
 }
 
 export interface AgentSettings {
@@ -24,6 +25,7 @@ const defaultSettings: Settings = {
   ui: {
     renderMarkdown: true,
     accentColor: "gray",
+    theme: "dark",
   },
   agent: {
     maxDepth: 8,
@@ -41,6 +43,7 @@ function loadSettings(): Settings {
       if (typeof parsed !== "object" || parsed === null) return defaultSettings;
       const ui = { ...defaultSettings.ui, ...parsed.ui };
       if (!(ui.accentColor in accentColors)) ui.accentColor = defaultSettings.ui.accentColor;
+      if (!themeNames.includes(ui.theme)) ui.theme = defaultSettings.ui.theme;
       return {
         ui,
         agent: { ...defaultSettings.agent, ...parsed.agent },
@@ -64,7 +67,7 @@ function saveSettings(settings: Settings): void {
 }
 
 export function useSettings(config: Config) {
-  const [settings, setSettings] = useState<Settings>(() => loadSettings());
+  const [settings, setSettings] = useState<Settings>(loadSettings);
   const [showSettings, setShowSettings] = useState(false);
   const initializedRef = useRef(false);
 

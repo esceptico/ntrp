@@ -1,4 +1,3 @@
-import { memo } from "react";
 import { Markdown } from "../../Markdown.js";
 
 interface AssistantMessageProps {
@@ -6,7 +5,7 @@ interface AssistantMessageProps {
   renderMarkdown?: boolean;
 }
 
-export const AssistantMessage = memo(function AssistantMessage({
+export function AssistantMessage({
   content,
   renderMarkdown = true,
 }: AssistantMessageProps) {
@@ -21,4 +20,4 @@ export const AssistantMessage = memo(function AssistantMessage({
       </box>
     </box>
   );
-});
+}

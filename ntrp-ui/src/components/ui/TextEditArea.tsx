@@ -35,7 +35,7 @@ export function TextEditArea({
       {lines.length === 0 || (lines.length === 1 && lines[0] === "") ? (
         <text>
           <span fg={colors.text.muted}>{placeholder}</span>
-          {showCursor && <span bg={colors.text.primary} fg="#000000"> </span>}
+          {showCursor && <span bg={colors.text.primary} fg={colors.contrast}> </span>}
         </text>
       ) : (
         lines.map((line, idx) => {
@@ -46,7 +46,7 @@ export function TextEditArea({
             return (
               <text key={idx}>
                 <span fg={colors.text.primary}>{beforeCursor}</span>
-                <span bg={colors.text.primary} fg="#000000">{atCursor}</span>
+                <span bg={colors.text.primary} fg={colors.contrast}>{atCursor}</span>
                 <span fg={colors.text.primary}>{afterCursor}</span>
               </text>
             );

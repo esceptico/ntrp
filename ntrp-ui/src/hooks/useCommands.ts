@@ -21,11 +21,12 @@ interface CommandContext {
   sendMessage: (msg: string) => void;
   setStatus: (status: StatusType) => void;
   toggleSettings: () => void;
+  openThemePicker: () => void;
   exit: () => void;
   refreshIndexStatus: () => Promise<void>;
 }
 
-type CommandHandler = (ctx: CommandContext) => boolean | Promise<boolean>;
+type CommandHandler = (ctx: CommandContext, args: string[]) => boolean | Promise<boolean>;
 
 const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   memory: ({ setViewMode }) => { setViewMode("memory"); return true; },
@@ -35,6 +36,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   schedules: ({ setViewMode }) => { setViewMode("schedules"); return true; },
   schedule: ({ setViewMode }) => { setViewMode("schedules"); return true; },
   dashboard: ({ setViewMode }) => { setViewMode("dashboard"); return true; },
+  theme: ({ openThemePicker }) => { openThemePicker(); return true; },
   settings: ({ toggleSettings }) => { toggleSettings(); return true; },
 
   compact: async ({ config, addMessage, setStatus }) => {
@@ -104,7 +106,7 @@ export function useCommands(context: CommandContext) {
 
       const handler = COMMAND_HANDLERS[cmd];
       if (handler) {
-        const result = handler(contextRef.current);
+        const result = handler(contextRef.current, parts.slice(1));
         return result instanceof Promise ? await result : result;
       }
 

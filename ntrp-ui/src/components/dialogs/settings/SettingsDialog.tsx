@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Config } from "../../../types.js";
 import type { Settings } from "../../../hooks/useSettings.js";
 import { useKeypress, type Key } from "../../../hooks/useKeypress.js";
-import { Dialog, colors, accentColors, Hints, type AccentColor } from "../../ui/index.js";
+import { Dialog, colors, accentColors, Hints } from "../../ui/index.js";
 import {
   getSupportedModels,
   updateConfig,
@@ -28,8 +28,8 @@ import { useTextInput } from "../../../hooks/useTextInput.js";
 import { useNotifiers } from "../../../hooks/useNotifiers.js";
 import { useSkills } from "../../../hooks/useSkills.js";
 
-function useAccent(accentColor: AccentColor) {
-  return useMemo(() => accentColors[accentColor].primary, [accentColor]);
+function getAccent(accentColor: keyof typeof accentColors) {
+  return accentColors[accentColor].primary;
 }
 
 type DropdownTarget = "chat" | "explore" | "memory" | "embedding" | null;
@@ -55,7 +55,7 @@ export function SettingsDialog({
   onRefreshIndexStatus,
   onClose,
 }: SettingsDialogProps) {
-  const accent = useAccent(settings.ui.accentColor);
+  const accent = getAccent(settings.ui.accentColor);
 
   const [activeSection, setActiveSection] = useState<SectionId>("agent");
   const [agentIndex, setAgentIndex] = useState(0);

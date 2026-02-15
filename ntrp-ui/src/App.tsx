@@ -3,7 +3,7 @@ import { useRenderer } from "@opentui/react";
 import type { Selection } from "@opentui/core";
 import type { Message, Config } from "./types.js";
 import { defaultConfig } from "./types.js";
-import { colors } from "./components/ui/colors.js";
+import { colors, setTheme, themeNames, type Theme } from "./components/ui/index.js";
 import { BULLET } from "./lib/constants.js";
 import {
   useSettings,
@@ -21,6 +21,7 @@ import {
   MessageDisplay,
   SettingsDialog,
   ChoiceSelector,
+  ThemePicker,
   MemoryViewer,
   SchedulesViewer,
   DashboardViewer,
@@ -42,6 +43,7 @@ interface AppContentProps {
   updateSetting: (category: keyof Settings, key: string, value: unknown) => void;
   closeSettings: () => void;
   toggleSettings: () => void;
+  setThemeByName: (name: string) => void;
   showSettings: boolean;
 }
 
@@ -51,6 +53,7 @@ function AppContent({
   updateSetting,
   closeSettings,
   toggleSettings,
+  setThemeByName,
   showSettings
 }: AppContentProps) {
   const renderer = useRenderer();
@@ -81,6 +84,7 @@ function AppContent({
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [showThemePicker, setShowThemePicker] = useState(false);
 
   const [skills, setSkills] = useState<Skill[]>([]);
   useEffect(() => {
@@ -131,7 +135,9 @@ function AppContent({
     };
   }, [renderer]);
 
-  const isInChatMode = viewMode === "chat" && !showSettings;
+  const isInChatMode = viewMode === "chat" && !showSettings && !showThemePicker;
+
+  const openThemePicker = useCallback(() => setShowThemePicker(true), []);
 
   const { handleCommand } = useCommands({
     config,
@@ -144,6 +150,7 @@ function AppContent({
     sendMessage,
     setStatus,
     toggleSettings,
+    openThemePicker,
     exit: () => renderer.destroy(),
     refreshIndexStatus,
   });
@@ -215,7 +222,7 @@ function AppContent({
   useKeypress(handleGlobalKeypress, { isActive: true });
 
   const { width, height } = useDimensions();
-  const hasOverlay = viewMode !== "chat";
+  const hasOverlay = viewMode !== "chat" || showThemePicker;
 
   const SIDEBAR_WIDTH = 32;
   const showSidebar = sidebarVisible && width >= 94 && serverConnected;
@@ -246,6 +253,7 @@ function AppContent({
                 <MessageDisplay
                   msg={item}
                   renderMarkdown={settings.ui.renderMarkdown}
+                  theme={settings.ui.theme}
                 />
               </box>
             );
@@ -324,6 +332,13 @@ function AppContent({
       {viewMode === "memory" && <MemoryViewer config={config} onClose={closeView} />}
       {viewMode === "schedules" && <SchedulesViewer config={config} onClose={closeView} />}
       {viewMode === "dashboard" && <DashboardViewer config={config} onClose={closeView} />}
+      {showThemePicker && (
+        <ThemePicker
+          current={settings.ui.theme}
+          onSelect={(theme) => setThemeByName(theme)}
+          onClose={() => setShowThemePicker(false)}
+        />
+      )}
       {showSettings && (
         <SettingsDialog
           config={config}
@@ -344,14 +359,24 @@ function AppContent({
 function AppWithAccent({ config }: { config: Config }) {
   const { settings, updateSetting, closeSettings, toggleSettings, showSettings } = useSettings(config);
 
+  // Sync colors before children render — setTheme mutates colors/accentColors in place
+  setTheme(settings.ui.theme);
+
+  const setThemeByName = useCallback((name: string) => {
+    if (themeNames.includes(name as Theme)) {
+      updateSetting("ui", "theme", name);
+    }
+  }, [updateSetting]);
+
   return (
-    <AccentColorProvider accent={settings.ui.accentColor}>
+    <AccentColorProvider accent={settings.ui.accentColor} theme={settings.ui.theme}>
       <AppContent
         config={config}
         settings={settings}
         updateSetting={updateSetting}
         closeSettings={closeSettings}
         toggleSettings={toggleSettings}
+        setThemeByName={setThemeByName}
         showSettings={showSettings}
       />
     </AccentColorProvider>
