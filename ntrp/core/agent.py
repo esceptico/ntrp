@@ -2,7 +2,8 @@ from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 from ntrp.constants import AGENT_MAX_ITERATIONS
-from ntrp.context.compression import compress_context_async, should_compress
+from ntrp.context.compression import compress_context_async, find_compressible_range, should_compress
+from ntrp.core.events import ContextCompressed
 from ntrp.core.parsing import normalize_assistant_message, parse_tool_calls
 from ntrp.core.state import AgentState, StateCallback
 from ntrp.core.tool_runner import ToolRunner
@@ -110,7 +111,18 @@ class Agent:
 
         if self.current_depth == 0:
             yield ThinkingEvent(status="compressing context...")
-        self.messages, _ = await compress_context_async(self.messages, self.model)
+
+        start, end = find_compressible_range(self.messages)
+        if start == 0 and end == 0:
+            return
+
+        discarded = tuple(self.messages[start:end])
+        self.messages, _ = await compress_context_async(self.messages, self.model, force=True)
+
+        if self.current_depth == 0:
+            self.ctx.channel.publish(
+                ContextCompressed(messages=discarded, session_id=self.ctx.session_id)
+            )
 
     def _append_tool_results(self, tool_calls: list[Any], results: dict[str, str]) -> None:
         for tc in tool_calls:

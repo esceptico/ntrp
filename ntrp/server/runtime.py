@@ -8,9 +8,10 @@ from ntrp.config import NTRP_DIR, Config, get_config
 from ntrp.constants import AGENT_MAX_DEPTH, INDEXABLE_SOURCES, SESSION_EXPIRY_HOURS
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
-from ntrp.core.events import ConsolidationCompleted, RunCompleted, RunStarted, ScheduleCompleted, ToolExecuted
+from ntrp.core.events import ConsolidationCompleted, ContextCompressed, RunCompleted, RunStarted, ScheduleCompleted, ToolExecuted
 from ntrp.llm.router import close as llm_close, init as llm_init
 from ntrp.logging import get_logger
+from ntrp.memory.chat_extraction import make_chat_extraction_handler
 from ntrp.memory.events import FactCreated, FactDeleted, FactUpdated, MemoryCleared
 from ntrp.memory.facts import FactMemory
 from ntrp.notifiers import Notifier, create_notifier, make_schedule_dispatcher
@@ -143,6 +144,10 @@ class Runtime:
         self.channel.subscribe(MemoryCleared, self._on_memory_cleared)
         self.channel.subscribe(SourceChanged, self._on_source_changed)
         self.channel.subscribe(ScheduleCompleted, make_schedule_dispatcher(lambda: self.notifiers))
+        self.channel.subscribe(
+            ContextCompressed,
+            make_chat_extraction_handler(lambda: self.memory, self.config.memory_model),
+        )
 
         if self.config.memory:
             self.memory = await FactMemory.create(

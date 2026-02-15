@@ -49,3 +49,9 @@ class IndexingCompleted:
 class ScheduleCompleted:
     task: ScheduledTask
     result: str | None
+
+
+@dataclass(frozen=True)
+class ContextCompressed:
+    messages: tuple[dict, ...]
+    session_id: str
