@@ -204,9 +204,9 @@ export function Sidebar({ serverConfig, data, usage, width, height }: SidebarPro
             <SectionHeader label="USAGE" />
             <text>
               <span fg={S}>{formatTokens(totalInput)}</span>
-              <span fg={D}> in  </span>
+              <span fg={D}> ↓ </span>
               <span fg={S}>{formatTokens(usage.completion)}</span>
-              <span fg={D}> out</span>
+              <span fg={D}> ↑</span>
               {hasCache && <span fg={D}>  {cachePct}% cache</span>}
             </text>
             {usage.cost > 0 && (
