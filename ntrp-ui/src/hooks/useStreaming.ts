@@ -62,7 +62,7 @@ export function useStreaming({
   const [toolChain, setToolChain] = useState<ToolChainItem[]>([]);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [pendingChoice, setPendingChoice] = useState<PendingChoice | null>(null);
-  const [usage, setUsage] = useState({ prompt: 0, completion: 0 });
+  const [usage, setUsage] = useState({ prompt: 0, completion: 0, cache_read: 0, cache_write: 0, cost: 0, lastCost: 0 });
 
   const generateId = useCallback(() => {
     return `m-${Date.now()}-${messageIdRef.current++}`;
@@ -213,6 +213,10 @@ export function useStreaming({
         setUsage((prev) => ({
           prompt: prev.prompt + event.usage.prompt,
           completion: prev.completion + event.usage.completion,
+          cache_read: prev.cache_read + (event.usage.cache_read || 0),
+          cache_write: prev.cache_write + (event.usage.cache_write || 0),
+          cost: prev.cost + (event.usage.cost || 0),
+          lastCost: event.usage.cost || 0,
         }));
         setStatus(Status.IDLE);
         setToolChain((prev) =>

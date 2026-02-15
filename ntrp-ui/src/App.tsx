@@ -313,6 +313,7 @@ function AppContent({
           <Sidebar
             serverConfig={serverConfig}
             data={sidebarData}
+            usage={streaming.usage}
             width={SIDEBAR_WIDTH}
             height={contentHeight}
           />

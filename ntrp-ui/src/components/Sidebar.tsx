@@ -5,9 +5,19 @@ import { useAccentColor } from "../hooks/index.js";
 import type { ServerConfig, Schedule } from "../api/client.js";
 import type { SidebarData } from "../hooks/useSidebar.js";
 
+interface UsageData {
+  prompt: number;
+  completion: number;
+  cache_read: number;
+  cache_write: number;
+  cost: number;
+  lastCost: number;
+}
+
 interface SidebarProps {
   serverConfig: ServerConfig | null;
   data: SidebarData;
+  usage: UsageData;
   width: number;
   height: number;
 }
@@ -29,11 +39,17 @@ function formatModel(model: string): string {
   return parts[parts.length - 1];
 }
 
-function formatTokens(total: number | null): string {
-  if (!total) return "0";
-  if (total >= 1_000_000) return `${(total / 1_000_000).toFixed(1)}M`;
-  if (total >= 1_000) return `${(total / 1_000).toFixed(1)}k`;
-  return `${total}`;
+function formatTokens(total: number | null, pad?: number): string {
+  let s: string;
+  if (!total) s = "0";
+  else if (total >= 1_000_000) s = `${(total / 1_000_000).toFixed(1)}M`;
+  else if (total >= 1_000) s = `${(total / 1_000).toFixed(1)}k`;
+  else s = `${total}`;
+  return pad ? s.padStart(pad) : s;
+}
+
+function formatCost(cost: number): string {
+  return `$${cost.toFixed(2)}`;
 }
 
 function ContextBar({ total, limit, width }: { total: number | null; limit: number; width: number }) {
@@ -120,7 +136,7 @@ function ScheduleRow({ schedule, width }: { schedule: Schedule; width: number })
   );
 }
 
-export function Sidebar({ serverConfig, data, width, height }: SidebarProps) {
+export function Sidebar({ serverConfig, data, usage, width, height }: SidebarProps) {
   const { accentValue } = useAccentColor();
   const contentWidth = width - 2; // padding
 
@@ -169,15 +185,36 @@ export function Sidebar({ serverConfig, data, width, height }: SidebarProps) {
           <SectionHeader label="CONTEXT" />
           <ContextBar total={data.context.total} limit={data.context.limit} width={contentWidth} />
           <text>
-            <span fg={D}>{formatTokens(data.context.total)}</span>
-            <span fg={D}> / </span>
-            <span fg={D}>{formatTokens(data.context.limit)}</span>
-          </text>
-          <text>
             <span fg={D}>{data.context.message_count} msgs  {data.context.tool_count} tools</span>
           </text>
         </box>
       )}
+
+      {/* Usage */}
+      {(usage.prompt > 0 || usage.completion > 0) && (() => {
+        const totalInput = usage.prompt + usage.cache_read + usage.cache_write;
+        const hasCache = usage.cache_read > 0 || usage.cache_write > 0;
+        const cachePct = totalInput > 0 ? Math.round((usage.cache_read / totalInput) * 100) : 0;
+        const limit = data.context?.limit;
+        const limitStr = limit ? ` / ${formatTokens(limit)}` : "";
+
+        return (
+          <box flexDirection="column">
+            <SectionHeader label="USAGE" />
+            <text>
+              <span fg={S}>{formatTokens(totalInput)}</span>
+              <span fg={D}>{limitStr}</span>
+              {hasCache && <span fg={D}>  {cachePct}% cache</span>}
+            </text>
+            {usage.cost > 0 && (
+              <text>
+                <span fg={S}>{formatCost(usage.cost)}</span>
+                {usage.lastCost > 0 && <span fg={D}>{` (+${formatCost(usage.lastCost)})`}</span>}
+              </text>
+            )}
+          </box>
+        );
+      })()}
 
       {/* Memory */}
       {data.stats && (

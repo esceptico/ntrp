@@ -62,6 +62,9 @@ export interface DoneEvent {
     prompt: number;
     completion: number;
     total: number;
+    cache_read: number;
+    cache_write: number;
+    cost: number;
   };
 }
 
