@@ -8,7 +8,7 @@ Personal proactive AI assistant with persistent memory, scheduling, and multi-so
 
 ```bash
 # Install
-git clone https://github.com/your-username/ntrp.git
+git clone https://github.com/esceptico/ntrp.git
 cd ntrp
 uv sync
 cd ntrp-ui && bun install && cd ..
