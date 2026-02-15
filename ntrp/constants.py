@@ -1,5 +1,3 @@
-from typing import Any
-
 # --- Content Truncation Limits ---
 
 CONTENT_PREVIEW_LIMIT = 500
@@ -15,33 +13,6 @@ DEFAULT_READ_LINES = 500
 DEFAULT_LIST_LIMIT = 50
 
 
-# --- Supported Models ---
-# LiteLLM format: provider/model -> {tokens, request_kwargs?}
-# Single source of truth for UI selection, context compression, and provider routing
-# "request_kwargs" are merged into litellm completion calls as-is
-
-SUPPORTED_MODELS: dict[str, dict[str, Any]] = {
-    "anthropic/claude-sonnet-4-5-20250929": {"tokens": 128000},
-    "openai/gpt-5.2": {"tokens": 128000},
-    "gemini/gemini-3-pro-preview": {"tokens": 128000},
-    "gemini/gemini-3-flash-preview": {"tokens": 128000},
-    "openrouter/moonshotai/kimi-k2.5": {
-        "tokens": 128000,
-        "request_kwargs": {
-            "extra_body": {"provider": {"order": ["moonshotai"], "allow_fallbacks": False}},
-        },
-    },
-    "openrouter/arcee-ai/trinity-large-preview:free": {"tokens": 128000},
-}
-
-# Embedding models: model -> dimension
-EMBEDDING_MODELS: dict[str, int] = {
-    "text-embedding-3-small": 1536,
-    "text-embedding-3-large": 3072,
-    "text-embedding-ada-002": 1536,
-    "gemini/gemini-embedding-001": 3072,
-}
-
 
 # --- Agent Limits ---
 
@@ -49,7 +20,7 @@ AGENT_MAX_DEPTH = 8
 AGENT_MAX_ITERATIONS = None
 
 EXPLORE_TIMEOUT = 300
-EXPLORE_MODEL_DEFAULT = "gemini/gemini-3-flash-preview"
+EXPLORE_MODEL_DEFAULT = "gemini-3-flash-preview"
 SUBAGENT_DEFAULT_TIMEOUT = 300
 
 

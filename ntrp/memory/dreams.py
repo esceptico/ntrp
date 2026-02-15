@@ -19,7 +19,7 @@ from ntrp.constants import (
     DREAM_MIN_FACTS,
     DREAM_TEMPERATURE,
 )
-from ntrp.llm import acompletion
+from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Dream, Embedding, Fact
 from ntrp.memory.prompts import DREAM_EVALUATOR_PROMPT, DREAM_PROMPT
@@ -157,7 +157,8 @@ async def _generate_dream(
     )
 
     try:
-        resp = await acompletion(
+        client = get_completion_client(model)
+        resp = await client.completion(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format=DreamGeneration,
@@ -192,7 +193,8 @@ async def _evaluate_batch(
     prompt = DREAM_EVALUATOR_PROMPT.format(n=len(candidates), candidates=formatted)
 
     try:
-        resp = await acompletion(
+        client = get_completion_client(model)
+        resp = await client.completion(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format=DreamEvaluation,

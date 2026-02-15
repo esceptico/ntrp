@@ -4,8 +4,9 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from ntrp.constants import EMBEDDING_MODELS, EXPLORE_MODEL_DEFAULT, SUPPORTED_MODELS
+from ntrp.constants import EXPLORE_MODEL_DEFAULT
 from ntrp.embedder import EmbeddingConfig
+from ntrp.llm.models import DEFAULTS, EMBEDDING_DEFAULTS
 from ntrp.logging import get_logger
 
 NTRP_DIR = Path.home() / ".ntrp"
@@ -39,13 +40,13 @@ class Config(BaseSettings):
         populate_by_name=True,
     )
 
-    # OpenAI (optional, for embeddings/models)
+    # API keys — read from standard env vars via aliases
+    anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
+    openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
 
-    # LiteLLM model format: provider/model
-    # Examples: anthropic/claude-sonnet-4, gemini/gemini-2.0-flash, openai/gpt-4o
-    # LiteLLM reads API keys from standard env vars:
-    #   ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY
+    # Model IDs (must match entries in llm/models.py DEFAULTS or user config)
     chat_model: str
     explore_model: str = EXPLORE_MODEL_DEFAULT
     memory_model: str
@@ -80,8 +81,9 @@ class Config(BaseSettings):
     @field_validator("chat_model", "explore_model")
     @classmethod
     def _validate_chat_model(cls, v: str) -> str:
-        if v not in SUPPORTED_MODELS:
-            raise ValueError(f"Unsupported model: {v}. Must be one of: {', '.join(SUPPORTED_MODELS)}")
+        valid = {m.id for m in DEFAULTS}
+        if v not in valid:
+            raise ValueError(f"Unsupported model: {v}. Must be one of: {', '.join(valid)}")
         return v
 
     @field_validator("browser_days")
@@ -92,14 +94,11 @@ class Config(BaseSettings):
         return v
 
     @property
-    def embedding_dim(self) -> int:
-        return EMBEDDING_MODELS[self.embedding_model]
-
-    @property
     def embedding(self) -> EmbeddingConfig:
+        dims = {m.id: m.dim for m in EMBEDDING_DEFAULTS}
         return EmbeddingConfig(
             model=self.embedding_model,
-            dim=self.embedding_dim,
+            dim=dims[self.embedding_model],
         )
 
     @property

@@ -8,7 +8,7 @@ from ntrp.constants import (
     CONSOLIDATION_SEARCH_LIMIT,
     CONSOLIDATION_TEMPERATURE,
 )
-from ntrp.llm import acompletion
+from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact, Observation
 from ntrp.memory.prompts import CONSOLIDATION_PROMPT
@@ -81,7 +81,8 @@ async def _llm_consolidation_decisions(
     )
 
     try:
-        response = await acompletion(
+        client = get_completion_client(model)
+        response = await client.completion(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format=ConsolidationResponse,

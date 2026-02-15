@@ -24,18 +24,21 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
     await reset_runtime()
 
     import ntrp.config
-    from ntrp.constants import EMBEDDING_MODELS
+    import ntrp.llm.models as llm_models
+    from ntrp.llm.models import EmbeddingModel, Provider
 
     monkeypatch.setattr(ntrp.config, "NTRP_DIR", tmp_path / "db")
-    monkeypatch.setitem(EMBEDDING_MODELS, "test-embedding", TEST_EMBEDDING_DIM)
+    extended = [*llm_models.EMBEDDING_DEFAULTS, EmbeddingModel("test-embedding", Provider.OPENAI, TEST_EMBEDDING_DIM)]
+    monkeypatch.setattr(llm_models, "EMBEDDING_DEFAULTS", extended)
+    monkeypatch.setattr(ntrp.config, "EMBEDDING_DEFAULTS", extended)
 
     test_config = Config(
         vault_path=tmp_path / "vault",
         openai_api_key="test-key",
         memory=True,
         embedding_model="test-embedding",
-        memory_model="gemini/gemini-3-flash-preview",
-        chat_model="gemini/gemini-3-flash-preview",
+        memory_model="gemini-3-flash-preview",
+        chat_model="gemini-3-flash-preview",
         browser=None,
         exa_api_key=None,
     )
@@ -302,6 +305,9 @@ class TestMemoryDisabled:
             vault_path=tmp_path / "vault",
             openai_api_key="test-key",
             memory=False,
+            chat_model="gemini-3-flash-preview",
+            memory_model="gemini-3-flash-preview",
+            embedding_model="text-embedding-3-small",
             browser=None,
             exa_api_key=None,
         )

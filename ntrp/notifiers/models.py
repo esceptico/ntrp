@@ -3,6 +3,10 @@ from dataclasses import dataclass
 from datetime import datetime
 
 
+def _to_dt(v):
+    return datetime.fromisoformat(v) if isinstance(v, str) else v
+
+
 @dataclass
 class NotifierConfig:
     name: str
@@ -13,5 +17,4 @@ class NotifierConfig:
     def __post_init__(self):
         if isinstance(self.config, str):
             self.config = json.loads(self.config)
-        if isinstance(self.created_at, str):
-            self.created_at = datetime.fromisoformat(self.created_at)
+        self.created_at = _to_dt(self.created_at)

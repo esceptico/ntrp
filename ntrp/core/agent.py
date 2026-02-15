@@ -1,13 +1,14 @@
 from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
-from ntrp.constants import AGENT_MAX_ITERATIONS, SUPPORTED_MODELS
+from ntrp.constants import AGENT_MAX_ITERATIONS
 from ntrp.context.compression import compress_context_async, should_compress
 from ntrp.core.parsing import normalize_assistant_message, parse_tool_calls
 from ntrp.core.state import AgentState, StateCallback
 from ntrp.core.tool_runner import ToolRunner
 from ntrp.events import SSEEvent, TextEvent, ThinkingEvent, ToolResultEvent
-from ntrp.llm import acompletion
+from ntrp.llm.models import get_model
+from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.tools.core.context import ToolContext
 from ntrp.tools.executor import ToolExecutor
@@ -21,7 +22,7 @@ class Agent:
         tools: list[dict],
         tool_executor: ToolExecutor,
         model: str,
-        system_prompt: str,
+        system_prompt: str | list[dict],
         ctx: ToolContext,
         max_depth: int = 3,
         current_depth: int = 0,
@@ -44,6 +45,9 @@ class Agent:
         self.messages: list[dict] = []
         self.total_input_tokens = 0
         self.total_output_tokens = 0
+        self.total_cache_read_tokens = 0
+        self.total_cache_write_tokens = 0
+        self.total_cost = 0.0
         self._last_input_tokens: int | None = None  # For adaptive compression
 
     @property
@@ -70,28 +74,35 @@ class Agent:
             ]
 
     async def _call_llm(self) -> Any:
-        model_params = SUPPORTED_MODELS[self.model]
-        cache_points = [
-            {"location": "tools"},
-            {"location": "message", "role": "system"},
-            {"location": "message", "index": -1},
-        ]
-        return await acompletion(
+        client = get_completion_client(self.model)
+        return await client.completion(
             model=self.model,
             messages=self.messages,
             tools=self.tools,
             tool_choice="auto",
-            cache_control_injection_points=cache_points,
-            **model_params.get("request_kwargs", {}),
         )
 
     def _track_usage(self, response: Any) -> None:
         if not response.usage:
             return
         prompt_tokens = response.usage.prompt_tokens or 0
+        completion_tokens = response.usage.completion_tokens or 0
+        cache_read = response.usage.cache_read_tokens or 0
+        cache_write = response.usage.cache_write_tokens or 0
+
         self.total_input_tokens += prompt_tokens
-        self.total_output_tokens += response.usage.completion_tokens or 0
-        self._last_input_tokens = prompt_tokens
+        self.total_output_tokens += completion_tokens
+        self.total_cache_read_tokens += cache_read
+        self.total_cache_write_tokens += cache_write
+        self._last_input_tokens = prompt_tokens + cache_read + cache_write
+
+        model = get_model(response.model)
+        self.total_cost += (
+            prompt_tokens * model.price_in
+            + completion_tokens * model.price_out
+            + cache_read * model.price_cache_read
+            + cache_write * model.price_cache_write
+        ) / 1_000_000
 
     async def _maybe_compact(self) -> AsyncGenerator[SSEEvent]:
         if not should_compress(self.messages, self.model, self._last_input_tokens):

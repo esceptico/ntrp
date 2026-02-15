@@ -1,10 +1,11 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from ntrp.constants import RECALL_SEARCH_LIMIT
 from ntrp.context.models import SessionData, SessionState
-from ntrp.core.prompts import build_system_prompt
-from ntrp.memory.formatting import format_memory_context
+from ntrp.core.prompts import build_system_blocks
+from ntrp.llm.models import get_model
+from ntrp.llm.models import Provider
+from ntrp.memory.formatting import format_session_memory
 from ntrp.server.runtime import Runtime
 from ntrp.server.state import RunState
 from ntrp.skills.registry import SkillRegistry
@@ -43,47 +44,38 @@ async def resolve_session(runtime: Runtime) -> SessionData:
     return data
 
 
+def _is_anthropic(model: str) -> bool:
+    return get_model(model).provider == Provider.ANTHROPIC
+
+
 async def prepare_messages(
     runtime: Runtime,
     messages: list[dict],
     user_message: str,
     last_activity: datetime | None = None,
-) -> tuple[list[dict], str]:
-    # Get memory context if available
+) -> tuple[list[dict], list[dict]]:
     memory_context = None
     if runtime.memory:
         user_facts, recent_facts = await runtime.memory.get_context()
-
-        # Query-conditioned recall: inject facts relevant to this specific message
-        query_context = await runtime.memory.recall(user_message, limit=RECALL_SEARCH_LIMIT)
-        # Deduplicate against static context
-        static_ids = {f.id for f in user_facts} | {f.id for f in recent_facts}
-        query_facts = [f for f in query_context.facts if f.id not in static_ids]
-
-        formatted_memory_context = format_memory_context(
-            user_facts=user_facts,
-            recent_facts=recent_facts,
-            query_facts=query_facts,
-            query_observations=query_context.observations,
-        )
-        memory_context = formatted_memory_context or None
+        memory_context = format_session_memory(user_facts, recent_facts) or None
 
     skills_context = runtime.skill_registry.to_prompt_xml() if runtime.skill_registry else None
 
-    system_prompt = build_system_prompt(
+    system_blocks = build_system_blocks(
         source_details=runtime.get_source_details(),
         last_activity=last_activity,
         memory_context=memory_context,
         skills_context=skills_context,
+        use_cache_control=_is_anthropic(runtime.config.chat_model),
     )
 
     if not messages:
-        messages = [{"role": "system", "content": system_prompt}]
+        messages = [{"role": "system", "content": system_blocks}]
     elif isinstance(messages[0], dict) and messages[0].get("role") == "system":
-        messages[0]["content"] = system_prompt
+        messages[0]["content"] = system_blocks
     else:
-        messages.insert(0, {"role": "system", "content": system_prompt})
+        messages.insert(0, {"role": "system", "content": system_blocks})
 
     messages.append({"role": "user", "content": user_message})
 
-    return messages, system_prompt
+    return messages, system_blocks

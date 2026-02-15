@@ -116,17 +116,18 @@ class TestTemporalPass:
 
         await fact_repo.conn.commit()
 
-        with patch("ntrp.memory.temporal.acompletion") as mock_llm:
-            mock_llm.return_value = mock_llm_response(
-                json.dumps({"actions": [
-                    {
-                        "action": "create",
-                        "text": "User shows declining sleep pattern over the past 3 weeks, correlating with elevated resting heart rate",
-                        "reason": "sleep hours decreasing from 7.5 to 4 over 2 weeks, followed by elevated HR",
-                        "source_fact_ids": [f1.id, f2.id, f3.id, f4.id],
-                    }
-                ]})
-            )
+        mock_client = AsyncMock()
+        mock_client.completion.return_value = mock_llm_response(
+            json.dumps({"actions": [
+                {
+                    "action": "create",
+                    "text": "User shows declining sleep pattern over the past 3 weeks, correlating with elevated resting heart rate",
+                    "reason": "sleep hours decreasing from 7.5 to 4 over 2 weeks, followed by elevated HR",
+                    "source_fact_ids": [f1.id, f2.id, f3.id, f4.id],
+                }
+            ]})
+        )
+        with patch("ntrp.memory.temporal.get_completion_client", return_value=mock_client):
             created = await temporal_consolidation_pass(
                 fact_repo, obs_repo, "test-model", embed_fn, days=30, min_facts=3
             )
@@ -140,7 +141,7 @@ class TestTemporalPass:
         assert "heart rate" in obs_list[0].summary.lower()
 
         # Verify the LLM received chronological facts
-        call_args = mock_llm.call_args
+        call_args = mock_client.completion.call_args
         prompt_content = call_args[1]["messages"][0]["content"]
         assert "User slept 7.5 hours" in prompt_content
         assert "User slept 4 hours" in prompt_content
@@ -169,13 +170,14 @@ class TestTemporalPass:
         await fact_repo.set_temporal_checkpoint(entity.id, window_end)
         await fact_repo.conn.commit()
 
-        with patch("ntrp.memory.temporal.acompletion") as mock_llm:
+        mock_client = AsyncMock()
+        with patch("ntrp.memory.temporal.get_completion_client", return_value=mock_client):
             created = await temporal_consolidation_pass(
                 fact_repo, obs_repo, "test-model", embed_fn, days=30, min_facts=3
             )
 
         assert created == 0
-        mock_llm.assert_not_called()
+        mock_client.completion.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_no_pattern_returns_skip(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
@@ -196,10 +198,11 @@ class TestTemporalPass:
 
         await fact_repo.conn.commit()
 
-        with patch("ntrp.memory.temporal.acompletion") as mock_llm:
-            mock_llm.return_value = mock_llm_response(
-                '{"actions": [{"action": "skip", "reason": "no temporal patterns found"}]}'
-            )
+        mock_client = AsyncMock()
+        mock_client.completion.return_value = mock_llm_response(
+            '{"actions": [{"action": "skip", "reason": "no temporal patterns found"}]}'
+        )
+        with patch("ntrp.memory.temporal.get_completion_client", return_value=mock_client):
             created = await temporal_consolidation_pass(
                 fact_repo, obs_repo, "test-model", embed_fn, days=30, min_facts=3
             )
@@ -228,10 +231,11 @@ class TestTemporalPass:
 
         await fact_repo.conn.commit()
 
-        with patch("ntrp.memory.temporal.acompletion") as mock_llm:
+        mock_client = AsyncMock()
+        with patch("ntrp.memory.temporal.get_completion_client", return_value=mock_client):
             created = await temporal_consolidation_pass(
                 fact_repo, obs_repo, "test-model", embed_fn, days=30, min_facts=3
             )
 
         assert created == 0
-        mock_llm.assert_not_called()
+        mock_client.completion.assert_not_called()

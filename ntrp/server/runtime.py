@@ -2,9 +2,6 @@ import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 
-import litellm.llms.custom_httpx.async_client_cleanup as litellm_cleanup
-import litellm.main as litellm_main
-
 import ntrp.database as database
 from ntrp.channel import Channel
 from ntrp.config import NTRP_DIR, Config, get_config
@@ -12,6 +9,7 @@ from ntrp.constants import AGENT_MAX_DEPTH, INDEXABLE_SOURCES, SESSION_EXPIRY_HO
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
 from ntrp.core.events import ConsolidationCompleted, RunCompleted, RunStarted, ScheduleCompleted, ToolExecuted
+from ntrp.llm.router import close as llm_close, init as llm_init
 from ntrp.logging import get_logger
 from ntrp.memory.events import FactCreated, FactDeleted, FactUpdated, MemoryCleared
 from ntrp.memory.facts import FactMemory
@@ -117,6 +115,8 @@ class Runtime:
     async def connect(self) -> None:
         if self._connected:
             return
+
+        llm_init(self.config)
 
         self.config.db_dir.mkdir(exist_ok=True)
 
@@ -295,8 +295,7 @@ class Runtime:
         await self.indexer.stop()
         await self.indexer.close()
 
-        await litellm_main.base_llm_aiohttp_handler.close()
-        await litellm_cleanup.close_litellm_async_clients()
+        await llm_close()
 
 
 _runtime: Runtime | None = None

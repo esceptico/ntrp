@@ -24,6 +24,16 @@ def _parse_datetime(value: Any) -> datetime | None:
 class _FrozenModel(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
+    def __repr__(self) -> str:
+        fields = []
+        for name in self.model_fields:
+            val = getattr(self, name)
+            if isinstance(val, np.ndarray):
+                fields.append(f"{name}=<{val.shape}>")
+            else:
+                fields.append(f"{name}={val!r}")
+        return f"{type(self).__name__}({', '.join(fields)})"
+
 
 class ExtractedEntity(_FrozenModel):
     name: str
@@ -46,7 +56,28 @@ class HistoryEntry(_FrozenModel):
         return _parse_datetime(v)
 
 
-class Observation(_FrozenModel):
+class _MemoryModel(_FrozenModel):
+    @field_validator("embedding", mode="before", check_fields=False)
+    @classmethod
+    def _deserialize_embedding(cls, v: Any) -> Embedding | None:
+        if v is None or isinstance(v, np.ndarray):
+            return v
+        if isinstance(v, bytes):
+            return deserialize_embedding(v)
+        return v
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_defaults(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if not data.get("access_count"):
+                data["access_count"] = 0
+            if data.get("last_accessed_at") is None and data.get("created_at") is not None:
+                data["last_accessed_at"] = data["created_at"]
+        return data
+
+
+class Observation(_MemoryModel):
     id: int
     summary: str
     embedding: Embedding | None
@@ -58,33 +89,13 @@ class Observation(_FrozenModel):
     last_accessed_at: datetime
     access_count: int
 
-    @field_validator("embedding", mode="before")
-    @classmethod
-    def _deserialize_embedding(cls, v: Any) -> Embedding | None:
-        if v is None or isinstance(v, np.ndarray):
-            return v
-        if isinstance(v, bytes):
-            return deserialize_embedding(v)
-        return v
-
     @field_validator("created_at", "updated_at", "last_accessed_at", mode="before")
     @classmethod
     def _parse_dt(cls, v: Any) -> datetime | None:
         return _parse_datetime(v)
 
-    @model_validator(mode="before")
-    @classmethod
-    def _coerce_access_count(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            if not data.get("access_count"):
-                data["access_count"] = 0
-            # Fallback: last_accessed_at defaults to created_at
-            if data.get("last_accessed_at") is None and data.get("created_at") is not None:
-                data["last_accessed_at"] = data["created_at"]
-        return data
 
-
-class Fact(_FrozenModel):
+class Fact(_MemoryModel):
     id: int
     text: str
     embedding: Embedding | None
@@ -97,29 +108,10 @@ class Fact(_FrozenModel):
     consolidated_at: datetime | None = None
     entity_refs: list["EntityRef"] = []
 
-    @field_validator("embedding", mode="before")
-    @classmethod
-    def _deserialize_embedding(cls, v: Any) -> Embedding | None:
-        if v is None or isinstance(v, np.ndarray):
-            return v
-        if isinstance(v, bytes):
-            return deserialize_embedding(v)
-        return v
-
     @field_validator("created_at", "happened_at", "last_accessed_at", "consolidated_at", mode="before")
     @classmethod
     def _parse_dt(cls, v: Any) -> datetime | None:
         return _parse_datetime(v)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _coerce_defaults(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            if not data.get("access_count"):
-                data["access_count"] = 0
-            if data.get("last_accessed_at") is None and data.get("created_at") is not None:
-                data["last_accessed_at"] = data["created_at"]
-        return data
 
 
 class EntityRef(_FrozenModel):

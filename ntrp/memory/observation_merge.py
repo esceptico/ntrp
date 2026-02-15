@@ -14,7 +14,7 @@ from ntrp.constants import (
     OBSERVATION_MERGE_SIMILARITY_THRESHOLD,
     OBSERVATION_MERGE_TEMPERATURE,
 )
-from ntrp.llm import acompletion
+from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Observation
 from ntrp.memory.prompts import OBSERVATION_MERGE_PROMPT
@@ -77,7 +77,8 @@ async def _llm_merge_decision(
     )
 
     try:
-        resp = await acompletion(
+        client = get_completion_client(model)
+        resp = await client.completion(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format=MergeAction,

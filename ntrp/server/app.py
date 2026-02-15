@@ -167,7 +167,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     elif runtime.skill_registry:
         user_message, _ = expand_skill_command(user_message, runtime.skill_registry)
 
-    messages, system_prompt = await prepare_messages(
+    messages, system_blocks = await prepare_messages(
         runtime, messages, user_message, last_activity=session_state.last_activity
     )
 
@@ -230,7 +230,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 tools=runtime.tools,
                 tool_executor=runtime.executor,
                 model=runtime.config.chat_model,
-                system_prompt=system_prompt,
+                system_prompt=system_blocks,
                 ctx=tool_ctx,
                 max_depth=runtime.max_depth,
                 current_depth=0,
@@ -251,6 +251,9 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
             run.prompt_tokens = agent.total_input_tokens
             run.completion_tokens = agent.total_output_tokens
+            run.cache_read_tokens = agent.total_cache_read_tokens
+            run.cache_write_tokens = agent.total_cache_write_tokens
+            run.cost = agent.total_cost
 
             yield to_sse(DoneEvent(run_id=run.run_id, usage=asdict(run.get_usage())))
             registry.complete_run(run.run_id)
@@ -263,6 +266,9 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             if agent:
                 run.prompt_tokens = agent.total_input_tokens
                 run.completion_tokens = agent.total_output_tokens
+                run.cache_read_tokens = agent.total_cache_read_tokens
+                run.cache_write_tokens = agent.total_cache_write_tokens
+                run.cost = agent.total_cost
                 run.messages = agent.messages
             session_state.last_activity = datetime.now(UTC)
             metadata = {"last_input_tokens": agent._last_input_tokens} if agent else None
@@ -272,6 +278,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                     run_id=run.run_id,
                     prompt_tokens=run.prompt_tokens,
                     completion_tokens=run.completion_tokens,
+                    cache_read_tokens=run.cache_read_tokens,
+                    cache_write_tokens=run.cache_write_tokens,
                     result=result or "",
                 )
             )

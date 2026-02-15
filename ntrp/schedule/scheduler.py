@@ -102,7 +102,7 @@ class Scheduler:
         from ntrp.core.agent import Agent
         from ntrp.core.prompts import build_system_prompt, scheduled_task_suffix
         from ntrp.core.spawner import create_spawn_fn
-        from ntrp.memory.formatting import format_memory_context
+        from ntrp.memory.formatting import format_session_memory
         from ntrp.tools.core.context import ToolContext
 
         _logger.info("Executing scheduled task %s: %s", task.task_id, task.description[:80])
@@ -112,7 +112,7 @@ class Scheduler:
         memory_context = None
         if memory:
             user_facts, recent_facts = await memory.get_context()
-            memory_context = format_memory_context(user_facts, recent_facts) or None
+            memory_context = format_session_memory(user_facts, recent_facts) or None
 
         system_prompt = build_system_prompt(
             source_details=self.deps.source_details(),

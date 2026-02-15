@@ -185,7 +185,7 @@ def _environment() -> str:
     now = datetime.now()
     return ENVIRONMENT_TEMPLATE.format(
         date=now.strftime("%A, %B %d, %Y"),
-        time=now.strftime("%H:%M"),
+        time=now.strftime("%H:00"),
     )
 
 
@@ -267,27 +267,66 @@ If a skill has already been loaded in this conversation (you see a `<skill>` tag
 {skills_xml}"""
 
 
+def _static_text(
+    source_details: dict[str, dict],
+    skills_context: str | None = None,
+) -> str:
+    parts = [BASE_SYSTEM_PROMPT, _sources(source_details)]
+    if skills_context:
+        parts.append(SKILLS_TEMPLATE.format(skills_xml=skills_context))
+    return "\n\n".join(s for s in parts if s)
+
+
+def _dynamic_text(last_activity: datetime | None = None) -> str:
+    parts = [_environment(), _time_gap(last_activity)]
+    return "\n\n".join(s for s in parts if s)
+
+
+def build_system_blocks(
+    source_details: dict[str, dict],
+    last_activity: datetime | None = None,
+    memory_context: str | None = None,
+    skills_context: str | None = None,
+    use_cache_control: bool = False,
+) -> list[dict]:
+    """Build system prompt as a list of content blocks.
+
+    When use_cache_control=True (Anthropic models), adds cache_control
+    to stable blocks for prompt caching. Other providers ignore this or
+    break on it (Gemini), so it must be opt-in.
+    """
+    static = _static_text(source_details, skills_context)
+
+    static_block: dict = {"type": "text", "text": static}
+    if use_cache_control:
+        static_block["cache_control"] = {"type": "ephemeral"}
+
+    blocks = [static_block]
+
+    dynamic = _dynamic_text(last_activity)
+    if dynamic:
+        blocks.append({"type": "text", "text": dynamic})
+
+    if memory_context:
+        memory_block: dict = {
+            "type": "text",
+            "text": MEMORY_CONTEXT_TEMPLATE.format(memory_content=memory_context),
+        }
+        if use_cache_control:
+            memory_block["cache_control"] = {"type": "ephemeral"}
+        blocks.append(memory_block)
+
+    return blocks
+
+
 def build_system_prompt(
     source_details: dict[str, dict],
     last_activity: datetime | None = None,
     memory_context: str | None = None,
     skills_context: str | None = None,
 ) -> str:
-    # Order: static prefix (cacheable) → dynamic suffix
-    # BASE_SYSTEM_PROMPT + _sources are stable within a session
-    # _environment changes hourly, memory_context on remember() calls
-    sections = [
-        BASE_SYSTEM_PROMPT,  # ~800 tokens, fully static
-        _sources(source_details),  # semi-static, changes only at session setup
-    ]
-    if skills_context:
-        sections.append(SKILLS_TEMPLATE.format(skills_xml=skills_context))
-    sections.extend(
-        [
-            _environment(),  # dynamic (date/time), cache break point
-            _time_gap(last_activity),  # dynamic, depends on activity
-        ]
-    )
+    """Build system prompt as a single string (for non-chat callers like scheduler/CLI)."""
+    parts = [_static_text(source_details, skills_context), _dynamic_text(last_activity)]
     if memory_context:
-        sections.append(MEMORY_CONTEXT_TEMPLATE.format(memory_content=memory_context))
-    return "\n\n".join(s for s in sections if s)
+        parts.append(MEMORY_CONTEXT_TEMPLATE.format(memory_content=memory_context))
+    return "\n\n".join(s for s in parts if s)

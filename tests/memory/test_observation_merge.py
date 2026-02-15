@@ -151,13 +151,15 @@ class TestObservationMergePass:
         async def mock_embed(text: str) -> np.ndarray:
             return mock_embedding(text)
 
-        async def mock_acompletion(**kwargs):
+        async def mock_completion(**kwargs):
             return mock_llm_response(json.dumps({
                 "action": "merge",
                 "text": "User enjoys coffee daily, drinking it every morning",
             }))
 
-        with patch("ntrp.memory.observation_merge.acompletion", side_effect=mock_acompletion):
+        mock_client = AsyncMock()
+        mock_client.completion.side_effect = mock_completion
+        with patch("ntrp.memory.observation_merge.get_completion_client", return_value=mock_client):
             merged = await observation_merge_pass(obs_repo, "test-model", mock_embed)
 
         assert merged == 1
@@ -181,13 +183,15 @@ class TestObservationMergePass:
         async def mock_embed(text: str) -> np.ndarray:
             return mock_embedding(text)
 
-        async def mock_acompletion(**kwargs):
+        async def mock_completion(**kwargs):
             return mock_llm_response(json.dumps({
                 "action": "skip",
                 "reason": "different beverages",
             }))
 
-        with patch("ntrp.memory.observation_merge.acompletion", side_effect=mock_acompletion):
+        mock_client = AsyncMock()
+        mock_client.completion.side_effect = mock_completion
+        with patch("ntrp.memory.observation_merge.get_completion_client", return_value=mock_client):
             merged = await observation_merge_pass(obs_repo, "test-model", mock_embed)
 
         assert merged == 0
@@ -205,11 +209,12 @@ class TestObservationMergePass:
         async def mock_embed(text: str) -> np.ndarray:
             return mock_embedding(text)
 
-        with patch("ntrp.memory.observation_merge.acompletion") as mock_llm:
+        mock_client = AsyncMock()
+        with patch("ntrp.memory.observation_merge.get_completion_client", return_value=mock_client):
             merged = await observation_merge_pass(obs_repo, "test-model", mock_embed)
 
         assert merged == 0
-        mock_llm.assert_not_called()
+        mock_client.completion.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_keeper_has_higher_evidence(self, obs_repo: ObservationRepository):
@@ -224,13 +229,15 @@ class TestObservationMergePass:
         async def mock_embed(text: str) -> np.ndarray:
             return mock_embedding(text)
 
-        async def mock_acompletion(**kwargs):
+        async def mock_completion(**kwargs):
             return mock_llm_response(json.dumps({
                 "action": "merge",
                 "text": "merged observation",
             }))
 
-        with patch("ntrp.memory.observation_merge.acompletion", side_effect=mock_acompletion):
+        mock_client = AsyncMock()
+        mock_client.completion.side_effect = mock_completion
+        with patch("ntrp.memory.observation_merge.get_completion_client", return_value=mock_client):
             merged = await observation_merge_pass(obs_repo, "test-model", mock_embed)
 
         assert merged == 1
@@ -261,7 +268,7 @@ class TestObservationMergePass:
             # Return embedding very similar to all three
             return base.copy()
 
-        async def mock_acompletion(**kwargs):
+        async def mock_completion(**kwargs):
             nonlocal call_count
             call_count += 1
             return mock_llm_response(json.dumps({
@@ -269,7 +276,9 @@ class TestObservationMergePass:
                 "text": f"merged-{call_count}",
             }))
 
-        with patch("ntrp.memory.observation_merge.acompletion", side_effect=mock_acompletion):
+        mock_client = AsyncMock()
+        mock_client.completion.side_effect = mock_completion
+        with patch("ntrp.memory.observation_merge.get_completion_client", return_value=mock_client):
             merged = await observation_merge_pass(obs_repo, "test-model", mock_embed)
 
         assert merged == 2  # Two merges: A+B → AB, then AB+C → ABC
@@ -357,7 +366,7 @@ class TestTemporalPassDedup:
             # Return the same embedding as the existing observation (perfect duplicate)
             return existing_emb.copy()
 
-        async def mock_acompletion(**kwargs):
+        async def mock_completion(**kwargs):
             return mock_llm_response(json.dumps({
                 "actions": [{
                     "action": "create",
@@ -367,7 +376,9 @@ class TestTemporalPassDedup:
                 }]
             }))
 
-        with patch("ntrp.memory.temporal.acompletion", side_effect=mock_acompletion):
+        mock_client = AsyncMock()
+        mock_client.completion.side_effect = mock_completion
+        with patch("ntrp.memory.temporal.get_completion_client", return_value=mock_client):
             created = await temporal_consolidation_pass(
                 fact_repo, obs_repo, "test-model", mock_embed,
                 days=30, min_facts=3,

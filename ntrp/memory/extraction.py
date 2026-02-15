@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 
 from ntrp.constants import EXTRACTION_TEMPERATURE
-from ntrp.llm import acompletion
+from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import ExtractedEntity, ExtractionResult
 from ntrp.memory.prompts import EXTRACTION_PROMPT
@@ -23,7 +23,8 @@ class Extractor:
 
     async def extract(self, text: str) -> ExtractionResult:
         try:
-            response = await acompletion(
+            client = get_completion_client(self.model)
+            response = await client.completion(
                 model=self.model,
                 messages=[{"role": "user", "content": EXTRACTION_PROMPT.format(text=text)}],
                 response_format=ExtractionSchema,

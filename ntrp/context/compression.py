@@ -3,16 +3,10 @@ from ntrp.constants import (
     COMPRESSION_THRESHOLD,
     MAX_MESSAGES,
     SUMMARY_MAX_TOKENS,
-    SUPPORTED_MODELS,
 )
+from ntrp.llm.models import get_model
+from ntrp.llm.router import get_completion_client
 from ntrp.context.prompts import SUMMARIZE_PROMPT_TEMPLATE
-from ntrp.llm import acompletion
-
-
-def _get_attr(msg, key: str, default=None):
-    if isinstance(msg, dict):
-        return msg.get(key, default)
-    return getattr(msg, key, default)
 
 
 def should_compress(
@@ -24,7 +18,7 @@ def should_compress(
         return True
 
     if actual_input_tokens is not None:
-        limit = SUPPORTED_MODELS[model]["tokens"]
+        limit = get_model(model).context_window
         return actual_input_tokens > int(limit * COMPRESSION_THRESHOLD)
 
     return False
@@ -62,21 +56,18 @@ def find_compressible_range(
 def _build_conversation_text(messages: list, start: int, end: int) -> str:
     text_parts = []
     for msg in messages[start:end]:
-        role = _get_attr(msg, "role") or "unknown"
-        # Skip tool results — assistant responses already capture the meaning
-        if role == "tool":
+        if (role := msg.get("role")) == "tool":
             continue
-        content = _get_attr(msg, "content") or ""
-        if isinstance(content, str) and content:
-            if content.startswith("[Session State Handoff]"):
-                text_parts.append(f"[PRIOR SUMMARY — preserve key points]\n{content}")
-            else:
-                text_parts.append(f"{role}: {content}")
+        if not (content := msg.get("content")):
+            continue
+        if content.startswith("[Session State Handoff]"):
+            text_parts.append(f"[PRIOR SUMMARY — preserve key points]\n{content}")
+        else:
+            text_parts.append(f"{role}: {content}")
     return "\n\n".join(text_parts)
 
 
 def _build_summarize_request(conversation_text: str, model: str) -> dict:
-    model_params = SUPPORTED_MODELS[model]
     word_budget = int(SUMMARY_MAX_TOKENS * 0.75)
     prompt = SUMMARIZE_PROMPT_TEMPLATE.format(budget=word_budget)
     return {
@@ -87,7 +78,6 @@ def _build_summarize_request(conversation_text: str, model: str) -> dict:
         ],
         "temperature": 0.3,
         "max_tokens": SUMMARY_MAX_TOKENS,
-        **model_params.get("request_kwargs", {}),
     }
 
 
@@ -98,7 +88,8 @@ async def summarize_messages_async(
     model: str,
 ) -> str:
     conversation_text = _build_conversation_text(messages, start, end)
-    response = await acompletion(**_build_summarize_request(conversation_text, model))
+    client = get_completion_client(model)
+    response = await client.completion(**_build_summarize_request(conversation_text, model))
     content = response.choices[0].message.content
     if not content:
         return "Unable to summarize."

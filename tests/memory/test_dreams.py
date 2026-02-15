@@ -139,10 +139,11 @@ class TestDreamGeneration:
                 )
         await fact_repo.conn.commit()
 
-        with patch("ntrp.memory.dreams.acompletion") as mock_llm:
-            mock_llm.return_value = mock_llm_response(
-                '{"bridge": null, "insight": null}'
-            )
+        mock_client = AsyncMock()
+        mock_client.completion.return_value = mock_llm_response(
+            '{"bridge": null, "insight": null}'
+        )
+        with patch("ntrp.memory.dreams.get_completion_client", return_value=mock_client):
             created = await run_dream_pass(fact_repo, dream_repo, "test-model")
 
         assert created == 0
@@ -162,7 +163,7 @@ class TestDreamGeneration:
 
         call_count = 0
 
-        async def mock_acompletion(**kwargs):
+        async def mock_completion(**kwargs):
             nonlocal call_count
             content = kwargs["messages"][0]["content"]
 
@@ -181,7 +182,9 @@ class TestDreamGeneration:
                 })
             )
 
-        with patch("ntrp.memory.dreams.acompletion", side_effect=mock_acompletion):
+        mock_client = AsyncMock()
+        mock_client.completion.side_effect = mock_completion
+        with patch("ntrp.memory.dreams.get_completion_client", return_value=mock_client):
             created = await run_dream_pass(fact_repo, dream_repo, "test-model")
 
         # Evaluator selected indices 0 and 2
@@ -208,11 +211,12 @@ class TestDreamPassGating:
             )
         await fact_repo.conn.commit()
 
-        with patch("ntrp.memory.dreams.acompletion") as mock_llm:
+        mock_client = AsyncMock()
+        with patch("ntrp.memory.dreams.get_completion_client", return_value=mock_client):
             created = await run_dream_pass(fact_repo, dream_repo, "test-model")
 
         assert created == 0
-        mock_llm.assert_not_called()
+        mock_client.completion.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_evaluator_rejects_all(self, fact_repo: FactRepository, dream_repo: DreamRepository):
@@ -226,7 +230,7 @@ class TestDreamPassGating:
                 )
         await fact_repo.conn.commit()
 
-        async def mock_acompletion(**kwargs):
+        async def mock_completion(**kwargs):
             content = kwargs["messages"][0]["content"]
             if "CANDIDATES:" in content:
                 return mock_llm_response(
@@ -236,7 +240,9 @@ class TestDreamPassGating:
                 '{"bridge": "test", "insight": "test insight"}'
             )
 
-        with patch("ntrp.memory.dreams.acompletion", side_effect=mock_acompletion):
+        mock_client = AsyncMock()
+        mock_client.completion.side_effect = mock_completion
+        with patch("ntrp.memory.dreams.get_completion_client", return_value=mock_client):
             created = await run_dream_pass(fact_repo, dream_repo, "test-model")
 
         assert created == 0

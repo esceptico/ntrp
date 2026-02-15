@@ -23,6 +23,8 @@ class RunCompleted:
     run_id: str
     prompt_tokens: int
     completion_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
     result: str
 
 

@@ -31,8 +31,7 @@ def normalize_assistant_message(message: Any) -> dict:
             }
             for tc in message.tool_calls
         ]
-    # Preserve reasoning_content for models with thinking enabled (e.g. Kimi K2.5)
-    if hasattr(message, "reasoning_content") and message.reasoning_content:
+    if message.reasoning_content:
         sanitized["reasoning_content"] = message.reasoning_content
     return sanitized
 

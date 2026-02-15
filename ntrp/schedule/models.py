@@ -6,6 +6,16 @@ from enum import StrEnum
 from ntrp.constants import FRIDAY_WEEKDAY
 
 
+def _to_dt(v):
+    return datetime.fromisoformat(v) if isinstance(v, str) else v
+
+
+def _to_json_list(v):
+    if isinstance(v, str):
+        return json.loads(v) if v else []
+    return v if v is not None else []
+
+
 class Recurrence(StrEnum):
     ONCE = "once"
     DAILY = "daily"
@@ -30,20 +40,12 @@ class ScheduledTask:
     writable: bool
 
     def __post_init__(self):
-        if isinstance(self.recurrence, str):
-            self.recurrence = Recurrence(self.recurrence)
-        if isinstance(self.created_at, str):
-            self.created_at = datetime.fromisoformat(self.created_at)
-        if isinstance(self.next_run_at, str):
-            self.next_run_at = datetime.fromisoformat(self.next_run_at)
-        if isinstance(self.last_run_at, str):
-            self.last_run_at = datetime.fromisoformat(self.last_run_at)
-        if isinstance(self.running_since, str):
-            self.running_since = datetime.fromisoformat(self.running_since)
-        if isinstance(self.notifiers, str):
-            self.notifiers = json.loads(self.notifiers) if self.notifiers else []
-        elif self.notifiers is None:
-            self.notifiers = []
+        self.recurrence = Recurrence(self.recurrence) if isinstance(self.recurrence, str) else self.recurrence
+        self.created_at = _to_dt(self.created_at)
+        self.next_run_at = _to_dt(self.next_run_at)
+        self.last_run_at = _to_dt(self.last_run_at)
+        self.running_since = _to_dt(self.running_since)
+        self.notifiers = _to_json_list(self.notifiers)
         self.enabled = bool(self.enabled)
         self.writable = bool(self.writable)
 

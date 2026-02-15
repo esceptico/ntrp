@@ -4,7 +4,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
 from ntrp.config import load_user_settings, save_user_settings
-from ntrp.constants import EMBEDDING_MODELS, HISTORY_MESSAGE_LIMIT, SUPPORTED_MODELS
+from ntrp.constants import HISTORY_MESSAGE_LIMIT
+from ntrp.llm.models import get_model, list_models
+from ntrp.llm.models import EMBEDDING_DEFAULTS
 from ntrp.context.compression import compress_context_async, find_compressible_range
 from ntrp.logging import get_logger
 from ntrp.server.runtime import get_runtime
@@ -136,7 +138,7 @@ async def get_config():
 async def list_models():
     runtime = get_runtime()
     return {
-        "models": list(SUPPORTED_MODELS.keys()),
+        "models": list_models(),
         "chat_model": runtime.config.chat_model,
         "explore_model": runtime.config.explore_model,
         "memory_model": runtime.config.memory_model,
@@ -252,7 +254,7 @@ class UpdateEmbeddingRequest(BaseModel):
 async def list_embedding_models():
     runtime = get_runtime()
     return {
-        "models": list(EMBEDDING_MODELS.keys()),
+        "models": [m.id for m in EMBEDDING_DEFAULTS],
         "current": runtime.config.embedding_model,
     }
 
@@ -261,7 +263,8 @@ async def list_embedding_models():
 async def update_embedding_model(req: UpdateEmbeddingRequest):
     runtime = get_runtime()
 
-    if req.embedding_model not in EMBEDDING_MODELS:
+    valid_embedding = {m.id for m in EMBEDDING_DEFAULTS}
+    if req.embedding_model not in valid_embedding:
         return {"status": "error", "message": f"Unknown model: {req.embedding_model}"}
 
     if req.embedding_model == runtime.config.embedding_model:
@@ -294,7 +297,7 @@ async def update_embedding_model(req: UpdateEmbeddingRequest):
 async def get_context_usage():
     runtime = get_runtime()
     model = runtime.config.chat_model
-    model_limit = SUPPORTED_MODELS.get(model, {}).get("tokens", 128000)
+    model_limit = get_model(model).context_window
 
     data = await runtime.restore_session()
     messages = data.messages if data else []

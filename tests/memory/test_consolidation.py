@@ -244,18 +244,19 @@ class TestConsolidateFact:
         )
         embed_fn = AsyncMock(return_value=mock_embedding("test"))
 
-        with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            mock_llm.return_value.choices = [
-                type(
-                    "Choice",
-                    (),
-                    {
-                        "message": type(
-                            "Message", (), {"content": '{"actions": [{"action": "skip", "reason": "ephemeral location state"}]}'}
-                        )()
-                    },
-                )()
-            ]
+        mock_client = AsyncMock()
+        mock_client.completion.return_value.choices = [
+            type(
+                "Choice",
+                (),
+                {
+                    "message": type(
+                        "Message", (), {"content": '{"actions": [{"action": "skip", "reason": "ephemeral location state"}]}'}
+                    )()
+                },
+            )()
+        ]
+        with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
             result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
 
         assert result.action == "skipped"
@@ -276,22 +277,23 @@ class TestConsolidateFact:
         )
         embed_fn = AsyncMock(return_value=mock_embedding("test"))
 
-        with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            mock_llm.return_value.choices = [
-                type(
-                    "Choice",
-                    (),
-                    {
-                        "message": type(
-                            "Message",
-                            (),
-                            {
-                                "content": '{"actions": [{"action": "create", "text": "Alice is a Python-focused developer", "reason": "synthesized preference"}]}'
-                            },
-                        )()
-                    },
-                )()
-            ]
+        mock_client = AsyncMock()
+        mock_client.completion.return_value.choices = [
+            type(
+                "Choice",
+                (),
+                {
+                    "message": type(
+                        "Message",
+                        (),
+                        {
+                            "content": '{"actions": [{"action": "create", "text": "Alice is a Python-focused developer", "reason": "synthesized preference"}]}'
+                        },
+                    )()
+                },
+            )()
+        ]
+        with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
             result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
 
         assert result.action == "created"
@@ -321,22 +323,23 @@ class TestConsolidateFact:
         )
         embed_fn = AsyncMock(return_value=emb)
 
-        with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            mock_llm.return_value.choices = [
-                type(
-                    "Choice",
-                    (),
-                    {
-                        "message": type(
-                            "Message",
-                            (),
-                            {
-                                "content": f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, "text": "Alice is a Python-focused developer who values code quality", "reason": "synthesis"}}]}}'
-                            },
-                        )()
-                    },
-                )()
-            ]
+        mock_client = AsyncMock()
+        mock_client.completion.return_value.choices = [
+            type(
+                "Choice",
+                (),
+                {
+                    "message": type(
+                        "Message",
+                        (),
+                        {
+                            "content": f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, "text": "Alice is a Python-focused developer who values code quality", "reason": "synthesis"}}]}}'
+                        },
+                    )()
+                },
+            )()
+        ]
+        with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
             result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
 
         assert result.action == "updated"
@@ -367,22 +370,23 @@ class TestConsolidateFact:
         )
         embed_fn = AsyncMock(return_value=emb)
 
-        with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            mock_llm.return_value.choices = [
-                type(
-                    "Choice",
-                    (),
-                    {
-                        "message": type(
-                            "Message",
-                            (),
-                            {
-                                "content": f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, "text": "Alice works at Meta (previously at Google)", "reason": "contradiction - job change"}}]}}'
-                            },
-                        )()
-                    },
-                )()
-            ]
+        mock_client = AsyncMock()
+        mock_client.completion.return_value.choices = [
+            type(
+                "Choice",
+                (),
+                {
+                    "message": type(
+                        "Message",
+                        (),
+                        {
+                            "content": f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, "text": "Alice works at Meta (previously at Google)", "reason": "contradiction - job change"}}]}}'
+                        },
+                    )()
+                },
+            )()
+        ]
+        with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
             result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
 
         assert result.action == "updated"
@@ -412,22 +416,23 @@ class TestConsolidateFact:
         )
         embed_fn = AsyncMock(return_value=emb_hobby)
 
-        with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            mock_llm.return_value.choices = [
-                type(
-                    "Choice",
-                    (),
-                    {
-                        "message": type(
-                            "Message",
-                            (),
-                            {
-                                "content": '{"actions": [{"action": "create", "text": "Alice enjoys outdoor activities like hiking", "reason": "new topic - hobbies"}]}'
-                            },
-                        )()
-                    },
-                )()
-            ]
+        mock_client = AsyncMock()
+        mock_client.completion.return_value.choices = [
+            type(
+                "Choice",
+                (),
+                {
+                    "message": type(
+                        "Message",
+                        (),
+                        {
+                            "content": '{"actions": [{"action": "create", "text": "Alice enjoys outdoor activities like hiking", "reason": "new topic - hobbies"}]}'
+                        },
+                    )()
+                },
+            )()
+        ]
+        with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
             result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
 
         assert result.action == "created"
@@ -445,14 +450,15 @@ class TestConsolidateFact:
         )
         embed_fn = AsyncMock(return_value=mock_embedding("test"))
 
-        with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            mock_llm.return_value.choices = [
-                type(
-                    "Choice",
-                    (),
-                    {"message": type("Message", (), {"content": "not valid json at all"})()},
-                )()
-            ]
+        mock_client = AsyncMock()
+        mock_client.completion.return_value.choices = [
+            type(
+                "Choice",
+                (),
+                {"message": type("Message", (), {"content": "not valid json at all"})()},
+            )()
+        ]
+        with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
             result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
 
         assert result.action == "skipped"
@@ -471,14 +477,15 @@ class TestAlwaysConsolidated:
         )
         embed_fn = AsyncMock(return_value=mock_embedding("test"))
 
-        with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            mock_llm.return_value.choices = [
-                type(
-                    "Choice",
-                    (),
-                    {"message": type("Message", (), {"content": '{"actions": [{"action": "skip", "reason": "ephemeral"}]}'})()},
-                )()
-            ]
+        mock_client = AsyncMock()
+        mock_client.completion.return_value.choices = [
+            type(
+                "Choice",
+                (),
+                {"message": type("Message", (), {"content": '{"actions": [{"action": "skip", "reason": "ephemeral"}]}'})()},
+            )()
+        ]
+        with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
             await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
 
         updated = await fact_repo.get(fact.id)
@@ -494,18 +501,19 @@ class TestAlwaysConsolidated:
         )
         embed_fn = AsyncMock(return_value=mock_embedding("test"))
 
-        with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            mock_llm.return_value.choices = [
-                type(
-                    "Choice",
-                    (),
-                    {
-                        "message": type(
-                            "Message", (), {"content": '{"actions": [{"action": "create", "text": "Bob enjoys pizza"}]}'}
-                        )()
-                    },
-                )()
-            ]
+        mock_client = AsyncMock()
+        mock_client.completion.return_value.choices = [
+            type(
+                "Choice",
+                (),
+                {
+                    "message": type(
+                        "Message", (), {"content": '{"actions": [{"action": "create", "text": "Bob enjoys pizza"}]}'}
+                    )()
+                },
+            )()
+        ]
+        with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
             await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
 
         updated = await fact_repo.get(fact.id)
@@ -562,12 +570,13 @@ class TestTemporalConsolidation:
         )
         embed_fn = AsyncMock(return_value=emb)
 
-        with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            mock_llm.return_value = mock_llm_response(
-                f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, '
-                f'"text": "Alice leads the backend rewrite (previously mobile, transitioned ~March 2026)", '
-                f'"reason": "role transition — newer fact supersedes mobile leadership"}}]}}'
-            )
+        mock_client = AsyncMock()
+        mock_client.completion.return_value = mock_llm_response(
+            f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, '
+            f'"text": "Alice leads the backend rewrite (previously mobile, transitioned ~March 2026)", '
+            f'"reason": "role transition — newer fact supersedes mobile leadership"}}]}}'
+        )
+        with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
             result = await consolidate_fact(new_fact, fact_repo, obs_repo, "test-model", embed_fn)
 
         assert result.action == "updated"
@@ -579,7 +588,7 @@ class TestTemporalConsolidation:
         assert updated_obs.history[0].previous_text == "Alice is the mobile app lead"
 
         # Verify the LLM received temporal context — happened_at in source facts
-        call_args = mock_llm.call_args
+        call_args = mock_client.completion.call_args
         prompt_content = call_args[1]["messages"][0]["content"]
         assert "happened_at" in prompt_content
         assert jan_10.isoformat() in prompt_content
@@ -628,12 +637,13 @@ class TestTemporalConsolidation:
         )
         embed_fn = AsyncMock(return_value=emb)
 
-        with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            mock_llm.return_value = mock_llm_response(
-                f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, '
-                f'"text": "Alice works across mobile and backend development", '
-                f'"reason": "expanded scope — addition, not replacement"}}]}}'
-            )
+        mock_client = AsyncMock()
+        mock_client.completion.return_value = mock_llm_response(
+            f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, '
+            f'"text": "Alice works across mobile and backend development", '
+            f'"reason": "expanded scope — addition, not replacement"}}]}}'
+        )
+        with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
             result = await consolidate_fact(new_fact, fact_repo, obs_repo, "test-model", embed_fn)
 
         assert result.action == "updated"
@@ -705,12 +715,13 @@ class TestTemporalConsolidation:
         )
         embed_fn = AsyncMock(return_value=emb)
 
-        with patch("ntrp.memory.consolidation.acompletion") as mock_llm:
-            mock_llm.return_value = mock_llm_response(
-                f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, '
-                f'"text": "Alice mentors junior engineers (previously also led mobile, left ~April 2026)", '
-                f'"reason": "partial update — mobile role ended but mentoring continues"}}]}}'
-            )
+        mock_client = AsyncMock()
+        mock_client.completion.return_value = mock_llm_response(
+            f'{{"actions": [{{"action": "update", "observation_id": {obs.id}, '
+            f'"text": "Alice mentors junior engineers (previously also led mobile, left ~April 2026)", '
+            f'"reason": "partial update — mobile role ended but mentoring continues"}}]}}'
+        )
+        with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
             result = await consolidate_fact(new_fact, fact_repo, obs_repo, "test-model", embed_fn)
 
         assert result.action == "updated"
