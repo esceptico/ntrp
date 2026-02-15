@@ -285,7 +285,7 @@ async def update_embedding_model(req: UpdateEmbeddingRequest):
 
     # Re-embed memory vectors in the background
     if runtime.memory:
-        runtime.memory.start_reembed(runtime.config.embedding)
+        runtime.memory.start_reembed(runtime.config.embedding, rebuild=True)
 
     return {
         "status": "reindexing",

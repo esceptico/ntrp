@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from ntrp.constants import EXPLORE_TIMEOUT
+from ntrp.constants import EXPLORE_TIMEOUT, USER_ENTITY_NAME
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.prompts import EXPLORE_PROMPTS
 from ntrp.tools.core.base import Tool, ToolResult
@@ -49,7 +49,7 @@ class ExploreTool(Tool):
             parts.append("DEPTH BUDGET: You are at the last level — no more sub-agents. Do all work directly.")
 
         if memory:
-            user_facts, _ = await memory.get_context(user_limit=5, recent_limit=0)
+            user_facts = await memory.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=5)
             if user_facts:
                 context = "\n".join(f"- {f.text}" for f in user_facts)
                 parts.append(f"USER CONTEXT:\n{context}")

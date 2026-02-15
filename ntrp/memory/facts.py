@@ -214,15 +214,16 @@ class FactMemory:
     def reembed_running(self) -> bool:
         return self._reembed_task is not None and not self._reembed_task.done()
 
-    def start_reembed(self, embedding: EmbeddingConfig) -> None:
+    def start_reembed(self, embedding: EmbeddingConfig, *, rebuild: bool = False) -> None:
         if self._reembed_task and not self._reembed_task.done():
             self._reembed_task.cancel()
-        self._reembed_task = asyncio.create_task(self._run_reembed(embedding))
+        self._reembed_task = asyncio.create_task(self._run_reembed(embedding, rebuild=rebuild))
 
-    async def _run_reembed(self, embedding: EmbeddingConfig) -> None:
+    async def _run_reembed(self, embedding: EmbeddingConfig, *, rebuild: bool = False) -> None:
         try:
             new_embedder = Embedder(embedding)
-            await self.db.rebuild_vec_tables(embedding.dim)
+            if rebuild:
+                await self.db.rebuild_vec_tables(embedding.dim)
 
             facts = await self.facts.list_all_with_embeddings()
             observations = await self.observations.list_all_with_embeddings()
@@ -393,10 +394,8 @@ class FactMemory:
     async def count(self) -> int:
         return await self.facts.count()
 
-    async def get_context(self, user_limit: int = 10, recent_limit: int = 10) -> tuple[list[Fact], list[Fact]]:
-        user_facts = await self.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=user_limit)
-        recent_facts = await self.facts.list_recent(limit=recent_limit)
-        return user_facts, recent_facts
+    async def get_context(self, user_limit: int = 10) -> list[Fact]:
+        return await self.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=user_limit)
 
     async def clear_observations(self) -> dict[str, int]:
         async with self.transaction():

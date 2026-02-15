@@ -124,15 +124,20 @@ class GraphDatabase:
         )
 
         stored_dim = await self._get_meta("embedding_dim")
-        if stored_dim is not None and int(stored_dim) != self.embedding_dim:
+        if stored_dim is None or int(stored_dim) != self.embedding_dim:
             _logger.info(
-                "Memory embedding dimension changed (%s → %d), rebuilding vec tables",
+                "Rebuilding memory vec tables (stored=%s, current=%d)",
                 stored_dim,
                 self.embedding_dim,
             )
             await self.conn.execute("DROP TABLE IF EXISTS observations_vec")
             await self.conn.execute("DROP TABLE IF EXISTS facts_vec")
-            self.dim_changed = True
+            # Only trigger re-embed when there's existing data with stale embeddings
+            rows = await self.conn.execute_fetchall(
+                "SELECT EXISTS(SELECT 1 FROM facts WHERE embedding IS NOT NULL)"
+            )
+            if rows and rows[0][0]:
+                self.dim_changed = True
 
         await self._init_vec_tables()
         await self._set_meta("embedding_dim", str(self.embedding_dim))

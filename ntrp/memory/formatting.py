@@ -37,38 +37,25 @@ def _format_sections(
     return "\n".join(lines)
 
 
-def format_session_memory(
-    user_facts: list[Fact] | None = None,
-    recent_facts: list[Fact] | None = None,
-) -> str:
-    """Format static session memory for the system prompt (cacheable)."""
-    sections: list[tuple[str, list[str]]] = []
-    if user_facts:
-        sections.append(("**About user**", [f"- {f.text}" for f in user_facts]))
-    if recent_facts:
-        sections.append(("**Recent**", [f"- {f.text}" for f in recent_facts]))
-    if not sections:
+def format_session_memory(user_facts: list[Fact] | None = None) -> str:
+    """Format stable user memory for the system prompt (cacheable)."""
+    if not user_facts:
         return ""
+    sections = [("**About user**", [f"- {f.text}" for f in user_facts])]
     return _format_sections(sections)
 
 
 def format_memory_context(
-    user_facts: list[Fact] | None = None,
-    recent_facts: list[Fact] | None = None,
     query_facts: list[Fact] | None = None,
     query_observations: list[Observation] | None = None,
 ) -> str:
     """Format full memory context (used by recall tool)."""
-    if not user_facts and not recent_facts and not query_facts and not query_observations:
+    if not query_facts and not query_observations:
         return ""
 
     sections: list[tuple[str, list[str]]] = []
-    if user_facts:
-        sections.append(("**About user**", [f"- {f.text}" for f in user_facts]))
     if query_facts:
         sections.append(("**Relevant**", [f"- {f.text}" for f in query_facts]))
-    if recent_facts:
-        sections.append(("**Recent**", [f"- {f.text}" for f in recent_facts]))
     if query_observations:
         sections.append(("**Patterns**", [_format_observation(obs) for obs in query_observations]))
 
