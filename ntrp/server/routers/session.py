@@ -136,7 +136,7 @@ async def get_config():
 
 
 @router.get("/models")
-async def list_models():
+async def get_models():
     runtime = get_runtime()
     return {
         "models": list_models(),
