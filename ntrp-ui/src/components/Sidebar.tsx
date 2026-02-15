@@ -185,6 +185,9 @@ export function Sidebar({ serverConfig, data, usage, width, height }: SidebarPro
           <SectionHeader label="CONTEXT" />
           <ContextBar total={data.context.total} limit={data.context.limit} width={contentWidth} />
           <text>
+            <span fg={D}>{formatTokens(data.context.total)} / {formatTokens(data.context.limit)}</span>
+          </text>
+          <text>
             <span fg={D}>{data.context.message_count} msgs  {data.context.tool_count} tools</span>
           </text>
         </box>
@@ -195,15 +198,15 @@ export function Sidebar({ serverConfig, data, usage, width, height }: SidebarPro
         const totalInput = usage.prompt + usage.cache_read + usage.cache_write;
         const hasCache = usage.cache_read > 0 || usage.cache_write > 0;
         const cachePct = totalInput > 0 ? Math.round((usage.cache_read / totalInput) * 100) : 0;
-        const limit = data.context?.limit;
-        const limitStr = limit ? ` / ${formatTokens(limit)}` : "";
 
         return (
           <box flexDirection="column">
             <SectionHeader label="USAGE" />
             <text>
               <span fg={S}>{formatTokens(totalInput)}</span>
-              <span fg={D}>{limitStr}</span>
+              <span fg={D}> in  </span>
+              <span fg={S}>{formatTokens(usage.completion)}</span>
+              <span fg={D}> out</span>
               {hasCache && <span fg={D}>  {cachePct}% cache</span>}
             </text>
             {usage.cost > 0 && (
