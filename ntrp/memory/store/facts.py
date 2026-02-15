@@ -79,7 +79,7 @@ _SQL_GET_FACTS_FOR_ENTITY = """
     FROM facts f
     JOIN entity_refs er ON f.id = er.fact_id
     WHERE er.name = ?
-    ORDER BY f.created_at DESC
+    ORDER BY f.access_count DESC, f.created_at DESC
     LIMIT ?
 """
 
