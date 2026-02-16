@@ -119,14 +119,15 @@ class GeminiClient(CompletionClient, EmbeddingClient):
             parts.append(types.Part(text=text))
         for tc in msg.get("tool_calls") or []:
             fn = tc.get("function", tc)
-            parts.append(
-                types.Part(
-                    function_call=types.FunctionCall(
-                        name=fn.get("name", ""),
-                        args=parse_args(fn.get("arguments", "{}")),
-                    )
-                )
-            )
+            part_kwargs: dict = {
+                "function_call": types.FunctionCall(
+                    name=fn.get("name", ""),
+                    args=parse_args(fn.get("arguments", "{}")),
+                ),
+            }
+            if sig := tc.get("thought_signature"):
+                part_kwargs["thought_signature"] = sig
+            parts.append(types.Part(**part_kwargs))
         return types.Content(role="model", parts=parts) if parts else None
 
     def _convert_tool_result(self, msg: dict, tool_name_map: dict[str, str]) -> types.Part:
@@ -244,7 +245,7 @@ class GeminiClient(CompletionClient, EmbeddingClient):
         call_seq = count()
 
         for part in parts:
-            if part.text is not None:
+            if part.text is not None and not part.thought:
                 text_parts.append(part.text)
             elif part.function_call is not None:
                 fc = part.function_call
@@ -256,6 +257,7 @@ class GeminiClient(CompletionClient, EmbeddingClient):
                             name=fc.name,
                             arguments=json.dumps(dict(fc.args)) if fc.args else "{}",
                         ),
+                        thought_signature=part.thought_signature,
                     )
                 )
 

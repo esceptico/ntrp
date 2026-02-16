@@ -20,8 +20,9 @@ def normalize_assistant_message(message: Any) -> dict:
         "content": message.content or "",
     }
     if message.tool_calls:
-        sanitized["tool_calls"] = [
-            {
+        tool_calls = []
+        for tc in message.tool_calls:
+            tc_dict = {
                 "id": tc.id,
                 "type": "function",
                 "function": {
@@ -29,8 +30,10 @@ def normalize_assistant_message(message: Any) -> dict:
                     "arguments": tc.function.arguments,
                 },
             }
-            for tc in message.tool_calls
-        ]
+            if tc.thought_signature:
+                tc_dict["thought_signature"] = tc.thought_signature
+            tool_calls.append(tc_dict)
+        sanitized["tool_calls"] = tool_calls
     if message.reasoning_content:
         sanitized["reasoning_content"] = message.reasoning_content
     return sanitized
