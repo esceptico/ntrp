@@ -137,8 +137,13 @@ export const InputArea = memo(function InputArea({
         e.preventDefault();
         const cmd = filteredCommandsRef.current[selectedIndexRef.current];
         const newText = `/${cmd.name} `;
-        inputRef.current?.setText(newText);
-        inputRef.current?.setCursorByOffset(newText.length);
+        const input = inputRef.current;
+        if (input) {
+          const cursor = input.logicalCursor;
+          input.deleteRange(0, 0, cursor.row, cursor.col);
+          input.insertText(newText);
+          input.cursorOffset = newText.length;
+        }
         setValue(newText);
         setSelectedIndex(0);
         return;
