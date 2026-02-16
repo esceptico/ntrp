@@ -218,9 +218,7 @@ class FactMemory:
             self._reembed_task.cancel()
         self._reembed_task = asyncio.create_task(self._run_reembed(embedding, rebuild=rebuild))
 
-    async def _run_reembed(
-        self, embedding: EmbeddingConfig, *, rebuild: bool = False, batch_size: int = 100
-    ) -> None:
+    async def _run_reembed(self, embedding: EmbeddingConfig, *, rebuild: bool = False, batch_size: int = 100) -> None:
         try:
             new_embedder = Embedder(embedding)
             if rebuild:

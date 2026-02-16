@@ -38,9 +38,7 @@ class SourceManager:
                         self._sources.pop(name, None)
                     else:
                         if source.errors:
-                            self._errors[name] = "; ".join(
-                                f"{k}: {v}" for k, v in source.errors.items()
-                            )
+                            self._errors[name] = "; ".join(f"{k}: {v}" for k, v in source.errors.items())
                         self._sources[name] = source
                 except Exception as e:
                     self._errors[name] = str(e)
