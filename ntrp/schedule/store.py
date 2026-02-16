@@ -147,6 +147,13 @@ class ScheduleStore:
         )
         await self.conn.commit()
 
+    async def clear_all_running(self) -> int:
+        cursor = await self.conn.execute(
+            "UPDATE scheduled_tasks SET running_since = NULL WHERE running_since IS NOT NULL"
+        )
+        await self.conn.commit()
+        return cursor.rowcount
+
     async def update_name(self, task_id: str, name: str) -> None:
         await self.conn.execute(
             "UPDATE scheduled_tasks SET name = ? WHERE task_id = ?",

@@ -40,7 +40,7 @@ class Scheduler:
     def start(self) -> None:
         if self._task is not None:
             return
-        self._task = asyncio.create_task(self._loop())
+        self._task = asyncio.create_task(self._startup_and_loop())
         _logger.info("Scheduler started (polling every %ds)", POLL_INTERVAL)
 
     @property
@@ -64,6 +64,26 @@ class Scheduler:
             self._running_execution = None
 
         _logger.info("Scheduler stopped")
+
+    async def _startup_and_loop(self) -> None:
+        try:
+            await self._reconcile()
+        except Exception:
+            _logger.exception("Scheduler reconciliation failed")
+        await self._loop()
+
+    async def _reconcile(self) -> None:
+        cleared = await self.store.clear_all_running()
+        if cleared:
+            _logger.info("Cleared %d stale running flags", cleared)
+
+        now = datetime.now(UTC)
+        for task in await self.store.list_due(now):
+            if task.recurrence == Recurrence.ONCE:
+                continue  # one-shot tasks should still fire
+            next_run = compute_next_run(task.time_of_day, task.recurrence, after=now)
+            await self.store.update_last_run(task.task_id, task.last_run_at or now, next_run)
+            _logger.info("Advanced stale task %s to %s", task.task_id, next_run)
 
     async def _loop(self) -> None:
         while True:
