@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from ntrp.channel import Channel
 from ntrp.events.internal import FactDeleted, FactUpdated, MemoryCleared
 from ntrp.memory.facts import FactMemory
