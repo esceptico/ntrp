@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ntrp.constants import CONSOLIDATION_INTERVAL
-from ntrp.events import ConsolidationCompleted, FactCreated, RunCompleted, RunStarted, ToolExecuted
+from ntrp.events.internal import ConsolidationCompleted, FactCreated, RunCompleted, RunStarted, ToolExecuted
 
 if TYPE_CHECKING:
     from ntrp.server.runtime import Runtime

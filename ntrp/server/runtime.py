@@ -8,12 +8,13 @@ from ntrp.config import NTRP_DIR, Config, get_config
 from ntrp.constants import AGENT_MAX_DEPTH, SESSION_EXPIRY_HOURS
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
-from ntrp.events import SourceChanged
+from ntrp.events.internal import SourceChanged
 from ntrp.llm.router import close as llm_close, init as llm_init
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.service import MemoryService
-from ntrp.notifiers import Notifier, create_notifier
+from ntrp.notifiers.base import Notifier
+from ntrp.notifiers.factory import create_notifier
 from ntrp.notifiers.service import NotifierService
 from ntrp.notifiers.store import NotifierStore
 from ntrp.schedule.scheduler import Scheduler, SchedulerDeps

@@ -4,9 +4,9 @@ from pathlib import Path
 
 from ntrp.constants import OFFLOAD_PREVIEW_CHARS, OFFLOAD_THRESHOLD
 from ntrp.core.async_queue import AsyncQueue
-from ntrp.events import ToolExecuted
 from ntrp.core.models import PendingToolCall, ToolExecutionResult
-from ntrp.events import SSEEvent, ToolCallEvent, ToolResultEvent
+from ntrp.events.internal import ToolExecuted
+from ntrp.events.sse import SSEEvent, ToolCallEvent, ToolResultEvent
 from ntrp.logging import get_logger
 from ntrp.tools.core.base import ToolResult
 from ntrp.tools.core.context import ToolContext, ToolExecution

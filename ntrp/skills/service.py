@@ -2,7 +2,7 @@ from pathlib import Path
 
 from ntrp.channel import Channel
 from ntrp.config import NTRP_DIR
-from ntrp.events import SkillChanged
+from ntrp.events.internal import SkillChanged
 from ntrp.skills.installer import install_from_github
 from ntrp.skills.registry import SkillMeta, SkillRegistry
 

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from ntrp.channel import Handler
 from ntrp.constants import CONSOLIDATION_TEMPERATURE
-from ntrp.events import ContextCompressed
+from ntrp.events.internal import ContextCompressed
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory

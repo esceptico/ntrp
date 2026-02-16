@@ -7,12 +7,11 @@ from ntrp.context.models import SessionData, SessionState
 from ntrp.core.agent import Agent
 from ntrp.core.factory import create_agent
 from ntrp.core.prompts import INIT_INSTRUCTION, build_system_blocks
-from ntrp.events import (
+from ntrp.events.internal import RunCompleted, RunStarted
+from ntrp.events.sse import (
     AgentResult,
     DoneEvent,
     ErrorEvent,
-    RunCompleted,
-    RunStarted,
     SessionInfoEvent,
     TextEvent,
     ThinkingEvent,

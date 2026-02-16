@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from ntrp.events import ContextCompressed
+from ntrp.events.internal import ContextCompressed
 from ntrp.memory.chat_extraction import (
     ChatExtractionSchema,
     _format_messages,

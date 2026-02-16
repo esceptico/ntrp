@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
-from ntrp.events import RunCompleted, RunStarted, ScheduleCompleted
+from ntrp.events.internal import RunCompleted, RunStarted, ScheduleCompleted
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
 from ntrp.schedule.models import Recurrence, ScheduledTask, compute_next_run

@@ -3,7 +3,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from ntrp.channel import Channel
-from ntrp.events import NotifierChanged
+from ntrp.events.internal import NotifierChanged
 from ntrp.notifiers.base import Notifier
 from ntrp.notifiers.models import NotifierConfig
 from ntrp.notifiers.store import NotifierStore

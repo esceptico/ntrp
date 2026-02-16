@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
-from ntrp.events import ApprovalNeededEvent, ChoiceEvent
+from ntrp.events.sse import ApprovalNeededEvent, ChoiceEvent
 
 if TYPE_CHECKING:
     from ntrp.memory.facts import FactMemory

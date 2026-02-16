@@ -3,7 +3,7 @@ import json
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from ntrp.events import AgentResult, CancelledEvent, SSEEvent
+from ntrp.events.sse import AgentResult, CancelledEvent, SSEEvent
 
 if TYPE_CHECKING:
     from ntrp.services.chat import ChatContext

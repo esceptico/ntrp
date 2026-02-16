@@ -3,11 +3,11 @@ from typing import Any
 
 from ntrp.constants import AGENT_MAX_ITERATIONS
 from ntrp.context.compression import compress_context_async, find_compressible_range, should_compress
-from ntrp.events import ContextCompressed
 from ntrp.core.parsing import normalize_assistant_message, parse_tool_calls
 from ntrp.core.state import AgentState, StateCallback
 from ntrp.core.tool_runner import ToolRunner
-from ntrp.events import SSEEvent, TextEvent, ThinkingEvent, ToolResultEvent
+from ntrp.events.internal import ContextCompressed
+from ntrp.events.sse import SSEEvent, TextEvent, ThinkingEvent, ToolResultEvent
 from ntrp.llm.models import get_model
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger

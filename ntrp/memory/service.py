@@ -1,5 +1,5 @@
 from ntrp.channel import Channel
-from ntrp.events import FactDeleted, FactUpdated, MemoryCleared
+from ntrp.events.internal import FactDeleted, FactUpdated, MemoryCleared
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.models import Dream, EntityRef, Fact, Observation
 

@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import Callable
 
-from ntrp.notifiers import Notifier
+from ntrp.notifiers.base import Notifier
 from ntrp.schedule.models import ScheduledTask
 from ntrp.schedule.scheduler import Scheduler
 from ntrp.schedule.store import ScheduleStore

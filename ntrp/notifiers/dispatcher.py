@@ -1,7 +1,7 @@
 from collections.abc import Callable
 
 from ntrp.channel import Handler
-from ntrp.events import ScheduleCompleted
+from ntrp.events.internal import ScheduleCompleted
 from ntrp.logging import get_logger
 from ntrp.notifiers.base import Notifier
 

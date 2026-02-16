@@ -2,7 +2,7 @@ from ntrp.channel import Channel
 from ntrp.config import Config
 from ntrp.logging import get_logger
 from ntrp.sources.base import Source
-from ntrp.events import SourceChanged
+from ntrp.events.internal import SourceChanged
 from ntrp.sources.registry import SOURCES
 
 _logger = get_logger(__name__)
