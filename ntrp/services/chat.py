@@ -133,6 +133,9 @@ class ChatService:
         elif runtime.skill_registry:
             user_message, _ = expand_skill_command(user_message, runtime.skill_registry)
 
+        if not session_state.name and not is_init and not message.strip().startswith("/"):
+            session_state.name = message.strip()[:50]
+
         messages, system_blocks = await _prepare_messages(
             runtime, messages, user_message, last_activity=session_state.last_activity
         )

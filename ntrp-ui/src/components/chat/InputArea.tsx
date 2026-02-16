@@ -176,6 +176,19 @@ export const InputArea = memo(function InputArea({
 
   const modelName = formatModel(chatModel);
 
+  const [clock, setClock] = useState(() => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  });
+  useEffect(() => {
+    const tick = () => {
+      const d = new Date();
+      setClock(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+    };
+    const id = setInterval(tick, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <box flexDirection="column" flexShrink={0}>
       {/* Autocomplete / Help — above input */}
@@ -293,6 +306,11 @@ export const InputArea = memo(function InputArea({
                 </text>
               </box>
               <box gap={2} flexDirection="row">
+                <text><span fg={colors.text.disabled}>{clock}</span></text>
+                <text>
+                  <span fg={colors.footer}>ctrl+n</span>
+                  <span fg={colors.text.disabled}> new</span>
+                </text>
                 <text>
                   <span fg={colors.footer}>ctrl+l</span>
                   <span fg={colors.text.disabled}> panel</span>

@@ -223,6 +223,14 @@ function AppContent({
         setSidebarVisible(v => !v);
         return;
       }
+      if (key.ctrl && key.name === "n" && !isStreaming && viewMode === "chat" && !showSettings) {
+        const newId = await createNewSession();
+        if (newId) {
+          resetForSessionSwitch([]);
+          refreshSidebar();
+        }
+        return;
+      }
       if (key.name === "escape" && isStreaming) {
         cancel();
       }
@@ -230,7 +238,7 @@ function AppContent({
         toggleSkipApprovals();
       }
     },
-    [renderer, isStreaming, cancel, toggleSkipApprovals, showSettings]
+    [renderer, isStreaming, cancel, toggleSkipApprovals, showSettings, viewMode, createNewSession, resetForSessionSwitch, refreshSidebar]
   );
 
   useKeypress(handleGlobalKeypress, { isActive: true });
