@@ -161,14 +161,4 @@ def get_config() -> Config:
 
     # Build config: init args (settings.json) > env vars > defaults
     overrides = {k: settings[k] for k in PERSIST_KEYS if k in settings}
-    config = Config(**overrides)  # type: ignore - pydantic handles validation
-
-    # Persist resolved config back so it survives restarts
-    resolved = config.model_dump(include=PERSIST_KEYS)
-    if resolved.get("vault_path") is not None:
-        resolved["vault_path"] = str(resolved["vault_path"])
-    if any(settings.get(k) != v for k, v in resolved.items()):
-        settings.update(resolved)
-        save_user_settings(settings)
-
-    return config
+    return Config(**overrides)  # type: ignore - pydantic handles validation
