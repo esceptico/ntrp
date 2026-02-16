@@ -118,6 +118,7 @@ class ChatService:
 
         session_data = await _resolve_session(runtime)
         session_state = session_data.state
+        session_state.skip_approvals = skip_approvals
         messages = session_data.messages
 
         user_message = message
