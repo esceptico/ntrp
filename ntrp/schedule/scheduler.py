@@ -99,11 +99,9 @@ class Scheduler:
 
     async def _run_agent(self, task: ScheduledTask) -> str | None:
         # Delayed imports: scheduler → agent → tools creates a circular import chain
-        from ntrp.core.agent import Agent
+        from ntrp.core.factory import create_agent
         from ntrp.core.prompts import build_system_prompt, scheduled_task_suffix
-        from ntrp.core.spawner import create_spawn_fn
         from ntrp.memory.formatting import format_session_memory
-        from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
         from ntrp.tools.directives import load_directives
 
         _logger.info("Executing scheduled task %s: %s", task.task_id, task.description[:80])
@@ -123,36 +121,19 @@ class Scheduler:
         system_prompt += scheduled_task_suffix(bool(task.notifiers))
 
         session_state = self.deps.create_session()
+        tools = self.deps.executor.get_tools() if task.writable else self.deps.executor.get_tools(mutates=False)
 
-        tool_ctx = ToolContext(
-            session_state=session_state,
-            registry=self.deps.executor.registry,
-            run=RunContext(
-                run_id=run_id,
-                max_depth=self.deps.max_depth,
-                explore_model=self.deps.explore_model,
-            ),
-            io=IOBridge(),
-            memory=memory,
-            channel=self.deps.channel,
-        )
-        tool_ctx.spawn_fn = create_spawn_fn(
+        agent = create_agent(
             executor=self.deps.executor,
             model=self.deps.model,
-            max_depth=self.deps.max_depth,
-            current_depth=0,
-            cancel_check=None,
-        )
-
-        tools = self.deps.executor.get_tools() if task.writable else self.deps.executor.get_tools(mutates=False)
-        agent = Agent(
             tools=tools,
-            tool_executor=self.deps.executor,
-            model=self.deps.model,
             system_prompt=system_prompt,
-            ctx=tool_ctx,
+            session_state=session_state,
+            memory=memory,
+            channel=self.deps.channel,
             max_depth=self.deps.max_depth,
-            current_depth=0,
+            explore_model=self.deps.explore_model,
+            run_id=run_id,
         )
 
         self.deps.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))

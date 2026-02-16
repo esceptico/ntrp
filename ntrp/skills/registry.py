@@ -75,6 +75,9 @@ class SkillRegistry:
                 location=location,
             )
 
+    def list_all(self) -> list[SkillMeta]:
+        return list(self._skills.values())
+
     def get(self, name: str) -> SkillMeta | None:
         return self._skills.get(name)
 

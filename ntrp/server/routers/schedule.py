@@ -1,5 +1,3 @@
-import asyncio
-
 from fastapi import APIRouter, HTTPException
 
 from ntrp.server.runtime import get_runtime
@@ -13,13 +11,20 @@ from ntrp.server.schemas import (
 router = APIRouter(tags=["schedule"])
 
 
+def _require_schedule_service():
+    runtime = get_runtime()
+    if not runtime.schedule_service:
+        raise HTTPException(status_code=503, detail="Scheduling not available")
+    return runtime
+
+
 @router.get("/schedules")
 async def list_schedules():
     runtime = get_runtime()
-    if not runtime.schedule_store:
+    if not runtime.schedule_service:
         return {"schedules": []}
 
-    tasks = await runtime.schedule_store.list_all()
+    tasks = await runtime.schedule_service.list_all()
     return {
         "schedules": [
             {
@@ -43,12 +48,10 @@ async def list_schedules():
 
 @router.get("/schedules/{task_id}")
 async def get_schedule(task_id: str):
-    runtime = get_runtime()
-    if not runtime.schedule_store:
-        raise HTTPException(status_code=503, detail="Scheduling not available")
-
-    task = await runtime.schedule_store.get(task_id)
-    if not task:
+    runtime = _require_schedule_service()
+    try:
+        task = await runtime.schedule_service.get(task_id)
+    except KeyError:
         raise HTTPException(status_code=404, detail="Task not found")
 
     return {
@@ -70,99 +73,74 @@ async def get_schedule(task_id: str):
 
 @router.post("/schedules/{task_id}/toggle")
 async def toggle_schedule(task_id: str):
-    runtime = get_runtime()
-    if not runtime.schedule_store:
-        raise HTTPException(status_code=503, detail="Scheduling not available")
-
-    task = await runtime.schedule_store.get(task_id)
-    if not task:
+    runtime = _require_schedule_service()
+    try:
+        new_enabled = await runtime.schedule_service.toggle_enabled(task_id)
+    except KeyError:
         raise HTTPException(status_code=404, detail="Task not found")
-
-    new_enabled = not task.enabled
-    await runtime.schedule_store.set_enabled(task_id, new_enabled)
     return {"enabled": new_enabled}
 
 
 @router.post("/schedules/{task_id}/writable")
 async def toggle_writable(task_id: str):
-    runtime = get_runtime()
-    if not runtime.schedule_store:
-        raise HTTPException(status_code=503, detail="Scheduling not available")
-
-    task = await runtime.schedule_store.get(task_id)
-    if not task:
+    runtime = _require_schedule_service()
+    try:
+        new_writable = await runtime.schedule_service.toggle_writable(task_id)
+    except KeyError:
         raise HTTPException(status_code=404, detail="Task not found")
-
-    new_writable = not task.writable
-    await runtime.schedule_store.set_writable(task_id, new_writable)
     return {"writable": new_writable}
 
 
 @router.post("/schedules/{task_id}/run")
 async def run_schedule(task_id: str):
-    runtime = get_runtime()
-    if not runtime.scheduler:
-        raise HTTPException(status_code=503, detail="Scheduler not available")
-
-    task = await runtime.schedule_store.get(task_id)
-    if not task:
+    runtime = _require_schedule_service()
+    try:
+        await runtime.schedule_service.run_now(task_id)
+    except KeyError:
         raise HTTPException(status_code=404, detail="Task not found")
-    if task.running_since:
-        raise HTTPException(status_code=409, detail="Task is already running")
-
-    asyncio.create_task(runtime.scheduler.run_now(task_id))
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="Scheduler not available")
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     return {"status": "started"}
 
 
 @router.patch("/schedules/{task_id}")
 async def update_schedule(task_id: str, request: UpdateScheduleRequest):
-    runtime = get_runtime()
-    if not runtime.schedule_store:
-        raise HTTPException(status_code=503, detail="Scheduling not available")
-
-    task = await runtime.schedule_store.get(task_id)
-    if not task:
+    runtime = _require_schedule_service()
+    try:
+        task = await runtime.schedule_service.update(task_id, name=request.name, description=request.description)
+    except KeyError:
         raise HTTPException(status_code=404, detail="Task not found")
-
-    if request.name is not None:
-        await runtime.schedule_store.update_name(task_id, request.name)
-    if request.description is not None:
-        await runtime.schedule_store.update_description(task_id, request.description)
-    return {"name": request.name or task.name, "description": request.description or task.description}
+    return {"name": task.name, "description": task.description}
 
 
 @router.get("/notifiers")
 async def list_notifiers():
     runtime = get_runtime()
-    return {"notifiers": list(runtime.notifiers.keys())}
+    if not runtime.notifier_service:
+        return {"notifiers": []}
+    return {"notifiers": runtime.notifier_service.list_names()}
 
 
 @router.put("/schedules/{task_id}/notifiers")
 async def set_notifiers(task_id: str, request: SetNotifiersRequest):
-    runtime = get_runtime()
-    if not runtime.schedule_store:
-        raise HTTPException(status_code=503, detail="Scheduling not available")
-
-    task = await runtime.schedule_store.get(task_id)
-    if not task:
+    runtime = _require_schedule_service()
+    try:
+        await runtime.schedule_service.set_notifiers(task_id, request.notifiers)
+    except KeyError:
         raise HTTPException(status_code=404, detail="Task not found")
-
-    for name in request.notifiers:
-        if name not in runtime.notifiers:
-            raise HTTPException(status_code=400, detail=f"Unknown notifier: {name}")
-
-    await runtime.schedule_store.set_notifiers(task_id, request.notifiers)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"notifiers": request.notifiers}
 
 
 @router.delete("/schedules/{task_id}")
 async def delete_schedule(task_id: str):
-    runtime = get_runtime()
-    if not runtime.schedule_store:
-        raise HTTPException(status_code=503, detail="Scheduling not available")
-
-    deleted = await runtime.schedule_store.delete(task_id)
-    if not deleted:
+    runtime = _require_schedule_service()
+    try:
+        await runtime.schedule_service.delete(task_id)
+    except KeyError:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"status": "deleted"}
 
@@ -173,10 +151,10 @@ async def delete_schedule(task_id: str):
 @router.get("/notifiers/configs")
 async def list_notifier_configs():
     runtime = get_runtime()
-    if not runtime.notifier_store:
+    if not runtime.notifier_service:
         return {"configs": []}
 
-    configs = await runtime.notifier_store.list_all()
+    configs = await runtime.notifier_service.list_configs()
     return {
         "configs": [
             {
@@ -193,16 +171,9 @@ async def list_notifier_configs():
 @router.get("/notifiers/types")
 async def list_notifier_types():
     runtime = get_runtime()
-    gmail = runtime.get_gmail()
-    accounts = gmail.list_accounts() if gmail else []
-
-    return {
-        "types": {
-            "email": {"fields": ["from_account", "to_address"], "accounts": accounts},
-            "telegram": {"fields": ["user_id"]},
-            "bash": {"fields": ["command"]},
-        }
-    }
+    if not runtime.notifier_service:
+        return {"types": {}}
+    return {"types": runtime.notifier_service.get_types()}
 
 
 @router.post("/notifiers/configs")

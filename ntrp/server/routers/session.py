@@ -57,11 +57,7 @@ async def get_session() -> SessionResponse:
 @router.post("/session/clear")
 async def clear_session():
     runtime = get_runtime()
-
-    if runtime.session_store:
-        sessions = await runtime.session_store.list_sessions(limit=100)
-        for s in sessions:
-            await runtime.session_store.delete_session(s["session_id"])
+    await runtime.clear_sessions()
     session_state = runtime.create_session()
 
     return {

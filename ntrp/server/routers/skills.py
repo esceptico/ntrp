@@ -1,18 +1,9 @@
-from pathlib import Path
-
 from fastapi import APIRouter, HTTPException
 
-from ntrp.config import NTRP_DIR
 from ntrp.server.runtime import get_runtime
 from ntrp.server.schemas import InstallRequest
-from ntrp.skills.installer import install_from_github
 
 router = APIRouter(tags=["skills"])
-
-_SKILLS_DIRS = [
-    (Path.cwd() / ".skills", "project"),
-    (NTRP_DIR / "skills", "global"),
-]
 
 
 @router.get("/skills")
@@ -25,7 +16,7 @@ async def list_skills():
                 "description": m.description,
                 "location": m.location,
             }
-            for m in runtime.skill_registry._skills.values()
+            for m in runtime.skill_service.list_all()
         ],
     }
 
@@ -33,19 +24,14 @@ async def list_skills():
 @router.post("/skills/install")
 async def install_skill(request: InstallRequest):
     runtime = get_runtime()
-    target_dir = NTRP_DIR / "skills"
 
     try:
-        name = await install_from_github(request.source, target_dir)
+        meta = await runtime.skill_service.install(request.source)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    runtime.skill_registry.reload(_SKILLS_DIRS)
-    runtime.rebuild_executor()
-
-    meta = runtime.skill_registry.get(name)
     return {
-        "name": name,
+        "name": meta.name if meta else request.source,
         "description": meta.description if meta else "",
         "status": "installed",
     }
@@ -54,7 +40,6 @@ async def install_skill(request: InstallRequest):
 @router.delete("/skills/{name}")
 async def remove_skill(name: str):
     runtime = get_runtime()
-    if not runtime.skill_registry.remove(name):
+    if not runtime.skill_service.remove(name):
         raise HTTPException(status_code=404, detail=f"Skill not found: {name}")
-    runtime.rebuild_executor()
     return {"status": "removed", "name": name}

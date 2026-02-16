@@ -17,6 +17,7 @@ from ntrp.notifiers import Notifier, create_notifier
 from ntrp.notifiers.service import NotifierService
 from ntrp.notifiers.store import NotifierStore
 from ntrp.schedule.scheduler import Scheduler, SchedulerDeps
+from ntrp.schedule.service import ScheduleService
 from ntrp.schedule.store import ScheduleStore
 from ntrp.server.dashboard import DashboardCollector
 from ntrp.server.indexer import Indexer
@@ -25,6 +26,7 @@ from ntrp.server.state import RunRegistry
 from ntrp.services.config import ConfigService
 from ntrp.services.lifecycle import wire_events
 from ntrp.skills.registry import SkillRegistry
+from ntrp.skills.service import SkillService
 from ntrp.sources.browser import BrowserHistorySource
 from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.sources.base import Indexable
@@ -57,9 +59,11 @@ class Runtime:
         self.schedule_store: ScheduleStore | None = None
         self.notifier_store: NotifierStore | None = None
         self.scheduler: Scheduler | None = None
+        self.schedule_service: ScheduleService | None = None
         self.run_registry = RunRegistry()
 
         self.skill_registry = SkillRegistry()
+        self.skill_service: SkillService | None = None
         self.notifiers: dict[str, Notifier] = {}
         self.notifier_service: NotifierService | None = None
         self.dashboard = DashboardCollector()
@@ -162,14 +166,21 @@ class Runtime:
                 (NTRP_DIR / "skills", "global"),
             ]
         )
+        self.skill_service = SkillService(self.skill_registry, self.channel)
 
         await self.rebuild_notifiers()
+
+        self.schedule_service = ScheduleService(
+            store=self.schedule_store,
+            scheduler=None,  # set after start_scheduler()
+            get_notifiers=lambda: self.notifiers,
+        )
 
         self.notifier_service = NotifierService(
             store=self.notifier_store,
             schedule_store=self.schedule_store,
             notifiers=self.notifiers,
-            rebuild_fn=self.rebuild_notifiers,
+            channel=self.channel,
             get_gmail=self.get_gmail,
         )
 
@@ -244,6 +255,12 @@ class Runtime:
 
         return data
 
+    async def clear_sessions(self) -> None:
+        if self.session_store:
+            sessions = await self.session_store.list_sessions(limit=100)
+            for s in sessions:
+                await self.session_store.delete_session(s["session_id"])
+
     async def save_session(
         self,
         session_state: SessionState,
@@ -272,6 +289,8 @@ class Runtime:
             )
             self.scheduler = Scheduler(deps, self.schedule_store)
             self.scheduler.start()
+            if self.schedule_service:
+                self.schedule_service.scheduler = self.scheduler
 
     def start_consolidation(self) -> None:
         if self.memory:

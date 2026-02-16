@@ -7,9 +7,11 @@ from ntrp.events.internal import (
     IndexingCompleted,
     IndexingStarted,
     MemoryCleared,
+    NotifierChanged,
     RunCompleted,
     RunStarted,
     ScheduleCompleted,
+    SkillChanged,
     SourceChanged,
     ToolExecuted,
 )
@@ -55,9 +57,11 @@ __all__ = [
     "IndexingCompleted",
     "IndexingStarted",
     "MemoryCleared",
+    "NotifierChanged",
     "RunCompleted",
     "RunStarted",
     "ScheduleCompleted",
+    "SkillChanged",
     "SourceChanged",
     "ToolExecuted",
 ]

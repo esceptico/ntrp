@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.agent import Agent
+from ntrp.core.factory import create_agent
 from ntrp.core.prompts import INIT_INSTRUCTION, build_system_blocks
-from ntrp.core.spawner import create_spawn_fn
 from ntrp.events import (
     AgentResult,
     DoneEvent,
@@ -22,7 +22,7 @@ from ntrp.memory.formatting import format_session_memory
 from ntrp.server.state import RunState, RunStatus
 from ntrp.server.stream import run_agent_loop, to_sse
 from ntrp.skills.registry import SkillRegistry
-from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
+from ntrp.tools.core.context import IOBridge
 from ntrp.context.compression import compress_context_async, find_compressible_range
 from ntrp.tools.directives import load_directives
 
@@ -152,26 +152,6 @@ class ChatService:
         run.approval_queue = asyncio.Queue()
         run.choice_queue = asyncio.Queue()
 
-        extra_auto_approve = INIT_AUTO_APPROVE if ctx.is_init else set()
-        run_ctx = RunContext(
-            run_id=run.run_id,
-            max_depth=runtime.max_depth,
-            extra_auto_approve=extra_auto_approve,
-            explore_model=runtime.config.explore_model,
-        )
-        io = IOBridge(
-            approval_queue=run.approval_queue,
-            choice_queue=run.choice_queue,
-        )
-        tool_ctx = ToolContext(
-            session_state=session_state,
-            registry=runtime.executor.registry,
-            run=run_ctx,
-            io=io,
-            memory=runtime.memory,
-            channel=runtime.channel,
-        )
-
         yield to_sse(
             SessionInfoEvent(
                 session_id=session_state.session_id,
@@ -188,23 +168,23 @@ class ChatService:
         agent: Agent | None = None
         result: str | None = None
         try:
-            tool_ctx.spawn_fn = create_spawn_fn(
+            agent = create_agent(
                 executor=runtime.executor,
                 model=runtime.config.chat_model,
-                max_depth=runtime.max_depth,
-                current_depth=0,
-                cancel_check=lambda: run.cancelled,
-            )
-
-            agent = Agent(
                 tools=runtime.tools,
-                tool_executor=runtime.executor,
-                model=runtime.config.chat_model,
                 system_prompt=ctx.messages[0]["content"] if ctx.messages else [],
-                ctx=tool_ctx,
+                session_state=session_state,
+                memory=runtime.memory,
+                channel=runtime.channel,
                 max_depth=runtime.max_depth,
-                current_depth=0,
+                explore_model=runtime.config.explore_model,
+                run_id=run.run_id,
                 cancel_check=lambda: run.cancelled,
+                io=IOBridge(
+                    approval_queue=run.approval_queue,
+                    choice_queue=run.choice_queue,
+                ),
+                extra_auto_approve=INIT_AUTO_APPROVE if ctx.is_init else None,
             )
 
             async for sse in run_agent_loop(ctx, agent, ctx.user_message):

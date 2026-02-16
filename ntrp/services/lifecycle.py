@@ -1,7 +1,5 @@
-import asyncio
 from typing import TYPE_CHECKING
 
-from ntrp.channel import Channel
 from ntrp.sources.base import Indexable
 from ntrp.events import (
     ConsolidationCompleted,
@@ -10,9 +8,11 @@ from ntrp.events import (
     FactDeleted,
     FactUpdated,
     MemoryCleared,
+    NotifierChanged,
     RunCompleted,
     RunStarted,
     ScheduleCompleted,
+    SkillChanged,
     SourceChanged,
     ToolExecuted,
 )
@@ -53,6 +53,15 @@ async def _on_source_changed(runtime: "Runtime", event: SourceChanged) -> None:
         await runtime.indexer.index.clear_source(name)
 
 
+async def _on_skill_changed(runtime: "Runtime", _event: SkillChanged) -> None:
+    async with runtime._config_lock:
+        runtime.rebuild_executor()
+
+
+async def _on_notifier_changed(runtime: "Runtime", _event: NotifierChanged) -> None:
+    await runtime.rebuild_notifiers()
+
+
 def wire_events(runtime: "Runtime") -> None:
     ch = runtime.channel
 
@@ -71,6 +80,12 @@ def wire_events(runtime: "Runtime") -> None:
 
     # Source changes → rebuild executor + reindex
     ch.subscribe(SourceChanged, lambda e: _on_source_changed(runtime, e))
+
+    # Skill changes → rebuild executor
+    ch.subscribe(SkillChanged, lambda e: _on_skill_changed(runtime, e))
+
+    # Notifier changes → rebuild notifiers + executor
+    ch.subscribe(NotifierChanged, lambda e: _on_notifier_changed(runtime, e))
 
     # Schedule notifications
     ch.subscribe(ScheduleCompleted, make_schedule_dispatcher(lambda: runtime.notifiers))

@@ -112,14 +112,14 @@ class DashboardCollector:
                 "error": runtime.indexer.error,
             },
             "scheduler": {
-                "running": runtime.scheduler is not None and runtime.scheduler.is_running,
+                "running": runtime.schedule_service.is_running if runtime.schedule_service else False,
                 "active_task": None,
                 "total_scheduled": 0,
                 "enabled_count": 0,
                 "next_run_at": None,
             },
             "consolidation": {
-                "running": runtime.memory is not None and runtime.memory.is_consolidating,
+                "running": runtime.memory_service.is_consolidating if runtime.memory_service else False,
                 "interval_seconds": CONSOLIDATION_INTERVAL,
             },
         }
@@ -135,15 +135,13 @@ class DashboardCollector:
     async def snapshot_async(self, runtime: "Runtime") -> dict:
         data = self._snapshot_sync(runtime)
 
-        if runtime.memory:
-            repo = runtime.memory.facts
-            obs_repo = runtime.memory.observations
+        if runtime.memory_service:
+            stats = await runtime.memory_service.stats()
             data["memory"] = {
                 "enabled": True,
-                "fact_count": await repo.count(),
-                "observation_count": await obs_repo.count(),
-                "unconsolidated": await repo.count_unconsolidated(),
-                "consolidation_running": runtime.memory.is_consolidating,
+                **stats,
+                "unconsolidated": await runtime.memory_service.facts.count_unconsolidated(),
+                "consolidation_running": runtime.memory_service.is_consolidating,
                 "last_consolidation_at": self.last_consolidation_at,
                 "recent_facts": list(self.recent_facts),
             }
@@ -158,8 +156,8 @@ class DashboardCollector:
                 "recent_facts": [],
             }
 
-        if runtime.schedule_store:
-            tasks = await runtime.schedule_store.list_all()
+        if runtime.schedule_service:
+            tasks = await runtime.schedule_service.list_all()
             enabled = [t for t in tasks if t.enabled]
             running = [t for t in tasks if t.running_since]
             next_runs = [t.next_run_at.timestamp() for t in enabled if t.next_run_at]

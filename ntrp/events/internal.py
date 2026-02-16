@@ -97,3 +97,19 @@ class SourceChanged:
 class ScheduleCompleted:
     task: ScheduledTask
     result: str | None
+
+
+# --- Skills ---
+
+
+@dataclass(frozen=True)
+class SkillChanged:
+    pass
+
+
+# --- Notifiers ---
+
+
+@dataclass(frozen=True)
+class NotifierChanged:
+    pass

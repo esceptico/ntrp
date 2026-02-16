@@ -2,6 +2,8 @@ import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from ntrp.channel import Channel
+from ntrp.events import NotifierChanged
 from ntrp.notifiers.base import Notifier
 from ntrp.notifiers.models import NotifierConfig
 from ntrp.notifiers.store import NotifierStore
@@ -17,14 +19,29 @@ class NotifierService:
         store: NotifierStore,
         schedule_store: ScheduleStore | None,
         notifiers: dict[str, Notifier],
-        rebuild_fn: Callable,
+        channel: Channel,
         get_gmail: Callable,
     ):
         self.store = store
         self.schedule_store = schedule_store
         self.notifiers = notifiers
-        self.rebuild_fn = rebuild_fn
+        self.channel = channel
         self.get_gmail = get_gmail
+
+    def list_names(self) -> list[str]:
+        return list(self.notifiers.keys())
+
+    def get_types(self) -> dict:
+        gmail = self.get_gmail()
+        accounts = gmail.list_accounts() if gmail else []
+        return {
+            "email": {"fields": ["from_account", "to_address"], "accounts": accounts},
+            "telegram": {"fields": ["user_id"]},
+            "bash": {"fields": ["command"]},
+        }
+
+    async def list_configs(self) -> list[NotifierConfig]:
+        return await self.store.list_all()
 
     def validate_config(self, notifier_type: str, config: dict) -> None:
         if notifier_type not in VALID_TYPES:
@@ -64,7 +81,7 @@ class NotifierService:
             created_at=datetime.now(UTC),
         )
         await self.store.save(cfg)
-        await self.rebuild_fn()
+        self.channel.publish(NotifierChanged())
         return cfg
 
     async def update(self, name: str, new_config: dict, new_name: str | None = None) -> NotifierConfig:
@@ -85,7 +102,7 @@ class NotifierService:
 
         existing.config = new_config
         await self.store.save(existing)
-        await self.rebuild_fn()
+        self.channel.publish(NotifierChanged())
         return existing
 
     async def delete(self, name: str) -> None:
@@ -100,7 +117,7 @@ class NotifierService:
                     new_notifiers = [n for n in task.notifiers if n != name]
                     await self.schedule_store.set_notifiers(task.task_id, new_notifiers)
 
-        await self.rebuild_fn()
+        self.channel.publish(NotifierChanged())
 
     async def test(self, name: str) -> None:
         notifier = self.notifiers.get(name)
