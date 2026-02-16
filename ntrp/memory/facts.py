@@ -218,7 +218,9 @@ class FactMemory:
             self._reembed_task.cancel()
         self._reembed_task = asyncio.create_task(self._run_reembed(embedding, rebuild=rebuild))
 
-    async def _run_reembed(self, embedding: EmbeddingConfig, *, rebuild: bool = False) -> None:
+    async def _run_reembed(
+        self, embedding: EmbeddingConfig, *, rebuild: bool = False, batch_size: int = 100
+    ) -> None:
         try:
             new_embedder = Embedder(embedding)
             if rebuild:
@@ -230,16 +232,20 @@ class FactMemory:
             self._reembed_progress = {"total": total, "done": 0}
 
             done = 0
-            for fact in facts:
-                new_emb = await new_embedder.embed_one(fact.text)
-                await self.facts.update_embedding(fact.id, new_emb)
-                done += 1
+            for i in range(0, len(facts), batch_size):
+                batch = facts[i : i + batch_size]
+                embeddings = await new_embedder.embed([f.text for f in batch])
+                for fact, emb in zip(batch, embeddings):
+                    await self.facts.update_embedding(fact.id, emb)
+                done += len(batch)
                 self._reembed_progress["done"] = done
 
-            for obs in observations:
-                new_emb = await new_embedder.embed_one(obs.summary)
-                await self.observations.update_embedding(obs.id, new_emb)
-                done += 1
+            for i in range(0, len(observations), batch_size):
+                batch = observations[i : i + batch_size]
+                embeddings = await new_embedder.embed([o.summary for o in batch])
+                for obs, emb in zip(batch, embeddings):
+                    await self.observations.update_embedding(obs.id, emb)
+                done += len(batch)
                 self._reembed_progress["done"] = done
 
             await self.db.conn.commit()

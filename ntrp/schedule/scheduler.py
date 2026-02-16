@@ -22,12 +22,12 @@ POLL_INTERVAL = 60
 class SchedulerDeps:
     executor: ToolExecutor
     memory: Callable[[], FactMemory | None]
-    model: str
+    get_model: Callable[[], str]
     max_depth: int
     channel: Channel
     source_details: Callable[[], dict[str, dict]]
     create_session: Callable[[], SessionState]
-    explore_model: str | None = None
+    get_explore_model: Callable[[], str | None] = lambda: None
 
 
 class Scheduler:
@@ -125,14 +125,14 @@ class Scheduler:
 
         agent = create_agent(
             executor=self.deps.executor,
-            model=self.deps.model,
+            model=self.deps.get_model(),
             tools=tools,
             system_prompt=system_prompt,
             session_state=session_state,
             memory=memory,
             channel=self.deps.channel,
             max_depth=self.deps.max_depth,
-            explore_model=self.deps.explore_model,
+            explore_model=self.deps.get_explore_model(),
             run_id=run_id,
         )
 

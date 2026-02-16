@@ -100,6 +100,10 @@ class Runtime:
                 channel=self.channel,
             )
             self.memory_service = MemoryService(self.memory, self.channel)
+        elif self.config.memory and self.memory:
+            if self.memory.extraction_model != self.config.memory_model:
+                self.memory.extraction_model = self.config.memory_model
+                self.memory.extractor.model = self.config.memory_model
         elif not self.config.memory and self.memory:
             await self.memory.close()
             self.memory = None
@@ -293,12 +297,12 @@ class Runtime:
             deps = SchedulerDeps(
                 executor=self.executor,
                 memory=lambda: self.memory,
-                model=self.config.chat_model,
+                get_model=lambda: self.config.chat_model,
                 max_depth=self.max_depth,
                 channel=self.channel,
                 source_details=self.get_source_details,
                 create_session=self.create_session,
-                explore_model=self.config.explore_model,
+                get_explore_model=lambda: self.config.explore_model,
             )
             self.scheduler = Scheduler(deps, self.schedule_store)
             self.scheduler.start()

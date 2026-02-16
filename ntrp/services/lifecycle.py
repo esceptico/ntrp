@@ -93,5 +93,5 @@ def wire_events(runtime: "Runtime") -> None:
     # Auto-extract facts from compressed context
     ch.subscribe(
         ContextCompressed,
-        make_chat_extraction_handler(lambda: runtime.memory, runtime.config.memory_model),
+        make_chat_extraction_handler(lambda: runtime.memory, lambda: runtime.config.memory_model),
     )

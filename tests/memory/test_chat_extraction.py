@@ -135,7 +135,7 @@ class TestChatExtractionHandler:
         mock_client = AsyncMock()
         mock_client.completion.return_value = mock_llm_response(schema.model_dump_json())
 
-        handler = make_chat_extraction_handler(lambda: memory, "test-model")
+        handler = make_chat_extraction_handler(lambda: memory, lambda: "test-model")
         event = ContextCompressed(messages=SAMPLE_MESSAGES, session_id="sess-123")
 
         with patch("ntrp.memory.chat_extraction.get_completion_client", return_value=mock_client):
@@ -147,7 +147,7 @@ class TestChatExtractionHandler:
 
     @pytest.mark.asyncio
     async def test_skips_when_no_memory(self):
-        handler = make_chat_extraction_handler(lambda: None, "test-model")
+        handler = make_chat_extraction_handler(lambda: None, lambda: "test-model")
         event = ContextCompressed(messages=SAMPLE_MESSAGES, session_id="sess-123")
         await handler(event)
 
@@ -159,7 +159,7 @@ class TestChatExtractionHandler:
         mock_client = AsyncMock()
         mock_client.completion.return_value = mock_llm_response(schema.model_dump_json())
 
-        handler = make_chat_extraction_handler(lambda: memory, "test-model")
+        handler = make_chat_extraction_handler(lambda: memory, lambda: "test-model")
         event = ContextCompressed(messages=SAMPLE_MESSAGES, session_id="sess-123")
 
         with patch("ntrp.memory.chat_extraction.get_completion_client", return_value=mock_client):

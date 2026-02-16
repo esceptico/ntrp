@@ -94,14 +94,14 @@ async def extract_from_chat(
 
 def make_chat_extraction_handler(
     get_memory: Callable[[], FactMemory | None],
-    model: str,
+    get_model: Callable[[], str],
 ) -> Handler[ContextCompressed]:
     async def handle(event: ContextCompressed) -> None:
         memory = get_memory()
         if not memory:
             return
 
-        facts = await extract_from_chat(event.messages, model)
+        facts = await extract_from_chat(event.messages, get_model())
         if not facts:
             return
 
