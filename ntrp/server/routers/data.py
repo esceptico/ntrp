@@ -16,7 +16,7 @@ def _require_memory():
 @router.get("/facts")
 async def get_facts(limit: int = 100, offset: int = 0):
     runtime = _require_memory()
-    facts, total = await runtime.memory_service.facts.list(limit=limit, offset=offset)
+    facts, total = await runtime.memory_service.facts.list_recent(limit=limit, offset=offset)
     return {
         "facts": [
             {
@@ -94,7 +94,7 @@ async def delete_fact(fact_id: int):
 @router.get("/observations")
 async def get_observations(limit: int = 50):
     runtime = _require_memory()
-    observations = await runtime.memory_service.observations.list(limit=limit)
+    observations = await runtime.memory_service.observations.list_recent(limit=limit)
     return {
         "observations": [
             {
@@ -170,7 +170,7 @@ async def delete_observation(observation_id: int):
 @router.get("/dreams")
 async def get_dreams(limit: int = 50):
     runtime = _require_memory()
-    dreams = await runtime.memory_service.dreams.list(limit=limit)
+    dreams = await runtime.memory_service.dreams.list_recent(limit=limit)
     return {
         "dreams": [
             {

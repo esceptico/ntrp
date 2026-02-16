@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from ntrp.channel import Channel
 from ntrp.events.internal import FactDeleted, FactUpdated, MemoryCleared
 from ntrp.memory.facts import FactMemory
@@ -11,7 +9,7 @@ class FactService:
         self._memory = memory
         self._channel = channel
 
-    async def list(self, limit: int = 100, offset: int = 0) -> tuple[list[Fact], int]:
+    async def list_recent(self, limit: int = 100, offset: int = 0) -> tuple[list[Fact], int]:
         total = await self._memory.facts.count()
         facts = await self._memory.facts.list_recent(limit=limit, offset=offset)
         return facts, total
@@ -67,7 +65,7 @@ class ObservationService:
     def __init__(self, memory: FactMemory):
         self._memory = memory
 
-    async def list(self, limit: int = 50) -> list[Observation]:
+    async def list_recent(self, limit: int = 50) -> list[Observation]:
         return await self._memory.observations.list_recent(limit=limit)
 
     async def get(self, observation_id: int) -> tuple[Observation, list[Fact]]:
@@ -106,7 +104,7 @@ class DreamService:
     def __init__(self, memory: FactMemory):
         self._memory = memory
 
-    async def list(self, limit: int = 50) -> list[Dream]:
+    async def list_recent(self, limit: int = 50) -> list[Dream]:
         return await self._memory.dreams.list_recent(limit=limit)
 
     async def get(self, dream_id: int) -> tuple[Dream, list[Fact]]:
