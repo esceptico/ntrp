@@ -109,7 +109,6 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     if (newId) {
       resetForSessionSwitch([]);
       refreshSidebar();
-      addMessage({ role: "status", content: name ? `New session: ${name}` : "New session created" });
     } else {
       addMessage({ role: "error", content: "Failed to create session" });
     }
@@ -132,7 +131,6 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
       await renameSession(config, sessionId, name);
       updateSessionInfo({ session_id: sessionId, session_name: name });
       refreshSidebar();
-      addMessage({ role: "status", content: `Session renamed: ${name}` });
     } catch (error) {
       addMessage({ role: "error", content: `${error}` });
     }
@@ -180,7 +178,6 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
       }
 
       refreshSidebar();
-      addMessage({ role: "status", content: "Session deleted" });
     } catch (error) {
       addMessage({ role: "error", content: `${error}` });
     }
