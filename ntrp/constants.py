@@ -126,6 +126,3 @@ OBSERVATION_MERGE_TEMPERATURE = 0.1
 
 FRIDAY_WEEKDAY = 4
 
-# --- Indexing ---
-
-INDEXABLE_SOURCES = {"notes", "memory"}

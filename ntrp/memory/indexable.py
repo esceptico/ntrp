@@ -3,7 +3,7 @@ from ntrp.memory.store.facts import FactRepository
 from ntrp.sources.models import RawItem
 
 
-class MemoryIndexSource:
+class MemoryIndexable:
     name = "memory"
 
     def __init__(self, db: GraphDatabase):

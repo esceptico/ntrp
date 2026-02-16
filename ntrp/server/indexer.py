@@ -10,7 +10,7 @@ from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.logging import get_logger
 from ntrp.search.index import SearchIndex
 from ntrp.search.store import SearchStore
-from ntrp.sources.base import IndexableSource
+from ntrp.sources.base import Indexable
 
 _logger = get_logger(__name__)
 
@@ -83,7 +83,7 @@ class Indexer:
     def running(self) -> bool:
         return self._running
 
-    def start(self, sources: list[IndexableSource]) -> None:
+    def start(self, sources: list[Indexable]) -> None:
         if self._running:
             return
 
@@ -94,7 +94,7 @@ class Indexer:
 
         self._task = asyncio.create_task(self._run(sources))
 
-    async def _run(self, sources: list[IndexableSource]) -> None:
+    async def _run(self, sources: list[Indexable]) -> None:
         self._running = True
         self._progress = IndexProgress()
 

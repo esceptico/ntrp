@@ -2,7 +2,7 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from ntrp.channel import Channel
-from ntrp.constants import INDEXABLE_SOURCES
+from ntrp.sources.base import Indexable
 from ntrp.events import (
     ConsolidationCompleted,
     ContextCompressed,
@@ -44,14 +44,12 @@ async def _on_source_changed(runtime: "Runtime", event: SourceChanged) -> None:
     async with runtime._config_lock:
         runtime.rebuild_executor()
     name = event.source_name
-    if name not in INDEXABLE_SOURCES:
-        return
-    source_active = (name == "notes" and "notes" in runtime.source_mgr.sources) or (
-        name == "memory" and runtime.memory is not None
-    )
-    if source_active:
+    source = runtime.source_mgr.sources.get(name)
+    if source and isinstance(source, Indexable):
+        runtime.indexables[name] = source
         runtime.start_indexing()
-    else:
+    elif name in runtime.indexables and source is None:
+        runtime.indexables.pop(name)
         await runtime.indexer.index.clear_source(name)
 
 

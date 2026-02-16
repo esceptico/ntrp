@@ -17,7 +17,7 @@ class Source:
         return {}
 
 
-class IndexableSource(Protocol):
+class Indexable(Protocol):
     name: str
 
     async def scan(self) -> list[RawItem]: ...

@@ -27,7 +27,8 @@ from ntrp.services.lifecycle import wire_events
 from ntrp.skills.registry import SkillRegistry
 from ntrp.sources.browser import BrowserHistorySource
 from ntrp.sources.google.gmail import MultiGmailSource
-from ntrp.sources.memory import MemoryIndexSource
+from ntrp.sources.base import Indexable
+from ntrp.memory.indexable import MemoryIndexable
 from ntrp.tools.executor import ToolExecutor
 
 _logger = get_logger(__name__)
@@ -48,6 +49,7 @@ class Runtime:
 
         self.memory: FactMemory | None = None
         self.memory_service: MemoryService | None = None
+        self.indexables: dict[str, Indexable] = {}
         self.executor: ToolExecutor | None = None
         self.tools: list[dict] = []
 
@@ -84,10 +86,12 @@ class Runtime:
                 channel=self.channel,
             )
             self.memory_service = MemoryService(self.memory, self.channel)
+            self.indexables["memory"] = MemoryIndexable(self.memory.db)
         elif not enabled and self.memory:
             await self.memory.close()
             self.memory = None
             self.memory_service = None
+            self.indexables.pop("memory", None)
         self.channel.publish(SourceChanged(source_name="memory"))
 
     def rebuild_executor(self) -> None:
@@ -139,6 +143,9 @@ class Runtime:
 
         wire_events(self)
 
+        if notes := self.source_mgr.sources.get("notes"):
+            self.indexables["notes"] = notes
+
         if self.config.memory:
             self.memory = await FactMemory.create(
                 db_path=self.config.memory_db_path,
@@ -147,6 +154,7 @@ class Runtime:
                 channel=self.channel,
             )
             self.memory_service = MemoryService(self.memory, self.channel)
+            self.indexables["memory"] = MemoryIndexable(self.memory.db)
 
         self.skill_registry.load(
             [
@@ -270,12 +278,7 @@ class Runtime:
             self.memory.start_consolidation()
 
     def start_indexing(self) -> None:
-        sources = []
-        if notes := self.source_mgr.sources.get("notes"):
-            sources.append(notes)
-        if self.memory:
-            sources.append(MemoryIndexSource(self.memory.db))
-        self.indexer.start(sources)
+        self.indexer.start(list(self.indexables.values()))
 
     async def get_index_status(self) -> dict:
         status = await self.indexer.get_status()
