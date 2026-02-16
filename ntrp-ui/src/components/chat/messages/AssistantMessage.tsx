@@ -2,21 +2,13 @@ import { Markdown } from "../../Markdown.js";
 
 interface AssistantMessageProps {
   content: string;
-  renderMarkdown?: boolean;
 }
 
-export function AssistantMessage({
-  content,
-  renderMarkdown = true,
-}: AssistantMessageProps) {
+export function AssistantMessage({ content }: AssistantMessageProps) {
   return (
     <box paddingLeft={3} flexShrink={0} overflow="hidden">
       <box flexGrow={1} flexDirection="column" overflow="hidden">
-        {renderMarkdown ? (
-          <Markdown>{content}</Markdown>
-        ) : (
-          <text>{content}</text>
-        )}
+        <Markdown>{content}</Markdown>
       </box>
     </box>
   );

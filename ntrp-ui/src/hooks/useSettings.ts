@@ -7,7 +7,6 @@ import * as path from "path";
 import * as os from "os";
 
 export interface UiSettings {
-  renderMarkdown: boolean;
   accentColor: AccentColor;
   theme: Theme;
 }
@@ -23,7 +22,6 @@ export interface Settings {
 
 const defaultSettings: Settings = {
   ui: {
-    renderMarkdown: true,
     accentColor: "gray",
     theme: "dark",
   },

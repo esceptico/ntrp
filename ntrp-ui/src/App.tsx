@@ -267,11 +267,7 @@ function AppContent({
 
             return (
               <box key={item.id} marginTop={needsMargin ? 1 : 0}>
-                <MessageDisplay
-                  msg={item}
-                  renderMarkdown={settings.ui.renderMarkdown}
-                  theme={settings.ui.theme}
-                />
+                <MessageDisplay msg={item} />
               </box>
             );
           })}

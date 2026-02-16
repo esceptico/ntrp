@@ -1,6 +1,5 @@
 import { memo } from "react";
 import type { Message } from "../../../types.js";
-import type { Theme } from "../../ui/colors.js";
 import { ToolChainDisplay, type ToolChainItem } from "../../ToolChain.js";
 import { UserMessage } from "./UserMessage.js";
 import { AssistantMessage } from "./AssistantMessage.js";
@@ -11,24 +10,16 @@ import { ThinkingMessage } from "./ThinkingMessage.js";
 
 interface MessageDisplayProps {
   msg: Message;
-  renderMarkdown?: boolean;
-  theme?: Theme;
 }
 
 export const MessageDisplay = memo(function MessageDisplay({
   msg,
-  renderMarkdown = true,
 }: MessageDisplayProps) {
   switch (msg.role) {
     case "user":
       return <UserMessage content={msg.content} />;
     case "assistant":
-      return (
-        <AssistantMessage
-          content={msg.content}
-          renderMarkdown={renderMarkdown}
-        />
-      );
+      return <AssistantMessage content={msg.content} />;
     case "tool":
       return (
         <ToolMessage
