@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import NamedTuple
 
 from ntrp.config import Config
 from ntrp.sources.base import Source
@@ -9,7 +10,10 @@ from ntrp.sources.google.calendar import MultiCalendarSource
 from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.sources.obsidian import ObsidianSource
 
-SourceEntry = tuple[Callable[[Config], bool], Callable[[Config], Source | None]]
+
+class SourceDef(NamedTuple):
+    enabled: Callable[[Config], bool]
+    create: Callable[[Config], Source | None]
 
 
 def _create_gmail(config: Config):
@@ -28,25 +32,25 @@ def _create_calendar(config: Config):
     return source if source.sources else None
 
 
-SOURCES: dict[str, SourceEntry] = {
-    "notes": (
-        lambda c: c.vault_path is not None,
-        lambda c: ObsidianSource(vault_path=c.vault_path),
+SOURCES: dict[str, SourceDef] = {
+    "notes": SourceDef(
+        enabled=lambda c: c.vault_path is not None,
+        create=lambda c: ObsidianSource(vault_path=c.vault_path),
     ),
-    "email": (
-        lambda c: c.gmail,
-        _create_gmail,
+    "gmail": SourceDef(
+        enabled=lambda c: c.gmail,
+        create=_create_gmail,
     ),
-    "calendar": (
-        lambda c: c.calendar,
-        _create_calendar,
+    "calendar": SourceDef(
+        enabled=lambda c: c.calendar,
+        create=_create_calendar,
     ),
-    "browser": (
-        lambda c: c.browser is not None,
-        lambda c: BrowserHistorySource(browser_name=c.browser, days_back=c.browser_days),
+    "browser": SourceDef(
+        enabled=lambda c: c.browser is not None,
+        create=lambda c: BrowserHistorySource(browser_name=c.browser, days_back=c.browser_days),
     ),
-    "web": (
-        lambda c: c.exa_api_key is not None,
-        lambda c: WebSource(api_key=c.exa_api_key),
+    "web": SourceDef(
+        enabled=lambda c: c.exa_api_key is not None,
+        create=lambda c: WebSource(api_key=c.exa_api_key),
     ),
 }

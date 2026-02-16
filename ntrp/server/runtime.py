@@ -8,7 +8,6 @@ from ntrp.config import NTRP_DIR, Config, get_config
 from ntrp.constants import AGENT_MAX_DEPTH, SESSION_EXPIRY_HOURS
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
-from ntrp.events.internal import SourceChanged
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import init as llm_init
 from ntrp.logging import get_logger
@@ -76,15 +75,24 @@ class Runtime:
     # --- Source accessors ---
 
     def get_gmail(self) -> MultiGmailSource | None:
-        return self.source_mgr.sources.get("email")
+        return self.source_mgr.sources.get("gmail")
 
     def get_browser(self) -> BrowserHistorySource | None:
         return self.source_mgr.sources.get("browser")
 
     # --- Subsystem lifecycle ---
 
-    async def reinit_memory(self, enabled: bool) -> None:
-        if enabled and not self.memory:
+    async def reload_config(self) -> None:
+        async with self._config_lock:
+            self.config = get_config()
+            self.source_mgr.sync(self.config)
+            await self._sync_memory()
+            await self._sync_embedding()
+            self._sync_indexables()
+            self.rebuild_executor()
+
+    async def _sync_memory(self) -> None:
+        if self.config.memory and not self.memory:
             self.memory = await FactMemory.create(
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
@@ -92,13 +100,27 @@ class Runtime:
                 channel=self.channel,
             )
             self.memory_service = MemoryService(self.memory, self.channel)
-            self.indexables["memory"] = MemoryIndexable(self.memory.db)
-        elif not enabled and self.memory:
+        elif not self.config.memory and self.memory:
             await self.memory.close()
             self.memory = None
             self.memory_service = None
-            self.indexables.pop("memory", None)
-        self.channel.publish(SourceChanged(source_name="memory"))
+
+    async def _sync_embedding(self) -> None:
+        new_embedding = self.config.embedding
+        if new_embedding != self.embedding:
+            self.embedding = new_embedding
+            await self.indexer.update_embedding(new_embedding)
+            if self.memory:
+                self.memory.start_reembed(new_embedding, rebuild=True)
+
+    def _sync_indexables(self) -> None:
+        self.indexables.clear()
+        for name, source in self.source_mgr.sources.items():
+            if isinstance(source, Indexable):
+                self.indexables[name] = source
+        if self.memory:
+            self.indexables["memory"] = MemoryIndexable(self.memory.db)
+        self.start_indexing()
 
     def rebuild_executor(self) -> None:
         self.executor = ToolExecutor(
@@ -186,18 +208,7 @@ class Runtime:
             get_gmail=self.get_gmail,
         )
 
-        self.config_service = ConfigService(
-            config=self.config,
-            source_mgr=self.source_mgr,
-            indexer=self.indexer,
-            reinit_memory_fn=self.reinit_memory,
-            rebuild_executor_fn=self.rebuild_executor,
-            start_indexing_fn=self.start_indexing,
-            start_reembed_fn=lambda emb: self.memory.start_reembed(emb, rebuild=True) if self.memory else None,
-            config_lock=self._config_lock,
-            get_max_depth=lambda: self.max_depth,
-            set_max_depth=lambda v: setattr(self, "max_depth", v),
-        )
+        self.config_service = ConfigService(self)
 
         self._connected = True
 

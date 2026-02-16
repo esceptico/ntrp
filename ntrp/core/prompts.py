@@ -215,7 +215,7 @@ def _sources(details: dict[str, dict]) -> str:
             )
         )
 
-    if info := details.get("email"):
+    if info := details.get("gmail"):
         accounts = info.get("accounts", [])
         accounts_info = f" — {', '.join(accounts)}" if accounts else ""
         lines.append(

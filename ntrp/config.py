@@ -86,6 +86,21 @@ class Config(BaseSettings):
             raise ValueError(f"Unsupported model: {v}. Must be one of: {', '.join(valid)}")
         return v
 
+    @field_validator("embedding_model")
+    @classmethod
+    def _validate_embedding_model(cls, v: str) -> str:
+        valid = {m.id for m in EMBEDDING_DEFAULTS}
+        if v not in valid:
+            raise ValueError(f"Unsupported embedding model: {v}. Must be one of: {', '.join(valid)}")
+        return v
+
+    @field_validator("browser", mode="before")
+    @classmethod
+    def _normalize_browser(cls, v: str | None) -> str | None:
+        if v in ("", "none"):
+            return None
+        return v
+
     @field_validator("browser_days")
     @classmethod
     def _validate_browser_days(cls, v: int) -> int:

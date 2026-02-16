@@ -29,11 +29,30 @@ class SourceManager:
     def get_available(self) -> list[str]:
         return list(self._sources.keys())
 
+    def sync(self, config: Config) -> None:
+        for name, source_def in SOURCES.items():
+            if source_def.enabled(config):
+                try:
+                    source = source_def.create(config)
+                    if source is None:
+                        self._sources.pop(name, None)
+                    else:
+                        if source.errors:
+                            self._errors[name] = "; ".join(
+                                f"{k}: {v}" for k, v in source.errors.items()
+                            )
+                        self._sources[name] = source
+                except Exception as e:
+                    self._errors[name] = str(e)
+            else:
+                self._sources.pop(name, None)
+                self._errors.pop(name, None)
+
     async def reinit(self, name: str, config: Config) -> Source | None:
         entry = SOURCES.get(name)
         if not entry:
             return None
-        _, create = entry
+        create = entry.create
         try:
             source = create(config)
             if source is None:
@@ -59,11 +78,11 @@ class SourceManager:
         return len(discover_gmail_tokens()) > 0
 
     def _init_sources(self, config: Config) -> None:
-        for name, (enabled, create) in SOURCES.items():
-            if not enabled(config):
+        for name, source_def in SOURCES.items():
+            if not source_def.enabled(config):
                 continue
             try:
-                source = create(config)
+                source = source_def.create(config)
                 if source is None:
                     continue
                 if source.errors:

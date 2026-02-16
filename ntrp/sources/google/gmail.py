@@ -206,7 +206,7 @@ def parse_email_date(headers: list[dict], fallback_ms: int) -> datetime:
 
 
 class GmailSource:
-    name = "email"
+    name = "gmail"
 
     def __init__(
         self,
@@ -487,7 +487,7 @@ class GmailSource:
 class MultiGmailSource(Source, EmailSource):
     """Wrapper for multiple Gmail accounts."""
 
-    name = "email"
+    name = "gmail"
 
     def __init__(self, token_paths: list[Path], days_back: int):
         self.sources: list[GmailSource] = []
