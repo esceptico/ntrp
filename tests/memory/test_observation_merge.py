@@ -282,7 +282,7 @@ class TestObservationMergePass:
 
         obs_a = await obs_repo.create(summary="obs A", embedding=emb_a, source_fact_id=1)
         await obs_repo.add_source_facts(obs_a.id, [2, 3])  # 3 facts total
-        obs_b = await obs_repo.create(summary="obs B", embedding=emb_b, source_fact_id=4)  # 1 fact
+        await obs_repo.create(summary="obs B", embedding=emb_b, source_fact_id=4)  # 1 fact
         await obs_repo.conn.commit()
 
         async def mock_embed(text: str) -> np.ndarray:

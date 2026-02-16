@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import asyncio
-from collections.abc import AsyncGenerator
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from ntrp.context.compression import compress_context_async, find_compressible_range
 from ntrp.context.models import SessionData, SessionState
@@ -30,7 +32,7 @@ INIT_AUTO_APPROVE = {"remember", "forget"}
 
 @dataclass
 class ChatContext:
-    runtime: "Runtime"
+    runtime: Runtime
     run: RunState
     session_state: SessionState
     messages: list[dict]
@@ -100,15 +102,14 @@ async def _prepare_messages(
     return messages, system_blocks
 
 
-# Avoid circular import at module level
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
     from ntrp.server.runtime import Runtime
 
 
 class ChatService:
-    def __init__(self, runtime: "Runtime"):
+    def __init__(self, runtime: Runtime):
         self.runtime = runtime
 
     async def prepare(self, message: str, skip_approvals: bool = False) -> ChatContext:

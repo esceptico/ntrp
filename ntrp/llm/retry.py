@@ -10,7 +10,7 @@ def _is_retryable(exc: BaseException) -> bool:
     from google.genai.errors import APIError as GeminiError
     from openai import APIStatusError as OpenAIError
 
-    if isinstance(exc, (AnthropicError, OpenAIError)):
+    if isinstance(exc, AnthropicError | OpenAIError):
         return exc.status_code in {408, 409, 429} or exc.status_code >= 500
 
     if isinstance(exc, GeminiError):

@@ -294,10 +294,6 @@ class ObservationRepository:
         cursor = await self.conn.execute("DELETE FROM observations")
         return cursor.rowcount
 
-    async def list_all_with_embeddings(self) -> list[Observation]:
-        rows = await self.conn.execute_fetchall(_SQL_LIST_ALL_WITH_EMBEDDINGS)
-        return [Observation.model_validate(_row_dict(r)) for r in rows]
-
     async def update_embedding(self, observation_id: int, embedding: Embedding) -> None:
         embedding_bytes = serialize_embedding(embedding)
         await self.conn.execute("UPDATE observations SET embedding = ? WHERE id = ?", (embedding_bytes, observation_id))

@@ -74,7 +74,7 @@ class TestKmeans:
 
         # Each cluster should mostly contain facts from one domain
         for _ki, fids in clusters.items():
-            domains = set(fid // 5 for fid in fids)
+            set(fid // 5 for fid in fids)
             # Not all from different domains
             assert len(fids) >= 2
 
