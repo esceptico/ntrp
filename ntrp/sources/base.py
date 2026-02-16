@@ -17,6 +17,7 @@ class Source:
         return {}
 
 
+@runtime_checkable
 class Indexable(Protocol):
     name: str
 
