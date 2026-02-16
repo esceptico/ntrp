@@ -7,7 +7,7 @@ from ntrp.memory.models import Fact
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
-from ntrp.memory.store.retrieval import (
+from ntrp.memory.retrieval import (
     entity_expand,
     hybrid_search,
     retrieve_facts,

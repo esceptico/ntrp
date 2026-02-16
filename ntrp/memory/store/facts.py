@@ -9,7 +9,7 @@ from ntrp.memory.models import Embedding, Entity, EntityRef, Fact
 _SQL_GET_FACT = "SELECT * FROM facts WHERE id = ?"
 _SQL_COUNT_FACTS = "SELECT COUNT(*) FROM facts"
 _SQL_COUNT_UNCONSOLIDATED = "SELECT COUNT(*) FROM facts WHERE consolidated_at IS NULL"
-_SQL_LIST_RECENT = "SELECT * FROM facts ORDER BY created_at DESC LIMIT ?"
+_SQL_LIST_RECENT = "SELECT * FROM facts ORDER BY created_at DESC LIMIT ? OFFSET ?"
 _SQL_DELETE_FACT = "DELETE FROM facts WHERE id = ?"
 
 _SQL_INSERT_FACT = """
@@ -230,8 +230,8 @@ class FactRepository:
             (now.isoformat(), *fact_ids),
         )
 
-    async def list_recent(self, limit: int = 100) -> list[Fact]:
-        rows = await self.conn.execute_fetchall(_SQL_LIST_RECENT, (limit,))
+    async def list_recent(self, limit: int = 100, offset: int = 0) -> list[Fact]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_RECENT, (limit, offset))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def list_in_time_window(self, start: datetime, end: datetime) -> list[Fact]:
@@ -244,6 +244,24 @@ class FactRepository:
 
     async def count_unconsolidated(self) -> int:
         rows = await self.conn.execute_fetchall(_SQL_COUNT_UNCONSOLIDATED)
+        return rows[0][0] if rows else 0
+
+    async def update_text(self, fact_id: int, text: str, embedding: Embedding) -> None:
+        embedding_bytes = serialize_embedding(embedding)
+        await self.conn.execute(
+            "UPDATE facts SET text = ?, embedding = ?, consolidated_at = NULL WHERE id = ?",
+            (text, embedding_bytes, fact_id),
+        )
+        await self.conn.execute(_SQL_DELETE_FACT_VEC, (fact_id,))
+        await self.conn.execute(_SQL_INSERT_FACT_VEC, (fact_id, embedding_bytes))
+
+    async def delete_entity_refs(self, fact_id: int) -> None:
+        await self.conn.execute(_SQL_DELETE_ENTITY_REFS, (fact_id,))
+
+    async def count_entity_refs(self, fact_id: int) -> int:
+        rows = await self.conn.execute_fetchall(
+            "SELECT COUNT(*) FROM entity_refs WHERE fact_id = ?", (fact_id,)
+        )
         return rows[0][0] if rows else 0
 
     async def delete(self, fact_id: int) -> None:

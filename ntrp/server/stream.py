@@ -1,9 +1,12 @@
 import asyncio
 import json
 from contextlib import suppress
+from typing import TYPE_CHECKING
 
 from ntrp.events import AgentResult, CancelledEvent, SSEEvent
-from ntrp.server.chat import ChatContext
+
+if TYPE_CHECKING:
+    from ntrp.services.chat import ChatContext
 
 
 def to_sse(event: SSEEvent | dict) -> str:
@@ -24,7 +27,7 @@ class _Error:
 type QueueItem = SSEEvent | _Done | _Error
 
 
-async def run_agent_loop(ctx: ChatContext, agent, user_message: str):
+async def run_agent_loop(ctx: "ChatContext", agent, user_message: str):
     """Run agent and yield SSE strings. Yields AgentResult at end.
 
     All events (agent, tool, subagent) flow through a single merged queue.
@@ -38,7 +41,7 @@ async def run_agent_loop(ctx: ChatContext, agent, user_message: str):
     error: Exception | None = None
 
     # Wire tool/subagent emit directly into the merged queue
-    agent.ctx.emit = merged_queue.put
+    agent.ctx.io.emit = merged_queue.put
 
     async def run_agent():
         nonlocal result, error

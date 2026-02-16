@@ -3,7 +3,7 @@ from typing import Any
 
 from ntrp.constants import AGENT_MAX_ITERATIONS
 from ntrp.context.compression import compress_context_async, find_compressible_range, should_compress
-from ntrp.core.events import ContextCompressed
+from ntrp.events import ContextCompressed
 from ntrp.core.parsing import normalize_assistant_message, parse_tool_calls
 from ntrp.core.state import AgentState, StateCallback
 from ntrp.core.tool_runner import ToolRunner
@@ -221,6 +221,6 @@ class Agent:
                     result = item
                 case TextEvent():
                     pass
-                case event if self.ctx.emit:
-                    await self.ctx.emit(event)
+                case event if self.ctx.io.emit:
+                    await self.ctx.io.emit(event)
         return result

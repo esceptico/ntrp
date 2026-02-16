@@ -5,16 +5,16 @@ from pathlib import Path
 import ntrp.database as database
 from ntrp.channel import Channel
 from ntrp.config import NTRP_DIR, Config, get_config
-from ntrp.constants import AGENT_MAX_DEPTH, INDEXABLE_SOURCES, SESSION_EXPIRY_HOURS
+from ntrp.constants import AGENT_MAX_DEPTH, SESSION_EXPIRY_HOURS
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
-from ntrp.core.events import ConsolidationCompleted, ContextCompressed, RunCompleted, RunStarted, ScheduleCompleted, ToolExecuted
+from ntrp.events import SourceChanged
 from ntrp.llm.router import close as llm_close, init as llm_init
 from ntrp.logging import get_logger
-from ntrp.memory.chat_extraction import make_chat_extraction_handler
-from ntrp.memory.events import FactCreated, FactDeleted, FactUpdated, MemoryCleared
 from ntrp.memory.facts import FactMemory
-from ntrp.notifiers import Notifier, create_notifier, make_schedule_dispatcher
+from ntrp.memory.service import MemoryService
+from ntrp.notifiers import Notifier, create_notifier
+from ntrp.notifiers.service import NotifierService
 from ntrp.notifiers.store import NotifierStore
 from ntrp.schedule.scheduler import Scheduler, SchedulerDeps
 from ntrp.schedule.store import ScheduleStore
@@ -22,9 +22,10 @@ from ntrp.server.dashboard import DashboardCollector
 from ntrp.server.indexer import Indexer
 from ntrp.server.sources import SourceManager
 from ntrp.server.state import RunRegistry
+from ntrp.services.config import ConfigService
+from ntrp.services.lifecycle import wire_events
 from ntrp.skills.registry import SkillRegistry
 from ntrp.sources.browser import BrowserHistorySource
-from ntrp.sources.events import SourceChanged
 from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.sources.memory import MemoryIndexSource
 from ntrp.tools.executor import ToolExecutor
@@ -46,6 +47,7 @@ class Runtime:
         self._sessions_conn = None
 
         self.memory: FactMemory | None = None
+        self.memory_service: MemoryService | None = None
         self.executor: ToolExecutor | None = None
         self.tools: list[dict] = []
 
@@ -57,9 +59,13 @@ class Runtime:
 
         self.skill_registry = SkillRegistry()
         self.notifiers: dict[str, Notifier] = {}
+        self.notifier_service: NotifierService | None = None
         self.dashboard = DashboardCollector()
+        self.config_service: ConfigService | None = None
         self._connected = False
         self._config_lock = asyncio.Lock()
+
+    # --- Source accessors ---
 
     def get_gmail(self) -> MultiGmailSource | None:
         return self.source_mgr.sources.get("email")
@@ -67,11 +73,7 @@ class Runtime:
     def get_browser(self) -> BrowserHistorySource | None:
         return self.source_mgr.sources.get("browser")
 
-    async def reinit_source(self, name: str) -> None:
-        await self.source_mgr.reinit(name, self.config)
-
-    async def remove_source(self, name: str) -> None:
-        await self.source_mgr.remove(name)
+    # --- Subsystem lifecycle ---
 
     async def reinit_memory(self, enabled: bool) -> None:
         if enabled and not self.memory:
@@ -81,9 +83,11 @@ class Runtime:
                 extraction_model=self.config.memory_model,
                 channel=self.channel,
             )
+            self.memory_service = MemoryService(self.memory, self.channel)
         elif not enabled and self.memory:
             await self.memory.close()
             self.memory = None
+            self.memory_service = None
         self.channel.publish(SourceChanged(source_name="memory"))
 
     def rebuild_executor(self) -> None:
@@ -96,7 +100,6 @@ class Runtime:
             default_notifiers=list(self.notifiers.keys()) or None,
             skill_registry=self.skill_registry if self.skill_registry else None,
         )
-
         self.tools = self.executor.get_tools()
 
     async def rebuild_notifiers(self) -> None:
@@ -113,12 +116,13 @@ class Runtime:
                     _logger.exception("Failed to create notifier %r", cfg.name)
         self.rebuild_executor()
 
+    # --- Connect / close ---
+
     async def connect(self) -> None:
         if self._connected:
             return
 
         llm_init(self.config)
-
         self.config.db_dir.mkdir(exist_ok=True)
 
         self._sessions_conn = await database.connect(self.config.sessions_db_path)
@@ -133,21 +137,7 @@ class Runtime:
 
         await self.indexer.connect()
 
-        self.channel.subscribe(ToolExecuted, self.dashboard.on_tool_executed)
-        self.channel.subscribe(RunStarted, self.dashboard.on_run_started)
-        self.channel.subscribe(RunCompleted, self.dashboard.on_run_completed)
-        self.channel.subscribe(FactCreated, self.dashboard.on_fact_created)
-        self.channel.subscribe(ConsolidationCompleted, self.dashboard.on_consolidation_completed)
-        self.channel.subscribe(FactCreated, self._on_fact_created)
-        self.channel.subscribe(FactUpdated, self._on_fact_updated)
-        self.channel.subscribe(FactDeleted, self._on_fact_deleted)
-        self.channel.subscribe(MemoryCleared, self._on_memory_cleared)
-        self.channel.subscribe(SourceChanged, self._on_source_changed)
-        self.channel.subscribe(ScheduleCompleted, make_schedule_dispatcher(lambda: self.notifiers))
-        self.channel.subscribe(
-            ContextCompressed,
-            make_chat_extraction_handler(lambda: self.memory, self.config.memory_model),
-        )
+        wire_events(self)
 
         if self.config.memory:
             self.memory = await FactMemory.create(
@@ -156,6 +146,7 @@ class Runtime:
                 extraction_model=self.config.memory_model,
                 channel=self.channel,
             )
+            self.memory_service = MemoryService(self.memory, self.channel)
 
         self.skill_registry.load(
             [
@@ -165,7 +156,42 @@ class Runtime:
         )
 
         await self.rebuild_notifiers()
+
+        self.notifier_service = NotifierService(
+            store=self.notifier_store,
+            schedule_store=self.schedule_store,
+            notifiers=self.notifiers,
+            rebuild_fn=self.rebuild_notifiers,
+            get_gmail=self.get_gmail,
+        )
+
+        self.config_service = ConfigService(
+            config=self.config,
+            source_mgr=self.source_mgr,
+            indexer=self.indexer,
+            reinit_memory_fn=self.reinit_memory,
+            rebuild_executor_fn=self.rebuild_executor,
+            start_indexing_fn=self.start_indexing,
+            start_reembed_fn=lambda emb: self.memory.start_reembed(emb, rebuild=True) if self.memory else None,
+            config_lock=self._config_lock,
+            get_max_depth=lambda: self.max_depth,
+            set_max_depth=lambda v: setattr(self, "max_depth", v),
+        )
+
         self._connected = True
+
+    async def close(self) -> None:
+        if self.scheduler:
+            await self.scheduler.stop()
+        if self.memory:
+            await self.memory.close()
+        if self._sessions_conn:
+            await self._sessions_conn.close()
+        await self.indexer.stop()
+        await self.indexer.close()
+        await llm_close()
+
+    # --- Queries ---
 
     def get_source_details(self) -> dict[str, dict]:
         return self.source_mgr.get_details()
@@ -181,6 +207,8 @@ class Runtime:
         if self.memory:
             sources.append("memory")
         return sources
+
+    # --- Session ---
 
     def create_session(self) -> SessionState:
         now = datetime.now(UTC)
@@ -220,6 +248,8 @@ class Runtime:
         except Exception as e:
             _logger.warning("Failed to save session: %s", e)
 
+    # --- Background tasks ---
+
     def start_scheduler(self) -> None:
         if self.schedule_store and self.executor:
             deps = SchedulerDeps(
@@ -253,54 +283,6 @@ class Runtime:
             status["reembedding"] = self.memory.reembed_running
             status["reembed_progress"] = self.memory._reembed_progress
         return status
-
-    async def _on_fact_created(self, event: FactCreated) -> None:
-        await self.indexer.index.upsert(
-            source="memory",
-            source_id=f"fact:{event.fact_id}",
-            title=event.text[:50],
-            content=event.text,
-        )
-
-    async def _on_fact_updated(self, event: FactUpdated) -> None:
-        await self.indexer.index.upsert(
-            source="memory",
-            source_id=f"fact:{event.fact_id}",
-            title=event.text[:50],
-            content=event.text,
-        )
-
-    async def _on_fact_deleted(self, event: FactDeleted) -> None:
-        await self.indexer.index.delete("memory", f"fact:{event.fact_id}")
-
-    async def _on_memory_cleared(self, _event: MemoryCleared) -> None:
-        await self.indexer.index.clear_source("memory")
-
-    async def _on_source_changed(self, event: SourceChanged) -> None:
-        async with self._config_lock:
-            self.rebuild_executor()
-        name = event.source_name
-        if name not in INDEXABLE_SOURCES:
-            return
-        source_active = (name == "notes" and "notes" in self.source_mgr.sources) or (
-            name == "memory" and self.memory is not None
-        )
-        if source_active:
-            self.start_indexing()
-        else:
-            await self.indexer.index.clear_source(name)
-
-    async def close(self) -> None:
-        if self.scheduler:
-            await self.scheduler.stop()
-        if self.memory:
-            await self.memory.close()
-        if self._sessions_conn:
-            await self._sessions_conn.close()
-        await self.indexer.stop()
-        await self.indexer.close()
-
-        await llm_close()
 
 
 _runtime: Runtime | None = None

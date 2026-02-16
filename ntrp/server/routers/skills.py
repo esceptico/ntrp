@@ -1,10 +1,10 @@
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
 
 from ntrp.config import NTRP_DIR
 from ntrp.server.runtime import get_runtime
+from ntrp.server.schemas import InstallRequest
 from ntrp.skills.installer import install_from_github
 
 router = APIRouter(tags=["skills"])
@@ -28,10 +28,6 @@ async def list_skills():
             for m in runtime.skill_registry._skills.values()
         ],
     }
-
-
-class InstallRequest(BaseModel):
-    source: str = Field(..., min_length=5, description="GitHub path: owner/repo/path/to/skill")
 
 
 @router.post("/skills/install")

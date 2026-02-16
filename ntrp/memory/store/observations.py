@@ -196,6 +196,17 @@ class ObservationRepository:
         rows = await self.conn.execute_fetchall(_SQL_LIST_ALL_WITH_EMBEDDINGS)
         return [Observation.model_validate(_row_dict(r)) for r in rows]
 
+    async def update_summary(self, observation_id: int, summary: str, embedding: Embedding) -> Observation | None:
+        now = datetime.now(UTC)
+        embedding_bytes = serialize_embedding(embedding)
+        await self.conn.execute(
+            "UPDATE observations SET summary = ?, embedding = ?, updated_at = ? WHERE id = ?",
+            (summary, embedding_bytes, now.isoformat(), observation_id),
+        )
+        await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (observation_id,))
+        await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (observation_id, embedding_bytes))
+        return await self.get(observation_id)
+
     async def delete(self, observation_id: int) -> None:
         await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (observation_id,))
         await self.conn.execute("DELETE FROM observations WHERE id = ?", (observation_id,))

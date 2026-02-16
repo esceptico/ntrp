@@ -43,9 +43,9 @@ CONSOLIDATION_INTERVAL = 30.0  # seconds between consolidation batches
 
 # --- Context Compaction ---
 
-COMPRESSION_THRESHOLD = 0.80  # % of model token limit to trigger compaction
-MAX_MESSAGES = 80  # message count ceiling — compress regardless of tokens
-COMPRESSION_KEEP_RATIO = 0.50  # keep most recent 50% of messages, compress the rest
+COMPRESSION_THRESHOLD = 0.8  # % of model token limit to trigger compaction
+MAX_MESSAGES = 120  # message count ceiling — compress regardless of tokens
+COMPRESSION_KEEP_RATIO = 0.2  # the most recent % of messages to keep uncompressed
 
 # Tool result offloading: large results stored externally, compact reference in context
 # Manus pattern: full representation → file, compact representation → context

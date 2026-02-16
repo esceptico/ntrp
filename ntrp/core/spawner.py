@@ -6,7 +6,7 @@ from uuid import uuid4
 from ntrp.constants import SUBAGENT_DEFAULT_TIMEOUT
 from ntrp.context.models import SessionState
 from ntrp.core.isolation import IsolationLevel
-from ntrp.tools.core.context import ToolContext
+from ntrp.tools.core.context import RunContext, ToolContext
 from ntrp.tools.executor import ToolExecutor
 
 
@@ -46,19 +46,20 @@ def create_spawn_fn(
         filtered_tools = tools or executor.registry.get_schemas()
         child_state = _create_session_state(calling_ctx, isolation)
 
+        child_run = RunContext(
+            run_id=calling_ctx.run.run_id,
+            current_depth=current_depth + 1,
+            max_depth=max_depth,
+            extra_auto_approve=calling_ctx.run.extra_auto_approve,
+            explore_model=calling_ctx.run.explore_model,
+        )
         child_ctx = ToolContext(
             session_state=child_state,
             registry=executor.registry,
+            run=child_run,
+            io=calling_ctx.io,
             memory=executor.memory,
-            emit=calling_ctx.emit,
-            approval_queue=calling_ctx.approval_queue,
-            choice_queue=calling_ctx.choice_queue,
             channel=calling_ctx.channel,
-            run_id=calling_ctx.run_id,
-            extra_auto_approve=calling_ctx.extra_auto_approve,
-            current_depth=current_depth + 1,
-            max_depth=max_depth,
-            explore_model=calling_ctx.explore_model,
         )
         child_ctx.spawn_fn = create_spawn_fn(
             executor=executor,

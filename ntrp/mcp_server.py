@@ -26,7 +26,7 @@ from ntrp.context.models import SessionState
 from ntrp.logging import get_logger
 from ntrp.server.runtime import Runtime
 from ntrp.tools.core.base import ToolResult
-from ntrp.tools.core.context import ToolContext, ToolExecution
+from ntrp.tools.core.context import IOBridge, RunContext, ToolContext, ToolExecution
 
 _logger = get_logger(__name__)
 
@@ -93,9 +93,10 @@ async def create_server() -> tuple[Server, Runtime]:
         tool_ctx = ToolContext(
             session_state=session_state,
             registry=runtime.executor.registry,
+            run=RunContext(run_id=str(uuid4())[:8]),
+            io=IOBridge(),
             memory=runtime.memory,
             channel=runtime.channel,
-            run_id=str(uuid4())[:8],
         )
 
         execution = ToolExecution(

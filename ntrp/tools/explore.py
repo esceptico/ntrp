@@ -75,7 +75,7 @@ class ExploreTool(Tool):
         if not ctx.spawn_fn:
             return ToolResult(content="Error: spawn capability not available", preview="Error", is_error=True)
 
-        remaining = ctx.max_depth - ctx.current_depth - 1
+        remaining = ctx.run.max_depth - ctx.run.current_depth - 1
         tool_names = set(self.EXPLORE_TOOLS)
         if depth == "quick" or remaining <= 1:
             tool_names.discard("explore")
@@ -90,7 +90,7 @@ class ExploreTool(Tool):
             system_prompt=prompt,
             tools=tools,
             timeout=timeout,
-            model_override=ctx.explore_model,
+            model_override=ctx.run.explore_model,
             parent_id=execution.tool_id,
             isolation=IsolationLevel.FULL,
         )

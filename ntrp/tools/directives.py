@@ -41,12 +41,9 @@ class SetDirectivesTool(Tool):
         directives: str = "",
         **kwargs: Any,
     ) -> ToolResult:
+        save_directives(directives)
         if not directives.strip():
-            if DIRECTIVES_PATH.exists():
-                DIRECTIVES_PATH.unlink()
             return ToolResult(content="Directives cleared.", preview="Cleared")
-
-        DIRECTIVES_PATH.write_text(json.dumps({"content": directives}))
         return ToolResult(
             content=f"Directives updated:\n{directives}",
             preview="Directives set",
@@ -69,3 +66,12 @@ def load_directives() -> str | None:
         return text or None
     except (json.JSONDecodeError, OSError):
         return None
+
+
+def save_directives(content: str) -> None:
+    content = content.strip()
+    if not content:
+        if DIRECTIVES_PATH.exists():
+            DIRECTIVES_PATH.unlink()
+        return
+    DIRECTIVES_PATH.write_text(json.dumps({"content": content}))

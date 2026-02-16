@@ -34,24 +34,36 @@ class Rejection:
 
 
 @dataclass
-class ToolContext:
-    """Shared context for tool execution. Stateless, one per request."""
+class RunContext:
+    """Per-run identity and limits."""
 
-    session_state: SessionState
-    registry: "ToolRegistry"
-    memory: "FactMemory | None" = None
+    run_id: str = ""
+    current_depth: int = 0
+    max_depth: int = 0
+    extra_auto_approve: set[str] = field(default_factory=set)
+    explore_model: str | None = None
+
+
+@dataclass
+class IOBridge:
+    """Communication channels to the UI."""
 
     emit: Callable[[Any], Awaitable[None]] | None = None
     approval_queue: asyncio.Queue[ApprovalResponse] | None = None
     choice_queue: asyncio.Queue[ChoiceResponse] | None = None
-    spawn_fn: Callable[..., Awaitable[str]] | None = None
 
+
+@dataclass
+class ToolContext:
+    """Shared context for tool execution."""
+
+    session_state: SessionState
+    registry: "ToolRegistry"
+    run: RunContext
+    io: IOBridge
+    memory: "FactMemory | None" = None
     channel: Channel = field(default_factory=Channel)
-    run_id: str = ""
-    extra_auto_approve: set[str] = field(default_factory=set)
-    current_depth: int = 0
-    max_depth: int = 0
-    explore_model: str | None = None
+    spawn_fn: Callable[..., Awaitable[str]] | None = None
 
     @property
     def session_id(self) -> str:
@@ -63,7 +75,7 @@ class ToolContext:
 
     @property
     def auto_approve(self) -> set[str]:
-        return self.session_state.auto_approve | self.extra_auto_approve
+        return self.session_state.auto_approve | self.run.extra_auto_approve
 
 
 @dataclass
@@ -84,10 +96,10 @@ class ToolExecution:
         if self.ctx.skip_approvals or self.tool_name in self.ctx.auto_approve:
             return None
 
-        if not self.ctx.emit or not self.ctx.approval_queue:
+        if not self.ctx.io.emit or not self.ctx.io.approval_queue:
             return None
 
-        await self.ctx.emit(
+        await self.ctx.io.emit(
             ApprovalNeededEvent(
                 tool_id=self.tool_id,
                 name=self.tool_name,
@@ -98,7 +110,7 @@ class ToolExecution:
         )
 
         try:
-            response = await asyncio.wait_for(self.ctx.approval_queue.get(), timeout=300)
+            response = await asyncio.wait_for(self.ctx.io.approval_queue.get(), timeout=300)
         except TimeoutError:
             return Rejection(feedback="Approval timed out")
 
@@ -114,10 +126,10 @@ class ToolExecution:
         options: list[dict],
         allow_multiple: bool = False,
     ) -> list[str]:
-        if not self.ctx.emit or not self.ctx.choice_queue:
+        if not self.ctx.io.emit or not self.ctx.io.choice_queue:
             return []
 
-        await self.ctx.emit(
+        await self.ctx.io.emit(
             ChoiceEvent(
                 tool_id=self.tool_id,
                 question=question,
@@ -127,7 +139,7 @@ class ToolExecution:
         )
 
         try:
-            response = await asyncio.wait_for(self.ctx.choice_queue.get(), timeout=300)
+            response = await asyncio.wait_for(self.ctx.io.choice_queue.get(), timeout=300)
         except TimeoutError:
             return []
         return response["selected"]

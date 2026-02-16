@@ -93,11 +93,11 @@ async def _run_headless(prompt: str):
     from uuid import uuid4
 
     from ntrp.core.agent import Agent
-    from ntrp.core.events import RunCompleted, RunStarted
+    from ntrp.events import RunCompleted, RunStarted
     from ntrp.core.prompts import build_system_prompt
     from ntrp.core.spawner import create_spawn_fn
     from ntrp.server.runtime import Runtime
-    from ntrp.tools.core.context import ToolContext
+    from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 
     runtime = Runtime()
     await runtime.connect()
@@ -115,11 +115,14 @@ async def _run_headless(prompt: str):
         tool_ctx = ToolContext(
             session_state=session_state,
             registry=runtime.executor.registry,
+            run=RunContext(
+                run_id=run_id,
+                max_depth=runtime.max_depth,
+                explore_model=runtime.config.explore_model,
+            ),
+            io=IOBridge(),
             memory=runtime.memory,
             channel=runtime.channel,
-            run_id=run_id,
-            max_depth=runtime.max_depth,
-            explore_model=runtime.config.explore_model,
         )
 
         tool_ctx.spawn_fn = create_spawn_fn(

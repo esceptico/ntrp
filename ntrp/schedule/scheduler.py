@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
-from ntrp.core.events import RunCompleted, RunStarted, ScheduleCompleted
+from ntrp.events import RunCompleted, RunStarted, ScheduleCompleted
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
 from ntrp.schedule.models import Recurrence, ScheduledTask, compute_next_run
@@ -103,7 +103,7 @@ class Scheduler:
         from ntrp.core.prompts import build_system_prompt, scheduled_task_suffix
         from ntrp.core.spawner import create_spawn_fn
         from ntrp.memory.formatting import format_session_memory
-        from ntrp.tools.core.context import ToolContext
+        from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
         from ntrp.tools.directives import load_directives
 
         _logger.info("Executing scheduled task %s: %s", task.task_id, task.description[:80])
@@ -127,11 +127,14 @@ class Scheduler:
         tool_ctx = ToolContext(
             session_state=session_state,
             registry=self.deps.executor.registry,
+            run=RunContext(
+                run_id=run_id,
+                max_depth=self.deps.max_depth,
+                explore_model=self.deps.explore_model,
+            ),
+            io=IOBridge(),
             memory=memory,
             channel=self.deps.channel,
-            run_id=run_id,
-            max_depth=self.deps.max_depth,
-            explore_model=self.deps.explore_model,
         )
         tool_ctx.spawn_fn = create_spawn_fn(
             executor=self.deps.executor,

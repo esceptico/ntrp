@@ -4,7 +4,7 @@ from pathlib import Path
 
 from ntrp.constants import OFFLOAD_PREVIEW_CHARS, OFFLOAD_THRESHOLD
 from ntrp.core.async_queue import AsyncQueue
-from ntrp.core.events import ToolExecuted
+from ntrp.events import ToolExecuted
 from ntrp.core.models import PendingToolCall, ToolExecutionResult
 from ntrp.events import SSEEvent, ToolCallEvent, ToolResultEvent
 from ntrp.logging import get_logger
@@ -84,7 +84,7 @@ class ToolRunner:
                 duration_ms=duration_ms,
                 depth=self.depth,
                 is_error=result.is_error,
-                run_id=self.ctx.run_id,
+                run_id=self.ctx.run.run_id,
             )
         )
 

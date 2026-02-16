@@ -1,21 +1,10 @@
-from datetime import UTC, datetime
-
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
 
-from ntrp.database import serialize_embedding
-from ntrp.memory.events import FactDeleted, FactUpdated, MemoryCleared
+from ntrp.events import MemoryCleared
 from ntrp.server.runtime import get_runtime
+from ntrp.server.schemas import UpdateFactRequest, UpdateObservationRequest
 
 router = APIRouter(tags=["data"])
-
-
-class UpdateFactRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=10000)
-
-
-class UpdateObservationRequest(BaseModel):
-    summary: str = Field(..., min_length=1, max_length=10000)
 
 
 def _require_memory():
@@ -31,8 +20,7 @@ async def get_facts(limit: int = 100, offset: int = 0):
     repo = runtime.memory.facts
 
     total = await repo.count()
-    facts = await repo.list_recent(limit=limit + offset)
-    sliced = facts[offset : offset + limit]
+    facts = await repo.list_recent(limit=limit, offset=offset)
 
     return {
         "facts": [
@@ -42,7 +30,7 @@ async def get_facts(limit: int = 100, offset: int = 0):
                 "source_type": f.source_type,
                 "created_at": f.created_at.isoformat(),
             }
-            for f in sliced
+            for f in facts
         ],
         "total": total,
     }
@@ -121,11 +109,8 @@ async def get_observation_details(observation_id: int):
         raise HTTPException(status_code=404, detail="Observation not found")
 
     fact_ids = await obs_repo.get_fact_ids(observation_id)
-    facts = []
-    for fid in fact_ids:
-        fact = await fact_repo.get(fid)
-        if fact:
-            facts.append({"id": fact.id, "text": fact.text})
+    facts_by_id = await fact_repo.get_batch(fact_ids)
+    facts = [{"id": f.id, "text": f.text} for f in facts_by_id.values()]
 
     return {
         "observation": {
@@ -170,11 +155,8 @@ async def get_dream_details(dream_id: int):
     if not dream:
         raise HTTPException(status_code=404, detail="Dream not found")
 
-    source_facts = []
-    for fid in dream.source_fact_ids:
-        fact = await fact_repo.get(fid)
-        if fact:
-            source_facts.append({"id": fact.id, "text": fact.text})
+    facts_by_id = await fact_repo.get_batch(dream.source_fact_ids)
+    source_facts = [{"id": f.id, "text": f.text} for f in facts_by_id.values()]
 
     return {
         "dream": {
@@ -218,41 +200,11 @@ async def get_stats():
 async def update_fact(fact_id: int, request: UpdateFactRequest):
     runtime = _require_memory()
 
-    async with runtime.memory.transaction():
-        repo = runtime.memory.facts
+    try:
+        fact, entity_refs = await runtime.memory_service.update_fact(fact_id, request.text)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Fact not found")
 
-        fact = await repo.get(fact_id)
-        if not fact:
-            raise HTTPException(status_code=404, detail="Fact not found")
-
-        new_embedding = await runtime.memory.embedder.embed_one(request.text)
-
-        await repo.conn.execute("DELETE FROM entity_refs WHERE fact_id = ?", (fact_id,))
-
-        embedding_bytes = serialize_embedding(new_embedding)
-        await repo.conn.execute(
-            """
-            UPDATE facts
-            SET text = ?, embedding = ?, consolidated_at = NULL
-            WHERE id = ?
-            """,
-            (request.text, embedding_bytes, fact_id),
-        )
-
-        await repo.conn.execute("DELETE FROM facts_vec WHERE fact_id = ?", (fact_id,))
-        await repo.conn.execute(
-            "INSERT INTO facts_vec (fact_id, embedding) VALUES (?, ?)",
-            (fact_id, embedding_bytes),
-        )
-
-        extraction = await runtime.memory.extractor.extract(request.text)
-        await runtime.memory._process_extraction(fact_id, extraction)
-
-        fact = await repo.get(fact_id)
-
-    runtime.channel.publish(FactUpdated(fact_id=fact_id, text=request.text))
-
-    entity_refs = await repo.get_entity_refs(fact_id)
     return {
         "fact": {
             "id": fact.id,
@@ -262,7 +214,7 @@ async def update_fact(fact_id: int, request: UpdateFactRequest):
             "created_at": fact.created_at.isoformat(),
             "access_count": fact.access_count,
         },
-        "entity_refs": [{"name": e.name, "entity_id": e.entity_id} for e in entity_refs],
+        "entity_refs": entity_refs,
     }
 
 
@@ -270,28 +222,15 @@ async def update_fact(fact_id: int, request: UpdateFactRequest):
 async def delete_fact(fact_id: int):
     runtime = _require_memory()
 
-    async with runtime.memory.transaction():
-        repo = runtime.memory.facts
-
-        fact = await repo.get(fact_id)
-        if not fact:
-            raise HTTPException(status_code=404, detail="Fact not found")
-
-        entity_refs_rows = await repo.conn.execute_fetchall(
-            "SELECT COUNT(*) FROM entity_refs WHERE fact_id = ?", (fact_id,)
-        )
-        entity_refs_count = entity_refs_rows[0][0] if entity_refs_rows else 0
-
-        await repo.delete(fact_id)
-
-    runtime.channel.publish(FactDeleted(fact_id=fact_id))
+    try:
+        cascaded = await runtime.memory_service.delete_fact(fact_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Fact not found")
 
     return {
         "status": "deleted",
         "fact_id": fact_id,
-        "cascaded": {
-            "entity_refs": entity_refs_count,
-        },
+        "cascaded": cascaded,
     }
 
 
@@ -299,32 +238,10 @@ async def delete_fact(fact_id: int):
 async def update_observation(observation_id: int, request: UpdateObservationRequest):
     runtime = _require_memory()
 
-    async with runtime.memory.transaction():
-        obs_repo = runtime.memory.observations
-
-        obs = await obs_repo.get(observation_id)
-        if not obs:
-            raise HTTPException(status_code=404, detail="Observation not found")
-
-        new_embedding = await runtime.memory.embedder.embed_one(request.summary)
-
-        now = datetime.now(UTC)
-        embedding_bytes = serialize_embedding(new_embedding)
-        await obs_repo.conn.execute(
-            """
-            UPDATE observations
-            SET summary = ?, embedding = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (request.summary, embedding_bytes, now.isoformat(), observation_id),
-        )
-
-        await obs_repo.conn.execute("DELETE FROM observations_vec WHERE observation_id = ?", (observation_id,))
-        await obs_repo.conn.execute(
-            "INSERT INTO observations_vec (observation_id, embedding) VALUES (?, ?)", (observation_id, embedding_bytes)
-        )
-
-        obs = await obs_repo.get(observation_id)
+    try:
+        obs = await runtime.memory_service.update_observation(observation_id, request.summary)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Observation not found")
 
     return {
         "observation": {
@@ -342,15 +259,10 @@ async def update_observation(observation_id: int, request: UpdateObservationRequ
 async def delete_observation(observation_id: int):
     runtime = _require_memory()
 
-    async with runtime.memory.transaction():
-        obs_repo = runtime.memory.observations
-
-        obs = await obs_repo.get(observation_id)
-        if not obs:
-            raise HTTPException(status_code=404, detail="Observation not found")
-
-        await obs_repo.conn.execute("DELETE FROM observations_vec WHERE observation_id = ?", (observation_id,))
-        await obs_repo.conn.execute("DELETE FROM observations WHERE id = ?", (observation_id,))
+    try:
+        await runtime.memory_service.delete_observation(observation_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Observation not found")
 
     return {
         "status": "deleted",
