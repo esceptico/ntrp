@@ -26,7 +26,7 @@ class _FrozenModel(BaseModel):
 
     def __repr__(self) -> str:
         fields = []
-        for name in self.model_fields:
+        for name in type(self).model_fields:
             val = getattr(self, name)
             if isinstance(val, np.ndarray):
                 fields.append(f"{name}=<{val.shape}>")
