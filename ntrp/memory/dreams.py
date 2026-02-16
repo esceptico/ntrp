@@ -21,7 +21,7 @@ from ntrp.constants import (
 )
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
-from ntrp.memory.models import Dream, Embedding, Fact
+from ntrp.memory.models import Embedding, Fact
 from ntrp.memory.prompts import DREAM_EVALUATOR_PROMPT, DREAM_PROMPT
 from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
@@ -32,6 +32,7 @@ type EmbedFn = Callable[[str], Coroutine[None, None, Embedding]]
 
 
 # --- Pydantic models for structured output ---
+
 
 class DreamGeneration(BaseModel):
     bridge: str | None
@@ -45,6 +46,7 @@ class DreamEvaluation(BaseModel):
 
 # --- Internal data ---
 
+
 class _DreamCandidate:
     __slots__ = ("bridge", "insight", "source_fact_ids")
 
@@ -55,6 +57,7 @@ class _DreamCandidate:
 
 
 # --- Clustering ---
+
 
 def _cosine(a: np.ndarray, b: np.ndarray) -> float:
     dot = np.dot(a, b)
@@ -82,7 +85,7 @@ def _kmeans(
         for fid in fids:
             emb = facts[fid][1]
             min_d = min(1.0 - _cosine(emb, c) for c in centroids)
-            dists.append(min_d ** 2)
+            dists.append(min_d**2)
         total = sum(dists)
         r = rng.random() * total
         cumulative = 0.0
@@ -138,6 +141,7 @@ def _get_supporters(
 
 # --- LLM calls ---
 
+
 async def _generate_dream(
     facts: dict[int, tuple[str, np.ndarray]],
     core_a: int,
@@ -185,10 +189,7 @@ async def _evaluate_batch(
     if not candidates:
         return []
 
-    formatted = "\n".join(
-        f"[{i}] BRIDGE: {c.bridge}\n    DREAM: {c.insight}"
-        for i, c in enumerate(candidates)
-    )
+    formatted = "\n".join(f"[{i}] BRIDGE: {c.bridge}\n    DREAM: {c.insight}" for i, c in enumerate(candidates))
 
     prompt = DREAM_EVALUATOR_PROMPT.format(n=len(candidates), candidates=formatted)
 
@@ -213,6 +214,7 @@ async def _evaluate_batch(
 
 
 # --- Pipeline ---
+
 
 def _load_fact_embeddings(facts: list[Fact]) -> dict[int, tuple[str, np.ndarray]]:
     result = {}
@@ -258,13 +260,19 @@ async def run_dream_pass(
             result = await _generate_dream(facts, core_a, sups_a, core_b, sups_b, model)
             if result and result.bridge and result.insight:
                 source_fids = [core_a, core_b] + sups_a + sups_b
-                candidates.append(_DreamCandidate(
-                    bridge=result.bridge,
-                    insight=result.insight,
-                    source_fact_ids=source_fids,
-                ))
+                candidates.append(
+                    _DreamCandidate(
+                        bridge=result.bridge,
+                        insight=result.insight,
+                        source_fact_ids=source_fids,
+                    )
+                )
 
-    _logger.info("Dream generation: %d candidates from %d cluster pairs", len(candidates), len(valid_clusters) * (len(valid_clusters) - 1) // 2)
+    _logger.info(
+        "Dream generation: %d candidates from %d cluster pairs",
+        len(candidates),
+        len(valid_clusters) * (len(valid_clusters) - 1) // 2,
+    )
 
     if not candidates:
         return 0

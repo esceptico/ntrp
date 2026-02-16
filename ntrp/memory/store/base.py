@@ -119,9 +119,7 @@ class GraphDatabase:
 
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
-        await self.conn.execute(
-            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
-        )
+        await self.conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
 
         stored_dim = await self._get_meta("embedding_dim")
         if stored_dim is None or int(stored_dim) != self.embedding_dim:
@@ -133,9 +131,7 @@ class GraphDatabase:
             await self.conn.execute("DROP TABLE IF EXISTS observations_vec")
             await self.conn.execute("DROP TABLE IF EXISTS facts_vec")
             # Only trigger re-embed when there's existing data with stale embeddings
-            rows = await self.conn.execute_fetchall(
-                "SELECT EXISTS(SELECT 1 FROM facts WHERE embedding IS NOT NULL)"
-            )
+            rows = await self.conn.execute_fetchall("SELECT EXISTS(SELECT 1 FROM facts WHERE embedding IS NOT NULL)")
             if rows and rows[0][0]:
                 self.dim_changed = True
 

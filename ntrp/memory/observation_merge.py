@@ -121,7 +121,10 @@ async def observation_merge_pass(
         if decision.action == "skip":
             _logger.debug(
                 "Merge skip: obs %d + %d (sim=%.3f): %s",
-                obs_a.id, obs_b.id, sim, decision.reason,
+                obs_a.id,
+                obs_b.id,
+                sim,
+                decision.reason,
             )
             skipped_pairs.add((min(obs_a.id, obs_b.id), max(obs_a.id, obs_b.id)))
             continue
@@ -148,15 +151,14 @@ async def observation_merge_pass(
         if merged:
             _logger.info(
                 "Merged obs %d + %d → %d: %s",
-                obs_a.id, obs_b.id, keeper.id, decision.text[:80],
+                obs_a.id,
+                obs_b.id,
+                keeper.id,
+                decision.text[:80],
             )
             merges += 1
             # Update in-memory list: replace keeper, remove removed
-            observations = [
-                merged if o.id == keeper.id else o
-                for o in observations
-                if o.id != removed.id
-            ]
+            observations = [merged if o.id == keeper.id else o for o in observations if o.id != removed.id]
 
     if merges > 0:
         _logger.info("Observation merge pass: %d merges", merges)

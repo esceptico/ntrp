@@ -23,15 +23,15 @@ from ntrp.events.internal import ConsolidationCompleted, FactCreated, FactDelete
 from ntrp.logging import get_logger
 from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decisions
 from ntrp.memory.dreams import run_dream_pass
-from ntrp.memory.observation_merge import observation_merge_pass
-from ntrp.memory.temporal import temporal_consolidation_pass
 from ntrp.memory.extraction import Extractor
 from ntrp.memory.models import ExtractionResult, Fact, FactContext
+from ntrp.memory.observation_merge import observation_merge_pass
+from ntrp.memory.retrieval import retrieve_with_observations
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
-from ntrp.memory.retrieval import retrieve_with_observations
+from ntrp.memory.temporal import temporal_consolidation_pass
 
 _logger = get_logger(__name__)
 

@@ -1,6 +1,6 @@
 """Tests for Hindsight-style per-fact consolidation (synthesis, not decomposition)."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -251,7 +251,9 @@ class TestConsolidateFact:
                 (),
                 {
                     "message": type(
-                        "Message", (), {"content": '{"actions": [{"action": "skip", "reason": "ephemeral location state"}]}'}
+                        "Message",
+                        (),
+                        {"content": '{"actions": [{"action": "skip", "reason": "ephemeral location state"}]}'},
                     )()
                 },
             )()
@@ -482,7 +484,11 @@ class TestAlwaysConsolidated:
             type(
                 "Choice",
                 (),
-                {"message": type("Message", (), {"content": '{"actions": [{"action": "skip", "reason": "ephemeral"}]}'})()},
+                {
+                    "message": type(
+                        "Message", (), {"content": '{"actions": [{"action": "skip", "reason": "ephemeral"}]}'}
+                    )()
+                },
             )()
         ]
         with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):

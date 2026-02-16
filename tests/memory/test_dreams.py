@@ -1,7 +1,7 @@
 """Tests for dream pipeline: clustering, generation, evaluation, and storage."""
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import numpy as np
@@ -9,12 +9,9 @@ import pytest
 import pytest_asyncio
 
 from ntrp.memory.dreams import (
-    DreamEvaluation,
-    DreamGeneration,
-    _cosine,
-    _kmeans,
     _centroid_nearest,
     _get_supporters,
+    _kmeans,
     run_dream_pass,
 )
 from ntrp.memory.store.base import GraphDatabase
@@ -140,9 +137,7 @@ class TestDreamGeneration:
         await fact_repo.conn.commit()
 
         mock_client = AsyncMock()
-        mock_client.completion.return_value = mock_llm_response(
-            '{"bridge": null, "insight": null}'
-        )
+        mock_client.completion.return_value = mock_llm_response('{"bridge": null, "insight": null}')
         with patch("ntrp.memory.dreams.get_completion_client", return_value=mock_client):
             created = await run_dream_pass(fact_repo, dream_repo, "test-model")
 
@@ -169,17 +164,17 @@ class TestDreamGeneration:
 
             # Last call is the evaluator (contains "CANDIDATES:")
             if "CANDIDATES:" in content:
-                return mock_llm_response(
-                    '{"selected": [0, 2], "reasoning": "These two had genuine insight"}'
-                )
+                return mock_llm_response('{"selected": [0, 2], "reasoning": "These two had genuine insight"}')
 
             # Generation calls
             call_count += 1
             return mock_llm_response(
-                json.dumps({
-                    "bridge": f"bridge-{call_count}",
-                    "insight": f"insight-{call_count}",
-                })
+                json.dumps(
+                    {
+                        "bridge": f"bridge-{call_count}",
+                        "insight": f"insight-{call_count}",
+                    }
+                )
             )
 
         mock_client = AsyncMock()
@@ -233,12 +228,8 @@ class TestDreamPassGating:
         async def mock_completion(**kwargs):
             content = kwargs["messages"][0]["content"]
             if "CANDIDATES:" in content:
-                return mock_llm_response(
-                    '{"selected": [], "reasoning": "All were generic"}'
-                )
-            return mock_llm_response(
-                '{"bridge": "test", "insight": "test insight"}'
-            )
+                return mock_llm_response('{"selected": [], "reasoning": "All were generic"}')
+            return mock_llm_response('{"bridge": "test", "insight": "test insight"}')
 
         mock_client = AsyncMock()
         mock_client.completion.side_effect = mock_completion

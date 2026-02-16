@@ -1,9 +1,7 @@
 import openai
-
 from pydantic import BaseModel
 
 from ntrp.llm.base import CompletionClient, EmbeddingClient
-from ntrp.llm.utils import blocks_to_text
 from ntrp.llm.types import (
     Choice,
     CompletionResponse,
@@ -12,6 +10,7 @@ from ntrp.llm.types import (
     ToolCall,
     Usage,
 )
+from ntrp.llm.utils import blocks_to_text
 
 
 class OpenAIClient(CompletionClient, EmbeddingClient):
@@ -32,7 +31,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         messages = self._preprocess_messages(messages)
 
         request: dict = {"model": model, "messages": messages}
-        
+
         optional = {
             "tools": tools,
             "tool_choice": tool_choice if tools else None,
@@ -71,7 +70,9 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
 
     def _preprocess_messages(self, messages: list[dict]) -> list[dict]:
         return [
-            {**msg, "content": blocks_to_text(msg["content"])} if msg.get("role") == "system" and isinstance(msg.get("content"), list) else msg
+            {**msg, "content": blocks_to_text(msg["content"])}
+            if msg.get("role") == "system" and isinstance(msg.get("content"), list)
+            else msg
             for msg in messages
         ]
 

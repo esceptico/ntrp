@@ -4,9 +4,9 @@ from ntrp.constants import (
     MAX_MESSAGES,
     SUMMARY_MAX_TOKENS,
 )
+from ntrp.context.prompts import SUMMARIZE_PROMPT_TEMPLATE
 from ntrp.llm.models import get_model
 from ntrp.llm.router import get_completion_client
-from ntrp.context.prompts import SUMMARIZE_PROMPT_TEMPLATE
 
 
 def should_compress(
@@ -122,5 +122,3 @@ async def compress_context_async(
 
     summary = await summarize_messages_async(messages, start, end, model)
     return _build_compressed_messages(messages, end, summary), True
-
-

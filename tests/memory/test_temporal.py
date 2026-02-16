@@ -118,14 +118,18 @@ class TestTemporalPass:
 
         mock_client = AsyncMock()
         mock_client.completion.return_value = mock_llm_response(
-            json.dumps({"actions": [
+            json.dumps(
                 {
-                    "action": "create",
-                    "text": "User shows declining sleep pattern over the past 3 weeks, correlating with elevated resting heart rate",
-                    "reason": "sleep hours decreasing from 7.5 to 4 over 2 weeks, followed by elevated HR",
-                    "source_fact_ids": [f1.id, f2.id, f3.id, f4.id],
+                    "actions": [
+                        {
+                            "action": "create",
+                            "text": "User shows declining sleep pattern over the past 3 weeks, correlating with elevated resting heart rate",
+                            "reason": "sleep hours decreasing from 7.5 to 4 over 2 weeks, followed by elevated HR",
+                            "source_fact_ids": [f1.id, f2.id, f3.id, f4.id],
+                        }
+                    ]
                 }
-            ]})
+            )
         )
         with patch("ntrp.memory.temporal.get_completion_client", return_value=mock_client):
             created = await temporal_consolidation_pass(

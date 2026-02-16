@@ -93,9 +93,9 @@ async def _run_headless(prompt: str):
     from uuid import uuid4
 
     from ntrp.core.agent import Agent
-    from ntrp.events import RunCompleted, RunStarted
     from ntrp.core.prompts import build_system_prompt
     from ntrp.core.spawner import create_spawn_fn
+    from ntrp.events import RunCompleted, RunStarted
     from ntrp.server.runtime import Runtime
     from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 

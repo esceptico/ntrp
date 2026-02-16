@@ -300,9 +300,7 @@ class ObservationRepository:
 
     async def update_embedding(self, observation_id: int, embedding: Embedding) -> None:
         embedding_bytes = serialize_embedding(embedding)
-        await self.conn.execute(
-            "UPDATE observations SET embedding = ? WHERE id = ?", (embedding_bytes, observation_id)
-        )
+        await self.conn.execute("UPDATE observations SET embedding = ? WHERE id = ?", (embedding_bytes, observation_id))
         await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (observation_id,))
         await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (observation_id, embedding_bytes))
 

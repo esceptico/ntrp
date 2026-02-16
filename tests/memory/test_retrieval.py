@@ -4,9 +4,6 @@ import pytest
 import pytest_asyncio
 
 from ntrp.memory.models import Fact
-from ntrp.memory.store.base import GraphDatabase
-from ntrp.memory.store.facts import FactRepository
-from ntrp.memory.store.observations import ObservationRepository
 from ntrp.memory.retrieval import (
     entity_expand,
     hybrid_search,
@@ -14,6 +11,9 @@ from ntrp.memory.retrieval import (
     retrieve_with_observations,
     score_fact,
 )
+from ntrp.memory.store.base import GraphDatabase
+from ntrp.memory.store.facts import FactRepository
+from ntrp.memory.store.observations import ObservationRepository
 from ntrp.search.retrieval import rrf_merge
 from tests.conftest import mock_embedding
 

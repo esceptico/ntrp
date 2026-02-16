@@ -5,8 +5,8 @@ from pathlib import Path
 
 import ntrp.database as database
 from ntrp.channel import Channel
-from ntrp.events.internal import IndexingCompleted, IndexingStarted
 from ntrp.embedder import Embedder, EmbeddingConfig
+from ntrp.events.internal import IndexingCompleted, IndexingStarted
 from ntrp.logging import get_logger
 from ntrp.search.index import SearchIndex
 from ntrp.search.store import SearchStore

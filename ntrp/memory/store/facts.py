@@ -259,9 +259,7 @@ class FactRepository:
         await self.conn.execute(_SQL_DELETE_ENTITY_REFS, (fact_id,))
 
     async def count_entity_refs(self, fact_id: int) -> int:
-        rows = await self.conn.execute_fetchall(
-            "SELECT COUNT(*) FROM entity_refs WHERE fact_id = ?", (fact_id,)
-        )
+        rows = await self.conn.execute_fetchall("SELECT COUNT(*) FROM entity_refs WHERE fact_id = ?", (fact_id,))
         return rows[0][0] if rows else 0
 
     async def delete(self, fact_id: int) -> None:
@@ -403,33 +401,21 @@ class FactRepository:
         )
         return [r[0] for r in rows]
 
-    async def get_facts_for_entity_temporal(
-        self, entity_id: int, days: int = 30, limit: int = 50
-    ) -> list[Fact]:
-        rows = await self.conn.execute_fetchall(
-            _SQL_GET_FACTS_FOR_ENTITY_TEMPORAL, (entity_id, days, limit)
-        )
+    async def get_facts_for_entity_temporal(self, entity_id: int, days: int = 30, limit: int = 50) -> list[Fact]:
+        rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_FOR_ENTITY_TEMPORAL, (entity_id, days, limit))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
-    async def get_entities_with_fact_count(
-        self, days: int = 30, min_count: int = 3
-    ) -> list[tuple[int, str, int]]:
-        rows = await self.conn.execute_fetchall(
-            _SQL_GET_ENTITIES_WITH_FACT_COUNT, (days, min_count)
-        )
+    async def get_entities_with_fact_count(self, days: int = 30, min_count: int = 3) -> list[tuple[int, str, int]]:
+        rows = await self.conn.execute_fetchall(_SQL_GET_ENTITIES_WITH_FACT_COUNT, (days, min_count))
         return [(r[0], r[1], r[2]) for r in rows]
 
     async def has_temporal_checkpoint(self, entity_id: int, window_end: str) -> bool:
-        rows = await self.conn.execute_fetchall(
-            _SQL_CHECK_TEMPORAL_CHECKPOINT, (entity_id, window_end)
-        )
+        rows = await self.conn.execute_fetchall(_SQL_CHECK_TEMPORAL_CHECKPOINT, (entity_id, window_end))
         return bool(rows)
 
     async def set_temporal_checkpoint(self, entity_id: int, window_end: str) -> None:
         now = datetime.now(UTC)
-        await self.conn.execute(
-            _SQL_INSERT_TEMPORAL_CHECKPOINT, (entity_id, window_end, now.isoformat())
-        )
+        await self.conn.execute(_SQL_INSERT_TEMPORAL_CHECKPOINT, (entity_id, window_end, now.isoformat()))
 
     async def list_all_with_embeddings(self) -> list[Fact]:
         rows = await self.conn.execute_fetchall(

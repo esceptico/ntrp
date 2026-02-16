@@ -4,11 +4,9 @@ from itertools import count
 
 from google import genai
 from google.genai import types
-
 from pydantic import BaseModel
 
 from ntrp.llm.base import CompletionClient, EmbeddingClient
-from ntrp.llm.utils import blocks_to_text, parse_args
 from ntrp.llm.types import (
     Choice,
     CompletionResponse,
@@ -17,7 +15,7 @@ from ntrp.llm.types import (
     ToolCall,
     Usage,
 )
-
+from ntrp.llm.utils import blocks_to_text, parse_args
 
 
 class GeminiClient(CompletionClient, EmbeddingClient):
@@ -121,12 +119,14 @@ class GeminiClient(CompletionClient, EmbeddingClient):
             parts.append(types.Part(text=text))
         for tc in msg.get("tool_calls") or []:
             fn = tc.get("function", tc)
-            parts.append(types.Part(
-                function_call=types.FunctionCall(
-                    name=fn.get("name", ""),
-                    args=parse_args(fn.get("arguments", "{}")),
+            parts.append(
+                types.Part(
+                    function_call=types.FunctionCall(
+                        name=fn.get("name", ""),
+                        args=parse_args(fn.get("arguments", "{}")),
+                    )
                 )
-            ))
+            )
         return types.Content(role="model", parts=parts) if parts else None
 
     def _convert_tool_result(self, msg: dict, tool_name_map: dict[str, str]) -> types.Part:
@@ -162,11 +162,13 @@ class GeminiClient(CompletionClient, EmbeddingClient):
             params = fn.get("parameters")
             if params:
                 params = self._clean_schema(params)
-            declarations.append(types.FunctionDeclaration(
-                name=fn["name"],
-                description=fn.get("description", ""),
-                parameters=params,
-            ))
+            declarations.append(
+                types.FunctionDeclaration(
+                    name=fn["name"],
+                    description=fn.get("description", ""),
+                    parameters=params,
+                )
+            )
         return [types.Tool(function_declarations=declarations)]
 
     def _clean_schema(self, schema: dict) -> dict:
@@ -175,8 +177,15 @@ class GeminiClient(CompletionClient, EmbeddingClient):
         return schema
 
     def _clean_schema_recursive(self, schema: dict) -> None:
-        for key in ("default", "exclusiveMaximum", "exclusiveMinimum",
-                     "additionalProperties", "$schema", "$defs", "title"):
+        for key in (
+            "default",
+            "exclusiveMaximum",
+            "exclusiveMinimum",
+            "additionalProperties",
+            "$schema",
+            "$defs",
+            "title",
+        ):
             schema.pop(key, None)
 
         if schema.get("type") == "string" and "format" in schema:
@@ -239,14 +248,16 @@ class GeminiClient(CompletionClient, EmbeddingClient):
                 text_parts.append(part.text)
             elif part.function_call is not None:
                 fc = part.function_call
-                tool_calls.append(ToolCall(
-                    id=f"call_{fc.name}_{next(call_seq)}",
-                    type="function",
-                    function=FunctionCall(
-                        name=fc.name,
-                        arguments=json.dumps(dict(fc.args)) if fc.args else "{}",
-                    ),
-                ))
+                tool_calls.append(
+                    ToolCall(
+                        id=f"call_{fc.name}_{next(call_seq)}",
+                        type="function",
+                        function=FunctionCall(
+                            name=fc.name,
+                            arguments=json.dumps(dict(fc.args)) if fc.args else "{}",
+                        ),
+                    )
+                )
 
         content = "\n".join(text_parts) if text_parts else None
         return content, tool_calls

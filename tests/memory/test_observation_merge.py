@@ -9,7 +9,6 @@ import pytest
 import pytest_asyncio
 
 from ntrp.memory.observation_merge import (
-    MergeAction,
     _cosine,
     _find_top_pair,
     observation_merge_pass,
@@ -45,13 +44,9 @@ def _make_distinct_embeddings(n: int, dim: int = TEST_EMBEDDING_DIM) -> list[np.
 
 def mock_llm_response(content: str):
     return type(
-        "Response", (), {
-            "choices": [
-                type("Choice", (), {
-                    "message": type("Message", (), {"content": content})()
-                })()
-            ]
-        },
+        "Response",
+        (),
+        {"choices": [type("Choice", (), {"message": type("Message", (), {"content": content})()})()]},
     )()
 
 
@@ -73,23 +68,51 @@ class TestCosine:
 
 class TestFindTopPair:
     def test_finds_most_similar(self, obs_repo: ObservationRepository):
-        from ntrp.memory.models import Observation
         from datetime import UTC, datetime
+
+        from ntrp.memory.models import Observation
 
         now = datetime.now(UTC)
         emb_a, emb_b = _make_similar_pair("test")
         emb_c = mock_embedding("completely-different")
 
         obs_list = [
-            Observation(id=1, summary="a", embedding=emb_a, evidence_count=1,
-                       source_fact_ids=[], history=[], created_at=now,
-                       updated_at=now, last_accessed_at=now, access_count=0),
-            Observation(id=2, summary="b", embedding=emb_b, evidence_count=1,
-                       source_fact_ids=[], history=[], created_at=now,
-                       updated_at=now, last_accessed_at=now, access_count=0),
-            Observation(id=3, summary="c", embedding=emb_c, evidence_count=1,
-                       source_fact_ids=[], history=[], created_at=now,
-                       updated_at=now, last_accessed_at=now, access_count=0),
+            Observation(
+                id=1,
+                summary="a",
+                embedding=emb_a,
+                evidence_count=1,
+                source_fact_ids=[],
+                history=[],
+                created_at=now,
+                updated_at=now,
+                last_accessed_at=now,
+                access_count=0,
+            ),
+            Observation(
+                id=2,
+                summary="b",
+                embedding=emb_b,
+                evidence_count=1,
+                source_fact_ids=[],
+                history=[],
+                created_at=now,
+                updated_at=now,
+                last_accessed_at=now,
+                access_count=0,
+            ),
+            Observation(
+                id=3,
+                summary="c",
+                embedding=emb_c,
+                evidence_count=1,
+                source_fact_ids=[],
+                history=[],
+                created_at=now,
+                updated_at=now,
+                last_accessed_at=now,
+                access_count=0,
+            ),
         ]
 
         result = _find_top_pair(obs_list, set(), threshold=0.80)
@@ -99,36 +122,64 @@ class TestFindTopPair:
         assert sim > 0.90
 
     def test_skips_known_pairs(self):
-        from ntrp.memory.models import Observation
         from datetime import UTC, datetime
+
+        from ntrp.memory.models import Observation
 
         now = datetime.now(UTC)
         emb_a, emb_b = _make_similar_pair("test")
 
         obs_list = [
-            Observation(id=1, summary="a", embedding=emb_a, evidence_count=1,
-                       source_fact_ids=[], history=[], created_at=now,
-                       updated_at=now, last_accessed_at=now, access_count=0),
-            Observation(id=2, summary="b", embedding=emb_b, evidence_count=1,
-                       source_fact_ids=[], history=[], created_at=now,
-                       updated_at=now, last_accessed_at=now, access_count=0),
+            Observation(
+                id=1,
+                summary="a",
+                embedding=emb_a,
+                evidence_count=1,
+                source_fact_ids=[],
+                history=[],
+                created_at=now,
+                updated_at=now,
+                last_accessed_at=now,
+                access_count=0,
+            ),
+            Observation(
+                id=2,
+                summary="b",
+                embedding=emb_b,
+                evidence_count=1,
+                source_fact_ids=[],
+                history=[],
+                created_at=now,
+                updated_at=now,
+                last_accessed_at=now,
+                access_count=0,
+            ),
         ]
 
         result = _find_top_pair(obs_list, {(1, 2)}, threshold=0.80)
         assert result is None
 
     def test_no_pairs_above_threshold(self):
-        from ntrp.memory.models import Observation
         from datetime import UTC, datetime
+
+        from ntrp.memory.models import Observation
 
         now = datetime.now(UTC)
         embeddings = _make_distinct_embeddings(3)
 
         obs_list = [
-            Observation(id=i+1, summary=f"obs-{i}", embedding=embeddings[i],
-                       evidence_count=1, source_fact_ids=[], history=[],
-                       created_at=now, updated_at=now, last_accessed_at=now,
-                       access_count=0)
+            Observation(
+                id=i + 1,
+                summary=f"obs-{i}",
+                embedding=embeddings[i],
+                evidence_count=1,
+                source_fact_ids=[],
+                history=[],
+                created_at=now,
+                updated_at=now,
+                last_accessed_at=now,
+                access_count=0,
+            )
             for i in range(3)
         ]
 
@@ -152,10 +203,14 @@ class TestObservationMergePass:
             return mock_embedding(text)
 
         async def mock_completion(**kwargs):
-            return mock_llm_response(json.dumps({
-                "action": "merge",
-                "text": "User enjoys coffee daily, drinking it every morning",
-            }))
+            return mock_llm_response(
+                json.dumps(
+                    {
+                        "action": "merge",
+                        "text": "User enjoys coffee daily, drinking it every morning",
+                    }
+                )
+            )
 
         mock_client = AsyncMock()
         mock_client.completion.side_effect = mock_completion
@@ -184,10 +239,14 @@ class TestObservationMergePass:
             return mock_embedding(text)
 
         async def mock_completion(**kwargs):
-            return mock_llm_response(json.dumps({
-                "action": "skip",
-                "reason": "different beverages",
-            }))
+            return mock_llm_response(
+                json.dumps(
+                    {
+                        "action": "skip",
+                        "reason": "different beverages",
+                    }
+                )
+            )
 
         mock_client = AsyncMock()
         mock_client.completion.side_effect = mock_completion
@@ -203,7 +262,7 @@ class TestObservationMergePass:
         embeddings = _make_distinct_embeddings(3)
 
         for i, emb in enumerate(embeddings):
-            await obs_repo.create(summary=f"observation-{i}", embedding=emb, source_fact_id=i+1)
+            await obs_repo.create(summary=f"observation-{i}", embedding=emb, source_fact_id=i + 1)
         await obs_repo.conn.commit()
 
         async def mock_embed(text: str) -> np.ndarray:
@@ -230,10 +289,14 @@ class TestObservationMergePass:
             return mock_embedding(text)
 
         async def mock_completion(**kwargs):
-            return mock_llm_response(json.dumps({
-                "action": "merge",
-                "text": "merged observation",
-            }))
+            return mock_llm_response(
+                json.dumps(
+                    {
+                        "action": "merge",
+                        "text": "merged observation",
+                    }
+                )
+            )
 
         mock_client = AsyncMock()
         mock_client.completion.side_effect = mock_completion
@@ -271,10 +334,14 @@ class TestObservationMergePass:
         async def mock_completion(**kwargs):
             nonlocal call_count
             call_count += 1
-            return mock_llm_response(json.dumps({
-                "action": "merge",
-                "text": f"merged-{call_count}",
-            }))
+            return mock_llm_response(
+                json.dumps(
+                    {
+                        "action": "merge",
+                        "text": f"merged-{call_count}",
+                    }
+                )
+            )
 
         mock_client = AsyncMock()
         mock_client.completion.side_effect = mock_completion
@@ -367,21 +434,31 @@ class TestTemporalPassDedup:
             return existing_emb.copy()
 
         async def mock_completion(**kwargs):
-            return mock_llm_response(json.dumps({
-                "actions": [{
-                    "action": "create",
-                    "text": "TestEntity shows a pattern of doing things repeatedly",
-                    "reason": "temporal pattern",
-                    "source_fact_ids": [facts[0].id, facts[1].id, facts[2].id],
-                }]
-            }))
+            return mock_llm_response(
+                json.dumps(
+                    {
+                        "actions": [
+                            {
+                                "action": "create",
+                                "text": "TestEntity shows a pattern of doing things repeatedly",
+                                "reason": "temporal pattern",
+                                "source_fact_ids": [facts[0].id, facts[1].id, facts[2].id],
+                            }
+                        ]
+                    }
+                )
+            )
 
         mock_client = AsyncMock()
         mock_client.completion.side_effect = mock_completion
         with patch("ntrp.memory.temporal.get_completion_client", return_value=mock_client):
             created = await temporal_consolidation_pass(
-                fact_repo, obs_repo, "test-model", mock_embed,
-                days=30, min_facts=3,
+                fact_repo,
+                obs_repo,
+                "test-model",
+                mock_embed,
+                days=30,
+                min_facts=3,
             )
 
         # Should have skipped creating the duplicate

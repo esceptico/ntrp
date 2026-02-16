@@ -1,12 +1,10 @@
 import json
 
 import anthropic
-
 from pydantic import BaseModel
 
 from ntrp.llm.base import CompletionClient
 from ntrp.llm.models import get_model
-from ntrp.llm.utils import blocks_to_text, parse_args
 from ntrp.llm.types import (
     Choice,
     CompletionResponse,
@@ -15,6 +13,7 @@ from ntrp.llm.types import (
     ToolCall,
     Usage,
 )
+from ntrp.llm.utils import blocks_to_text, parse_args
 
 _FINISH_REASONS = {
     "end_turn": "stop",
@@ -58,9 +57,14 @@ class AnthropicClient(CompletionClient):
         self._inject_cache_control_last_message(api_messages)
 
         request = self._build_request(
-            model=model, messages=api_messages, system=system,
-            tools=api_tools, tool_choice=api_tool_choice,
-            temperature=temperature, max_tokens=max_tokens, **kwargs,
+            model=model,
+            messages=api_messages,
+            system=system,
+            tools=api_tools,
+            tool_choice=api_tool_choice,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **kwargs,
         )
 
         response = await self._client.messages.create(**request)
@@ -84,10 +88,16 @@ class AnthropicClient(CompletionClient):
         return None
 
     def _build_request(
-        self, *, model: str, messages: list[dict],
-        system: list[dict] | None, tools: list[dict] | None,
-        tool_choice: dict | None, temperature: float | None,
-        max_tokens: int | None, **kwargs,
+        self,
+        *,
+        model: str,
+        messages: list[dict],
+        system: list[dict] | None,
+        tools: list[dict] | None,
+        tool_choice: dict | None,
+        temperature: float | None,
+        max_tokens: int | None,
+        **kwargs,
     ) -> dict:
         request: dict = {
             "model": model,
@@ -135,12 +145,14 @@ class AnthropicClient(CompletionClient):
 
         for tc in msg.get("tool_calls") or []:
             fn = tc.get("function", tc)
-            content_blocks.append({
-                "type": "tool_use",
-                "id": tc.get("id", ""),
-                "name": fn.get("name", ""),
-                "input": parse_args(fn.get("arguments", "{}")),
-            })
+            content_blocks.append(
+                {
+                    "type": "tool_use",
+                    "id": tc.get("id", ""),
+                    "name": fn.get("name", ""),
+                    "input": parse_args(fn.get("arguments", "{}")),
+                }
+            )
 
         return {"role": "assistant", "content": content_blocks or ""}
 
@@ -187,9 +199,7 @@ class AnthropicClient(CompletionClient):
 
     # --- Response parsing ---
 
-    def _parse_response(
-        self, response, model: str, response_format: type[BaseModel] | None
-    ) -> CompletionResponse:
+    def _parse_response(self, response, model: str, response_format: type[BaseModel] | None) -> CompletionResponse:
         content, tool_calls, reasoning = self._parse_content_blocks(response.content, response_format)
         usage = self._parse_usage(response.usage)
 
@@ -201,16 +211,20 @@ class AnthropicClient(CompletionClient):
         )
 
         return CompletionResponse(
-            choices=[Choice(
-                message=message,
-                finish_reason=_FINISH_REASONS.get(response.stop_reason, response.stop_reason),
-            )],
+            choices=[
+                Choice(
+                    message=message,
+                    finish_reason=_FINISH_REASONS.get(response.stop_reason, response.stop_reason),
+                )
+            ],
             usage=usage,
             model=model,
         )
 
     def _parse_content_blocks(
-        self, blocks, response_format: type[BaseModel] | None,
+        self,
+        blocks,
+        response_format: type[BaseModel] | None,
     ) -> tuple[str | None, list[ToolCall], str | None]:
         text_parts: list[str] = []
         tool_calls: list[ToolCall] = []
@@ -223,14 +237,16 @@ class AnthropicClient(CompletionClient):
                 if response_format and block.name == "_structured_output":
                     text_parts.append(json.dumps(block.input))
                 else:
-                    tool_calls.append(ToolCall(
-                        id=block.id,
-                        type="function",
-                        function=FunctionCall(
-                            name=block.name,
-                            arguments=json.dumps(block.input),
-                        ),
-                    ))
+                    tool_calls.append(
+                        ToolCall(
+                            id=block.id,
+                            type="function",
+                            function=FunctionCall(
+                                name=block.name,
+                                arguments=json.dumps(block.input),
+                            ),
+                        )
+                    )
             elif block.type == "thinking":
                 reasoning = block.thinking
 

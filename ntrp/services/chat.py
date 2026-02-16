@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
+from ntrp.context.compression import compress_context_async, find_compressible_range
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.agent import Agent
 from ntrp.core.factory import create_agent
@@ -22,7 +23,6 @@ from ntrp.server.state import RunState, RunStatus
 from ntrp.server.stream import run_agent_loop, to_sse
 from ntrp.skills.registry import SkillRegistry
 from ntrp.tools.core.context import IOBridge
-from ntrp.context.compression import compress_context_async, find_compressible_range
 from ntrp.tools.directives import load_directives
 
 INIT_AUTO_APPROVE = {"remember", "forget"}
@@ -256,12 +256,16 @@ class ChatService:
 
         msg_count = end - start
         new_messages, was_compressed = await compress_context_async(
-            messages=messages, model=model, force=True,
+            messages=messages,
+            model=model,
+            force=True,
         )
 
         if was_compressed:
             await runtime.save_session(
-                session_state, new_messages, metadata={"last_input_tokens": None},
+                session_state,
+                new_messages,
+                metadata={"last_input_tokens": None},
             )
             return {
                 "status": "compacted",

@@ -49,9 +49,7 @@ async def temporal_consolidation_pass(
         if await fact_repo.has_temporal_checkpoint(entity_id, window_end):
             continue
 
-        facts = await fact_repo.get_facts_for_entity_temporal(
-            entity_id, days=days, limit=50
-        )
+        facts = await fact_repo.get_facts_for_entity_temporal(entity_id, days=days, limit=50)
         if len(facts) < min_facts:
             continue
 
@@ -82,7 +80,9 @@ async def temporal_consolidation_pass(
                         await obs_repo.add_source_facts(existing_obs.id, action.source_fact_ids)
                     _logger.info(
                         "Temporal: skipped duplicate for %s (sim=%.2f with obs %d)",
-                        entity_name, sim, existing_obs.id,
+                        entity_name,
+                        sim,
+                        existing_obs.id,
                     )
                     continue
 

@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 
 from ntrp.schedule.models import ScheduledTask
 
-
 # --- Run lifecycle ---
 
 

@@ -9,9 +9,11 @@ from ntrp.constants import AGENT_MAX_DEPTH, SESSION_EXPIRY_HOURS
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
 from ntrp.events.internal import SourceChanged
-from ntrp.llm.router import close as llm_close, init as llm_init
+from ntrp.llm.router import close as llm_close
+from ntrp.llm.router import init as llm_init
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
+from ntrp.memory.indexable import MemoryIndexable
 from ntrp.memory.service import MemoryService
 from ntrp.notifiers.base import Notifier
 from ntrp.notifiers.factory import create_notifier
@@ -28,10 +30,9 @@ from ntrp.services.config import ConfigService
 from ntrp.services.lifecycle import wire_events
 from ntrp.skills.registry import SkillRegistry
 from ntrp.skills.service import SkillService
+from ntrp.sources.base import Indexable
 from ntrp.sources.browser import BrowserHistorySource
 from ntrp.sources.google.gmail import MultiGmailSource
-from ntrp.sources.base import Indexable
-from ntrp.memory.indexable import MemoryIndexable
 from ntrp.tools.executor import ToolExecutor
 
 _logger = get_logger(__name__)

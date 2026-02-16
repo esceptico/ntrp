@@ -120,9 +120,7 @@ class Agent:
         self.messages, _ = await compress_context_async(self.messages, self.model, force=True)
 
         if self.current_depth == 0:
-            self.ctx.channel.publish(
-                ContextCompressed(messages=discarded, session_id=self.ctx.session_id)
-            )
+            self.ctx.channel.publish(ContextCompressed(messages=discarded, session_id=self.ctx.session_id))
 
     def _append_tool_results(self, tool_calls: list[Any], results: dict[str, str]) -> None:
         for tc in tool_calls:

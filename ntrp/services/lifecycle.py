@@ -1,6 +1,5 @@
 from typing import TYPE_CHECKING
 
-from ntrp.sources.base import Indexable
 from ntrp.events.internal import (
     ConsolidationCompleted,
     ContextCompressed,
@@ -18,6 +17,7 @@ from ntrp.events.internal import (
 )
 from ntrp.memory.chat_extraction import make_chat_extraction_handler
 from ntrp.notifiers.dispatcher import make_schedule_dispatcher
+from ntrp.sources.base import Indexable
 
 if TYPE_CHECKING:
     from ntrp.server.runtime import Runtime

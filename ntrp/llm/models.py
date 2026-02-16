@@ -24,16 +24,29 @@ class Model:
 
 # Prices are per million tokens.
 DEFAULTS = [
-    Model("claude-opus-4-6", Provider.ANTHROPIC, 200_000,
-          max_output_tokens=16384, price_in=5, price_out=25, price_cache_read=0.50, price_cache_write=6.25),
-    Model("claude-sonnet-4-5-20250929", Provider.ANTHROPIC, 200_000,
-          max_output_tokens=8192, price_in=3, price_out=15, price_cache_read=0.30, price_cache_write=3.75),
-    Model("gpt-5.2", Provider.OPENAI, 128_000,
-          max_output_tokens=16384, price_in=2, price_out=8),
-    Model("gemini-3-pro-preview", Provider.GOOGLE, 128_000,
-          max_output_tokens=65536, price_in=1.25, price_out=10),
-    Model("gemini-3-flash-preview", Provider.GOOGLE, 128_000,
-          max_output_tokens=65536, price_in=0.15, price_out=0.60),
+    Model(
+        "claude-opus-4-6",
+        Provider.ANTHROPIC,
+        200_000,
+        max_output_tokens=16384,
+        price_in=5,
+        price_out=25,
+        price_cache_read=0.50,
+        price_cache_write=6.25,
+    ),
+    Model(
+        "claude-sonnet-4-5-20250929",
+        Provider.ANTHROPIC,
+        200_000,
+        max_output_tokens=8192,
+        price_in=3,
+        price_out=15,
+        price_cache_read=0.30,
+        price_cache_write=3.75,
+    ),
+    Model("gpt-5.2", Provider.OPENAI, 128_000, max_output_tokens=16384, price_in=2, price_out=8),
+    Model("gemini-3-pro-preview", Provider.GOOGLE, 128_000, max_output_tokens=65536, price_in=1.25, price_out=10),
+    Model("gemini-3-flash-preview", Provider.GOOGLE, 128_000, max_output_tokens=65536, price_in=0.15, price_out=0.60),
 ]
 
 

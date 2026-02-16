@@ -164,8 +164,7 @@ class ConfigService:
             "browser": self.config.browser,
             "gmail_enabled": self.config.gmail,
             "has_browser": self.config.browser is not None,
-            "has_notes": self.config.vault_path is not None
-            and self.source_mgr.sources.get("notes") is not None,
+            "has_notes": self.config.vault_path is not None and self.source_mgr.sources.get("notes") is not None,
             "max_depth": self._get_max_depth(),
             "memory_enabled": memory_connected,
             "sources": {

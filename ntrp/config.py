@@ -118,11 +118,21 @@ class Config(BaseSettings):
         return self.db_dir / "memory.db"
 
 
-PERSIST_KEYS = frozenset({
-    "chat_model", "explore_model", "memory_model", "embedding_model",
-    "browser", "browser_days", "vault_path",
-    "memory", "gmail", "gmail_days", "calendar",
-})
+PERSIST_KEYS = frozenset(
+    {
+        "chat_model",
+        "explore_model",
+        "memory_model",
+        "embedding_model",
+        "browser",
+        "browser_days",
+        "vault_path",
+        "memory",
+        "gmail",
+        "gmail_days",
+        "calendar",
+    }
+)
 
 
 def get_config() -> Config:
