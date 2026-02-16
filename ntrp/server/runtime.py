@@ -5,7 +5,7 @@ from pathlib import Path
 import ntrp.database as database
 from ntrp.channel import Channel
 from ntrp.config import NTRP_DIR, Config, get_config
-from ntrp.constants import AGENT_MAX_DEPTH, SESSION_EXPIRY_HOURS
+from ntrp.constants import AGENT_MAX_DEPTH
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
 from ntrp.llm.router import close as llm_close
@@ -246,12 +246,20 @@ class Runtime:
 
     # --- Session ---
 
-    def create_session(self) -> SessionState:
+    def create_session(self, name: str | None = None) -> SessionState:
         now = datetime.now(UTC)
         return SessionState(
-            session_id=now.strftime("%Y%m%d_%H%M%S"),
+            session_id=f"{now.strftime('%Y%m%d_%H%M%S')}_{now.microsecond // 1000:03d}",
             started_at=now,
+            name=name,
         )
+
+    async def load_session(self, session_id: str) -> SessionData | None:
+        try:
+            return await self.session_store.load_session(session_id)
+        except Exception as e:
+            _logger.warning("Failed to load session %s: %s", session_id, e)
+            return None
 
     async def restore_session(self) -> SessionData | None:
         try:
@@ -263,20 +271,10 @@ class Runtime:
         if not data:
             return None
 
-        age_hours = (datetime.now(UTC) - data.state.last_activity).total_seconds() / 3600
-        if age_hours > SESSION_EXPIRY_HOURS:
-            return None
-
         if not data.messages or len(data.messages) < 2:
             return None
 
         return data
-
-    async def clear_sessions(self) -> None:
-        if self.session_store:
-            sessions = await self.session_store.list_sessions(limit=100)
-            for s in sessions:
-                await self.session_store.delete_session(s["session_id"])
 
     async def save_session(
         self,

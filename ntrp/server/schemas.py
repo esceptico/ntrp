@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class ChatRequest(BaseModel):
     message: str
     skip_approvals: bool = False
+    session_id: str | None = None
 
 
 class ToolResultRequest(BaseModel):
@@ -32,6 +33,23 @@ class SessionResponse(BaseModel):
     session_id: str
     sources: list[str]
     source_errors: dict[str, str]
+    name: str | None = None
+
+
+class CreateSessionRequest(BaseModel):
+    name: str | None = None
+
+
+class RenameSessionRequest(BaseModel):
+    name: str
+
+
+class CompactRequest(BaseModel):
+    session_id: str | None = None
+
+
+class ClearSessionRequest(BaseModel):
+    session_id: str | None = None
 
 
 class SourceToggles(BaseModel):

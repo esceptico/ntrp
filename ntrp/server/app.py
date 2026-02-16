@@ -105,7 +105,7 @@ async def list_tools():
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest) -> StreamingResponse:
     svc = ChatService(get_runtime())
-    ctx = await svc.prepare(request.message, request.skip_approvals)
+    ctx = await svc.prepare(request.message, request.skip_approvals, session_id=request.session_id)
     return StreamingResponse(
         svc.stream(ctx),
         media_type="text/event-stream",

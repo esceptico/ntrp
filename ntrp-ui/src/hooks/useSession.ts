@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { Config } from "../types.js";
 import {
   checkHealth,
@@ -6,6 +6,7 @@ import {
   getServerConfig,
   getIndexStatus,
   getHistory,
+  createSession,
   type ServerConfig,
   type HistoryMessage,
 } from "../api/client.js";
@@ -20,6 +21,7 @@ interface IndexStatus {
 
 export function useSession(config: Config) {
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionName, setSessionName] = useState<string | null>(null);
   const [sources, setSources] = useState<string[]>([]);
   const [skipApprovals, setSkipApprovals] = useState(false);
   const [serverConnected, setServerConnected] = useState(false);
@@ -46,6 +48,7 @@ export function useSession(config: Config) {
           ]);
 
           setSessionId(session.session_id);
+          setSessionName(session.name ?? null);
           setSources(session.sources);
           setServerConfig(configData);
           setHistory(historyData.messages);
@@ -96,9 +99,14 @@ export function useSession(config: Config) {
     }
   };
 
-  const updateSessionInfo = (info: { session_id: string; sources: string[] }) => {
+  const updateSessionInfo = (info: { session_id: string; sources?: string[]; session_name?: string }) => {
     setSessionId(info.session_id);
-    setSources(info.sources);
+    if (info.sources !== undefined) {
+      setSources(info.sources);
+    }
+    if (info.session_name !== undefined) {
+      setSessionName(info.session_name || null);
+    }
   };
 
   const toggleSkipApprovals = () => {
@@ -109,8 +117,38 @@ export function useSession(config: Config) {
     setServerConfig((prev) => prev && { ...prev, ...patch });
   };
 
+  const switchSession = useCallback(async (targetSessionId: string): Promise<{ history: HistoryMessage[] } | null> => {
+    try {
+      const [session, historyData] = await Promise.all([
+        getSession(config, targetSessionId),
+        getHistory(config, targetSessionId).catch(() => ({ messages: [] })),
+      ]);
+      setSessionId(session.session_id);
+      setSessionName(session.name ?? null);
+      setSources(session.sources);
+      setHistory(historyData.messages);
+      return { history: historyData.messages };
+    } catch {
+      return null;
+    }
+  }, [config]);
+
+  const createNewSession = useCallback(async (name?: string): Promise<string | null> => {
+    try {
+      const result = await createSession(config, name);
+      setSessionId(result.session_id);
+      setSessionName(result.name ?? null);
+      setSources([]);
+      setHistory([]);
+      return result.session_id;
+    } catch {
+      return null;
+    }
+  }, [config]);
+
   return {
     sessionId,
+    sessionName,
     sources,
     skipApprovals,
     serverConnected,
@@ -121,5 +159,7 @@ export function useSession(config: Config) {
     updateSessionInfo,
     toggleSkipApprovals,
     updateServerConfig,
+    switchSession,
+    createNewSession,
   };
 }

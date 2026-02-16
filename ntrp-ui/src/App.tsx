@@ -20,6 +20,7 @@ import {
   InputArea,
   MessageDisplay,
   SettingsDialog,
+  SessionPicker,
   ChoiceSelector,
   ThemePicker,
   MemoryViewer,
@@ -31,9 +32,9 @@ import {
 } from "./components/index.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { COMMANDS } from "./lib/commands.js";
-import { getSkills, type Skill } from "./api/client.js";
+import { getSkills, deleteSession, type Skill } from "./api/client.js";
 
-type ViewMode = "chat" | "memory" | "settings" | "schedules" | "dashboard";
+type ViewMode = "chat" | "memory" | "settings" | "schedules" | "dashboard" | "sessions";
 
 import type { Settings } from "./hooks/useSettings.js";
 
@@ -61,6 +62,7 @@ function AppContent({
   const session = useSession(config);
   const {
     sessionId,
+    sessionName,
     skipApprovals,
     serverConnected,
     serverConfig,
@@ -70,6 +72,8 @@ function AppContent({
     updateSessionInfo,
     toggleSkipApprovals,
     updateServerConfig,
+    switchSession,
+    createNewSession,
   } = session;
 
   const initialMessages = useMemo(() =>
@@ -113,6 +117,7 @@ function AppContent({
     handleApproval,
     cancel,
     setStatus,
+    resetForSessionSwitch,
   } = streaming;
 
   const [copiedFlash, setCopiedFlash] = useState(false);
@@ -135,6 +140,11 @@ function AppContent({
     };
   }, [renderer]);
 
+  const { width, height } = useDimensions();
+  const SIDEBAR_WIDTH = 32;
+  const showSidebar = sidebarVisible && width >= 94 && serverConnected;
+  const { data: sidebarData, refresh: refreshSidebar } = useSidebar(config, showSidebar, messages.length);
+
   const isInChatMode = viewMode === "chat" && !showSettings && !showThemePicker;
 
   const openThemePicker = useCallback(() => setShowThemePicker(true), []);
@@ -153,6 +163,10 @@ function AppContent({
     openThemePicker,
     exit: () => renderer.destroy(),
     refreshIndexStatus,
+    createNewSession,
+    switchSession,
+    resetForSessionSwitch,
+    refreshSidebar,
   });
 
   const allCommands = useMemo(() => [
@@ -221,12 +235,7 @@ function AppContent({
 
   useKeypress(handleGlobalKeypress, { isActive: true });
 
-  const { width, height } = useDimensions();
   const hasOverlay = viewMode !== "chat" || showThemePicker;
-
-  const SIDEBAR_WIDTH = 32;
-  const showSidebar = sidebarVisible && width >= 94 && serverConnected;
-  const sidebarData = useSidebar(config, showSidebar, messages.length);
 
   const contentHeight = height - 2; // paddingTop + paddingBottom
   const mainPadding = 4; // paddingLeft(2) + paddingRight(2)
@@ -303,6 +312,7 @@ function AppContent({
             queueCount={messageQueue.length}
             skipApprovals={skipApprovals}
             chatModel={serverConfig?.chat_model}
+            sessionName={sessionName}
             indexStatus={indexStatus}
             copiedFlash={copiedFlash}
           />
@@ -324,6 +334,8 @@ function AppContent({
             usage={streaming.usage}
             width={SIDEBAR_WIDTH}
             height={contentHeight}
+            currentSessionId={sessionId}
+            currentSessionName={sessionName}
           />
         </>
       )}
@@ -332,6 +344,46 @@ function AppContent({
       {viewMode === "memory" && <MemoryViewer config={config} onClose={closeView} />}
       {viewMode === "schedules" && <SchedulesViewer config={config} onClose={closeView} />}
       {viewMode === "dashboard" && <DashboardViewer config={config} onClose={closeView} />}
+      {viewMode === "sessions" && (
+        <SessionPicker
+          config={config}
+          currentSessionId={sessionId}
+          onSwitch={async (targetId) => {
+            const result = await switchSession(targetId);
+            if (result) {
+              const historyMessages: Message[] = result.history.map((msg, i) => ({
+                id: `h-${i}`,
+                role: msg.role,
+                content: msg.content,
+              }));
+              resetForSessionSwitch(historyMessages);
+              refreshSidebar();
+            } else {
+              addMessage({ role: "error", content: "Failed to switch session" } as Message);
+            }
+          }}
+          onDelete={async (targetId) => {
+            try {
+              await deleteSession(config, targetId);
+              if (targetId === sessionId) {
+                await createNewSession();
+                resetForSessionSwitch([]);
+              }
+              refreshSidebar();
+            } catch {
+              // ignore
+            }
+          }}
+          onNew={async () => {
+            const newId = await createNewSession();
+            if (newId) {
+              resetForSessionSwitch([]);
+              refreshSidebar();
+            }
+          }}
+          onClose={closeView}
+        />
+      )}
       {showThemePicker && (
         <ThemePicker
           current={settings.ui.theme}

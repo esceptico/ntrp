@@ -35,7 +35,6 @@ CONVERSATION_GAP_THRESHOLD = 1800  # seconds (30 min) - show time gap note if ex
 
 # --- Session ---
 
-SESSION_EXPIRY_HOURS = 24
 HISTORY_MESSAGE_LIMIT = 50  # max user/assistant messages returned for UI history
 CONSOLIDATION_INTERVAL = 30.0  # seconds between consolidation batches
 

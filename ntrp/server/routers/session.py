@@ -5,6 +5,10 @@ from ntrp.constants import HISTORY_MESSAGE_LIMIT
 from ntrp.llm.models import EMBEDDING_DEFAULTS, get_model, list_models
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
+    ClearSessionRequest,
+    CompactRequest,
+    CreateSessionRequest,
+    RenameSessionRequest,
     SessionResponse,
     UpdateConfigRequest,
     UpdateDirectivesRequest,
@@ -54,9 +58,14 @@ def _config_response(rt: Runtime) -> dict:
 
 
 @router.get("/session/history")
-async def get_session_history():
+async def get_session_history(session_id: str | None = None):
     runtime = get_runtime()
-    data = await runtime.restore_session()
+
+    if session_id:
+        data = await runtime.load_session(session_id)
+    else:
+        data = await runtime.restore_session()
+
     if not data:
         return {"messages": []}
 
@@ -76,10 +85,14 @@ async def get_session_history():
 
 
 @router.get("/session")
-async def get_session() -> SessionResponse:
+async def get_session(session_id: str | None = None) -> SessionResponse:
     runtime = get_runtime()
 
-    data = await runtime.restore_session()
+    if session_id:
+        data = await runtime.load_session(session_id)
+    else:
+        data = await runtime.restore_session()
+
     if data:
         session_state = data.state
     else:
@@ -89,19 +102,73 @@ async def get_session() -> SessionResponse:
         session_id=session_state.session_id,
         sources=runtime.get_available_sources(),
         source_errors=runtime.get_source_errors(),
+        name=session_state.name,
     )
 
 
 @router.post("/session/clear")
-async def clear_session():
+async def clear_session(req: ClearSessionRequest | None = None):
     runtime = get_runtime()
-    await runtime.clear_sessions()
-    session_state = runtime.create_session()
+    target_id = req.session_id if req else None
+
+    if target_id:
+        data = await runtime.load_session(target_id)
+    else:
+        data = await runtime.restore_session()
+
+    if not data:
+        return {"status": "cleared", "session_id": None}
+
+    data.state.last_activity = data.state.started_at
+    await runtime.save_session(data.state, [])
 
     return {
         "status": "cleared",
-        "session_id": session_state.session_id,
+        "session_id": data.state.session_id,
     }
+
+
+# --- Multi-session ---
+
+
+@router.post("/sessions")
+async def create_session(req: CreateSessionRequest | None = None):
+    runtime = get_runtime()
+    name = req.name if req else None
+    state = runtime.create_session(name=name)
+    await runtime.save_session(state, [])
+    return {
+        "session_id": state.session_id,
+        "name": state.name,
+        "started_at": state.started_at.isoformat(),
+        "last_activity": state.last_activity.isoformat(),
+        "message_count": 0,
+    }
+
+
+@router.get("/sessions")
+async def list_sessions():
+    runtime = get_runtime()
+    sessions = await runtime.session_store.list_sessions(limit=20)
+    return {"sessions": sessions}
+
+
+@router.patch("/sessions/{session_id}")
+async def rename_session(session_id: str, req: RenameSessionRequest):
+    runtime = get_runtime()
+    updated = await runtime.session_store.update_session_name(session_id, req.name)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"session_id": session_id, "name": req.name}
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(session_id: str):
+    runtime = get_runtime()
+    deleted = await runtime.session_store.delete_session(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"status": "deleted", "session_id": session_id}
 
 
 # --- Config ---
@@ -172,12 +239,16 @@ async def update_embedding_model(req: UpdateEmbeddingRequest):
 
 
 @router.get("/context")
-async def get_context_usage():
+async def get_context_usage(session_id: str | None = None):
     runtime = get_runtime()
     model = runtime.config.chat_model
     model_limit = get_model(model).context_window
 
-    data = await runtime.restore_session()
+    if session_id:
+        data = await runtime.load_session(session_id)
+    else:
+        data = await runtime.restore_session()
+
     messages = data.messages if data else []
     last_input_tokens = data.last_input_tokens if data else None
 
@@ -191,9 +262,10 @@ async def get_context_usage():
 
 
 @router.post("/compact")
-async def compact_context():
+async def compact_context(req: CompactRequest | None = None):
+    session_id = req.session_id if req else None
     svc = ChatService(get_runtime())
-    return await svc.compact()
+    return await svc.compact(session_id=session_id)
 
 
 # --- Directives ---

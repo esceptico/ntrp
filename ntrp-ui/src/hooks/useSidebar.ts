@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { Config } from "../types.js";
-import { getStats, getContextUsage, getSchedules, type Stats, type Schedule } from "../api/client.js";
+import { getStats, getContextUsage, getSchedules, listSessions, type Stats, type Schedule, type SessionListItem } from "../api/client.js";
 
 const POLL_INTERVAL = 60_000;
 
@@ -14,9 +14,10 @@ export interface SidebarData {
     tool_count: number;
   } | null;
   nextSchedules: Schedule[];
+  sessions: SessionListItem[];
 }
 
-const EMPTY: SidebarData = { stats: null, context: null, nextSchedules: [] };
+const EMPTY: SidebarData = { stats: null, context: null, nextSchedules: [], sessions: [] };
 
 export function useSidebar(config: Config, active: boolean, messageCount: number) {
   const [data, setData] = useState<SidebarData>(EMPTY);
@@ -25,10 +26,11 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
   const refresh = useCallback(async () => {
     if (!activeRef.current) return;
     try {
-      const [stats, context, schedulesResult] = await Promise.all([
+      const [stats, context, schedulesResult, sessionsResult] = await Promise.all([
         getStats(config),
         getContextUsage(config),
         getSchedules(config),
+        listSessions(config).catch(() => ({ sessions: [] })),
       ]);
       if (!activeRef.current) return;
 
@@ -37,7 +39,7 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
         .sort((a, b) => new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime())
         .slice(0, 3);
 
-      setData({ stats, context, nextSchedules });
+      setData({ stats, context, nextSchedules, sessions: sessionsResult.sessions });
     } catch {
       // ignore
     }
@@ -59,5 +61,5 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
     };
   }, [refresh, active]);
 
-  return data;
+  return { data, refresh };
 }

@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     started_at TEXT NOT NULL,
     last_activity TEXT NOT NULL,
     messages TEXT,
-    metadata TEXT
+    metadata TEXT,
+    name TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
@@ -22,8 +23,8 @@ CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
 SQL_SAVE_SESSION = """
 INSERT OR REPLACE INTO sessions (
     session_id, started_at, last_activity,
-    messages, metadata
-) VALUES (?, ?, ?, ?, ?)
+    messages, metadata, name
+) VALUES (?, ?, ?, ?, ?, ?)
 """
 
 SQL_GET_LATEST = """
@@ -32,7 +33,8 @@ ORDER BY last_activity DESC LIMIT 1
 """
 
 SQL_LIST_SESSIONS = """
-SELECT session_id, started_at, last_activity
+SELECT session_id, started_at, last_activity, name,
+       json_array_length(COALESCE(messages, '[]')) AS message_count
 FROM sessions
 ORDER BY last_activity DESC
 LIMIT ?
@@ -45,7 +47,11 @@ class SessionStore:
 
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
-        await self.conn.commit()
+        try:
+            await self.conn.execute("ALTER TABLE sessions ADD COLUMN name TEXT")
+            await self.conn.commit()
+        except Exception:
+            pass
 
     async def save_session(self, state: SessionState, messages: list[dict | Any], metadata: dict | None = None) -> None:
         serializable_messages = []
@@ -63,6 +69,7 @@ class SessionStore:
                 state.last_activity.isoformat(),
                 json.dumps(serializable_messages, default=str),
                 json.dumps(metadata or {}),
+                state.name,
             ),
         )
         await self.conn.commit()
@@ -80,10 +87,14 @@ class SessionStore:
             started_at = started_at.replace(tzinfo=UTC)
         if last_activity.tzinfo is None:
             last_activity = last_activity.replace(tzinfo=UTC)
+
+        name = row["name"]
+
         state = SessionState(
             session_id=row["session_id"],
             started_at=started_at,
             last_activity=last_activity,
+            name=name,
         )
 
         messages = json.loads(row["messages"]) if row["messages"] else []
@@ -100,16 +111,26 @@ class SessionStore:
             return None
         return await self.load_session(rows[0]["session_id"])
 
-    async def list_sessions(self, limit: int = 10) -> list[dict]:
+    async def list_sessions(self, limit: int = 20) -> list[dict]:
         rows = await self.conn.execute_fetchall(SQL_LIST_SESSIONS, (limit,))
         return [
             {
                 "session_id": row["session_id"],
                 "started_at": row["started_at"],
                 "last_activity": row["last_activity"],
+                "name": row["name"],
+                "message_count": row["message_count"],
             }
             for row in rows
         ]
+
+    async def update_session_name(self, session_id: str, name: str) -> bool:
+        cursor = await self.conn.execute(
+            "UPDATE sessions SET name = ? WHERE session_id = ?",
+            (name, session_id),
+        )
+        await self.conn.commit()
+        return cursor.rowcount > 0
 
     async def delete_session(self, session_id: str) -> bool:
         cursor = await self.conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))

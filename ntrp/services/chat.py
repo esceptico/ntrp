@@ -112,11 +112,16 @@ class ChatService:
     def __init__(self, runtime: Runtime):
         self.runtime = runtime
 
-    async def prepare(self, message: str, skip_approvals: bool = False) -> ChatContext:
+    async def prepare(self, message: str, skip_approvals: bool = False, session_id: str | None = None) -> ChatContext:
         runtime = self.runtime
         registry = runtime.run_registry
 
-        session_data = await _resolve_session(runtime)
+        if session_id:
+            session_data = await runtime.load_session(session_id)
+            if not session_data:
+                session_data = SessionData(runtime.create_session(), [])
+        else:
+            session_data = await _resolve_session(runtime)
         session_state = session_data.state
         session_state.skip_approvals = skip_approvals
         messages = session_data.messages
@@ -160,6 +165,7 @@ class ChatService:
                 sources=runtime.get_available_sources(),
                 source_errors=runtime.get_source_errors(),
                 skip_approvals=session_state.skip_approvals,
+                session_name=session_state.name or "",
             )
         )
 
@@ -235,11 +241,14 @@ class ChatService:
                 )
             )
 
-    async def compact(self) -> dict:
+    async def compact(self, session_id: str | None = None) -> dict:
         runtime = self.runtime
         model = runtime.config.chat_model
 
-        data = await runtime.restore_session()
+        if session_id:
+            data = await runtime.load_session(session_id)
+        else:
+            data = await runtime.restore_session()
         if not data:
             return {"status": "no_session", "message": "No active session to compact"}
 

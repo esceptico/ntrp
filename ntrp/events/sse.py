@@ -116,6 +116,7 @@ class SessionInfoEvent(SSEEvent):
     sources: list[str] = field(default_factory=list)
     source_errors: dict[str, str] = field(default_factory=dict)
     skip_approvals: bool = False
+    session_name: str = ""
 
 
 @dataclass(frozen=True)

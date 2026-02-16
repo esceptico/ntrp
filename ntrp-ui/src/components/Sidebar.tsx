@@ -1,6 +1,6 @@
 import React from "react";
 import { colors } from "./ui/colors.js";
-import { truncateText } from "../lib/utils.js";
+import { truncateText, formatAge } from "../lib/utils.js";
 import { useAccentColor } from "../hooks/index.js";
 import type { ServerConfig, Schedule } from "../api/client.js";
 import type { SidebarData } from "../hooks/useSidebar.js";
@@ -20,6 +20,8 @@ interface SidebarProps {
   usage: UsageData;
   width: number;
   height: number;
+  currentSessionId: string | null;
+  currentSessionName: string | null;
 }
 
 const H = colors.text.secondary; // header (brighter)
@@ -136,9 +138,30 @@ function ScheduleRow({ schedule, width }: { schedule: Schedule; width: number })
   );
 }
 
-export function Sidebar({ serverConfig, data, usage, width, height }: SidebarProps) {
+function SessionRow({ session, isCurrent, width }: { session: { session_id: string; name: string | null; message_count: number; last_activity: string }; isCurrent: boolean; width: number }) {
+  const indicator = isCurrent ? "\u25B8 " : "  ";
+  const label = session.name || session.session_id;
+  const age = formatAge(session.last_activity);
+  const suffix = ` ${age}`;
+  const nameWidth = Math.max(4, width - indicator.length - suffix.length);
+  const displayName = truncateText(label, nameWidth);
+
+  return (
+    <text>
+      <span fg={isCurrent ? H : D}>{indicator}</span>
+      <span fg={isCurrent ? H : S}>{displayName}</span>
+      <span fg={D}>{suffix}</span>
+    </text>
+  );
+}
+
+export function Sidebar({ serverConfig, data, usage, width, height, currentSessionId, currentSessionName }: SidebarProps) {
   const { accentValue } = useAccentColor();
   const contentWidth = width - 2; // padding
+
+  const MAX_SESSIONS = 5;
+  const visibleSessions = data.sessions.slice(0, MAX_SESSIONS);
+  const overflowCount = Math.max(0, data.sessions.length - MAX_SESSIONS);
 
   return (
     <box
@@ -249,6 +272,24 @@ export function Sidebar({ serverConfig, data, usage, width, height }: SidebarPro
           {data.nextSchedules.map(s => (
             <ScheduleRow key={s.task_id} schedule={s} width={contentWidth} />
           ))}
+        </box>
+      )}
+
+      {/* Sessions */}
+      {visibleSessions.length > 0 && (
+        <box flexDirection="column">
+          <SectionHeader label="SESSIONS" />
+          {visibleSessions.map((s) => (
+            <SessionRow
+              key={s.session_id}
+              session={s}
+              isCurrent={s.session_id === currentSessionId}
+              width={contentWidth}
+            />
+          ))}
+          {overflowCount > 0 && (
+            <text><span fg={D}>  +{overflowCount} more</span></text>
+          )}
         </box>
       )}
     </box>

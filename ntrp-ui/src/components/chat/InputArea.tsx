@@ -24,6 +24,7 @@ interface InputAreaProps {
   queueCount?: number;
   skipApprovals?: boolean;
   chatModel?: string;
+  sessionName?: string | null;
   indexStatus?: { indexing: boolean; progress: { total: number; done: number }; reembedding?: boolean; reembed_progress?: { total: number; done: number } | null } | null;
   copiedFlash?: boolean;
 }
@@ -38,6 +39,7 @@ export const InputArea = memo(function InputArea({
   queueCount = 0,
   skipApprovals = false,
   chatModel,
+  sessionName,
   indexStatus = null,
   copiedFlash = false,
 }: InputAreaProps) {
@@ -136,6 +138,7 @@ export const InputArea = memo(function InputArea({
         const cmd = filteredCommandsRef.current[selectedIndexRef.current];
         const newText = `/${cmd.name} `;
         inputRef.current?.setText(newText);
+        inputRef.current?.setCursorByOffset(newText.length);
         setValue(newText);
         setSelectedIndex(0);
         return;
@@ -214,8 +217,10 @@ export const InputArea = memo(function InputArea({
               onContentChange={handleContentChange}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              {chatModel ? (
-                <text flexShrink={0} fg={colors.text.muted}>{modelName}</text>
+              {(sessionName || chatModel) ? (
+                <text flexShrink={0} fg={colors.text.muted}>
+                  {sessionName ? `${sessionName} · ${modelName}` : modelName}
+                </text>
               ) : null}
               {skipApprovals ? (
                 <text><span fg={colors.status.warning}><strong>skip approvals</strong></span></text>

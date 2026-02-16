@@ -25,7 +25,7 @@ interface UseStreamingOptions {
   config: Config;
   sessionId: string | null;
   skipApprovals: boolean;
-  onSessionInfo?: (info: { session_id: string; sources: string[] }) => void;
+  onSessionInfo?: (info: { session_id: string; sources: string[]; session_name?: string }) => void;
   initialMessages?: Message[];
 }
 
@@ -38,6 +38,10 @@ export function useStreaming({
 }: UseStreamingOptions) {
   const messageIdRef = useRef(0);
   const runIdRef = useRef<string | null>(null);
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+  const skipApprovalsRef = useRef(skipApprovals);
+  skipApprovalsRef.current = skipApprovals;
 
   const toolDescRef = useRef<Map<string, string>>(new Map());
   const toolStartRef = useRef<Map<string, number>>(new Map());
@@ -93,6 +97,7 @@ export function useStreaming({
     onSessionInfo?.({
       session_id: event.session_id,
       sources: event.sources,
+      session_name: event.session_name,
     });
   }, [onSessionInfo]);
 
@@ -269,7 +274,7 @@ export function useStreaming({
     toolSeqRef.current = 0;
 
     try {
-      for await (const event of streamChat(message, sessionId, config, skipApprovals)) {
+      for await (const event of streamChat(message, sessionIdRef.current, config, skipApprovalsRef.current)) {
         await handleEvent(event);
       }
     } catch (error) {
@@ -283,7 +288,7 @@ export function useStreaming({
 
     setIsStreaming(false);
     setStatus(Status.IDLE);
-  }, [sessionId, config, skipApprovals, handleEvent, addMessage]);
+  }, [config, handleEvent, addMessage]);
 
   const handleApproval = useCallback(async (
     result: "once" | "always" | "reject",
@@ -347,6 +352,25 @@ export function useStreaming({
     }
   }, [config, isStreaming]);
 
+  const resetForSessionSwitch = useCallback((newHistory?: Message[]) => {
+    setMessages(newHistory ?? []);
+    historyLoadedRef.current = true;
+    setToolChain([]);
+    setUsage({ prompt: 0, completion: 0, cache_read: 0, cache_write: 0, cost: 0, lastCost: 0 });
+    runIdRef.current = null;
+    pendingTextRef.current = "";
+    currentDepthRef.current = 0;
+    toolDescRef.current.clear();
+    toolStartRef.current.clear();
+    toolSeqRef.current = 0;
+    alwaysAllowedToolsRef.current.clear();
+    autoApprovedIdsRef.current.clear();
+    setPendingApproval(null);
+    setPendingChoice(null);
+    setStatus(Status.IDLE);
+    setIsStreaming(false);
+  }, []);
+
   return {
     messages,
     isStreaming,
@@ -363,5 +387,6 @@ export function useStreaming({
     handleChoice,
     cancelChoice,
     cancel,
+    resetForSessionSwitch,
   };
 }

@@ -1,6 +1,6 @@
 export { InputArea, MessageDisplay } from "./chat/index.js";
 
-export { ApprovalDialog, ChoiceSelector, SettingsDialog, ThemePicker } from "./dialogs/index.js";
+export { ApprovalDialog, ChoiceSelector, SessionPicker, SettingsDialog, ThemePicker } from "./dialogs/index.js";
 
 export { MemoryViewer, SchedulesViewer, DashboardViewer } from "./viewers/index.js";
 

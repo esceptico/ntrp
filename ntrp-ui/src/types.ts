@@ -53,6 +53,7 @@ export interface SessionInfoEvent {
   sources: string[];
   source_errors: Record<string, string>;
   skip_approvals?: boolean;
+  session_name?: string;
 }
 
 export interface DoneEvent {
