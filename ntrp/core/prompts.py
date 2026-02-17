@@ -81,7 +81,7 @@ WORKFLOW:
 WORKFLOW:
 1. Search with 3-4 query variants (different angles on the topic)
 2. Read every relevant result with read_note() — not just the top one
-3. When a topic branches, use explore() to delegate sub-topics in parallel rather than chasing everything yourself
+3. When a topic branches, use explore() to delegate sub-topics in parallel rather than chasing everything yourself. Each sub-agent MUST have a clearly distinct, non-overlapping scope — never spawn two agents that would run similar searches
 4. 5-10 search+read cycles is normal
 
 {_EXPLORE_BASE}""",
@@ -91,7 +91,7 @@ WORKFLOW:
 1. Search with 4-6 query variants (different angles, synonyms, related terms)
 2. Read EVERY relevant result with read_note() — not just the top one
 3. Follow references — if a note mentions another project, person, or topic, search for that too
-4. Delegate sub-topics with explore() — spawn multiple in parallel for breadth. Don't try to do everything sequentially yourself.
+4. Delegate sub-topics with explore() — spawn multiple in parallel for breadth. Don't try to do everything sequentially yourself. Each sub-agent MUST have a clearly distinct, non-overlapping scope. Bad: explore("Revolut interview"), explore("Revolut DS interview"). Good: explore("Revolut technical questions — pandas, SQL, coding"), explore("Revolut behavioral and culture fit")
 5. Keep going until you've exhausted the topic — 10-20 search+read cycles is normal
 6. After your first pass, ask: what did I miss? Then search for gaps.
 

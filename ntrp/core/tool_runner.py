@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import AsyncGenerator, Callable
+from dataclasses import replace
 from pathlib import Path
 
 from ntrp.constants import OFFLOAD_PREVIEW_CHARS, OFFLOAD_THRESHOLD
@@ -191,6 +192,25 @@ class ToolRunner:
             async for event in self._execute_single(call):
                 yield event
 
+    @staticmethod
+    def _enrich_explore_siblings(calls: list[PendingToolCall]) -> list[PendingToolCall]:
+        explore_indices = [i for i, c in enumerate(calls) if c.name == "explore"]
+        if len(explore_indices) <= 1:
+            return calls
+
+        enriched = list(calls)
+        for idx in explore_indices:
+            call = calls[idx]
+            siblings = [calls[i].args.get("task", "") for i in explore_indices if i != idx]
+            hint = (
+                "\n\nOther agents are already covering: "
+                + "; ".join(f'"{s}"' for s in siblings)
+                + ". Focus on YOUR specific scope — avoid overlapping searches."
+            )
+            new_args = {**call.args, "task": call.args.get("task", "") + hint}
+            enriched[idx] = replace(call, args=new_args)
+        return enriched
+
     async def execute_all(self, calls: list[PendingToolCall]) -> AsyncGenerator[SSEEvent]:
         def partition(pred, items):
             yes, no = [], []
@@ -198,6 +218,7 @@ class ToolRunner:
                 (yes if pred(item) else no).append(item)
             return yes, no
 
+        calls = self._enrich_explore_siblings(calls)
         needs_approval, auto_approved = partition(self._needs_approval, calls)
 
         for batch, executor in [
