@@ -164,15 +164,12 @@ export function Sidebar({ serverConfig, data, usage, width, height, currentSessi
   const overflowCount = Math.max(0, data.sessions.length - MAX_SESSIONS);
 
   return (
-    <box
-      flexDirection="column"
+    <scrollbox
       width={width}
       height={height}
-      paddingX={1}
-      paddingTop={1}
-      gap={1}
-      overflow="hidden"
+      style={{ scrollbarOptions: { visible: false } }}
     >
+      <box flexDirection="column" paddingX={1} paddingTop={1} gap={1}>
       {/* Title */}
       <text>
         <span fg={accentValue}>ntrp</span>
@@ -292,6 +289,7 @@ export function Sidebar({ serverConfig, data, usage, width, height, currentSessi
           )}
         </box>
       )}
-    </box>
+      </box>
+    </scrollbox>
   );
 }
