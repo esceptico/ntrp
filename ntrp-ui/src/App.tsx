@@ -253,6 +253,26 @@ function AppContent({
   return (
     <ErrorBoundary>
     <box flexDirection="row" width={width} height={height} paddingTop={1} paddingBottom={1} backgroundColor={colors.background.base}>
+      {/* Sidebar */}
+      {showSidebar && (
+        <>
+          <Sidebar
+            serverConfig={serverConfig}
+            data={sidebarData}
+            usage={streaming.usage}
+            width={SIDEBAR_WIDTH}
+            height={contentHeight}
+            currentSessionId={sessionId}
+            currentSessionName={sessionName}
+          />
+          <box width={1} height={contentHeight} flexShrink={0} flexDirection="column">
+            {Array.from({ length: contentHeight }).map((_, i) => (
+              <text key={i}><span fg={colors.divider}>{"\u2502"}</span></text>
+            ))}
+          </box>
+        </>
+      )}
+
       {/* Main content */}
       <box flexDirection="column" flexGrow={1} paddingLeft={2} paddingRight={2} gap={1}>
       <DimensionsProvider padding={0} width={mainWidth}>
@@ -323,26 +343,6 @@ function AppContent({
         </box>
       </DimensionsProvider>
       </box>
-
-      {/* Sidebar */}
-      {showSidebar && (
-        <>
-          <box width={1} height={contentHeight} flexShrink={0} flexDirection="column">
-            {Array.from({ length: contentHeight }).map((_, i) => (
-              <text key={i}><span fg={colors.divider}>{"\u2502"}</span></text>
-            ))}
-          </box>
-          <Sidebar
-            serverConfig={serverConfig}
-            data={sidebarData}
-            usage={streaming.usage}
-            width={SIDEBAR_WIDTH}
-            height={contentHeight}
-            currentSessionId={sessionId}
-            currentSessionName={sessionName}
-          />
-        </>
-      )}
 
       {/* Overlays — Dialog handles absolute positioning and dimming */}
       {viewMode === "memory" && <MemoryViewer config={config} onClose={closeView} />}
