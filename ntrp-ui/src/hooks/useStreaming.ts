@@ -281,10 +281,10 @@ export function useStreaming({
       addMessage({ role: "error", content: `${error}` });
     }
 
+    currentDepthRef.current = 0;
     const finalContent = truncateText(pendingTextRef.current, MAX_ASSISTANT_CHARS, 'end');
     pendingTextRef.current = "";
-    if (finalContent && currentDepthRef.current === 0) addMessage({ role: "assistant", content: finalContent });
-    currentDepthRef.current = 0;
+    if (finalContent) addMessage({ role: "assistant", content: finalContent });
 
     setIsStreaming(false);
     setStatus(Status.IDLE);
