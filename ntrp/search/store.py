@@ -10,6 +10,7 @@ from ntrp.logging import get_logger
 _logger = get_logger(__name__)
 
 SNIPPET_DISPLAY_LIMIT = 500
+DQ = '"'
 
 
 @dataclass
@@ -351,19 +352,20 @@ class SearchStore:
             return []
 
         terms = query.split()
-        escaped_terms = [f'"{t.replace(chr(34), chr(34) + chr(34))}"' for t in terms]
-        fts_query = " ".join(escaped_terms)
+        if not terms:
+            return []
+        fts_query = " OR ".join(f'"{t.replace(DQ, DQ + DQ)}"' for t in terms)
 
         try:
             if sources:
                 placeholders = ",".join("?" * len(sources))
                 rows = await self.conn.execute_fetchall(
                     f"""
-                    SELECT items.id, bm25(items_fts) as score
+                    SELECT items.id, items_fts.rank
                     FROM items_fts
                     JOIN items ON items_fts.rowid = items.id
                     WHERE items_fts MATCH ? AND items.source IN ({placeholders})
-                    ORDER BY score
+                    ORDER BY items_fts.rank
                     LIMIT ?
                     """,
                     [fts_query, *sources, limit],
@@ -371,11 +373,11 @@ class SearchStore:
             else:
                 rows = await self.conn.execute_fetchall(
                     """
-                    SELECT items.id, bm25(items_fts) as score
+                    SELECT items.id, items_fts.rank
                     FROM items_fts
                     JOIN items ON items_fts.rowid = items.id
                     WHERE items_fts MATCH ?
-                    ORDER BY score
+                    ORDER BY items_fts.rank
                     LIMIT ?
                     """,
                     (fts_query, limit),

@@ -92,9 +92,10 @@ class NotesTool(Tool):
         self,
         execution: ToolExecution,
         query: str | None = None,
-        limit: int = DEFAULT_LIST_LIMIT,
+        limit: int | None = None,
         **kwargs: Any,
     ) -> ToolResult:
+        limit = limit or DEFAULT_LIST_LIMIT
         if query:
             return await self._search(query, limit)
         return self._list(limit)
@@ -178,8 +179,10 @@ class ReadNoteTool(Tool):
         self.source = source
 
     async def execute(
-        self, execution: ToolExecution, path: str, offset: int = 1, limit: int = DEFAULT_READ_LINES, **kwargs: Any
+        self, execution: ToolExecution, path: str, offset: int | None = None, limit: int | None = None, **kwargs: Any
     ) -> ToolResult:
+        offset = offset or 1
+        limit = limit or DEFAULT_READ_LINES
         content = self.source.read(path)
         if content is None:
             return ToolResult(
