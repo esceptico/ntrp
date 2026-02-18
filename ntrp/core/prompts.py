@@ -203,31 +203,28 @@ def _sources(details: dict[str, dict]) -> str:
     lines = []
 
     if info := details.get("notes"):
-        path = info.get("path", "")
-        path_info = f" at {path}" if path else ""
+        path_info = f" at {info['path']}" if info["path"] else ""
         lines.append(NOTES_TEMPLATE.format(path_info=path_info))
 
     if info := details.get("browser"):
         lines.append(
             BROWSER_TEMPLATE.format(
-                browser_type=info.get("type", "browser").capitalize(),
-                days=info.get("days", 30),
+                browser_type=info["type"].capitalize(),
+                days=info["days"],
             )
         )
 
     if info := details.get("gmail"):
-        accounts = info.get("accounts", [])
-        accounts_info = f" — {', '.join(accounts)}" if accounts else ""
+        accounts_info = f" — {', '.join(info['accounts'])}" if info["accounts"] else ""
         lines.append(
             EMAIL_TEMPLATE.format(
                 accounts_info=accounts_info,
-                days=info.get("days", 30),
+                days=info["days"],
             )
         )
 
     if info := details.get("calendar"):
-        accounts = info.get("accounts", [])
-        accounts_info = f" — {', '.join(accounts)}" if accounts else ""
+        accounts_info = f" — {', '.join(info['accounts'])}" if info["accounts"] else ""
         lines.append(CALENDAR_TEMPLATE.format(accounts_info=accounts_info))
 
     if not lines:

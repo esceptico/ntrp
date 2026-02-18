@@ -158,7 +158,7 @@ async def _run_headless(prompt: str):
                     completion_tokens=agent.total_output_tokens,
                     cache_read_tokens=agent.total_cache_read_tokens,
                     cache_write_tokens=agent.total_cache_write_tokens,
-                    result=result or "",
+                    result=result,
                 )
             )
     finally:

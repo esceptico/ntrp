@@ -76,7 +76,7 @@ async def _prepare_messages(
     memory_context = None
     if runtime.memory:
         observations, user_facts = await runtime.memory.get_context()
-        memory_context = format_session_memory(observations=observations, user_facts=user_facts) or None
+        memory_context = format_session_memory(observations=observations, user_facts=user_facts)
 
     skills_context = runtime.skill_registry.to_prompt_xml() if runtime.skill_registry else None
     directives = load_directives()
@@ -92,7 +92,7 @@ async def _prepare_messages(
 
     if not messages:
         messages = [{"role": "system", "content": system_blocks}]
-    elif isinstance(messages[0], dict) and messages[0].get("role") == "system":
+    elif isinstance(messages[0], dict) and messages[0]["role"] == "system":
         messages[0]["content"] = system_blocks
     else:
         messages.insert(0, {"role": "system", "content": system_blocks})
@@ -240,7 +240,7 @@ class ChatService:
                     completion_tokens=run.completion_tokens,
                     cache_read_tokens=run.cache_read_tokens,
                     cache_write_tokens=run.cache_write_tokens,
-                    result=result or "",
+                    result=result,
                 )
             )
 

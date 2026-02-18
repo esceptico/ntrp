@@ -52,10 +52,10 @@ def _format_sections(
 def format_session_memory(
     observations: list[Observation] | None = None,
     user_facts: list[Fact] | None = None,
-) -> str:
+) -> str | None:
     """Format stable user memory for the system prompt (cacheable)."""
     if not observations and not user_facts:
-        return ""
+        return None
     sections: list[tuple[str, list[str]]] = []
     if observations:
         sections.append(("**Patterns**", [_format_observation(obs) for obs in observations]))
@@ -68,14 +68,14 @@ def format_memory_context(
     query_facts: list[Fact] | None = None,
     query_observations: list[Observation] | None = None,
     bundled_sources: dict[int, list[Fact]] | None = None,
-) -> str:
+) -> str | None:
     """Format full memory context (used by recall tool).
 
     Observations are primary, with source facts bundled as evidence.
     Standalone facts fill gaps for unconsolidated content.
     """
     if not query_facts and not query_observations:
-        return ""
+        return None
 
     sections: list[tuple[str, list[str]]] = []
 

@@ -131,7 +131,7 @@ class Scheduler:
         memory_context = None
         if memory:
             observations, user_facts = await memory.get_context()
-            memory_context = format_session_memory(observations=observations, user_facts=user_facts) or None
+            memory_context = format_session_memory(observations=observations, user_facts=user_facts)
 
         system_prompt = build_system_prompt(
             source_details=self.deps.source_details(),
@@ -168,7 +168,7 @@ class Scheduler:
                     completion_tokens=agent.total_output_tokens,
                     cache_read_tokens=agent.total_cache_read_tokens,
                     cache_write_tokens=agent.total_cache_write_tokens,
-                    result=result or "",
+                    result=result,
                 )
             )
 

@@ -66,11 +66,22 @@ def _format_events(events: list) -> str:
     return "\n".join(lines)
 
 
+_DEFAULT_DAYS_FORWARD = 7
+_DEFAULT_DAYS_BACK = 0
+_DEFAULT_CALENDAR_LIMIT = 30
+
+
 class CalendarInput(BaseModel):
     query: str | None = Field(default=None, description="Search query. Omit to list events by time range.")
-    days_forward: int = Field(default=7, description="Days ahead to look when listing (default: 7)")
-    days_back: int = Field(default=0, description="Days back to look when listing (default: 0)")
-    limit: int = Field(default=30, description="Maximum results (default: 30)")
+    days_forward: int = Field(
+        default=_DEFAULT_DAYS_FORWARD, description=f"Days ahead to look when listing (default: {_DEFAULT_DAYS_FORWARD})"
+    )
+    days_back: int = Field(
+        default=_DEFAULT_DAYS_BACK, description=f"Days back to look when listing (default: {_DEFAULT_DAYS_BACK})"
+    )
+    limit: int = Field(
+        default=_DEFAULT_CALENDAR_LIMIT, description=f"Maximum results (default: {_DEFAULT_CALENDAR_LIMIT})"
+    )
 
 
 class CalendarTool(Tool):
@@ -87,9 +98,9 @@ class CalendarTool(Tool):
         self,
         execution: ToolExecution,
         query: str | None = None,
-        days_forward: int = 7,
-        days_back: int = 0,
-        limit: int = 30,
+        days_forward: int = _DEFAULT_DAYS_FORWARD,
+        days_back: int = _DEFAULT_DAYS_BACK,
+        limit: int = _DEFAULT_CALENDAR_LIMIT,
         **kwargs: Any,
     ) -> ToolResult:
         if query:
@@ -157,7 +168,7 @@ class CreateCalendarEventTool(Tool):
         self.source = source
 
     async def approval_info(
-        self, summary: str = "", start: str = "", end: str = "", location: str = "", **kwargs: Any
+        self, summary: str, start: str, end: str | None = None, location: str | None = None, **kwargs: Any
     ) -> ApprovalInfo | None:
         start_dt = _parse_datetime(start)
         if not start_dt:
@@ -171,29 +182,16 @@ class CreateCalendarEventTool(Tool):
     async def execute(
         self,
         execution: ToolExecution,
-        summary: str = "",
-        start: str = "",
-        end: str = "",
-        description: str = "",
-        location: str = "",
-        attendees: str = "",
+        summary: str,
+        start: str,
+        end: str | None = None,
+        description: str | None = None,
+        location: str | None = None,
+        attendees: str | None = None,
         all_day: bool = False,
-        account: str = "",
+        account: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
-        if not summary:
-            return ToolResult(
-                content="Error: summary is required",
-                preview="Missing summary",
-                is_error=True,
-            )
-        if not start:
-            return ToolResult(
-                content="Error: start time is required",
-                preview="Missing start",
-                is_error=True,
-            )
-
         start_dt = _parse_datetime(start)
         if not start_dt:
             return ToolResult(
@@ -202,16 +200,16 @@ class CreateCalendarEventTool(Tool):
                 is_error=True,
             )
 
-        end_dt = _parse_datetime(end)
+        end_dt = _parse_datetime(end) if end else None
         attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
 
         result = self.source.create_event(
-            account=account,
+            account=account or "",
             summary=summary,
             start=start_dt,
             end=end_dt,
-            description=description,
-            location=location,
+            description=description or "",
+            location=location or "",
             attendees=attendee_list,
             all_day=all_day,
         )
@@ -242,7 +240,13 @@ class EditCalendarEventTool(Tool):
         self.source = source
 
     async def approval_info(
-        self, event_id: str = "", summary: str = "", start: str = "", end: str = "", location: str = "", **kwargs: Any
+        self,
+        event_id: str,
+        summary: str | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        location: str | None = None,
+        **kwargs: Any,
     ) -> ApprovalInfo | None:
         changes = []
         if summary:
@@ -258,23 +262,16 @@ class EditCalendarEventTool(Tool):
     async def execute(
         self,
         execution: ToolExecution,
-        event_id: str = "",
-        summary: str = "",
-        start: str = "",
-        end: str = "",
-        description: str = "",
-        location: str = "",
-        attendees: str = "",
+        event_id: str,
+        summary: str | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        description: str | None = None,
+        location: str | None = None,
+        attendees: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
-        if not event_id:
-            return ToolResult(
-                content="Error: event_id is required",
-                preview="Missing event_id",
-                is_error=True,
-            )
-
-        start_dt = _parse_datetime(start)
+        start_dt = _parse_datetime(start) if start else None
         if start and not start_dt:
             return ToolResult(
                 content=f"Invalid start time: {start}. Use ISO format: 2024-01-15T14:00:00",
@@ -282,7 +279,7 @@ class EditCalendarEventTool(Tool):
                 is_error=True,
             )
 
-        end_dt = _parse_datetime(end)
+        end_dt = _parse_datetime(end) if end else None
         if end and not end_dt:
             return ToolResult(
                 content=f"Invalid end time: {end}. Use ISO format: 2024-01-15T15:00:00",
@@ -294,11 +291,11 @@ class EditCalendarEventTool(Tool):
 
         result = self.source.update_event(
             event_id=event_id,
-            summary=summary if summary else None,
+            summary=summary,
             start=start_dt,
             end=end_dt,
-            description=description if description else None,
-            location=location if location else None,
+            description=description,
+            location=location,
             attendees=attendee_list,
         )
         return ToolResult(content=result, preview="Updated")
@@ -319,16 +316,9 @@ class DeleteCalendarEventTool(Tool):
     def __init__(self, source: CalendarSource):
         self.source = source
 
-    async def approval_info(self, event_id: str = "", **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(self, event_id: str, **kwargs: Any) -> ApprovalInfo | None:
         return ApprovalInfo(description=event_id, preview=None, diff=None)
 
-    async def execute(self, execution: ToolExecution, event_id: str = "", **kwargs: Any) -> ToolResult:
-        if not event_id:
-            return ToolResult(
-                content="Error: event_id is required",
-                preview="Missing event_id",
-                is_error=True,
-            )
-
+    async def execute(self, execution: ToolExecution, event_id: str, **kwargs: Any) -> ToolResult:
         result = self.source.delete_event(event_id)
         return ToolResult(content=result, preview="Deleted")

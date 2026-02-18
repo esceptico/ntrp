@@ -71,7 +71,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
     def _preprocess_messages(self, messages: list[dict]) -> list[dict]:
         return [
             {**msg, "content": blocks_to_text(msg["content"])}
-            if msg.get("role") == "system" and isinstance(msg.get("content"), list)
+            if msg["role"] == "system" and isinstance(msg["content"], list)
             else msg
             for msg in messages
         ]

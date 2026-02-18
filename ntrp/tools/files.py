@@ -13,10 +13,18 @@ READ_FILE_DESCRIPTION = (
 )
 
 
+_DEFAULT_OFFSET = 1
+_DEFAULT_LINE_LIMIT = 500
+
+
 class ReadFileInput(BaseModel):
     path: str = Field(description="Path to the file (relative or absolute)")
-    offset: int = Field(default=1, description="Line number to start from (1-based, default: 1)")
-    limit: int = Field(default=500, description="Maximum lines to read (default: 500)")
+    offset: int = Field(
+        default=_DEFAULT_OFFSET, description=f"Line number to start from (1-based, default: {_DEFAULT_OFFSET})"
+    )
+    limit: int = Field(
+        default=_DEFAULT_LINE_LIMIT, description=f"Maximum lines to read (default: {_DEFAULT_LINE_LIMIT})"
+    )
 
 
 class ReadFileTool(Tool):
@@ -29,11 +37,8 @@ class ReadFileTool(Tool):
         self.base_path = base_path or os.getcwd()
 
     async def execute(
-        self, execution: Any, path: str = "", offset: int = 1, limit: int = 500, **kwargs: Any
+        self, execution: Any, path: str, offset: int = _DEFAULT_OFFSET, limit: int = _DEFAULT_LINE_LIMIT, **kwargs: Any
     ) -> ToolResult:
-        if not path:
-            return ToolResult(content="Error: path is required", preview="Missing path", is_error=True)
-
         if not os.path.isabs(path):
             full_path = os.path.join(self.base_path, path)
         else:

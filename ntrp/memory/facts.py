@@ -160,9 +160,7 @@ class FactMemory:
                 if not await self.facts.get(fact.id):
                     continue
                 for action, embedding in precomputed:
-                    result = await apply_consolidation(
-                        fact, action, self.facts, self.observations, embedding
-                    )
+                    result = await apply_consolidation(fact, action, self.facts, self.observations, embedding)
                     if result.action == "created":
                         obs_created += 1
                 await self.facts.mark_consolidated(fact.id)

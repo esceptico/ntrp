@@ -18,7 +18,7 @@ class RunCompleted:
     completion_tokens: int
     cache_read_tokens: int
     cache_write_tokens: int
-    result: str
+    result: str | None
 
 
 @dataclass(frozen=True)
@@ -27,7 +27,7 @@ class ToolExecuted:
     duration_ms: int
     depth: int
     is_error: bool
-    run_id: str = ""
+    run_id: str
 
 
 @dataclass(frozen=True)

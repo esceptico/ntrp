@@ -34,13 +34,13 @@ class SSEEvent:
 @dataclass(frozen=True)
 class ThinkingEvent(SSEEvent):
     type: EventType = field(default=EventType.THINKING, init=False)
-    status: str = ""
+    status: str
 
 
 @dataclass(frozen=True)
 class TextEvent(SSEEvent):
     type: EventType = field(default=EventType.TEXT, init=False)
-    content: str = ""
+    content: str
 
 
 def _format_call(name: str, args: dict) -> str:
@@ -84,8 +84,8 @@ class ToolResultEvent(SSEEvent):
 @dataclass(frozen=True)
 class ApprovalNeededEvent(SSEEvent):
     type: EventType = field(default=EventType.APPROVAL_NEEDED, init=False)
-    tool_id: str = ""
-    name: str = ""
+    tool_id: str
+    name: str
     # For file operations
     path: str | None = None
     diff: str | None = None
@@ -95,24 +95,24 @@ class ApprovalNeededEvent(SSEEvent):
 @dataclass(frozen=True)
 class QuestionEvent(SSEEvent):
     type: EventType = field(default=EventType.QUESTION, init=False)
-    question: str = ""
-    tool_id: str = ""  # For tracking
+    question: str
+    tool_id: str
 
 
 @dataclass(frozen=True)
 class ChoiceEvent(SSEEvent):
     type: EventType = field(default=EventType.CHOICE, init=False)
-    question: str = ""
+    question: str
+    tool_id: str
     options: list[dict] = field(default_factory=list)  # List of {id, label, description?}
     allow_multiple: bool = False  # Single vs multi-select
-    tool_id: str = ""
 
 
 @dataclass(frozen=True)
 class SessionInfoEvent(SSEEvent):
     type: EventType = field(default=EventType.SESSION_INFO, init=False)
-    session_id: str = ""
-    run_id: str = ""
+    session_id: str
+    run_id: str
     sources: list[str] = field(default_factory=list)
     source_errors: dict[str, str] = field(default_factory=dict)
     skip_approvals: bool = False
@@ -122,21 +122,21 @@ class SessionInfoEvent(SSEEvent):
 @dataclass(frozen=True)
 class DoneEvent(SSEEvent):
     type: EventType = field(default=EventType.DONE, init=False)
-    run_id: str = ""
+    run_id: str
     usage: dict = field(default_factory=dict)  # {"prompt": N, "completion": N}
 
 
 @dataclass(frozen=True)
 class ErrorEvent(SSEEvent):
     type: EventType = field(default=EventType.ERROR, init=False)
-    message: str = ""
+    message: str
     recoverable: bool = False
 
 
 @dataclass(frozen=True)
 class CancelledEvent(SSEEvent):
     type: EventType = field(default=EventType.CANCELLED, init=False)
-    run_id: str = ""
+    run_id: str
 
 
 @dataclass(frozen=True)

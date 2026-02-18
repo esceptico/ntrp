@@ -23,9 +23,15 @@ class WebSearchCategory(str, Enum):
     tweet = "tweet"
 
 
+_DEFAULT_SEARCH_RESULTS = 5
+
+
 class WebSearchInput(BaseModel):
     query: str = Field(description="The search query")
-    num_results: int = Field(default=5, description=f"Number of results (default: 5, max: {WEB_SEARCH_MAX_RESULTS})")
+    num_results: int = Field(
+        default=_DEFAULT_SEARCH_RESULTS,
+        description=f"Number of results (default: {_DEFAULT_SEARCH_RESULTS}, max: {WEB_SEARCH_MAX_RESULTS})",
+    )
     category: WebSearchCategory | None = Field(
         default=None,
         description="Filter by category: company, research paper, news, pdf, github, tweet",
@@ -45,14 +51,11 @@ class WebSearchTool(Tool):
     async def execute(
         self,
         execution: ToolExecution,
-        query: str = "",
-        num_results: int = 5,
+        query: str,
+        num_results: int = _DEFAULT_SEARCH_RESULTS,
         category: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
-        if not query.strip():
-            return ToolResult(content="Error: query is required", preview="Missing query", is_error=True)
-
         try:
             results = self.source.search_with_details(
                 query=query,
@@ -95,10 +98,7 @@ class WebFetchTool(Tool):
     def __init__(self, source: WebSearchSource):
         self.source = source
 
-    async def execute(self, execution: ToolExecution, url: str = "", **kwargs: Any) -> ToolResult:
-        if not url.strip():
-            return ToolResult(content="Error: url is required", preview="Missing url", is_error=True)
-
+    async def execute(self, execution: ToolExecution, url: str, **kwargs: Any) -> ToolResult:
         if not url.startswith(("http://", "https://")):
             return ToolResult(
                 content=f"Invalid URL: must start with http:// or https://. Got: {url}",

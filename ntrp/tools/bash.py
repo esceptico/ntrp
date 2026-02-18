@@ -163,16 +163,14 @@ class BashTool(Tool):
         self.working_dir = working_dir
         self.timeout = timeout
 
-    async def approval_info(self, command: str = "", **kwargs: Any) -> ApprovalInfo | None:
-        if command and not is_safe_command(command) and not is_blocked_command(command):
+    async def approval_info(self, command: str, **kwargs: Any) -> ApprovalInfo | None:
+        if not is_safe_command(command) and not is_blocked_command(command):
             return ApprovalInfo(description=command, preview=None, diff=None)
         return None
 
     async def execute(
-        self, execution: ToolExecution, command: str = "", working_dir: str | None = None, **kwargs: Any
+        self, execution: ToolExecution, command: str, working_dir: str | None = None, **kwargs: Any
     ) -> ToolResult:
-        if not command:
-            return ToolResult(content="Error: command is required", preview="Missing command", is_error=True)
         if is_blocked_command(command):
             return ToolResult(content=f"Blocked: {command}", preview="Blocked", is_error=True)
 

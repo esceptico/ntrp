@@ -71,11 +71,11 @@ async def get_session_history(session_id: str | None = None):
 
     history = []
     for msg in data.messages:
-        role = msg.get("role")
+        role = msg["role"]
         if role not in ("user", "assistant"):
             continue
 
-        content = msg.get("content", "")
+        content = msg["content"]
         if not content or not isinstance(content, str) or not content.strip():
             continue
 

@@ -39,7 +39,7 @@ def make_observation(id: int, summary: str) -> Observation:
 class TestFormatMemoryContext:
     def test_empty_context(self):
         context = FactContext(facts=[], observations=[])
-        assert format_memory_context(query_facts=context.facts, query_observations=context.observations) == ""
+        assert format_memory_context(query_facts=context.facts, query_observations=context.observations) is None
 
     def test_facts_only(self):
         context = FactContext(

@@ -178,7 +178,7 @@ class ReadNoteTool(Tool):
         self.source = source
 
     async def execute(
-        self, execution: ToolExecution, path: str = "", offset: int = 1, limit: int = DEFAULT_READ_LINES, **kwargs: Any
+        self, execution: ToolExecution, path: str, offset: int = 1, limit: int = DEFAULT_READ_LINES, **kwargs: Any
     ) -> ToolResult:
         content = self.source.read(path)
         if content is None:
@@ -210,9 +210,7 @@ class EditNoteTool(Tool):
     def __init__(self, source: NotesSource):
         self.source = source
 
-    async def approval_info(
-        self, path: str = "", find: str = "", replace: str = "", **kwargs: Any
-    ) -> ApprovalInfo | None:
+    async def approval_info(self, path: str, find: str, replace: str = "", **kwargs: Any) -> ApprovalInfo | None:
         original = self.source.read(path)
         if original is None or find not in original:
             return None
@@ -225,11 +223,8 @@ class EditNoteTool(Tool):
         return ApprovalInfo(description=path, preview=None, diff=diff_preview)
 
     async def execute(
-        self, execution: ToolExecution, path: str = "", find: str = "", replace: str = "", **kwargs: Any
+        self, execution: ToolExecution, path: str, find: str, replace: str = "", **kwargs: Any
     ) -> ToolResult:
-        if not path or not find:
-            return ToolResult(content="Error: path and find are required", preview="Missing fields", is_error=True)
-
         original = self.source.read(path)
         if original is None:
             return ToolResult(
@@ -276,7 +271,7 @@ class CreateNoteTool(Tool):
     def __init__(self, source: NotesSource):
         self.source = source
 
-    async def approval_info(self, path: str = "", content: str = "", **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(self, path: str, content: str, **kwargs: Any) -> ApprovalInfo | None:
         if not path.endswith(".md"):
             path = path + ".md"
         if self.source.exists(path):
@@ -286,10 +281,7 @@ class CreateNoteTool(Tool):
             preview_content += "\n... (truncated)"
         return ApprovalInfo(description=path, preview=preview_content, diff=None)
 
-    async def execute(self, execution: ToolExecution, path: str = "", content: str = "", **kwargs: Any) -> ToolResult:
-        if not path or not content:
-            return ToolResult(content="Error: path and content are required", preview="Missing fields", is_error=True)
-
+    async def execute(self, execution: ToolExecution, path: str, content: str, **kwargs: Any) -> ToolResult:
         if not path.endswith(".md"):
             path = path + ".md"
 
@@ -320,15 +312,12 @@ class DeleteNoteTool(Tool):
     def __init__(self, source: NotesSource):
         self.source = source
 
-    async def approval_info(self, path: str = "", **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(self, path: str, **kwargs: Any) -> ApprovalInfo | None:
         if self.source.read(path) is None:
             return None
         return ApprovalInfo(description=path, preview=None, diff=None)
 
-    async def execute(self, execution: ToolExecution, path: str = "", **kwargs: Any) -> ToolResult:
-        if not path:
-            return ToolResult(content="Error: path is required", preview="Missing path", is_error=True)
-
+    async def execute(self, execution: ToolExecution, path: str, **kwargs: Any) -> ToolResult:
         original = self.source.read(path)
         if original is None:
             return ToolResult(
@@ -358,15 +347,12 @@ class MoveNoteTool(Tool):
     def __init__(self, source: NotesSource):
         self.source = source
 
-    async def approval_info(self, path: str = "", new_path: str = "", **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(self, path: str, new_path: str, **kwargs: Any) -> ApprovalInfo | None:
         if not self.source.exists(path):
             return None
         return ApprovalInfo(description=f"{path} → {new_path}", preview=None, diff=None)
 
-    async def execute(self, execution: ToolExecution, path: str = "", new_path: str = "", **kwargs: Any) -> ToolResult:
-        if not path or not new_path:
-            return ToolResult(content="Error: path and new_path are required", preview="Missing fields", is_error=True)
-
+    async def execute(self, execution: ToolExecution, path: str, new_path: str, **kwargs: Any) -> ToolResult:
         if not new_path.endswith(".md"):
             new_path = new_path + ".md"
 

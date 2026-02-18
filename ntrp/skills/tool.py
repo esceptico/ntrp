@@ -28,7 +28,7 @@ class UseSkillTool(Tool):
     def available(self) -> bool:
         return bool(self.registry)
 
-    async def execute(self, execution: ToolExecution, skill: str = "", args: str = "", **kwargs) -> ToolResult:
+    async def execute(self, execution: ToolExecution, skill: str, args: str = "", **kwargs) -> ToolResult:
         body = self.registry.load_body(skill)
         if body is None:
             available = ", ".join(self.registry.names)

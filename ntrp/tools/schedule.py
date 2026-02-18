@@ -64,10 +64,10 @@ class ScheduleTaskTool(Tool):
 
     async def approval_info(
         self,
-        name: str = "",
-        description: str = "",
-        time: str = "",
-        recurrence: str = "",
+        name: str,
+        description: str,
+        time: str,
+        recurrence: str,
         notify: bool = False,
         writable: bool = False,
         **kwargs: Any,
@@ -96,21 +96,14 @@ class ScheduleTaskTool(Tool):
     async def execute(
         self,
         execution: ToolExecution,
-        name: str = "",
-        description: str = "",
-        time: str = "",
-        recurrence: str = "",
+        name: str,
+        description: str,
+        time: str,
+        recurrence: str,
         notify: bool = False,
         writable: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
-        if not name or not description or not time or not recurrence:
-            return ToolResult(
-                content="Error: name, description, time, and recurrence are required",
-                preview="Missing fields",
-                is_error=True,
-            )
-
         try:
             parts = time.split(":")
             h, m = int(parts[0]), int(parts[1])
@@ -197,16 +190,13 @@ class CancelScheduleTool(Tool):
     def __init__(self, store: ScheduleStore):
         self.store = store
 
-    async def approval_info(self, task_id: str = "", **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(self, task_id: str, **kwargs: Any) -> ApprovalInfo | None:
         task = await self.store.get(task_id)
         if not task:
             return None
         return ApprovalInfo(description=f"Cancel: {task.description}", preview=None, diff=None)
 
-    async def execute(self, execution: ToolExecution, task_id: str = "", **kwargs: Any) -> ToolResult:
-        if not task_id:
-            return ToolResult(content="Error: task_id is required", preview="Missing task_id", is_error=True)
-
+    async def execute(self, execution: ToolExecution, task_id: str, **kwargs: Any) -> ToolResult:
         task = await self.store.get(task_id)
         if not task:
             return ToolResult(content=f"Error: task '{task_id}' not found", preview="Not found", is_error=True)
@@ -229,10 +219,7 @@ class GetScheduleResultTool(Tool):
     def __init__(self, store: ScheduleStore):
         self.store = store
 
-    async def execute(self, execution: ToolExecution, task_id: str = "", **kwargs: Any) -> ToolResult:
-        if not task_id:
-            return ToolResult(content="Error: task_id is required", preview="Missing task_id", is_error=True)
-
+    async def execute(self, execution: ToolExecution, task_id: str, **kwargs: Any) -> ToolResult:
         task = await self.store.get(task_id)
         if not task:
             return ToolResult(content=f"Error: task '{task_id}' not found", preview="Not found", is_error=True)

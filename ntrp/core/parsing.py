@@ -2,6 +2,9 @@ import json
 from typing import Any
 
 from ntrp.core.models import PendingToolCall
+from ntrp.logging import get_logger
+
+_logger = get_logger(__name__)
 
 
 def parse_tool_arguments(arguments: str | None) -> dict:
@@ -10,6 +13,7 @@ def parse_tool_arguments(arguments: str | None) -> dict:
     try:
         return json.loads(arguments)
     except json.JSONDecodeError:
+        _logger.warning("Malformed tool arguments: %.200s", arguments)
         return {}
 
 

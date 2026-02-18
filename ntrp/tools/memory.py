@@ -49,20 +49,17 @@ class RememberTool(Tool):
     def __init__(self, memory: Any):
         self.memory = memory
 
-    async def approval_info(self, fact: str = "", **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(self, fact: str, **kwargs: Any) -> ApprovalInfo | None:
         return ApprovalInfo(description=fact[:100], preview=None, diff=None)
 
     async def execute(
         self,
         execution: Any,
-        fact: str = "",
+        fact: str,
         source: str | None = None,
         happened_at: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
-        if not fact:
-            return ToolResult(content="Error: fact is required", preview="Missing fact", is_error=True)
-
         event_time = datetime.fromisoformat(happened_at) if happened_at else None
 
         result = await self.memory.remember(
@@ -82,9 +79,14 @@ class RememberTool(Tool):
         )
 
 
+_DEFAULT_RECALL_LIMIT = 5
+
+
 class RecallInput(BaseModel):
     query: str = Field(description="What to recall.")
-    limit: int = Field(default=5, description="Number of seed facts (default 5).")
+    limit: int = Field(
+        default=_DEFAULT_RECALL_LIMIT, description=f"Number of seed facts (default {_DEFAULT_RECALL_LIMIT})."
+    )
 
 
 class RecallTool(Tool):
@@ -96,7 +98,9 @@ class RecallTool(Tool):
     def __init__(self, memory: Any):
         self.memory = memory
 
-    async def execute(self, execution: Any, query: str, limit: int = 5, **kwargs: Any) -> ToolResult:
+    async def execute(
+        self, execution: Any, query: str, limit: int = _DEFAULT_RECALL_LIMIT, **kwargs: Any
+    ) -> ToolResult:
         context = await self.memory.recall(query=query, limit=limit)
         formatted = format_memory_context(
             query_facts=context.facts,
@@ -127,12 +131,9 @@ class ForgetTool(Tool):
     def __init__(self, memory: Any):
         self.memory = memory
 
-    async def approval_info(self, query: str = "", **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(self, query: str, **kwargs: Any) -> ApprovalInfo | None:
         return ApprovalInfo(description=query, preview=None, diff=None)
 
-    async def execute(self, execution: Any, query: str = "", **kwargs: Any) -> ToolResult:
-        if not query:
-            return ToolResult(content="Error: query is required", preview="Missing query", is_error=True)
-
+    async def execute(self, execution: Any, query: str, **kwargs: Any) -> ToolResult:
         count = await self.memory.forget(query=query)
         return ToolResult(content=f"Forgot {count} fact(s) related to '{query}'.", preview=f"Forgot {count}")

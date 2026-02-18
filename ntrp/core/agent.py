@@ -124,7 +124,9 @@ class Agent:
 
     def _append_tool_results(self, tool_calls: list[Any], results: dict[str, str]) -> None:
         for tc in tool_calls:
-            result = results.get(tc.id, "Error: tool execution failed")
+            if (result := results.get(tc.id)) is None:
+                _logger.error("Missing result for tool call %s", tc.id)
+                result = "Error: tool execution failed"
             self.messages.append(
                 {
                     "role": "tool",

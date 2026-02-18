@@ -44,7 +44,7 @@ def find_compressible_range(
     tail_start = n - keep_count
 
     # Snap forward past tool messages to avoid splitting mid-turn
-    while tail_start < n and messages[tail_start].get("role") == "tool":
+    while tail_start < n and messages[tail_start]["role"] == "tool":
         tail_start += 1
 
     if tail_start <= 1:
@@ -56,9 +56,9 @@ def find_compressible_range(
 def _build_conversation_text(messages: list, start: int, end: int) -> str:
     text_parts = []
     for msg in messages[start:end]:
-        if (role := msg.get("role")) == "tool":
+        if (role := msg["role"]) == "tool":
             continue
-        if not (content := msg.get("content")):
+        if not (content := msg["content"]):
             continue
         if content.startswith("[Session State Handoff]"):
             text_parts.append(f"[PRIOR SUMMARY — preserve key points]\n{content}")

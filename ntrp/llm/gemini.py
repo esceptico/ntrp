@@ -80,12 +80,9 @@ class GeminiClient(CompletionClient, EmbeddingClient):
     def _build_tool_name_map(self, messages: list[dict]) -> dict[str, str]:
         name_map: dict[str, str] = {}
         for msg in messages:
-            if msg.get("role") == "assistant":
-                for tc in msg.get("tool_calls") or []:
-                    fn = tc.get("function", tc)
-                    tc_id = tc.get("id", "")
-                    if tc_id:
-                        name_map[tc_id] = fn.get("name", "unknown")
+            if msg["role"] == "assistant":
+                for tc in msg.get("tool_calls", []):
+                    name_map[tc["id"]] = tc["function"]["name"]
         return name_map
 
     def _convert_messages(self, messages: list[dict]) -> tuple[str | None, list[types.Content]]:
@@ -94,10 +91,10 @@ class GeminiClient(CompletionClient, EmbeddingClient):
         tool_name_map = self._build_tool_name_map(messages)
 
         for msg in messages:
-            role = msg.get("role")
+            role = msg["role"]
 
             if role == "system":
-                system_instruction = blocks_to_text(msg.get("content", ""))
+                system_instruction = blocks_to_text(msg["content"])
             elif role == "user":
                 contents.append(self._convert_user(msg))
             elif role == "assistant":
@@ -110,18 +107,18 @@ class GeminiClient(CompletionClient, EmbeddingClient):
         return system_instruction, contents
 
     def _convert_user(self, msg: dict) -> types.Content:
-        text = blocks_to_text(msg.get("content", ""))
+        text = blocks_to_text(msg["content"])
         return types.Content(role="user", parts=[types.Part(text=text)])
 
     def _convert_assistant(self, msg: dict) -> types.Content | None:
         parts: list[types.Part] = []
-        if text := msg.get("content"):
+        if text := msg["content"]:
             parts.append(types.Part(text=text))
-        for tc in msg.get("tool_calls") or []:
-            fn = tc.get("function", tc)
+        for tc in msg.get("tool_calls", []):
+            fn = tc["function"]
             part_kwargs: dict = {
                 "function_call": types.FunctionCall(
-                    name=fn.get("name", ""),
+                    name=fn["name"],
                     args=parse_args(fn.get("arguments", "{}")),
                 ),
             }
@@ -131,9 +128,9 @@ class GeminiClient(CompletionClient, EmbeddingClient):
         return types.Content(role="model", parts=parts) if parts else None
 
     def _convert_tool_result(self, msg: dict, tool_name_map: dict[str, str]) -> types.Part:
-        tool_call_id = msg.get("tool_call_id", "")
+        tool_call_id = msg["tool_call_id"]
         tool_name = tool_name_map.get(tool_call_id, "unknown")
-        content_str = msg.get("content", "")
+        content_str = msg["content"]
         try:
             result_dict = json.loads(content_str)
         except (json.JSONDecodeError, TypeError):

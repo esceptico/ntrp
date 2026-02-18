@@ -49,10 +49,10 @@ class ChatExtractionSchema(BaseModel):
 def _format_messages(messages: tuple[dict, ...]) -> str:
     parts = []
     for msg in messages:
-        role = msg.get("role", "")
+        role = msg["role"]
         if role == "tool":
             continue
-        content = msg.get("content", "")
+        content = msg["content"]
         if not content or not isinstance(content, str):
             continue
         if content.startswith("[Session State Handoff]"):

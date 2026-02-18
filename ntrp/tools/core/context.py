@@ -39,7 +39,7 @@ class Rejection:
 class RunContext:
     """Per-run identity and limits."""
 
-    run_id: str = ""
+    run_id: str
     current_depth: int = 0
     max_depth: int = 0
     extra_auto_approve: set[str] = field(default_factory=set)

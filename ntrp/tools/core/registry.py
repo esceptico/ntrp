@@ -1,5 +1,7 @@
 from typing import Any
 
+from pydantic import ValidationError
+
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
@@ -18,6 +20,20 @@ class ToolRegistry:
 
     async def execute(self, name: str, execution: ToolExecution, arguments: dict[str, Any]) -> ToolResult:
         tool = self._tools[name]
+
+        if tool.input_model is not None:
+            try:
+                validated = tool.input_model(**arguments)
+                arguments = validated.model_dump()
+            except ValidationError as e:
+                errors = "; ".join(
+                    f"{'.'.join(str(l) for l in err['loc'])}: {err['msg']}" for err in e.errors() if err.get("loc")
+                )
+                return ToolResult(
+                    content=f"Invalid arguments: {errors}",
+                    preview="Validation error",
+                    is_error=True,
+                )
 
         info = await tool.approval_info(**arguments)
         if info is not None:

@@ -129,27 +129,27 @@ class AnthropicClient(CompletionClient):
     def _convert_messages(self, messages: list[dict]) -> list[dict]:
         result: list[dict] = []
         for msg in messages:
-            role = msg.get("role")
+            role = msg["role"]
             if role == "assistant":
                 result.append(self._convert_assistant(msg))
             elif role == "tool":
                 self._append_tool_result(result, msg)
             elif role == "user":
-                result.append({"role": "user", "content": msg.get("content", "")})
+                result.append({"role": "user", "content": msg["content"]})
         return result
 
     def _convert_assistant(self, msg: dict) -> dict:
         content_blocks: list[dict] = []
-        if text := msg.get("content"):
+        if text := msg["content"]:
             content_blocks.append({"type": "text", "text": text})
 
-        for tc in msg.get("tool_calls") or []:
-            fn = tc.get("function", tc)
+        for tc in msg.get("tool_calls", []):
+            fn = tc["function"]
             content_blocks.append(
                 {
                     "type": "tool_use",
-                    "id": tc.get("id", ""),
-                    "name": fn.get("name", ""),
+                    "id": tc["id"],
+                    "name": fn["name"],
                     "input": parse_args(fn.get("arguments", "{}")),
                 }
             )
@@ -160,7 +160,7 @@ class AnthropicClient(CompletionClient):
         block = {
             "type": "tool_result",
             "tool_use_id": msg["tool_call_id"],
-            "content": msg.get("content") or "",
+            "content": msg["content"],
         }
         # Merge consecutive tool results into one user message
         if result and result[-1]["role"] == "user" and isinstance(result[-1]["content"], list):

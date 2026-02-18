@@ -29,27 +29,15 @@ class AskChoiceTool(Tool):
     mutates = False
     input_model = AskChoiceInput
 
-    async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult:
-        question = kwargs.get("question", "")
-        options = kwargs.get("options", [])
-        allow_multiple = kwargs.get("allow_multiple", False)
-
-        if not question:
-            return ToolResult(content="Error: question is required", preview="Missing question", is_error=True)
-        if not options or len(options) < 2:
+    async def execute(
+        self, execution: ToolExecution, question: str, options: list, allow_multiple: bool = False, **kwargs: Any
+    ) -> ToolResult:
+        if len(options) < 2:
             return ToolResult(
                 content="Error: at least 2 options are required",
                 preview="Too few options",
                 is_error=True,
             )
-
-        for opt in options:
-            if not isinstance(opt, dict) or "id" not in opt or "label" not in opt:
-                return ToolResult(
-                    content="Error: each option must have 'id' and 'label'",
-                    preview="Invalid options",
-                    is_error=True,
-                )
 
         selected = await execution.ask_choice(question, options, allow_multiple)
 

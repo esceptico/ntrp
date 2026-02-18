@@ -40,23 +40,18 @@ class SendEmailTool(Tool):
     def __init__(self, source: EmailSource):
         self.source = source
 
-    async def approval_info(
-        self, account: str = "", to: str = "", subject: str = "", **kwargs: Any
-    ) -> ApprovalInfo | None:
+    async def approval_info(self, account: str, to: str, subject: str, **kwargs: Any) -> ApprovalInfo | None:
         return ApprovalInfo(description=to, preview=f"Subject: {subject}\nFrom: {account}", diff=None)
 
     async def execute(
         self,
         execution: ToolExecution,
-        account: str = "",
-        to: str = "",
-        subject: str = "",
-        body: str = "",
+        account: str,
+        to: str,
+        subject: str,
+        body: str,
         **kwargs: Any,
     ) -> ToolResult:
-        if not account or not to:
-            return ToolResult(content="Error: account and to are required", preview="Missing fields", is_error=True)
-
         result = self.source.send_email(account=account, to=to, subject=subject, body=body)
         return ToolResult(content=result, preview="Sent")
 
@@ -75,10 +70,7 @@ class ReadEmailTool(Tool):
     def __init__(self, source: EmailSource):
         self.source = source
 
-    async def execute(self, execution: ToolExecution, email_id: str = "", **kwargs: Any) -> ToolResult:
-        if not email_id:
-            return ToolResult(content="Error: email_id is required", preview="Missing email_id", is_error=True)
-
+    async def execute(self, execution: ToolExecution, email_id: str, **kwargs: Any) -> ToolResult:
         content = self.source.read(email_id)
         if not content:
             return ToolResult(
@@ -113,10 +105,17 @@ def _format_email_search(results: list) -> str:
     return "\n".join(output)
 
 
+_DEFAULT_EMAIL_DAYS = 7
+_DEFAULT_EMAIL_LIMIT = 30
+
+
 class EmailsInput(BaseModel):
     query: str | None = Field(default=None, description="Search query. Omit to list recent emails.")
-    days: int = Field(default=7, description="How many days back to look when listing (default: 7)")
-    limit: int = Field(default=30, description="Maximum results (default: 30)")
+    days: int = Field(
+        default=_DEFAULT_EMAIL_DAYS,
+        description=f"How many days back to look when listing (default: {_DEFAULT_EMAIL_DAYS})",
+    )
+    limit: int = Field(default=_DEFAULT_EMAIL_LIMIT, description=f"Maximum results (default: {_DEFAULT_EMAIL_LIMIT})")
 
 
 class EmailsTool(Tool):
@@ -130,7 +129,12 @@ class EmailsTool(Tool):
         self.source = source
 
     async def execute(
-        self, execution: ToolExecution, query: str | None = None, days: int = 7, limit: int = 30, **kwargs: Any
+        self,
+        execution: ToolExecution,
+        query: str | None = None,
+        days: int = _DEFAULT_EMAIL_DAYS,
+        limit: int = _DEFAULT_EMAIL_LIMIT,
+        **kwargs: Any,
     ) -> ToolResult:
         if query:
             return self._search(query, limit)

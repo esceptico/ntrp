@@ -30,7 +30,7 @@ class SetDirectivesTool(Tool):
     mutates = True
     input_model = SetDirectivesInput
 
-    async def approval_info(self, directives: str = "", **kwargs: Any) -> ApprovalInfo:
+    async def approval_info(self, directives: str, **kwargs: Any) -> ApprovalInfo:
         current = load_directives() or ""
         diff = _diff(current, directives)
         return ApprovalInfo(description="Update directives", preview=None, diff=diff)
@@ -38,7 +38,7 @@ class SetDirectivesTool(Tool):
     async def execute(
         self,
         execution: ToolExecution,
-        directives: str = "",
+        directives: str,
         **kwargs: Any,
     ) -> ToolResult:
         save_directives(directives)
