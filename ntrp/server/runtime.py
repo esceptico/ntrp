@@ -1,10 +1,9 @@
 import asyncio
 from datetime import UTC, datetime
-from pathlib import Path
 
 import ntrp.database as database
 from ntrp.channel import Channel
-from ntrp.config import NTRP_DIR, Config, get_config
+from ntrp.config import Config, get_config
 from ntrp.constants import AGENT_MAX_DEPTH
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
@@ -28,7 +27,7 @@ from ntrp.server.state import RunRegistry
 from ntrp.services.config import ConfigService
 from ntrp.services.lifecycle import wire_events
 from ntrp.skills.registry import SkillRegistry
-from ntrp.skills.service import SkillService
+from ntrp.skills.service import SKILLS_DIRS, SkillService
 from ntrp.sources.base import Indexable
 from ntrp.sources.browser import BrowserHistorySource
 from ntrp.sources.google.gmail import MultiGmailSource
@@ -188,12 +187,7 @@ class Runtime:
             self.memory_service = MemoryService(self.memory, self.channel)
             self.indexables["memory"] = MemoryIndexable(self.memory.db)
 
-        self.skill_registry.load(
-            [
-                (Path.cwd() / ".skills", "project"),
-                (NTRP_DIR / "skills", "global"),
-            ]
-        )
+        self.skill_registry.load(SKILLS_DIRS)
         self.skill_service = SkillService(self.skill_registry, self.channel)
 
         await self.rebuild_notifiers()
