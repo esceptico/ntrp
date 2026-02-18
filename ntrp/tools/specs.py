@@ -31,7 +31,6 @@ from ntrp.tools.notes import (
     ReadNoteTool,
 )
 from ntrp.tools.schedule import CancelScheduleTool, GetScheduleResultTool, ListSchedulesTool, ScheduleTaskTool
-from ntrp.tools.scratchpad import ListScratchpadTool, ReadScratchpadTool, WriteScratchpadTool
 from ntrp.tools.web import WebFetchTool, WebSearchTool
 
 
@@ -136,9 +135,6 @@ def _create_core_tools(deps: ToolDeps) -> list[Tool]:
         ReadFileTool(base_path=deps.working_dir),
         ExploreTool(),
         AskChoiceTool(),
-        WriteScratchpadTool(),
-        ReadScratchpadTool(),
-        ListScratchpadTool(),
         SetDirectivesTool(),
     ]
 
