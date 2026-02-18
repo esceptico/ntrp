@@ -73,6 +73,14 @@ CREATE INDEX IF NOT EXISTS idx_entity_refs_fact ON entity_refs(fact_id);
 CREATE INDEX IF NOT EXISTS idx_entity_refs_name ON entity_refs(name);
 CREATE INDEX IF NOT EXISTS idx_entity_refs_entity ON entity_refs(entity_id);
 
+CREATE TABLE IF NOT EXISTS obs_entity_refs (
+    observation_id INTEGER REFERENCES observations(id) ON DELETE CASCADE,
+    entity_id INTEGER REFERENCES entities(id),
+    PRIMARY KEY (observation_id, entity_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_obs_entity_refs_entity ON obs_entity_refs(entity_id);
+
 CREATE INDEX IF NOT EXISTS idx_facts_consolidated ON facts(consolidated_at);
 
 CREATE TABLE IF NOT EXISTS temporal_checkpoints (
@@ -142,6 +150,7 @@ class GraphDatabase:
     async def clear_all(self) -> None:
         await self.conn.execute("DELETE FROM dreams")
         await self.conn.execute("DELETE FROM temporal_checkpoints")
+        await self.conn.execute("DELETE FROM obs_entity_refs")
         await self.conn.execute("DELETE FROM observations_vec")
         await self.conn.execute("DELETE FROM observations")
         await self.conn.execute("DELETE FROM entity_refs")

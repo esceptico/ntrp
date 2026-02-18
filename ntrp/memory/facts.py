@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Self
 
@@ -13,9 +14,12 @@ from ntrp.channel import Channel
 from ntrp.constants import (
     CONSOLIDATION_INTERVAL,
     CONSOLIDATION_MAX_BACKOFF_MULTIPLIER,
+    FACT_DEDUP_EMBEDDING_SIMILARITY,
+    FACT_DEDUP_TEXT_RATIO,
     FORGET_SEARCH_LIMIT,
     FORGET_SIMILARITY_THRESHOLD,
     RECALL_SEARCH_LIMIT,
+    SYSTEM_PROMPT_OBSERVATION_LIMIT,
     USER_ENTITY_NAME,
 )
 from ntrp.embedder import Embedder, EmbeddingConfig
@@ -24,7 +28,9 @@ from ntrp.logging import get_logger
 from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decisions
 from ntrp.memory.dreams import run_dream_pass
 from ntrp.memory.extraction import Extractor
-from ntrp.memory.models import ExtractionResult, Fact, FactContext
+from ntrp.memory.fact_merge import fact_merge_pass
+from ntrp.memory.decay import decay_score
+from ntrp.memory.models import ExtractionResult, Fact, FactContext, Observation
 from ntrp.memory.observation_merge import observation_merge_pass
 from ntrp.memory.retrieval import retrieve_with_observations
 from ntrp.memory.store.base import GraphDatabase
@@ -68,6 +74,7 @@ class FactMemory:
         self._last_temporal_pass: datetime | None = None
         self._last_dream_pass: datetime | None = None
         self._last_merge_pass: datetime | None = None
+        self._last_fact_merge_pass: datetime | None = None
 
     @asynccontextmanager
     async def transaction(self) -> AsyncGenerator[None]:
@@ -114,6 +121,7 @@ class FactMemory:
                     backoff = interval
                 await self._maybe_run_temporal_pass()
                 await self._maybe_run_observation_merge()
+                await self._maybe_run_fact_merge()
                 await self._maybe_run_dream_pass()
             except asyncio.CancelledError:
                 raise
@@ -190,6 +198,25 @@ class FactMemory:
             self._last_merge_pass = now
         except Exception as e:
             _logger.warning("Observation merge pass failed: %s", e)
+
+    async def _maybe_run_fact_merge(self) -> None:
+        now = datetime.now()
+        if self._last_fact_merge_pass and (now - self._last_fact_merge_pass) < timedelta(days=1):
+            return
+
+        try:
+            async with self.transaction():
+                merged = await fact_merge_pass(
+                    self.facts,
+                    self.observations,
+                    self.extraction_model,
+                    self.embedder.embed_one,
+                )
+            if merged > 0:
+                _logger.info("Fact merge pass: %d merges", merged)
+            self._last_fact_merge_pass = now
+        except Exception as e:
+            _logger.warning("Fact merge pass failed: %s", e)
 
     async def _maybe_run_dream_pass(self) -> None:
         now = datetime.now()
@@ -279,6 +306,22 @@ class FactMemory:
             return None
         embedding = await self.embedder.embed_one(text)
 
+        # Dedup: skip if a near-identical fact already exists
+        # Embedding finds the candidate; text ratio + embedding similarity decide independently
+        similar = await self.facts.search_facts_vector(embedding, limit=1)
+        if similar:
+            existing_fact, similarity = similar[0]
+            text_ratio = SequenceMatcher(None, text.lower(), existing_fact.text.lower()).ratio()
+            is_dup = text_ratio >= FACT_DEDUP_TEXT_RATIO or similarity >= FACT_DEDUP_EMBEDDING_SIMILARITY
+            _logger.info(
+                "Dedup check: fact %d text_ratio=%.3f sim=%.3f dup=%s — %r",
+                existing_fact.id, text_ratio, similarity, is_dup, existing_fact.text[:80],
+            )
+            if is_dup:
+                async with self.transaction():
+                    await self.facts.reinforce([existing_fact.id])
+                return None
+
         async with self.transaction():
             fact = await self.facts.create(
                 text=text,
@@ -348,10 +391,12 @@ class FactMemory:
 
             if context.observations:
                 await self.observations.reinforce([o.id for o in context.observations])
-                for obs in context.observations:
-                    fact_ids = await self.observations.get_fact_ids(obs.id)
-                    if fact_ids:
-                        await self.facts.reinforce(fact_ids)
+                # Reinforce only the displayed source facts (bundled_sources), not all
+                displayed_fact_ids = [
+                    f.id for facts in context.bundled_sources.values() for f in facts
+                ]
+                if displayed_fact_ids:
+                    await self.facts.reinforce(displayed_fact_ids)
 
         return context
 
@@ -397,8 +442,30 @@ class FactMemory:
     async def count(self) -> int:
         return await self.facts.count()
 
-    async def get_context(self, user_limit: int = 10) -> list[Fact]:
-        return await self.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=user_limit)
+    async def get_context(self, user_limit: int = 10) -> tuple[list[Observation], list[Fact]]:
+        # Get User-linked observations, scored by decay
+        user_entity = await self.facts.get_entity_by_name(USER_ENTITY_NAME)
+        if user_entity:
+            raw_obs = await self.observations.get_for_entity(user_entity.id, limit=20)
+            scored_obs = sorted(
+                raw_obs,
+                key=lambda o: decay_score(o.last_accessed_at, o.access_count),
+                reverse=True,
+            )
+            observations = scored_obs[:SYSTEM_PROMPT_OBSERVATION_LIMIT]
+        else:
+            observations = []
+
+        # Exclusion set: all source fact IDs from selected observations
+        exclude_ids: set[int] = set()
+        for obs in observations:
+            exclude_ids.update(obs.source_fact_ids)
+
+        # User facts, minus those already covered by observations
+        all_user_facts = await self.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=user_limit + len(exclude_ids))
+        user_facts = [f for f in all_user_facts if f.id not in exclude_ids][:user_limit]
+
+        return observations, user_facts
 
     async def clear_observations(self) -> dict[str, int]:
         async with self.transaction():

@@ -242,7 +242,7 @@ async def update_embedding_model(req: UpdateEmbeddingRequest):
 async def get_context_usage(session_id: str | None = None):
     runtime = get_runtime()
     model = runtime.config.chat_model
-    model_limit = get_model(model).context_window
+    model_limit = get_model(model).max_context_tokens
 
     if session_id:
         data = await runtime.load_session(session_id)

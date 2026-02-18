@@ -158,22 +158,22 @@ class TestConsolidationSchema:
 
 class TestExecuteAction:
     @pytest.mark.asyncio
-    async def test_skip_action_returns_none(self, obs_repo: ObservationRepository):
+    async def test_skip_action_returns_none(self, obs_repo: ObservationRepository, fact_repo: FactRepository):
         fact = make_fact(1, "Test fact")
         action = ConsolidationAction(action="skip", reason="ephemeral")
         embed_fn = AsyncMock(return_value=mock_embedding("test"))
 
-        result = await _execute_action(action, fact, obs_repo, embed_fn)
+        result = await _execute_action(action, fact, fact_repo, obs_repo, embed_fn)
 
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_create_action(self, obs_repo: ObservationRepository):
+    async def test_create_action(self, obs_repo: ObservationRepository, fact_repo: FactRepository):
         fact = make_fact(1, "Test fact")
         action = ConsolidationAction(action="create", text="Alice is a Python developer")
         embed_fn = AsyncMock(return_value=mock_embedding("test"))
 
-        result = await _execute_action(action, fact, obs_repo, embed_fn)
+        result = await _execute_action(action, fact, fact_repo, obs_repo, embed_fn)
 
         assert result.action == "created"
         assert result.observation_id is not None
@@ -196,7 +196,7 @@ class TestExecuteAction:
         )
         embed_fn = AsyncMock(return_value=mock_embedding("test"))
 
-        result = await _execute_action(action, fact, obs_repo, embed_fn)
+        result = await _execute_action(action, fact, fact_repo, obs_repo, embed_fn)
 
         assert result.action == "updated"
         assert result.observation_id == obs.id
@@ -207,12 +207,12 @@ class TestExecuteAction:
         assert len(updated.history) == 1
 
     @pytest.mark.asyncio
-    async def test_update_without_id_returns_none(self, obs_repo: ObservationRepository):
+    async def test_update_without_id_returns_none(self, obs_repo: ObservationRepository, fact_repo: FactRepository):
         fact = make_fact(1, "Test fact")
         action = ConsolidationAction(action="update", text="New text", observation_id=None)
         embed_fn = AsyncMock()
 
-        result = await _execute_action(action, fact, obs_repo, embed_fn)
+        result = await _execute_action(action, fact, fact_repo, obs_repo, embed_fn)
 
         assert result is None
 

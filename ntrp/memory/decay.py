@@ -13,8 +13,9 @@ def decay_score(
 ) -> float:
     now = datetime.now(UTC)
     hours = (now - last_accessed_at).total_seconds() / _SECONDS_PER_HOUR
-    strength = math.log(access_count + 1) + 1
-    return decay_rate ** (hours / strength)
+    time_decay = decay_rate**hours
+    access_boost = 1 + math.log1p(access_count) * 0.1
+    return time_decay * access_boost
 
 
 def recency_boost(

@@ -75,8 +75,8 @@ async def _prepare_messages(
 ) -> tuple[list[dict], list[dict]]:
     memory_context = None
     if runtime.memory:
-        user_facts = await runtime.memory.get_context()
-        memory_context = format_session_memory(user_facts=user_facts) or None
+        observations, user_facts = await runtime.memory.get_context()
+        memory_context = format_session_memory(observations=observations, user_facts=user_facts) or None
 
     skills_context = runtime.skill_registry.to_prompt_xml() if runtime.skill_registry else None
     directives = load_directives()

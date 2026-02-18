@@ -60,7 +60,7 @@ async def apply_consolidation(
     if action.action == "skip":
         return ConsolidationResult(action="skipped", reason=action.reason)
 
-    result = await _execute_action(action, fact, obs_repo, embed_fn)
+    result = await _execute_action(action, fact, fact_repo, obs_repo, embed_fn)
     if not result:
         return ConsolidationResult(action="skipped", reason="action_failed")
 
@@ -103,11 +103,15 @@ async def _llm_consolidation_decisions(
 async def _execute_action(
     action: ConsolidationAction,
     fact: Fact,
+    fact_repo: FactRepository,
     obs_repo: ObservationRepository,
     embed_fn: EmbedFn,
 ) -> ConsolidationResult | None:
     if action.action == "skip":
         return None
+
+    # Get entity IDs from the source fact for inheritance
+    fact_entity_ids = await fact_repo.get_entity_ids_for_facts([fact.id])
 
     if action.action == "update":
         if not action.observation_id or not action.text:
@@ -123,6 +127,8 @@ async def _execute_action(
             reason=action.reason or "",
         )
         if obs:
+            if fact_entity_ids:
+                await obs_repo.link_entities(obs.id, fact_entity_ids)
             _logger.info("Updated observation %d with fact %d: %s", obs.id, fact.id, action.reason)
             return ConsolidationResult(action="updated", observation_id=obs.id, reason=action.reason)
         else:
@@ -140,6 +146,8 @@ async def _execute_action(
             embedding=embedding,
             source_fact_id=fact.id,
         )
+        if fact_entity_ids:
+            await obs_repo.link_entities(obs.id, fact_entity_ids)
         _logger.info("Created observation %d from fact %d", obs.id, fact.id)
         return ConsolidationResult(action="created", observation_id=obs.id)
 

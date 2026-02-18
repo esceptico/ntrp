@@ -72,6 +72,9 @@ class RememberTool(Tool):
             happened_at=event_time,
         )
 
+        if not result:
+            return ToolResult(content="Already known — reinforced existing memory.", preview="Already known")
+
         entities = ", ".join(result.entities_extracted) if result.entities_extracted else "none"
         return ToolResult(
             content=f"Remembered: {result.fact.text}\nEntities: {entities}",
@@ -95,10 +98,15 @@ class RecallTool(Tool):
 
     async def execute(self, execution: Any, query: str, limit: int = 5, **kwargs: Any) -> ToolResult:
         context = await self.memory.recall(query=query, limit=limit)
-        formatted = format_memory_context(query_facts=context.facts, query_observations=context.observations)
+        formatted = format_memory_context(
+            query_facts=context.facts,
+            query_observations=context.observations,
+            bundled_sources=context.bundled_sources,
+        )
         if formatted:
-            count = len(context.facts)
-            return ToolResult(content=formatted, preview=f"{count} facts")
+            obs_count = len(context.observations)
+            fact_count = len(context.facts)
+            return ToolResult(content=formatted, preview=f"{obs_count} patterns, {fact_count} facts")
         return ToolResult(
             content="No memory found for this query. Try broader terms or use remember() to store facts first.",
             preview="0 facts",

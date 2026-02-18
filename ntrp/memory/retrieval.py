@@ -9,6 +9,7 @@ from ntrp.constants import (
     ENTITY_EXPANSION_MAX_FACTS,
     ENTITY_EXPANSION_PER_ENTITY_LIMIT,
     RECALL_OBSERVATION_LIMIT,
+    RECALL_STANDALONE_FACT_LIMIT,
     RRF_OVERFETCH_FACTOR,
     TEMPORAL_EXPANSION_BASE_SCORE,
     TEMPORAL_EXPANSION_LIMIT,
@@ -188,6 +189,35 @@ async def retrieve_facts(
     return FactContext(facts=[f for f, _ in scored[:ENTITY_EXPANSION_MAX_FACTS]])
 
 
+async def _observation_hybrid_search(
+    obs_repo: ObservationRepository,
+    query_text: str,
+    query_embedding: Embedding,
+    limit: int,
+) -> dict[int, float]:
+    """Hybrid search over observations: vector + FTS, merged via RRF."""
+    vector_results = await obs_repo.search_vector(query_embedding, limit * RRF_OVERFETCH_FACTOR)
+    vector_ranking = [(obs.id, sim) for obs, sim in vector_results]
+
+    fts_results = await obs_repo.search_fts(query_text, limit * RRF_OVERFETCH_FACTOR)
+    fts_ranking = [(obs.id, 1.0 - i * 0.1) for i, obs in enumerate(fts_results)]
+
+    return rrf_merge([vector_ranking, fts_ranking])
+
+
+def _score_observation(
+    obs: Observation,
+    base_score: float,
+    query_time: datetime | None = None,
+) -> float:
+    d = decay_score(obs.last_accessed_at, obs.access_count)
+    r = recency_boost(obs.updated_at, reference_time=query_time)
+    return base_score * d * r
+
+
+BUNDLED_DISPLAY_LIMIT = 5  # max source facts fetched per observation for display
+
+
 async def retrieve_with_observations(
     repo: FactRepository,
     obs_repo: ObservationRepository,
@@ -196,16 +226,51 @@ async def retrieve_with_observations(
     seed_limit: int = 5,
     query_time: datetime | None = None,
 ) -> FactContext:
-    context = await retrieve_facts(repo, query_text, query_embedding, seed_limit, query_time)
+    # --- Phase 1: Observation retrieval via hybrid search (vector + FTS) ---
+    obs_rrf = await _observation_hybrid_search(obs_repo, query_text, query_embedding, RECALL_OBSERVATION_LIMIT)
 
-    observations = await obs_repo.search_vector(query_embedding, RECALL_OBSERVATION_LIMIT)
+    obs_by_id = await obs_repo.get_batch(list(obs_rrf.keys()))
 
-    def obs_score(item: tuple[Observation, float]) -> float:
-        obs, similarity = item
-        decay = decay_score(obs.last_accessed_at, obs.access_count)
-        recency = recency_boost(obs.created_at, reference_time=query_time)
-        return similarity * decay * recency
+    obs_scores: dict[int, float] = {}
+    for oid, base in obs_rrf.items():
+        if oid not in obs_by_id:
+            continue
+        obs_scores[oid] = _score_observation(obs_by_id[oid], base, query_time)
 
-    top_obs = heapq.nlargest(RECALL_OBSERVATION_LIMIT, observations, key=obs_score)
+    top_obs_ids = [oid for oid, _ in heapq.nlargest(RECALL_OBSERVATION_LIMIT, obs_scores.items(), key=lambda x: x[1])]
+    observations = [obs_by_id[oid] for oid in top_obs_ids]
 
-    return context.model_copy(update={"observations": [obs for obs, _ in top_obs]})
+    # --- Phase 2: Bundle source facts ---
+    # Exclusion set: ALL source fact IDs (prevents duplicates in standalone facts)
+    bundled_fact_ids: set[int] = set()
+    for obs in observations:
+        bundled_fact_ids.update(obs.source_fact_ids)
+
+    # Display: fetch only the most recent N source facts per observation
+    all_display_ids: set[int] = set()
+    display_ids_per_obs: dict[int, list[int]] = {}
+    for obs in observations:
+        if not obs.source_fact_ids:
+            continue
+        recent_ids = obs.source_fact_ids[-BUNDLED_DISPLAY_LIMIT:]
+        display_ids_per_obs[obs.id] = recent_ids
+        all_display_ids.update(recent_ids)
+
+    display_facts = await repo.get_batch(list(all_display_ids)) if all_display_ids else {}
+
+    bundled_sources: dict[int, list[Fact]] = {}
+    for obs in observations:
+        if obs.id in display_ids_per_obs:
+            source_facts = [display_facts[fid] for fid in display_ids_per_obs[obs.id] if fid in display_facts]
+            if source_facts:
+                bundled_sources[obs.id] = source_facts
+
+    # --- Phase 3: Standalone facts (unconsolidated/skipped, not already bundled) ---
+    fact_context = await retrieve_facts(repo, query_text, query_embedding, seed_limit, query_time)
+    standalone_facts = [f for f in fact_context.facts if f.id not in bundled_fact_ids][:RECALL_STANDALONE_FACT_LIMIT]
+
+    return FactContext(
+        facts=standalone_facts,
+        observations=observations,
+        bundled_sources=bundled_sources,
+    )

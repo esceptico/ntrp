@@ -158,3 +158,4 @@ class Dream(_FrozenModel):
 class FactContext(_FrozenModel):
     facts: list[Fact]
     observations: list[Observation] = []
+    bundled_sources: dict[int, list[Fact]] = {}  # observation_id -> source facts

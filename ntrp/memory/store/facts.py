@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import aiosqlite
 
 from ntrp.database import serialize_embedding
+from ntrp.memory.fts import build_fts_query
 from ntrp.memory.models import Embedding, Entity, EntityRef, Fact
 
 _SQL_GET_FACT = "SELECT * FROM facts WHERE id = ?"
@@ -326,10 +327,9 @@ class FactRepository:
         return [(facts_by_id[fid], 1 - distances[fid]) for fid in fact_ids if fid in facts_by_id]
 
     async def search_facts_fts(self, query: str, limit: int = 10) -> list[Fact]:
-        terms = query.split()
-        if not terms:
+        fts_query = build_fts_query(query)
+        if not fts_query:
             return []
-        fts_query = " ".join(f'"{t.replace(chr(34), chr(34) + chr(34))}"' for t in terms)
         rows = await self.conn.execute_fetchall(_SQL_SEARCH_FACTS_FTS, (fts_query, limit))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 

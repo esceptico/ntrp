@@ -13,7 +13,7 @@ class Provider(Enum):
 class Model:
     id: str
     provider: Provider
-    context_window: int
+    max_context_tokens: int
     max_output_tokens: int = 8192
     price_in: float = 0
     price_out: float = 0
@@ -26,8 +26,8 @@ class Model:
 DEFAULTS = [
     Model(
         "claude-opus-4-6",
-        Provider.ANTHROPIC,
-        200_000,
+        provider=Provider.ANTHROPIC,
+        max_context_tokens=200_000,
         max_output_tokens=16384,
         price_in=5,
         price_out=25,
@@ -35,18 +35,39 @@ DEFAULTS = [
         price_cache_write=6.25,
     ),
     Model(
-        "claude-sonnet-4-5-20250929",
-        Provider.ANTHROPIC,
-        200_000,
+        "claude-sonnet-4-6",
+        provider=Provider.ANTHROPIC,
+        max_context_tokens=200_000,
         max_output_tokens=8192,
         price_in=3,
         price_out=15,
         price_cache_read=0.30,
         price_cache_write=3.75,
     ),
-    Model("gpt-5.2", Provider.OPENAI, 128_000, max_output_tokens=16384, price_in=2, price_out=8),
-    Model("gemini-3-pro-preview", Provider.GOOGLE, 128_000, max_output_tokens=65536, price_in=1.25, price_out=10),
-    Model("gemini-3-flash-preview", Provider.GOOGLE, 128_000, max_output_tokens=65536, price_in=0.15, price_out=0.60),
+    Model(
+        "gpt-5.2",
+        provider=Provider.OPENAI,
+        max_context_tokens=128_000,
+        max_output_tokens=16384,
+        price_in=2,
+        price_out=8,
+    ),
+    Model(
+        "gemini-3-pro-preview",
+        provider=Provider.GOOGLE,
+        max_context_tokens=128_000,
+        max_output_tokens=65536,
+        price_in=1.25,
+        price_out=10,
+    ),
+    Model(
+        "gemini-3-flash-preview",
+        provider=Provider.GOOGLE,
+        max_context_tokens=128_000,
+        max_output_tokens=65536,
+        price_in=0.15,
+        price_out=0.60,
+    ),
 ]
 
 

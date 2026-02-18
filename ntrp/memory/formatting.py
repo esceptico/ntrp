@@ -3,13 +3,20 @@ from ntrp.memory.models import Fact, Observation
 MEMORY_CONTEXT_CHAR_BUDGET = 3000
 
 
+def _format_bundled_observation(obs: Observation, source_facts: list[Fact]) -> str:
+    lines = [f"- {obs.summary} ({obs.evidence_count} sources)"]
+    for fact in source_facts[:5]:
+        date = ""
+        if fact.happened_at:
+            date = f" ({fact.happened_at.strftime('%b %d')})"
+        elif fact.created_at:
+            date = f" ({fact.created_at.strftime('%b %d')})"
+        lines.append(f"  - {fact.text}{date}")
+    return "\n".join(lines)
+
+
 def _format_observation(obs: Observation) -> str:
-    line = f"- {obs.summary}"
-    if obs.history:
-        for entry in obs.history[-2:]:
-            month = entry.changed_at.strftime("%b %Y")
-            line += f' (previously: "{entry.previous_text}", changed {month})'
-    return line
+    return f"- {obs.summary}"
 
 
 def _format_sections(
@@ -21,14 +28,19 @@ def _format_sections(
         section_lines = [header] + items
         section_text = "\n".join(section_lines)
         if budget - len(section_text) < 0:
-            if lines:
-                lines.append("")
-            lines.append(header)
+            # Section doesn't fit whole — add items individually
+            budget -= len(header) + 1
+            added = []
             for item in items:
-                if budget - len(item) < 0:
+                if budget - len(item) - 1 < 0:
                     break
-                lines.append(item)
+                added.append(item)
                 budget -= len(item) + 1
+            if added:
+                if lines:
+                    lines.append("")
+                lines.append(header)
+                lines.extend(added)
             break
         if lines:
             lines.append("")
@@ -37,26 +49,47 @@ def _format_sections(
     return "\n".join(lines)
 
 
-def format_session_memory(user_facts: list[Fact] | None = None) -> str:
+def format_session_memory(
+    observations: list[Observation] | None = None,
+    user_facts: list[Fact] | None = None,
+) -> str:
     """Format stable user memory for the system prompt (cacheable)."""
-    if not user_facts:
+    if not observations and not user_facts:
         return ""
-    sections = [("**About user**", [f"- {f.text}" for f in user_facts])]
+    sections: list[tuple[str, list[str]]] = []
+    if observations:
+        sections.append(("**Patterns**", [_format_observation(obs) for obs in observations]))
+    if user_facts:
+        sections.append(("**About user**", [f"- {f.text}" for f in user_facts]))
     return _format_sections(sections)
 
 
 def format_memory_context(
     query_facts: list[Fact] | None = None,
     query_observations: list[Observation] | None = None,
+    bundled_sources: dict[int, list[Fact]] | None = None,
 ) -> str:
-    """Format full memory context (used by recall tool)."""
+    """Format full memory context (used by recall tool).
+
+    Observations are primary, with source facts bundled as evidence.
+    Standalone facts fill gaps for unconsolidated content.
+    """
     if not query_facts and not query_observations:
         return ""
 
     sections: list[tuple[str, list[str]]] = []
+
+    if query_observations:
+        obs_items = []
+        for obs in query_observations:
+            sources = (bundled_sources or {}).get(obs.id, [])
+            if sources:
+                obs_items.append(_format_bundled_observation(obs, sources))
+            else:
+                obs_items.append(_format_observation(obs))
+        sections.append(("**Patterns**", obs_items))
+
     if query_facts:
         sections.append(("**Relevant**", [f"- {f.text}" for f in query_facts]))
-    if query_observations:
-        sections.append(("**Patterns**", [_format_observation(obs) for obs in query_observations]))
 
     return _format_sections(sections)

@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import aiosqlite
 
 from ntrp.database import serialize_embedding
+from ntrp.memory.fts import build_fts_query
 from ntrp.memory.models import Embedding, HistoryEntry, Observation
 
 _SQL_GET_OBSERVATION = "SELECT * FROM observations WHERE id = ?"
@@ -12,6 +13,45 @@ _SQL_LIST_ALL_WITH_EMBEDDINGS = "SELECT * FROM observations WHERE embedding IS N
 _SQL_COUNT_OBSERVATIONS = "SELECT COUNT(*) FROM observations"
 _SQL_LIST_RECENT_OBSERVATIONS = "SELECT * FROM observations ORDER BY updated_at DESC LIMIT ?"
 _SQL_GET_OBSERVATIONS_BY_IDS = "SELECT * FROM observations WHERE id IN ({placeholders})"
+
+_SQL_SEARCH_OBSERVATIONS_FTS = """
+    SELECT o.*
+    FROM observations o
+    JOIN observations_fts fts ON o.id = fts.rowid
+    WHERE observations_fts MATCH ?
+    ORDER BY bm25(observations_fts)
+    LIMIT ?
+"""
+
+_SQL_SEARCH_OBSERVATIONS_TEMPORAL = """
+    SELECT * FROM observations
+    WHERE updated_at IS NOT NULL
+    ORDER BY ABS(julianday(updated_at) - julianday(?))
+    LIMIT ?
+"""
+
+_SQL_GET_OBSERVATIONS_FOR_ENTITY = """
+    SELECT DISTINCT o.*
+    FROM observations o
+    JOIN obs_entity_refs oer ON o.id = oer.observation_id
+    WHERE oer.entity_id = ?
+    ORDER BY o.updated_at DESC
+    LIMIT ?
+"""
+
+_SQL_GET_ENTITY_IDS_FOR_OBSERVATIONS = """
+    SELECT DISTINCT oer.entity_id
+    FROM obs_entity_refs oer
+    WHERE oer.observation_id IN ({placeholders})
+    AND oer.entity_id IS NOT NULL
+"""
+
+_SQL_INSERT_OBS_ENTITY_REF = """
+    INSERT OR IGNORE INTO obs_entity_refs (observation_id, entity_id)
+    VALUES (?, ?)
+"""
+
+_SQL_DELETE_OBS_ENTITY_REFS = "DELETE FROM obs_entity_refs WHERE observation_id = ?"
 
 _SQL_INSERT_OBSERVATION = """
     INSERT INTO observations (
@@ -101,6 +141,16 @@ class ObservationRepository:
     async def get(self, observation_id: int) -> Observation | None:
         rows = await self.conn.execute_fetchall(_SQL_GET_OBSERVATION, (observation_id,))
         return Observation.model_validate(_row_dict(rows[0])) if rows else None
+
+    async def get_batch(self, observation_ids: list[int]) -> dict[int, Observation]:
+        if not observation_ids:
+            return {}
+        placeholders = ",".join("?" * len(observation_ids))
+        rows = await self.conn.execute_fetchall(
+            _SQL_GET_OBSERVATIONS_BY_IDS.format(placeholders=placeholders),
+            observation_ids,
+        )
+        return {r["id"]: Observation.model_validate(_row_dict(r)) for r in rows}
 
     async def update(
         self,
@@ -208,6 +258,7 @@ class ObservationRepository:
         return await self.get(observation_id)
 
     async def delete(self, observation_id: int) -> None:
+        await self.conn.execute(_SQL_DELETE_OBS_ENTITY_REFS, (observation_id,))
         await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (observation_id,))
         await self.conn.execute("DELETE FROM observations WHERE id = ?", (observation_id,))
 
@@ -265,6 +316,11 @@ class ObservationRepository:
             await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (keeper_id,))
             await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (keeper_id, embedding_bytes))
 
+        # Merge entity links from removed into keeper
+        removed_entities = await self.get_entity_ids([removed_id])
+        if removed_entities:
+            await self.link_entities(keeper_id, removed_entities)
+
         # Delete the removed observation
         await self.delete(removed_id)
 
@@ -290,6 +346,7 @@ class ObservationRepository:
         return rows[0][0]
 
     async def clear_all(self) -> int:
+        await self.conn.execute("DELETE FROM obs_entity_refs")
         await self.conn.execute("DELETE FROM observations_vec")
         cursor = await self.conn.execute("DELETE FROM observations")
         return cursor.rowcount
@@ -299,6 +356,42 @@ class ObservationRepository:
         await self.conn.execute("UPDATE observations SET embedding = ? WHERE id = ?", (embedding_bytes, observation_id))
         await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (observation_id,))
         await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (observation_id, embedding_bytes))
+
+    async def search_fts(self, query: str, limit: int = 10) -> list[Observation]:
+        fts_query = build_fts_query(query)
+        if not fts_query:
+            return []
+        rows = await self.conn.execute_fetchall(_SQL_SEARCH_OBSERVATIONS_FTS, (fts_query, limit))
+        return [Observation.model_validate(_row_dict(r)) for r in rows]
+
+    async def search_temporal(self, reference_time: datetime, limit: int = 10) -> list[Observation]:
+        rows = await self.conn.execute_fetchall(
+            _SQL_SEARCH_OBSERVATIONS_TEMPORAL, (reference_time.isoformat(), limit)
+        )
+        return [Observation.model_validate(_row_dict(r)) for r in rows]
+
+    async def get_for_entity(self, entity_id: int, limit: int = 20) -> list[Observation]:
+        rows = await self.conn.execute_fetchall(_SQL_GET_OBSERVATIONS_FOR_ENTITY, (entity_id, limit))
+        return [Observation.model_validate(_row_dict(r)) for r in rows]
+
+    async def get_entity_ids(self, observation_ids: list[int]) -> list[int]:
+        if not observation_ids:
+            return []
+        placeholders = ",".join("?" * len(observation_ids))
+        rows = await self.conn.execute_fetchall(
+            _SQL_GET_ENTITY_IDS_FOR_OBSERVATIONS.format(placeholders=placeholders),
+            observation_ids,
+        )
+        return [r[0] for r in rows]
+
+    async def link_entities(self, observation_id: int, entity_ids: list[int]) -> None:
+        for entity_id in entity_ids:
+            await self.conn.execute(_SQL_INSERT_OBS_ENTITY_REF, (observation_id, entity_id))
+
+    async def replace_entity_links(self, observation_id: int, entity_ids: list[int]) -> None:
+        await self.conn.execute(_SQL_DELETE_OBS_ENTITY_REFS, (observation_id,))
+        for entity_id in entity_ids:
+            await self.conn.execute(_SQL_INSERT_OBS_ENTITY_REF, (observation_id, entity_id))
 
     async def search_vector(self, query_embedding: Embedding, limit: int = 10) -> list[tuple[Observation, float]]:
         query_bytes = serialize_embedding(query_embedding)

@@ -81,6 +81,11 @@ TEMPORAL_EXPANSION_BASE_SCORE = 0.3  # base score for temporally expanded facts
 EXTRACTION_TEMPERATURE = 0.0  # deterministic extraction
 CONSOLIDATION_TEMPERATURE = 0.1  # very deterministic for consolidation decisions
 
+# Fact dedup: skip storing near-identical facts at ingest time
+# Two independent paths — either one triggers dedup:
+FACT_DEDUP_TEXT_RATIO = 0.85  # SequenceMatcher ratio — model-independent, catches near-exact text
+FACT_DEDUP_EMBEDDING_SIMILARITY = 0.95  # cosine similarity — catches semantic duplicates
+
 # Forget operation
 FORGET_SIMILARITY_THRESHOLD = 0.8
 FORGET_SEARCH_LIMIT = 10
@@ -88,6 +93,8 @@ FORGET_SEARCH_LIMIT = 10
 # Recall: search and expand graph context
 RECALL_SEARCH_LIMIT = 5  # seed nodes from search
 RECALL_OBSERVATION_LIMIT = 5  # max observations in context
+RECALL_STANDALONE_FACT_LIMIT = 10  # max standalone facts (not bundled with observations)
+SYSTEM_PROMPT_OBSERVATION_LIMIT = 5  # max observations in system prompt memory context
 
 
 # V2 Retrieval Recency
@@ -119,6 +126,11 @@ DREAM_EVAL_TEMPERATURE = 0.3
 
 OBSERVATION_MERGE_SIMILARITY_THRESHOLD = 0.90
 OBSERVATION_MERGE_TEMPERATURE = 0.1
+
+# --- Fact Merge ---
+
+FACT_MERGE_SIMILARITY_THRESHOLD = 0.90  # lower than dedup (0.95) — LLM makes final call
+FACT_MERGE_TEMPERATURE = 0.1
 
 # --- Schedule ---
 

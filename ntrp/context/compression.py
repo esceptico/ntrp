@@ -18,7 +18,7 @@ def should_compress(
         return True
 
     if actual_input_tokens is not None:
-        limit = get_model(model).context_window
+        limit = get_model(model).max_context_tokens
         return actual_input_tokens > int(limit * COMPRESSION_THRESHOLD)
 
     return False

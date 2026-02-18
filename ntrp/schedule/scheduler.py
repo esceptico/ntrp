@@ -130,8 +130,8 @@ class Scheduler:
         memory = self.deps.memory()
         memory_context = None
         if memory:
-            user_facts = await memory.get_context()
-            memory_context = format_session_memory(user_facts=user_facts) or None
+            observations, user_facts = await memory.get_context()
+            memory_context = format_session_memory(observations=observations, user_facts=user_facts) or None
 
         system_prompt = build_system_prompt(
             source_details=self.deps.source_details(),
