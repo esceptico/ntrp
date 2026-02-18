@@ -1,9 +1,13 @@
 [project]
 name = "ntrp"
 version = "0.1.0"
-description = "personal entropy reduction system"
+description = "Personal AI assistant with persistent memory and multi-source knowledge integration"
 readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.13"
+
+[project.urls]
+Repository = "https://github.com/esceptico/ntrp"
 dependencies = [
     "openai>=1.0.0",
     "anthropic>=0.40.0",
