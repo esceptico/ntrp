@@ -1,5 +1,5 @@
 import json
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -14,7 +14,7 @@ WEB_SEARCH_DESCRIPTION = "Search the web for information. Returns titles, URLs, 
 WEB_FETCH_DESCRIPTION = "Fetch content from a URL. Returns the page text in readable format."
 
 
-class WebSearchCategory(str, Enum):
+class WebSearchCategory(StrEnum):
     company = "company"
     research_paper = "research paper"
     news = "news"

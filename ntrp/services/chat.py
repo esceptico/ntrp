@@ -136,7 +136,7 @@ class ChatService:
         if not session_state.name and not is_init and not message.strip().startswith("/"):
             session_state.name = message.strip()[:50]
 
-        messages, system_blocks = await _prepare_messages(
+        messages, _system_blocks = await _prepare_messages(
             runtime, messages, user_message, last_activity=session_state.last_activity
         )
 
