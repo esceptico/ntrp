@@ -116,21 +116,24 @@ Reply ONLY with valid JSON:
 
 If no genuine insight exists, reply: {{"bridge": null, "insight": null}}"""
 
-DREAM_EVALUATOR_PROMPT = """You are a strict quality filter for a dream/insight generation system. Below are {n} candidate dreams generated from cross-domain fact pairs about one person.
+DREAM_EVALUATOR_PROMPT = """You are an extremely strict quality filter for a dream/insight generation system. Below are {n} candidate dreams generated from cross-domain fact pairs about one person.
 
-Your job: pick ONLY the 1-3 dreams that would genuinely surprise or provoke thought in the person. Reject anything that is:
+Your job: pick AT MOST 1 dream — the single most genuinely surprising insight. Most batches should produce ZERO survivors. Reject anything that is:
 - Generic (could apply to anyone: "balances work and health")
 - Obvious (just restating what the facts say)
 - Forced (the connection is a stretch)
 - Fortune-cookie wisdom ("the real journey is within")
+- Thematically repetitive (rehashing the same domains/tensions seen before)
+
+A good dream reveals a connection the person hasn't considered — it should make them pause.
 
 CANDIDATES:
 {candidates}
 
 Reply ONLY with valid JSON:
-{{"selected": [<list of dream indices (0-based) that pass quality filter>], "reasoning": "<1 sentence on why these stood out>"}}
+{{"selected": [<0 or 1 dream index (0-based)>], "reasoning": "<1 sentence>"}}
 
-If NONE are good enough: {{"selected": [], "reasoning": "..."}}"""
+Default to empty: {{"selected": [], "reasoning": "nothing exceptional"}}"""
 
 OBSERVATION_MERGE_PROMPT = """You are merging two similar observations from a memory system into one.
 

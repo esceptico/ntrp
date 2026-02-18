@@ -2,7 +2,7 @@
 
 Clusters facts by embedding similarity, cross-pollinates cluster pairs via LLM
 to find structural patterns between unrelated domains, filters through a
-comparative evaluator, and stores survivors.
+comparative evaluator, deduplicates against recent dreams, and stores survivors.
 """
 
 import math
@@ -15,7 +15,9 @@ from pydantic import BaseModel
 
 from ntrp.constants import (
     DREAM_CLUSTER_FACTOR,
+    DREAM_DEDUP_THRESHOLD,
     DREAM_EVAL_TEMPERATURE,
+    DREAM_MAX_PAIRS,
     DREAM_MIN_FACTS,
     DREAM_TEMPERATURE,
 )
@@ -213,6 +215,10 @@ async def _evaluate_batch(
         return []
 
 
+def _is_duplicate(embedding: np.ndarray, existing: list[np.ndarray], threshold: float) -> bool:
+    return any(_cosine(embedding, e) >= threshold for e in existing)
+
+
 # --- Pipeline ---
 
 
@@ -228,6 +234,7 @@ async def run_dream_pass(
     fact_repo: FactRepository,
     dream_repo: DreamRepository,
     model: str,
+    embed_fn: EmbedFn,
 ) -> int:
     all_facts = await fact_repo.list_all_with_embeddings()
     if len(all_facts) < DREAM_MIN_FACTS:
@@ -246,32 +253,37 @@ async def run_dream_pass(
         _logger.debug("Dream pass skipped: fewer than 2 valid clusters")
         return 0
 
-    # Generate dreams for all cluster pairs
+    # Build all possible pairs, sample a subset
+    all_pairs = [(i, j) for i in range(len(valid_clusters)) for j in range(i + 1, len(valid_clusters))]
+    rng = random.Random()
+    pairs = rng.sample(all_pairs, min(DREAM_MAX_PAIRS, len(all_pairs)))
+
+    # Generate dreams for sampled cluster pairs
     candidates: list[_DreamCandidate] = []
 
-    for i in range(len(valid_clusters)):
-        for j in range(i + 1, len(valid_clusters)):
-            ki, kj = valid_clusters[i], valid_clusters[j]
-            core_a = _centroid_nearest(facts, clusters[ki])
-            core_b = _centroid_nearest(facts, clusters[kj])
-            sups_a = _get_supporters(facts, core_a, clusters[ki], n=2)
-            sups_b = _get_supporters(facts, core_b, clusters[kj], n=2)
+    for i, j in pairs:
+        ki, kj = valid_clusters[i], valid_clusters[j]
+        core_a = _centroid_nearest(facts, clusters[ki])
+        core_b = _centroid_nearest(facts, clusters[kj])
+        sups_a = _get_supporters(facts, core_a, clusters[ki], n=2)
+        sups_b = _get_supporters(facts, core_b, clusters[kj], n=2)
 
-            result = await _generate_dream(facts, core_a, sups_a, core_b, sups_b, model)
-            if result and result.bridge and result.insight:
-                source_fids = [core_a, core_b] + sups_a + sups_b
-                candidates.append(
-                    _DreamCandidate(
-                        bridge=result.bridge,
-                        insight=result.insight,
-                        source_fact_ids=source_fids,
-                    )
+        result = await _generate_dream(facts, core_a, sups_a, core_b, sups_b, model)
+        if result and result.bridge and result.insight:
+            source_fids = [core_a, core_b] + sups_a + sups_b
+            candidates.append(
+                _DreamCandidate(
+                    bridge=result.bridge,
+                    insight=result.insight,
+                    source_fact_ids=source_fids,
                 )
+            )
 
     _logger.info(
-        "Dream generation: %d candidates from %d cluster pairs",
+        "Dream generation: %d candidates from %d/%d cluster pairs",
         len(candidates),
-        len(valid_clusters) * (len(valid_clusters) - 1) // 2,
+        len(pairs),
+        len(all_pairs),
     )
 
     if not candidates:
@@ -283,14 +295,29 @@ async def run_dream_pass(
 
     _logger.info("Dream evaluation: %d/%d survived", len(survivors), len(candidates))
 
-    # Store survivors
+    if not survivors:
+        return 0
+
+    # Dedup against recent dreams
+    existing_embeddings = await dream_repo.recent_embeddings(limit=100)
+
     stored = 0
     for candidate in survivors:
+        embedding = await embed_fn(candidate.insight)
+        if _is_duplicate(embedding, existing_embeddings, DREAM_DEDUP_THRESHOLD):
+            _logger.debug("Dream dedup: skipped '%s' (too similar to existing)", candidate.bridge)
+            continue
+
         await dream_repo.create(
             bridge=candidate.bridge,
             insight=candidate.insight,
             source_fact_ids=candidate.source_fact_ids,
+            embedding=embedding,
         )
+        existing_embeddings.append(embedding)
         stored += 1
+
+    if stored < len(survivors):
+        _logger.info("Dream dedup: %d/%d survivors were duplicates", len(survivors) - stored, len(survivors))
 
     return stored

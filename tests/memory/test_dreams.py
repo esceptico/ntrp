@@ -11,6 +11,7 @@ import pytest_asyncio
 from ntrp.memory.dreams import (
     _centroid_nearest,
     _get_supporters,
+    _is_duplicate,
     _kmeans,
     run_dream_pass,
 )
@@ -47,6 +48,10 @@ def _make_distinct_embedding(domain: int, index: int, dim: int = TEST_EMBEDDING_
     noise = rng.randn(dim) * 0.1
     v = base + noise
     return v / np.linalg.norm(v)
+
+
+async def _mock_embed(text: str) -> np.ndarray:
+    return mock_embedding(text)
 
 
 @pytest_asyncio.fixture
@@ -122,11 +127,27 @@ class TestGetSupporters:
         assert result == [2]
 
 
+class TestDedup:
+    def test_detects_duplicate(self):
+        a = np.array([1.0, 0.0, 0.0])
+        b = np.array([0.99, 0.01, 0.0])
+        b = b / np.linalg.norm(b)
+        assert _is_duplicate(a, [b], threshold=0.85)
+
+    def test_passes_different(self):
+        a = np.array([1.0, 0.0, 0.0])
+        b = np.array([0.0, 1.0, 0.0])
+        assert not _is_duplicate(a, [b], threshold=0.85)
+
+    def test_empty_existing(self):
+        a = np.array([1.0, 0.0, 0.0])
+        assert not _is_duplicate(a, [], threshold=0.85)
+
+
 class TestDreamGeneration:
     @pytest.mark.asyncio
     async def test_skips_on_null_bridge(self, fact_repo: FactRepository, dream_repo: DreamRepository):
         """When LLM returns null bridge/insight, generation is skipped."""
-        # Create 20+ facts across distinct domains
         for domain in range(5):
             for i in range(5):
                 await fact_repo.create(
@@ -139,7 +160,7 @@ class TestDreamGeneration:
         mock_client = AsyncMock()
         mock_client.completion.return_value = mock_llm_response('{"bridge": null, "insight": null}')
         with patch("ntrp.memory.dreams.get_completion_client", return_value=mock_client):
-            created = await run_dream_pass(fact_repo, dream_repo, "test-model")
+            created = await run_dream_pass(fact_repo, dream_repo, "test-model", _mock_embed)
 
         assert created == 0
         assert await dream_repo.count() == 0
@@ -164,7 +185,7 @@ class TestDreamGeneration:
 
             # Last call is the evaluator (contains "CANDIDATES:")
             if "CANDIDATES:" in content:
-                return mock_llm_response('{"selected": [0, 2], "reasoning": "These two had genuine insight"}')
+                return mock_llm_response('{"selected": [0], "reasoning": "This one had genuine insight"}')
 
             # Generation calls
             call_count += 1
@@ -180,18 +201,49 @@ class TestDreamGeneration:
         mock_client = AsyncMock()
         mock_client.completion.side_effect = mock_completion
         with patch("ntrp.memory.dreams.get_completion_client", return_value=mock_client):
-            created = await run_dream_pass(fact_repo, dream_repo, "test-model")
+            created = await run_dream_pass(fact_repo, dream_repo, "test-model", _mock_embed)
 
-        # Evaluator selected indices 0 and 2
-        assert created == 2
-        assert await dream_repo.count() == 2
+        # Evaluator selected index 0
+        assert created == 1
+        assert await dream_repo.count() == 1
 
         dreams = await dream_repo.list_recent(limit=10)
-        assert len(dreams) == 2
-        for dream in dreams:
-            assert dream.bridge
-            assert dream.insight
-            assert len(dream.source_fact_ids) > 0
+        assert len(dreams) == 1
+        assert dreams[0].bridge
+        assert dreams[0].insight
+        assert len(dreams[0].source_fact_ids) > 0
+
+    @pytest.mark.asyncio
+    async def test_dedup_skips_similar_dream(self, fact_repo: FactRepository, dream_repo: DreamRepository):
+        """Dreams similar to existing ones are deduplicated."""
+        for domain in range(5):
+            for i in range(5):
+                await fact_repo.create(
+                    text=f"domain-{domain} fact-{i}",
+                    source_type="test",
+                    embedding=_make_distinct_embedding(domain, i),
+                )
+        await fact_repo.conn.commit()
+
+        # Pre-populate with an existing dream that has the same embedding
+        existing_emb = mock_embedding("insight-1")
+        await dream_repo.create("existing", "insight-1", [1], embedding=existing_emb)
+        await dream_repo.conn.commit()
+
+        async def mock_completion(**kwargs):
+            content = kwargs["messages"][0]["content"]
+            if "CANDIDATES:" in content:
+                return mock_llm_response('{"selected": [0], "reasoning": "good"}')
+            # Generate dream with same text → same embedding → should be deduped
+            return mock_llm_response('{"bridge": "test", "insight": "insight-1"}')
+
+        mock_client = AsyncMock()
+        mock_client.completion.side_effect = mock_completion
+        with patch("ntrp.memory.dreams.get_completion_client", return_value=mock_client):
+            created = await run_dream_pass(fact_repo, dream_repo, "test-model", _mock_embed)
+
+        assert created == 0
+        assert await dream_repo.count() == 1  # only the pre-existing one
 
 
 class TestDreamPassGating:
@@ -208,7 +260,7 @@ class TestDreamPassGating:
 
         mock_client = AsyncMock()
         with patch("ntrp.memory.dreams.get_completion_client", return_value=mock_client):
-            created = await run_dream_pass(fact_repo, dream_repo, "test-model")
+            created = await run_dream_pass(fact_repo, dream_repo, "test-model", _mock_embed)
 
         assert created == 0
         mock_client.completion.assert_not_called()
@@ -234,7 +286,7 @@ class TestDreamPassGating:
         mock_client = AsyncMock()
         mock_client.completion.side_effect = mock_completion
         with patch("ntrp.memory.dreams.get_completion_client", return_value=mock_client):
-            created = await run_dream_pass(fact_repo, dream_repo, "test-model")
+            created = await run_dream_pass(fact_repo, dream_repo, "test-model", _mock_embed)
 
         assert created == 0
         assert await dream_repo.count() == 0
@@ -292,3 +344,14 @@ class TestDreamRepository:
         last = await dream_repo.last_created_at()
         assert last is not None
         assert isinstance(last, datetime)
+
+    @pytest.mark.asyncio
+    async def test_recent_embeddings(self, dream_repo: DreamRepository):
+        emb = mock_embedding("test")
+        await dream_repo.create("b1", "i1", [1], embedding=emb)
+        await dream_repo.create("b2", "i2", [2])  # no embedding
+        await dream_repo.conn.commit()
+
+        embeddings = await dream_repo.recent_embeddings()
+        assert len(embeddings) == 1
+        assert np.allclose(embeddings[0], emb / np.linalg.norm(emb), atol=1e-5)

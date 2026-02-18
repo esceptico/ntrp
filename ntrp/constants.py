@@ -119,6 +119,8 @@ USER_ENTITY_NAME = "User"
 
 DREAM_MIN_FACTS = 20
 DREAM_CLUSTER_FACTOR = 3
+DREAM_MAX_PAIRS = 6  # max cluster pairs to cross-pollinate (caps LLM calls)
+DREAM_DEDUP_THRESHOLD = 0.85  # cosine similarity — skip dreams too similar to recent ones
 DREAM_TEMPERATURE = 0.7
 DREAM_EVAL_TEMPERATURE = 0.3
 

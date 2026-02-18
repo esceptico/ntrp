@@ -2,23 +2,31 @@ import json
 from datetime import UTC, datetime
 
 import aiosqlite
+import numpy as np
 
-from ntrp.memory.models import Dream
+from ntrp.database import deserialize_embedding, serialize_embedding
+from ntrp.memory.models import Dream, Embedding
 
 _SQL_INSERT_DREAM = """
-    INSERT INTO dreams (bridge, insight, source_fact_ids, created_at)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO dreams (bridge, insight, embedding, source_fact_ids, created_at)
+    VALUES (?, ?, ?, ?, ?)
 """
 _SQL_GET_DREAM = "SELECT * FROM dreams WHERE id = ?"
 _SQL_LIST_RECENT = "SELECT * FROM dreams ORDER BY created_at DESC LIMIT ?"
 _SQL_COUNT = "SELECT COUNT(*) FROM dreams"
 _SQL_DELETE = "DELETE FROM dreams WHERE id = ?"
 _SQL_LAST_CREATED = "SELECT MAX(created_at) FROM dreams"
+_SQL_RECENT_EMBEDDINGS = """
+    SELECT id, embedding FROM dreams
+    WHERE embedding IS NOT NULL
+    ORDER BY created_at DESC LIMIT ?
+"""
 
 
 def _row_dict(row: aiosqlite.Row) -> dict:
     d = dict(row)
     d["source_fact_ids"] = json.loads(d["source_fact_ids"]) if d.get("source_fact_ids") else []
+    d.pop("embedding", None)
     return d
 
 
@@ -26,11 +34,13 @@ class DreamRepository:
     def __init__(self, conn: aiosqlite.Connection):
         self.conn = conn
 
-    async def create(self, bridge: str, insight: str, source_fact_ids: list[int]) -> Dream:
+    async def create(
+        self, bridge: str, insight: str, source_fact_ids: list[int], embedding: Embedding | None = None
+    ) -> Dream:
         now = datetime.now(UTC)
         cursor = await self.conn.execute(
             _SQL_INSERT_DREAM,
-            (bridge, insight, json.dumps(source_fact_ids), now.isoformat()),
+            (bridge, insight, serialize_embedding(embedding), json.dumps(source_fact_ids), now.isoformat()),
         )
         return Dream(
             id=cursor.lastrowid,
@@ -64,3 +74,12 @@ class DreamRepository:
             dt = datetime.fromisoformat(raw)
             return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
         return raw
+
+    async def recent_embeddings(self, limit: int = 100) -> list[np.ndarray]:
+        rows = await self.conn.execute_fetchall(_SQL_RECENT_EMBEDDINGS, (limit,))
+        result = []
+        for r in rows:
+            emb = deserialize_embedding(r["embedding"])
+            if emb is not None:
+                result.append(emb)
+        return result

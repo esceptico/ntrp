@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS dreams (
     id INTEGER PRIMARY KEY,
     bridge TEXT NOT NULL,
     insight TEXT NOT NULL,
+    embedding BLOB,
     source_fact_ids TEXT DEFAULT '[]',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

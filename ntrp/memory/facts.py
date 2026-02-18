@@ -229,6 +229,7 @@ class FactMemory:
                     self.facts,
                     self.dreams,
                     self.extraction_model,
+                    self.embedder.embed_one,
                 )
             if created > 0:
                 _logger.info("Dream pass created %d dreams", created)
