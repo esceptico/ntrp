@@ -128,20 +128,21 @@ class SearchStore:
 
     async def rebuild_vec_table(self, new_dim: int) -> None:
         self.embedding_dim = new_dim
+        await self.conn.execute("DROP TABLE IF EXISTS items_vec")
         try:
-            await self.conn.execute("DROP TABLE IF EXISTS items_vec")
             await self.conn.execute(f"""
                 CREATE VIRTUAL TABLE items_vec USING vec0(
                     item_id INTEGER PRIMARY KEY,
                     embedding float[{self.embedding_dim}] distance_metric=cosine
                 );
             """)
-            await self._set_meta("embedding_dim", str(self.embedding_dim))
-            await self.conn.commit()
             self._has_vec = True
         except Exception as e:
             _logger.warning("Failed to recreate vec0 table: %s", e)
             self._has_vec = False
+
+        await self._set_meta("embedding_dim", str(self.embedding_dim))
+        await self.conn.commit()
 
     async def _check_integrity(self) -> None:
         try:
