@@ -7,6 +7,7 @@ and updates observation source_fact_ids.
 
 import json
 from collections.abc import Callable, Coroutine
+from contextlib import AbstractAsyncContextManager, nullcontext
 from typing import Literal
 
 import numpy as np
@@ -23,6 +24,7 @@ from ntrp.memory.store.observations import ObservationRepository
 _logger = get_logger(__name__)
 
 type EmbedFn = Callable[[str], Coroutine[None, None, Embedding]]
+type AtomicFn = Callable[[], AbstractAsyncContextManager[None]]
 
 
 class FactMergeAction(BaseModel):
@@ -103,12 +105,11 @@ async def _merge_facts(
     keeper: Fact,
     removed: Fact,
     merged_text: str,
+    embedding: Embedding,
     fact_repo: FactRepository,
     obs_repo: ObservationRepository,
-    embed_fn: EmbedFn,
 ) -> None:
     # Update keeper text + embedding
-    embedding = await embed_fn(merged_text)
     await fact_repo.update_text(keeper.id, merged_text, embedding)
 
     # Transfer entity refs from removed to keeper (skip duplicates)
@@ -153,6 +154,7 @@ async def fact_merge_pass(
     obs_repo: ObservationRepository,
     model: str,
     embed_fn: EmbedFn,
+    atomic: AtomicFn | None = None,
     threshold: float = FACT_MERGE_SIMILARITY_THRESHOLD,
 ) -> int:
     facts = await fact_repo.list_all_with_embeddings()
@@ -183,10 +185,15 @@ async def fact_merge_pass(
             skipped_pairs.add((min(fact_a.id, fact_b.id), max(fact_a.id, fact_b.id)))
             continue
 
-        merged_text = decision.text or fact_a.text
         keeper, removed = _pick_keeper(fact_a, fact_b)
+        merged_text = decision.text or keeper.text
 
-        await _merge_facts(keeper, removed, merged_text, fact_repo, obs_repo, embed_fn)
+        # Embedding outside atomic (network call)
+        embedding = await embed_fn(merged_text)
+
+        # DB writes inside atomic
+        async with atomic() if atomic else nullcontext():
+            await _merge_facts(keeper, removed, merged_text, embedding, fact_repo, obs_repo)
 
         _logger.info(
             "Merged fact %d + %d → %d (sim=%.3f): %s",
@@ -207,6 +214,7 @@ async def fact_merge_pass(
 
     if merges > 0:
         _logger.info("Fact merge pass: %d merges", merges)
-        await fact_repo.cleanup_orphaned_entities()
+        async with atomic() if atomic else nullcontext():
+            await fact_repo.cleanup_orphaned_entities()
 
     return merges

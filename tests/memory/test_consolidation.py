@@ -76,12 +76,12 @@ def mock_llm_response(content: str):
     )()
 
 
-async def consolidate_fact(fact, fact_repo, obs_repo, model, embed_fn):
+async def consolidate_fact(fact, fact_repo, obs_repo, model, embedding):
     """Test helper that combines the multi-action consolidation API."""
     actions = await get_consolidation_decisions(fact, obs_repo, fact_repo, model)
     results = []
     for action in actions:
-        result = await apply_consolidation(fact, action, fact_repo, obs_repo, embed_fn)
+        result = await apply_consolidation(fact, action, fact_repo, obs_repo, embedding)
         results.append(result)
     await fact_repo.mark_consolidated(fact.id)
     return results[-1] if results else ConsolidationResult(action="skipped", reason="no_actions")
@@ -161,9 +161,9 @@ class TestExecuteAction:
     async def test_skip_action_returns_none(self, obs_repo: ObservationRepository, fact_repo: FactRepository):
         fact = make_fact(1, "Test fact")
         action = ConsolidationAction(action="skip", reason="ephemeral")
-        embed_fn = AsyncMock(return_value=mock_embedding("test"))
+        embedding = mock_embedding("test")
 
-        result = await _execute_action(action, fact, fact_repo, obs_repo, embed_fn)
+        result = await _execute_action(action, fact, fact_repo, obs_repo, embedding)
 
         assert result is None
 
@@ -171,9 +171,9 @@ class TestExecuteAction:
     async def test_create_action(self, obs_repo: ObservationRepository, fact_repo: FactRepository):
         fact = make_fact(1, "Test fact")
         action = ConsolidationAction(action="create", text="Alice is a Python developer")
-        embed_fn = AsyncMock(return_value=mock_embedding("test"))
+        embedding = mock_embedding("test")
 
-        result = await _execute_action(action, fact, fact_repo, obs_repo, embed_fn)
+        result = await _execute_action(action, fact, fact_repo, obs_repo, embedding)
 
         assert result.action == "created"
         assert result.observation_id is not None
@@ -194,9 +194,9 @@ class TestExecuteAction:
             text="Alice is a Python developer who values code quality",
             reason="synthesis",
         )
-        embed_fn = AsyncMock(return_value=mock_embedding("test"))
+        embedding = mock_embedding("test")
 
-        result = await _execute_action(action, fact, fact_repo, obs_repo, embed_fn)
+        result = await _execute_action(action, fact, fact_repo, obs_repo, embedding)
 
         assert result.action == "updated"
         assert result.observation_id == obs.id
@@ -210,9 +210,9 @@ class TestExecuteAction:
     async def test_update_without_id_returns_none(self, obs_repo: ObservationRepository, fact_repo: FactRepository):
         fact = make_fact(1, "Test fact")
         action = ConsolidationAction(action="update", text="New text", observation_id=None)
-        embed_fn = AsyncMock()
+        embedding = None
 
-        result = await _execute_action(action, fact, fact_repo, obs_repo, embed_fn)
+        result = await _execute_action(action, fact, fact_repo, obs_repo, embedding)
 
         assert result is None
 
@@ -225,9 +225,9 @@ class TestConsolidateFact:
             source_type="test",
             embedding=None,
         )
-        embed_fn = AsyncMock()
+        embedding = None
 
-        result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
+        result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embedding)
 
         assert result.action == "skipped"
 
@@ -242,7 +242,7 @@ class TestConsolidateFact:
             source_type="test",
             embedding=mock_embedding("ephemeral"),
         )
-        embed_fn = AsyncMock(return_value=mock_embedding("test"))
+        embedding = mock_embedding("test")
 
         mock_client = AsyncMock()
         mock_client.completion.return_value.choices = [
@@ -259,7 +259,7 @@ class TestConsolidateFact:
             )()
         ]
         with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
-            result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
+            result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embedding)
 
         assert result.action == "skipped"
         assert "ephemeral" in result.reason
@@ -277,7 +277,7 @@ class TestConsolidateFact:
             source_type="test",
             embedding=mock_embedding("alice python"),
         )
-        embed_fn = AsyncMock(return_value=mock_embedding("test"))
+        embedding = mock_embedding("test")
 
         mock_client = AsyncMock()
         mock_client.completion.return_value.choices = [
@@ -296,7 +296,7 @@ class TestConsolidateFact:
             )()
         ]
         with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
-            result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
+            result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embedding)
 
         assert result.action == "created"
         assert result.observation_id is not None
@@ -323,7 +323,7 @@ class TestConsolidateFact:
             source_type="test",
             embedding=emb,
         )
-        embed_fn = AsyncMock(return_value=emb)
+        embedding = emb
 
         mock_client = AsyncMock()
         mock_client.completion.return_value.choices = [
@@ -342,7 +342,7 @@ class TestConsolidateFact:
             )()
         ]
         with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
-            result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
+            result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embedding)
 
         assert result.action == "updated"
         assert result.observation_id == obs.id
@@ -370,7 +370,7 @@ class TestConsolidateFact:
             source_type="test",
             embedding=emb,
         )
-        embed_fn = AsyncMock(return_value=emb)
+        embedding = emb
 
         mock_client = AsyncMock()
         mock_client.completion.return_value.choices = [
@@ -389,7 +389,7 @@ class TestConsolidateFact:
             )()
         ]
         with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
-            result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
+            result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embedding)
 
         assert result.action == "updated"
 
@@ -416,7 +416,7 @@ class TestConsolidateFact:
             source_type="test",
             embedding=emb_hobby,
         )
-        embed_fn = AsyncMock(return_value=emb_hobby)
+        embedding = emb_hobby
 
         mock_client = AsyncMock()
         mock_client.completion.return_value.choices = [
@@ -435,7 +435,7 @@ class TestConsolidateFact:
             )()
         ]
         with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
-            result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
+            result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embedding)
 
         assert result.action == "created"
 
@@ -450,7 +450,7 @@ class TestConsolidateFact:
             source_type="test",
             embedding=mock_embedding("bob pizza"),
         )
-        embed_fn = AsyncMock(return_value=mock_embedding("test"))
+        embedding = mock_embedding("test")
 
         mock_client = AsyncMock()
         mock_client.completion.return_value.choices = [
@@ -461,7 +461,7 @@ class TestConsolidateFact:
             )()
         ]
         with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
-            result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
+            result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embedding)
 
         assert result.action == "skipped"
 
@@ -477,7 +477,7 @@ class TestAlwaysConsolidated:
             source_type="test",
             embedding=mock_embedding("ephemeral"),
         )
-        embed_fn = AsyncMock(return_value=mock_embedding("test"))
+        embedding = mock_embedding("test")
 
         mock_client = AsyncMock()
         mock_client.completion.return_value.choices = [
@@ -492,7 +492,7 @@ class TestAlwaysConsolidated:
             )()
         ]
         with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
-            await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
+            await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embedding)
 
         updated = await fact_repo.get(fact.id)
         assert updated.consolidated_at is not None
@@ -505,7 +505,7 @@ class TestAlwaysConsolidated:
             source_type="test",
             embedding=mock_embedding("bob pizza"),
         )
-        embed_fn = AsyncMock(return_value=mock_embedding("test"))
+        embedding = mock_embedding("test")
 
         mock_client = AsyncMock()
         mock_client.completion.return_value.choices = [
@@ -520,7 +520,7 @@ class TestAlwaysConsolidated:
             )()
         ]
         with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
-            await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embed_fn)
+            await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embedding)
 
         updated = await fact_repo.get(fact.id)
         assert updated.consolidated_at is not None
@@ -574,7 +574,7 @@ class TestTemporalConsolidation:
             embedding=emb,
             happened_at=mar_5,
         )
-        embed_fn = AsyncMock(return_value=emb)
+        embedding = emb
 
         mock_client = AsyncMock()
         mock_client.completion.return_value = mock_llm_response(
@@ -583,7 +583,7 @@ class TestTemporalConsolidation:
             f'"reason": "role transition — newer fact supersedes mobile leadership"}}]}}'
         )
         with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
-            result = await consolidate_fact(new_fact, fact_repo, obs_repo, "test-model", embed_fn)
+            result = await consolidate_fact(new_fact, fact_repo, obs_repo, "test-model", embedding)
 
         assert result.action == "updated"
 
@@ -641,7 +641,7 @@ class TestTemporalConsolidation:
             embedding=emb,
             happened_at=datetime(2026, 2, 20, tzinfo=UTC),
         )
-        embed_fn = AsyncMock(return_value=emb)
+        embedding = emb
 
         mock_client = AsyncMock()
         mock_client.completion.return_value = mock_llm_response(
@@ -650,7 +650,7 @@ class TestTemporalConsolidation:
             f'"reason": "expanded scope — addition, not replacement"}}]}}'
         )
         with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
-            result = await consolidate_fact(new_fact, fact_repo, obs_repo, "test-model", embed_fn)
+            result = await consolidate_fact(new_fact, fact_repo, obs_repo, "test-model", embedding)
 
         assert result.action == "updated"
 
@@ -719,7 +719,7 @@ class TestTemporalConsolidation:
             embedding=emb,
             happened_at=datetime(2026, 4, 1, tzinfo=UTC),
         )
-        embed_fn = AsyncMock(return_value=emb)
+        embedding = emb
 
         mock_client = AsyncMock()
         mock_client.completion.return_value = mock_llm_response(
@@ -728,7 +728,7 @@ class TestTemporalConsolidation:
             f'"reason": "partial update — mobile role ended but mentoring continues"}}]}}'
         )
         with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
-            result = await consolidate_fact(new_fact, fact_repo, obs_repo, "test-model", embed_fn)
+            result = await consolidate_fact(new_fact, fact_repo, obs_repo, "test-model", embedding)
 
         assert result.action == "updated"
 

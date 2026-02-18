@@ -5,6 +5,7 @@ or skip, re-embeds, repeats until no pairs remain above threshold.
 """
 
 from collections.abc import Callable, Coroutine
+from contextlib import AbstractAsyncContextManager, nullcontext
 from typing import Literal
 
 import numpy as np
@@ -23,6 +24,7 @@ from ntrp.memory.store.observations import ObservationRepository
 _logger = get_logger(__name__)
 
 type EmbedFn = Callable[[str], Coroutine[None, None, Embedding]]
+type AtomicFn = Callable[[], AbstractAsyncContextManager[None]]
 
 
 class MergeAction(BaseModel):
@@ -99,6 +101,7 @@ async def observation_merge_pass(
     obs_repo: ObservationRepository,
     model: str,
     embed_fn: EmbedFn,
+    atomic: AtomicFn | None = None,
     threshold: float = OBSERVATION_MERGE_SIMILARITY_THRESHOLD,
 ) -> int:
     observations = await obs_repo.list_all_with_embeddings()
@@ -139,14 +142,18 @@ async def observation_merge_pass(
         else:
             keeper, removed = obs_b, obs_a
 
+        # Embedding outside atomic (network call)
         new_embedding = await embed_fn(decision.text)
-        merged = await obs_repo.merge(
-            keeper_id=keeper.id,
-            removed_id=removed.id,
-            merged_text=decision.text,
-            embedding=new_embedding,
-            reason=f"merged with obs {removed.id} (sim={sim:.3f})",
-        )
+
+        # DB writes inside atomic
+        async with atomic() if atomic else nullcontext():
+            merged = await obs_repo.merge(
+                keeper_id=keeper.id,
+                removed_id=removed.id,
+                merged_text=decision.text,
+                embedding=new_embedding,
+                reason=f"merged with obs {removed.id} (sim={sim:.3f})",
+            )
 
         if merged:
             _logger.info(

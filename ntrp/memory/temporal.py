@@ -1,5 +1,6 @@
 import json
 from collections.abc import Callable, Coroutine
+from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -16,6 +17,7 @@ from ntrp.memory.store.observations import ObservationRepository
 _logger = get_logger(__name__)
 
 type EmbedFn = Callable[[str], Coroutine[None, None, Embedding]]
+type AtomicFn = Callable[[], AbstractAsyncContextManager[None]]
 
 
 class TemporalAction(BaseModel):
@@ -34,6 +36,7 @@ async def temporal_consolidation_pass(
     obs_repo: ObservationRepository,
     model: str,
     embed_fn: EmbedFn,
+    atomic: AtomicFn | None = None,
     days: int = 30,
     min_facts: int = 3,
 ) -> int:
@@ -67,25 +70,36 @@ async def temporal_consolidation_pass(
         )
 
         actions = await _llm_temporal_patterns(entity_name, facts_json, model)
+        if not actions:
+            continue  # LLM failed or returned empty — don't set checkpoint, retry next pass
 
+        # Pre-compute embeddings + dedup checks outside atomic block
+        to_create: list[tuple[TemporalAction, Embedding]] = []
+        to_reinforce: list[tuple[int, list[int]]] = []  # (obs_id, fact_ids)
         for action in actions:
-            if action.action == "create" and action.text:
-                embedding = await embed_fn(action.text)
+            if action.action != "create" or not action.text:
+                continue
+            embedding = await embed_fn(action.text)
+            similar = await obs_repo.search_vector(embedding, limit=1)
+            if similar and similar[0][1] >= OBSERVATION_MERGE_SIMILARITY_THRESHOLD:
+                existing_obs, sim = similar[0]
+                if action.source_fact_ids:
+                    to_reinforce.append((existing_obs.id, action.source_fact_ids))
+                _logger.info(
+                    "Temporal: skipped duplicate for %s (sim=%.2f with obs %d)",
+                    entity_name,
+                    sim,
+                    existing_obs.id,
+                )
+            else:
+                to_create.append((action, embedding))
 
-                # Check if a very similar observation already exists
-                similar = await obs_repo.search_vector(embedding, limit=1)
-                if similar and similar[0][1] >= OBSERVATION_MERGE_SIMILARITY_THRESHOLD:
-                    existing_obs, sim = similar[0]
-                    if action.source_fact_ids:
-                        await obs_repo.add_source_facts(existing_obs.id, action.source_fact_ids)
-                    _logger.info(
-                        "Temporal: skipped duplicate for %s (sim=%.2f with obs %d)",
-                        entity_name,
-                        sim,
-                        existing_obs.id,
-                    )
-                    continue
+        # All DB writes inside atomic block
+        async with atomic() if atomic else nullcontext():
+            for obs_id, fact_ids in to_reinforce:
+                await obs_repo.add_source_facts(obs_id, fact_ids)
 
+            for action, embedding in to_create:
                 source_fact_id = action.source_fact_ids[0] if action.source_fact_ids else None
                 obs = await obs_repo.create(
                     summary=action.text,
@@ -101,7 +115,7 @@ async def temporal_consolidation_pass(
                 )
                 created += 1
 
-        await fact_repo.set_temporal_checkpoint(entity_id, window_end)
+            await fact_repo.set_temporal_checkpoint(entity_id, window_end)
 
     _logger.info("Temporal pass: %d observations created from %d entities", created, len(entities))
     return created

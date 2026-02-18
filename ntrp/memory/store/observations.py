@@ -223,6 +223,25 @@ class ObservationRepository:
             (now.isoformat(), *observation_ids),
         )
 
+    async def remove_source_facts(self, fact_ids: list[int]) -> None:
+        """Remove deleted fact IDs from all observations' source_fact_ids."""
+        if not fact_ids:
+            return
+        for fact_id in fact_ids:
+            rows = await self.conn.execute_fetchall(
+                "SELECT id, source_fact_ids FROM observations WHERE source_fact_ids LIKE ?",
+                (f"%{fact_id}%",),
+            )
+            for row in rows:
+                raw_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []
+                if fact_id not in raw_ids:
+                    continue  # LIKE matched a substring (e.g., id=5 matching id=15)
+                new_ids = [fid for fid in raw_ids if fid != fact_id]
+                await self.conn.execute(
+                    "UPDATE observations SET source_fact_ids = ?, evidence_count = ? WHERE id = ?",
+                    (json.dumps(new_ids), len(new_ids), row["id"]),
+                )
+
     async def add_source_facts(self, observation_id: int, fact_ids: list[int]) -> None:
         if not fact_ids:
             return
@@ -385,6 +404,22 @@ class ObservationRepository:
     async def link_entities(self, observation_id: int, entity_ids: list[int]) -> None:
         for entity_id in entity_ids:
             await self.conn.execute(_SQL_INSERT_OBS_ENTITY_REF, (observation_id, entity_id))
+
+    async def merge_entity_refs(self, keep_id: int, merge_ids: list[int]) -> None:
+        """Repoint obs_entity_refs from absorbed entity IDs to keeper."""
+        if not merge_ids:
+            return
+        placeholders = ",".join("?" * len(merge_ids))
+        # Update where possible (no conflict with existing keeper link)
+        await self.conn.execute(
+            f"UPDATE OR IGNORE obs_entity_refs SET entity_id = ? WHERE entity_id IN ({placeholders})",
+            (keep_id, *merge_ids),
+        )
+        # Delete remaining rows that couldn't be updated (observation already links to keeper)
+        await self.conn.execute(
+            f"DELETE FROM obs_entity_refs WHERE entity_id IN ({placeholders})",
+            merge_ids,
+        )
 
     async def replace_entity_links(self, observation_id: int, entity_ids: list[int]) -> None:
         await self.conn.execute(_SQL_DELETE_OBS_ENTITY_REFS, (observation_id,))

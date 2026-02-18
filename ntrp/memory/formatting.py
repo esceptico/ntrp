@@ -41,7 +41,7 @@ def _format_sections(
                     lines.append("")
                 lines.append(header)
                 lines.extend(added)
-            break
+            continue
         if lines:
             lines.append("")
         lines.extend(section_lines)

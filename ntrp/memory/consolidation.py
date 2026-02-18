@@ -1,5 +1,4 @@
 import json
-from collections.abc import Callable, Coroutine
 from typing import Literal
 
 from pydantic import BaseModel
@@ -16,8 +15,6 @@ from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
 
 _logger = get_logger(__name__)
-
-type EmbedFn = Callable[[str], Coroutine[None, None, Embedding]]
 
 
 class ConsolidationAction(BaseModel):
@@ -55,12 +52,12 @@ async def apply_consolidation(
     action: ConsolidationAction,
     fact_repo: FactRepository,
     obs_repo: ObservationRepository,
-    embed_fn: EmbedFn,
+    embedding: Embedding | None,
 ) -> ConsolidationResult:
     if action.action == "skip":
         return ConsolidationResult(action="skipped", reason=action.reason)
 
-    result = await _execute_action(action, fact, fact_repo, obs_repo, embed_fn)
+    result = await _execute_action(action, fact, fact_repo, obs_repo, embedding)
     if not result:
         return ConsolidationResult(action="skipped", reason="action_failed")
 
@@ -105,7 +102,7 @@ async def _execute_action(
     fact: Fact,
     fact_repo: FactRepository,
     obs_repo: ObservationRepository,
-    embed_fn: EmbedFn,
+    embedding: Embedding | None,
 ) -> ConsolidationResult | None:
     if action.action == "skip":
         return None
@@ -114,11 +111,10 @@ async def _execute_action(
     fact_entity_ids = await fact_repo.get_entity_ids_for_facts([fact.id])
 
     if action.action == "update":
-        if not action.observation_id or not action.text:
-            _logger.debug("Skipped update: missing observation_id or text")
+        if not action.observation_id or not action.text or embedding is None:
+            _logger.debug("Skipped update: missing observation_id, text, or embedding")
             return None
 
-        embedding = await embed_fn(action.text)
         obs = await obs_repo.update(
             observation_id=action.observation_id,
             summary=action.text,
@@ -136,11 +132,10 @@ async def _execute_action(
             return None
 
     if action.action == "create":
-        if not action.text:
-            _logger.debug("Skipped create: missing text")
+        if not action.text or embedding is None:
+            _logger.debug("Skipped create: missing text or embedding")
             return None
 
-        embedding = await embed_fn(action.text)
         obs = await obs_repo.create(
             summary=action.text,
             embedding=embedding,

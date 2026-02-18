@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Self
@@ -138,20 +138,30 @@ class FactMemory:
                 fact.model_copy(update={"entity_refs": await self.facts.get_entity_refs(fact.id)}) for fact in facts
             ]
 
-        # LLM decisions outside lock
+        # LLM decisions + embeddings outside lock
         decisions = []
         for fact in facts:
             actions = await get_consolidation_decisions(fact, self.observations, self.facts, self.extraction_model)
-            decisions.append((fact, actions))
+            # Pre-compute embeddings for actions that need them
+            precomputed = []
+            for action in actions:
+                embedding = None
+                if action.action in ("update", "create") and action.text:
+                    embedding = await self.embedder.embed_one(action.text)
+                precomputed.append((action, embedding))
+            decisions.append((fact, precomputed))
 
-        # Apply under lock
+        # Apply under lock — DB writes only, no network I/O
         async with self.transaction():
             count = 0
             obs_created = 0
-            for fact, actions in decisions:
-                for action in actions:
+            for fact, precomputed in decisions:
+                # Verify fact still exists (could be deleted by concurrent forget())
+                if not await self.facts.get(fact.id):
+                    continue
+                for action, embedding in precomputed:
                     result = await apply_consolidation(
-                        fact, action, self.facts, self.observations, self.embedder.embed_one
+                        fact, action, self.facts, self.observations, embedding
                     )
                     if result.action == "created":
                         obs_created += 1
@@ -162,19 +172,30 @@ class FactMemory:
         self.channel.publish(ConsolidationCompleted(facts_processed=count, observations_created=obs_created))
         return count
 
+    @asynccontextmanager
+    async def _atomic(self) -> AsyncGenerator[None]:
+        """Lock + commit for background passes. Wraps a logical write unit."""
+        async with self._db_lock:
+            try:
+                yield
+                await self.db.conn.commit()
+            except Exception:
+                await self.db.conn.rollback()
+                raise
+
     async def _maybe_run_temporal_pass(self) -> None:
-        now = datetime.now()
+        now = datetime.now(UTC)
         if self._last_temporal_pass and (now - self._last_temporal_pass) < timedelta(days=1):
             return
 
         try:
-            async with self.transaction():
-                created = await temporal_consolidation_pass(
-                    self.facts,
-                    self.observations,
-                    self.extraction_model,
-                    self.embedder.embed_one,
-                )
+            created = await temporal_consolidation_pass(
+                self.facts,
+                self.observations,
+                self.extraction_model,
+                self.embedder.embed_one,
+                atomic=self._atomic,
+            )
             if created > 0:
                 _logger.info("Temporal pass created %d observations", created)
             self._last_temporal_pass = now
@@ -182,17 +203,17 @@ class FactMemory:
             _logger.warning("Temporal consolidation pass failed: %s", e)
 
     async def _maybe_run_observation_merge(self) -> None:
-        now = datetime.now()
+        now = datetime.now(UTC)
         if self._last_merge_pass and (now - self._last_merge_pass) < timedelta(days=1):
             return
 
         try:
-            async with self.transaction():
-                merged = await observation_merge_pass(
-                    self.observations,
-                    self.extraction_model,
-                    self.embedder.embed_one,
-                )
+            merged = await observation_merge_pass(
+                self.observations,
+                self.extraction_model,
+                self.embedder.embed_one,
+                atomic=self._atomic,
+            )
             if merged > 0:
                 _logger.info("Observation merge pass: %d merges", merged)
             self._last_merge_pass = now
@@ -200,18 +221,18 @@ class FactMemory:
             _logger.warning("Observation merge pass failed: %s", e)
 
     async def _maybe_run_fact_merge(self) -> None:
-        now = datetime.now()
+        now = datetime.now(UTC)
         if self._last_fact_merge_pass and (now - self._last_fact_merge_pass) < timedelta(days=1):
             return
 
         try:
-            async with self.transaction():
-                merged = await fact_merge_pass(
-                    self.facts,
-                    self.observations,
-                    self.extraction_model,
-                    self.embedder.embed_one,
-                )
+            merged = await fact_merge_pass(
+                self.facts,
+                self.observations,
+                self.extraction_model,
+                self.embedder.embed_one,
+                atomic=self._atomic,
+            )
             if merged > 0:
                 _logger.info("Fact merge pass: %d merges", merged)
             self._last_fact_merge_pass = now
@@ -219,18 +240,18 @@ class FactMemory:
             _logger.warning("Fact merge pass failed: %s", e)
 
     async def _maybe_run_dream_pass(self) -> None:
-        now = datetime.now()
+        now = datetime.now(UTC)
         if self._last_dream_pass and (now - self._last_dream_pass) < timedelta(days=1):
             return
 
         try:
-            async with self.transaction():
-                created = await run_dream_pass(
-                    self.facts,
-                    self.dreams,
-                    self.extraction_model,
-                    self.embedder.embed_one,
-                )
+            created = await run_dream_pass(
+                self.facts,
+                self.dreams,
+                self.extraction_model,
+                self.embedder.embed_one,
+                atomic=self._atomic,
+            )
             if created > 0:
                 _logger.info("Dream pass created %d dreams", created)
             self._last_dream_pass = now
@@ -307,27 +328,28 @@ class FactMemory:
             return None
         embedding = await self.embedder.embed_one(text)
 
-        # Dedup: skip if a near-identical fact already exists
-        # Embedding finds the candidate; text ratio + embedding similarity decide independently
-        similar = await self.facts.search_facts_vector(embedding, limit=1)
-        if similar:
-            existing_fact, similarity = similar[0]
-            text_ratio = SequenceMatcher(None, text.lower(), existing_fact.text.lower()).ratio()
-            is_dup = text_ratio >= FACT_DEDUP_TEXT_RATIO or similarity >= FACT_DEDUP_EMBEDDING_SIMILARITY
-            _logger.info(
-                "Dedup check: fact %d text_ratio=%.3f sim=%.3f dup=%s — %r",
-                existing_fact.id,
-                text_ratio,
-                similarity,
-                is_dup,
-                existing_fact.text[:80],
-            )
-            if is_dup:
-                async with self.transaction():
-                    await self.facts.reinforce([existing_fact.id])
-                return None
+        # Extract entities outside lock (LLM call)
+        extraction = await self.extractor.extract(text)
 
         async with self.transaction():
+            # Dedup inside lock to prevent TOCTOU race
+            similar = await self.facts.search_facts_vector(embedding, limit=1)
+            if similar:
+                existing_fact, similarity = similar[0]
+                text_ratio = SequenceMatcher(None, text.lower(), existing_fact.text.lower()).ratio()
+                is_dup = text_ratio >= FACT_DEDUP_TEXT_RATIO or similarity >= FACT_DEDUP_EMBEDDING_SIMILARITY
+                _logger.info(
+                    "Dedup check: fact %d text_ratio=%.3f sim=%.3f dup=%s — %r",
+                    existing_fact.id,
+                    text_ratio,
+                    similarity,
+                    is_dup,
+                    existing_fact.text[:80],
+                )
+                if is_dup:
+                    await self.facts.reinforce([existing_fact.id])
+                    return None
+
             fact = await self.facts.create(
                 text=text,
                 source_type=source_type,
@@ -335,8 +357,6 @@ class FactMemory:
                 embedding=embedding,
                 happened_at=happened_at,
             )
-
-            extraction = await self.extractor.extract(text)
             entities_extracted = await self._process_extraction(fact.id, extraction)
 
         self.channel.publish(FactCreated(fact_id=fact.id, text=text))
@@ -409,12 +429,15 @@ class FactMemory:
 
         async with self.transaction():
             count = 0
+            deleted_ids = []
             for fact, score in results:
                 if score >= FORGET_SIMILARITY_THRESHOLD:
                     await self.facts.delete(fact.id)
+                    deleted_ids.append(fact.id)
                     count += 1
                     self.channel.publish(FactDeleted(fact_id=fact.id))
             if count > 0:
+                await self.observations.remove_source_facts(deleted_ids)
                 await self.facts.cleanup_orphaned_entities()
             return count
 
@@ -439,6 +462,7 @@ class FactMemory:
 
             merge_ids = [e.id for e in entities if e.id != keep.id]
             count = await self.facts.merge_entities(keep.id, merge_ids)
+            await self.observations.merge_entity_refs(keep.id, merge_ids)
             _logger.info("Merged entities %s → '%s' (%d merged)", [e.name for e in entities], keep.name, count)
             return count
 

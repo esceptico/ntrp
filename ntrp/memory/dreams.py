@@ -9,6 +9,7 @@ import math
 import random
 from collections import defaultdict
 from collections.abc import Callable, Coroutine
+from contextlib import AbstractAsyncContextManager, nullcontext
 
 import numpy as np
 from pydantic import BaseModel
@@ -31,6 +32,7 @@ from ntrp.memory.store.facts import FactRepository
 _logger = get_logger(__name__)
 
 type EmbedFn = Callable[[str], Coroutine[None, None, Embedding]]
+type AtomicFn = Callable[[], AbstractAsyncContextManager[None]]
 
 
 # --- Pydantic models for structured output ---
@@ -235,6 +237,7 @@ async def run_dream_pass(
     dream_repo: DreamRepository,
     model: str,
     embed_fn: EmbedFn,
+    atomic: AtomicFn | None = None,
 ) -> int:
     all_facts = await fact_repo.list_all_with_embeddings()
     if len(all_facts) < DREAM_MIN_FACTS:
@@ -308,12 +311,13 @@ async def run_dream_pass(
             _logger.debug("Dream dedup: skipped '%s' (too similar to existing)", candidate.bridge)
             continue
 
-        await dream_repo.create(
-            bridge=candidate.bridge,
-            insight=candidate.insight,
-            source_fact_ids=candidate.source_fact_ids,
-            embedding=embedding,
-        )
+        async with atomic() if atomic else nullcontext():
+            await dream_repo.create(
+                bridge=candidate.bridge,
+                insight=candidate.insight,
+                source_fact_ids=candidate.source_fact_ids,
+                embedding=embedding,
+            )
         existing_embeddings.append(embedding)
         stored += 1
 

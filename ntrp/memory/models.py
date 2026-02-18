@@ -70,7 +70,7 @@ class _MemoryModel(_FrozenModel):
     @classmethod
     def _coerce_defaults(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            if not data.get("access_count"):
+            if data.get("access_count") is None:
                 data["access_count"] = 0
             if data.get("last_accessed_at") is None and data.get("created_at") is not None:
                 data["last_accessed_at"] = data["created_at"]
