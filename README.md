@@ -1,6 +1,6 @@
 # NTRP
 
-Personal proactive AI assistant with persistent memory, scheduling, and multi-source knowledge integration.
+Personal assistant with persistent memory, scheduling, and multi-source knowledge integration.
 ![Showcase](docs/images/showcase.png)
 
 
