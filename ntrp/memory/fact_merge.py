@@ -175,7 +175,10 @@ async def fact_merge_pass(
         if decision.action == "different":
             _logger.debug(
                 "Fact merge skip: %d + %d (sim=%.3f): %s",
-                fact_a.id, fact_b.id, sim, decision.reason,
+                fact_a.id,
+                fact_b.id,
+                sim,
+                decision.reason,
             )
             skipped_pairs.add((min(fact_a.id, fact_b.id), max(fact_a.id, fact_b.id)))
             continue
@@ -187,7 +190,11 @@ async def fact_merge_pass(
 
         _logger.info(
             "Merged fact %d + %d → %d (sim=%.3f): %s",
-            fact_a.id, fact_b.id, keeper.id, sim, merged_text[:80],
+            fact_a.id,
+            fact_b.id,
+            keeper.id,
+            sim,
+            merged_text[:80],
         )
         merges += 1
 

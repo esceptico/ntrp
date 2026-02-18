@@ -26,10 +26,10 @@ from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.events.internal import ConsolidationCompleted, FactCreated, FactDeleted
 from ntrp.logging import get_logger
 from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decisions
+from ntrp.memory.decay import decay_score
 from ntrp.memory.dreams import run_dream_pass
 from ntrp.memory.extraction import Extractor
 from ntrp.memory.fact_merge import fact_merge_pass
-from ntrp.memory.decay import decay_score
 from ntrp.memory.models import ExtractionResult, Fact, FactContext, Observation
 from ntrp.memory.observation_merge import observation_merge_pass
 from ntrp.memory.retrieval import retrieve_with_observations
@@ -315,7 +315,11 @@ class FactMemory:
             is_dup = text_ratio >= FACT_DEDUP_TEXT_RATIO or similarity >= FACT_DEDUP_EMBEDDING_SIMILARITY
             _logger.info(
                 "Dedup check: fact %d text_ratio=%.3f sim=%.3f dup=%s — %r",
-                existing_fact.id, text_ratio, similarity, is_dup, existing_fact.text[:80],
+                existing_fact.id,
+                text_ratio,
+                similarity,
+                is_dup,
+                existing_fact.text[:80],
             )
             if is_dup:
                 async with self.transaction():
@@ -392,9 +396,7 @@ class FactMemory:
             if context.observations:
                 await self.observations.reinforce([o.id for o in context.observations])
                 # Reinforce only the displayed source facts (bundled_sources), not all
-                displayed_fact_ids = [
-                    f.id for facts in context.bundled_sources.values() for f in facts
-                ]
+                displayed_fact_ids = [f.id for facts in context.bundled_sources.values() for f in facts]
                 if displayed_fact_ids:
                     await self.facts.reinforce(displayed_fact_ids)
 

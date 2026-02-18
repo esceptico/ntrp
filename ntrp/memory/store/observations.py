@@ -365,9 +365,7 @@ class ObservationRepository:
         return [Observation.model_validate(_row_dict(r)) for r in rows]
 
     async def search_temporal(self, reference_time: datetime, limit: int = 10) -> list[Observation]:
-        rows = await self.conn.execute_fetchall(
-            _SQL_SEARCH_OBSERVATIONS_TEMPORAL, (reference_time.isoformat(), limit)
-        )
+        rows = await self.conn.execute_fetchall(_SQL_SEARCH_OBSERVATIONS_TEMPORAL, (reference_time.isoformat(), limit))
         return [Observation.model_validate(_row_dict(r)) for r in rows]
 
     async def get_for_entity(self, entity_id: int, limit: int = 20) -> list[Observation]:
