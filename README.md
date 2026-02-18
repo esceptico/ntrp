@@ -15,7 +15,7 @@ cd ntrp-ui && bun install && cd ..
 
 # Configure
 cp .env.example .env
-# Edit .env and set OPENAI_API_KEY
+# Edit .env — set at least one LLM key and the model variables
 
 # Start
 uv run ntrp serve              # backend
@@ -29,9 +29,11 @@ uv run ntrp run -p "your prompt here"
 
 **Docker**:
 ```bash
-cp .env.example .env  # Edit: set OPENAI_API_KEY
+cp .env.example .env  # set your API keys
 docker-compose up -d
 ```
+
+See [docs/setup.md](docs/setup.md) for detailed setup instructions (Google OAuth, Telegram, Obsidian, etc).
 
 ## Features
 

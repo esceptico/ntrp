@@ -1,10 +1,9 @@
 import json
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from ntrp.constants import EXPLORE_MODEL_DEFAULT
 from ntrp.embedder import EmbeddingConfig
 from ntrp.llm.models import DEFAULTS, EMBEDDING_DEFAULTS
 from ntrp.logging import get_logger
@@ -48,7 +47,7 @@ class Config(BaseSettings):
 
     # Model IDs (must match entries in llm/models.py DEFAULTS or user config)
     chat_model: str
-    explore_model: str = EXPLORE_MODEL_DEFAULT
+    explore_model: str | None = None
     memory_model: str
     embedding_model: str
 
@@ -78,9 +77,18 @@ class Config(BaseSettings):
     # API authentication (optional — required when exposed to network)
     api_key: str | None = None
 
+    @model_validator(mode="after")
+    def _default_explore_model(self) -> "Config":
+        if not self.explore_model:
+            self.explore_model = self.chat_model
+            _logger.info("explore_model not set, defaulting to chat_model: %s", self.chat_model)
+        return self
+
     @field_validator("chat_model", "explore_model")
     @classmethod
-    def _validate_chat_model(cls, v: str) -> str:
+    def _validate_chat_model(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
         valid = {m.id for m in DEFAULTS}
         if v not in valid:
             raise ValueError(f"Unsupported model: {v}. Must be one of: {', '.join(valid)}")
