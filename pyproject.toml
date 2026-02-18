@@ -5,9 +5,6 @@ description = "Personal AI assistant with persistent memory and multi-source kno
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.13"
-
-[project.urls]
-Repository = "https://github.com/esceptico/ntrp"
 dependencies = [
     "openai>=1.0.0",
     "anthropic>=0.40.0",
@@ -21,18 +18,18 @@ dependencies = [
     "google-api-python-client>=2.188.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.34.0",
-    "sse-starlette>=2.1.0",
     "exa-py>=2.0.2",
     "pydantic-settings>=2.12.0",
     "aiosqlite>=0.22.1",
     "sqlite-vec>=0.1.6",
-    "langfuse>=2.59.0",
-    "opentelemetry-exporter-otlp>=1.20.0",
     "structlog>=24.0.0",
     "markdown>=3.7",
     "pyyaml>=6.0",
     "aiohttp>=3.13.3",
 ]
+
+[project.urls]
+Repository = "https://github.com/esceptico/ntrp"
 
 [project.optional-dependencies]
 gmail = [
