@@ -112,6 +112,9 @@ class SkillRegistry:
         meta = self._skills.get(name)
         if not meta:
             return False
+        if meta.location == "builtin":
+            _logger.warning("Cannot remove builtin skill '%s'", name)
+            return False
         import shutil
 
         shutil.rmtree(meta.path, ignore_errors=True)

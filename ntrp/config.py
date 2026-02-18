@@ -5,7 +5,7 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ntrp.embedder import EmbeddingConfig
-from ntrp.llm.models import DEFAULTS, EMBEDDING_DEFAULTS
+from ntrp.llm.models import EMBEDDING_DEFAULTS, get_models, load_custom_models
 from ntrp.logging import get_logger
 
 NTRP_DIR = Path.home() / ".ntrp"
@@ -84,14 +84,14 @@ class Config(BaseSettings):
             _logger.info("explore_model not set, defaulting to chat_model: %s", self.chat_model)
         return self
 
-    @field_validator("chat_model", "explore_model")
+    @field_validator("chat_model", "explore_model", "memory_model")
     @classmethod
-    def _validate_chat_model(cls, v: str | None) -> str | None:
+    def _validate_model(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        valid = {m.id for m in DEFAULTS}
-        if v not in valid:
-            raise ValueError(f"Unsupported model: {v}. Must be one of: {', '.join(valid)}")
+        models = get_models()
+        if v not in models:
+            raise ValueError(f"Unknown model: {v}. Available: {', '.join(models)}")
         return v
 
     @field_validator("embedding_model")
@@ -159,6 +159,7 @@ PERSIST_KEYS = frozenset(
 
 
 def get_config() -> Config:
+    load_custom_models()
     settings = load_user_settings()
 
     # Flatten legacy sources nesting

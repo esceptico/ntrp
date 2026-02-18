@@ -23,6 +23,40 @@ uv run ntrp serve              # backend
 cd ntrp-ui && bun run src/index.tsx  # UI (separate terminal)
 ```
 
+## Custom Models
+
+You can use any OpenAI-compatible model (OpenRouter, Ollama, vLLM, LM Studio, etc.) by defining it in `~/.ntrp/models.json`:
+
+```json
+{
+  "deepseek/deepseek-r1": {
+    "base_url": "https://openrouter.ai/api/v1",
+    "api_key_env": "OPENROUTER_API_KEY",
+    "context_window": 128000,
+    "max_output_tokens": 8192
+  },
+  "ollama/llama3": {
+    "base_url": "http://localhost:11434/v1",
+    "context_window": 8192
+  }
+}
+```
+
+Each model needs:
+- `base_url` — the OpenAI-compatible API endpoint
+- `context_window` — max input tokens (used for context compression thresholds)
+- `api_key_env` (optional) — name of the environment variable holding the API key
+- `max_output_tokens` (optional, default 8192)
+- `price_in`, `price_out` (optional) — cost per million tokens, for usage tracking
+
+Then use the model ID in your `.env`:
+
+```
+NTRP_CHAT_MODEL=deepseek/deepseek-r1
+```
+
+Custom models appear in the settings UI alongside built-in models.
+
 ## Google Gmail & Calendar
 
 Requires a Google Cloud project with OAuth credentials.

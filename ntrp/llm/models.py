@@ -1,5 +1,13 @@
+import json
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
+
+from ntrp.logging import get_logger
+
+_logger = get_logger(__name__)
+
+MODELS_PATH = Path.home() / ".ntrp" / "models.json"
 
 
 class Provider(Enum):
@@ -20,6 +28,7 @@ class Model:
     price_cache_read: float = 0
     price_cache_write: float = 0
     base_url: str | None = None
+    api_key_env: str | None = None
 
 
 # Prices are per million tokens.
@@ -88,6 +97,51 @@ EMBEDDING_DEFAULTS = [
 
 _models: dict[str, Model] = {m.id: m for m in DEFAULTS}
 _embedding_models: dict[str, EmbeddingModel] = {m.id: m for m in EMBEDDING_DEFAULTS}
+_custom_loaded = False
+
+
+def load_custom_models() -> None:
+    global _custom_loaded
+    if _custom_loaded:
+        return
+    _custom_loaded = True
+
+    if not MODELS_PATH.exists():
+        return
+
+    try:
+        raw = json.loads(MODELS_PATH.read_text())
+    except (json.JSONDecodeError, OSError):
+        _logger.warning("Failed to read %s", MODELS_PATH, exc_info=True)
+        return
+
+    if not isinstance(raw, dict):
+        _logger.warning("%s: expected a JSON object, got %s", MODELS_PATH, type(raw).__name__)
+        return
+
+    for model_id, entry in raw.items():
+        if not isinstance(entry, dict):
+            _logger.warning("Skipping custom model %s: expected object", model_id)
+            continue
+        if "base_url" not in entry:
+            _logger.warning("Skipping custom model %s: missing base_url", model_id)
+            continue
+        if "context_window" not in entry:
+            _logger.warning("Skipping custom model %s: missing context_window", model_id)
+            continue
+
+        model = Model(
+            id=model_id,
+            provider=Provider.CUSTOM,
+            max_context_tokens=int(entry["context_window"]),
+            max_output_tokens=int(entry.get("max_output_tokens", 8192)),
+            price_in=float(entry.get("price_in", 0)),
+            price_out=float(entry.get("price_out", 0)),
+            base_url=entry["base_url"],
+            api_key_env=entry.get("api_key_env"),
+        )
+        _models[model_id] = model
+        _logger.info("Registered custom model: %s (base_url=%s)", model_id, model.base_url)
 
 
 def get_model(model_id: str) -> Model:
@@ -104,3 +158,7 @@ def get_embedding_model(model_id: str) -> EmbeddingModel:
 
 def list_models() -> list[str]:
     return list(_models)
+
+
+def get_models() -> dict[str, Model]:
+    return _models

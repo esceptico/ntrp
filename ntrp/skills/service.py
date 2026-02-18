@@ -6,7 +6,10 @@ from ntrp.events.internal import SkillChanged
 from ntrp.skills.installer import install_from_github
 from ntrp.skills.registry import SkillMeta, SkillRegistry
 
+BUILTIN_SKILLS_DIR = Path(__file__).resolve().parent.parent.parent / "skills"
+
 SKILLS_DIRS: list[tuple[Path, str]] = [
+    (BUILTIN_SKILLS_DIR, "builtin"),
     (Path.cwd() / ".skills", "project"),
     (NTRP_DIR / "skills", "global"),
 ]
