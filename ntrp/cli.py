@@ -90,7 +90,7 @@ def run(ctx, prompt: str):
 
 
 async def _run_headless(prompt: str):
-    from uuid import uuid4
+    import secrets
 
     from ntrp.core.agent import Agent
     from ntrp.core.prompts import build_system_prompt
@@ -104,13 +104,13 @@ async def _run_headless(prompt: str):
 
     try:
         system_prompt = build_system_prompt(
-            source_details=runtime.get_source_details(),
+            source_details=runtime.source_mgr.get_details(),
             last_activity=None,
             memory_context=None,
         )
 
-        run_id = str(uuid4())[:8]
-        session_state = runtime.create_session()
+        run_id = secrets.token_hex(4)
+        session_state = runtime.session_service.create()
 
         tool_ctx = ToolContext(
             session_state=session_state,

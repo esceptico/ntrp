@@ -1,8 +1,8 @@
 import asyncio
+import secrets
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from uuid import uuid4
 
 
 class RunStatus(StrEnum):
@@ -56,7 +56,7 @@ class RunRegistry:
         self._runs: dict[str, RunState] = {}
 
     def create_run(self, session_id: str) -> RunState:
-        run_id = str(uuid4())[:8]
+        run_id = secrets.token_hex(4)
         run = RunState(run_id=run_id, session_id=session_id)
         self._runs[run_id] = run
         return run

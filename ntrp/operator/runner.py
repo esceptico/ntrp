@@ -1,6 +1,6 @@
+import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
-from uuid import uuid4
 
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
@@ -53,7 +53,7 @@ class RunResult:
 
 
 async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
-    run_id = str(uuid4())[:8]
+    run_id = secrets.token_hex(4)
 
     memory = deps.memory()
     memory_context = None

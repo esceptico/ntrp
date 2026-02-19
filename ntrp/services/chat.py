@@ -20,12 +20,16 @@ from ntrp.events.sse import (
     ThinkingEvent,
 )
 from ntrp.llm.models import Provider, get_model
+from ntrp.logging import get_logger
 from ntrp.memory.formatting import format_session_memory
 from ntrp.server.state import RunState, RunStatus
 from ntrp.server.stream import run_agent_loop, to_sse
 from ntrp.skills.registry import SkillRegistry
 from ntrp.tools.core.context import IOBridge
 from ntrp.tools.directives import load_directives
+
+
+_logger = get_logger(__name__)
 
 INIT_AUTO_APPROVE = {"remember", "forget"}
 
@@ -219,6 +223,7 @@ class ChatService:
             runtime.run_registry.complete_run(run.run_id)
 
         except Exception as e:
+            _logger.exception("Chat stream failed (run_id=%s, session_id=%s)", run.run_id, session_state.session_id)
             yield to_sse(ErrorEvent(message=str(e), recoverable=False))
             run.status = RunStatus.ERROR
 
