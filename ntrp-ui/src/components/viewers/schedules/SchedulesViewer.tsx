@@ -1,6 +1,7 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
+import type { InputRenderable, TextareaRenderable } from "@opentui/core";
 import type { Config } from "../../../types.js";
-import { useKeypress, useTextInput, type Key } from "../../../hooks/index.js";
+import { useKeypress, type Key } from "../../../hooks/index.js";
 import { Dialog, Loading, colors, BaseSelectionList, Hints } from "../../ui/index.js";
 import { useSchedules, type EditFocus } from "../../../hooks/useSchedules.js";
 import { ScheduleItem } from "./ScheduleItem.js";
@@ -24,18 +25,14 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
     viewingResult,
     editMode,
     editName,
-    editNameCursorPos,
     editText,
-    cursorPos,
     saving,
     setSelectedIndex,
     setConfirmDelete,
     setViewingResult,
     setEditMode,
     setEditName,
-    setEditNameCursorPos,
     setEditText,
-    setCursorPos,
     setLoading,
     setEditFocus,
     setEditNotifiers,
@@ -55,19 +52,8 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
 
   const [detailScroll, setDetailScroll] = useState(0);
 
-  const nameInput = useTextInput({
-    text: editName,
-    cursorPos: editNameCursorPos,
-    setText: setEditName,
-    setCursorPos: setEditNameCursorPos,
-  });
-
-  const textInput = useTextInput({
-    text: editText,
-    cursorPos,
-    setText: setEditText,
-    setCursorPos,
-  });
+  const nameRef = useRef<InputRenderable | null>(null);
+  const descRef = useRef<TextareaRenderable | null>(null);
 
   const handleKeypress = useCallback(
     (key: Key) => {
@@ -89,15 +75,16 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
       // Edit mode
       if (editMode) {
         if (key.ctrl && key.name === "s") {
-          handleSave();
+          handleSave(
+            nameRef.current?.value,
+            descRef.current?.plainText,
+          );
           return;
         }
         if (key.name === "escape") {
           setEditMode(false);
           setEditName("");
-          setEditNameCursorPos(0);
           setEditText("");
-          setCursorPos(0);
           setEditFocus("name");
           return;
         }
@@ -118,24 +105,16 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
           } else if (key.name === "down" || key.name === "j") {
             setEditNotifierCursor((i) => Math.min(availableNotifiers.length - 1, i + 1));
           } else if (key.name === "space" || key.name === "return") {
-            const name = availableNotifiers[editNotifierCursor];
-            if (name) {
+            const notifier = availableNotifiers[editNotifierCursor];
+            if (notifier) {
               setEditNotifiers((prev) =>
-                prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+                prev.includes(notifier.name) ? prev.filter((n) => n !== notifier.name) : [...prev, notifier.name]
               );
             }
           }
-          return;
         }
 
-        if (editFocus === "name") {
-          if (key.name !== "return") {
-            nameInput.handleKey(key);
-          }
-          return;
-        }
-
-        textInput.handleKey(key);
+        // name/description: native input/textarea handles text editing
         return;
       }
 
@@ -165,10 +144,9 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
         if (task) {
           setEditMode(true);
           setEditName(task.name);
-          setEditNameCursorPos(task.name.length);
           setEditText(task.description);
-          setCursorPos(task.description.length);
-          setEditNotifiers(task.notifiers.filter((n) => availableNotifiers.includes(n)));
+          const notifierNames = availableNotifiers.map((n) => n.name);
+          setEditNotifiers(task.notifiers.filter((n) => notifierNames.includes(n)));
           setEditNotifierCursor(0);
           setEditFocus("name");
         }
@@ -188,9 +166,9 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
       confirmDelete, handleDelete, loadSchedules, handleViewResult, handleRun,
       editMode, editFocus, editNotifierCursor, availableNotifiers, handleSave,
       viewingResult,
-      setSelectedIndex, setConfirmDelete, setViewingResult, setEditMode, setEditName, setEditNameCursorPos,
-      setEditText, setCursorPos, setEditFocus, setEditNotifiers, setEditNotifierCursor,
-      setLoading, nameInput, textInput,
+      setSelectedIndex, setConfirmDelete, setViewingResult, setEditMode, setEditName,
+      setEditText, setEditFocus, setEditNotifiers, setEditNotifierCursor,
+      setLoading,
     ]
   );
 
@@ -245,17 +223,15 @@ export function SchedulesViewer({ config, onClose }: SchedulesViewerProps) {
           return (
             <ScheduleEditView
               editName={editName}
-              editNameCursorPos={editNameCursorPos}
               editText={editText}
-              cursorPos={cursorPos}
-              setEditText={setEditText}
-              setCursorPos={setCursorPos}
               saving={saving}
               width={width}
               editFocus={editFocus}
               availableNotifiers={availableNotifiers}
               editNotifiers={editNotifiers}
               editNotifierCursor={editNotifierCursor}
+              nameRef={(r) => { nameRef.current = r; }}
+              descRef={(r) => { descRef.current = r; }}
             />
           );
         }

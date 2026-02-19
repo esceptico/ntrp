@@ -118,6 +118,33 @@ export function useTextInput({
         return true;
       }
 
+      if (key.name === "up" || key.name === "down") {
+        const v = textRef.current;
+        const lines = v.split("\n");
+        let charCount = 0;
+        let curLine = 0;
+        let curCol = 0;
+        for (let i = 0; i < lines.length; i++) {
+          const len = lines[i].length + 1;
+          if (charCount + len > pos) {
+            curLine = i;
+            curCol = pos - charCount;
+            break;
+          }
+          charCount += len;
+        }
+        if (key.name === "up" && curLine > 0) {
+          let newPos = 0;
+          for (let i = 0; i < curLine - 1; i++) newPos += lines[i].length + 1;
+          moveCursor(newPos + Math.min(curCol, lines[curLine - 1].length));
+        } else if (key.name === "down" && curLine < lines.length - 1) {
+          let newPos = 0;
+          for (let i = 0; i <= curLine; i++) newPos += lines[i].length + 1;
+          moveCursor(newPos + Math.min(curCol, lines[curLine + 1].length));
+        }
+        return true;
+      }
+
       if (key.name === "left") {
         moveCursor(Math.max(0, pos - 1));
         return true;

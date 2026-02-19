@@ -11,6 +11,7 @@ import {
   getNotifiers,
   setScheduleNotifiers,
   type Schedule,
+  type NotifierSummary,
 } from "../api/client.js";
 
 export type EditFocus = "name" | "description" | "notifiers";
@@ -24,11 +25,9 @@ interface UseSchedulesResult {
   viewingResult: Schedule | null;
   editMode: boolean;
   editName: string;
-  editNameCursorPos: number;
   editText: string;
-  cursorPos: number;
   saving: boolean;
-  availableNotifiers: string[];
+  availableNotifiers: NotifierSummary[];
   editFocus: EditFocus;
   editNotifiers: string[];
   editNotifierCursor: number;
@@ -37,9 +36,7 @@ interface UseSchedulesResult {
   setViewingResult: React.Dispatch<React.SetStateAction<Schedule | null>>;
   setEditMode: React.Dispatch<React.SetStateAction<boolean>>;
   setEditName: React.Dispatch<React.SetStateAction<string>>;
-  setEditNameCursorPos: React.Dispatch<React.SetStateAction<number>>;
   setEditText: React.Dispatch<React.SetStateAction<string>>;
-  setCursorPos: React.Dispatch<React.SetStateAction<number>>;
   setSaving: React.Dispatch<React.SetStateAction<boolean>>;
   setSchedules: React.Dispatch<React.SetStateAction<Schedule[]>>;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
@@ -52,7 +49,7 @@ interface UseSchedulesResult {
   handleToggleWritable: () => Promise<void>;
   handleRun: () => Promise<void>;
   handleViewResult: () => Promise<void>;
-  handleSave: () => Promise<void>;
+  handleSave: (name?: string, description?: string) => Promise<void>;
 }
 
 export function useSchedules(config: Config): UseSchedulesResult {
@@ -64,20 +61,14 @@ export function useSchedules(config: Config): UseSchedulesResult {
   const [viewingResult, setViewingResult] = useState<Schedule | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [editName, setEditName] = useState("");
-  const [editNameCursorPos, setEditNameCursorPos] = useState(0);
   const [editText, setEditText] = useState("");
-  const [cursorPos, setCursorPos] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [availableNotifiers, setAvailableNotifiers] = useState<string[]>([]);
+  const [availableNotifiers, setAvailableNotifiers] = useState<NotifierSummary[]>([]);
   const [editFocus, setEditFocus] = useState<EditFocus>("name");
   const [editNotifiers, setEditNotifiers] = useState<string[]>([]);
   const [editNotifierCursor, setEditNotifierCursor] = useState(0);
 
   const loadedRef = useRef(false);
-  const editNameRef = useRef(editName);
-  editNameRef.current = editName;
-  const editTextRef = useRef(editText);
-  editTextRef.current = editText;
   const editNotifiersRef = useRef(editNotifiers);
   editNotifiersRef.current = editNotifiers;
 
@@ -170,40 +161,38 @@ export function useSchedules(config: Config): UseSchedulesResult {
     }
   }, [config, schedules, selectedIndex]);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (name?: string, description?: string) => {
     const task = schedules[selectedIndex];
     if (!task) return;
-    const name = editNameRef.current;
-    const text = editTextRef.current;
+    const saveName = name ?? editName;
+    const saveText = description ?? editText;
     const notifiers = editNotifiersRef.current;
     setSaving(true);
     try {
       await Promise.all([
-        updateSchedule(config, task.task_id, { name, description: text }),
+        updateSchedule(config, task.task_id, { name: saveName, description: saveText }),
         setScheduleNotifiers(config, task.task_id, notifiers),
       ]);
       setSchedules((prev) =>
-        prev.map((s) => (s.task_id === task.task_id ? { ...s, name, description: text, notifiers } : s))
+        prev.map((s) => (s.task_id === task.task_id ? { ...s, name: saveName, description: saveText, notifiers } : s))
       );
       setEditMode(false);
       setEditName("");
-      setEditNameCursorPos(0);
       setEditText("");
-      setCursorPos(0);
       setEditFocus("name");
     } catch {
       loadSchedules();
     } finally {
       setSaving(false);
     }
-  }, [config, schedules, selectedIndex, loadSchedules]);
+  }, [config, schedules, selectedIndex, editName, editText, loadSchedules]);
 
   return {
     schedules, selectedIndex, loading, error, confirmDelete, viewingResult,
-    editMode, editName, editNameCursorPos, editText, cursorPos, saving,
+    editMode, editName, editText, saving,
     availableNotifiers, editFocus, editNotifiers, editNotifierCursor,
     setSelectedIndex, setConfirmDelete, setViewingResult, setEditMode,
-    setEditName, setEditNameCursorPos, setEditText, setCursorPos, setSaving,
+    setEditName, setEditText, setSaving,
     setSchedules, setLoading, setEditFocus, setEditNotifiers, setEditNotifierCursor,
     loadSchedules, handleToggle, handleDelete, handleToggleWritable,
     handleRun, handleViewResult, handleSave,

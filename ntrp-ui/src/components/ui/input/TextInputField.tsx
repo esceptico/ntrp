@@ -1,5 +1,4 @@
 import { colors } from "../colors.js";
-import { CURSOR_CHAR } from "../../../lib/constants.js";
 
 interface TextInputFieldProps {
   value: string;
@@ -19,23 +18,27 @@ export function TextInputField({
   textColor = colors.text.primary,
 }: TextInputFieldProps) {
   if (value) {
+    if (showCursor) {
+      const beforeCursor = value.slice(0, cursorPos);
+      const atCursor = value[cursorPos] || " ";
+      const afterCursor = value.slice(cursorPos + 1);
+      return (
+        <text>
+          <span fg={textColor}>{beforeCursor}</span>
+          <span bg={colors.text.primary} fg={colors.contrast}>{atCursor}</span>
+          <span fg={textColor}>{afterCursor}</span>
+        </text>
+      );
+    }
     return (
-      <text>
-        <span fg={textColor}>
-          {value.slice(0, cursorPos)}
-          {showCursor && CURSOR_CHAR}
-          {value.slice(cursorPos)}
-        </span>
-      </text>
+      <text><span fg={textColor}>{value}</span></text>
     );
   }
 
   return (
     <text>
-      <span fg={placeholderColor}>
-        {placeholder}
-        {showCursor && CURSOR_CHAR}
-      </span>
+      <span fg={placeholderColor}>{placeholder}</span>
+      {showCursor && <span bg={colors.text.primary} fg={colors.contrast}>{" "}</span>}
     </text>
   );
 }
