@@ -1,5 +1,5 @@
-import markdown as md
 import aiohttp
+import markdown as md
 
 from ntrp.logging import get_logger
 

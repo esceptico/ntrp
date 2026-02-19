@@ -6,9 +6,11 @@ from uuid import uuid4
 
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
-from ntrp.events.internal import RunCompleted, RunStarted, ScheduleCompleted
+from ntrp.events.internal import RunCompleted, RunStarted
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
+from ntrp.notifiers.base import Notifier
+from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.schedule.models import Recurrence, ScheduledTask, compute_next_run
 from ntrp.schedule.store import ScheduleStore
 from ntrp.tools.executor import ToolExecutor
@@ -27,6 +29,8 @@ class SchedulerDeps:
     channel: Channel
     source_details: Callable[[], dict[str, dict]]
     create_session: Callable[[], SessionState]
+    get_notifiers: Callable[[], dict[str, Notifier]]
+    notification_log: NotificationLogStore
     get_explore_model: Callable[[], str | None] = lambda: None
 
 
@@ -123,6 +127,7 @@ class Scheduler:
         from ntrp.core.prompts import build_system_prompt, scheduled_task_suffix
         from ntrp.memory.formatting import format_session_memory
         from ntrp.tools.directives import load_directives
+        from ntrp.tools.notify import NotifyTool
 
         _logger.info("Executing scheduled task %s: %s", task.task_id, task.description[:80])
 
@@ -138,13 +143,23 @@ class Scheduler:
             memory_context=memory_context,
             directives=load_directives(),
         )
-        system_prompt += scheduled_task_suffix(bool(task.notifiers))
+        system_prompt += scheduled_task_suffix()
 
         session_state = self.deps.create_session()
-        tools = self.deps.executor.get_tools() if task.writable else self.deps.executor.get_tools(mutates=False)
+        executor = self.deps.executor
+        tools = executor.get_tools() if task.writable else executor.get_tools(mutates=False)
+
+        if task.notifiers:
+            notifier_registry = self.deps.get_notifiers()
+            resolved = [notifier_registry[name] for name in task.notifiers if name in notifier_registry]
+            if resolved:
+                notify_tool = NotifyTool(resolved, self.deps.notification_log, task.task_id)
+                run_registry = executor.registry.copy_with(notify_tool)
+                executor = executor.with_registry(run_registry)
+                tools = [*tools, notify_tool.to_dict()]
 
         agent = create_agent(
-            executor=self.deps.executor,
+            executor=executor,
             model=self.deps.get_model(),
             tools=tools,
             system_prompt=system_prompt,
@@ -171,8 +186,6 @@ class Scheduler:
                     result=result,
                 )
             )
-
-        self.deps.channel.publish(ScheduleCompleted(task=task, result=result))
 
         return result
 

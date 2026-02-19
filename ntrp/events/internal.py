@@ -1,7 +1,5 @@
 from dataclasses import dataclass, field
 
-from ntrp.schedule.models import ScheduledTask
-
 # --- Run lifecycle ---
 
 
@@ -87,15 +85,6 @@ class IndexingCompleted:
 @dataclass(frozen=True)
 class SourceChanged:
     source_name: str
-
-
-# --- Schedule ---
-
-
-@dataclass(frozen=True)
-class ScheduleCompleted:
-    task: ScheduledTask
-    result: str | None
 
 
 # --- Skills ---

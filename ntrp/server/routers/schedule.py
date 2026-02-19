@@ -120,7 +120,7 @@ async def list_notifiers():
     runtime = get_runtime()
     if not runtime.notifier_service:
         return {"notifiers": []}
-    return {"notifiers": runtime.notifier_service.list_names()}
+    return {"notifiers": runtime.notifier_service.list_summary()}
 
 
 @router.put("/schedules/{task_id}/notifiers")

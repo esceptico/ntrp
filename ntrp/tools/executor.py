@@ -19,7 +19,7 @@ class ToolExecutor:
         working_dir: str | None = None,
         search_index: Any | None = None,
         schedule_store: ScheduleStore | None = None,
-        default_notifiers: list[str] | None = None,
+        available_notifiers: dict[str, str] | None = None,
         registry: ToolRegistry | None = None,
         skill_registry: SkillRegistry | None = None,
     ):
@@ -35,13 +35,23 @@ class ToolExecutor:
             memory=memory,
             search_index=search_index,
             schedule_store=schedule_store,
-            default_notifiers=default_notifiers,
+            available_notifiers=available_notifiers,
             working_dir=working_dir,
             skill_registry=skill_registry,
         )
         for create_tools in TOOL_FACTORIES:
             for tool in create_tools(deps):
                 self.registry.register(tool)
+
+    def with_registry(self, registry: ToolRegistry) -> "ToolExecutor":
+        """Create a shallow copy of this executor with a different registry."""
+        clone = ToolExecutor.__new__(ToolExecutor)
+        clone.sources = self.sources
+        clone.memory = self.memory
+        clone.model = self.model
+        clone.search_index = self.search_index
+        clone.registry = registry
+        return clone
 
     async def execute(self, tool_name: str, arguments: dict, execution: ToolExecution) -> ToolResult:
         tool = self.registry.get(tool_name)

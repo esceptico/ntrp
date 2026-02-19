@@ -15,6 +15,7 @@ from ntrp.memory.indexable import MemoryIndexable
 from ntrp.memory.service import MemoryService
 from ntrp.notifiers.base import Notifier
 from ntrp.notifiers.factory import create_notifier
+from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.notifiers.service import NotifierService
 from ntrp.notifiers.store import NotifierStore
 from ntrp.schedule.scheduler import Scheduler, SchedulerDeps
@@ -66,6 +67,7 @@ class Runtime:
         self.skill_service: SkillService | None = None
         self.notifiers: dict[str, Notifier] = {}
         self.notifier_service: NotifierService | None = None
+        self.notification_log: NotificationLogStore | None = None
         self.dashboard = DashboardCollector()
         self.config_service: ConfigService | None = None
         self._connected = False
@@ -126,13 +128,19 @@ class Runtime:
         self.start_indexing()
 
     def rebuild_executor(self) -> None:
+        notifier_map: dict[str, str] | None = None
+        if self.notifiers and self.notifier_store:
+            notifier_map = {}
+            for name, notifier in self.notifiers.items():
+                notifier_map[name] = notifier.channel
+
         self.executor = ToolExecutor(
             sources=self.source_mgr.sources,
             memory=self.memory,
             model=self.config.chat_model,
             search_index=self.indexer.index,
             schedule_store=self.schedule_store,
-            default_notifiers=list(self.notifiers.keys()) or None,
+            available_notifiers=notifier_map,
             skill_registry=self.skill_registry if self.skill_registry else None,
         )
         self.tools = self.executor.get_tools()
@@ -169,6 +177,9 @@ class Runtime:
 
         self.notifier_store = NotifierStore(self._sessions_conn)
         await self.notifier_store.init_schema()
+
+        self.notification_log = NotificationLogStore(self._sessions_conn)
+        await self.notification_log.init_schema()
 
         await self.indexer.connect()
 
@@ -285,7 +296,7 @@ class Runtime:
     # --- Background tasks ---
 
     def start_scheduler(self) -> None:
-        if self.schedule_store and self.executor:
+        if self.schedule_store and self.executor and self.notification_log:
             deps = SchedulerDeps(
                 executor=self.executor,
                 memory=lambda: self.memory,
@@ -294,6 +305,8 @@ class Runtime:
                 channel=self.channel,
                 source_details=self.get_source_details,
                 create_session=self.create_session,
+                get_notifiers=lambda: self.notifiers,
+                notification_log=self.notification_log,
                 get_explore_model=lambda: self.config.explore_model,
             )
             self.scheduler = Scheduler(deps, self.schedule_store)

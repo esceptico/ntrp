@@ -12,7 +12,7 @@ from ntrp.tools.core.context import ToolExecution
 SCHEDULE_TASK_DESCRIPTION = (
     "Schedule a task for the agent to run at a specific time. "
     "The task runs autonomously — read-only by default, set writable=true for memory/note writes. "
-    "Results are stored on the task and optionally sent via configured notifiers."
+    "If the user wants to be notified, set notifiers to the relevant channel names."
 )
 
 LIST_SCHEDULES_DESCRIPTION = "List all scheduled tasks with their status, timing, and next run."
@@ -47,20 +47,30 @@ class ScheduleTaskInput(BaseModel):
         description="How often: once, daily, weekdays (Mon-Fri), weekly",
         json_schema_extra={"enum": ["once", "daily", "weekdays", "weekly"]},
     )
-    notify: bool = Field(default=False, description="Send results via configured notifiers (default: false)")
+    notifiers: list[str] = Field(
+        default_factory=list,
+        description="Notifier channel names to use for this task (e.g. ['work-telegram'])",
+    )
     writable: bool = Field(default=False, description="Allow task to write to memory and notes (default: false)")
 
 
 class ScheduleTaskTool(Tool):
     name = "schedule_task"
     display_name = "ScheduleTask"
-    description = SCHEDULE_TASK_DESCRIPTION
     mutates = True
     input_model = ScheduleTaskInput
 
-    def __init__(self, store: ScheduleStore, default_notifiers: list[str] | None = None):
+    def __init__(self, store: ScheduleStore, available_notifiers: dict[str, str] | None = None):
         self.store = store
-        self.default_notifiers = default_notifiers or []
+        self._available_notifiers = available_notifiers or {}
+        self.description = self._build_description()
+
+    def _build_description(self) -> str:
+        desc = SCHEDULE_TASK_DESCRIPTION
+        if self._available_notifiers:
+            items = ", ".join(f"{name} ({ntype})" for name, ntype in self._available_notifiers.items())
+            desc += f"\nAvailable notifiers: {items}"
+        return desc
 
     async def approval_info(
         self,
@@ -68,7 +78,7 @@ class ScheduleTaskTool(Tool):
         description: str,
         time: str,
         recurrence: str,
-        notify: bool = False,
+        notifiers: list[str] | None = None,
         writable: bool = False,
         **kwargs: Any,
     ) -> ApprovalInfo | None:
@@ -86,8 +96,8 @@ class ScheduleTaskTool(Tool):
         next_run = compute_next_run(time_normalized, rec, after=now)
 
         preview = f"Time: {time_normalized} ({rec.value})\nNext run: {next_run.strftime('%Y-%m-%d %H:%M')}"
-        if notify and self.default_notifiers:
-            preview += f"\nNotify: {', '.join(self.default_notifiers)}"
+        if notifiers:
+            preview += f"\nNotify: {', '.join(notifiers)}"
         if writable:
             preview += "\nWritable: yes"
 
@@ -100,7 +110,7 @@ class ScheduleTaskTool(Tool):
         description: str,
         time: str,
         recurrence: str,
-        notify: bool = False,
+        notifiers: list[str] | None = None,
         writable: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
@@ -126,7 +136,16 @@ class ScheduleTaskTool(Tool):
                 is_error=True,
             )
 
-        notifiers = list(self.default_notifiers) if notify else []
+        notifier_list = notifiers or []
+        unknown = [n for n in notifier_list if n not in self._available_notifiers]
+        if unknown:
+            return ToolResult(
+                content=f"Error: unknown notifier(s): {', '.join(unknown)}. "
+                f"Available: {', '.join(self._available_notifiers) or 'none'}",
+                preview="Unknown notifier",
+                is_error=True,
+            )
+
         now = datetime.now(UTC)
         next_run = compute_next_run(time_normalized, rec, after=now)
 
@@ -140,7 +159,7 @@ class ScheduleTaskTool(Tool):
             created_at=now,
             next_run_at=next_run,
             last_run_at=None,
-            notifiers=notifiers,
+            notifiers=notifier_list,
             last_result=None,
             running_since=None,
             writable=bool(writable),
@@ -148,7 +167,7 @@ class ScheduleTaskTool(Tool):
 
         await self.store.save(task)
 
-        notify_line = f"\nNotify: {', '.join(notifiers)}" if notifiers else ""
+        notify_line = f"\nNotify: {', '.join(notifier_list)}" if notifier_list else ""
         return ToolResult(
             content=f"Scheduled: {description}\n"
             f"ID: {task.task_id}\n"

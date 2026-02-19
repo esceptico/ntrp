@@ -10,13 +10,11 @@ from ntrp.events.internal import (
     NotifierChanged,
     RunCompleted,
     RunStarted,
-    ScheduleCompleted,
     SkillChanged,
     SourceChanged,
     ToolExecuted,
 )
 from ntrp.memory.chat_extraction import make_chat_extraction_handler
-from ntrp.notifiers.dispatcher import make_schedule_dispatcher
 from ntrp.sources.base import Indexable
 
 if TYPE_CHECKING:
@@ -86,9 +84,6 @@ def wire_events(runtime: "Runtime") -> None:
 
     # Notifier changes → rebuild notifiers + executor
     ch.subscribe(NotifierChanged, lambda e: _on_notifier_changed(runtime, e))
-
-    # Schedule notifications
-    ch.subscribe(ScheduleCompleted, make_schedule_dispatcher(lambda: runtime.notifiers))
 
     # Auto-extract facts from compressed context
     ch.subscribe(

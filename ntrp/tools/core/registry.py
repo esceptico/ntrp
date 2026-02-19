@@ -15,6 +15,15 @@ class ToolRegistry:
         self._tools[tool.name] = tool
         self._schemas[tool.name] = tool.to_dict()
 
+    def copy_with(self, *extra_tools: Tool) -> "ToolRegistry":
+        """Create a shallow copy of this registry with additional tools."""
+        registry = ToolRegistry()
+        registry._tools = dict(self._tools)
+        registry._schemas = dict(self._schemas)
+        for tool in extra_tools:
+            registry.register(tool)
+        return registry
+
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
 
