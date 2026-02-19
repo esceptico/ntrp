@@ -65,7 +65,6 @@ class FactMemory:
         self.dreams = DreamRepository(conn)
         self.embedder = embedder or Embedder(embedding)
         self.extractor = extractor or Extractor(extraction_model)
-        self.extraction_model = extraction_model
         self.channel = channel
         self._consolidation_task: asyncio.Task | None = None
         self._reembed_task: asyncio.Task | None = None
@@ -259,6 +258,17 @@ class FactMemory:
     @property
     def reembed_running(self) -> bool:
         return self._reembed_task is not None and not self._reembed_task.done()
+
+    @property
+    def reembed_progress(self) -> dict | None:
+        return self._reembed_progress
+
+    @property
+    def extraction_model(self) -> str:
+        return self.extractor.model
+
+    def update_extraction_model(self, model: str) -> None:
+        self.extractor.model = model
 
     def start_reembed(self, embedding: EmbeddingConfig, *, rebuild: bool = False) -> None:
         if self._reembed_task and not self._reembed_task.done():
