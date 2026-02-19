@@ -18,7 +18,8 @@ from ntrp.notifiers.factory import create_notifier
 from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.notifiers.service import NotifierService
 from ntrp.notifiers.store import NotifierStore
-from ntrp.schedule.scheduler import Scheduler, SchedulerDeps
+from ntrp.operator import OperatorDeps
+from ntrp.schedule.scheduler import Scheduler
 from ntrp.schedule.service import ScheduleService
 from ntrp.schedule.store import ScheduleStore
 from ntrp.server.dashboard import DashboardCollector
@@ -297,7 +298,7 @@ class Runtime:
 
     def start_scheduler(self) -> None:
         if self.schedule_store and self.executor and self.notification_log:
-            deps = SchedulerDeps(
+            deps = OperatorDeps(
                 executor=self.executor,
                 memory=lambda: self.memory,
                 get_model=lambda: self.config.chat_model,

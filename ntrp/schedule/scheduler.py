@@ -1,41 +1,18 @@
 import asyncio
-from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime
-from uuid import uuid4
 
-from ntrp.channel import Channel
-from ntrp.context.models import SessionState
-from ntrp.events.internal import RunCompleted, RunStarted
 from ntrp.logging import get_logger
-from ntrp.memory.facts import FactMemory
-from ntrp.notifiers.base import Notifier
-from ntrp.notifiers.log_store import NotificationLogStore
+from ntrp.operator import OperatorDeps, RunRequest, run_agent
 from ntrp.schedule.models import Recurrence, ScheduledTask, compute_next_run
 from ntrp.schedule.store import ScheduleStore
-from ntrp.tools.executor import ToolExecutor
 
 _logger = get_logger(__name__)
 
 POLL_INTERVAL = 60
 
 
-@dataclass(frozen=True)
-class SchedulerDeps:
-    executor: ToolExecutor
-    memory: Callable[[], FactMemory | None]
-    get_model: Callable[[], str]
-    max_depth: int
-    channel: Channel
-    source_details: Callable[[], dict[str, dict]]
-    create_session: Callable[[], SessionState]
-    get_notifiers: Callable[[], dict[str, Notifier]]
-    notification_log: NotificationLogStore
-    get_explore_model: Callable[[], str | None] = lambda: None
-
-
 class Scheduler:
-    def __init__(self, deps: SchedulerDeps, store: ScheduleStore):
+    def __init__(self, deps: OperatorDeps, store: ScheduleStore):
         self.deps = deps
         self.store = store
         self._task: asyncio.Task | None = None
@@ -122,72 +99,18 @@ class Scheduler:
             await self.store.clear_running(task.task_id)
 
     async def _run_agent(self, task: ScheduledTask) -> str | None:
-        # Delayed imports: scheduler → agent → tools creates a circular import chain
-        from ntrp.core.factory import create_agent
-        from ntrp.core.prompts import build_system_prompt, scheduled_task_suffix
-        from ntrp.memory.formatting import format_session_memory
-        from ntrp.tools.directives import load_directives
-        from ntrp.tools.notify import NotifyTool
+        from ntrp.core.prompts import scheduled_task_suffix
 
         _logger.info("Executing scheduled task %s: %s", task.task_id, task.description[:80])
-
-        run_id = str(uuid4())[:8]
-        memory = self.deps.memory()
-        memory_context = None
-        if memory:
-            observations, user_facts = await memory.get_context()
-            memory_context = format_session_memory(observations=observations, user_facts=user_facts)
-
-        system_prompt = build_system_prompt(
-            source_details=self.deps.source_details(),
-            memory_context=memory_context,
-            directives=load_directives(),
+        request = RunRequest(
+            prompt=task.description,
+            prompt_suffix=scheduled_task_suffix(),
+            writable=task.writable,
+            notifiers=task.notifiers,
+            source_id=task.task_id,
         )
-        system_prompt += scheduled_task_suffix()
-
-        session_state = self.deps.create_session()
-        executor = self.deps.executor
-        tools = executor.get_tools() if task.writable else executor.get_tools(mutates=False)
-
-        if task.notifiers:
-            notifier_registry = self.deps.get_notifiers()
-            resolved = [notifier_registry[name] for name in task.notifiers if name in notifier_registry]
-            if resolved:
-                notify_tool = NotifyTool(resolved, self.deps.notification_log, task.task_id)
-                run_registry = executor.registry.copy_with(notify_tool)
-                executor = executor.with_registry(run_registry)
-                tools = [*tools, notify_tool.to_dict()]
-
-        agent = create_agent(
-            executor=executor,
-            model=self.deps.get_model(),
-            tools=tools,
-            system_prompt=system_prompt,
-            session_state=session_state,
-            memory=memory,
-            channel=self.deps.channel,
-            max_depth=self.deps.max_depth,
-            explore_model=self.deps.get_explore_model(),
-            run_id=run_id,
-        )
-
-        self.deps.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
-        result: str | None = None
-        try:
-            result = await agent.run(task.description)
-        finally:
-            self.deps.channel.publish(
-                RunCompleted(
-                    run_id=run_id,
-                    prompt_tokens=agent.total_input_tokens,
-                    completion_tokens=agent.total_output_tokens,
-                    cache_read_tokens=agent.total_cache_read_tokens,
-                    cache_write_tokens=agent.total_cache_write_tokens,
-                    result=result,
-                )
-            )
-
-        return result
+        result = await run_agent(self.deps, request)
+        return result.output
 
     async def _execute_task(self, task: ScheduledTask) -> None:
         result = await self._run_agent(task)
