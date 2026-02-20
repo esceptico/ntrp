@@ -302,8 +302,12 @@ export const InputArea = memo(function InputArea({
                   <span fg={colors.text.disabled}> side panel</span>
                 </text>
                 <text>
-                  <span fg={colors.footer}>shift+tab</span>
+                  <span fg={colors.footer}>tab tab</span>
                   <span fg={colors.text.disabled}> approvals</span>
+                </text>
+                <text>
+                  <span fg={colors.footer}>shift+tab</span>
+                  <span fg={colors.text.disabled}> switch chat</span>
                 </text>
               </box>
             </>

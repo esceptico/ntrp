@@ -214,6 +214,9 @@ function AppContent({
 
   const closeView = useCallback(() => setViewMode("chat"), []);
 
+  const tabPendingRef = useRef(false);
+  const tabTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleGlobalKeypress = useCallback(
     async (key: Key) => {
       if (key.ctrl && key.name === "c") {
@@ -234,11 +237,42 @@ function AppContent({
       if (key.name === "escape" && isStreaming) {
         cancel();
       }
-      if (key.shift && key.name === "tab" && !showSettings) {
-        toggleSkipApprovals();
+      if (key.shift && key.name === "tab" && !showSettings && !isStreaming && viewMode === "chat") {
+        const sessions = sidebarData.sessions;
+        if (sessions.length < 2) return;
+        const currentIdx = sessions.findIndex(s => s.session_id === sessionId);
+        const nextIdx = (currentIdx + 1) % sessions.length;
+        const target = sessions[nextIdx];
+        if (target) {
+          const result = await switchSession(target.session_id);
+          if (result) {
+            const historyMessages: Message[] = result.history.map((msg, i) => ({
+              id: `h-${i}`,
+              role: msg.role,
+              content: msg.content,
+            }));
+            resetForSessionSwitch(historyMessages);
+            refreshSidebar();
+          }
+        }
+        return;
+      }
+      if (key.name === "tab" && !key.shift && !key.ctrl && !key.meta && !showSettings) {
+        if (tabPendingRef.current) {
+          tabPendingRef.current = false;
+          if (tabTimeoutRef.current) clearTimeout(tabTimeoutRef.current);
+          toggleSkipApprovals();
+        } else {
+          tabPendingRef.current = true;
+          if (tabTimeoutRef.current) clearTimeout(tabTimeoutRef.current);
+          tabTimeoutRef.current = setTimeout(() => {
+            tabPendingRef.current = false;
+          }, 500);
+        }
+        return;
       }
     },
-    [renderer, isStreaming, cancel, toggleSkipApprovals, showSettings, viewMode, createNewSession, resetForSessionSwitch, refreshSidebar]
+    [renderer, isStreaming, cancel, toggleSkipApprovals, showSettings, viewMode, createNewSession, resetForSessionSwitch, refreshSidebar, sidebarData.sessions, sessionId, switchSession]
   );
 
   useKeypress(handleGlobalKeypress, { isActive: true });
