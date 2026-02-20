@@ -174,4 +174,11 @@ def get_config() -> Config:
 
     # Build config: init args (settings.json) > env vars > defaults
     overrides = {k: settings[k] for k in PERSIST_KEYS if k in settings}
-    return Config(**overrides)  # type: ignore - pydantic handles validation
+    config = Config(**overrides)  # type: ignore - pydantic handles validation
+
+    # Persist defaulted explore_model so it stops mirroring chat_model on reload
+    if "explore_model" not in settings:
+        settings["explore_model"] = config.explore_model
+        save_user_settings(settings)
+
+    return config
