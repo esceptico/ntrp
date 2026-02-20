@@ -85,6 +85,8 @@ class EmbeddingModel:
     id: str
     provider: Provider
     dim: int
+    base_url: str | None = None
+    api_key_env: str | None = None
 
 
 EMBEDDING_DEFAULTS = [
@@ -119,7 +121,13 @@ def load_custom_models() -> None:
         _logger.warning("%s: expected a JSON object, got %s", MODELS_PATH, type(raw).__name__)
         return
 
+    embedding_raw = {}
     for model_id, entry in raw.items():
+        if model_id == "embedding":
+            if isinstance(entry, dict):
+                embedding_raw = entry
+            continue
+
         if not isinstance(entry, dict):
             _logger.warning("Skipping custom model %s: expected object", model_id)
             continue
@@ -143,6 +151,27 @@ def load_custom_models() -> None:
         _models[model_id] = model
         _logger.info("Registered custom model: %s (base_url=%s)", model_id, model.base_url)
 
+    for model_id, entry in embedding_raw.items():
+        if not isinstance(entry, dict):
+            _logger.warning("Skipping custom embedding model %s: expected object", model_id)
+            continue
+        if "base_url" not in entry:
+            _logger.warning("Skipping custom embedding model %s: missing base_url", model_id)
+            continue
+        if "dim" not in entry:
+            _logger.warning("Skipping custom embedding model %s: missing dim", model_id)
+            continue
+
+        emb = EmbeddingModel(
+            id=model_id,
+            provider=Provider.CUSTOM,
+            dim=int(entry["dim"]),
+            base_url=entry["base_url"],
+            api_key_env=entry.get("api_key_env"),
+        )
+        _embedding_models[model_id] = emb
+        _logger.info("Registered custom embedding model: %s (base_url=%s)", model_id, emb.base_url)
+
 
 def get_model(model_id: str) -> Model:
     if model_id not in _models:
@@ -162,3 +191,11 @@ def list_models() -> list[str]:
 
 def get_models() -> dict[str, Model]:
     return _models
+
+
+def list_embedding_models() -> list[str]:
+    return list(_embedding_models)
+
+
+def get_embedding_models() -> dict[str, EmbeddingModel]:
+    return _embedding_models

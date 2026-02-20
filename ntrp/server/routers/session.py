@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
 
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
-from ntrp.llm.models import EMBEDDING_DEFAULTS, get_model, list_models
+from ntrp.llm.models import get_model, list_embedding_models, list_models
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
     ClearSessionRequest,
@@ -195,10 +195,10 @@ async def update_config(req: UpdateConfigRequest):
 
 
 @router.get("/models/embedding")
-async def list_embedding_models():
+async def get_embedding_models():
     runtime = get_runtime()
     return {
-        "models": [m.id for m in EMBEDDING_DEFAULTS],
+        "models": list_embedding_models(),
         "current": runtime.config.embedding_model,
     }
 

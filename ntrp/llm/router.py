@@ -3,7 +3,7 @@ import os
 from ntrp.llm.anthropic import AnthropicClient
 from ntrp.llm.base import CompletionClient, EmbeddingClient
 from ntrp.llm.gemini import GeminiClient
-from ntrp.llm.models import Provider, get_embedding_model, get_model, get_models
+from ntrp.llm.models import Provider, get_embedding_model, get_embedding_models, get_model, get_models
 from ntrp.llm.openai import OpenAIClient
 
 _completion_clients: dict[str, CompletionClient] = {}
@@ -18,6 +18,9 @@ def init(config) -> None:
     _api_keys[Provider.OPENAI] = config.openai_api_key
     _api_keys[Provider.GOOGLE] = config.gemini_api_key
     for model in get_models().values():
+        if model.provider == Provider.CUSTOM and model.api_key_env:
+            _api_keys[model.id] = os.environ.get(model.api_key_env)
+    for model in get_embedding_models().values():
         if model.provider == Provider.CUSTOM and model.api_key_env:
             _api_keys[model.id] = os.environ.get(model.api_key_env)
 
@@ -43,7 +46,7 @@ def get_completion_client(model_id: str) -> CompletionClient:
 
 def get_embedding_client(model_id: str) -> EmbeddingClient:
     model = get_embedding_model(model_id)
-    cache_key = model.provider.value
+    cache_key = model.id if model.provider == Provider.CUSTOM else model.provider.value
     if cache_key not in _embedding_clients:
         key = _api_keys.get(model.provider)
         match model.provider:
@@ -51,6 +54,8 @@ def get_embedding_client(model_id: str) -> EmbeddingClient:
                 _embedding_clients[cache_key] = OpenAIClient(api_key=key)
             case Provider.GOOGLE:
                 _embedding_clients[cache_key] = GeminiClient(api_key=key)
+            case Provider.CUSTOM:
+                _embedding_clients[cache_key] = OpenAIClient(base_url=model.base_url, api_key=_api_keys.get(model.id))
             case _:
                 raise ValueError(f"Provider {model.provider} does not support embeddings")
     return _embedding_clients[cache_key]

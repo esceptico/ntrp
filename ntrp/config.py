@@ -5,7 +5,7 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ntrp.embedder import EmbeddingConfig
-from ntrp.llm.models import EMBEDDING_DEFAULTS, get_models, load_custom_models
+from ntrp.llm.models import get_embedding_model, get_embedding_models, get_models, load_custom_models
 from ntrp.logging import get_logger
 
 NTRP_DIR = Path.home() / ".ntrp"
@@ -100,9 +100,9 @@ class Config(BaseSettings):
     @field_validator("embedding_model")
     @classmethod
     def _validate_embedding_model(cls, v: str) -> str:
-        valid = {m.id for m in EMBEDDING_DEFAULTS}
-        if v not in valid:
-            raise ValueError(f"Unsupported embedding model: {v}. Must be one of: {', '.join(valid)}")
+        models = get_embedding_models()
+        if v not in models:
+            raise ValueError(f"Unknown embedding model: {v}. Available: {', '.join(models)}")
         return v
 
     @field_validator("browser", mode="before")
@@ -121,10 +121,10 @@ class Config(BaseSettings):
 
     @property
     def embedding(self) -> EmbeddingConfig:
-        dims = {m.id: m.dim for m in EMBEDDING_DEFAULTS}
+        model = get_embedding_model(self.embedding_model)
         return EmbeddingConfig(
-            model=self.embedding_model,
-            dim=dims[self.embedding_model],
+            model=model.id,
+            dim=model.dim,
         )
 
     @property

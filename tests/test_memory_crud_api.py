@@ -28,9 +28,8 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
     from ntrp.llm.models import EmbeddingModel, Provider
 
     monkeypatch.setattr(ntrp.config, "NTRP_DIR", tmp_path / "db")
-    extended = [*llm_models.EMBEDDING_DEFAULTS, EmbeddingModel("test-embedding", Provider.OPENAI, TEST_EMBEDDING_DIM)]
-    monkeypatch.setattr(llm_models, "EMBEDDING_DEFAULTS", extended)
-    monkeypatch.setattr(ntrp.config, "EMBEDDING_DEFAULTS", extended)
+    test_emb = EmbeddingModel("test-embedding", Provider.OPENAI, TEST_EMBEDDING_DIM)
+    monkeypatch.setitem(llm_models._embedding_models, "test-embedding", test_emb)
 
     test_config = Config(
         vault_path=tmp_path / "vault",
