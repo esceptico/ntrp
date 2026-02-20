@@ -6,8 +6,8 @@
     "dev": "bun --watch run src/index.tsx"
   },
   "dependencies": {
-    "@opentui/core": "latest",
-    "@opentui/react": "latest"
+    "@opentui/core": "^0.1.80",
+    "@opentui/react": "^0.1.80"
   },
   "devDependencies": {
     "@types/bun": "latest",
