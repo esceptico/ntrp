@@ -306,10 +306,6 @@ export function useStreaming({
     const resultText = approved ? "Approved" : feedback || "";
     await submitToolResult(currentRunId, pendingApproval.toolId, resultText, approved, config);
 
-    const statusIcon = result === "reject" ? "\u2717" : "\u2713";
-    const statusText = result === "always" ? "Always allowed" : result === "once" ? "Allowed" : "Rejected";
-    addMessage({ role: "status", content: `${statusIcon} ${statusText}: ${pendingApproval.name}` });
-
     setPendingApproval(null);
     setStatus(Status.THINKING);
   }, [pendingApproval, config, addMessage]);
