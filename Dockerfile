@@ -15,15 +15,19 @@ COPY ntrp ./ntrp
 
 FROM python:3.13-slim
 
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
-COPY --from=build /app/.venv /app/.venv
+RUN groupadd --gid 1000 ntrp \
+    && useradd --uid 1000 --gid ntrp --create-home ntrp \
+    && mkdir -p /app/data /home/ntrp/.ntrp \
+    && chown -R ntrp:ntrp /app /home/ntrp/.ntrp
 
-COPY ntrp ./ntrp
+COPY --from=build --chown=ntrp:ntrp /app/.venv /app/.venv
 
-RUN mkdir -p /app/data
+COPY --chown=ntrp:ntrp ntrp ./ntrp
+COPY --chown=ntrp:ntrp skills ./skills
+
+USER ntrp
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -32,6 +36,6 @@ ENV PYTHONUNBUFFERED=1 \
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
 CMD ["uvicorn", "ntrp.server.app:app", "--host", "0.0.0.0", "--port", "8000"]

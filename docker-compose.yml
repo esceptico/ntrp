@@ -1,7 +1,4 @@
-version: '3.8'
-
 services:
-  # Backend API Server
   ntrp-backend:
     build:
       context: .
@@ -11,52 +8,16 @@ services:
     ports:
       - "${NTRP_PORT:-8000}:8000"
     volumes:
-      # Persistent data storage (sessions, memory, indexes)
-      - ntrp-data:/app/data
+      - ntrp-data:/home/ntrp/.ntrp
+      # obsidian vault, comment if not using (and change ro to rw if you need to edit)
+      - ${NTRP_VAULT_PATH}:/vault:ro
+    env_file: .env
     environment:
-      # Required
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-
-      # Optional - LLM Providers
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-
-      # Optional - Models
-      - NTRP_CHAT_MODEL=${NTRP_CHAT_MODEL:-gpt-4o}
-      - NTRP_MEMORY_MODEL=${NTRP_MEMORY_MODEL:-gpt-4o-mini}
-
-      # Optional - Features
-      - NTRP_USER_ID=${NTRP_USER_ID:-docker}
-      - EXA_API_KEY=${EXA_API_KEY:-}
-
-      # Optional - Monitoring
-      - LUNARY_PUBLIC_KEY=${LUNARY_PUBLIC_KEY:-}
-      - LUNARY_APP_ID=${LUNARY_APP_ID:-}
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
+      - NTRP_VAULT_PATH=/vault
+      # browser history doesn't work in docker
+      - NTRP_BROWSER=
     networks:
       - ntrp-network
-
-  # Optional: Frontend Terminal UI (for remote access)
-  # Uncomment to run the terminal UI in a container
-  # ntrp-ui:
-  #   build:
-  #     context: ./ntrp-ui
-  #     dockerfile: Dockerfile
-  #   container_name: ntrp-ui
-  #   restart: unless-stopped
-  #   environment:
-  #     - NTRP_API_URL=http://ntrp-backend:8000
-  #   depends_on:
-  #     - ntrp-backend
-  #   networks:
-  #     - ntrp-network
-  #   stdin_open: true
-  #   tty: true
 
 volumes:
   ntrp-data:
