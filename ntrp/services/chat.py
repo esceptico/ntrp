@@ -8,7 +8,7 @@ from ntrp.channel import Channel
 from ntrp.context.compression import compress_context_async, find_compressible_range
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.agent import Agent
-from ntrp.core.factory import create_agent
+from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import INIT_INSTRUCTION, build_system_blocks
 from ntrp.events.internal import RunCompleted, RunStarted
 from ntrp.events.sse import (
@@ -47,11 +47,9 @@ class ChatContext:
     is_init: bool
     executor: ToolExecutor
     tools: list[dict]
-    model: str
-    explore_model: str | None
+    config: AgentConfig
     memory: FactMemory | None
     channel: Channel
-    max_depth: int
     available_sources: list[str]
     source_errors: dict[str, str]
     session_service: SessionService
@@ -159,11 +157,13 @@ class ChatService:
             is_init=is_init,
             executor=runtime.executor,
             tools=runtime.executor.get_tools(),
-            model=runtime.config.chat_model,
-            explore_model=runtime.config.explore_model,
+            config=AgentConfig(
+                model=runtime.config.chat_model,
+                explore_model=runtime.config.explore_model,
+                max_depth=runtime.config.max_depth,
+            ),
             memory=runtime.memory,
             channel=runtime.channel,
-            max_depth=runtime.config.max_depth,
             available_sources=runtime.get_available_sources(),
             source_errors=runtime.get_source_errors(),
             session_service=runtime.session_service,
@@ -194,14 +194,12 @@ class ChatService:
         try:
             agent = create_agent(
                 executor=ctx.executor,
-                model=ctx.model,
+                config=ctx.config,
                 tools=ctx.tools,
                 system_prompt=ctx.run.messages[0]["content"] if ctx.run.messages else [],
                 session_state=session_state,
                 memory=ctx.memory,
                 channel=ctx.channel,
-                max_depth=ctx.max_depth,
-                explore_model=ctx.explore_model,
                 run_id=run.run_id,
                 cancel_check=lambda: run.cancelled,
                 io=IOBridge(

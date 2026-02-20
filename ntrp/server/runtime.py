@@ -13,7 +13,8 @@ from ntrp.memory.service import MemoryService
 from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.notifiers.service import NotifierService
 from ntrp.notifiers.store import NotifierStore
-from ntrp.operator import OperatorConfig, OperatorDeps
+from ntrp.core.factory import AgentConfig
+from ntrp.operator.runner import OperatorDeps
 from ntrp.schedule.scheduler import Scheduler
 from ntrp.schedule.service import ScheduleService
 from ntrp.schedule.store import ScheduleStore
@@ -213,7 +214,7 @@ class Runtime:
         return OperatorDeps(
             executor=self.executor,
             memory=self.memory,
-            config=OperatorConfig(
+            config=AgentConfig(
                 model=self.config.chat_model,
                 explore_model=self.config.explore_model,
                 max_depth=self.config.max_depth,

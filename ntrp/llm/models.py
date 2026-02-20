@@ -1,9 +1,10 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
 from ntrp.logging import get_logger
+from ntrp.usage import Pricing
 
 _logger = get_logger(__name__)
 
@@ -23,10 +24,7 @@ class Model:
     provider: Provider
     max_context_tokens: int
     max_output_tokens: int = 8192
-    price_in: float = 0
-    price_out: float = 0
-    price_cache_read: float = 0
-    price_cache_write: float = 0
+    pricing: Pricing = field(default_factory=Pricing)
     base_url: str | None = None
     api_key_env: str | None = None
 
@@ -38,44 +36,35 @@ DEFAULTS = [
         provider=Provider.ANTHROPIC,
         max_context_tokens=200_000,
         max_output_tokens=16384,
-        price_in=5,
-        price_out=25,
-        price_cache_read=0.50,
-        price_cache_write=6.25,
+        pricing=Pricing(price_in=5, price_out=25, price_cache_read=0.50, price_cache_write=6.25),
     ),
     Model(
         "claude-sonnet-4-6",
         provider=Provider.ANTHROPIC,
         max_context_tokens=200_000,
         max_output_tokens=8192,
-        price_in=3,
-        price_out=15,
-        price_cache_read=0.30,
-        price_cache_write=3.75,
+        pricing=Pricing(price_in=3, price_out=15, price_cache_read=0.30, price_cache_write=3.75),
     ),
     Model(
         "gpt-5.2",
         provider=Provider.OPENAI,
         max_context_tokens=128_000,
         max_output_tokens=16384,
-        price_in=2,
-        price_out=8,
+        pricing=Pricing(price_in=2, price_out=8),
     ),
     Model(
         "gemini-3-pro-preview",
         provider=Provider.GOOGLE,
         max_context_tokens=128_000,
         max_output_tokens=65536,
-        price_in=1.25,
-        price_out=10,
+        pricing=Pricing(price_in=1.25, price_out=10),
     ),
     Model(
         "gemini-3-flash-preview",
         provider=Provider.GOOGLE,
         max_context_tokens=128_000,
         max_output_tokens=65536,
-        price_in=0.15,
-        price_out=0.60,
+        pricing=Pricing(price_in=0.15, price_out=0.60),
     ),
 ]
 
@@ -143,8 +132,10 @@ def load_custom_models() -> None:
             provider=Provider.CUSTOM,
             max_context_tokens=int(entry["context_window"]),
             max_output_tokens=int(entry.get("max_output_tokens", 8192)),
-            price_in=float(entry.get("price_in", 0)),
-            price_out=float(entry.get("price_out", 0)),
+            pricing=Pricing(
+                price_in=float(entry.get("price_in", 0)),
+                price_out=float(entry.get("price_out", 0)),
+            ),
             base_url=entry["base_url"],
             api_key_env=entry.get("api_key_env"),
         )

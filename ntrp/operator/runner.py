@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
-from ntrp.core.factory import create_agent
+from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted, RunStarted
 from ntrp.memory.facts import FactMemory
@@ -18,17 +18,10 @@ from ntrp.usage import Usage
 
 
 @dataclass(frozen=True)
-class OperatorConfig:
-    model: str
-    explore_model: str | None
-    max_depth: int
-
-
-@dataclass(frozen=True)
 class OperatorDeps:
     executor: ToolExecutor
     memory: FactMemory | None
-    config: OperatorConfig
+    config: AgentConfig
     channel: Channel
     source_details: dict[str, dict]
     create_session: Callable[[], SessionState]
@@ -81,14 +74,12 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
 
     agent = create_agent(
         executor=executor,
-        model=deps.config.model,
+        config=deps.config,
         tools=tools,
         system_prompt=system_prompt,
         session_state=session_state,
         memory=deps.memory,
         channel=deps.channel,
-        max_depth=deps.config.max_depth,
-        explore_model=deps.config.explore_model,
         run_id=run_id,
     )
 

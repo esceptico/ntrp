@@ -84,12 +84,7 @@ class Agent:
         if not response.usage:
             return
         model = get_model(response.model)
-        step = response.usage.with_cost(
-            price_in=model.price_in,
-            price_out=model.price_out,
-            price_cache_read=model.price_cache_read,
-            price_cache_write=model.price_cache_write,
-        )
+        step = response.usage.with_cost(model.pricing)
         self.usage += step
         self._last_input_tokens = step.prompt_tokens + step.cache_read_tokens + step.cache_write_tokens
 

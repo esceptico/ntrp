@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from ntrp.logging import get_logger
-from ntrp.operator import RunRequest, run_agent
+from ntrp.operator.runner import RunRequest, run_agent
 from ntrp.schedule.models import Recurrence, ScheduledTask, compute_next_run
 from ntrp.schedule.store import ScheduleStore
 

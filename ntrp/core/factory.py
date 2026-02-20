@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
@@ -9,17 +10,22 @@ from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 from ntrp.tools.executor import ToolExecutor
 
 
+@dataclass(frozen=True)
+class AgentConfig:
+    model: str
+    explore_model: str | None
+    max_depth: int
+
+
 def create_agent(
     *,
     executor: ToolExecutor,
-    model: str,
+    config: AgentConfig,
     tools: list[dict],
     system_prompt: str | list[dict],
     session_state: SessionState,
     memory: FactMemory | None,
     channel: Channel,
-    max_depth: int,
-    explore_model: str | None,
     run_id: str,
     cancel_check: Callable[[], bool] | None = None,
     io: IOBridge | None = None,
@@ -27,9 +33,9 @@ def create_agent(
 ) -> Agent:
     run_ctx = RunContext(
         run_id=run_id,
-        max_depth=max_depth,
+        max_depth=config.max_depth,
         extra_auto_approve=extra_auto_approve or set(),
-        explore_model=explore_model,
+        explore_model=config.explore_model,
     )
 
     tool_ctx = ToolContext(
@@ -43,8 +49,8 @@ def create_agent(
     )
     tool_ctx.spawn_fn = create_spawn_fn(
         executor=executor,
-        model=model,
-        max_depth=max_depth,
+        model=config.model,
+        max_depth=config.max_depth,
         current_depth=0,
         cancel_check=cancel_check,
     )
@@ -52,10 +58,10 @@ def create_agent(
     return Agent(
         tools=tools,
         tool_executor=executor,
-        model=model,
+        model=config.model,
         system_prompt=system_prompt,
         ctx=tool_ctx,
-        max_depth=max_depth,
+        max_depth=config.max_depth,
         current_depth=0,
         cancel_check=cancel_check,
     )
