@@ -297,8 +297,12 @@ class TestMemoryDisabled:
     """Test error handling when memory is disabled"""
 
     @pytest.mark.asyncio
-    async def test_endpoints_fail_when_memory_disabled(self, tmp_path: Path):
+    async def test_endpoints_fail_when_memory_disabled(self, tmp_path: Path, monkeypatch):
         """All CRUD endpoints should return 503 when memory is disabled"""
+        import ntrp.config
+
+        monkeypatch.setattr(ntrp.config, "NTRP_DIR", tmp_path / "db")
+
         await reset_runtime()
 
         test_config = Config(

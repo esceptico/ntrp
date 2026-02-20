@@ -43,7 +43,7 @@ def create_spawn_fn(
     ) -> str:
         from ntrp.core.agent import Agent
 
-        filtered_tools = tools or executor.registry.get_schemas()
+        filtered_tools = tools or executor.get_tools()
         child_state = _create_session_state(calling_ctx, isolation)
 
         child_run = RunContext(
@@ -58,7 +58,8 @@ def create_spawn_fn(
             registry=executor.registry,
             run=child_run,
             io=calling_ctx.io,
-            memory=executor.memory,
+            memory=executor.runtime.memory,
+            sources=executor.runtime.source_mgr.sources,
             channel=calling_ctx.channel,
         )
         child_ctx.spawn_fn = create_spawn_fn(

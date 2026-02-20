@@ -74,6 +74,9 @@ class Config(BaseSettings):
     browser: str | None = None
     browser_days: int = 30
 
+    # Agent depth limit
+    max_depth: int = 8
+
     # API authentication (optional — required when exposed to network)
     api_key: str | None = None
 
@@ -154,6 +157,7 @@ PERSIST_KEYS = frozenset(
         "gmail",
         "gmail_days",
         "calendar",
+        "max_depth",
     }
 )
 

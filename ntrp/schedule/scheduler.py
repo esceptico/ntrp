@@ -1,10 +1,14 @@
 import asyncio
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from ntrp.logging import get_logger
-from ntrp.operator import OperatorDeps, RunRequest, run_agent
+from ntrp.operator import RunRequest, run_agent
 from ntrp.schedule.models import Recurrence, ScheduledTask, compute_next_run
 from ntrp.schedule.store import ScheduleStore
+
+if TYPE_CHECKING:
+    from ntrp.server.runtime import Runtime
 
 _logger = get_logger(__name__)
 
@@ -12,8 +16,8 @@ POLL_INTERVAL = 60
 
 
 class Scheduler:
-    def __init__(self, deps: OperatorDeps, store: ScheduleStore):
-        self.deps = deps
+    def __init__(self, runtime: "Runtime", store: ScheduleStore):
+        self.runtime = runtime
         self.store = store
         self._task: asyncio.Task | None = None
         self._running_execution: asyncio.Task | None = None
@@ -87,8 +91,7 @@ class Scheduler:
                 await asyncio.shield(execution)
             except asyncio.CancelledError:
                 return  # Loop cancelled, but execution continues — stop() will await it
-            finally:
-                self._running_execution = None
+            self._running_execution = None
 
     async def _run_and_finalize(self, task: ScheduledTask) -> None:
         try:
@@ -109,7 +112,7 @@ class Scheduler:
             notifiers=task.notifiers,
             source_id=task.task_id,
         )
-        result = await run_agent(self.deps, request)
+        result = await run_agent(self.runtime.build_operator_deps(), request)
         return result.output
 
     async def _execute_task(self, task: ScheduledTask) -> None:

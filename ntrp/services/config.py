@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -10,8 +8,8 @@ if TYPE_CHECKING:
 
 
 class ConfigService:
-    def __init__(self, runtime: Runtime):
-        self._rt = runtime
+    def __init__(self, runtime: "Runtime"):
+        self.runtime = runtime
 
     async def update(self, **fields) -> None:
         if "vault_path" in fields:
@@ -23,9 +21,6 @@ class ConfigService:
                 fields["vault_path"] = str(vault)
             else:
                 fields["vault_path"] = None
-
-        if "max_depth" in fields:
-            self._rt.max_depth = fields.pop("max_depth")
 
         persist = {k: v for k, v in fields.items() if k in PERSIST_KEYS}
         if not persist:
@@ -41,7 +36,7 @@ class ConfigService:
         save_user_settings(settings)
 
         try:
-            await self._rt.reload_config()
+            await self.runtime.reload_config()
         except Exception:
             save_user_settings(backup)
             raise

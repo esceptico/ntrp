@@ -9,6 +9,7 @@ from ntrp.events.sse import ApprovalNeededEvent, ChoiceEvent
 
 if TYPE_CHECKING:
     from ntrp.memory.facts import FactMemory
+    from ntrp.sources.base import Source
     from ntrp.tools.core.base import ToolResult
     from ntrp.tools.core.registry import ToolRegistry
 
@@ -64,6 +65,7 @@ class ToolContext:
     run: RunContext
     io: IOBridge
     memory: "FactMemory | None" = None
+    sources: "dict[str, Source]" = field(default_factory=dict)
     channel: Channel = field(default_factory=Channel)
     spawn_fn: Callable[..., Awaitable[str]] | None = None
 
@@ -78,6 +80,12 @@ class ToolContext:
     @property
     def auto_approve(self) -> set[str]:
         return self.session_state.auto_approve | self.run.extra_auto_approve
+
+    def get_source[T](self, source_type: type[T]) -> T | None:
+        for s in self.sources.values():
+            if isinstance(s, source_type):
+                return s
+        return None
 
 
 @dataclass

@@ -57,23 +57,33 @@ class ScheduleTaskInput(BaseModel):
 class ScheduleTaskTool(Tool):
     name = "schedule_task"
     display_name = "ScheduleTask"
+    description = SCHEDULE_TASK_DESCRIPTION
     mutates = True
     input_model = ScheduleTaskInput
 
-    def __init__(self, store: ScheduleStore, available_notifiers: dict[str, str] | None = None):
+    def __init__(self, store: ScheduleStore, notifier_service: Any = None):
         self.store = store
-        self._available_notifiers = available_notifiers or {}
-        self.description = self._build_description()
+        self.notifier_service = notifier_service
 
-    def _build_description(self) -> str:
-        desc = SCHEDULE_TASK_DESCRIPTION
-        if self._available_notifiers:
-            items = ", ".join(f"{name} ({ntype})" for name, ntype in self._available_notifiers.items())
-            desc += f"\nAvailable notifiers: {items}"
-        return desc
+    def _get_available_notifiers(self) -> dict[str, str]:
+        if not self.notifier_service:
+            return {}
+        svc_notifiers = self.notifier_service.notifiers
+        if not svc_notifiers:
+            return {}
+        return {name: n.channel for name, n in svc_notifiers.items()}
+
+    def to_dict(self) -> dict:
+        schema = super().to_dict()
+        available = self._get_available_notifiers()
+        if available:
+            items = ", ".join(f"{name} ({ntype})" for name, ntype in available.items())
+            schema["function"]["description"] += f"\nAvailable notifiers: {items}"
+        return schema
 
     async def approval_info(
         self,
+        execution: ToolExecution,
         name: str,
         description: str,
         time: str,
@@ -136,12 +146,13 @@ class ScheduleTaskTool(Tool):
                 is_error=True,
             )
 
+        available_notifiers = self._get_available_notifiers()
         notifier_list = notifiers or []
-        unknown = [n for n in notifier_list if n not in self._available_notifiers]
+        unknown = [n for n in notifier_list if n not in available_notifiers]
         if unknown:
             return ToolResult(
                 content=f"Error: unknown notifier(s): {', '.join(unknown)}. "
-                f"Available: {', '.join(self._available_notifiers) or 'none'}",
+                f"Available: {', '.join(available_notifiers) or 'none'}",
                 preview="Unknown notifier",
                 is_error=True,
             )
@@ -209,7 +220,7 @@ class CancelScheduleTool(Tool):
     def __init__(self, store: ScheduleStore):
         self.store = store
 
-    async def approval_info(self, task_id: str, **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(self, execution: ToolExecution, task_id: str, **kwargs: Any) -> ApprovalInfo | None:
         task = await self.store.get(task_id)
         if not task:
             return None

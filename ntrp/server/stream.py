@@ -1,5 +1,4 @@
 import asyncio
-import json
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
@@ -9,108 +8,63 @@ if TYPE_CHECKING:
     from ntrp.services.chat import ChatContext
 
 
-def to_sse(event: SSEEvent | dict) -> str:
-    if isinstance(event, SSEEvent):
-        return event.to_sse_string()
-    return f"data: {json.dumps(event)}\n\n"
-
-
-class _Done:
-    pass
-
-
-class _Error:
-    def __init__(self, exception: Exception):
-        self.exception = exception
-
-
-type QueueItem = SSEEvent | _Done | _Error
-
-
-async def run_agent_loop(ctx: "ChatContext", agent, user_message: str):
+async def run_agent_loop(ctx: "ChatContext", agent):
     """Run agent and yield SSE strings. Yields AgentResult at end.
 
-    All events (agent, tool, subagent) flow through a single merged queue.
-    Tools emit directly into the queue — no polling bridge needed.
+    Events from agent.stream() and tool/subagent emissions merge through a single queue.
+    None sentinel signals the agent task is done.
     """
-    # Strip the just-appended user message — agent.stream() adds it internally
-    history = ctx.messages[:-1] if len(ctx.messages) > 1 else None
+    messages = ctx.run.messages
+    user_message = messages[-1]["content"]
+    history = messages[:-1] if len(messages) > 1 else None
 
-    merged_queue: asyncio.Queue[QueueItem] = asyncio.Queue()
-    result: str = ""
-    error: Exception | None = None
+    queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+    agent.ctx.io.emit = queue.put
 
-    # Wire tool/subagent emit directly into the merged queue
-    agent.ctx.io.emit = merged_queue.put
-
-    async def run_agent():
-        nonlocal result, error
+    async def _run() -> str:
+        result = ""
         try:
             async for item in agent.stream(user_message, history=history):
                 if isinstance(item, str):
                     result = item
                 elif isinstance(item, SSEEvent):
-                    await merged_queue.put(item)
-        except Exception as e:
-            error = e
-            await merged_queue.put(_Error(e))
+                    await queue.put(item)
         finally:
-            await merged_queue.put(_Done())
+            await queue.put(None)
+        return result
 
-    agent_task = asyncio.create_task(run_agent())
-
-    def _drain_remaining():
-        events = []
-        while not merged_queue.empty():
-            match merged_queue.get_nowait():
-                case _Done():
-                    break
-                case _Error(exception=e):
-                    raise e
-                case event:
-                    events.append(event)
-        return events
+    task = asyncio.create_task(_run())
 
     try:
         while True:
             if ctx.run.cancelled:
-                yield to_sse(CancelledEvent(run_id=ctx.run.run_id))
+                yield CancelledEvent(run_id=ctx.run.run_id).to_sse_string()
                 return
 
             try:
-                item = await asyncio.wait_for(merged_queue.get(), timeout=0.1)
+                event = await asyncio.wait_for(queue.get(), timeout=0.1)
             except TimeoutError:
-                if agent_task.done():
-                    for evt in _drain_remaining():
-                        yield to_sse(evt)
+                if task.done():
                     break
                 continue
 
-            match item:
-                case _Done():
-                    for evt in _drain_remaining():
-                        yield to_sse(evt)
-                    break
-                case _Error(exception=e):
-                    raise e
-                case event:
-                    yield to_sse(event)
+            if event is None:
+                break
+            yield event.to_sse_string()
+
+        # Drain remaining events
+        while not queue.empty():
+            if (event := queue.get_nowait()) is not None:
+                yield event.to_sse_string()
+
+        # Re-raise agent errors
+        if task.done() and not task.cancelled() and task.exception():
+            raise task.exception()
+
+        yield AgentResult(text=task.result())
 
     finally:
-        while not merged_queue.empty():
-            try:
-                item = merged_queue.get_nowait()
-                if isinstance(item, SSEEvent):
-                    yield to_sse(item)
-            except asyncio.QueueEmpty:
-                break
-
-        if not agent_task.done():
-            agent_task.cancel()
+        if not task.done():
+            task.cancel()
             with suppress(asyncio.CancelledError):
-                await agent_task
-
-    if error:
-        raise error
-
-    yield AgentResult(text=result)
+                await task

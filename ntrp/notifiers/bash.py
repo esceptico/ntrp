@@ -1,13 +1,16 @@
 import asyncio
 import os
+from typing import Any
 
-from ntrp.logging import get_logger
-
-_logger = get_logger(__name__)
+from ntrp.notifiers.base import Notifier
 
 
-class BashNotifier:
+class BashNotifier(Notifier):
     channel = "bash"
+
+    @classmethod
+    def from_config(cls, config: dict, runtime: Any) -> "BashNotifier":
+        return cls(command=config["command"])
 
     def __init__(self, command: str):
         self._command = command
@@ -23,9 +26,4 @@ class BashNotifier:
         )
         _, stderr = await proc.communicate(input=body.encode())
         if proc.returncode != 0:
-            _logger.error(
-                "Bash notifier %r exited %d: %s",
-                self._command,
-                proc.returncode,
-                stderr.decode().strip(),
-            )
+            raise RuntimeError(f"Bash notifier {self._command!r} exited {proc.returncode}: {stderr.decode().strip()}")

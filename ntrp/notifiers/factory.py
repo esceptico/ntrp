@@ -1,27 +1,17 @@
-from collections.abc import Callable
+from typing import Any
 
-from ntrp.config import Config
 from ntrp.notifiers.base import Notifier
 from ntrp.notifiers.bash import BashNotifier
 from ntrp.notifiers.email import EmailNotifier
 from ntrp.notifiers.models import NotifierConfig
 from ntrp.notifiers.telegram import TelegramNotifier
 
+_NOTIFIER_CLASSES: list[type[Notifier]] = [EmailNotifier, TelegramNotifier, BashNotifier]
+REGISTRY: dict[str, type[Notifier]] = {cls.channel: cls for cls in _NOTIFIER_CLASSES}
 
-def create_notifier(cfg: NotifierConfig, *, config: Config, gmail: Callable) -> Notifier:
-    if cfg.type == "email":
-        return EmailNotifier(
-            gmail=gmail,
-            from_account=cfg.config["from_account"],
-            to_address=cfg.config["to_address"],
-        )
-    if cfg.type == "telegram":
-        if not config.telegram_bot_token:
-            raise ValueError("TELEGRAM_BOT_TOKEN not set in environment")
-        return TelegramNotifier(
-            token=config.telegram_bot_token,
-            user_id=cfg.config["user_id"],
-        )
-    if cfg.type == "bash":
-        return BashNotifier(command=cfg.config["command"])
-    raise ValueError(f"Unknown notifier type: {cfg.type}")
+
+def create_notifier(cfg: NotifierConfig, runtime: Any) -> Notifier:
+    cls = REGISTRY.get(cfg.type)
+    if not cls:
+        raise ValueError(f"Unknown notifier type: {cfg.type}")
+    return cls.from_config(cfg.config, runtime)

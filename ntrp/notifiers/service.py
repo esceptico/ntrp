@@ -1,71 +1,88 @@
 import re
-from collections.abc import Callable
+import sys
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-from ntrp.channel import Channel
-from ntrp.events.internal import NotifierChanged
+from ntrp.logging import get_logger
 from ntrp.notifiers.base import Notifier
+from ntrp.notifiers.factory import create_notifier
 from ntrp.notifiers.models import NotifierConfig
 from ntrp.notifiers.store import NotifierStore
-from ntrp.schedule.store import ScheduleStore
 
-VALID_TYPES = {"email", "telegram", "bash"}
+if TYPE_CHECKING:
+    from ntrp.server.runtime import Runtime
+
+_logger = get_logger(__name__)
 NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
+
+NOTIFIER_FIELDS: dict[str, list[str]] = {
+    "email": ["from_account", "to_address"],
+    "telegram": ["user_id"],
+    "bash": ["command"],
+}
 
 
 class NotifierService:
-    def __init__(
-        self,
-        store: NotifierStore,
-        schedule_store: ScheduleStore | None,
-        notifiers: dict[str, Notifier],
-        channel: Channel,
-        get_gmail: Callable,
-    ):
+    def __init__(self, store: NotifierStore, runtime: "Runtime"):
         self.store = store
-        self.schedule_store = schedule_store
-        self.notifiers = notifiers
-        self.channel = channel
-        self.get_gmail = get_gmail
+        self.runtime = runtime
+        self._notifiers: dict[str, Notifier] = {}
+
+    @property
+    def notifiers(self) -> dict[str, Notifier]:
+        return self._notifiers
+
+    async def rebuild(self) -> None:
+        new_notifiers: dict[str, Notifier] = {}
+        for cfg in await self.store.list_all():
+            try:
+                new_notifiers[cfg.name] = create_notifier(cfg, self.runtime)
+            except Exception:
+                _logger.exception("Failed to create notifier %r", cfg.name)
+        self._notifiers = new_notifiers
+
+    async def seed_defaults(self) -> None:
+        existing = await self.store.list_all()
+        if existing:
+            return
+        if sys.platform == "darwin":
+            await self.store.save(
+                NotifierConfig(
+                    name="macos-sound",
+                    type="bash",
+                    config={
+                        "command": 'osascript -e \'display notification "Task completed" with title "ntrp" sound name "Glass"\''
+                    },
+                    created_at=datetime.now(UTC),
+                )
+            )
 
     def list_names(self) -> list[str]:
-        return list(self.notifiers.keys())
+        return list(self._notifiers.keys())
 
     def list_summary(self) -> list[dict[str, str]]:
-        return [{"name": name, "type": n.channel} for name, n in self.notifiers.items()]
+        return [{"name": name, "type": n.channel} for name, n in self._notifiers.items()]
 
     def get_types(self) -> dict:
-        gmail = self.get_gmail()
-        accounts = gmail.list_accounts() if gmail else []
-        return {
-            "email": {"fields": ["from_account", "to_address"], "accounts": accounts},
-            "telegram": {"fields": ["user_id"]},
-            "bash": {"fields": ["command"]},
-        }
+        gmail = self.runtime.source_mgr.sources.get("gmail")
+        types = {name: {"fields": fields} for name, fields in NOTIFIER_FIELDS.items()}
+        types["email"]["accounts"] = gmail.list_accounts() if gmail else []
+        return types
 
     async def list_configs(self) -> list[NotifierConfig]:
         return await self.store.list_all()
 
     def validate_config(self, notifier_type: str, config: dict) -> None:
-        if notifier_type not in VALID_TYPES:
+        fields = NOTIFIER_FIELDS.get(notifier_type)
+        if fields is None:
             raise ValueError(f"Invalid notifier type: {notifier_type}")
-
+        for field in fields:
+            if not config.get(field):
+                raise ValueError(f"{field} is required")
         if notifier_type == "email":
-            if not config.get("from_account"):
-                raise ValueError("from_account is required")
-            if not config.get("to_address"):
-                raise ValueError("to_address is required")
-            gmail = self.get_gmail()
-            if gmail:
-                accounts = gmail.list_accounts()
-                if config["from_account"] not in accounts:
-                    raise ValueError(f"Unknown Gmail account: {config['from_account']}")
-        elif notifier_type == "telegram":
-            if not config.get("user_id"):
-                raise ValueError("user_id is required")
-        elif notifier_type == "bash":
-            if not config.get("command"):
-                raise ValueError("command is required")
+            gmail = self.runtime.source_mgr.sources.get("gmail")
+            if gmail and config["from_account"] not in gmail.list_accounts():
+                raise ValueError(f"Unknown Gmail account: {config['from_account']}")
 
     async def create(self, name: str, notifier_type: str, config: dict) -> NotifierConfig:
         if not NAME_RE.match(name):
@@ -84,7 +101,7 @@ class NotifierService:
             created_at=datetime.now(UTC),
         )
         await self.store.save(cfg)
-        self.channel.publish(NotifierChanged())
+        await self.rebuild()
         return cfg
 
     async def update(self, name: str, new_config: dict, new_name: str | None = None) -> NotifierConfig:
@@ -100,12 +117,13 @@ class NotifierService:
             conflict = await self.store.get(new_name)
             if conflict:
                 raise ValueError(f"Notifier '{new_name}' already exists")
-            await self.store.delete(name)
+            await self.store.rename(name, new_name, new_config)
             existing.name = new_name
-
-        existing.config = new_config
-        await self.store.save(existing)
-        self.channel.publish(NotifierChanged())
+            existing.config = new_config
+        else:
+            existing.config = new_config
+            await self.store.save(existing)
+        await self.rebuild()
         return existing
 
     async def delete(self, name: str) -> None:
@@ -113,17 +131,10 @@ class NotifierService:
         if not deleted:
             raise KeyError(f"Notifier '{name}' not found")
 
-        if self.schedule_store:
-            tasks = await self.schedule_store.list_all()
-            for task in tasks:
-                if name in task.notifiers:
-                    new_notifiers = [n for n in task.notifiers if n != name]
-                    await self.schedule_store.set_notifiers(task.task_id, new_notifiers)
-
-        self.channel.publish(NotifierChanged())
+        await self.rebuild()
 
     async def test(self, name: str) -> None:
-        notifier = self.notifiers.get(name)
+        notifier = self._notifiers.get(name)
         if not notifier:
             raise KeyError(f"Notifier '{name}' not found")
 

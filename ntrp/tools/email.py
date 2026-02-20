@@ -37,10 +37,9 @@ class SendEmailTool(Tool):
     source_type = EmailSource
     input_model = SendEmailInput
 
-    def __init__(self, source: EmailSource):
-        self.source = source
-
-    async def approval_info(self, account: str, to: str, subject: str, **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(
+        self, execution: ToolExecution, account: str, to: str, subject: str, **kwargs: Any
+    ) -> ApprovalInfo | None:
         return ApprovalInfo(description=to, preview=f"Subject: {subject}\nFrom: {account}", diff=None)
 
     async def execute(
@@ -52,7 +51,8 @@ class SendEmailTool(Tool):
         body: str,
         **kwargs: Any,
     ) -> ToolResult:
-        result = self.source.send_email(account=account, to=to, subject=subject, body=body)
+        source = execution.ctx.get_source(EmailSource)
+        result = source.send_email(account=account, to=to, subject=subject, body=body)
         return ToolResult(content=result, preview="Sent")
 
 
@@ -67,11 +67,9 @@ class ReadEmailTool(Tool):
     source_type = EmailSource
     input_model = ReadEmailInput
 
-    def __init__(self, source: EmailSource):
-        self.source = source
-
     async def execute(self, execution: ToolExecution, email_id: str, **kwargs: Any) -> ToolResult:
-        content = self.source.read(email_id)
+        source = execution.ctx.get_source(EmailSource)
+        content = source.read(email_id)
         if not content:
             return ToolResult(
                 content=f"Email not found: {email_id}. Use emails() or emails(query) to find valid email IDs.",
@@ -125,9 +123,6 @@ class EmailsTool(Tool):
     source_type = EmailSource
     input_model = EmailsInput
 
-    def __init__(self, source: EmailSource):
-        self.source = source
-
     async def execute(
         self,
         execution: ToolExecution,
@@ -136,13 +131,14 @@ class EmailsTool(Tool):
         limit: int = _DEFAULT_EMAIL_LIMIT,
         **kwargs: Any,
     ) -> ToolResult:
+        source = execution.ctx.get_source(EmailSource)
         if query:
-            return self._search(query, limit)
-        return self._list(days, limit)
+            return self._search(source, query, limit)
+        return self._list(source, days, limit)
 
-    def _list(self, days: int, limit: int) -> ToolResult:
-        accounts = self.source.list_accounts()
-        emails = self.source.list_recent(days=days, limit=limit)
+    def _list(self, source: EmailSource, days: int, limit: int) -> ToolResult:
+        accounts = source.list_accounts()
+        emails = source.list_recent(days=days, limit=limit)
 
         if not emails:
             if accounts:
@@ -156,8 +152,8 @@ class EmailsTool(Tool):
         content = _format_email_list(trimmed)
         return ToolResult(content=content, preview=f"{len(emails)} emails")
 
-    def _search(self, query: str, limit: int) -> ToolResult:
-        results = self.source.search(query, limit=limit)
+    def _search(self, source: EmailSource, query: str, limit: int) -> ToolResult:
+        results = source.search(query, limit=limit)
         if not results:
             return ToolResult(content=f"No emails found for '{query}'", preview="0 emails")
 

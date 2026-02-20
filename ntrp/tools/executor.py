@@ -1,55 +1,32 @@
-from typing import Any
+from typing import TYPE_CHECKING
 
-from ntrp.memory.facts import FactMemory
-from ntrp.schedule.store import ScheduleStore
-from ntrp.skills.registry import SkillRegistry
-from ntrp.sources.base import Source
 from ntrp.tools.core.base import ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.specs import TOOL_FACTORIES, ToolDeps
 
+if TYPE_CHECKING:
+    from ntrp.server.runtime import Runtime
+
 
 class ToolExecutor:
-    def __init__(
-        self,
-        sources: dict[str, Source],
-        model: str,
-        memory: FactMemory | None = None,
-        working_dir: str | None = None,
-        search_index: Any | None = None,
-        schedule_store: ScheduleStore | None = None,
-        available_notifiers: dict[str, str] | None = None,
-        registry: ToolRegistry | None = None,
-        skill_registry: SkillRegistry | None = None,
-    ):
-        self.sources = sources
-        self.memory = memory
-        self.model = model
-        self.search_index = search_index
-
-        self.registry = registry or ToolRegistry()
+    def __init__(self, runtime: "Runtime"):
+        self.runtime = runtime
+        self.registry = ToolRegistry()
 
         deps = ToolDeps(
-            sources=sources,
-            memory=memory,
-            search_index=search_index,
-            schedule_store=schedule_store,
-            available_notifiers=available_notifiers,
-            working_dir=working_dir,
-            skill_registry=skill_registry,
+            search_index=runtime.indexer.index,
+            schedule_store=runtime.schedule_store,
+            skill_registry=runtime.skill_registry,
+            notifier_service=runtime.notifier_service,
         )
         for create_tools in TOOL_FACTORIES:
             for tool in create_tools(deps):
                 self.registry.register(tool)
 
     def with_registry(self, registry: ToolRegistry) -> "ToolExecutor":
-        """Create a shallow copy of this executor with a different registry."""
         clone = ToolExecutor.__new__(ToolExecutor)
-        clone.sources = self.sources
-        clone.memory = self.memory
-        clone.model = self.model
-        clone.search_index = self.search_index
+        clone.runtime = self.runtime
         clone.registry = registry
         return clone
 
@@ -64,4 +41,11 @@ class ToolExecutor:
         return await self.registry.execute(tool_name, execution, arguments)
 
     def get_tools(self, mutates: bool | None = None) -> list[dict]:
-        return self.registry.get_schemas(mutates=mutates)
+        return self.registry.get_schemas(
+            sources=self.runtime.source_mgr.sources,
+            has_memory=self.runtime.memory is not None,
+            mutates=mutates,
+        )
+
+    def get_tool_metadata(self) -> list[dict]:
+        return [tool.get_metadata() for tool in self.registry.tools.values()]

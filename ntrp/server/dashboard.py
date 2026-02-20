@@ -69,7 +69,7 @@ class DashboardCollector:
     async def on_fact_created(self, event: FactCreated) -> None:
         self.recent_facts.append({"id": event.fact_id, "text": event.text[:80], "ts": time.time()})
 
-    def _snapshot_sync(self, runtime: "Runtime") -> dict:
+    async def snapshot(self, runtime: "Runtime") -> dict:
         now = time.time()
 
         system = {
@@ -104,6 +104,18 @@ class DashboardCollector:
         }
 
         indexer_progress = runtime.indexer.progress
+        schedule_tasks = None
+        if runtime.schedule_service:
+            schedule_tasks = await runtime.schedule_service.list_all()
+
+        memory_stats = None
+        memory_consolidating = False
+        memory_unconsolidated = 0
+        if runtime.memory_service:
+            memory_stats = await runtime.memory_service.stats()
+            memory_unconsolidated = await runtime.memory_service.count_unconsolidated()
+            memory_consolidating = runtime.memory_service.is_consolidating
+
         background = {
             "indexer": {
                 "status": indexer_progress.status.value,
@@ -119,34 +131,22 @@ class DashboardCollector:
                 "next_run_at": None,
             },
             "consolidation": {
-                "running": runtime.memory_service.is_consolidating if runtime.memory_service else False,
+                "running": memory_consolidating,
                 "interval_seconds": CONSOLIDATION_INTERVAL,
             },
         }
 
-        return {
-            "system": system,
-            "tokens": tokens,
-            "agent": agent,
-            "memory": {},
-            "background": background,
-        }
-
-    async def snapshot_async(self, runtime: "Runtime") -> dict:
-        data = self._snapshot_sync(runtime)
-
-        if runtime.memory_service:
-            stats = await runtime.memory_service.stats()
-            data["memory"] = {
+        if memory_stats:
+            memory = {
                 "enabled": True,
-                **stats,
-                "unconsolidated": await runtime.memory_service.facts.count_unconsolidated(),
-                "consolidation_running": runtime.memory_service.is_consolidating,
+                **memory_stats,
+                "unconsolidated": memory_unconsolidated,
+                "consolidation_running": memory_consolidating,
                 "last_consolidation_at": self.last_consolidation_at,
                 "recent_facts": list(self.recent_facts),
             }
         else:
-            data["memory"] = {
+            memory = {
                 "enabled": False,
                 "fact_count": 0,
                 "observation_count": 0,
@@ -156,17 +156,22 @@ class DashboardCollector:
                 "recent_facts": [],
             }
 
-        if runtime.schedule_service:
-            tasks = await runtime.schedule_service.list_all()
-            enabled = [t for t in tasks if t.enabled]
-            running = [t for t in tasks if t.running_since]
+        if schedule_tasks is not None:
+            enabled = [t for t in schedule_tasks if t.enabled]
+            running = [t for t in schedule_tasks if t.running_since]
             next_runs = [t.next_run_at.timestamp() for t in enabled if t.next_run_at]
-            data["background"]["scheduler"] = {
-                "running": runtime.scheduler is not None and runtime.scheduler.is_running,
+            background["scheduler"] = {
+                "running": runtime.schedule_service.is_running if runtime.schedule_service else False,
                 "active_task": running[0].description[:60] if running else None,
-                "total_scheduled": len(tasks),
+                "total_scheduled": len(schedule_tasks),
                 "enabled_count": len(enabled),
                 "next_run_at": min(next_runs) if next_runs else None,
             }
 
-        return data
+        return {
+            "system": system,
+            "tokens": tokens,
+            "agent": agent,
+            "memory": memory,
+            "background": background,
+        }

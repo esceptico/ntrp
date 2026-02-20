@@ -1,27 +1,28 @@
 import asyncio
-from collections.abc import Callable
+from typing import Any
 
-from ntrp.logging import get_logger
-
-_logger = get_logger(__name__)
+from ntrp.notifiers.base import Notifier
 
 
-class EmailNotifier:
+class EmailNotifier(Notifier):
     channel = "email"
 
-    def __init__(self, gmail: Callable, from_account: str, to_address: str):
-        self._gmail = gmail
+    @classmethod
+    def from_config(cls, config: dict, runtime: Any) -> "EmailNotifier":
+        return cls(runtime=runtime, from_account=config["from_account"], to_address=config["to_address"])
+
+    def __init__(self, runtime: Any, from_account: str, to_address: str):
+        self._runtime = runtime
         self._from_account = from_account
         self._to_address = to_address
 
     async def send(self, subject: str, body: str) -> None:
-        source = self._gmail()
-        if not source:
-            _logger.warning("Email notifier: gmail source unavailable")
-            return
+        gmail = self._runtime.source_mgr.sources.get("gmail")
+        if not gmail:
+            raise RuntimeError("Gmail source not available")
 
         await asyncio.to_thread(
-            source.send_email,
+            gmail.send_email,
             account=self._from_account,
             to=self._to_address,
             subject=subject,

@@ -105,11 +105,15 @@ class SessionStore:
             last_input_tokens=metadata.get("last_input_tokens"),
         )
 
-    async def get_latest_session(self) -> SessionData | None:
+    async def get_latest_id(self) -> str | None:
         rows = await self.conn.execute_fetchall(SQL_GET_LATEST)
-        if not rows:
+        return rows[0]["session_id"] if rows else None
+
+    async def get_latest_session(self) -> SessionData | None:
+        session_id = await self.get_latest_id()
+        if not session_id:
             return None
-        return await self.load_session(rows[0]["session_id"])
+        return await self.load_session(session_id)
 
     async def list_sessions(self, limit: int = 20) -> list[dict]:
         rows = await self.conn.execute_fetchall(SQL_LIST_SESSIONS, (limit,))

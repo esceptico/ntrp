@@ -51,13 +51,10 @@ class Tool(ABC):
     description: str
     mutates: bool = False
     source_type: ClassVar[type | None] = None
+    requires_memory: ClassVar[bool] = False
     input_model: ClassVar[type[BaseModel] | None] = None
 
-    @property
-    def available(self) -> bool:
-        return True
-
-    async def approval_info(self, **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(self, execution: ToolExecution, **kwargs: Any) -> ApprovalInfo | None:
         return None
 
     @abstractmethod

@@ -80,7 +80,7 @@ class ExploreTool(Tool):
         if depth == "quick" or remaining <= 1:
             tool_names.discard("explore")
 
-        tools = ctx.registry.get_schemas(names=tool_names)
+        tools = ctx.registry.get_schemas(names=tool_names, sources=ctx.sources, has_memory=ctx.memory is not None)
         prompt = await self._build_prompt(ctx.memory, depth, remaining)
         timeout = DEPTH_TIMEOUTS[depth]
 

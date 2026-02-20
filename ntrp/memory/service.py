@@ -1,7 +1,11 @@
 from ntrp.channel import Channel
-from ntrp.events.internal import FactDeleted, FactUpdated, MemoryCleared
+from ntrp.events.internal import ContextCompressed, FactDeleted, FactUpdated, MemoryCleared
+from ntrp.logging import get_logger
+from ntrp.memory.chat_extraction import extract_from_chat
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.models import Dream, EntityRef, Fact, Observation
+
+_logger = get_logger(__name__)
 
 
 class FactService:
@@ -129,6 +133,22 @@ class MemoryService:
         self.facts = FactService(memory, channel)
         self.observations = ObservationService(memory)
         self.dreams = DreamService(memory)
+        channel.subscribe(ContextCompressed, self._on_context_compressed)
+
+    async def _on_context_compressed(self, event: ContextCompressed) -> None:
+        facts = await extract_from_chat(event.messages, self.memory.extraction_model)
+        if not facts:
+            return
+        _logger.info("Extracted %d facts from compressed context", len(facts))
+        for fact_text in facts:
+            await self.memory.remember(
+                text=fact_text,
+                source_type="chat",
+                source_ref=event.session_id,
+            )
+
+    def close(self) -> None:
+        self.channel.unsubscribe(ContextCompressed, self._on_context_compressed)
 
     @property
     def is_consolidating(self) -> bool:
@@ -139,6 +159,9 @@ class MemoryService:
             "fact_count": await self.memory.facts.count(),
             "observation_count": await self.memory.observations.count(),
         }
+
+    async def count_unconsolidated(self) -> int:
+        return await self.memory.facts.count_unconsolidated()
 
     async def clear(self) -> dict[str, int]:
         deleted = await self.memory.clear()

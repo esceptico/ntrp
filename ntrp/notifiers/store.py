@@ -1,6 +1,4 @@
 import json
-import sys
-from datetime import UTC, datetime
 
 import aiosqlite
 
@@ -23,24 +21,6 @@ class NotifierStore:
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
         await self.conn.commit()
-        await self._seed_defaults()
-
-    async def _seed_defaults(self) -> None:
-        rows = await self.conn.execute_fetchall("SELECT COUNT(*) as c FROM notifier_configs")
-        if rows[0]["c"] > 0:
-            return
-
-        if sys.platform == "darwin":
-            await self.save(
-                NotifierConfig(
-                    name="macos-sound",
-                    type="bash",
-                    config={
-                        "command": 'osascript -e \'display notification "Task completed" with title "ntrp" sound name "Glass"\''
-                    },
-                    created_at=datetime.now(UTC),
-                )
-            )
 
     async def list_all(self) -> list[NotifierConfig]:
         rows = await self.conn.execute_fetchall(
@@ -61,6 +41,13 @@ class NotifierStore:
         await self.conn.execute(
             "INSERT OR REPLACE INTO notifier_configs (name, type, config, created_at) VALUES (?, ?, ?, ?)",
             (config.name, config.type, json.dumps(config.config), config.created_at.isoformat()),
+        )
+        await self.conn.commit()
+
+    async def rename(self, old_name: str, new_name: str, new_config: dict) -> None:
+        await self.conn.execute(
+            "UPDATE notifier_configs SET name = ?, config = ? WHERE name = ?",
+            (new_name, json.dumps(new_config), old_name),
         )
         await self.conn.commit()
 

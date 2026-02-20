@@ -1,13 +1,8 @@
-from collections.abc import Callable
-
 from pydantic import BaseModel
 
-from ntrp.channel import Handler
 from ntrp.constants import CONSOLIDATION_TEMPERATURE
-from ntrp.events.internal import ContextCompressed
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
-from ntrp.memory.facts import FactMemory
 
 _logger = get_logger(__name__)
 
@@ -90,27 +85,3 @@ async def extract_from_chat(
     except Exception:
         _logger.warning("Chat extraction failed", exc_info=True)
         return []
-
-
-def make_chat_extraction_handler(
-    get_memory: Callable[[], FactMemory | None],
-    get_model: Callable[[], str],
-) -> Handler[ContextCompressed]:
-    async def handle(event: ContextCompressed) -> None:
-        memory = get_memory()
-        if not memory:
-            return
-
-        facts = await extract_from_chat(event.messages, get_model())
-        if not facts:
-            return
-
-        _logger.info("Extracted %d facts from compressed context", len(facts))
-        for fact_text in facts:
-            await memory.remember(
-                text=fact_text,
-                source_type="chat",
-                source_ref=event.session_id,
-            )
-
-    return handle

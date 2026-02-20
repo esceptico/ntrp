@@ -91,9 +91,6 @@ class CalendarTool(Tool):
     source_type = CalendarSource
     input_model = CalendarInput
 
-    def __init__(self, source: CalendarSource):
-        self.source = source
-
     async def execute(
         self,
         execution: ToolExecution,
@@ -103,13 +100,14 @@ class CalendarTool(Tool):
         limit: int = _DEFAULT_CALENDAR_LIMIT,
         **kwargs: Any,
     ) -> ToolResult:
+        source = execution.ctx.get_source(CalendarSource)
         if query:
-            return self._search(query, limit)
-        return self._list(days_forward, days_back, limit)
+            return self._search(source, query, limit)
+        return self._list(source, days_forward, days_back, limit)
 
-    def _search(self, query: str, limit: int) -> ToolResult:
+    def _search(self, source: CalendarSource, query: str, limit: int) -> ToolResult:
         try:
-            events = self.source.search(query, limit=limit)
+            events = source.search(query, limit=limit)
 
             if not events:
                 return ToolResult(
@@ -122,15 +120,15 @@ class CalendarTool(Tool):
         except Exception as e:
             return ToolResult(content=f"Error searching events: {e}", preview="Search failed", is_error=True)
 
-    def _list(self, days_forward: int, days_back: int, limit: int) -> ToolResult:
+    def _list(self, source: CalendarSource, days_forward: int, days_back: int, limit: int) -> ToolResult:
         events = []
 
         if days_back > 0:
-            past = self.source.get_past(days=days_back, limit=limit)
+            past = source.get_past(days=days_back, limit=limit)
             events.extend(past)
 
         if days_forward > 0:
-            upcoming = self.source.get_upcoming(days=days_forward, limit=limit)
+            upcoming = source.get_upcoming(days=days_forward, limit=limit)
             events.extend(upcoming)
 
         if not events:
@@ -164,11 +162,14 @@ class CreateCalendarEventTool(Tool):
     source_type = CalendarSource
     input_model = CreateCalendarEventInput
 
-    def __init__(self, source: CalendarSource):
-        self.source = source
-
     async def approval_info(
-        self, summary: str, start: str, end: str | None = None, location: str | None = None, **kwargs: Any
+        self,
+        execution: ToolExecution,
+        summary: str,
+        start: str,
+        end: str | None = None,
+        location: str | None = None,
+        **kwargs: Any,
     ) -> ApprovalInfo | None:
         start_dt = _parse_datetime(start)
         if not start_dt:
@@ -203,7 +204,8 @@ class CreateCalendarEventTool(Tool):
         end_dt = _parse_datetime(end) if end else None
         attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
 
-        result = self.source.create_event(
+        source = execution.ctx.get_source(CalendarSource)
+        result = source.create_event(
             account=account or "",
             summary=summary,
             start=start_dt,
@@ -236,11 +238,9 @@ class EditCalendarEventTool(Tool):
     source_type = CalendarSource
     input_model = EditCalendarEventInput
 
-    def __init__(self, source: CalendarSource):
-        self.source = source
-
     async def approval_info(
         self,
+        execution: ToolExecution,
         event_id: str,
         summary: str | None = None,
         start: str | None = None,
@@ -289,7 +289,8 @@ class EditCalendarEventTool(Tool):
 
         attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
 
-        result = self.source.update_event(
+        source = execution.ctx.get_source(CalendarSource)
+        result = source.update_event(
             event_id=event_id,
             summary=summary,
             start=start_dt,
@@ -313,12 +314,10 @@ class DeleteCalendarEventTool(Tool):
     source_type = CalendarSource
     input_model = DeleteCalendarEventInput
 
-    def __init__(self, source: CalendarSource):
-        self.source = source
-
-    async def approval_info(self, event_id: str, **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(self, execution: ToolExecution, event_id: str, **kwargs: Any) -> ApprovalInfo | None:
         return ApprovalInfo(description=event_id, preview=None, diff=None)
 
     async def execute(self, execution: ToolExecution, event_id: str, **kwargs: Any) -> ToolResult:
-        result = self.source.delete_event(event_id)
+        source = execution.ctx.get_source(CalendarSource)
+        result = source.delete_event(event_id)
         return ToolResult(content=result, preview="Deleted")

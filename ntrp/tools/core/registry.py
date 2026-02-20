@@ -2,6 +2,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from ntrp.sources.base import Source
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
@@ -9,17 +10,13 @@ from ntrp.tools.core.context import ToolExecution
 class ToolRegistry:
     def __init__(self):
         self._tools: dict[str, Tool] = {}
-        self._schemas: dict[str, dict] = {}  # Pre-computed schemas
 
     def register(self, tool: Tool) -> None:
         self._tools[tool.name] = tool
-        self._schemas[tool.name] = tool.to_dict()
 
     def copy_with(self, *extra_tools: Tool) -> "ToolRegistry":
-        """Create a shallow copy of this registry with additional tools."""
         registry = ToolRegistry()
         registry._tools = dict(self._tools)
-        registry._schemas = dict(self._schemas)
         for tool in extra_tools:
             registry.register(tool)
         return registry
@@ -44,7 +41,20 @@ class ToolRegistry:
                     is_error=True,
                 )
 
-        info = await tool.approval_info(**arguments)
+        if tool.source_type is not None and not execution.ctx.get_source(tool.source_type):
+            return ToolResult(
+                content=f"Required source ({tool.source_type.__name__}) is no longer available.",
+                preview="Source unavailable",
+                is_error=True,
+            )
+        if tool.requires_memory and not execution.ctx.memory:
+            return ToolResult(
+                content="Memory is not available.",
+                preview="No memory",
+                is_error=True,
+            )
+
+        info = await tool.approval_info(execution, **arguments)
         if info is not None:
             rejection = await execution.request_approval(
                 info.description,
@@ -59,6 +69,8 @@ class ToolRegistry:
     def get_schemas(
         self,
         *,
+        sources: dict[str, Source] | None = None,
+        has_memory: bool = False,
         names: set[str] | None = None,
         mutates: bool | None = None,
     ) -> list[dict]:
@@ -68,7 +80,12 @@ class ToolRegistry:
                 continue
             if mutates is not None and tool.mutates != mutates:
                 continue
-            schemas.append(self._schemas[name])
+            if tool.source_type is not None:
+                if not sources or not any(isinstance(s, tool.source_type) for s in sources.values()):
+                    continue
+            if tool.requires_memory and not has_memory:
+                continue
+            schemas.append(tool.to_dict())
         return schemas
 
     @property

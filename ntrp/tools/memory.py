@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from ntrp.memory.formatting import format_memory_context
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
+from ntrp.tools.core.context import ToolExecution
 
 RECALL_DESCRIPTION = """Recall stored facts from memory about a topic or entity.
 
@@ -44,25 +45,24 @@ class RememberTool(Tool):
     display_name = "Remember"
     description = REMEMBER_DESCRIPTION
     mutates = True
+    requires_memory = True
     input_model = RememberInput
 
-    def __init__(self, memory: Any):
-        self.memory = memory
-
-    async def approval_info(self, fact: str, **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(self, execution: ToolExecution, fact: str, **kwargs: Any) -> ApprovalInfo | None:
         return ApprovalInfo(description=fact[:100], preview=None, diff=None)
 
     async def execute(
         self,
-        execution: Any,
+        execution: ToolExecution,
         fact: str,
         source: str | None = None,
         happened_at: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
+        memory = execution.ctx.memory
         event_time = datetime.fromisoformat(happened_at) if happened_at else None
 
-        result = await self.memory.remember(
+        result = await memory.remember(
             text=fact,
             source_type="source" if source else "explicit",
             source_ref=source,
@@ -93,15 +93,14 @@ class RecallTool(Tool):
     name = "recall"
     display_name = "Recall"
     description = RECALL_DESCRIPTION
+    requires_memory = True
     input_model = RecallInput
 
-    def __init__(self, memory: Any):
-        self.memory = memory
-
     async def execute(
-        self, execution: Any, query: str, limit: int = _DEFAULT_RECALL_LIMIT, **kwargs: Any
+        self, execution: ToolExecution, query: str, limit: int = _DEFAULT_RECALL_LIMIT, **kwargs: Any
     ) -> ToolResult:
-        context = await self.memory.recall(query=query, limit=limit)
+        memory = execution.ctx.memory
+        context = await memory.recall(query=query, limit=limit)
         formatted = format_memory_context(
             query_facts=context.facts,
             query_observations=context.observations,
@@ -126,14 +125,13 @@ class ForgetTool(Tool):
     display_name = "Forget"
     description = FORGET_DESCRIPTION
     mutates = True
+    requires_memory = True
     input_model = ForgetInput
 
-    def __init__(self, memory: Any):
-        self.memory = memory
-
-    async def approval_info(self, query: str, **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(self, execution: ToolExecution, query: str, **kwargs: Any) -> ApprovalInfo | None:
         return ApprovalInfo(description=query, preview=None, diff=None)
 
-    async def execute(self, execution: Any, query: str, **kwargs: Any) -> ToolResult:
-        count = await self.memory.forget(query=query)
+    async def execute(self, execution: ToolExecution, query: str, **kwargs: Any) -> ToolResult:
+        memory = execution.ctx.memory
+        count = await memory.forget(query=query)
         return ToolResult(content=f"Forgot {count} fact(s) related to '{query}'.", preview=f"Forgot {count}")

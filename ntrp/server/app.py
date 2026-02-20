@@ -77,7 +77,7 @@ app.include_router(skills_router)
 @app.get("/health")
 async def health():
     runtime = get_runtime()
-    return {"status": "ok" if runtime._connected else "unavailable"}
+    return {"status": "ok" if runtime.connected else "unavailable"}
 
 
 @app.get("/index/status")
@@ -96,10 +96,7 @@ async def start_indexing():
 @app.get("/tools")
 async def list_tools():
     runtime = get_runtime()
-    tools = []
-    for tool in runtime.executor.registry.tools.values():
-        tools.append(tool.get_metadata())
-    return {"tools": tools}
+    return {"tools": runtime.executor.get_tool_metadata()}
 
 
 @app.post("/chat/stream")

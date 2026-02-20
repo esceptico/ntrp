@@ -1,11 +1,8 @@
 import asyncio
-from datetime import UTC, datetime
 
 import ntrp.database as database
 from ntrp.channel import Channel
 from ntrp.config import Config, get_config
-from ntrp.constants import AGENT_MAX_DEPTH
-from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import init as llm_init
@@ -13,12 +10,10 @@ from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.indexable import MemoryIndexable
 from ntrp.memory.service import MemoryService
-from ntrp.notifiers.base import Notifier
-from ntrp.notifiers.factory import create_notifier
 from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.notifiers.service import NotifierService
 from ntrp.notifiers.store import NotifierStore
-from ntrp.operator import OperatorDeps
+from ntrp.operator import OperatorConfig, OperatorDeps
 from ntrp.schedule.scheduler import Scheduler
 from ntrp.schedule.service import ScheduleService
 from ntrp.schedule.store import ScheduleStore
@@ -28,11 +23,10 @@ from ntrp.server.sources import SourceManager
 from ntrp.server.state import RunRegistry
 from ntrp.services.config import ConfigService
 from ntrp.services.lifecycle import wire_events
+from ntrp.services.session import SessionService
 from ntrp.skills.registry import SkillRegistry
 from ntrp.skills.service import SKILLS_DIRS, SkillService
 from ntrp.sources.base import Indexable
-from ntrp.sources.browser import BrowserHistorySource
-from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.tools.executor import ToolExecutor
 
 _logger = get_logger(__name__)
@@ -48,16 +42,14 @@ class Runtime:
         self.embedding = self.config.embedding
         self.indexer = Indexer(db_path=self.config.search_db_path, embedding=self.embedding, channel=self.channel)
 
-        self.session_store: SessionStore | None = None
+        self.session_service: SessionService | None = None
         self._sessions_conn = None
 
         self.memory: FactMemory | None = None
         self.memory_service: MemoryService | None = None
         self.indexables: dict[str, Indexable] = {}
         self.executor: ToolExecutor | None = None
-        self.tools: list[dict] = []
 
-        self.max_depth = AGENT_MAX_DEPTH
         self.schedule_store: ScheduleStore | None = None
         self.notifier_store: NotifierStore | None = None
         self.scheduler: Scheduler | None = None
@@ -66,7 +58,6 @@ class Runtime:
 
         self.skill_registry = SkillRegistry()
         self.skill_service: SkillService | None = None
-        self.notifiers: dict[str, Notifier] = {}
         self.notifier_service: NotifierService | None = None
         self.notification_log: NotificationLogStore | None = None
         self.dashboard = DashboardCollector()
@@ -74,13 +65,9 @@ class Runtime:
         self._connected = False
         self._config_lock = asyncio.Lock()
 
-    # --- Source accessors ---
-
-    def get_gmail(self) -> MultiGmailSource | None:
-        return self.source_mgr.sources.get("gmail")
-
-    def get_browser(self) -> BrowserHistorySource | None:
-        return self.source_mgr.sources.get("browser")
+    @property
+    def connected(self) -> bool:
+        return self._connected
 
     # --- Subsystem lifecycle ---
 
@@ -91,7 +78,6 @@ class Runtime:
             await self._sync_memory()
             await self._sync_embedding()
             self._sync_indexables()
-            self.rebuild_executor()
 
     async def _sync_memory(self) -> None:
         if self.config.memory and not self.memory:
@@ -104,9 +90,10 @@ class Runtime:
             self.memory_service = MemoryService(self.memory, self.channel)
         elif self.config.memory and self.memory:
             if self.memory.extraction_model != self.config.memory_model:
-                self.memory.extraction_model = self.config.memory_model
-                self.memory.extractor.model = self.config.memory_model
+                self.memory.update_extraction_model(self.config.memory_model)
         elif not self.config.memory and self.memory:
+            if self.memory_service:
+                self.memory_service.close()
             await self.memory.close()
             self.memory = None
             self.memory_service = None
@@ -128,38 +115,6 @@ class Runtime:
             self.indexables["memory"] = MemoryIndexable(self.memory.db)
         self.start_indexing()
 
-    def rebuild_executor(self) -> None:
-        notifier_map: dict[str, str] | None = None
-        if self.notifiers and self.notifier_store:
-            notifier_map = {}
-            for name, notifier in self.notifiers.items():
-                notifier_map[name] = notifier.channel
-
-        self.executor = ToolExecutor(
-            sources=self.source_mgr.sources,
-            memory=self.memory,
-            model=self.config.chat_model,
-            search_index=self.indexer.index,
-            schedule_store=self.schedule_store,
-            available_notifiers=notifier_map,
-            skill_registry=self.skill_registry if self.skill_registry else None,
-        )
-        self.tools = self.executor.get_tools()
-
-    async def rebuild_notifiers(self) -> None:
-        self.notifiers.clear()
-        if self.notifier_store:
-            for cfg in await self.notifier_store.list_all():
-                try:
-                    self.notifiers[cfg.name] = create_notifier(
-                        cfg,
-                        config=self.config,
-                        gmail=self.get_gmail,
-                    )
-                except Exception:
-                    _logger.exception("Failed to create notifier %r", cfg.name)
-        self.rebuild_executor()
-
     # --- Connect / close ---
 
     async def connect(self) -> None:
@@ -170,8 +125,9 @@ class Runtime:
         self.config.db_dir.mkdir(exist_ok=True)
 
         self._sessions_conn = await database.connect(self.config.sessions_db_path)
-        self.session_store = SessionStore(self._sessions_conn)
-        await self.session_store.init_schema()
+        session_store = SessionStore(self._sessions_conn)
+        await session_store.init_schema()
+        self.session_service = SessionService(session_store)
 
         self.schedule_store = ScheduleStore(self._sessions_conn)
         await self.schedule_store.init_schema()
@@ -200,25 +156,18 @@ class Runtime:
             self.indexables["memory"] = MemoryIndexable(self.memory.db)
 
         self.skill_registry.load(SKILLS_DIRS)
-        self.skill_service = SkillService(self.skill_registry, self.channel)
-
-        await self.rebuild_notifiers()
-
-        self.schedule_service = ScheduleService(
-            store=self.schedule_store,
-            scheduler=None,  # set after start_scheduler()
-            get_notifiers=lambda: self.notifiers,
-        )
+        self.skill_service = SkillService(self.skill_registry)
 
         self.notifier_service = NotifierService(
             store=self.notifier_store,
-            schedule_store=self.schedule_store,
-            notifiers=self.notifiers,
-            channel=self.channel,
-            get_gmail=self.get_gmail,
+            runtime=self,
         )
+        await self.notifier_service.seed_defaults()
+        await self.notifier_service.rebuild()
+        self.executor = ToolExecutor(runtime=self)
 
-        self.config_service = ConfigService(self)
+        self.schedule_service = ScheduleService(store=self.schedule_store, runtime=self)
+        self.config_service = ConfigService(runtime=self)
 
         self._connected = True
 
@@ -235,8 +184,11 @@ class Runtime:
 
     # --- Queries ---
 
-    def get_source_details(self) -> dict[str, dict]:
-        return self.source_mgr.get_details()
+    def get_available_sources(self) -> list[str]:
+        sources = self.source_mgr.get_available()
+        if self.memory:
+            sources.append("memory")
+        return sources
 
     def get_source_errors(self) -> dict[str, str]:
         errors = dict(self.source_mgr.errors)
@@ -244,76 +196,28 @@ class Runtime:
             errors["index"] = self.indexer.error
         return errors
 
-    def get_available_sources(self) -> list[str]:
-        sources = self.source_mgr.get_available()
-        if self.memory:
-            sources.append("memory")
-        return sources
-
-    # --- Session ---
-
-    def create_session(self, name: str | None = None) -> SessionState:
-        now = datetime.now(UTC)
-        return SessionState(
-            session_id=f"{now.strftime('%Y%m%d_%H%M%S')}_{now.microsecond // 1000:03d}",
-            started_at=now,
-            name=name,
-        )
-
-    async def load_session(self, session_id: str) -> SessionData | None:
-        try:
-            return await self.session_store.load_session(session_id)
-        except Exception as e:
-            _logger.warning("Failed to load session %s: %s", session_id, e)
-            return None
-
-    async def restore_session(self) -> SessionData | None:
-        try:
-            data = await self.session_store.get_latest_session()
-        except Exception as e:
-            _logger.warning("Failed to restore session: %s", e)
-            return None
-
-        if not data:
-            return None
-
-        if not data.messages or len(data.messages) < 2:
-            return None
-
-        return data
-
-    async def save_session(
-        self,
-        session_state: SessionState,
-        messages: list[dict],
-        metadata: dict | None = None,
-    ) -> None:
-        try:
-            session_state.last_activity = datetime.now(UTC)
-            await self.session_store.save_session(session_state, messages, metadata=metadata)
-        except Exception as e:
-            _logger.warning("Failed to save session: %s", e)
-
     # --- Background tasks ---
+
+    def build_operator_deps(self) -> OperatorDeps:
+        return OperatorDeps(
+            executor=self.executor,
+            memory=self.memory,
+            config=OperatorConfig(
+                model=self.config.chat_model,
+                explore_model=self.config.explore_model,
+                max_depth=self.config.max_depth,
+            ),
+            channel=self.channel,
+            source_details=self.source_mgr.get_details(),
+            create_session=self.session_service.create,
+            notifiers=self.notifier_service.notifiers if self.notifier_service else {},
+            notification_log=self.notification_log,
+        )
 
     def start_scheduler(self) -> None:
         if self.schedule_store and self.executor and self.notification_log:
-            deps = OperatorDeps(
-                executor=self.executor,
-                memory=lambda: self.memory,
-                get_model=lambda: self.config.chat_model,
-                max_depth=self.max_depth,
-                channel=self.channel,
-                source_details=self.get_source_details,
-                create_session=self.create_session,
-                get_notifiers=lambda: self.notifiers,
-                notification_log=self.notification_log,
-                get_explore_model=lambda: self.config.explore_model,
-            )
-            self.scheduler = Scheduler(deps, self.schedule_store)
+            self.scheduler = Scheduler(runtime=self, store=self.schedule_store)
             self.scheduler.start()
-            if self.schedule_service:
-                self.schedule_service.scheduler = self.scheduler
 
     def start_consolidation(self) -> None:
         if self.memory:
@@ -326,7 +230,7 @@ class Runtime:
         status = await self.indexer.get_status()
         if self.memory:
             status["reembedding"] = self.memory.reembed_running
-            status["reembed_progress"] = self.memory._reembed_progress
+            status["reembed_progress"] = self.memory.reembed_progress
         return status
 
 
@@ -350,7 +254,7 @@ def get_runtime() -> Runtime:
     global _runtime
     if _runtime is None:
         raise RuntimeError("Runtime not initialized. Call get_runtime_async() first.")
-    if not _runtime._connected:
+    if not _runtime.connected:
         raise RuntimeError("Runtime not connected. Call await runtime.connect() first.")
     return _runtime
 

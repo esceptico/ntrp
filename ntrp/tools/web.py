@@ -45,9 +45,6 @@ class WebSearchTool(Tool):
     source_type = WebSearchSource
     input_model = WebSearchInput
 
-    def __init__(self, source: WebSearchSource):
-        self.source = source
-
     async def execute(
         self,
         execution: ToolExecution,
@@ -56,8 +53,9 @@ class WebSearchTool(Tool):
         category: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
+        source = execution.ctx.get_source(WebSearchSource)
         try:
-            results = self.source.search_with_details(
+            results = source.search_with_details(
                 query=query,
                 num_results=min(max(num_results, 1), WEB_SEARCH_MAX_RESULTS),
                 category=category,
@@ -95,9 +93,6 @@ class WebFetchTool(Tool):
     source_type = WebSearchSource
     input_model = WebFetchInput
 
-    def __init__(self, source: WebSearchSource):
-        self.source = source
-
     async def execute(self, execution: ToolExecution, url: str, **kwargs: Any) -> ToolResult:
         if not url.startswith(("http://", "https://")):
             return ToolResult(
@@ -106,8 +101,9 @@ class WebFetchTool(Tool):
                 is_error=True,
             )
 
+        source = execution.ctx.get_source(WebSearchSource)
         try:
-            results = self.source.get_contents([url])
+            results = source.get_contents([url])
 
             if results:
                 r = results[0]

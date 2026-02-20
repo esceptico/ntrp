@@ -38,6 +38,7 @@ def create_agent(
         run=run_ctx,
         io=io or IOBridge(),
         memory=memory,
+        sources=executor.runtime.source_mgr.sources,
         channel=channel,
     )
     tool_ctx.spawn_fn = create_spawn_fn(

@@ -117,29 +117,30 @@ async def _run_headless(prompt: str):
             registry=runtime.executor.registry,
             run=RunContext(
                 run_id=run_id,
-                max_depth=runtime.max_depth,
+                max_depth=runtime.config.max_depth,
                 explore_model=runtime.config.explore_model,
             ),
             io=IOBridge(),
             memory=runtime.memory,
+            sources=runtime.source_mgr.sources,
             channel=runtime.channel,
         )
 
         tool_ctx.spawn_fn = create_spawn_fn(
             executor=runtime.executor,
             model=runtime.config.chat_model,
-            max_depth=runtime.max_depth,
+            max_depth=runtime.config.max_depth,
             current_depth=0,
             cancel_check=None,
         )
 
         agent = Agent(
-            tools=runtime.tools,
+            tools=runtime.executor.get_tools(),
             tool_executor=runtime.executor,
             model=runtime.config.chat_model,
             system_prompt=system_prompt,
             ctx=tool_ctx,
-            max_depth=runtime.max_depth,
+            max_depth=runtime.config.max_depth,
             current_depth=0,
             cancel_check=None,
         )

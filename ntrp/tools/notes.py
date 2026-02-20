@@ -84,8 +84,7 @@ class NotesTool(Tool):
     source_type = NotesSource
     input_model = NotesInput
 
-    def __init__(self, source: NotesSource, search_index: Any | None = None):
-        self.source = source
+    def __init__(self, search_index: Any | None = None):
         self.search_index = search_index
 
     async def execute(
@@ -95,13 +94,14 @@ class NotesTool(Tool):
         limit: int | None = None,
         **kwargs: Any,
     ) -> ToolResult:
+        source = execution.ctx.get_source(NotesSource)
         limit = limit or DEFAULT_LIST_LIMIT
         if query:
-            return await self._search(query, limit)
-        return self._list(limit)
+            return await self._search(source, query, limit)
+        return self._list(source, limit)
 
-    def _list(self, limit: int) -> ToolResult:
-        files_by_mtime = self.source.get_all_with_mtime()
+    def _list(self, source: NotesSource, limit: int) -> ToolResult:
+        files_by_mtime = source.get_all_with_mtime()
 
         sorted_files = sorted(
             files_by_mtime.items(),
@@ -119,7 +119,7 @@ class NotesTool(Tool):
 
         return ToolResult(content=content, preview=f"{showing} notes")
 
-    async def _search(self, query: str, limit: int) -> ToolResult:
+    async def _search(self, source: NotesSource, query: str, limit: int) -> ToolResult:
         query = simplify_query(query)
 
         if self.search_index:
@@ -138,11 +138,11 @@ class NotesTool(Tool):
 
         seen = set()
         results = []
-        for path in self.source.search(query):
+        for path in source.search(query):
             if path in seen:
                 continue
             seen.add(path)
-            content = self.source.read(path) or ""
+            content = source.read(path) or ""
             snippet = truncate(content.replace("\n", " ").strip(), SNIPPET_TRUNCATE)
             title = path.split("/")[-1].replace(".md", "")
             results.append((title, path, snippet))
@@ -175,15 +175,13 @@ class ReadNoteTool(Tool):
     source_type = NotesSource
     input_model = ReadNoteInput
 
-    def __init__(self, source: NotesSource):
-        self.source = source
-
     async def execute(
         self, execution: ToolExecution, path: str, offset: int | None = None, limit: int | None = None, **kwargs: Any
     ) -> ToolResult:
+        source = execution.ctx.get_source(NotesSource)
         offset = offset or 1
         limit = limit or DEFAULT_READ_LINES
-        content = self.source.read(path)
+        content = source.read(path)
         if content is None:
             return ToolResult(
                 content=f"Note not found: {path}. Use notes() to see available notes.",
@@ -210,11 +208,11 @@ class EditNoteTool(Tool):
     source_type = NotesSource
     input_model = EditNoteInput
 
-    def __init__(self, source: NotesSource):
-        self.source = source
-
-    async def approval_info(self, path: str, find: str, replace: str = "", **kwargs: Any) -> ApprovalInfo | None:
-        original = self.source.read(path)
+    async def approval_info(
+        self, execution: ToolExecution, path: str, find: str, replace: str = "", **kwargs: Any
+    ) -> ApprovalInfo | None:
+        source = execution.ctx.get_source(NotesSource)
+        original = source.read(path)
         if original is None or find not in original:
             return None
         proposed = original.replace(find, replace, 1)
@@ -228,7 +226,8 @@ class EditNoteTool(Tool):
     async def execute(
         self, execution: ToolExecution, path: str, find: str, replace: str = "", **kwargs: Any
     ) -> ToolResult:
-        original = self.source.read(path)
+        source = execution.ctx.get_source(NotesSource)
+        original = source.read(path)
         if original is None:
             return ToolResult(
                 content=f"Note not found: {path}. Use notes() to find correct path.",
@@ -244,7 +243,7 @@ class EditNoteTool(Tool):
         proposed = original.replace(find, replace, 1)
         diff = generate_diff(original, proposed, path)
 
-        success = self.source.write(path, proposed)
+        success = source.write(path, proposed)
         if success:
             lines_changed = len([l for l in diff.split("\n") if l.startswith("+") or l.startswith("-")]) - 2
             return ToolResult(
@@ -271,13 +270,13 @@ class CreateNoteTool(Tool):
     source_type = NotesSource
     input_model = CreateNoteInput
 
-    def __init__(self, source: NotesSource):
-        self.source = source
-
-    async def approval_info(self, path: str, content: str, **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(
+        self, execution: ToolExecution, path: str, content: str, **kwargs: Any
+    ) -> ApprovalInfo | None:
+        source = execution.ctx.get_source(NotesSource)
         if not path.endswith(".md"):
             path = path + ".md"
-        if self.source.exists(path):
+        if source.exists(path):
             return None
         preview_content = content[:CONTENT_PREVIEW_LIMIT]
         if len(content) > CONTENT_PREVIEW_LIMIT:
@@ -285,16 +284,17 @@ class CreateNoteTool(Tool):
         return ApprovalInfo(description=path, preview=preview_content, diff=None)
 
     async def execute(self, execution: ToolExecution, path: str, content: str, **kwargs: Any) -> ToolResult:
+        source = execution.ctx.get_source(NotesSource)
         if not path.endswith(".md"):
             path = path + ".md"
 
-        if self.source.exists(path):
+        if source.exists(path):
             return ToolResult(
                 content=f"Note already exists: {path}. Use edit_note to modify or choose different path.",
                 preview="Exists",
             )
 
-        success = self.source.write(path, content)
+        success = source.write(path, content)
         if success:
             return ToolResult(content=f"Created note: {path}", preview="Created")
         return ToolResult(content=f"Error creating {path}", preview="Create failed", is_error=True)
@@ -312,23 +312,22 @@ class DeleteNoteTool(Tool):
     source_type = NotesSource
     input_model = DeleteNoteInput
 
-    def __init__(self, source: NotesSource):
-        self.source = source
-
-    async def approval_info(self, path: str, **kwargs: Any) -> ApprovalInfo | None:
-        if self.source.read(path) is None:
+    async def approval_info(self, execution: ToolExecution, path: str, **kwargs: Any) -> ApprovalInfo | None:
+        source = execution.ctx.get_source(NotesSource)
+        if source.read(path) is None:
             return None
         return ApprovalInfo(description=path, preview=None, diff=None)
 
     async def execute(self, execution: ToolExecution, path: str, **kwargs: Any) -> ToolResult:
-        original = self.source.read(path)
+        source = execution.ctx.get_source(NotesSource)
+        original = source.read(path)
         if original is None:
             return ToolResult(
                 content=f"Note not found: {path}. Use notes() to find correct path.",
                 preview="Not found",
             )
 
-        success = self.source.delete(path)
+        success = source.delete(path)
         if success:
             return ToolResult(content=f"Deleted: {path}", preview="Deleted")
         return ToolResult(content=f"Error deleting {path}", preview="Delete failed", is_error=True)
@@ -347,31 +346,32 @@ class MoveNoteTool(Tool):
     source_type = NotesSource
     input_model = MoveNoteInput
 
-    def __init__(self, source: NotesSource):
-        self.source = source
-
-    async def approval_info(self, path: str, new_path: str, **kwargs: Any) -> ApprovalInfo | None:
-        if not self.source.exists(path):
+    async def approval_info(
+        self, execution: ToolExecution, path: str, new_path: str, **kwargs: Any
+    ) -> ApprovalInfo | None:
+        source = execution.ctx.get_source(NotesSource)
+        if not source.exists(path):
             return None
         return ApprovalInfo(description=f"{path} → {new_path}", preview=None, diff=None)
 
     async def execute(self, execution: ToolExecution, path: str, new_path: str, **kwargs: Any) -> ToolResult:
+        source = execution.ctx.get_source(NotesSource)
         if not new_path.endswith(".md"):
             new_path = new_path + ".md"
 
-        if not self.source.exists(path):
+        if not source.exists(path):
             return ToolResult(
                 content=f"Note not found: {path}. Use notes() to find correct path.",
                 preview="Not found",
             )
 
-        if self.source.exists(new_path):
+        if source.exists(new_path):
             return ToolResult(
                 content=f"Destination already exists: {new_path}. Choose different path or delete existing first.",
                 preview="Exists",
             )
 
-        success = self.source.move(path, new_path)
+        success = source.move(path, new_path)
         if success:
             return ToolResult(content=f"Moved: `{path}` → `{new_path}`", preview="Moved")
         return ToolResult(content=f"Error moving {path}", preview="Move failed", is_error=True)

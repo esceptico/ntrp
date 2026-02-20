@@ -159,11 +159,10 @@ class BashTool(Tool):
 
     mutates = True
 
-    def __init__(self, working_dir: str | None = None, timeout: int = 30):
-        self.working_dir = working_dir
+    def __init__(self, timeout: int = 30):
         self.timeout = timeout
 
-    async def approval_info(self, command: str, **kwargs: Any) -> ApprovalInfo | None:
+    async def approval_info(self, execution: ToolExecution, command: str, **kwargs: Any) -> ApprovalInfo | None:
         if not is_safe_command(command) and not is_blocked_command(command):
             return ApprovalInfo(description=command, preview=None, diff=None)
         return None
@@ -174,7 +173,7 @@ class BashTool(Tool):
         if is_blocked_command(command):
             return ToolResult(content=f"Blocked: {command}", preview="Blocked", is_error=True)
 
-        cwd = working_dir or self.working_dir
+        cwd = working_dir
         output = execute_bash(command, cwd, self.timeout)
         lines = output.count("\n") + 1
         return ToolResult(content=output, preview=f"{lines} lines")

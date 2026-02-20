@@ -1,5 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from ntrp.notifiers.service import NotifierService
+from ntrp.schedule.service import ScheduleService
 from ntrp.server.runtime import get_runtime
 from ntrp.server.schemas import (
     CreateNotifierRequest,
@@ -11,11 +13,18 @@ from ntrp.server.schemas import (
 router = APIRouter(tags=["schedule"])
 
 
-def _require_schedule_service():
+def _require_schedule_service() -> ScheduleService:
     runtime = get_runtime()
     if not runtime.schedule_service:
         raise HTTPException(status_code=503, detail="Scheduling not available")
-    return runtime
+    return runtime.schedule_service
+
+
+def _require_notifier_service() -> NotifierService:
+    runtime = get_runtime()
+    if not runtime.notifier_service:
+        raise HTTPException(status_code=503, detail="Notifier service not available")
+    return runtime.notifier_service
 
 
 @router.get("/schedules")
@@ -47,10 +56,9 @@ async def list_schedules():
 
 
 @router.get("/schedules/{task_id}")
-async def get_schedule(task_id: str):
-    runtime = _require_schedule_service()
+async def get_schedule(task_id: str, svc: ScheduleService = Depends(_require_schedule_service)):
     try:
-        task = await runtime.schedule_service.get(task_id)
+        task = await svc.get(task_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -72,30 +80,27 @@ async def get_schedule(task_id: str):
 
 
 @router.post("/schedules/{task_id}/toggle")
-async def toggle_schedule(task_id: str):
-    runtime = _require_schedule_service()
+async def toggle_schedule(task_id: str, svc: ScheduleService = Depends(_require_schedule_service)):
     try:
-        new_enabled = await runtime.schedule_service.toggle_enabled(task_id)
+        new_enabled = await svc.toggle_enabled(task_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"enabled": new_enabled}
 
 
 @router.post("/schedules/{task_id}/writable")
-async def toggle_writable(task_id: str):
-    runtime = _require_schedule_service()
+async def toggle_writable(task_id: str, svc: ScheduleService = Depends(_require_schedule_service)):
     try:
-        new_writable = await runtime.schedule_service.toggle_writable(task_id)
+        new_writable = await svc.toggle_writable(task_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"writable": new_writable}
 
 
 @router.post("/schedules/{task_id}/run")
-async def run_schedule(task_id: str):
-    runtime = _require_schedule_service()
+async def run_schedule(task_id: str, svc: ScheduleService = Depends(_require_schedule_service)):
     try:
-        await runtime.schedule_service.run_now(task_id)
+        await svc.run_now(task_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Task not found")
     except RuntimeError:
@@ -106,10 +111,11 @@ async def run_schedule(task_id: str):
 
 
 @router.patch("/schedules/{task_id}")
-async def update_schedule(task_id: str, request: UpdateScheduleRequest):
-    runtime = _require_schedule_service()
+async def update_schedule(
+    task_id: str, request: UpdateScheduleRequest, svc: ScheduleService = Depends(_require_schedule_service)
+):
     try:
-        task = await runtime.schedule_service.update(task_id, name=request.name, description=request.description)
+        task = await svc.update(task_id, name=request.name, description=request.description)
     except KeyError:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"name": task.name, "description": task.description}
@@ -124,10 +130,11 @@ async def list_notifiers():
 
 
 @router.put("/schedules/{task_id}/notifiers")
-async def set_notifiers(task_id: str, request: SetNotifiersRequest):
-    runtime = _require_schedule_service()
+async def set_notifiers(
+    task_id: str, request: SetNotifiersRequest, svc: ScheduleService = Depends(_require_schedule_service)
+):
     try:
-        await runtime.schedule_service.set_notifiers(task_id, request.notifiers)
+        await svc.set_notifiers(task_id, request.notifiers)
     except KeyError:
         raise HTTPException(status_code=404, detail="Task not found")
     except ValueError as e:
@@ -136,10 +143,9 @@ async def set_notifiers(task_id: str, request: SetNotifiersRequest):
 
 
 @router.delete("/schedules/{task_id}")
-async def delete_schedule(task_id: str):
-    runtime = _require_schedule_service()
+async def delete_schedule(task_id: str, svc: ScheduleService = Depends(_require_schedule_service)):
     try:
-        await runtime.schedule_service.delete(task_id)
+        await svc.delete(task_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"status": "deleted"}
@@ -149,12 +155,8 @@ async def delete_schedule(task_id: str):
 
 
 @router.get("/notifiers/configs")
-async def list_notifier_configs():
-    runtime = get_runtime()
-    if not runtime.notifier_service:
-        return {"configs": []}
-
-    configs = await runtime.notifier_service.list_configs()
+async def list_notifier_configs(svc: NotifierService = Depends(_require_notifier_service)):
+    configs = await svc.list_configs()
     return {
         "configs": [
             {
@@ -169,21 +171,16 @@ async def list_notifier_configs():
 
 
 @router.get("/notifiers/types")
-async def list_notifier_types():
-    runtime = get_runtime()
-    if not runtime.notifier_service:
-        return {"types": {}}
-    return {"types": runtime.notifier_service.get_types()}
+async def list_notifier_types(svc: NotifierService = Depends(_require_notifier_service)):
+    return {"types": svc.get_types()}
 
 
 @router.post("/notifiers/configs")
-async def create_notifier_config(request: CreateNotifierRequest):
-    runtime = get_runtime()
-    if not runtime.notifier_service:
-        raise HTTPException(status_code=503, detail="Notifier store not available")
-
+async def create_notifier_config(
+    request: CreateNotifierRequest, svc: NotifierService = Depends(_require_notifier_service)
+):
     try:
-        cfg = await runtime.notifier_service.create(request.name, request.type, request.config)
+        cfg = await svc.create(request.name, request.type, request.config)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -191,13 +188,11 @@ async def create_notifier_config(request: CreateNotifierRequest):
 
 
 @router.put("/notifiers/configs/{name}")
-async def update_notifier_config(name: str, request: UpdateNotifierRequest):
-    runtime = get_runtime()
-    if not runtime.notifier_service:
-        raise HTTPException(status_code=503, detail="Notifier store not available")
-
+async def update_notifier_config(
+    name: str, request: UpdateNotifierRequest, svc: NotifierService = Depends(_require_notifier_service)
+):
     try:
-        cfg = await runtime.notifier_service.update(name, request.config, new_name=request.name)
+        cfg = await svc.update(name, request.config, new_name=request.name)
     except KeyError:
         raise HTTPException(status_code=404, detail="Notifier not found")
     except ValueError as e:
@@ -207,13 +202,9 @@ async def update_notifier_config(name: str, request: UpdateNotifierRequest):
 
 
 @router.delete("/notifiers/configs/{name}")
-async def delete_notifier_config(name: str):
-    runtime = get_runtime()
-    if not runtime.notifier_service:
-        raise HTTPException(status_code=503, detail="Notifier store not available")
-
+async def delete_notifier_config(name: str, svc: NotifierService = Depends(_require_notifier_service)):
     try:
-        await runtime.notifier_service.delete(name)
+        await svc.delete(name)
     except KeyError:
         raise HTTPException(status_code=404, detail="Notifier not found")
 
@@ -221,13 +212,9 @@ async def delete_notifier_config(name: str):
 
 
 @router.post("/notifiers/configs/{name}/test")
-async def test_notifier(name: str):
-    runtime = get_runtime()
-    if not runtime.notifier_service:
-        raise HTTPException(status_code=503, detail="Notifier service not available")
-
+async def test_notifier(name: str, svc: NotifierService = Depends(_require_notifier_service)):
     try:
-        await runtime.notifier_service.test(name)
+        await svc.test(name)
     except KeyError:
         raise HTTPException(status_code=404, detail="Notifier not found")
     except Exception as e:

@@ -2,19 +2,15 @@ from typing import TYPE_CHECKING
 
 from ntrp.events.internal import (
     ConsolidationCompleted,
-    ContextCompressed,
     FactCreated,
     FactDeleted,
     FactUpdated,
     MemoryCleared,
-    NotifierChanged,
     RunCompleted,
     RunStarted,
-    SkillChanged,
     SourceChanged,
     ToolExecuted,
 )
-from ntrp.memory.chat_extraction import make_chat_extraction_handler
 from ntrp.sources.base import Indexable
 
 if TYPE_CHECKING:
@@ -39,25 +35,14 @@ async def _on_memory_cleared(runtime: "Runtime", _event: MemoryCleared) -> None:
 
 
 async def _on_source_changed(runtime: "Runtime", event: SourceChanged) -> None:
-    async with runtime._config_lock:
-        runtime.rebuild_executor()
     name = event.source_name
     source = runtime.source_mgr.sources.get(name)
     if source and isinstance(source, Indexable):
         runtime.indexables[name] = source
         runtime.start_indexing()
-    elif name in runtime.indexables and source is None:
-        runtime.indexables.pop(name)
+    elif source is None:
+        runtime.indexables.pop(name, None)
         await runtime.indexer.index.clear_source(name)
-
-
-async def _on_skill_changed(runtime: "Runtime", _event: SkillChanged) -> None:
-    async with runtime._config_lock:
-        runtime.rebuild_executor()
-
-
-async def _on_notifier_changed(runtime: "Runtime", _event: NotifierChanged) -> None:
-    await runtime.rebuild_notifiers()
 
 
 def wire_events(runtime: "Runtime") -> None:
@@ -76,17 +61,5 @@ def wire_events(runtime: "Runtime") -> None:
     ch.subscribe(FactDeleted, lambda e: _on_fact_deleted(runtime, e))
     ch.subscribe(MemoryCleared, lambda e: _on_memory_cleared(runtime, e))
 
-    # Source changes → rebuild executor + reindex
+    # Source changes → reindex
     ch.subscribe(SourceChanged, lambda e: _on_source_changed(runtime, e))
-
-    # Skill changes → rebuild executor
-    ch.subscribe(SkillChanged, lambda e: _on_skill_changed(runtime, e))
-
-    # Notifier changes → rebuild notifiers + executor
-    ch.subscribe(NotifierChanged, lambda e: _on_notifier_changed(runtime, e))
-
-    # Auto-extract facts from compressed context
-    ch.subscribe(
-        ContextCompressed,
-        make_chat_extraction_handler(lambda: runtime.memory, lambda: runtime.config.memory_model),
-    )

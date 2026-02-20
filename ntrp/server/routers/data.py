@@ -1,22 +1,22 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from ntrp.memory.service import MemoryService
 from ntrp.server.runtime import get_runtime
 from ntrp.server.schemas import UpdateFactRequest, UpdateObservationRequest
 
 router = APIRouter(tags=["data"])
 
 
-def _require_memory():
+def _require_memory() -> MemoryService:
     runtime = get_runtime()
     if not runtime.memory_service:
         raise HTTPException(status_code=503, detail="Memory is disabled")
-    return runtime
+    return runtime.memory_service
 
 
 @router.get("/facts")
-async def get_facts(limit: int = 100, offset: int = 0):
-    runtime = _require_memory()
-    facts, total = await runtime.memory_service.facts.list_recent(limit=limit, offset=offset)
+async def get_facts(limit: int = 100, offset: int = 0, svc: MemoryService = Depends(_require_memory)):
+    facts, total = await svc.facts.list_recent(limit=limit, offset=offset)
     return {
         "facts": [
             {
@@ -32,10 +32,9 @@ async def get_facts(limit: int = 100, offset: int = 0):
 
 
 @router.get("/facts/{fact_id}")
-async def get_fact_details(fact_id: int):
-    runtime = _require_memory()
+async def get_fact_details(fact_id: int, svc: MemoryService = Depends(_require_memory)):
     try:
-        fact, entity_refs = await runtime.memory_service.facts.get(fact_id)
+        fact, entity_refs = await svc.facts.get(fact_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Fact not found")
 
@@ -54,11 +53,9 @@ async def get_fact_details(fact_id: int):
 
 
 @router.patch("/facts/{fact_id}")
-async def update_fact(fact_id: int, request: UpdateFactRequest):
-    runtime = _require_memory()
-
+async def update_fact(fact_id: int, request: UpdateFactRequest, svc: MemoryService = Depends(_require_memory)):
     try:
-        fact, entity_refs = await runtime.memory_service.facts.update(fact_id, request.text)
+        fact, entity_refs = await svc.facts.update(fact_id, request.text)
     except KeyError:
         raise HTTPException(status_code=404, detail="Fact not found")
 
@@ -76,11 +73,9 @@ async def update_fact(fact_id: int, request: UpdateFactRequest):
 
 
 @router.delete("/facts/{fact_id}")
-async def delete_fact(fact_id: int):
-    runtime = _require_memory()
-
+async def delete_fact(fact_id: int, svc: MemoryService = Depends(_require_memory)):
     try:
-        cascaded = await runtime.memory_service.facts.delete(fact_id)
+        cascaded = await svc.facts.delete(fact_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Fact not found")
 
@@ -92,9 +87,8 @@ async def delete_fact(fact_id: int):
 
 
 @router.get("/observations")
-async def get_observations(limit: int = 50):
-    runtime = _require_memory()
-    observations = await runtime.memory_service.observations.list_recent(limit=limit)
+async def get_observations(limit: int = 50, svc: MemoryService = Depends(_require_memory)):
+    observations = await svc.observations.list_recent(limit=limit)
     return {
         "observations": [
             {
@@ -111,10 +105,9 @@ async def get_observations(limit: int = 50):
 
 
 @router.get("/observations/{observation_id}")
-async def get_observation_details(observation_id: int):
-    runtime = _require_memory()
+async def get_observation_details(observation_id: int, svc: MemoryService = Depends(_require_memory)):
     try:
-        obs, facts = await runtime.memory_service.observations.get(observation_id)
+        obs, facts = await svc.observations.get(observation_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Observation not found")
 
@@ -132,11 +125,11 @@ async def get_observation_details(observation_id: int):
 
 
 @router.patch("/observations/{observation_id}")
-async def update_observation(observation_id: int, request: UpdateObservationRequest):
-    runtime = _require_memory()
-
+async def update_observation(
+    observation_id: int, request: UpdateObservationRequest, svc: MemoryService = Depends(_require_memory)
+):
     try:
-        obs = await runtime.memory_service.observations.update(observation_id, request.summary)
+        obs = await svc.observations.update(observation_id, request.summary)
     except KeyError:
         raise HTTPException(status_code=404, detail="Observation not found")
 
@@ -153,11 +146,9 @@ async def update_observation(observation_id: int, request: UpdateObservationRequ
 
 
 @router.delete("/observations/{observation_id}")
-async def delete_observation(observation_id: int):
-    runtime = _require_memory()
-
+async def delete_observation(observation_id: int, svc: MemoryService = Depends(_require_memory)):
     try:
-        await runtime.memory_service.observations.delete(observation_id)
+        await svc.observations.delete(observation_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Observation not found")
 
@@ -168,9 +159,8 @@ async def delete_observation(observation_id: int):
 
 
 @router.get("/dreams")
-async def get_dreams(limit: int = 50):
-    runtime = _require_memory()
-    dreams = await runtime.memory_service.dreams.list_recent(limit=limit)
+async def get_dreams(limit: int = 50, svc: MemoryService = Depends(_require_memory)):
+    dreams = await svc.dreams.list_recent(limit=limit)
     return {
         "dreams": [
             {
@@ -185,10 +175,9 @@ async def get_dreams(limit: int = 50):
 
 
 @router.get("/dreams/{dream_id}")
-async def get_dream_details(dream_id: int):
-    runtime = _require_memory()
+async def get_dream_details(dream_id: int, svc: MemoryService = Depends(_require_memory)):
     try:
-        dream, source_facts = await runtime.memory_service.dreams.get(dream_id)
+        dream, source_facts = await svc.dreams.get(dream_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Dream not found")
 
@@ -204,10 +193,9 @@ async def get_dream_details(dream_id: int):
 
 
 @router.delete("/dreams/{dream_id}")
-async def delete_dream(dream_id: int):
-    runtime = _require_memory()
+async def delete_dream(dream_id: int, svc: MemoryService = Depends(_require_memory)):
     try:
-        await runtime.memory_service.dreams.delete(dream_id)
+        await svc.dreams.delete(dream_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Dream not found")
 
@@ -215,20 +203,17 @@ async def delete_dream(dream_id: int):
 
 
 @router.get("/stats")
-async def get_stats():
-    runtime = _require_memory()
-    return await runtime.memory_service.stats()
+async def get_stats(svc: MemoryService = Depends(_require_memory)):
+    return await svc.stats()
 
 
 @router.post("/memory/clear")
-async def clear_memory():
-    runtime = _require_memory()
-    deleted = await runtime.memory_service.clear()
+async def clear_memory(svc: MemoryService = Depends(_require_memory)):
+    deleted = await svc.clear()
     return {"status": "cleared", "deleted": deleted}
 
 
 @router.post("/memory/observations/clear")
-async def clear_observations():
-    runtime = _require_memory()
-    result = await runtime.memory_service.clear_observations()
+async def clear_observations(svc: MemoryService = Depends(_require_memory)):
+    result = await svc.clear_observations()
     return {"status": "cleared", **result}

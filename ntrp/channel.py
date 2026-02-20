@@ -25,6 +25,14 @@ class Channel:
     def subscribe[T](self, event_type: type[T], handler: Handler[T]) -> None:
         self._handlers[event_type].append(handler)
 
+    def unsubscribe[T](self, event_type: type[T], handler: Handler[T]) -> None:
+        handlers = self._handlers.get(event_type)
+        if handlers:
+            try:
+                handlers.remove(handler)
+            except ValueError:
+                pass
+
     def publish[T](self, event: T) -> None:
         for handler in self._handlers.get(type(event), []):
             asyncio.create_task(self._run(handler, event))

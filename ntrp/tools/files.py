@@ -33,14 +33,11 @@ class ReadFileTool(Tool):
     description = READ_FILE_DESCRIPTION
     input_model = ReadFileInput
 
-    def __init__(self, base_path: str | None = None):
-        self.base_path = base_path or os.getcwd()
-
     async def execute(
         self, execution: Any, path: str, offset: int = _DEFAULT_OFFSET, limit: int = _DEFAULT_LINE_LIMIT, **kwargs: Any
     ) -> ToolResult:
         if not os.path.isabs(path):
-            full_path = os.path.join(self.base_path, path)
+            full_path = os.path.join(os.getcwd(), path)
         else:
             full_path = path
 

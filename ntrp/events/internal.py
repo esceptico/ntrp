@@ -85,19 +85,3 @@ class IndexingCompleted:
 @dataclass(frozen=True)
 class SourceChanged:
     source_name: str
-
-
-# --- Skills ---
-
-
-@dataclass(frozen=True)
-class SkillChanged:
-    pass
-
-
-# --- Notifiers ---
-
-
-@dataclass(frozen=True)
-class NotifierChanged:
-    pass

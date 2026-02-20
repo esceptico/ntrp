@@ -29,18 +29,16 @@ class BrowserTool(Tool):
     source_type = BrowserSource
     input_model = BrowserInput
 
-    def __init__(self, source: BrowserSource):
-        self.source = source
-
     async def execute(
         self, execution: ToolExecution, query: str | None = None, days: int = 7, limit: int = 30, **kwargs: Any
     ) -> ToolResult:
+        source = execution.ctx.get_source(BrowserSource)
         if query:
-            return self._search(query, limit)
-        return self._list(days, limit)
+            return self._search(source, query, limit)
+        return self._list(source, days, limit)
 
-    def _list(self, days: int, limit: int) -> ToolResult:
-        items = self.source.list_recent(days=days, limit=limit)
+    def _list(self, source: BrowserSource, days: int, limit: int) -> ToolResult:
+        items = source.list_recent(days=days, limit=limit)
 
         if not items:
             return ToolResult(content=f"No browser history in last {days} days", preview="0 items")
@@ -53,14 +51,14 @@ class BrowserTool(Tool):
 
         return ToolResult(content="\n".join(output), preview=f"{len(items)} items")
 
-    def _search(self, query: str, limit: int) -> ToolResult:
-        urls = self.source.search(query)
+    def _search(self, source: BrowserSource, query: str, limit: int) -> ToolResult:
+        urls = source.search(query)
         if not urls:
             return ToolResult(content=f"No browser history found for '{query}'", preview="0 results")
 
         output = []
         for url in list(urls)[:limit]:
-            info = self.source.read(url)
+            info = source.read(url)
             if info:
                 lines = info.split("\n")
                 title = next(

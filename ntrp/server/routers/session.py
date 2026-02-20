@@ -35,7 +35,7 @@ def _config_response(rt: Runtime) -> dict:
         "gmail_enabled": config.gmail,
         "has_browser": config.browser is not None,
         "has_notes": config.vault_path is not None and rt.source_mgr.sources.get("notes") is not None,
-        "max_depth": rt.max_depth,
+        "max_depth": config.max_depth,
         "memory_enabled": memory_connected,
         "sources": {
             "gmail": {"enabled": config.gmail, "connected": has_google},
@@ -61,11 +61,7 @@ def _config_response(rt: Runtime) -> dict:
 async def get_session_history(session_id: str | None = None):
     runtime = get_runtime()
 
-    if session_id:
-        data = await runtime.load_session(session_id)
-    else:
-        data = await runtime.restore_session()
-
+    data = await runtime.session_service.load(session_id)
     if not data:
         return {"messages": []}
 
@@ -88,15 +84,11 @@ async def get_session_history(session_id: str | None = None):
 async def get_session(session_id: str | None = None) -> SessionResponse:
     runtime = get_runtime()
 
-    if session_id:
-        data = await runtime.load_session(session_id)
-    else:
-        data = await runtime.restore_session()
-
+    data = await runtime.session_service.load(session_id)
     if data:
         session_state = data.state
     else:
-        session_state = runtime.create_session()
+        session_state = runtime.session_service.create()
 
     return SessionResponse(
         session_id=session_state.session_id,
@@ -111,16 +103,12 @@ async def clear_session(req: ClearSessionRequest | None = None):
     runtime = get_runtime()
     target_id = req.session_id if req else None
 
-    if target_id:
-        data = await runtime.load_session(target_id)
-    else:
-        data = await runtime.restore_session()
-
+    data = await runtime.session_service.load(target_id)
     if not data:
         return {"status": "cleared", "session_id": None}
 
     data.state.last_activity = data.state.started_at
-    await runtime.save_session(data.state, [])
+    await runtime.session_service.save(data.state, [])
 
     return {
         "status": "cleared",
@@ -135,8 +123,8 @@ async def clear_session(req: ClearSessionRequest | None = None):
 async def create_session(req: CreateSessionRequest | None = None):
     runtime = get_runtime()
     name = req.name if req else None
-    state = runtime.create_session(name=name)
-    await runtime.save_session(state, [])
+    state = runtime.session_service.create(name=name)
+    await runtime.session_service.save(state, [])
     return {
         "session_id": state.session_id,
         "name": state.name,
@@ -149,14 +137,14 @@ async def create_session(req: CreateSessionRequest | None = None):
 @router.get("/sessions")
 async def list_sessions():
     runtime = get_runtime()
-    sessions = await runtime.session_store.list_sessions(limit=20)
+    sessions = await runtime.session_service.list_sessions(limit=20)
     return {"sessions": sessions}
 
 
 @router.patch("/sessions/{session_id}")
 async def rename_session(session_id: str, req: RenameSessionRequest):
     runtime = get_runtime()
-    updated = await runtime.session_store.update_session_name(session_id, req.name)
+    updated = await runtime.session_service.rename(session_id, req.name)
     if not updated:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"session_id": session_id, "name": req.name}
@@ -165,7 +153,7 @@ async def rename_session(session_id: str, req: RenameSessionRequest):
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
     runtime = get_runtime()
-    deleted = await runtime.session_store.delete_session(session_id)
+    deleted = await runtime.session_service.delete(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "deleted", "session_id": session_id}
@@ -244,11 +232,7 @@ async def get_context_usage(session_id: str | None = None):
     model = runtime.config.chat_model
     model_limit = get_model(model).max_context_tokens
 
-    if session_id:
-        data = await runtime.load_session(session_id)
-    else:
-        data = await runtime.restore_session()
-
+    data = await runtime.session_service.load(session_id)
     messages = data.messages if data else []
     last_input_tokens = data.last_input_tokens if data else None
 
@@ -257,7 +241,7 @@ async def get_context_usage(session_id: str | None = None):
         "limit": model_limit,
         "total": last_input_tokens,
         "message_count": len(messages),
-        "tool_count": len(runtime.tools or []),
+        "tool_count": len(runtime.executor.get_tools()) if runtime.executor else 0,
     }
 
 

@@ -1,26 +1,22 @@
 import asyncio
-from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from ntrp.notifiers.base import Notifier
 from ntrp.schedule.models import ScheduledTask
-from ntrp.schedule.scheduler import Scheduler
 from ntrp.schedule.store import ScheduleStore
+
+if TYPE_CHECKING:
+    from ntrp.server.runtime import Runtime
 
 
 class ScheduleService:
-    def __init__(
-        self,
-        store: ScheduleStore,
-        scheduler: Scheduler | None,
-        get_notifiers: Callable[[], dict[str, Notifier]],
-    ):
+    def __init__(self, store: ScheduleStore, runtime: "Runtime"):
         self.store = store
-        self.scheduler = scheduler
-        self.get_notifiers = get_notifiers
+        self.runtime = runtime
 
     @property
     def is_running(self) -> bool:
-        return self.scheduler is not None and self.scheduler.is_running
+        scheduler = self.runtime.scheduler
+        return scheduler is not None and scheduler.is_running
 
     async def list_all(self) -> list[ScheduledTask]:
         return await self.store.list_all()
@@ -44,12 +40,13 @@ class ScheduleService:
         return new_writable
 
     async def run_now(self, task_id: str) -> None:
-        if not self.scheduler:
+        scheduler = self.runtime.scheduler
+        if not scheduler:
             raise RuntimeError("Scheduler not available")
         task = await self.get(task_id)
         if task.running_since:
             raise ValueError(f"Task {task_id} is already running")
-        asyncio.create_task(self.scheduler.run_now(task_id))
+        asyncio.create_task(scheduler.run_now(task_id))
 
     async def update(self, task_id: str, name: str | None = None, description: str | None = None) -> ScheduledTask:
         task = await self.get(task_id)
@@ -75,7 +72,7 @@ class ScheduleService:
 
     async def set_notifiers(self, task_id: str, notifier_names: list[str]) -> None:
         await self.get(task_id)
-        notifiers = self.get_notifiers()
+        notifiers = self.runtime.notifier_service.notifiers if self.runtime.notifier_service else {}
         for name in notifier_names:
             if name not in notifiers:
                 raise ValueError(f"Unknown notifier: {name}")

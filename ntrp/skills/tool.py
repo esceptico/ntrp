@@ -24,10 +24,6 @@ class UseSkillTool(Tool):
     def __init__(self, registry: SkillRegistry):
         self.registry = registry
 
-    @property
-    def available(self) -> bool:
-        return bool(self.registry)
-
     async def execute(self, execution: ToolExecution, skill: str, args: str = "", **kwargs) -> ToolResult:
         body = self.registry.load_body(skill)
         if body is None:

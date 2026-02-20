@@ -2,12 +2,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from ntrp.events.internal import ContextCompressed
 from ntrp.memory.chat_extraction import (
     ChatExtractionSchema,
     _format_messages,
     extract_from_chat,
-    make_chat_extraction_handler,
 )
 
 
@@ -123,46 +121,3 @@ class TestExtractFromChat:
             facts = await extract_from_chat(SAMPLE_MESSAGES, "test-model")
 
         assert facts == []
-
-
-class TestChatExtractionHandler:
-    @pytest.mark.asyncio
-    async def test_calls_remember_for_each_fact(self):
-        memory = AsyncMock()
-        memory.remember = AsyncMock()
-
-        schema = ChatExtractionSchema(facts=["User chose Postgres", "John handles deployment"])
-        mock_client = AsyncMock()
-        mock_client.completion.return_value = mock_llm_response(schema.model_dump_json())
-
-        handler = make_chat_extraction_handler(lambda: memory, lambda: "test-model")
-        event = ContextCompressed(messages=SAMPLE_MESSAGES, session_id="sess-123")
-
-        with patch("ntrp.memory.chat_extraction.get_completion_client", return_value=mock_client):
-            await handler(event)
-
-        assert memory.remember.call_count == 2
-        memory.remember.assert_any_call(text="User chose Postgres", source_type="chat", source_ref="sess-123")
-        memory.remember.assert_any_call(text="John handles deployment", source_type="chat", source_ref="sess-123")
-
-    @pytest.mark.asyncio
-    async def test_skips_when_no_memory(self):
-        handler = make_chat_extraction_handler(lambda: None, lambda: "test-model")
-        event = ContextCompressed(messages=SAMPLE_MESSAGES, session_id="sess-123")
-        await handler(event)
-
-    @pytest.mark.asyncio
-    async def test_skips_when_no_facts_extracted(self):
-        memory = AsyncMock()
-
-        schema = ChatExtractionSchema(facts=[])
-        mock_client = AsyncMock()
-        mock_client.completion.return_value = mock_llm_response(schema.model_dump_json())
-
-        handler = make_chat_extraction_handler(lambda: memory, lambda: "test-model")
-        event = ContextCompressed(messages=SAMPLE_MESSAGES, session_id="sess-123")
-
-        with patch("ntrp.memory.chat_extraction.get_completion_client", return_value=mock_client):
-            await handler(event)
-
-        memory.remember.assert_not_called()
