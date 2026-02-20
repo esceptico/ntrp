@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from ntrp.usage import Usage
+
 
 @dataclass(frozen=True)
 class FunctionCall:
@@ -13,14 +15,6 @@ class ToolCall:
     type: str  # always "function"
     function: FunctionCall
     thought_signature: str | None = None
-
-
-@dataclass(frozen=True)
-class Usage:
-    prompt_tokens: int
-    completion_tokens: int
-    cache_read_tokens: int
-    cache_write_tokens: int
 
 
 @dataclass(frozen=True)

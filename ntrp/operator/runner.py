@@ -14,6 +14,7 @@ from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
 from ntrp.tools.notify import NotifyTool
+from ntrp.usage import Usage
 
 
 @dataclass(frozen=True)
@@ -48,10 +49,7 @@ class RunRequest:
 class RunResult:
     run_id: str
     output: str | None
-    prompt_tokens: int
-    completion_tokens: int
-    cache_read_tokens: int
-    cache_write_tokens: int
+    usage: Usage
 
 
 async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
@@ -99,22 +97,6 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
     try:
         output = await agent.run(request.prompt)
     finally:
-        deps.channel.publish(
-            RunCompleted(
-                run_id=run_id,
-                prompt_tokens=agent.total_input_tokens,
-                completion_tokens=agent.total_output_tokens,
-                cache_read_tokens=agent.total_cache_read_tokens,
-                cache_write_tokens=agent.total_cache_write_tokens,
-                result=output,
-            )
-        )
+        deps.channel.publish(RunCompleted(run_id=run_id, usage=agent.usage, result=output))
 
-    return RunResult(
-        run_id=run_id,
-        output=output,
-        prompt_tokens=agent.total_input_tokens,
-        completion_tokens=agent.total_output_tokens,
-        cache_read_tokens=agent.total_cache_read_tokens,
-        cache_write_tokens=agent.total_cache_write_tokens,
-    )
+    return RunResult(run_id=run_id, output=output, usage=agent.usage)

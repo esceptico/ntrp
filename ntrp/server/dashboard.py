@@ -56,9 +56,9 @@ class DashboardCollector:
     async def on_run_completed(self, event: RunCompleted) -> None:
         self.total_runs += 1
         self.active_runs = max(0, self.active_runs - 1)
-        self.total_prompt_tokens += event.prompt_tokens
-        self.total_completion_tokens += event.completion_tokens
-        self.token_history.append(TokenRecord(event.prompt_tokens, event.completion_tokens, time.time()))
+        self.total_prompt_tokens += event.usage.prompt_tokens
+        self.total_completion_tokens += event.usage.completion_tokens
+        self.token_history.append(TokenRecord(event.usage.prompt_tokens, event.usage.completion_tokens, time.time()))
 
     async def on_run_started(self, _event: RunStarted) -> None:
         self.active_runs += 1

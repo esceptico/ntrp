@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
+from ntrp.usage import Usage
+
 
 class RunStatus(StrEnum):
     PENDING = "pending"
@@ -13,42 +15,18 @@ class RunStatus(StrEnum):
     ERROR = "error"
 
 
-@dataclass(frozen=True)
-class UsageStats:
-    prompt: int
-    completion: int
-    total: int
-    cache_read: int
-    cache_write: int
-    cost: float
-
-
 @dataclass
 class RunState:
     run_id: str
     session_id: str
     status: RunStatus = RunStatus.PENDING
     messages: list[dict] = field(default_factory=list)
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    cache_read_tokens: int = 0
-    cache_write_tokens: int = 0
-    cost: float = 0.0
+    usage: Usage = field(default_factory=Usage)
     approval_queue: asyncio.Queue | None = None
     choice_queue: asyncio.Queue | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     cancelled: bool = False
-
-    def get_usage(self) -> UsageStats:
-        return UsageStats(
-            prompt=self.prompt_tokens,
-            completion=self.completion_tokens,
-            total=self.prompt_tokens + self.completion_tokens,
-            cache_read=self.cache_read_tokens,
-            cache_write=self.cache_write_tokens,
-            cost=self.cost,
-        )
 
 
 class RunRegistry:

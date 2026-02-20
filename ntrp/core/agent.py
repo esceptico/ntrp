@@ -13,6 +13,7 @@ from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.tools.core.context import ToolContext
 from ntrp.tools.executor import ToolExecutor
+from ntrp.usage import Usage
 
 _logger = get_logger(__name__)
 
@@ -44,11 +45,7 @@ class Agent:
 
         self._state = AgentState.IDLE
         self.messages: list[dict] = []
-        self.total_input_tokens = 0
-        self.total_output_tokens = 0
-        self.total_cache_read_tokens = 0
-        self.total_cache_write_tokens = 0
-        self.total_cost = 0.0
+        self.usage = Usage()
         self._last_input_tokens: int | None = None  # For adaptive compression
 
     @property
@@ -86,24 +83,15 @@ class Agent:
     def _track_usage(self, response: Any) -> None:
         if not response.usage:
             return
-        prompt_tokens = response.usage.prompt_tokens or 0
-        completion_tokens = response.usage.completion_tokens or 0
-        cache_read = response.usage.cache_read_tokens or 0
-        cache_write = response.usage.cache_write_tokens or 0
-
-        self.total_input_tokens += prompt_tokens
-        self.total_output_tokens += completion_tokens
-        self.total_cache_read_tokens += cache_read
-        self.total_cache_write_tokens += cache_write
-        self._last_input_tokens = prompt_tokens + cache_read + cache_write
-
         model = get_model(response.model)
-        self.total_cost += (
-            prompt_tokens * model.price_in
-            + completion_tokens * model.price_out
-            + cache_read * model.price_cache_read
-            + cache_write * model.price_cache_write
-        ) / 1_000_000
+        step = response.usage.with_cost(
+            price_in=model.price_in,
+            price_out=model.price_out,
+            price_cache_read=model.price_cache_read,
+            price_cache_write=model.price_cache_write,
+        )
+        self.usage += step
+        self._last_input_tokens = step.prompt_tokens + step.cache_read_tokens + step.cache_write_tokens
 
     async def _maybe_compact(self) -> AsyncGenerator[SSEEvent]:
         if not should_compress(self.messages, self.model, self._last_input_tokens):

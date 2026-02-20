@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import AsyncGenerator
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -220,10 +220,14 @@ class ChatService:
             if result is None:
                 return  # Cancelled — session saved in finally
 
+            if agent:
+                run.usage = agent.usage
+                run.messages = agent.messages
+
             if result:
                 yield TextEvent(content=result).to_sse_string()
 
-            yield DoneEvent(run_id=run.run_id, usage=asdict(run.get_usage())).to_sse_string()
+            yield DoneEvent(run_id=run.run_id, usage=run.usage.to_dict()).to_sse_string()
             ctx.run_registry.complete_run(run.run_id)
 
         except Exception as e:
@@ -233,11 +237,7 @@ class ChatService:
 
         finally:
             if agent:
-                run.prompt_tokens = agent.total_input_tokens
-                run.completion_tokens = agent.total_output_tokens
-                run.cache_read_tokens = agent.total_cache_read_tokens
-                run.cache_write_tokens = agent.total_cache_write_tokens
-                run.cost = agent.total_cost
+                run.usage = agent.usage
                 run.messages = agent.messages
             last_tokens = getattr(agent, "_last_input_tokens", None) if agent else None
             metadata = {"last_input_tokens": last_tokens} if last_tokens is not None else None
@@ -245,10 +245,7 @@ class ChatService:
             ctx.channel.publish(
                 RunCompleted(
                     run_id=run.run_id,
-                    prompt_tokens=run.prompt_tokens,
-                    completion_tokens=run.completion_tokens,
-                    cache_read_tokens=run.cache_read_tokens,
-                    cache_write_tokens=run.cache_write_tokens,
+                    usage=run.usage,
                     result=result,
                 )
             )
