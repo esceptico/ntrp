@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { colors } from "../../ui/colors.js";
+import { colors, useThemeVersion } from "../../ui/colors.js";
 import { useDimensions } from "../../../contexts/index.js";
 import { truncateText } from "../../ui/index.js";
 import { MAX_TOOL_OUTPUT_LINES, MIN_DELEGATE_DURATION_SHOW } from "../../../lib/constants.js";
@@ -21,6 +21,7 @@ const DelegateMessage = memo(function DelegateMessage({
   toolCount,
   duration,
 }: DelegateMessageProps) {
+  useThemeVersion();
   const { width: terminalWidth } = useDimensions();
   const parts: string[] = [];
   if (toolCount && toolCount > 0) parts.push(`${toolCount} tool${toolCount !== 1 ? "s" : ""}`);
@@ -61,6 +62,7 @@ export const ToolMessage = memo(function ToolMessage({
   duration,
   autoApproved,
 }: ToolMessageProps) {
+  useThemeVersion();
   const { width } = useDimensions();
   const contentWidth = Math.max(0, width - 3);
   const suffix = autoApproved ? AUTO_SUFFIX : "";

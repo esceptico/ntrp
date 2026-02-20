@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { colors } from "../../ui/colors.js";
+import { colors, useThemeVersion } from "../../ui/colors.js";
 import { useDimensions } from "../../../contexts/index.js";
 import { truncateText } from "../../ui/index.js";
 
@@ -8,6 +8,7 @@ interface StatusMessageProps {
 }
 
 export const StatusMessage = memo(function StatusMessage({ content }: StatusMessageProps) {
+  useThemeVersion();
   const { width } = useDimensions();
   const contentWidth = Math.max(0, width - 3);
 

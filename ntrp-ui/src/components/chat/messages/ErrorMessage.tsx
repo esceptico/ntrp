@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { colors } from "../../ui/colors.js";
+import { colors, useThemeVersion } from "../../ui/colors.js";
 import { SplitBorder } from "../../ui/border.js";
 
 interface ErrorMessageProps {
@@ -7,6 +7,7 @@ interface ErrorMessageProps {
 }
 
 export const ErrorMessage = memo(function ErrorMessage({ content }: ErrorMessageProps) {
+  useThemeVersion();
 
   return (
     <box

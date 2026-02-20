@@ -5,6 +5,8 @@
  * Everything else (setTheme, /theme command, settings) picks it up automatically.
  */
 
+import { useSyncExternalStore } from "react";
+
 export type AccentColor = "gray";
 
 type Palette = {
@@ -134,6 +136,17 @@ export function syncAccentColor(color: AccentColor) {
   currentAccent = color;
 }
 
+// Theme version — incremented on every setTheme call.
+// Used by useThemeVersion() to force re-renders in memoized components.
+let _themeVersion = 0;
+const _listeners = new Set<() => void>();
+
+export function getThemeVersion() { return _themeVersion; }
+export function subscribeThemeVersion(cb: () => void) {
+  _listeners.add(cb);
+  return () => { _listeners.delete(cb); };
+}
+
 export function setTheme(theme: Theme) {
   const p = palettes[theme];
   if (!p) return;
@@ -152,4 +165,10 @@ export function setTheme(theme: Theme) {
   Object.assign(colors.tool, p.tool);
   colors.contrast = p.contrast;
   Object.assign(accentColors.gray, p.accent);
+  _themeVersion++;
+  for (const cb of _listeners) cb();
+}
+
+export function useThemeVersion() {
+  return useSyncExternalStore(subscribeThemeVersion, getThemeVersion);
 }
