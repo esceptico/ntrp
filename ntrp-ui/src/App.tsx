@@ -214,6 +214,33 @@ function AppContent({
 
   const closeView = useCallback(() => setViewMode("chat"), []);
 
+  const cycleSession = useCallback(async () => {
+    const sessions = sidebarData.sessions;
+    if (sessions.length < 2) return;
+    const currentIdx = sessions.findIndex(s => s.session_id === sessionId);
+    const nextIdx = (currentIdx + 1) % sessions.length;
+    const target = sessions[nextIdx];
+    if (!target) return;
+    const result = await switchSession(target.session_id);
+    if (result) {
+      const historyMessages: Message[] = result.history.map((msg, i) => ({
+        id: `h-${i}`,
+        role: msg.role,
+        content: msg.content,
+      }));
+      resetForSessionSwitch(historyMessages);
+      refreshSidebar();
+    }
+  }, [sidebarData.sessions, sessionId, switchSession, resetForSessionSwitch, refreshSidebar]);
+
+  const startNewSession = useCallback(async () => {
+    const newId = await createNewSession();
+    if (newId) {
+      resetForSessionSwitch([]);
+      refreshSidebar();
+    }
+  }, [createNewSession, resetForSessionSwitch, refreshSidebar]);
+
   const tabPendingRef = useRef(false);
   const tabTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -227,34 +254,14 @@ function AppContent({
         return;
       }
       if (key.ctrl && key.name === "n" && !isStreaming && viewMode === "chat" && !showSettings) {
-        const newId = await createNewSession();
-        if (newId) {
-          resetForSessionSwitch([]);
-          refreshSidebar();
-        }
+        startNewSession();
         return;
       }
       if (key.name === "escape" && isStreaming) {
         cancel();
       }
       if (key.shift && key.name === "tab" && !showSettings && !isStreaming && viewMode === "chat") {
-        const sessions = sidebarData.sessions;
-        if (sessions.length < 2) return;
-        const currentIdx = sessions.findIndex(s => s.session_id === sessionId);
-        const nextIdx = (currentIdx + 1) % sessions.length;
-        const target = sessions[nextIdx];
-        if (target) {
-          const result = await switchSession(target.session_id);
-          if (result) {
-            const historyMessages: Message[] = result.history.map((msg, i) => ({
-              id: `h-${i}`,
-              role: msg.role,
-              content: msg.content,
-            }));
-            resetForSessionSwitch(historyMessages);
-            refreshSidebar();
-          }
-        }
+        cycleSession();
         return;
       }
       if (key.name === "tab" && !key.shift && !key.ctrl && !key.meta && !showSettings) {
@@ -272,7 +279,7 @@ function AppContent({
         return;
       }
     },
-    [renderer, isStreaming, cancel, toggleSkipApprovals, showSettings, viewMode, createNewSession, resetForSessionSwitch, refreshSidebar, sidebarData.sessions, sessionId, switchSession]
+    [renderer, isStreaming, cancel, showSettings, viewMode, toggleSkipApprovals, cycleSession, startNewSession]
   );
 
   useKeypress(handleGlobalKeypress, { isActive: true });
@@ -404,21 +411,14 @@ function AppContent({
             try {
               await deleteSession(config, targetId);
               if (targetId === sessionId) {
-                await createNewSession();
-                resetForSessionSwitch([]);
+                await startNewSession();
               }
               refreshSidebar();
             } catch {
               // ignore
             }
           }}
-          onNew={async () => {
-            const newId = await createNewSession();
-            if (newId) {
-              resetForSessionSwitch([]);
-              refreshSidebar();
-            }
-          }}
+          onNew={startNewSession}
           onClose={closeView}
         />
       )}
