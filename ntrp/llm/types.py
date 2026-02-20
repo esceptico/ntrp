@@ -14,7 +14,7 @@ class ToolCall:
     id: str
     type: str  # always "function"
     function: FunctionCall
-    thought_signature: str | None = None
+    thought_signature: bytes | None = None
 
 
 @dataclass(frozen=True)

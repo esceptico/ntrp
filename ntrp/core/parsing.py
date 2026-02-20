@@ -1,3 +1,4 @@
+import base64
 import json
 from typing import Any
 
@@ -35,7 +36,7 @@ def normalize_assistant_message(message: Any) -> dict:
                 },
             }
             if tc.thought_signature:
-                tc_dict["thought_signature"] = tc.thought_signature
+                tc_dict["thought_signature"] = base64.b64encode(tc.thought_signature).decode()
             tool_calls.append(tc_dict)
         sanitized["tool_calls"] = tool_calls
     if message.reasoning_content:

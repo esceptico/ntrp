@@ -1,3 +1,4 @@
+import base64
 import copy
 import json
 from itertools import count
@@ -123,7 +124,7 @@ class GeminiClient(CompletionClient, EmbeddingClient):
                 ),
             }
             if sig := tc.get("thought_signature"):
-                part_kwargs["thought_signature"] = sig
+                part_kwargs["thought_signature"] = base64.b64decode(sig)
             parts.append(types.Part(**part_kwargs))
         return types.Content(role="model", parts=parts) if parts else None
 
