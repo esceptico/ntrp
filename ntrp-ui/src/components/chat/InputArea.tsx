@@ -255,7 +255,7 @@ export const InputArea = memo(function InputArea({
           {isStreaming || status === Status.COMPRESSING ? (
             <>
               <box flexDirection="row" gap={1} flexGrow={1}>
-                <box marginLeft={3}>
+                <box marginLeft={1}>
                   {status === Status.COMPRESSING ? (
                     <BrailleCompress width={8} color={accentValue} interval={30} />
                   ) : (
