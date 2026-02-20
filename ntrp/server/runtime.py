@@ -4,6 +4,7 @@ import ntrp.database as database
 from ntrp.channel import Channel
 from ntrp.config import Config, get_config
 from ntrp.context.store import SessionStore
+from ntrp.core.factory import AgentConfig
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import init as llm_init
 from ntrp.logging import get_logger
@@ -13,7 +14,6 @@ from ntrp.memory.service import MemoryService
 from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.notifiers.service import NotifierService
 from ntrp.notifiers.store import NotifierStore
-from ntrp.core.factory import AgentConfig
 from ntrp.operator.runner import OperatorDeps
 from ntrp.schedule.scheduler import Scheduler
 from ntrp.schedule.service import ScheduleService
