@@ -151,11 +151,36 @@ async def rename_session(session_id: str, req: RenameSessionRequest):
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str):
+async def archive_session(session_id: str):
     runtime = get_runtime()
-    deleted = await runtime.session_service.delete(session_id)
-    if not deleted:
+    archived = await runtime.session_service.archive(session_id)
+    if not archived:
         raise HTTPException(status_code=404, detail="Session not found")
+    return {"status": "archived", "session_id": session_id}
+
+
+@router.get("/sessions/archived")
+async def list_archived_sessions():
+    runtime = get_runtime()
+    sessions = await runtime.session_service.list_archived(limit=20)
+    return {"sessions": sessions}
+
+
+@router.post("/sessions/{session_id}/restore")
+async def restore_session(session_id: str):
+    runtime = get_runtime()
+    restored = await runtime.session_service.restore(session_id)
+    if not restored:
+        raise HTTPException(status_code=404, detail="Archived session not found")
+    return {"status": "restored", "session_id": session_id}
+
+
+@router.delete("/sessions/{session_id}/permanent")
+async def permanently_delete_session(session_id: str):
+    runtime = get_runtime()
+    deleted = await runtime.session_service.permanently_delete(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Archived session not found")
     return {"status": "deleted", "session_id": session_id}
 
 

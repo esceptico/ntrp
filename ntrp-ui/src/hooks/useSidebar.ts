@@ -19,16 +19,19 @@ export interface SidebarData {
 
 const EMPTY: SidebarData = { stats: null, context: null, nextSchedules: [], sessions: [] };
 
-export function useSidebar(config: Config, active: boolean, messageCount: number) {
+export function useSidebar(config: Config, active: boolean, messageCount: number, sessionId: string | null) {
   const [data, setData] = useState<SidebarData>(EMPTY);
   const activeRef = useRef(true);
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
 
   const refresh = useCallback(async () => {
     if (!activeRef.current) return;
     try {
+      const sid = sessionIdRef.current ?? undefined;
       const [stats, context, schedulesResult, sessionsResult] = await Promise.all([
         getStats(config),
-        getContextUsage(config),
+        getContextUsage(config, sid),
         getSchedules(config),
         listSessions(config).catch(() => ({ sessions: [] })),
       ]);
@@ -45,10 +48,10 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
     }
   }, [config]);
 
-  // Refresh on message changes
+  // Refresh on session or message changes
   useEffect(() => {
     if (active) refresh();
-  }, [active, messageCount, refresh]);
+  }, [active, sessionId, messageCount, refresh]);
 
   // Fallback poll for external changes (schedules, etc.)
   useEffect(() => {

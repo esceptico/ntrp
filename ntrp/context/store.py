@@ -23,12 +23,13 @@ CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
 SQL_SAVE_SESSION = """
 INSERT OR REPLACE INTO sessions (
     session_id, started_at, last_activity,
-    messages, metadata, name
-) VALUES (?, ?, ?, ?, ?, ?)
+    messages, metadata, name, archived_at
+) VALUES (?, ?, ?, ?, ?, ?, NULL)
 """
 
 SQL_GET_LATEST = """
 SELECT session_id FROM sessions
+WHERE archived_at IS NULL
 ORDER BY last_activity DESC LIMIT 1
 """
 
@@ -36,7 +37,17 @@ SQL_LIST_SESSIONS = """
 SELECT session_id, started_at, last_activity, name,
        json_array_length(COALESCE(messages, '[]')) AS message_count
 FROM sessions
+WHERE archived_at IS NULL
 ORDER BY last_activity DESC
+LIMIT ?
+"""
+
+SQL_LIST_ARCHIVED = """
+SELECT session_id, started_at, last_activity, name, archived_at,
+       json_array_length(COALESCE(messages, '[]')) AS message_count
+FROM sessions
+WHERE archived_at IS NOT NULL
+ORDER BY archived_at DESC
 LIMIT ?
 """
 
@@ -47,11 +58,12 @@ class SessionStore:
 
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
-        try:
-            await self.conn.execute("ALTER TABLE sessions ADD COLUMN name TEXT")
-            await self.conn.commit()
-        except Exception:
-            pass
+        for col in ("name TEXT", "archived_at TEXT"):
+            try:
+                await self.conn.execute(f"ALTER TABLE sessions ADD COLUMN {col}")
+                await self.conn.commit()
+            except Exception:
+                pass
 
     async def save_session(self, state: SessionState, messages: list[dict | Any], metadata: dict | None = None) -> None:
         serializable_messages = []
@@ -136,7 +148,40 @@ class SessionStore:
         await self.conn.commit()
         return cursor.rowcount > 0
 
-    async def delete_session(self, session_id: str) -> bool:
-        cursor = await self.conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+    async def archive_session(self, session_id: str) -> bool:
+        cursor = await self.conn.execute(
+            "UPDATE sessions SET archived_at = ? WHERE session_id = ? AND archived_at IS NULL",
+            (datetime.now(UTC).isoformat(), session_id),
+        )
+        await self.conn.commit()
+        return cursor.rowcount > 0
+
+    async def restore_session(self, session_id: str) -> bool:
+        cursor = await self.conn.execute(
+            "UPDATE sessions SET archived_at = NULL WHERE session_id = ? AND archived_at IS NOT NULL",
+            (session_id,),
+        )
+        await self.conn.commit()
+        return cursor.rowcount > 0
+
+    async def list_archived_sessions(self, limit: int = 20) -> list[dict]:
+        rows = await self.conn.execute_fetchall(SQL_LIST_ARCHIVED, (limit,))
+        return [
+            {
+                "session_id": row["session_id"],
+                "started_at": row["started_at"],
+                "last_activity": row["last_activity"],
+                "name": row["name"],
+                "message_count": row["message_count"],
+                "archived_at": row["archived_at"],
+            }
+            for row in rows
+        ]
+
+    async def permanently_delete_session(self, session_id: str) -> bool:
+        cursor = await self.conn.execute(
+            "DELETE FROM sessions WHERE session_id = ? AND archived_at IS NOT NULL",
+            (session_id,),
+        )
         await self.conn.commit()
         return cursor.rowcount > 0

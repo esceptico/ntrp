@@ -268,6 +268,7 @@ export interface SessionListItem {
   last_activity: string;
   name: string | null;
   message_count: number;
+  archived_at?: string | null;
 }
 
 export async function listSessions(config: Config): Promise<{ sessions: SessionListItem[] }> {
@@ -285,6 +286,18 @@ export async function renameSession(config: Config, sessionId: string, name: str
 
 export async function deleteSession(config: Config, sessionId: string): Promise<{ status: string; session_id: string }> {
   return api.delete<{ status: string; session_id: string }>(`${config.serverUrl}/sessions/${sessionId}`);
+}
+
+export async function listArchivedSessions(config: Config): Promise<{ sessions: SessionListItem[] }> {
+  return api.get<{ sessions: SessionListItem[] }>(`${config.serverUrl}/sessions/archived`);
+}
+
+export async function restoreSession(config: Config, sessionId: string): Promise<{ status: string; session_id: string }> {
+  return api.post<{ status: string; session_id: string }>(`${config.serverUrl}/sessions/${sessionId}/restore`);
+}
+
+export async function permanentlyDeleteSession(config: Config, sessionId: string): Promise<{ status: string; session_id: string }> {
+  return api.delete<{ status: string; session_id: string }>(`${config.serverUrl}/sessions/${sessionId}/permanent`);
 }
 
 export async function purgeMemory(config: Config): Promise<{ status: string; deleted: Record<string, number> }> {

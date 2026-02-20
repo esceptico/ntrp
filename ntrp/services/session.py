@@ -47,5 +47,14 @@ class SessionService:
     async def rename(self, session_id: str, name: str) -> bool:
         return await self.store.update_session_name(session_id, name)
 
-    async def delete(self, session_id: str) -> bool:
-        return await self.store.delete_session(session_id)
+    async def archive(self, session_id: str) -> bool:
+        return await self.store.archive_session(session_id)
+
+    async def restore(self, session_id: str) -> bool:
+        return await self.store.restore_session(session_id)
+
+    async def list_archived(self, limit: int = 20) -> list[dict]:
+        return await self.store.list_archived_sessions(limit=limit)
+
+    async def permanently_delete(self, session_id: str) -> bool:
+        return await self.store.permanently_delete_session(session_id)

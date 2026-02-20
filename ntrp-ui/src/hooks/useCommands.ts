@@ -9,8 +9,10 @@ import {
   compactContext,
   startIndexing,
   listSessions,
+  listArchivedSessions,
   renameSession,
   deleteSession,
+  restoreSession,
   type SessionListItem,
 } from "../api/client.js";
 
@@ -177,6 +179,28 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
         }
       }
 
+      refreshSidebar();
+    } catch (error) {
+      addMessage({ role: "error", content: `${error}` });
+    }
+    return true;
+  },
+
+  restore: async ({ config, addMessage, refreshSidebar }, args) => {
+    const query = args.join(" ").trim();
+    if (!query) {
+      addMessage({ role: "error", content: "Usage: /restore <session name or id>" });
+      return true;
+    }
+    try {
+      const { sessions } = await listArchivedSessions(config);
+      const match = findSession(sessions, query);
+      if (!match) {
+        addMessage({ role: "error", content: `No archived session matching "${query}"` });
+        return true;
+      }
+      await restoreSession(config, match.session_id);
+      addMessage({ role: "status", content: `Restored session "${match.name || match.session_id}"` });
       refreshSidebar();
     } catch (error) {
       addMessage({ role: "error", content: `${error}` });

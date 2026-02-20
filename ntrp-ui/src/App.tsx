@@ -32,7 +32,7 @@ import {
 } from "./components/index.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { COMMANDS } from "./lib/commands.js";
-import { getSkills, deleteSession, type Skill } from "./api/client.js";
+import { getSkills, deleteSession, listSessions, restoreSession, permanentlyDeleteSession, type Skill } from "./api/client.js";
 
 type ViewMode = "chat" | "memory" | "settings" | "schedules" | "dashboard" | "sessions";
 
@@ -143,7 +143,7 @@ function AppContent({
   const { width, height } = useDimensions();
   const SIDEBAR_WIDTH = 32;
   const showSidebar = sidebarVisible && width >= 94 && serverConnected;
-  const { data: sidebarData, refresh: refreshSidebar } = useSidebar(config, showSidebar, messages.length);
+  const { data: sidebarData, refresh: refreshSidebar } = useSidebar(config, showSidebar, messages.length, sessionId);
 
   const isInChatMode = viewMode === "chat" && !showSettings && !showThemePicker;
 
@@ -411,9 +411,37 @@ function AppContent({
             try {
               await deleteSession(config, targetId);
               if (targetId === sessionId) {
-                await startNewSession();
+                const { sessions } = await listSessions(config);
+                const next = sessions.find(s => s.session_id !== targetId);
+                if (next) {
+                  const result = await switchSession(next.session_id);
+                  if (result) {
+                    resetForSessionSwitch(result.history.map((msg, i) => ({
+                      id: `h-${i}`, role: msg.role, content: msg.content,
+                    })));
+                  } else {
+                    await startNewSession();
+                  }
+                } else {
+                  await startNewSession();
+                }
               }
               refreshSidebar();
+            } catch {
+              // ignore
+            }
+          }}
+          onRestore={async (targetId) => {
+            try {
+              await restoreSession(config, targetId);
+              refreshSidebar();
+            } catch {
+              // ignore
+            }
+          }}
+          onPermanentDelete={async (targetId) => {
+            try {
+              await permanentlyDeleteSession(config, targetId);
             } catch {
               // ignore
             }
