@@ -121,9 +121,11 @@ class Runtime:
         if self._connected:
             return
 
+        _logger.info("Initializing LLM providers")
         llm_init(self.config)
         self.config.db_dir.mkdir(exist_ok=True)
 
+        _logger.info("Opening database")
         self._sessions_conn = await database.connect(self.config.sessions_db_path)
         session_store = SessionStore(self._sessions_conn)
         await session_store.init_schema()
@@ -138,6 +140,7 @@ class Runtime:
         self.notification_log = NotificationLogStore(self._sessions_conn)
         await self.notification_log.init_schema()
 
+        _logger.info("Connecting search index")
         await self.indexer.connect()
 
         wire_events(self)
@@ -146,6 +149,7 @@ class Runtime:
             self.indexables["notes"] = notes
 
         if self.config.memory:
+            _logger.info("Initializing memory")
             self.memory = await FactMemory.create(
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
@@ -164,12 +168,19 @@ class Runtime:
         )
         await self.notifier_service.seed_defaults()
         await self.notifier_service.rebuild()
+
+        _logger.info("Registering tools")
         self.executor = ToolExecutor(runtime=self)
 
         self.schedule_service = ScheduleService(store=self.schedule_store, runtime=self)
         self.config_service = ConfigService(runtime=self)
 
         self._connected = True
+        _logger.info(
+            "Runtime ready",
+            sources=len(self.source_mgr.sources),
+            tools=len(self.executor.registry),
+        )
 
     async def close(self) -> None:
         if self.scheduler:

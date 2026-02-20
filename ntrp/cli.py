@@ -62,7 +62,17 @@ def serve(ctx, host: str, port: int, reload: bool):
         console.print(f"[red]Error:[/red] {ctx.obj['config_error']}")
         raise SystemExit(1)
 
+    import socket
+
     import uvicorn
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind((host, port))
+        except OSError:
+            console.print(f"[red]Error:[/red] Port {port} is already in use")
+            console.print("[dim]Kill the existing process or use --port to pick another[/dim]")
+            raise SystemExit(1)
 
     console.print(f"[bold]ntrp server[/bold] starting on http://{host}:{port}")
     console.print("[dim]Press Ctrl+C to stop[/dim]")

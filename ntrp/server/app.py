@@ -4,7 +4,6 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from ntrp.logging import configure_logging
 from ntrp.server.routers.dashboard import router as dashboard_router
 from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
@@ -19,7 +18,6 @@ from ntrp.services.chat import ChatService
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await get_runtime_async()
-    configure_logging()
     yield
     await reset_runtime()
 

@@ -11,15 +11,15 @@ processors = [
     renderer,
 ]
 
+# Configure immediately so all logs use consistent format from first import
+structlog.configure(
+    processors=processors,
+    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+    logger_factory=structlog.WriteLoggerFactory(file=sys.stderr),
+)
 
-def configure_logging(level: str = "INFO"):
-    structlog.configure(
-        processors=processors,
-        wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, level)),
-        logger_factory=structlog.WriteLoggerFactory(file=sys.stderr),
-    )
-    for name in ("googleapiclient.discovery_cache", "LiteLLM", "httpx"):
-        logging.getLogger(name).setLevel(logging.WARNING)
+for _name in ("googleapiclient.discovery_cache", "LiteLLM", "httpx"):
+    logging.getLogger(_name).setLevel(logging.WARNING)
 
 
 def get_logger(name: str | None = None):
