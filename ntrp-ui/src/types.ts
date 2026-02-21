@@ -86,20 +86,6 @@ export interface QuestionEvent {
   tool_id: string;
 }
 
-export interface ChoiceOption {
-  id: string;
-  label: string;
-  description?: string;
-}
-
-export interface ChoiceEvent {
-  type: "choice";
-  question: string;
-  options: ChoiceOption[];
-  allow_multiple: boolean;
-  tool_id: string;
-}
-
 export type ServerEvent =
   | ThinkingEvent
   | TextEvent
@@ -107,7 +93,6 @@ export type ServerEvent =
   | ToolResultEvent
   | ApprovalNeededEvent
   | QuestionEvent
-  | ChoiceEvent
   | SessionInfoEvent
   | DoneEvent
   | ErrorEvent

@@ -10,7 +10,6 @@ class EventType(StrEnum):
     TOOL_RESULT = "tool_result"
     APPROVAL_NEEDED = "approval_needed"
     QUESTION = "question"
-    CHOICE = "choice"
     SESSION_INFO = "session_info"
     DONE = "done"
     ERROR = "error"
@@ -97,15 +96,6 @@ class QuestionEvent(SSEEvent):
     type: EventType = field(default=EventType.QUESTION, init=False)
     question: str
     tool_id: str
-
-
-@dataclass(frozen=True)
-class ChoiceEvent(SSEEvent):
-    type: EventType = field(default=EventType.CHOICE, init=False)
-    question: str
-    tool_id: str
-    options: list[dict] = field(default_factory=list)  # List of {id, label, description?}
-    allow_multiple: bool = False  # Single vs multi-select
 
 
 @dataclass(frozen=True)

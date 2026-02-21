@@ -72,15 +72,6 @@ export async function submitToolResult(
   await api.post(`${config.serverUrl}/tools/result`, { run_id: runId, tool_id: toolId, result, approved });
 }
 
-export async function submitChoiceResult(
-  runId: string,
-  toolId: string,
-  selected: string[],
-  config: Config
-): Promise<void> {
-  await api.post(`${config.serverUrl}/tools/choice`, { run_id: runId, tool_id: toolId, selected });
-}
-
 export async function getSession(config: Config, sessionId?: string): Promise<{
   session_id: string;
   sources: string[];

@@ -15,7 +15,6 @@ const VERBS = [
 const LABELS: Partial<Record<StatusType, string>> = {
   [Status.COMPRESSING]: "compressing context",
   [Status.AWAITING_APPROVAL]: "awaiting approval",
-  [Status.AWAITING_CHOICE]: "awaiting choice",
 };
 
 interface CyclingStatusProps {

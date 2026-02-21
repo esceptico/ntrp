@@ -23,7 +23,6 @@ class RunState:
     messages: list[dict] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     approval_queue: asyncio.Queue | None = None
-    choice_queue: asyncio.Queue | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     cancelled: bool = False

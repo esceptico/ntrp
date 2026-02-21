@@ -175,7 +175,6 @@ class ChatService:
         session_state = ctx.session_state
 
         run.approval_queue = asyncio.Queue()
-        run.choice_queue = asyncio.Queue()
 
         yield SessionInfoEvent(
             session_id=session_state.session_id,
@@ -204,7 +203,6 @@ class ChatService:
                 cancel_check=lambda: run.cancelled,
                 io=IOBridge(
                     approval_queue=run.approval_queue,
-                    choice_queue=run.choice_queue,
                 ),
                 extra_auto_approve=INIT_AUTO_APPROVE if ctx.is_init else None,
             )

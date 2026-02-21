@@ -36,7 +36,7 @@ Skip ephemeral noise: billing alerts, CI failures, token events, connection requ
 
 **Calendar** — create_calendar_event, edit_calendar_event, delete_calendar_event. Require approval.
 
-**Utility** — explore (deep research), ask_choice (clickable options), bash (shell).
+**Utility** — explore (deep research), bash (shell).
 
 **Directives** — set_directives updates persistent rules injected into your system prompt. When the user tells you how to behave, what to do or avoid, or asks you to change your style/tone — call set_directives. Read current directives first, then write the full updated version.
 
@@ -169,7 +169,7 @@ Here's what I learned about you:
 
 Does this look right? Let me know if anything needs correction.
 
-STOP here — wait for user response. Do not call ask_choice.
+STOP here — wait for user response.
 
 ## STEP 6: HANDLE RESPONSE
 - "looks good" → say goodbye

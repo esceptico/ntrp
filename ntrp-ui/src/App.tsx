@@ -21,7 +21,6 @@ import {
   MessageDisplay,
   SettingsDialog,
   SessionPicker,
-  ChoiceSelector,
   ThemePicker,
   MemoryViewer,
   SchedulesViewer,
@@ -108,12 +107,9 @@ function AppContent({
     status,
     toolChain,
     pendingApproval,
-    pendingChoice,
     addMessage,
     clearMessages,
     sendMessage,
-    handleChoice,
-    cancelChoice,
     handleApproval,
     cancel,
     setStatus,
@@ -180,7 +176,7 @@ function AppContent({
       if (!trimmed) return;
 
       if (trimmed.startsWith("/")) {
-        if (isStreaming || pendingApproval || pendingChoice) return;
+        if (isStreaming || pendingApproval) return;
         const handled = await handleCommand(trimmed);
         if (handled) return;
         const cmdName = trimmed.slice(1).split(" ")[0];
@@ -192,25 +188,25 @@ function AppContent({
         return;
       }
 
-      if (isStreaming || pendingApproval || pendingChoice) {
+      if (isStreaming || pendingApproval) {
         setMessageQueue((prev) => [...prev, trimmed]);
         return;
       }
 
       sendMessage(trimmed);
     },
-    [isStreaming, pendingApproval, pendingChoice, sendMessage, handleCommand, addMessage, skills]
+    [isStreaming, pendingApproval, sendMessage, handleCommand, addMessage, skills]
   );
 
   useEffect(() => {
-    if (!isStreaming && !pendingApproval && !pendingChoice && messageQueue.length > 0) {
+    if (!isStreaming && !pendingApproval && messageQueue.length > 0) {
       const [firstMessage, ...rest] = messageQueue;
       setMessageQueue(rest);
       if (firstMessage) {
         sendMessage(firstMessage);
       }
     }
-  }, [isStreaming, pendingApproval, pendingChoice, messageQueue, sendMessage]);
+  }, [isStreaming, pendingApproval, messageQueue, sendMessage]);
 
   const closeView = useCallback(() => setViewMode("chat"), []);
 
@@ -346,16 +342,6 @@ function AppContent({
             />
           )}
 
-          {pendingChoice && (
-            <ChoiceSelector
-              question={pendingChoice.question}
-              options={pendingChoice.options}
-              allowMultiple={pendingChoice.allowMultiple}
-              onSelect={handleChoice}
-              onCancel={cancelChoice}
-              isActive={!pendingApproval}
-            />
-          )}
         </scrollbox>
 
         {/* Status — pinned above input */}
@@ -369,8 +355,8 @@ function AppContent({
         <box flexShrink={0}>
           <InputArea
             onSubmit={handleSubmit}
-            disabled={!serverConnected || hasOverlay || showSettings || !!pendingApproval || !!pendingChoice}
-            focus={isInChatMode && !hasOverlay && !showSettings && !pendingApproval && !pendingChoice}
+            disabled={!serverConnected || hasOverlay || showSettings || !!pendingApproval}
+            focus={isInChatMode && !hasOverlay && !showSettings && !pendingApproval}
             isStreaming={isStreaming}
             status={status}
             commands={allCommands}

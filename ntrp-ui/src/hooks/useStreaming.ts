@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { Message, ServerEvent, Config, PendingApproval } from "../types.js";
 import type { ToolChainItem } from "../components/toolchain/types.js";
-import { streamChat, submitToolResult, submitChoiceResult, cancelRun } from "../api/client.js";
+import { streamChat, submitToolResult, cancelRun } from "../api/client.js";
 import {
   MAX_MESSAGES,
   MAX_TOOL_MESSAGE_CHARS,
@@ -11,13 +11,6 @@ import {
   type Status as StatusType,
 } from "../lib/constants.js";
 import { truncateText } from "../lib/utils.js";
-
-interface PendingChoice {
-  toolId: string;
-  question: string;
-  options: { id: string; label: string; description?: string }[];
-  allowMultiple: boolean;
-}
 
 type MessageInput = Omit<Message, "id"> & { id?: string };
 
@@ -65,7 +58,6 @@ export function useStreaming({
   const [status, setStatus] = useState<StatusType>(Status.IDLE);
   const [toolChain, setToolChain] = useState<ToolChainItem[]>([]);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
-  const [pendingChoice, setPendingChoice] = useState<PendingChoice | null>(null);
   const [usage, setUsage] = useState({ prompt: 0, completion: 0, cache_read: 0, cache_write: 0, cost: 0, lastCost: 0 });
 
   const generateId = useCallback(() => {
@@ -136,12 +128,6 @@ export function useStreaming({
     const duration = startTime ? Math.round((Date.now() - startTime) / 1000) : undefined;
     toolStartRef.current.delete(event.tool_id);
     const autoApproved = autoApprovedIdsRef.current.delete(event.tool_id);
-
-    if (event.name === "ask_choice") {
-      setToolChain((prev) => prev.filter((item) => item.id !== event.tool_id));
-      setStatus(Status.THINKING);
-      return;
-    }
 
     setToolChain((prev) => {
       const childCount = prev.filter((item) => item.parentId === event.tool_id).length;
@@ -242,15 +228,6 @@ export function useStreaming({
       case "question":
         pendingTextRef.current = event.question;
         break;
-      case "choice":
-        setPendingChoice({
-          toolId: event.tool_id,
-          question: event.question,
-          options: event.options,
-          allowMultiple: event.allow_multiple,
-        });
-        setStatus(Status.AWAITING_CHOICE);
-        break;
       default: {
         const _exhaustive: never = event;
         return _exhaustive;
@@ -310,33 +287,6 @@ export function useStreaming({
     setStatus(Status.THINKING);
   }, [pendingApproval, config, addMessage]);
 
-  const handleChoice = useCallback(async (selected: string[]) => {
-    const currentRunId = runIdRef.current;
-    if (!pendingChoice || !currentRunId) return;
-
-    const labels = selected.map((id) => {
-      const opt = pendingChoice.options.find((o) => o.id === id);
-      return opt?.label ?? id;
-    });
-
-    await submitChoiceResult(currentRunId, pendingChoice.toolId, selected, config);
-    addMessage({ role: "status", content: `Selected: ${labels.join(", ")}` });
-
-    setPendingChoice(null);
-    setStatus(Status.THINKING);
-  }, [pendingChoice, config, addMessage]);
-
-  const cancelChoice = useCallback(async () => {
-    const currentRunId = runIdRef.current;
-    if (!pendingChoice || !currentRunId) return;
-
-    await submitChoiceResult(currentRunId, pendingChoice.toolId, [], config);
-    addMessage({ role: "status", content: "Choice cancelled" });
-
-    setPendingChoice(null);
-    setStatus(Status.THINKING);
-  }, [pendingChoice, config, addMessage]);
-
   const cancel = useCallback(async () => {
     const currentRunId = runIdRef.current;
     if (!currentRunId || !isStreaming) return;
@@ -362,7 +312,6 @@ export function useStreaming({
     alwaysAllowedToolsRef.current.clear();
     autoApprovedIdsRef.current.clear();
     setPendingApproval(null);
-    setPendingChoice(null);
     setStatus(Status.IDLE);
     setIsStreaming(false);
   }, []);
@@ -373,15 +322,12 @@ export function useStreaming({
     status,
     toolChain,
     pendingApproval,
-    pendingChoice,
     usage,
     addMessage,
     clearMessages,
     sendMessage,
     setStatus,
     handleApproval,
-    handleChoice,
-    cancelChoice,
     cancel,
     resetForSessionSwitch,
   };

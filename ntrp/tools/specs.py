@@ -5,7 +5,6 @@ from typing import Any
 from ntrp.schedule.store import ScheduleStore
 from ntrp.skills.registry import SkillRegistry
 from ntrp.skills.tool import UseSkillTool
-from ntrp.tools.ask_choice import AskChoiceTool
 from ntrp.tools.bash import BashTool
 from ntrp.tools.browser import BrowserTool
 from ntrp.tools.calendar import (
@@ -105,7 +104,6 @@ def _create_core_tools(deps: ToolDeps) -> list[Tool]:
         BashTool(),
         ReadFileTool(),
         ExploreTool(),
-        AskChoiceTool(),
         SetDirectivesTool(),
     ]
 

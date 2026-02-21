@@ -20,12 +20,6 @@ class CancelRequest(BaseModel):
     run_id: str
 
 
-class ChoiceResultRequest(BaseModel):
-    run_id: str
-    tool_id: str
-    selected: list[str]
-
-
 # --- Session / config ---
 
 

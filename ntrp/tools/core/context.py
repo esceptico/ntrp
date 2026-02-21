@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
-from ntrp.events.sse import ApprovalNeededEvent, ChoiceEvent
+from ntrp.events.sse import ApprovalNeededEvent
 
 if TYPE_CHECKING:
     from ntrp.memory.facts import FactMemory
@@ -17,10 +17,6 @@ if TYPE_CHECKING:
 class ApprovalResponse(TypedDict):
     approved: bool
     result: str
-
-
-class ChoiceResponse(TypedDict):
-    selected: list[str]
 
 
 @dataclass
@@ -53,7 +49,6 @@ class IOBridge:
 
     emit: Callable[[Any], Awaitable[None]] | None = None
     approval_queue: asyncio.Queue[ApprovalResponse] | None = None
-    choice_queue: asyncio.Queue[ChoiceResponse] | None = None
 
 
 @dataclass
@@ -129,27 +124,3 @@ class ToolExecution:
             return Rejection(feedback=feedback)
 
         return None
-
-    async def ask_choice(
-        self,
-        question: str,
-        options: list[dict],
-        allow_multiple: bool = False,
-    ) -> list[str]:
-        if not self.ctx.io.emit or not self.ctx.io.choice_queue:
-            return []
-
-        await self.ctx.io.emit(
-            ChoiceEvent(
-                tool_id=self.tool_id,
-                question=question,
-                options=options,
-                allow_multiple=allow_multiple,
-            )
-        )
-
-        try:
-            response = await asyncio.wait_for(self.ctx.io.choice_queue.get(), timeout=300)
-        except TimeoutError:
-            return []
-        return response["selected"]

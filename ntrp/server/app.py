@@ -11,7 +11,7 @@ from ntrp.server.routers.schedule import router as schedule_router
 from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.runtime import get_run_registry, get_runtime, get_runtime_async, reset_runtime
-from ntrp.server.schemas import CancelRequest, ChatRequest, ChoiceResultRequest, ToolResultRequest
+from ntrp.server.schemas import CancelRequest, ChatRequest, ToolResultRequest
 from ntrp.services.chat import ChatService
 
 
@@ -129,22 +129,6 @@ async def submit_tool_result(request: ToolResultRequest):
                 "approved": request.approved,
             }
         )
-    else:
-        raise HTTPException(status_code=400, detail="No active stream for this run")
-
-    return {"status": "ok"}
-
-
-@app.post("/tools/choice")
-async def submit_choice_result(request: ChoiceResultRequest):
-    registry = get_run_registry()
-    run = registry.get_run(request.run_id)
-
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-
-    if run.choice_queue:
-        await run.choice_queue.put({"selected": request.selected})
     else:
         raise HTTPException(status_code=400, detail="No active stream for this run")
 

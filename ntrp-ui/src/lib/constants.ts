@@ -26,7 +26,6 @@ export const Status = {
   COMPRESSING: "compressing",
   TOOL: "tool",
   AWAITING_APPROVAL: "awaiting_approval",
-  AWAITING_CHOICE: "awaiting_choice",
 } as const;
 
 export type Status = (typeof Status)[keyof typeof Status];
