@@ -34,9 +34,17 @@ export function useSession(config: Config) {
     if (initRef.current) return;
     initRef.current = true;
 
+    async function waitForServer(maxAttempts = 30, intervalMs = 1000): Promise<boolean> {
+      for (let i = 0; i < maxAttempts; i++) {
+        if (await checkHealth(config)) return true;
+        await new Promise((r) => setTimeout(r, intervalMs));
+      }
+      return false;
+    }
+
     async function init() {
       try {
-        const healthy = await checkHealth(config);
+        const healthy = await waitForServer();
         setServerConnected(healthy);
 
         if (healthy) {

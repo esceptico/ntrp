@@ -1,3 +1,4 @@
+import asyncio
 import os
 from collections.abc import Iterator
 from datetime import datetime
@@ -30,6 +31,9 @@ class ObsidianSource(Source, NotesSource):
         return {"path": str(self.vault_path)}
 
     async def scan(self) -> list[RawItem]:
+        return await asyncio.to_thread(self._scan_sync)
+
+    def _scan_sync(self) -> list[RawItem]:
         items = []
         for filepath, relative_path in _walk_markdown_files(self.vault_path):
             if item := self._read_file(filepath, relative_path):

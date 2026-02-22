@@ -1,3 +1,4 @@
+import asyncio
 import shlex
 import subprocess
 from typing import Any
@@ -174,6 +175,6 @@ class BashTool(Tool):
             return ToolResult(content=f"Blocked: {command}", preview="Blocked", is_error=True)
 
         cwd = working_dir
-        output = execute_bash(command, cwd, self.timeout)
+        output = await asyncio.to_thread(execute_bash, command, cwd, self.timeout)
         lines = output.count("\n") + 1
         return ToolResult(content=output, preview=f"{lines} lines")
