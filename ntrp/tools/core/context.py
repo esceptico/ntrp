@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
+from ntrp.core.ledger import ExplorationLedger
 from ntrp.events.sse import ApprovalNeededEvent
 
 if TYPE_CHECKING:
@@ -62,6 +63,7 @@ class ToolContext:
     memory: "FactMemory | None" = None
     sources: "dict[str, Source]" = field(default_factory=dict)
     channel: Channel = field(default_factory=Channel)
+    ledger: ExplorationLedger | None = None
     spawn_fn: Callable[..., Awaitable[str]] | None = None
 
     @property

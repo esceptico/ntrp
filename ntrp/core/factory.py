@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.core.agent import Agent
+from ntrp.core.ledger import ExplorationLedger
 from ntrp.core.spawner import create_spawn_fn
 from ntrp.memory.facts import FactMemory
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
@@ -46,6 +47,7 @@ def create_agent(
         memory=memory,
         sources=executor.runtime.source_mgr.sources,
         channel=channel,
+        ledger=ExplorationLedger(),
     )
     tool_ctx.spawn_fn = create_spawn_fn(
         executor=executor,

@@ -61,6 +61,7 @@ def create_spawn_fn(
             memory=executor.runtime.memory,
             sources=executor.runtime.source_mgr.sources,
             channel=calling_ctx.channel,
+            ledger=calling_ctx.ledger,
         )
         child_ctx.spawn_fn = create_spawn_fn(
             executor=executor,
