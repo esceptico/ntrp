@@ -104,11 +104,16 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
             cache_write_tokens=0,
         )
 
+        reasoning_content = getattr(msg, "reasoning_content", None)
+        if reasoning_content is None:
+            extra = getattr(msg, "model_extra", None) or {}
+            reasoning_content = extra.get("reasoning_content")
+
         message = Message(
             role=msg.role,
             content=msg.content,
             tool_calls=tool_calls,
-            reasoning_content=msg.reasoning_content,
+            reasoning_content=reasoning_content,
         )
 
         return CompletionResponse(
