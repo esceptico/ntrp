@@ -157,7 +157,7 @@ async def _generate_dream(
     sup_a = "\n".join(f'    - "{facts[f][0][:120]}"' for f in supporters_a)
     sup_b = "\n".join(f'    - "{facts[f][0][:120]}"' for f in supporters_b)
 
-    prompt = DREAM_PROMPT.format(
+    prompt = DREAM_PROMPT.render(
         core_a=facts[core_a][0],
         supporters_a=sup_a or "    (none)",
         core_b=facts[core_b][0],
@@ -195,7 +195,7 @@ async def _evaluate_batch(
 
     formatted = "\n".join(f"[{i}] BRIDGE: {c.bridge}\n    DREAM: {c.insight}" for i, c in enumerate(candidates))
 
-    prompt = DREAM_EVALUATOR_PROMPT.format(n=len(candidates), candidates=formatted)
+    prompt = DREAM_EVALUATOR_PROMPT.render(n=len(candidates), candidates=formatted)
 
     try:
         client = get_completion_client(model)

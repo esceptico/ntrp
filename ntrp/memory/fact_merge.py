@@ -66,7 +66,7 @@ async def _llm_merge_decision(
     fact_b: Fact,
     model: str,
 ) -> FactMergeAction:
-    prompt = FACT_MERGE_PROMPT.format(
+    prompt = FACT_MERGE_PROMPT.render(
         id_a=fact_a.id,
         text_a=fact_a.text,
         id_b=fact_b.id,

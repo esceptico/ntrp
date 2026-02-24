@@ -1,12 +1,13 @@
 from pydantic import BaseModel
 
 from ntrp.constants import CONSOLIDATION_TEMPERATURE
+from ntrp.core.prompts import env
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CHAT_EXTRACTION_PROMPT = """Extract durable personal knowledge from this conversation.
+CHAT_EXTRACTION_PROMPT = env.from_string("""Extract durable personal knowledge from this conversation.
 
 Return facts worth remembering permanently — things useful to recall months later.
 
@@ -34,7 +35,7 @@ RULES:
 - If nothing durable was discussed, return an empty list
 
 CONVERSATION:
-{conversation}"""
+{{ conversation }}""")
 
 
 class ChatExtractionSchema(BaseModel):
@@ -64,7 +65,7 @@ async def extract_from_chat(
     if not conversation.strip():
         return []
 
-    prompt = CHAT_EXTRACTION_PROMPT.format(conversation=conversation)
+    prompt = CHAT_EXTRACTION_PROMPT.render(conversation=conversation)
 
     try:
         client = get_completion_client(model)

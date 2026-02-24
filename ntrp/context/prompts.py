@@ -1,5 +1,7 @@
-SUMMARIZE_PROMPT_TEMPLATE = """You are continuing an active personal assistant session.
-Create a state handoff for seamless continuation. Target length: ~{budget} words.
+from ntrp.core.prompts import env
+
+SUMMARIZE_PROMPT_TEMPLATE = env.from_string("""You are continuing an active personal assistant session.
+Create a state handoff for seamless continuation. Target length: ~{{ budget }} words.
 
 ## Required Sections:
 
@@ -30,4 +32,4 @@ List of identifiers that may need retrieval:
 - If a fact cannot be traced to a source, mark (unverified)
 - Do NOT restate general preferences unless relevant to current objective
 - Focus on CONTINUING work, not documenting history
-- Be terse. State, not story."""
+- Be terse. State, not story.""")

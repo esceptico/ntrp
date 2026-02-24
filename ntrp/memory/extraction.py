@@ -26,7 +26,7 @@ class Extractor:
             client = get_completion_client(self.model)
             response = await client.completion(
                 model=self.model,
-                messages=[{"role": "user", "content": EXTRACTION_PROMPT.format(text=text)}],
+                messages=[{"role": "user", "content": EXTRACTION_PROMPT.render(text=text)}],
                 response_format=ExtractionSchema,
                 temperature=EXTRACTION_TEMPERATURE,
             )

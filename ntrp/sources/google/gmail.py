@@ -10,6 +10,7 @@ from typing import Any
 from googleapiclient.discovery import build
 
 from ntrp.constants import CONTENT_READ_LIMIT
+from ntrp.core.prompts import env
 from ntrp.sources.base import EmailSource, Source, SourceItem
 from ntrp.sources.google.auth import (
     NTRP_DIR,
@@ -20,92 +21,92 @@ from ntrp.sources.google.auth import (
 )
 from ntrp.sources.models import RawItem
 
-EMAIL_HTML_TEMPLATE = """<!DOCTYPE html>
+EMAIL_HTML_TEMPLATE = env.from_string("""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <style>
-        body {{
+        body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
             line-height: 1.6;
             color: #333;
             max-width: 800px;
             margin: 0;
             padding: 20px;
-        }}
-        table {{
+        }
+        table {
             border-collapse: collapse;
             width: 100%;
             margin: 16px 0;
-        }}
-        th, td {{
+        }
+        th, td {
             border: 1px solid #ddd;
             padding: 8px 12px;
             text-align: left;
-        }}
-        th {{
+        }
+        th {
             background: #f5f5f5;
             font-weight: 600;
-        }}
-        pre {{
+        }
+        pre {
             background: #f5f5f5;
             padding: 12px;
             border-radius: 4px;
             overflow-x: auto;
             margin: 16px 0;
-        }}
-        code {{
+        }
+        code {
             background: #f5f5f5;
             padding: 2px 6px;
             border-radius: 3px;
             font-family: 'Courier New', Consolas, monospace;
             font-size: 0.9em;
-        }}
-        pre code {{
+        }
+        pre code {
             background: transparent;
             padding: 0;
-        }}
-        h1, h2, h3 {{
+        }
+        h1, h2, h3 {
             margin-top: 24px;
             margin-bottom: 12px;
             color: #111;
             font-weight: 600;
-        }}
-        h1 {{ font-size: 24px; }}
-        h2 {{ font-size: 20px; }}
-        h3 {{ font-size: 18px; }}
-        ul, ol {{
+        }
+        h1 { font-size: 24px; }
+        h2 { font-size: 20px; }
+        h3 { font-size: 18px; }
+        ul, ol {
             margin: 12px 0;
             padding-left: 24px;
-        }}
-        li {{
+        }
+        li {
             margin: 4px 0;
-        }}
-        p {{
+        }
+        p {
             margin: 12px 0;
-        }}
-        a {{
+        }
+        a {
             color: #0066cc;
             text-decoration: none;
-        }}
-        a:hover {{
+        }
+        a:hover {
             text-decoration: underline;
-        }}
-        strong {{
+        }
+        strong {
             font-weight: 600;
-        }}
-        blockquote {{
+        }
+        blockquote {
             border-left: 4px solid #ddd;
             margin: 16px 0;
             padding-left: 16px;
             color: #666;
-        }}
+        }
     </style>
 </head>
 <body>
-{content}
+{{ content }}
 </body>
-</html>"""
+</html>""")
 
 
 def decode_base64_body(data: str) -> str:
@@ -318,7 +319,7 @@ class GmailSource:
         )
         content = md.convert(markdown_text)
 
-        return EMAIL_HTML_TEMPLATE.format(content=content)
+        return EMAIL_HTML_TEMPLATE.render(content=content)
 
     def _fetch_message_metadata(self, msg_id: str) -> dict | None:
         cache_key = f"meta:{msg_id}"

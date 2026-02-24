@@ -72,7 +72,7 @@ async def _llm_consolidation_decisions(
 ) -> list[ConsolidationAction]:
     observations_json = await _format_observations(candidates, fact_repo)
 
-    prompt = CONSOLIDATION_PROMPT.format(
+    prompt = CONSOLIDATION_PROMPT.render(
         fact_text=fact.text,
         observations_json=observations_json,
     )

@@ -69,7 +69,7 @@ def _build_conversation_text(messages: list, start: int, end: int) -> str:
 
 def _build_summarize_request(conversation_text: str, model: str) -> dict:
     word_budget = int(SUMMARY_MAX_TOKENS * 0.75)
-    prompt = SUMMARIZE_PROMPT_TEMPLATE.format(budget=word_budget)
+    prompt = SUMMARIZE_PROMPT_TEMPLATE.render(budget=word_budget)
     return {
         "model": model,
         "messages": [

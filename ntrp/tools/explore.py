@@ -4,9 +4,31 @@ from pydantic import BaseModel, Field
 
 from ntrp.constants import EXPLORE_TIMEOUT, USER_ENTITY_NAME
 from ntrp.core.isolation import IsolationLevel
-from ntrp.core.prompts import EXPLORE_PROMPTS, current_date_formatted
+from ntrp.core.prompts import EXPLORE_PROMPTS, current_date_formatted, env
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
+
+EXPLORE_SYSTEM_PROMPT = env.from_string("""{{ base_prompt }}
+
+Today is {{ date }}.
+{% if remaining_depth > 1 %}
+
+DEPTH BUDGET: You can spawn {{ remaining_depth - 1 }} more levels of sub-agents. Use explore() to delegate sub-topics — don't try to cover everything yourself.
+{% elif remaining_depth == 1 %}
+
+DEPTH BUDGET: You are at the last level — no more sub-agents. Do all work directly.
+{% endif %}
+{% if ledger_summary %}
+
+{{ ledger_summary }}
+{% endif %}
+{% if user_facts %}
+
+USER CONTEXT:
+{% for fact in user_facts -%}
+- {{ fact.text }}
+{% endfor %}
+{% endif %}""")
 
 EXPLORE_DESCRIPTION = (
     "Spawn an exploration agent for information gathering. "
@@ -36,30 +58,21 @@ class ExploreTool(Tool):
     input_model = ExploreInput
 
     async def _build_prompt(self, ctx, depth: str, remaining_depth: int, tool_id: str) -> str:
-        base = EXPLORE_PROMPTS[depth]
-
-        parts = [base, f"Today is {current_date_formatted()}."]
-
-        if remaining_depth > 1:
-            parts.append(
-                f"DEPTH BUDGET: You can spawn {remaining_depth - 1} more levels of sub-agents. "
-                "Use explore() to delegate sub-topics — don't try to cover everything yourself."
-            )
-        elif remaining_depth == 1:
-            parts.append("DEPTH BUDGET: You are at the last level — no more sub-agents. Do all work directly.")
-
+        ledger_summary = None
         if ctx.ledger:
             ledger_summary = await ctx.ledger.summary(exclude_id=tool_id)
-            if ledger_summary:
-                parts.append(ledger_summary)
 
+        user_facts = []
         if ctx.memory:
             user_facts = await ctx.memory.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=5)
-            if user_facts:
-                context = "\n".join(f"- {f.text}" for f in user_facts)
-                parts.append(f"USER CONTEXT:\n{context}")
 
-        return "\n\n".join(parts)
+        return EXPLORE_SYSTEM_PROMPT.render(
+            base_prompt=EXPLORE_PROMPTS[depth],
+            date=current_date_formatted(),
+            remaining_depth=remaining_depth,
+            ledger_summary=ledger_summary,
+            user_facts=user_facts,
+        )
 
     EXPLORE_TOOLS = {
         "notes",

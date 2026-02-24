@@ -69,7 +69,7 @@ async def _llm_merge_decision(
     obs_b: Observation,
     model: str,
 ) -> MergeAction:
-    prompt = OBSERVATION_MERGE_PROMPT.format(
+    prompt = OBSERVATION_MERGE_PROMPT.render(
         id_a=obs_a.id,
         evidence_a=obs_a.evidence_count,
         text_a=obs_a.summary,

@@ -1,4 +1,6 @@
-EXTRACTION_PROMPT = """Extract named entities from this fact. Return ONLY proper nouns:
+from ntrp.core.prompts import env
+
+EXTRACTION_PROMPT = env.from_string("""Extract named entities from this fact. Return ONLY proper nouns:
 - People: "Alice", "Dr. Chen"
 - Organizations: "Google", "Revolut"
 - Projects/products: "ntrp", "Kubernetes"
@@ -7,9 +9,9 @@ EXTRACTION_PROMPT = """Extract named entities from this fact. Return ONLY proper
 DO NOT extract: generic nouns, values/amounts, dates, code identifiers, abstract concepts.
 Use "User" for first-person references.
 
-Text: {text}"""
+Text: {{ text }}""")
 
-CONSOLIDATION_PROMPT = """You are a memory consolidation system. Synthesize facts into higher-level observations.
+CONSOLIDATION_PROMPT = env.from_string("""You are a memory consolidation system. Synthesize facts into higher-level observations.
 
 ## OBSERVATIONS ARE A HIGHER ABSTRACTION LEVEL THAN FACTS
 
@@ -74,10 +76,10 @@ rather than growing a single observation indefinitely.
 
 ---
 
-NEW FACT: {fact_text}
+NEW FACT: {{ fact_text }}
 
 EXISTING OBSERVATIONS (with source facts):
-{observations_json}
+{{ observations_json }}
 
 Each observation includes:
 - id: unique identifier for updating
@@ -91,32 +93,32 @@ Each observation includes:
 
 Return your actions as a JSON object with an "actions" array:
 
-{{"actions": [
-  {{"action": "update", "observation_id": <id>, "text": "synthesized observation", "reason": "..."}},
-  {{"action": "create", "text": "new synthesized observation", "reason": "..."}},
-  {{"action": "skip", "reason": "ephemeral/no durable knowledge"}}
-]}}"""
+{"actions": [
+  {"action": "update", "observation_id": <id>, "text": "synthesized observation", "reason": "..."},
+  {"action": "create", "text": "new synthesized observation", "reason": "..."},
+  {"action": "skip", "reason": "ephemeral/no durable knowledge"}
+]}""")
 
-DREAM_PROMPT = """Two clusters of facts from different life domains of the same person:
+DREAM_PROMPT = env.from_string("""Two clusters of facts from different life domains of the same person:
 
 DOMAIN A:
-  Core: "{core_a}"
+  Core: "{{ core_a }}"
   Supporting:
-{supporters_a}
+{{ supporters_a }}
 
 DOMAIN B:
-  Core: "{core_b}"
+  Core: "{{ core_b }}"
   Supporting:
-{supporters_b}
+{{ supporters_b }}
 
 Find the deepest structural pattern, hidden dependency, or ironic contradiction connecting these domains.
 
 Reply ONLY with valid JSON:
-{{"bridge": "<2-4 word abstract concept>", "insight": "<one vivid, specific sentence — should feel like a genuine insight, not a fortune cookie>"}}
+{"bridge": "<2-4 word abstract concept>", "insight": "<one vivid, specific sentence — should feel like a genuine insight, not a fortune cookie>"}
 
-If no genuine insight exists, reply: {{"bridge": null, "insight": null}}"""
+If no genuine insight exists, reply: {"bridge": null, "insight": null}""")
 
-DREAM_EVALUATOR_PROMPT = """You are an extremely strict quality filter for a dream/insight generation system. Below are {n} candidate dreams generated from cross-domain fact pairs about one person.
+DREAM_EVALUATOR_PROMPT = env.from_string("""You are an extremely strict quality filter for a dream/insight generation system. Below are {{ n }} candidate dreams generated from cross-domain fact pairs about one person.
 
 Your job: pick AT MOST 1 dream — the single most genuinely surprising insight. Most batches should produce ZERO survivors. Reject anything that is:
 - Generic (could apply to anyone: "balances work and health")
@@ -128,42 +130,42 @@ Your job: pick AT MOST 1 dream — the single most genuinely surprising insight.
 A good dream reveals a connection the person hasn't considered — it should make them pause.
 
 CANDIDATES:
-{candidates}
+{{ candidates }}
 
 Reply ONLY with valid JSON:
-{{"selected": [<0 or 1 dream index (0-based)>], "reasoning": "<1 sentence>"}}
+{"selected": [<0 or 1 dream index (0-based)>], "reasoning": "<1 sentence>"}
 
-Default to empty: {{"selected": [], "reasoning": "nothing exceptional"}}"""
+Default to empty: {"selected": [], "reasoning": "nothing exceptional"}""")
 
-OBSERVATION_MERGE_PROMPT = """You are merging two similar observations from a memory system into one.
+OBSERVATION_MERGE_PROMPT = env.from_string("""You are merging two similar observations from a memory system into one.
 
-OBSERVATION A (id={id_a}, {evidence_a} supporting facts):
-{text_a}
+OBSERVATION A (id={{ id_a }}, {{ evidence_a }} supporting facts):
+{{ text_a }}
 
-OBSERVATION B (id={id_b}, {evidence_b} supporting facts):
-{text_b}
+OBSERVATION B (id={{ id_b }}, {{ evidence_b }} supporting facts):
+{{ text_b }}
 
 Rules:
 - If these describe the SAME topic: merge into ONE observation that preserves all specific details, dates, and context from both. Don't lose information.
 - If these are RELATED but genuinely DISTINCT topics: skip.
 - The merged observation should be at least as specific as the more detailed of the two.
-- Keep it concise — one clear statement, not a paragraph."""
+- Keep it concise — one clear statement, not a paragraph.""")
 
-FACT_MERGE_PROMPT = """Two facts from a memory system. Decide if they describe the SAME thing or are genuinely DIFFERENT.
+FACT_MERGE_PROMPT = env.from_string("""Two facts from a memory system. Decide if they describe the SAME thing or are genuinely DIFFERENT.
 
-FACT A (id={id_a}):
-{text_a}
+FACT A (id={{ id_a }}):
+{{ text_a }}
 
-FACT B (id={id_b}):
-{text_b}
+FACT B (id={{ id_b }}):
+{{ text_b }}
 
 Rules:
 - "same" = both facts capture the same event/state/preference, just worded differently or with different detail levels. Keep the more informative version.
 - "different" = facts share structure or vocabulary but describe genuinely different events, people, companies, dates, or topics.
 - When merging, produce a single fact text that preserves all specific details (dates, names, numbers) from both.
-- CRITICAL: "User applied to X on date1" and "User applied to Y on date2" are DIFFERENT facts even if structurally similar."""
+- CRITICAL: "User applied to X on date1" and "User applied to Y on date2" are DIFFERENT facts even if structurally similar.""")
 
-TEMPORAL_PATTERN_PROMPT = """You are a temporal pattern detector for a memory system. Given chronological facts about an entity, identify temporal patterns that no single fact captures.
+TEMPORAL_PATTERN_PROMPT = env.from_string("""You are a temporal pattern detector for a memory system. Given chronological facts about an entity, identify temporal patterns that no single fact captures.
 
 ## WHAT TO LOOK FOR
 
@@ -182,18 +184,18 @@ TEMPORAL_PATTERN_PROMPT = """You are a temporal pattern detector for a memory sy
 
 ---
 
-ENTITY: {entity_name}
+ENTITY: {{ entity_name }}
 
 CHRONOLOGICAL FACTS:
-{facts_json}
+{{ facts_json }}
 
 ---
 
 Return your actions as a JSON object with an "actions" array:
 
-{{"actions": [
-  {{"action": "create", "text": "pattern observation text", "reason": "which facts support this", "source_fact_ids": [1, 2, 3]}},
-  {{"action": "skip", "reason": "no temporal patterns found"}}
-]}}
+{"actions": [
+  {"action": "create", "text": "pattern observation text", "reason": "which facts support this", "source_fact_ids": [1, 2, 3]},
+  {"action": "skip", "reason": "no temporal patterns found"}
+]}
 
-If no meaningful patterns exist: {{"actions": [{{"action": "skip", "reason": "no temporal patterns found"}}]}}"""
+If no meaningful patterns exist: {"actions": [{"action": "skip", "reason": "no temporal patterns found"}]}""")

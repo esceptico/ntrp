@@ -126,7 +126,7 @@ async def _llm_temporal_patterns(
     facts_json: str,
     model: str,
 ) -> list[TemporalAction]:
-    prompt = TEMPORAL_PATTERN_PROMPT.format(
+    prompt = TEMPORAL_PATTERN_PROMPT.render(
         entity_name=entity_name,
         facts_json=facts_json,
     )
