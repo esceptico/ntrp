@@ -18,7 +18,6 @@ from ntrp.tools.directives import SetDirectivesTool
 from ntrp.tools.email import EmailsTool, ReadEmailTool, SendEmailTool
 from ntrp.tools.explore import ExploreTool
 from ntrp.tools.files import ReadFileTool
-from ntrp.tools.time import CurrentTimeTool
 from ntrp.tools.memory import ForgetTool, RecallTool, RememberTool
 from ntrp.tools.notes import (
     CreateNoteTool,
@@ -29,6 +28,7 @@ from ntrp.tools.notes import (
     ReadNoteTool,
 )
 from ntrp.tools.schedule import CancelScheduleTool, GetScheduleResultTool, ListSchedulesTool, ScheduleTaskTool
+from ntrp.tools.time import CurrentTimeTool
 from ntrp.tools.web import WebFetchTool, WebSearchTool
 
 
