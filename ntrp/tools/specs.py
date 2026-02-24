@@ -28,6 +28,7 @@ from ntrp.tools.notes import (
     ReadNoteTool,
 )
 from ntrp.tools.schedule import CancelScheduleTool, GetScheduleResultTool, ListSchedulesTool, ScheduleTaskTool
+from ntrp.tools.time import CurrentTimeTool
 from ntrp.tools.web import WebFetchTool, WebSearchTool
 
 
@@ -105,6 +106,7 @@ def _create_core_tools(deps: ToolDeps) -> list[Tool]:
         ReadFileTool(),
         ExploreTool(),
         SetDirectivesTool(),
+        CurrentTimeTool(),
     ]
 
 

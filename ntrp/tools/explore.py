@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 from ntrp.constants import EXPLORE_TIMEOUT, USER_ENTITY_NAME
 from ntrp.core.isolation import IsolationLevel
-from ntrp.core.prompts import EXPLORE_PROMPTS
+from ntrp.core.prompts import EXPLORE_PROMPTS, current_date_formatted
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
@@ -38,7 +38,7 @@ class ExploreTool(Tool):
     async def _build_prompt(self, ctx, depth: str, remaining_depth: int, tool_id: str) -> str:
         base = EXPLORE_PROMPTS[depth]
 
-        parts = [base]
+        parts = [base, f"Today is {current_date_formatted()}."]
 
         if remaining_depth > 1:
             parts.append(
@@ -72,6 +72,7 @@ class ExploreTool(Tool):
         "web_search",
         "web_fetch",
         "explore",
+        "current_time",
     }
 
     async def execute(self, execution: ToolExecution, task: str, depth: str = "normal", **kwargs) -> ToolResult:

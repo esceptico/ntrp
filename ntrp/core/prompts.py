@@ -36,7 +36,7 @@ Skip ephemeral noise: billing alerts, CI failures, token events, connection requ
 
 **Calendar** — create_calendar_event, edit_calendar_event, delete_calendar_event. Require approval.
 
-**Utility** — explore (deep research), bash (shell).
+**Utility** — explore (deep research), bash (shell), current_time (current date/time).
 
 **Directives** — set_directives updates persistent rules injected into your system prompt. When the user tells you how to behave, what to do or avoid, or asks you to change your style/tone — call set_directives. Read current directives first, then write the full updated version.
 
@@ -104,6 +104,8 @@ EXPLORE_PROMPT = EXPLORE_PROMPTS["normal"]
 
 ENVIRONMENT_TEMPLATE = """## CONTEXT
 Today is {date} at {time} (user's local time)."""
+
+TEMPORAL_REMINDER = "Remember: today is {date}."
 
 DATA_SOURCES_HEADER = """## DATA SOURCES"""
 
@@ -188,12 +190,17 @@ Ask about their work, projects, and interests, then explore based on answers.
 - Minimal user effort — they just confirm or correct"""
 
 
-def _environment() -> str:
+def current_date_formatted() -> str:
+    return datetime.now().strftime("%A, %B %d, %Y")
+
+
+def _environment() -> tuple[str, str]:
+    """Return (environment block, temporal reminder)."""
     now = datetime.now()
-    return ENVIRONMENT_TEMPLATE.format(
-        date=now.strftime("%A, %B %d, %Y"),
-        time=now.strftime("%H:00"),
-    )
+    date = now.strftime("%A, %B %d, %Y")
+    env = ENVIRONMENT_TEMPLATE.format(date=date, time=now.strftime("%H:00"))
+    reminder = TEMPORAL_REMINDER.format(date=date)
+    return env, reminder
 
 
 def _sources(details: dict[str, dict]) -> str:
@@ -282,9 +289,11 @@ def _static_text(
     return "\n\n".join(s for s in parts if s)
 
 
-def _dynamic_text(last_activity: datetime | None = None) -> str:
-    parts = [_environment(), _time_gap(last_activity)]
-    return "\n\n".join(s for s in parts if s)
+def _dynamic_text(last_activity: datetime | None = None) -> tuple[str, str]:
+    """Return (dynamic block, temporal reminder)."""
+    env, reminder = _environment()
+    parts = [env, _time_gap(last_activity)]
+    return "\n\n".join(s for s in parts if s), reminder
 
 
 def build_system_blocks(
@@ -309,7 +318,7 @@ def build_system_blocks(
 
     blocks = [static_block]
 
-    dynamic = _dynamic_text(last_activity)
+    dynamic, reminder = _dynamic_text(last_activity)
     if dynamic:
         blocks.append({"type": "text", "text": dynamic})
 
@@ -322,6 +331,8 @@ def build_system_blocks(
             memory_block["cache_control"] = {"type": "ephemeral"}
         blocks.append(memory_block)
 
+    blocks.append({"type": "text", "text": reminder})
+
     return blocks
 
 
@@ -333,7 +344,9 @@ def build_system_prompt(
     directives: str | None = None,
 ) -> str:
     """Build system prompt as a single string (for non-chat callers like scheduler/CLI)."""
-    parts = [_static_text(source_details, skills_context, directives), _dynamic_text(last_activity)]
+    dynamic, reminder = _dynamic_text(last_activity)
+    parts = [_static_text(source_details, skills_context, directives), dynamic]
     if memory_context:
         parts.append(MEMORY_CONTEXT_TEMPLATE.format(memory_content=memory_context))
+    parts.append(reminder)
     return "\n\n".join(s for s in parts if s)
