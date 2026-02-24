@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from ntrp.logging import get_logger
 from ntrp.operator.runner import RunRequest, run_agent
-from ntrp.schedule.models import Recurrence, ScheduledTask, compute_next_run
+from ntrp.schedule.models import ScheduledTask, compute_next_run
 from ntrp.schedule.store import ScheduleStore
 
 if TYPE_CHECKING:
@@ -64,9 +64,9 @@ class Scheduler:
 
         now = datetime.now(UTC)
         for task in await self.store.list_due(now):
-            if task.recurrence == Recurrence.ONCE:
-                continue  # one-shot tasks should still fire
-            next_run = compute_next_run(task.time_of_day, task.recurrence, after=now)
+            if task.is_one_shot:
+                continue
+            next_run = compute_next_run(task.time_of_day, task.repeat, after=now)
             await self.store.update_last_run(task.task_id, task.last_run_at or now, next_run)
             _logger.info("Advanced stale task %s to %s", task.task_id, next_run)
 
@@ -90,7 +90,7 @@ class Scheduler:
             try:
                 await asyncio.shield(execution)
             except asyncio.CancelledError:
-                return  # Loop cancelled, but execution continues — stop() will await it
+                return
             self._running_execution = None
 
     async def _run_and_finalize(self, task: ScheduledTask) -> None:
@@ -118,11 +118,11 @@ class Scheduler:
     async def _execute_task(self, task: ScheduledTask) -> None:
         result = await self._run_agent(task)
         now = datetime.now(UTC)
-        if task.recurrence == Recurrence.ONCE:
+        if task.is_one_shot:
             await self.store.update_last_run(task.task_id, now, now, result=result)
             await self.store.set_enabled(task.task_id, False)
         else:
-            next_run = compute_next_run(task.time_of_day, task.recurrence, after=now)
+            next_run = compute_next_run(task.time_of_day, task.repeat, after=now)
             await self.store.update_last_run(task.task_id, now, next_run, result=result)
         _logger.info("Completed scheduled task %s", task.task_id)
 
@@ -137,10 +137,10 @@ class Scheduler:
         try:
             result = await self._run_agent(task)
             now = datetime.now(UTC)
-            if task.recurrence == Recurrence.ONCE:
+            if task.is_one_shot:
                 await self.store.update_last_run(task.task_id, now, task.next_run_at, result=result)
             else:
-                next_run = compute_next_run(task.time_of_day, task.recurrence, after=now)
+                next_run = compute_next_run(task.time_of_day, task.repeat, after=now)
                 await self.store.update_last_run(task.task_id, now, next_run, result=result)
             return result
         finally:

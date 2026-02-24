@@ -59,7 +59,7 @@ class ScheduleService:
             name=name if name is not None else task.name,
             description=description if description is not None else task.description,
             time_of_day=task.time_of_day,
-            recurrence=task.recurrence,
+            repeat=task.repeat,
             enabled=task.enabled,
             created_at=task.created_at,
             next_run_at=task.next_run_at,

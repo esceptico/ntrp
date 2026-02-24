@@ -1,10 +1,10 @@
+import secrets
 from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from ntrp.schedule.models import Recurrence, ScheduledTask, compute_next_run
+from ntrp.schedule.models import Repeat, ScheduledTask, compute_next_run
 from ntrp.schedule.store import ScheduleStore
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
@@ -29,9 +29,10 @@ def _format_schedule_list(tasks: list[ScheduledTask]) -> str:
         next_run = t.next_run_at.strftime("%Y-%m-%d %H:%M") if t.next_run_at else "—"
         last_run = t.last_run_at.strftime("%Y-%m-%d %H:%M") if t.last_run_at else "never"
         label = t.name or t.description[:60]
+
         lines.append(
             f"[{t.task_id}] {label}\n"
-            f"  {t.time_of_day} · {t.recurrence.value} · {status}\n"
+            f"  {t.time_of_day} · {t.repeat.value} · {status}\n"
             f"  next: {next_run} · last: {last_run}"
         )
     return "\n\n".join(lines)
@@ -98,14 +99,14 @@ class ScheduleTaskTool(Tool):
             if not (0 <= h <= 23 and 0 <= m <= 59):
                 raise ValueError
             time_normalized = f"{h:02d}:{m:02d}"
-            rec = Recurrence(recurrence)
+            repeat = Repeat(recurrence)
         except (ValueError, IndexError):
             return None
 
         now = datetime.now(UTC)
-        next_run = compute_next_run(time_normalized, rec, after=now)
+        next_run = compute_next_run(time_normalized, repeat, after=now)
 
-        preview = f"Time: {time_normalized} ({rec.value})\nNext run: {next_run.strftime('%Y-%m-%d %H:%M')}"
+        preview = f"Time: {time_normalized} ({repeat.value})\nNext run: {next_run.strftime('%Y-%m-%d %H:%M')}"
         if notifiers:
             preview += f"\nNotify: {', '.join(notifiers)}"
         if writable:
@@ -138,7 +139,7 @@ class ScheduleTaskTool(Tool):
             )
 
         try:
-            rec = Recurrence(recurrence)
+            repeat = Repeat(recurrence)
         except ValueError:
             return ToolResult(
                 content=f"Error: invalid recurrence '{recurrence}'. Use: once, daily, weekdays, weekly",
@@ -158,14 +159,14 @@ class ScheduleTaskTool(Tool):
             )
 
         now = datetime.now(UTC)
-        next_run = compute_next_run(time_normalized, rec, after=now)
+        next_run = compute_next_run(time_normalized, repeat, after=now)
 
         task = ScheduledTask(
-            task_id=uuid4().hex[:8],
+            task_id=secrets.token_hex(4),
             name=name,
             description=description,
             time_of_day=time_normalized,
-            recurrence=rec,
+            repeat=repeat,
             enabled=True,
             created_at=now,
             next_run_at=next_run,
@@ -182,7 +183,7 @@ class ScheduleTaskTool(Tool):
         return ToolResult(
             content=f"Scheduled: {description}\n"
             f"ID: {task.task_id}\n"
-            f"Time: {time_normalized} ({rec.value})\n"
+            f"Time: {time_normalized} ({repeat.value})\n"
             f"Next run: {next_run.strftime('%Y-%m-%d %H:%M')}" + notify_line,
             preview=f"Scheduled ({task.task_id})",
         )

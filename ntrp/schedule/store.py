@@ -3,7 +3,30 @@ from datetime import datetime
 
 import aiosqlite
 
-from ntrp.schedule.models import ScheduledTask
+from ntrp.schedule.models import Repeat, ScheduledTask
+
+
+def _parse_dt(raw: str | None) -> datetime | None:
+    return datetime.fromisoformat(raw) if raw else None
+
+
+def _row_to_task(row: dict) -> ScheduledTask:
+    return ScheduledTask(
+        task_id=row["task_id"],
+        name=row["name"],
+        description=row["description"],
+        time_of_day=row["time_of_day"],
+        repeat=Repeat(row["recurrence"]),
+        enabled=bool(row["enabled"]),
+        created_at=datetime.fromisoformat(row["created_at"]),
+        next_run_at=datetime.fromisoformat(row["next_run_at"]),
+        last_run_at=_parse_dt(row["last_run_at"]),
+        notifiers=json.loads(row["notifiers"]) if row["notifiers"] else [],
+        last_result=row["last_result"],
+        running_since=_parse_dt(row["running_since"]),
+        writable=bool(row["writable"]),
+    )
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS scheduled_tasks (
@@ -30,15 +53,18 @@ MIGRATIONS = [
     "ALTER TABLE scheduled_tasks ADD COLUMN name TEXT NOT NULL DEFAULT ''",
 ]
 
-SQL_SAVE = """
-INSERT OR REPLACE INTO scheduled_tasks
-    (task_id, name, description, time_of_day, recurrence, enabled,
-     created_at, last_run_at, next_run_at, notifiers, last_result, running_since, writable)
+_COLUMNS = (
+    "task_id, name, description, time_of_day, recurrence, enabled, "
+    "created_at, last_run_at, next_run_at, notifiers, last_result, running_since, writable"
+)
+
+SQL_SAVE = f"""
+INSERT OR REPLACE INTO scheduled_tasks ({_COLUMNS})
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
-SQL_LIST_DUE = """
-SELECT * FROM scheduled_tasks
+SQL_LIST_DUE = f"""
+SELECT {_COLUMNS} FROM scheduled_tasks
 WHERE enabled = 1 AND next_run_at <= ? AND running_since IS NULL
 ORDER BY next_run_at
 """
@@ -71,7 +97,7 @@ class ScheduleStore:
                 task.name,
                 task.description,
                 task.time_of_day,
-                task.recurrence.value,
+                task.repeat.value,
                 int(task.enabled),
                 task.created_at.isoformat(),
                 task.last_run_at.isoformat() if task.last_run_at else None,
@@ -85,18 +111,22 @@ class ScheduleStore:
         await self.conn.commit()
 
     async def get(self, task_id: str) -> ScheduledTask | None:
-        rows = await self.conn.execute_fetchall("SELECT * FROM scheduled_tasks WHERE task_id = ?", (task_id,))
+        rows = await self.conn.execute_fetchall(
+            f"SELECT {_COLUMNS} FROM scheduled_tasks WHERE task_id = ?", (task_id,)
+        )
         if not rows:
             return None
-        return ScheduledTask(**rows[0])
+        return _row_to_task(rows[0])
 
     async def list_all(self) -> list[ScheduledTask]:
-        rows = await self.conn.execute_fetchall("SELECT * FROM scheduled_tasks ORDER BY created_at")
-        return [ScheduledTask(**row) for row in rows]
+        rows = await self.conn.execute_fetchall(
+            f"SELECT {_COLUMNS} FROM scheduled_tasks ORDER BY created_at"
+        )
+        return [_row_to_task(row) for row in rows]
 
     async def list_due(self, now: datetime) -> list[ScheduledTask]:
         rows = await self.conn.execute_fetchall(SQL_LIST_DUE, (now.isoformat(),))
-        return [ScheduledTask(**row) for row in rows]
+        return [_row_to_task(row) for row in rows]
 
     async def mark_running(self, task_id: str, now: datetime) -> None:
         await self.conn.execute(

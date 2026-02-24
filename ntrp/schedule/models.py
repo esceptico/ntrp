@@ -1,22 +1,11 @@
-import json
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from enum import StrEnum
 
-from ntrp.constants import FRIDAY_WEEKDAY
+from ntrp.constants import DAYS_IN_WEEK, FRIDAY_WEEKDAY
 
 
-def _to_dt(v):
-    return datetime.fromisoformat(v) if isinstance(v, str) else v
-
-
-def _to_json_list(v):
-    if isinstance(v, str):
-        return json.loads(v) if v else []
-    return v if v is not None else []
-
-
-class Recurrence(StrEnum):
+class Repeat(StrEnum):
     ONCE = "once"
     DAILY = "daily"
     WEEKDAYS = "weekdays"
@@ -28,8 +17,8 @@ class ScheduledTask:
     task_id: str
     name: str
     description: str
-    time_of_day: str  # "HH:MM" local time
-    recurrence: Recurrence
+    time_of_day: str
+    repeat: Repeat
     enabled: bool
     created_at: datetime
     next_run_at: datetime
@@ -39,53 +28,26 @@ class ScheduledTask:
     running_since: datetime | None
     writable: bool
 
-    def __post_init__(self):
-        self.recurrence = Recurrence(self.recurrence) if isinstance(self.recurrence, str) else self.recurrence
-        self.created_at = _to_dt(self.created_at)
-        self.next_run_at = _to_dt(self.next_run_at)
-        self.last_run_at = _to_dt(self.last_run_at)
-        self.running_since = _to_dt(self.running_since)
-        self.notifiers = _to_json_list(self.notifiers)
-        self.enabled = bool(self.enabled)
-        self.writable = bool(self.writable)
+    @property
+    def is_one_shot(self) -> bool:
+        return self.repeat == Repeat.ONCE
 
 
-def compute_next_run(
-    time_of_day: str,
-    recurrence: Recurrence,
-    after: datetime,
-) -> datetime:
-    """
-    Compute next run time in UTC for a given local time-of-day.
-
-    Args:
-        time_of_day: "HH:MM" in local time
-        recurrence: how often the task repeats
-        after: UTC datetime to compute next run after
-
-    Returns:
-        UTC datetime for the next run
-    """
-    # Convert UTC 'after' to local time (system timezone)
+def compute_next_run(time_of_day: str, repeat: Repeat, after: datetime) -> datetime:
     after_local = after.astimezone()
+    t = time.fromisoformat(time_of_day)
+    candidate = after_local.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
 
-    hour, minute = (int(x) for x in time_of_day.split(":"))
-
-    # Create candidate in local time
-    candidate = after_local.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-    # If we've already passed that time today, move to tomorrow
     if candidate <= after_local:
         candidate += timedelta(days=1)
 
-    # Handle recurrence patterns
-    if recurrence == Recurrence.WEEKDAYS:
-        while candidate.weekday() > FRIDAY_WEEKDAY:
-            candidate += timedelta(days=1)
-    elif recurrence == Recurrence.WEEKLY:
-        target_weekday = after_local.weekday()
-        while candidate.weekday() != target_weekday:
-            candidate += timedelta(days=1)
+    match repeat:
+        case Repeat.WEEKDAYS if candidate.weekday() > FRIDAY_WEEKDAY:
+            candidate += timedelta(days=DAYS_IN_WEEK - candidate.weekday())
+        case Repeat.WEEKLY:
+            target = after_local.weekday()
+            days_ahead = (target - candidate.weekday()) % DAYS_IN_WEEK
+            if days_ahead:
+                candidate += timedelta(days=days_ahead)
 
-    # Convert back to UTC
     return candidate.astimezone(UTC)
