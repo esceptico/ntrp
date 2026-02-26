@@ -65,11 +65,13 @@ async def gmail_add():
 
 @router.delete("/{token_file}")
 async def gmail_remove(token_file: str):
-    # Security: only allow removing gmail_token*.json files
+    # Security: validate filename and ensure path stays within NTRP_DIR
     if not token_file.startswith("gmail_token") or not token_file.endswith(".json"):
         raise HTTPException(status_code=400, detail="Invalid token file name")
 
-    token_path = NTRP_DIR / token_file
+    token_path = (NTRP_DIR / token_file).resolve()
+    if not token_path.is_relative_to(NTRP_DIR.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid token file path")
     if not token_path.exists():
         raise HTTPException(status_code=404, detail="Token file not found")
 
