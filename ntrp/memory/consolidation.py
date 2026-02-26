@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import Literal
 
@@ -7,6 +8,9 @@ from ntrp.constants import (
     CONSOLIDATION_SEARCH_LIMIT,
     CONSOLIDATION_TEMPERATURE,
 )
+
+CONSOLIDATION_MAX_RETRIES = 2
+CONSOLIDATION_RETRY_DELAY = 3  # seconds
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact, Observation
@@ -77,24 +81,32 @@ async def _llm_consolidation_decisions(
         observations_json=observations_json,
     )
 
-    try:
-        client = get_completion_client(model)
-        response = await client.completion(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            response_format=ConsolidationResponse,
-            temperature=CONSOLIDATION_TEMPERATURE,
-        )
-        content = response.choices[0].message.content
-        if not content:
-            return []
+    for attempt in range(CONSOLIDATION_MAX_RETRIES + 1):
+        try:
+            client = get_completion_client(model)
+            response = await client.completion(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                response_format=ConsolidationResponse,
+                temperature=CONSOLIDATION_TEMPERATURE,
+            )
+            content = response.choices[0].message.content
+            if not content:
+                return []
 
-        parsed = ConsolidationResponse.model_validate_json(content)
-        return parsed.actions
+            parsed = ConsolidationResponse.model_validate_json(content)
+            return parsed.actions
 
-    except Exception as e:
-        _logger.warning("Consolidation LLM failed: %s", e)
-        return []
+        except Exception as e:
+            if attempt < CONSOLIDATION_MAX_RETRIES:
+                delay = CONSOLIDATION_RETRY_DELAY * (attempt + 1)
+                _logger.warning("Consolidation LLM failed (attempt %d/%d): %s, retrying in %ds",
+                                attempt + 1, CONSOLIDATION_MAX_RETRIES + 1, e, delay)
+                await asyncio.sleep(delay)
+            else:
+                _logger.warning("Consolidation LLM failed after %d attempts: %s", attempt + 1, e)
+
+    return []
 
 
 async def _execute_action(

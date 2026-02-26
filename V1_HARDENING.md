@@ -9,11 +9,11 @@
 
 ## Should fix (robustness)
 
-- [ ] **Scheduler missed runs** — silently skipped on restart. Make configurable (skip vs catch-up) or at minimum log clearly.
-- [ ] **DST handling in schedules** — spring-forward skips runs, fall-back double-runs.
-- [ ] **Config corruption recovery** — corrupted `settings.json` silently returns `{}`. No backup/recovery.
-- [ ] **Notifier retries** — transient network errors permanently fail. No retry for Telegram/email.
-- [ ] **Consolidation LLM failures** — silently returns empty, no backoff, fact gets stuck.
+- [x] **Scheduler missed runs** — silently skipped on restart. Make configurable (skip vs catch-up) or at minimum log clearly.
+- [x] **DST handling in schedules** — spring-forward skips runs, fall-back double-runs.
+- [x] **Config corruption recovery** — corrupted `settings.json` silently returns `{}`. No backup/recovery.
+- [x] **Notifier retries** — transient network errors permanently fail. No retry for Telegram/email.
+- [x] **Consolidation LLM failures** — silently returns empty, no backoff, fact gets stuck.
 
 ## Nice-to-haves
 
