@@ -10,7 +10,7 @@ from httpx import ASGITransport, AsyncClient
 
 from ntrp.config import Config
 from ntrp.server.app import app
-from ntrp.server.runtime import Runtime, reset_runtime
+from ntrp.server.runtime import Runtime
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
 
 
@@ -21,8 +21,6 @@ async def _mock_embed_one(text: str):
 @pytest_asyncio.fixture
 async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
     """Create isolated runtime with memory enabled for testing"""
-    await reset_runtime()
-
     import ntrp.config
     import ntrp.llm.models as llm_models
     from ntrp.llm.models import EmbeddingModel, Provider
@@ -60,17 +58,13 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
 
         runtime.memory.extractor.extract = mock_extract
 
-    # Mock indexer embedder to prevent real API calls from channel events
     runtime.indexer.index.embedder.embed_one = _mock_embed_one
-
-    import ntrp.server.runtime as runtime_module
-
-    runtime_module._runtime = runtime
+    app.state.runtime = runtime
 
     yield runtime
 
     await runtime.close()
-    await reset_runtime()
+    app.state.runtime = None
 
 
 @pytest_asyncio.fixture
@@ -302,8 +296,6 @@ class TestMemoryDisabled:
 
         monkeypatch.setattr(ntrp.config, "NTRP_DIR", tmp_path / "db")
 
-        await reset_runtime()
-
         test_config = Config(
             vault_path=tmp_path / "vault",
             openai_api_key="test-key",
@@ -318,10 +310,7 @@ class TestMemoryDisabled:
 
         runtime = Runtime(config=test_config)
         await runtime.connect()
-
-        import ntrp.server.runtime as runtime_module
-
-        runtime_module._runtime = runtime
+        app.state.runtime = runtime
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             responses = await asyncio.gather(
@@ -335,4 +324,4 @@ class TestMemoryDisabled:
             assert all("Memory is disabled" in r.json()["detail"] for r in responses)
 
         await runtime.close()
-        await reset_runtime()
+        app.state.runtime = None

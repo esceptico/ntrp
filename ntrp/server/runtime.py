@@ -1,5 +1,7 @@
 import asyncio
 
+from fastapi import Request
+
 import ntrp.database as database
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
@@ -291,38 +293,8 @@ class Runtime:
         return status
 
 
-_runtime: Runtime | None = None
-_runtime_lock = asyncio.Lock()
-
-
-async def get_runtime_async() -> Runtime:
-    global _runtime
-    async with _runtime_lock:
-        if _runtime is None:
-            _runtime = Runtime()
-            await _runtime.connect()
-            _runtime.start_indexing()
-            _runtime.start_scheduler()
-            _runtime.start_monitor()
-            _runtime.start_consolidation()
-    return _runtime
-
-
-def get_runtime() -> Runtime:
-    global _runtime
-    if _runtime is None:
-        raise RuntimeError("Runtime not initialized. Call get_runtime_async() first.")
-    if not _runtime.connected:
-        raise RuntimeError("Runtime not connected. Call await runtime.connect() first.")
-    return _runtime
-
-
-def get_run_registry() -> RunRegistry:
-    return get_runtime().run_registry
-
-
-async def reset_runtime() -> None:
-    global _runtime
-    if _runtime is not None:
-        await _runtime.close()
-        _runtime = None
+def get_runtime(request: Request) -> Runtime:
+    runtime: Runtime | None = getattr(request.app.state, "runtime", None)
+    if runtime is None or not runtime.connected:
+        raise RuntimeError("Runtime not initialized")
+    return runtime

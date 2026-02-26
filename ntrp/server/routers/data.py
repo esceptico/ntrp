@@ -1,14 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.memory.service import MemoryService
-from ntrp.server.runtime import get_runtime
+from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import UpdateFactRequest, UpdateObservationRequest
 
 router = APIRouter(tags=["data"])
 
 
-def _require_memory() -> MemoryService:
-    runtime = get_runtime()
+def _require_memory(runtime: Runtime = Depends(get_runtime)) -> MemoryService:
     if not runtime.memory_service:
         raise HTTPException(status_code=503, detail="Memory is disabled")
     return runtime.memory_service

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ntrp.automation.models import Automation
 from ntrp.automation.service import AutomationService
 from ntrp.notifiers.service import NotifierService
-from ntrp.server.runtime import get_runtime
+from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
     CreateAutomationRequest,
     CreateNotifierRequest,
@@ -35,15 +35,13 @@ def _automation_to_dict(a: Automation) -> dict:
     }
 
 
-def _require_automation_service() -> AutomationService:
-    runtime = get_runtime()
+def _require_automation_service(runtime: Runtime = Depends(get_runtime)) -> AutomationService:
     if not runtime.automation_service:
         raise HTTPException(status_code=503, detail="Automations not available")
     return runtime.automation_service
 
 
-def _require_notifier_service() -> NotifierService:
-    runtime = get_runtime()
+def _require_notifier_service(runtime: Runtime = Depends(get_runtime)) -> NotifierService:
     if not runtime.notifier_service:
         raise HTTPException(status_code=503, detail="Notifier service not available")
     return runtime.notifier_service
@@ -149,8 +147,7 @@ async def update_automation(
 
 
 @router.get("/notifiers")
-async def list_notifiers():
-    runtime = get_runtime()
+async def list_notifiers(runtime: Runtime = Depends(get_runtime)):
     if not runtime.notifier_service:
         return {"notifiers": []}
     return {"notifiers": runtime.notifier_service.list_summary()}

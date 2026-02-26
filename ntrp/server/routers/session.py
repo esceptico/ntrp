@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
 
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
@@ -58,9 +58,7 @@ def _config_response(rt: Runtime) -> dict:
 
 
 @router.get("/session/history")
-async def get_session_history(session_id: str | None = None):
-    runtime = get_runtime()
-
+async def get_session_history(runtime: Runtime = Depends(get_runtime), session_id: str | None = None):
     data = await runtime.session_service.load(session_id)
     if not data:
         return {"messages": []}
@@ -81,9 +79,7 @@ async def get_session_history(session_id: str | None = None):
 
 
 @router.get("/session")
-async def get_session(session_id: str | None = None) -> SessionResponse:
-    runtime = get_runtime()
-
+async def get_session(runtime: Runtime = Depends(get_runtime), session_id: str | None = None) -> SessionResponse:
     data = await runtime.session_service.load(session_id)
     if data:
         session_state = data.state
@@ -99,8 +95,7 @@ async def get_session(session_id: str | None = None) -> SessionResponse:
 
 
 @router.post("/session/clear")
-async def clear_session(req: ClearSessionRequest | None = None):
-    runtime = get_runtime()
+async def clear_session(runtime: Runtime = Depends(get_runtime), req: ClearSessionRequest | None = None):
     target_id = req.session_id if req else None
 
     data = await runtime.session_service.load(target_id)
@@ -120,8 +115,7 @@ async def clear_session(req: ClearSessionRequest | None = None):
 
 
 @router.post("/sessions")
-async def create_session(req: CreateSessionRequest | None = None):
-    runtime = get_runtime()
+async def create_session(runtime: Runtime = Depends(get_runtime), req: CreateSessionRequest | None = None):
     name = req.name if req else None
     state = runtime.session_service.create(name=name)
     await runtime.session_service.save(state, [])
@@ -135,15 +129,13 @@ async def create_session(req: CreateSessionRequest | None = None):
 
 
 @router.get("/sessions")
-async def list_sessions():
-    runtime = get_runtime()
+async def list_sessions(runtime: Runtime = Depends(get_runtime)):
     sessions = await runtime.session_service.list_sessions(limit=20)
     return {"sessions": sessions}
 
 
 @router.patch("/sessions/{session_id}")
-async def rename_session(session_id: str, req: RenameSessionRequest):
-    runtime = get_runtime()
+async def rename_session(session_id: str, req: RenameSessionRequest, runtime: Runtime = Depends(get_runtime)):
     updated = await runtime.session_service.rename(session_id, req.name)
     if not updated:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -151,8 +143,7 @@ async def rename_session(session_id: str, req: RenameSessionRequest):
 
 
 @router.delete("/sessions/{session_id}")
-async def archive_session(session_id: str):
-    runtime = get_runtime()
+async def archive_session(session_id: str, runtime: Runtime = Depends(get_runtime)):
     archived = await runtime.session_service.archive(session_id)
     if not archived:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -160,15 +151,13 @@ async def archive_session(session_id: str):
 
 
 @router.get("/sessions/archived")
-async def list_archived_sessions():
-    runtime = get_runtime()
+async def list_archived_sessions(runtime: Runtime = Depends(get_runtime)):
     sessions = await runtime.session_service.list_archived(limit=20)
     return {"sessions": sessions}
 
 
 @router.post("/sessions/{session_id}/restore")
-async def restore_session(session_id: str):
-    runtime = get_runtime()
+async def restore_session(session_id: str, runtime: Runtime = Depends(get_runtime)):
     restored = await runtime.session_service.restore(session_id)
     if not restored:
         raise HTTPException(status_code=404, detail="Archived session not found")
@@ -176,8 +165,7 @@ async def restore_session(session_id: str):
 
 
 @router.delete("/sessions/{session_id}/permanent")
-async def permanently_delete_session(session_id: str):
-    runtime = get_runtime()
+async def permanently_delete_session(session_id: str, runtime: Runtime = Depends(get_runtime)):
     deleted = await runtime.session_service.permanently_delete(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Archived session not found")
@@ -188,13 +176,12 @@ async def permanently_delete_session(session_id: str):
 
 
 @router.get("/config")
-async def get_config():
-    return _config_response(get_runtime())
+async def get_config(runtime: Runtime = Depends(get_runtime)):
+    return _config_response(runtime)
 
 
 @router.get("/models")
-async def get_models():
-    runtime = get_runtime()
+async def get_models(runtime: Runtime = Depends(get_runtime)):
     return {
         "models": list_models(),
         "chat_model": runtime.config.chat_model,
@@ -204,8 +191,7 @@ async def get_models():
 
 
 @router.patch("/config")
-async def update_config(req: UpdateConfigRequest):
-    runtime = get_runtime()
+async def update_config(req: UpdateConfigRequest, runtime: Runtime = Depends(get_runtime)):
     fields = req.model_dump(exclude_unset=True)
     if sources := fields.pop("sources", None):
         fields.update({k: v for k, v in sources.items() if v is not None})
@@ -220,8 +206,7 @@ async def update_config(req: UpdateConfigRequest):
 
 
 @router.get("/models/embedding")
-async def get_embedding_models():
-    runtime = get_runtime()
+async def get_embedding_models(runtime: Runtime = Depends(get_runtime)):
     return {
         "models": list_embedding_models(),
         "current": runtime.config.embedding_model,
@@ -229,8 +214,7 @@ async def get_embedding_models():
 
 
 @router.post("/config/embedding")
-async def update_embedding_model(req: UpdateEmbeddingRequest):
-    runtime = get_runtime()
+async def update_embedding_model(req: UpdateEmbeddingRequest, runtime: Runtime = Depends(get_runtime)):
     old_model = runtime.config.embedding_model
 
     try:
@@ -252,8 +236,7 @@ async def update_embedding_model(req: UpdateEmbeddingRequest):
 
 
 @router.get("/context")
-async def get_context_usage(session_id: str | None = None):
-    runtime = get_runtime()
+async def get_context_usage(runtime: Runtime = Depends(get_runtime), session_id: str | None = None):
     model = runtime.config.chat_model
     model_limit = get_model(model).max_context_tokens
 
@@ -271,9 +254,9 @@ async def get_context_usage(session_id: str | None = None):
 
 
 @router.post("/compact")
-async def compact_context(req: CompactRequest | None = None):
+async def compact_context(runtime: Runtime = Depends(get_runtime), req: CompactRequest | None = None):
     session_id = req.session_id if req else None
-    svc = ChatService(get_runtime())
+    svc = ChatService(runtime)
     return await svc.compact(session_id=session_id)
 
 

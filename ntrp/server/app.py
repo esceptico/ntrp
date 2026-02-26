@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -10,16 +10,22 @@ from ntrp.server.routers.gmail import router as gmail_router
 from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.routers.webhooks import router as webhooks_router
-from ntrp.server.runtime import get_run_registry, get_runtime, get_runtime_async, reset_runtime
+from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import CancelRequest, ChatRequest, ToolResultRequest
 from ntrp.services.chat import ChatService
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await get_runtime_async()
+    runtime = Runtime()
+    await runtime.connect()
+    runtime.start_indexing()
+    runtime.start_scheduler()
+    runtime.start_monitor()
+    runtime.start_consolidation()
+    app.state.runtime = runtime
     yield
-    await reset_runtime()
+    await runtime.close()
 
 
 app = FastAPI(
@@ -50,7 +56,11 @@ class AuthMiddleware:
             return
 
         request = Request(scope, receive)
-        runtime = get_runtime()
+        runtime: Runtime | None = getattr(request.app.state, "runtime", None)
+        if not runtime:
+            await self.app(scope, receive, send)
+            return
+
         public_paths = {"/health", "/webhooks/email"}
         if request.url.path not in public_paths:
             auth = request.headers.get("authorization", "")
@@ -74,33 +84,29 @@ app.include_router(webhooks_router)
 
 
 @app.get("/health")
-async def health():
-    runtime = get_runtime()
+async def health(runtime: Runtime = Depends(get_runtime)):
     return {"status": "ok" if runtime.connected else "unavailable"}
 
 
 @app.get("/index/status")
-async def get_index_status():
-    runtime = get_runtime()
+async def get_index_status(runtime: Runtime = Depends(get_runtime)):
     return await runtime.get_index_status()
 
 
 @app.post("/index/start")
-async def start_indexing():
-    runtime = get_runtime()
+async def start_indexing(runtime: Runtime = Depends(get_runtime)):
     runtime.start_indexing()
     return {"status": "started"}
 
 
 @app.get("/tools")
-async def list_tools():
-    runtime = get_runtime()
+async def list_tools(runtime: Runtime = Depends(get_runtime)):
     return {"tools": runtime.executor.get_tool_metadata()}
 
 
 @app.post("/chat/stream")
-async def chat_stream(request: ChatRequest) -> StreamingResponse:
-    svc = ChatService(get_runtime())
+async def chat_stream(request: ChatRequest, runtime: Runtime = Depends(get_runtime)) -> StreamingResponse:
+    svc = ChatService(runtime)
     try:
         ctx = await svc.prepare(request.message, request.skip_approvals, session_id=request.session_id)
     except Exception as e:
@@ -117,9 +123,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
 
 @app.post("/tools/result")
-async def submit_tool_result(request: ToolResultRequest):
-    registry = get_run_registry()
-    run = registry.get_run(request.run_id)
+async def submit_tool_result(request: ToolResultRequest, runtime: Runtime = Depends(get_runtime)):
+    run = runtime.run_registry.get_run(request.run_id)
 
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -140,7 +145,6 @@ async def submit_tool_result(request: ToolResultRequest):
 
 
 @app.post("/cancel")
-async def cancel_run(request: CancelRequest):
-    registry = get_run_registry()
-    registry.cancel_run(request.run_id)
+async def cancel_run(request: CancelRequest, runtime: Runtime = Depends(get_runtime)):
+    runtime.run_registry.cancel_run(request.run_id)
     return {"status": "cancelled"}
