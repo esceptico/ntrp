@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import type { ScrollBoxRenderable } from "@opentui/core";
 import { truncateText, wrapText } from "../../lib/utils.js";
 import { colors } from "./colors.js";
 
@@ -21,34 +22,27 @@ export function ExpandableText({
   isFocused = false,
   color,
 }: ExpandableTextProps) {
+  const scrollRef = useRef<ScrollBoxRenderable | null>(null);
   const textColor = color ?? (isFocused ? colors.text.primary : colors.text.secondary);
   const effectiveWidth = width - 2;
-
   const lines = useMemo(() => wrapText(text, effectiveWidth), [text, effectiveWidth]);
+  const truncated = truncateText(text, effectiveWidth);
 
-  // Single line — just render it
-  if (lines.length <= 1) {
-    return (
-      <box width={width} height={1}>
-        <text><span fg={textColor}>{text}</span></text>
-      </box>
-    );
-  }
+  useEffect(() => {
+    if (!expanded || !scrollRef.current) return;
+    scrollRef.current.scrollTo(Math.max(0, scrollOffset));
+  }, [expanded, scrollOffset]);
 
-  // Fits within visibleLines — show all lines, no expand needed
-  if (lines.length <= visibleLines) {
-    return (
-      <box flexDirection="column" width={width} height={lines.length}>
-        {lines.map((line, i) => (
-          <text key={i}><span fg={textColor}>{line}</span></text>
-        ))}
-      </box>
-    );
-  }
-
-  // Exceeds visibleLines — collapsed by default, expandable
   if (!expanded) {
-    const truncated = truncateText(text, effectiveWidth);
+    if (lines.length <= visibleLines) {
+      return (
+        <box flexDirection="column" width={width} height={Math.max(1, lines.length)}>
+          {lines.map((line, i) => (
+            <text key={i}><span fg={textColor}>{line || " "}</span></text>
+          ))}
+        </box>
+      );
+    }
     return (
       <box width={width} height={1}>
         <text>
@@ -59,34 +53,19 @@ export function ExpandableText({
     );
   }
 
-  // Expanded with scroll
-  const needsScroll = lines.length > visibleLines;
-  const actualVisibleLines = needsScroll ? visibleLines - 1 : visibleLines;
-  const maxScroll = Math.max(0, lines.length - actualVisibleLines);
-  const safeOffset = Math.min(scrollOffset, maxScroll);
-  const displayLines = lines.slice(safeOffset, safeOffset + actualVisibleLines);
-  const canScrollUp = safeOffset > 0;
-  const canScrollDown = safeOffset < maxScroll;
-
   return (
-    <box flexDirection="column" width={width} height={visibleLines}>
-      {displayLines.map((line, i) => (
-        <text key={i}><span fg={textColor}>{line}</span></text>
-      ))}
-      {needsScroll && (
-        <text>
-          <span fg={colors.text.muted}>
-            {canScrollUp ? "\u25B2" : " "} {safeOffset + 1}-{safeOffset + displayLines.length}/{lines.length} {canScrollDown ? "\u25BC" : " "}
-          </span>
-        </text>
-      )}
-    </box>
+    <scrollbox
+      ref={(r: ScrollBoxRenderable) => { scrollRef.current = r; }}
+      width={width}
+      height={visibleLines}
+      style={{ scrollbarOptions: { visible: false } }}
+    >
+      <text wrapMode="word"><span fg={textColor}>{text || " "}</span></text>
+    </scrollbox>
   );
 }
 
 export function getTextMaxScroll(text: string, width: number, visibleLines: number): number {
-  const lines = wrapText(text, width - 2);
-  const needsScroll = lines.length > visibleLines;
-  const actualVisibleLines = needsScroll ? visibleLines - 1 : visibleLines;
-  return Math.max(0, lines.length - actualVisibleLines);
+  const lines = wrapText(text, Math.max(1, width - 2));
+  return Math.max(0, lines.length - Math.max(1, visibleLines));
 }
