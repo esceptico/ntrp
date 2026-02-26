@@ -30,11 +30,10 @@ async def email_webhook(
     """Receive new-email notifications from an external webhook service."""
     runtime = get_runtime()
     expected_token = runtime.config.webhook_token or runtime.config.api_key
-    if expected_token:
-        has_valid_header = bool(webhook_token) and secrets.compare_digest(webhook_token, expected_token)
-        has_valid_bearer = authorization == f"Bearer {expected_token}"
-        if not has_valid_header and not has_valid_bearer:
-            raise HTTPException(status_code=401, detail="Unauthorized webhook request")
+    has_valid_header = bool(webhook_token) and secrets.compare_digest(webhook_token, expected_token)
+    has_valid_bearer = authorization == f"Bearer {expected_token}"
+    if not has_valid_header and not has_valid_bearer:
+        raise HTTPException(status_code=401, detail="Unauthorized webhook request")
 
     received = payload.received_at or datetime.now(UTC)
     if received.tzinfo is None:

@@ -80,8 +80,8 @@ class Config(BaseSettings):
     # Agent depth limit
     max_depth: int = 8
 
-    # API authentication (optional — required when exposed to network)
-    api_key: str | None = None
+    # API authentication
+    api_key: str
     webhook_token: str | None = None
 
     @model_validator(mode="after")

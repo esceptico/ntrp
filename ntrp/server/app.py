@@ -52,7 +52,7 @@ class AuthMiddleware:
         request = Request(scope, receive)
         runtime = get_runtime()
         public_paths = {"/health", "/webhooks/email"}
-        if runtime.config.api_key and request.url.path not in public_paths:
+        if request.url.path not in public_paths:
             auth = request.headers.get("authorization", "")
             if auth != f"Bearer {runtime.config.api_key}":
                 response = JSONResponse(status_code=401, content={"detail": "Unauthorized"})
