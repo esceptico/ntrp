@@ -1,5 +1,5 @@
-import { useState, useCallback, useMemo } from "react";
-import { colors, SelectionIndicator, Hints } from "../../ui/index.js";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { colors, BaseSelectionList, Hints, truncateText } from "../../ui/index.js";
 import { useKeypress, useAccentColor, type Key } from "../../../hooks/index.js";
 
 interface ModelDropdownProps {
@@ -40,18 +40,15 @@ export function ModelDropdown({
     return validModels.filter((m) => m.toLowerCase().includes(lower));
   }, [models, search]);
 
-  const maxVisible = 10;
-  const scrollOffset = Math.max(0, Math.min(selectedIndex - Math.floor(maxVisible / 2), filteredModels.length - maxVisible));
-  const visibleModels = filteredModels.slice(scrollOffset, scrollOffset + maxVisible);
-  const hasScrollUp = scrollOffset > 0;
-  const hasScrollDown = scrollOffset + maxVisible < filteredModels.length;
+  useEffect(() => {
+    setSelectedIndex((i) => Math.max(0, Math.min(i, Math.max(0, filteredModels.length - 1))));
+  }, [filteredModels.length]);
 
   const handleKeypress = useCallback(
     (key: Key) => {
       if (key.name === "escape") {
         if (search) {
           setSearch("");
-          setSelectedIndex(0);
         } else {
           onClose();
         }
@@ -74,17 +71,6 @@ export function ModelDropdown({
         setSelectedIndex((i) => Math.min(filteredModels.length - 1, i + 1));
         return;
       }
-
-      if (key.name === "backspace" || key.name === "delete") {
-        setSearch((s) => s.slice(0, -1));
-        setSelectedIndex(0);
-        return;
-      }
-
-      if (key.insertable && key.sequence && !key.ctrl && !key.meta) {
-        setSearch((s) => s + key.sequence);
-        setSelectedIndex(0);
-      }
     },
     [filteredModels, selectedIndex, search, onSelect, onClose]
   );
@@ -95,47 +81,50 @@ export function ModelDropdown({
 
   return (
     <box flexDirection="column" width={width}>
-      {/* Search */}
-      <box marginBottom={1}>
-        <text>
-          <span fg={colors.text.muted}>/ </span>
-          <span fg={colors.text.primary}>{search}</span>
-          <span fg={accentValue}>_</span>
-        </text>
+      <box marginBottom={1} flexDirection="row">
+        <text><span fg={colors.text.muted}>/ </span></text>
+        <input
+          value={search}
+          onInput={(value) => {
+            setSearch(value);
+            setSelectedIndex(0);
+          }}
+          focused={true}
+          textColor={colors.text.primary}
+          focusedTextColor={colors.text.primary}
+          cursorColor={accentValue}
+          placeholder="search model"
+          placeholderColor={colors.text.disabled}
+          width={Math.max(10, width - 4)}
+        />
       </box>
 
-      {hasScrollUp && (
-        <text><span fg={colors.text.disabled}>  ↑ more</span></text>
-      )}
-
-      {/* Model list */}
-      <box flexDirection="column">
-        {visibleModels.map((model, idx) => {
-          const actualIdx = scrollOffset + idx;
-          const isSelected = actualIdx === selectedIndex;
-          const isCurrent = model === currentModel;
-          const shortName = getShortModelName(model);
-          const displayName = shortName.length > contentWidth ? shortName.slice(0, contentWidth - 1) + "…" : shortName;
-
-          return (
-            <text key={model}>
-              <SelectionIndicator selected={isSelected} accent={accentValue} />
-              {isCurrent ? (
-                <span fg={accentValue}><strong>{displayName}</strong></span>
-              ) : (
-                <span fg={isSelected ? colors.text.primary : colors.text.secondary}>{displayName}</span>
-              )}
-              {isCurrent && <span fg={colors.text.muted}> •</span>}
-            </text>
-          );
-        })}
-        {filteredModels.length === 0 && (
-          <text><span fg={colors.text.muted}>  No matches</span></text>
-        )}
-      </box>
-
-      {hasScrollDown && (
-        <text><span fg={colors.text.disabled}>  ↓ more</span></text>
+      {filteredModels.length === 0 ? (
+        <text><span fg={colors.text.muted}>No matches</span></text>
+      ) : (
+        <BaseSelectionList
+          items={filteredModels}
+          selectedIndex={selectedIndex}
+          visibleLines={10}
+          showScrollArrows
+          showCount
+          showIndicator
+          indicator="▶"
+          renderItem={(model, ctx) => {
+            const isCurrent = model === currentModel;
+            const displayName = truncateText(getShortModelName(model), contentWidth);
+            return (
+              <text>
+                {isCurrent ? (
+                  <span fg={accentValue}><strong>{displayName}</strong></span>
+                ) : (
+                  <span fg={ctx.isSelected ? colors.text.primary : colors.text.secondary}>{displayName}</span>
+                )}
+                {isCurrent && <span fg={colors.text.muted}> •</span>}
+              </text>
+            );
+          }}
+        />
       )}
 
       {/* Footer */}
