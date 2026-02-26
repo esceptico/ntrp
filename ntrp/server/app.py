@@ -85,7 +85,7 @@ app.include_router(webhooks_router)
 
 @app.get("/health")
 async def health(runtime: Runtime = Depends(get_runtime)):
-    return {"status": "ok" if runtime.connected else "unavailable"}
+    return {"status": "ok" if runtime.connected else "unavailable", "version": app.version}
 
 
 @app.get("/index/status")

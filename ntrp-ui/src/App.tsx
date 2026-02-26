@@ -63,6 +63,7 @@ function AppContent({
     sessionName,
     skipApprovals,
     serverConnected,
+    serverVersion,
     serverConfig,
     indexStatus,
     history,
@@ -294,6 +295,7 @@ function AppContent({
         <>
           <Sidebar
             serverConfig={serverConfig}
+            serverVersion={serverVersion}
             data={sidebarData}
             usage={streaming.usage}
             width={SIDEBAR_WIDTH}
