@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -84,9 +84,8 @@ class CreateAutomationInput(BaseModel):
     name: str = Field(description="Short human-readable label (e.g. 'morning briefing', 'pre-meeting prep')")
     description: str = Field(description="What the agent should do (natural language task)")
     model: str | None = Field(default=None, description="Optional agent model override for this automation.")
-    trigger_type: str = Field(
+    trigger_type: Literal["time", "event"] = Field(
         description="Trigger type: 'time' (scheduled or interval), 'event' (reacts to events like calendar_approaching, new_email)",
-        json_schema_extra={"enum": ["time", "event"]},
     )
     at: str | None = Field(
         default=None,
@@ -125,10 +124,9 @@ class UpdateAutomationInput(BaseModel):
     name: str | None = Field(default=None, description="New name")
     description: str | None = Field(default=None, description="New task description")
     model: str | None = Field(default=None, description="New model override")
-    trigger_type: str | None = Field(
+    trigger_type: Literal["time", "event"] | None = Field(
         default=None,
         description="New trigger type: 'time' or 'event'. Only set when switching trigger type.",
-        json_schema_extra={"enum": ["time", "event"]},
     )
     at: str | None = Field(default=None, description="New time of day HH:MM (24h). For schedule-based time triggers.")
     days: str | None = Field(
