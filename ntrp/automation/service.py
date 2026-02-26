@@ -31,6 +31,7 @@ class TriggerPatch:
     days: str | None = None
     every: str | None = None
     event_type: str | None = None
+    lead_minutes: int | str | None = None
     start: str | None = None
     end: str | None = None
 
@@ -38,11 +39,20 @@ class TriggerPatch:
     def has_changes(self) -> bool:
         return any(
             value is not None
-            for value in (self.trigger_type, self.at, self.days, self.every, self.event_type, self.start, self.end)
+            for value in (
+                self.trigger_type,
+                self.at,
+                self.days,
+                self.every,
+                self.event_type,
+                self.lead_minutes,
+                self.start,
+                self.end,
+            )
         )
 
     @property
-    def overrides(self) -> dict[str, str]:
+    def overrides(self) -> dict[str, str | int]:
         return {
             key: value
             for key, value in {
@@ -50,6 +60,7 @@ class TriggerPatch:
                 "days": self.days,
                 "every": self.every,
                 "event_type": self.event_type,
+                "lead_minutes": self.lead_minutes,
                 "start": self.start,
                 "end": self.end,
             }.items()
@@ -157,6 +168,7 @@ class AutomationService:
         days: str | None = None,
         every: str | None = None,
         event_type: str | None = None,
+        lead_minutes: int | str | None = None,
         start: str | None = None,
         end: str | None = None,
         notifiers: list[str] | None = None,
@@ -175,6 +187,7 @@ class AutomationService:
             days=days,
             every=every,
             event_type=event_type,
+            lead_minutes=lead_minutes,
             start=start,
             end=end,
         )
@@ -196,6 +209,7 @@ class AutomationService:
         days: str | None = None,
         every: str | None = None,
         event_type: str | None = None,
+        lead_minutes: int | str | None = None,
         notifiers: list[str] | None = None,
         writable: bool = False,
         start: str | None = None,
@@ -203,7 +217,14 @@ class AutomationService:
         model: str | None = None,
     ) -> Automation:
         trigger, next_run = build_trigger(
-            trigger_type, at=at, days=days, every=every, event_type=event_type, start=start, end=end,
+            trigger_type,
+            at=at,
+            days=days,
+            every=every,
+            event_type=event_type,
+            lead_minutes=lead_minutes,
+            start=start,
+            end=end,
         )
 
         if notifiers:

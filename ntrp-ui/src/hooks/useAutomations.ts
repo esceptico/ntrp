@@ -3,6 +3,7 @@ import type { Config } from "../types.js";
 import {
   getAutomations,
   getAutomationDetail,
+  getSupportedModels,
   toggleAutomation,
   updateAutomation,
   deleteAutomation,
@@ -31,6 +32,7 @@ interface UseAutomationsResult {
   editText: string;
   saving: boolean;
   availableNotifiers: NotifierSummary[];
+  availableModels: string[];
   editFocus: EditFocus;
   editNotifiers: string[];
   editNotifierCursor: number;
@@ -73,6 +75,7 @@ export function useAutomations(config: Config): UseAutomationsResult {
   const [editText, setEditText] = useState("");
   const [saving, setSaving] = useState(false);
   const [availableNotifiers, setAvailableNotifiers] = useState<NotifierSummary[]>([]);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [editFocus, setEditFocus] = useState<EditFocus>("name");
   const [editNotifiers, setEditNotifiers] = useState<string[]>([]);
   const [editNotifierCursor, setEditNotifierCursor] = useState(0);
@@ -85,12 +88,14 @@ export function useAutomations(config: Config): UseAutomationsResult {
 
   const loadAutomations = useCallback(async () => {
     try {
-      const [data, notifiersData] = await Promise.all([
+      const [data, notifiersData, modelsData] = await Promise.all([
         getAutomations(config),
         getNotifiers(config),
+        getSupportedModels(config).catch(() => ({ models: [] as string[] })),
       ]);
       setAutomations(data.automations);
       setAvailableNotifiers(notifiersData.notifiers);
+      setAvailableModels(modelsData.models ?? []);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load automations");
@@ -231,7 +236,7 @@ export function useAutomations(config: Config): UseAutomationsResult {
   return {
     automations, selectedIndex, loading, error, confirmDelete, viewingResult,
     editMode, editName, editText, saving,
-    availableNotifiers, editFocus, editNotifiers, editNotifierCursor,
+    availableNotifiers, availableModels, editFocus, editNotifiers, editNotifierCursor,
     createMode, createError,
     setSelectedIndex, setConfirmDelete, setViewingResult, setEditMode,
     setEditName, setEditText, setSaving,

@@ -366,6 +366,7 @@ export interface TimeTrigger {
 export interface EventTrigger {
   type: "event";
   event_type: string;
+  lead_minutes?: number;
 }
 
 export type Trigger = TimeTrigger | EventTrigger;
@@ -397,6 +398,7 @@ export interface CreateAutomationData {
   start?: string;
   end?: string;
   event_type?: string;
+  lead_minutes?: number;
   notifiers: string[];
   writable: boolean;
 }
@@ -412,6 +414,7 @@ export interface UpdateAutomationData {
   start?: string;
   end?: string;
   event_type?: string;
+  lead_minutes?: number;
   notifiers?: string[];
   writable?: boolean;
 }

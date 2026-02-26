@@ -82,6 +82,7 @@ class Config(BaseSettings):
 
     # API authentication (optional — required when exposed to network)
     api_key: str | None = None
+    webhook_token: str | None = None
 
     @model_validator(mode="after")
     def _default_explore_model(self) -> "Config":

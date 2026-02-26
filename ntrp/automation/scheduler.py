@@ -11,6 +11,7 @@ from ntrp.constants import (
     SCHEDULER_STOP_TIMEOUT,
 )
 from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
+from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, TriggerEvent
 from ntrp.logging import get_logger
 from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent
 from ntrp.automation.models import Automation
@@ -172,12 +173,22 @@ class Scheduler:
         result = await run_agent(self._build_deps(), request)
         return result.output
 
-    async def fire_event(self, event_type: str, event_key: str, context: str) -> None:
+    async def fire_event(self, event: TriggerEvent) -> None:
         now = datetime.now(UTC)
         cutoff = datetime.now(UTC) - timedelta(seconds=SCHEDULER_DEDUP_TTL)
         await self.store.evict_event_claims_older_than(cutoff)
+        event_type = event.event_type
+        event_key = event.event_key
+        context = event.format_context()
         automations = await self.store.list_event_triggered(event_type)
         for automation in automations:
+            if (
+                event_type == EVENT_APPROACHING
+                and isinstance(event, EventApproaching)
+                and getattr(automation.trigger, "lead_minutes", None) is not None
+                and event.minutes_until > int(getattr(automation.trigger, "lead_minutes"))
+            ):
+                continue
             claimed = await self.store.claim_event(automation.task_id, event_key, now)
             if not claimed:
                 continue

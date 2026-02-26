@@ -94,6 +94,7 @@ class CreateAutomationRequest(BaseModel):
     days: str | None = None
     every: str | None = None
     event_type: str | None = None
+    lead_minutes: int | str | None = None
     notifiers: list[str] = Field(default_factory=list)
     writable: bool = False
     start: str | None = None
@@ -109,6 +110,7 @@ class UpdateAutomationRequest(BaseModel):
     days: str | None = None
     every: str | None = None
     event_type: str | None = None
+    lead_minutes: int | str | None = None
     start: str | None = None
     end: str | None = None
     notifiers: list[str] | None = None

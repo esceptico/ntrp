@@ -4,7 +4,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 from typing import Callable, Literal
 
-from ntrp.constants import DAYS_IN_WEEK
+from ntrp.constants import (
+    AUTOMATION_EVENT_APPROACHING_DEFAULT_LEAD_MINUTES,
+    DAYS_IN_WEEK,
+    MONITOR_EVENT_APPROACHING_HORIZON_MINUTES,
+)
+from ntrp.events.triggers import EVENT_APPROACHING
 
 DAY_NAMES: dict[str, int] = {
     "mon": 0,
@@ -67,6 +72,18 @@ def parse_interval(raw: str) -> timedelta:
         raise ValueError("Interval must be positive")
 
     return timedelta(hours=hours, minutes=minutes)
+
+
+def normalize_lead_minutes(raw: int | str | None) -> int | None:
+    if raw is None:
+        return None
+    if isinstance(raw, int):
+        return raw
+    normalized = raw.strip()
+    if not normalized:
+        return None
+    interval = parse_interval(normalized)
+    return int(interval.total_seconds() // 60)
 
 
 def _advance_to_days(candidate: datetime, target_days: frozenset[int]) -> datetime:
@@ -192,13 +209,30 @@ class TimeTrigger:
 @dataclass
 class EventTrigger:
     event_type: str
+    lead_minutes: int | None = None
     type: Literal["event"] = "event"
 
-    def params(self) -> dict[str, str | None]:
-        return {"event_type": self.event_type}
+    def __post_init__(self) -> None:
+        self.lead_minutes = normalize_lead_minutes(self.lead_minutes)
+        if self.event_type == EVENT_APPROACHING:
+            if self.lead_minutes is None:
+                self.lead_minutes = AUTOMATION_EVENT_APPROACHING_DEFAULT_LEAD_MINUTES
+            if self.lead_minutes <= 0:
+                raise ValueError("'lead_minutes' must be positive")
+            if self.lead_minutes > MONITOR_EVENT_APPROACHING_HORIZON_MINUTES:
+                raise ValueError(
+                    f"'lead_minutes' cannot exceed monitor horizon ({MONITOR_EVENT_APPROACHING_HORIZON_MINUTES}m)",
+                )
+        elif self.lead_minutes is not None:
+            raise ValueError("'lead_minutes' is only supported for 'event_approaching'")
+
+    def params(self) -> dict[str, str | int | None]:
+        return {"event_type": self.event_type, "lead_minutes": self.lead_minutes}
 
     @property
     def label(self) -> str:
+        if self.event_type == EVENT_APPROACHING and self.lead_minutes:
+            return f"on:{self.event_type} ({self.lead_minutes}m)"
         return f"on:{self.event_type}"
 
     @property
@@ -236,6 +270,7 @@ def _build_time_trigger(
     days: str | None,
     every: str | None,
     event_type: str | None,  # noqa: ARG001
+    lead_minutes: int | str | None,  # noqa: ARG001
     start: str | None,
     end: str | None,
 ) -> tuple[Trigger, datetime | None]:
@@ -249,12 +284,13 @@ def _build_event_trigger(
     days: str | None,  # noqa: ARG001
     every: str | None,  # noqa: ARG001
     event_type: str | None,
+    lead_minutes: int | str | None,
     start: str | None,  # noqa: ARG001
     end: str | None,  # noqa: ARG001
 ) -> tuple[Trigger, datetime | None]:
     if not event_type:
         raise ValueError("'event_type' is required for event trigger")
-    return EventTrigger(event_type=event_type), None
+    return EventTrigger(event_type=event_type, lead_minutes=lead_minutes), None
 
 
 BUILD_DISPATCH: dict[str, BuildHandler] = {
@@ -269,6 +305,7 @@ def build_trigger(
     days: str | None = None,
     every: str | None = None,
     event_type: str | None = None,
+    lead_minutes: int | str | None = None,
     start: str | None = None,
     end: str | None = None,
 ) -> tuple[Trigger, datetime | None]:
@@ -281,6 +318,7 @@ def build_trigger(
         days=days,
         every=every,
         event_type=event_type,
+        lead_minutes=lead_minutes,
         start=start,
         end=end,
     )
@@ -309,7 +347,10 @@ def _parse_time_trigger(payload: dict) -> Trigger:
 
 
 def _parse_event_trigger(payload: dict) -> Trigger:
-    return EventTrigger(event_type=payload["event_type"])
+    return EventTrigger(
+        event_type=payload["event_type"],
+        lead_minutes=payload.get("lead_minutes"),
+    )
 
 
 PARSE_DISPATCH: dict[str, ParseHandler] = {

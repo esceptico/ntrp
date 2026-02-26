@@ -2,7 +2,7 @@ import { colors, TextInputField, TextEditArea } from "../../ui/index.js";
 import { CHECKBOX_CHECKED, CHECKBOX_UNCHECKED } from "../../../lib/constants.js";
 import type { NotifierSummary } from "../../../api/client.js";
 
-export type CreateFocus = "name" | "description" | "model" | "trigger_type" | "mode" | "time" | "interval" | "start" | "end" | "days" | "day_picker" | "event_type" | "notifiers" | "writable";
+export type CreateFocus = "name" | "description" | "model" | "trigger_type" | "mode" | "time" | "interval" | "start" | "end" | "days" | "day_picker" | "event_type" | "event_lead" | "notifiers" | "writable";
 
 export const TRIGGER_TYPES = ["time", "event"] as const;
 export const SCHEDULE_MODES = ["schedule", "interval"] as const;
@@ -30,8 +30,9 @@ interface AutomationCreateViewProps {
   nameCursorPos: number;
   descValue: string;
   descCursorPos: number;
-  modelValue: string;
-  modelCursorPos: number;
+  selectedModel: string;
+  eventLeadValue: string;
+  eventLeadCursorPos: number;
   timeValue: string;
   timeCursorPos: number;
   intervalValue: string;
@@ -62,8 +63,9 @@ export function AutomationCreateView({
   nameCursorPos,
   descValue,
   descCursorPos,
-  modelValue,
-  modelCursorPos,
+  selectedModel,
+  eventLeadValue,
+  eventLeadCursorPos,
   timeValue,
   timeCursorPos,
   intervalValue,
@@ -157,10 +159,10 @@ export function AutomationCreateView({
       ? `${daysLabel} @ ${timeValue || "--:--"}`
       : `Every ${intervalValue || "--"} ${daysLabel}${(startValue || endValue) ? `, ${startValue || "--:--"}-${endValue || "--:--"}` : ""}`
     : eventType;
-  const modelPreview = modelValue.trim() ? ` model=${modelValue.trim()}` : "";
+  const modelPreview = selectedModel ? ` model=${selectedModel}` : "";
   const preview = triggerType === "time"
     ? `${timePreview} (${timezone}) -> ${notifierLabel}${modelPreview}`
-    : `on ${eventType} -> ${notifierLabel}${modelPreview}`;
+    : `on ${eventType}${eventType === "event_approaching" ? ` (${eventLeadValue || "60m"})` : ""} -> ${notifierLabel}${modelPreview}`;
   const scheduleError = triggerType === "time" && daysOption === "custom" && customDays.length === 0
     ? "Select at least one day"
     : null;
@@ -195,12 +197,12 @@ export function AutomationCreateView({
 
       <box flexDirection="row">
         {labelCell("MODEL", focus === "model")}
-        <TextInputField
-          value={modelValue}
-          cursorPos={modelCursorPos}
-          placeholder="(optional) override default model"
-          showCursor={focus === "model"}
-        />
+        <text>
+          <span fg={focus === "model" ? colors.text.primary : colors.text.secondary}>
+            {selectedModel || "default"}
+          </span>
+          <span fg={colors.text.muted}> (enter to choose)</span>
+        </text>
       </box>
 
       <box marginTop={1} />
@@ -282,7 +284,20 @@ export function AutomationCreateView({
       )}
 
       {triggerType === "event" && (
-        selectorRow("EVENT", focus === "event_type", EVENT_TYPES, eventType)
+        <>
+          {selectorRow("EVENT", focus === "event_type", EVENT_TYPES, eventType)}
+          {eventType === "event_approaching" && (
+            <box flexDirection="row">
+              {labelCell("LEAD", focus === "event_lead")}
+              <TextInputField
+                value={eventLeadValue}
+                cursorPos={eventLeadCursorPos}
+                placeholder="60m"
+                showCursor={focus === "event_lead"}
+              />
+            </box>
+          )}
+        </>
       )}
 
       <box marginTop={1} />

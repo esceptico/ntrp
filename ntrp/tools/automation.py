@@ -26,7 +26,7 @@ LIST_AUTOMATIONS_DESCRIPTION = "List all automations with their trigger, status,
 UPDATE_AUTOMATION_DESCRIPTION = (
     "Update an existing automation. Only provide the fields you want to change. "
     "Use list_automations to find IDs. "
-    "Trigger fields (trigger_type, at, days, every, event_type, start, end) are merged with "
+    "Trigger fields (trigger_type, at, days, every, event_type, lead_minutes, start, end) are merged with "
     "the current trigger — only provide what should change. "
     "Set enabled=false to pause or enabled=true to resume."
 )
@@ -108,6 +108,10 @@ class CreateAutomationInput(BaseModel):
         description="End of active window in HH:MM (24h). Only for interval mode. Must be set with 'start'.",
     )
     event_type: str | None = Field(default=None, description=f"Event type to react to (e.g. '{EVENT_APPROACHING}', '{NEW_EMAIL}'). Required for trigger_type='event'")
+    lead_minutes: int | str | None = Field(
+        default=None,
+        description="For event_approaching only: trigger when event is this many minutes away (default 60).",
+    )
     notifiers: list[str] = Field(default_factory=list, description="Notifier channel names (e.g. ['work-telegram'])")
     writable: bool = Field(default=False, description="Allow automation to write to memory and notes")
 
@@ -128,6 +132,10 @@ class UpdateAutomationInput(BaseModel):
     start: str | None = Field(default=None, description="New active window start HH:MM (interval mode only)")
     end: str | None = Field(default=None, description="New active window end HH:MM (interval mode only)")
     event_type: str | None = Field(default=None, description=f"New event type (e.g. '{EVENT_APPROACHING}', '{NEW_EMAIL}')")
+    lead_minutes: int | str | None = Field(
+        default=None,
+        description="New lead time for event_approaching (minutes or duration like '2h30m')",
+    )
     notifiers: list[str] | None = Field(default=None, description="New notifier list (replaces existing)")
     writable: bool | None = Field(default=None, description="Allow writes to memory and notes")
     enabled: bool | None = Field(default=None, description="Enable or disable the automation")
@@ -174,13 +182,21 @@ class CreateAutomationTool(Tool):
         start: str | None = None,
         end: str | None = None,
         event_type: str | None = None,
+        lead_minutes: int | str | None = None,
         notifiers: list[str] | None = None,
         writable: bool = False,
         **kwargs: Any,
     ) -> ApprovalInfo | None:
         try:
             trigger, next_run = build_trigger(
-                trigger_type, at=at, days=days, every=every, event_type=event_type, start=start, end=end,
+                trigger_type,
+                at=at,
+                days=days,
+                every=every,
+                event_type=event_type,
+                lead_minutes=lead_minutes,
+                start=start,
+                end=end,
             )
         except ValueError:
             return None
@@ -210,6 +226,7 @@ class CreateAutomationTool(Tool):
         start: str | None = None,
         end: str | None = None,
         event_type: str | None = None,
+        lead_minutes: int | str | None = None,
         notifiers: list[str] | None = None,
         writable: bool = False,
         **kwargs: Any,
@@ -218,7 +235,7 @@ class CreateAutomationTool(Tool):
             automation = await self.service.create(
                 name=name, description=description, trigger_type=trigger_type,
                 at=at, days=days, every=every, event_type=event_type,
-                notifiers=notifiers, writable=writable, start=start, end=end, model=model,
+                lead_minutes=lead_minutes, notifiers=notifiers, writable=writable, start=start, end=end, model=model,
             )
         except ValueError as e:
             return ToolResult(content=f"Error: {e}", preview="Failed", is_error=True)
@@ -284,6 +301,7 @@ class UpdateAutomationTool(Tool):
         days: str | None = None,
         every: str | None = None,
         event_type: str | None = None,
+        lead_minutes: int | str | None = None,
         start: str | None = None,
         end: str | None = None,
         notifiers: list[str] | None = None,
@@ -298,7 +316,7 @@ class UpdateAutomationTool(Tool):
         fields = {
             "name": name, "description": description, "enabled": enabled,
             "writable": writable, "model": model, "trigger_type": trigger_type,
-            "at": at, "days": days, "every": every, "event_type": event_type,
+            "at": at, "days": days, "every": every, "event_type": event_type, "lead_minutes": lead_minutes,
             "start": start, "end": end,
         }
         for key, value in fields.items():
@@ -326,6 +344,7 @@ class UpdateAutomationTool(Tool):
         days: str | None = None,
         every: str | None = None,
         event_type: str | None = None,
+        lead_minutes: int | str | None = None,
         start: str | None = None,
         end: str | None = None,
         notifiers: list[str] | None = None,
@@ -337,7 +356,7 @@ class UpdateAutomationTool(Tool):
             automation = await self.service.update(
                 task_id, name=name, description=description, model=model,
                 trigger_type=trigger_type, at=at, days=days, every=every,
-                event_type=event_type, start=start, end=end,
+                event_type=event_type, lead_minutes=lead_minutes, start=start, end=end,
                 notifiers=notifiers, writable=writable, enabled=enabled,
             )
         except KeyError:

@@ -252,7 +252,7 @@ class Runtime:
     def _wire_event_triggers(self) -> None:
         async def on_trigger(event: TriggerEvent) -> None:
             if self.scheduler:
-                await self.scheduler.fire_event(event.event_type, event.event_key, event.format_context())
+                await self.scheduler.fire_event(event)
 
         for event_cls in TRIGGER_EVENT_TYPES:
             self.channel.subscribe(event_cls, on_trigger)

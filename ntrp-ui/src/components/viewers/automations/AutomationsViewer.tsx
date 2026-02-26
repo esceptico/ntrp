@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import type { Config } from "../../../types.js";
 import type { Automation, CreateAutomationData, UpdateAutomationData } from "../../../api/client.js";
 import { useKeypress, type Key } from "../../../hooks/index.js";
@@ -15,10 +15,90 @@ import {
   type CreateFocus,
 } from "./AutomationCreateView.js";
 import { ResultViewer } from "./ResultViewer.js";
+import { ModelDropdown } from "../../dialogs/settings/ModelDropdown.js";
 
 interface AutomationsViewerProps {
   config: Config;
   onClose: () => void;
+}
+
+const DEFAULT_MODEL_OPTION = "__default__";
+
+function buildAutomationPayload(params: {
+  name: string;
+  description: string;
+  model: string;
+  triggerType: "time" | "event";
+  scheduleMode: "schedule" | "interval";
+  time: string;
+  every: string;
+  start: string;
+  end: string;
+  daysOption: string;
+  customDays: string[];
+  eventType: string;
+  eventLead: number;
+  notifiers: string[];
+  writable: boolean;
+}): CreateAutomationData | UpdateAutomationData {
+  const data: CreateAutomationData | UpdateAutomationData = {
+    name: params.name,
+    description: params.description,
+    model: params.model,
+    trigger_type: params.triggerType,
+    notifiers: params.notifiers,
+    writable: params.writable,
+  };
+
+  if (params.triggerType === "time") {
+    if (params.scheduleMode === "schedule") {
+      data.at = params.time;
+    } else {
+      data.every = params.every;
+      if (params.start && params.end) {
+        data.start = params.start;
+        data.end = params.end;
+      }
+    }
+    if (params.daysOption === "custom") {
+      data.days = params.customDays.join(",");
+    } else if (params.daysOption !== "once" && params.daysOption !== "always") {
+      data.days = params.daysOption;
+    }
+  } else {
+    data.event_type = params.eventType;
+    if (params.eventType === "event_approaching") {
+      data.lead_minutes = params.eventLead;
+    }
+  }
+
+  return data;
+}
+
+function createFocusOrder(params: {
+  triggerType: "time" | "event";
+  scheduleMode: "schedule" | "interval";
+  daysOption: string;
+  eventType: string;
+  hasNotifiers: boolean;
+}): CreateFocus[] {
+  const order: CreateFocus[] = ["name", "description", "model", "trigger_type"];
+  if (params.triggerType === "time") {
+    order.push("mode");
+    if (params.scheduleMode === "schedule") {
+      order.push("time");
+    } else {
+      order.push("interval", "start", "end");
+    }
+    order.push("days");
+    if (params.daysOption === "custom") order.push("day_picker");
+  } else {
+    order.push("event_type");
+    if (params.eventType === "event_approaching") order.push("event_lead");
+  }
+  if (params.hasNotifiers) order.push("notifiers");
+  order.push("writable");
+  return order;
 }
 
 export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
@@ -47,6 +127,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     handleCreate,
     handleUpdate,
     availableNotifiers,
+    availableModels,
   } = useAutomations(config);
 
   const [detailScroll, setDetailScroll] = useState(0);
@@ -64,10 +145,12 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
   const [createNotifierCursor, setCreateNotifierCursor] = useState(0);
   const [createCustomDays, setCreateCustomDays] = useState<string[]>([]);
   const [createDayCursor, setCreateDayCursor] = useState(0);
+  const [createModelCustomOption, setCreateModelCustomOption] = useState<string | null>(null);
+  const [createModelIndex, setCreateModelIndex] = useState(0);
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
 
   // Controlled inputs for create form (so preview stays in sync)
   const nameInput = useInlineTextInput();
-  const modelInput = useInlineTextInput();
   const [createDesc, setCreateDesc] = useState("");
   const [createDescCursor, setCreateDescCursor] = useState(0);
   const descInput = useTextInput({
@@ -80,6 +163,31 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
   const intervalInput = useInlineTextInput();
   const startInput = useInlineTextInput();
   const endInput = useInlineTextInput();
+  const eventLeadInput = useInlineTextInput();
+
+  const createModelOptions = useMemo(() => {
+    const base = [DEFAULT_MODEL_OPTION, ...availableModels];
+    if (createModelCustomOption && !base.includes(createModelCustomOption)) {
+      base.push(createModelCustomOption);
+    }
+    return base;
+  }, [availableModels, createModelCustomOption]);
+
+  const selectedModel = createModelOptions[createModelIndex] === DEFAULT_MODEL_OPTION
+    ? ""
+    : (createModelOptions[createModelIndex] ?? "");
+
+  const parseLeadToMinutes = useCallback((raw: string): number | null => {
+    const normalized = raw.trim().toLowerCase();
+    if (!normalized) return null;
+    if (/^\d+$/.test(normalized)) return Number(normalized);
+    const m = /^(?:(\d+)h)?(?:(\d+)m)?$/.exec(normalized);
+    if (!m || (!m[1] && !m[2])) return null;
+    const hours = Number(m[1] || 0);
+    const mins = Number(m[2] || 0);
+    const total = (hours * 60) + mins;
+    return total > 0 ? total : null;
+  }, []);
 
   const resetCreateState = useCallback(() => {
     setEditingTaskId(null);
@@ -94,25 +202,29 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     setCreateNotifierCursor(0);
     setCreateCustomDays([]);
     setCreateDayCursor(0);
+    setCreateModelCustomOption(null);
+    setCreateModelIndex(0);
+    setShowModelDropdown(false);
     setCreateError(null);
     nameInput.reset();
-    modelInput.reset();
     setCreateDesc("");
     setCreateDescCursor(0);
     timeInput.reset();
     intervalInput.reset();
     startInput.reset();
     endInput.reset();
+    eventLeadInput.reset();
+    eventLeadInput.setValue("60m");
   }, [
     setEditingTaskId,
     setCreateMode,
     setCreateError,
     nameInput,
-    modelInput,
     timeInput,
     intervalInput,
     startInput,
     endInput,
+    eventLeadInput,
   ]);
 
   const getCreateValidationError = useCallback((): string | null => {
@@ -134,6 +246,10 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
         return "Select at least one day";
       }
     }
+    if (createTriggerType === "event" && createEventType === "event_approaching") {
+      const lead = parseLeadToMinutes(eventLeadInput.value);
+      if (lead === null) return "Lead time must be like 30m or 2h30m";
+    }
     return null;
   }, [
     createTriggerType,
@@ -146,6 +262,9 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     intervalInput.value,
     startInput.value,
     endInput.value,
+    createEventType,
+    eventLeadInput.value,
+    parseLeadToMinutes,
   ]);
 
   const openFullEditor = useCallback((item: Automation) => {
@@ -156,8 +275,15 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
 
     nameInput.reset();
     nameInput.setValue(item.name ?? "");
-    modelInput.reset();
-    modelInput.setValue(item.model ?? "");
+    const model = item.model ?? "";
+    if (model && !createModelOptions.includes(model)) {
+      setCreateModelCustomOption(model);
+      setCreateModelIndex(createModelOptions.length);
+    } else {
+      setCreateModelCustomOption(null);
+      const idx = createModelOptions.indexOf(model || DEFAULT_MODEL_OPTION);
+      setCreateModelIndex(idx >= 0 ? idx : 0);
+    }
     setCreateDesc(item.description ?? "");
     setCreateDescCursor((item.description ?? "").length);
 
@@ -170,6 +296,8 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     if (item.trigger.type === "event") {
       setCreateTriggerType("event");
       setCreateEventType(item.trigger.event_type);
+      eventLeadInput.reset();
+      eventLeadInput.setValue(`${item.trigger.lead_minutes ?? 60}m`);
       setCreateScheduleMode("schedule");
       setCreateDaysOption("once");
       timeInput.reset();
@@ -224,13 +352,14 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     setCreateScheduleMode,
     setCreateDaysOption,
     nameInput,
-    modelInput,
+    createModelOptions,
     setCreateDesc,
     setCreateDescCursor,
     timeInput,
     intervalInput,
     startInput,
     endInput,
+    eventLeadInput,
   ]);
 
   const handleKeypress = useCallback(
@@ -258,36 +387,23 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
             setCreateError(validationError);
             return;
           }
-          const name = nameInput.value.trim();
-          const description = createDesc.trim();
-          const data: CreateAutomationData | UpdateAutomationData = {
-            name,
-            description,
-            model: modelInput.value.trim(),
-            trigger_type: createTriggerType,
+          const data = buildAutomationPayload({
+            name: nameInput.value.trim(),
+            description: createDesc.trim(),
+            model: selectedModel,
+            triggerType: createTriggerType,
+            scheduleMode: createScheduleMode,
+            time: timeInput.value.trim(),
+            every: intervalInput.value.trim(),
+            start: startInput.value.trim(),
+            end: endInput.value.trim(),
+            daysOption: createDaysOption,
+            customDays: createCustomDays,
+            eventType: createEventType,
+            eventLead: parseLeadToMinutes(eventLeadInput.value) ?? 60,
             notifiers: createNotifiers,
             writable: createWritable,
-          };
-          if (createTriggerType === "time") {
-            if (createScheduleMode === "schedule") {
-              data.at = timeInput.value.trim();
-            } else {
-              data.every = intervalInput.value.trim();
-              const startVal = startInput.value.trim();
-              const endVal = endInput.value.trim();
-              if (startVal && endVal) {
-                data.start = startVal;
-                data.end = endVal;
-              }
-            }
-            if (createDaysOption === "custom") {
-              data.days = createCustomDays.join(",");
-            } else if (createDaysOption !== "once" && createDaysOption !== "always") {
-              data.days = createDaysOption;
-            }
-          } else {
-            data.event_type = createEventType;
-          }
+          });
           if (editingTaskId) {
             handleUpdate(editingTaskId, data);
           } else {
@@ -301,21 +417,13 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
         }
         if (key.name === "tab") {
           setCreateFocus((f) => {
-            const order: CreateFocus[] = ["name", "description", "model", "trigger_type"];
-            if (createTriggerType === "time") {
-              order.push("mode");
-              if (createScheduleMode === "schedule") {
-                order.push("time");
-              } else {
-                order.push("interval", "start", "end");
-              }
-              order.push("days");
-              if (createDaysOption === "custom") order.push("day_picker");
-            } else {
-              order.push("event_type");
-            }
-            if (availableNotifiers.length > 0) order.push("notifiers");
-            order.push("writable");
+            const order = createFocusOrder({
+              triggerType: createTriggerType,
+              scheduleMode: createScheduleMode,
+              daysOption: createDaysOption,
+              eventType: createEventType,
+              hasNotifiers: availableNotifiers.length > 0,
+            });
             const idx = order.indexOf(f);
             return order[(idx + 1) % order.length];
           });
@@ -326,6 +434,12 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
         if (createFocus === "trigger_type") {
           if (key.name === "left" || key.name === "h" || key.name === "right" || key.name === "l") {
             setCreateTriggerType((t) => t === "time" ? "event" : "time");
+          }
+          return;
+        }
+        if (createFocus === "model") {
+          if (key.name === "return" || key.name === "space") {
+            setShowModelDropdown(true);
           }
           return;
         }
@@ -377,6 +491,10 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
           }
           return;
         }
+        if (createFocus === "event_lead") {
+          if (eventLeadInput.handleKey(key)) return;
+          return;
+        }
         if (createFocus === "notifiers") {
           if (key.name === "up" || key.name === "k") {
             setCreateNotifierCursor((i) => Math.max(0, i - 1));
@@ -402,7 +520,6 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
         // Text fields: route to controlled input handlers
         if (createFocus === "name" && nameInput.handleKey(key)) return;
         if (createFocus === "description" && descInput.handleKey(key)) return;
-        if (createFocus === "model" && modelInput.handleKey(key)) return;
         if (createFocus === "time" && timeInput.handleKey(key)) return;
         if (createFocus === "interval" && intervalInput.handleKey(key)) return;
         if (createFocus === "start" && startInput.handleKey(key)) return;
@@ -448,7 +565,11 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
       } else if (key.name === "n") {
         setEditingTaskId(null);
         nameInput.reset();
-        modelInput.reset();
+        setCreateModelCustomOption(null);
+        setCreateModelIndex(0);
+        setShowModelDropdown(false);
+        eventLeadInput.reset();
+        eventLeadInput.setValue("60m");
         setCreateDesc("");
         setCreateDescCursor(0);
         timeInput.reset();
@@ -464,6 +585,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
       confirmDelete, handleDelete, loadAutomations, handleViewResult, handleRun,
       viewingResult, createMode, createFocus, createTriggerType, createScheduleMode,
       createDaysOption, createEventType, createNotifierCursor, createCustomDays, createDayCursor,
+      createModelIndex, createModelOptions, selectedModel,
       handleCreate, handleUpdate, resetCreateState, getCreateValidationError,
       openFullEditor, editingTaskId,
       setSelectedIndex, setConfirmDelete, setViewingResult,
@@ -471,13 +593,33 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
       setCreateScheduleMode, setCreateDaysOption, setCreateEventType, setCreateWritable,
       setCreateNotifiers, setCreateNotifierCursor, setCreateCustomDays, setCreateDayCursor, setEditingTaskId,
       setCreateError,
-      nameInput, modelInput, descInput, timeInput, intervalInput, startInput, endInput,
+      nameInput, descInput, timeInput, intervalInput, startInput, endInput, eventLeadInput, parseLeadToMinutes,
     ]
   );
 
-  useKeypress(handleKeypress, { isActive: true });
+  useKeypress(handleKeypress, { isActive: !showModelDropdown });
 
   const createCanSave = createMode && !saving && getCreateValidationError() === null;
+
+  if (showModelDropdown && createMode) {
+    return (
+      <Dialog title="AUTOMATION MODEL" size="medium" onClose={() => setShowModelDropdown(false)}>
+        {({ width }) => (
+          <ModelDropdown
+            models={createModelOptions}
+            currentModel={createModelOptions[createModelIndex] ?? DEFAULT_MODEL_OPTION}
+            width={Math.min(50, width)}
+            onSelect={(model) => {
+              const idx = createModelOptions.indexOf(model);
+              if (idx >= 0) setCreateModelIndex(idx);
+              setShowModelDropdown(false);
+            }}
+            onClose={() => setShowModelDropdown(false)}
+          />
+        )}
+      </Dialog>
+    );
+  }
 
   const getFooter = (): React.ReactNode => {
     if (viewingResult) return <Hints items={[["j/k", "scroll"], ["q", "back"]]} />;
@@ -540,6 +682,8 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
               scheduleMode={createScheduleMode}
               daysOption={createDaysOption}
               eventType={createEventType}
+              eventLeadValue={eventLeadInput.value}
+              eventLeadCursorPos={eventLeadInput.cursorPos}
               writable={createWritable}
               saving={saving}
               error={createError}
@@ -553,8 +697,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
               nameCursorPos={nameInput.cursorPos}
               descValue={createDesc}
               descCursorPos={createDescCursor}
-              modelValue={modelInput.value}
-              modelCursorPos={modelInput.cursorPos}
+              selectedModel={selectedModel}
               timeValue={timeInput.value}
               timeCursorPos={timeInput.cursorPos}
               intervalValue={intervalInput.value}

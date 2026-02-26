@@ -10,7 +10,10 @@ interface ModelDropdownProps {
   width: number;
 }
 
+const DEFAULT_MODEL_OPTION = "__default__";
+
 function getShortModelName(model: string): string {
+  if (model === DEFAULT_MODEL_OPTION) return "default";
   if (!model) return "";
   const parts = model.split("/");
   return parts.length > 1 ? parts.slice(1).join("/") : model;

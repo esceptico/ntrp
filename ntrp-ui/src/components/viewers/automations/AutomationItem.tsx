@@ -15,7 +15,10 @@ function triggerLabel(trigger: Automation["trigger"]): string {
       if (trigger.start && trigger.end) base += ` (${trigger.start}\u2013${trigger.end})`;
       return trigger.days ? `${base}  ${trigger.days}` : base;
     }
-    case "event": return `on:${trigger.event_type}`;
+    case "event":
+      return trigger.event_type === "event_approaching" && trigger.lead_minutes
+        ? `on:${trigger.event_type} (${trigger.lead_minutes}m)`
+        : `on:${trigger.event_type}`;
   }
 }
 
