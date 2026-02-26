@@ -888,6 +888,15 @@ wheels = [
 ]
 
 [[package]]
+name = "mistletoe"
+version = "1.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/11/96/ea46a376a7c4cd56955ecdfff0ea68de43996a4e6d1aee4599729453bd11/mistletoe-1.4.0.tar.gz", hash = "sha256:1630f906e5e4bbe66fdeb4d29d277e2ea515d642bb18a9b49b136361a9818c9d", size = 107203 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2a/0f/b5e545f0c7962be90366af3418989b12cf441d9da1e5d89d88f2f3e5cf8f/mistletoe-1.4.0-py3-none-any.whl", hash = "sha256:44a477803861de1237ba22e375c6b617690a31d2902b47279d1f8f7ed498a794", size = 51304 },
+]
+
+[[package]]
 name = "multidict"
 version = "6.7.1"
 source = { registry = "https://pypi.org/simple" }
@@ -970,7 +979,7 @@ wheels = [
 
 [[package]]
 name = "ntrp"
-version = "0.2.1"
+version = "0.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -993,6 +1002,7 @@ dependencies = [
     { name = "rich" },
     { name = "sqlite-vec" },
     { name = "structlog" },
+    { name = "telegramify-markdown" },
     { name = "tenacity" },
     { name = "uvicorn" },
 ]
@@ -1035,6 +1045,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.0" },
     { name = "sqlite-vec", specifier = ">=0.1.6" },
     { name = "structlog", specifier = ">=24.0.0" },
+    { name = "telegramify-markdown", specifier = ">=0.5.4" },
     { name = "tenacity", specifier = ">=9.0.0" },
     { name = "uvicorn", specifier = ">=0.34.0" },
 ]
@@ -1600,6 +1611,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ef/52/9ba0f43b686e7f3ddfeaa78ac3af750292662284b3661e91ad5494f21dbc/structlog-25.5.0.tar.gz", hash = "sha256:098522a3bebed9153d4570c6d0288abf80a031dfdb2048d59a49e9dc2190fc98", size = 1460830 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a8/45/a132b9074aa18e799b891b91ad72133c98d8042c70f6240e4c5f9dabee2f/structlog-25.5.0-py3-none-any.whl", hash = "sha256:a8453e9b9e636ec59bd9e79bbd4a72f025981b3ba0f5837aebf48f02f37a7f9f", size = 72510 },
+]
+
+[[package]]
+name = "telegramify-markdown"
+version = "0.5.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mistletoe" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/33/eb/8a3a557eec87c0fcd4c0939232fa5ea407801050370596daa4ca3e51a1db/telegramify_markdown-0.5.4.tar.gz", hash = "sha256:c32bd04e5a1c22519c011ccf7350a01b6d162e6cc9a9d89c83eff964d491007e", size = 40370 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/f0/4d07bcada3cddb66bccf061661b733e8512c5580e1bd11fba2aea1488d70/telegramify_markdown-0.5.4-py3-none-any.whl", hash = "sha256:7c806e12b6c7045d7723e064a0ff25afcb16c92c0d95385b61a57b8c53a430d3", size = 33536 },
 ]
 
 [[package]]

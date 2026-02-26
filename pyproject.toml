@@ -1,6 +1,6 @@
 [project]
 name = "ntrp"
-version = "0.2.1"
+version = "0.2.2"
 description = "Personal AI assistant with persistent memory and multi-source knowledge integration"
 readme = "README.md"
 license = {text = "MIT"}
@@ -28,6 +28,7 @@ dependencies = [
     "aiohttp>=3.13.3",
     "jinja2>=3.1.0",
     "google-cloud-pubsub>=2.35.0",
+    "telegramify-markdown>=0.5.4",
 ]
 
 [project.urls]
