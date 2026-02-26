@@ -2,7 +2,7 @@ import React from "react";
 import { colors } from "./ui/colors.js";
 import { truncateText, formatAge } from "../lib/utils.js";
 import { useAccentColor } from "../hooks/index.js";
-import type { ServerConfig, Schedule } from "../api/client.js";
+import type { ServerConfig, Automation } from "../api/client.js";
 import type { SidebarData } from "../hooks/useSidebar.js";
 
 interface UsageData {
@@ -121,13 +121,19 @@ function formatRelativeTime(isoStr: string): string {
   return `${days}d`;
 }
 
-function ScheduleRow({ schedule, width }: { schedule: Schedule; width: number }) {
-  const time = schedule.time_of_day || "??:??";
-  const eta = schedule.next_run_at ? formatRelativeTime(schedule.next_run_at) : "";
+function AutomationRow({ automation, width }: { automation: Automation; width: number }) {
+  const time = automation.trigger.type === "time"
+    ? (() => {
+        let base = automation.trigger.every ? `every ${automation.trigger.every}` : automation.trigger.at ?? "";
+        if (automation.trigger.start && automation.trigger.end) base += ` (${automation.trigger.start}\u2013${automation.trigger.end})`;
+        return base;
+      })()
+    : `on:${automation.trigger.event_type}`;
+  const eta = automation.next_run_at ? formatRelativeTime(automation.next_run_at) : "";
   const prefix = `${time} `;
   const suffix = eta ? ` ${eta}` : "";
   const nameWidth = Math.max(4, width - prefix.length - suffix.length);
-  const name = truncateText(schedule.name || schedule.description, nameWidth);
+  const name = truncateText(automation.name || automation.description, nameWidth);
 
   return (
     <text>
@@ -262,12 +268,12 @@ export function Sidebar({ serverConfig, data, usage, width, height, currentSessi
         </box>
       )}
 
-      {/* Schedules */}
-      {data.nextSchedules.length > 0 && (
+      {/* Automations */}
+      {data.nextAutomations.length > 0 && (
         <box flexDirection="column">
           <SectionHeader label="NEXT UP" />
-          {data.nextSchedules.map(s => (
-            <ScheduleRow key={s.task_id} schedule={s} width={contentWidth} />
+          {data.nextAutomations.map(s => (
+            <AutomationRow key={s.task_id} automation={s} width={contentWidth} />
           ))}
         </box>
       )}

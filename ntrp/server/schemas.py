@@ -82,12 +82,38 @@ class UpdateObservationRequest(BaseModel):
     summary: str = Field(..., min_length=1, max_length=10000)
 
 
-# --- Schedule / notifiers ---
+# --- Automations / notifiers ---
 
 
-class UpdateScheduleRequest(BaseModel):
+class CreateAutomationRequest(BaseModel):
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    model: str | None = None
+    trigger_type: str
+    at: str | None = None
+    days: str | None = None
+    every: str | None = None
+    event_type: str | None = None
+    notifiers: list[str] = Field(default_factory=list)
+    writable: bool = False
+    start: str | None = None
+    end: str | None = None
+
+
+class UpdateAutomationRequest(BaseModel):
     name: str | None = None
     description: str | None = None
+    model: str | None = None
+    trigger_type: str | None = None
+    at: str | None = None
+    days: str | None = None
+    every: str | None = None
+    event_type: str | None = None
+    start: str | None = None
+    end: str | None = None
+    notifiers: list[str] | None = None
+    writable: bool | None = None
+    enabled: bool | None = None
 
 
 class SetNotifiersRequest(BaseModel):

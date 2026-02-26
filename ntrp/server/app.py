@@ -7,9 +7,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from ntrp.server.routers.dashboard import router as dashboard_router
 from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
-from ntrp.server.routers.schedule import router as schedule_router
+from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.skills import router as skills_router
+from ntrp.server.routers.webhooks import router as webhooks_router
 from ntrp.server.runtime import get_run_registry, get_runtime, get_runtime_async, reset_runtime
 from ntrp.server.schemas import CancelRequest, ChatRequest, ToolResultRequest
 from ntrp.services.chat import ChatService
@@ -51,7 +52,8 @@ class AuthMiddleware:
 
         request = Request(scope, receive)
         runtime = get_runtime()
-        if runtime.config.api_key and request.url.path != "/health":
+        public_paths = {"/health", "/webhooks/email"}
+        if runtime.config.api_key and request.url.path not in public_paths:
             auth = request.headers.get("authorization", "")
             if auth != f"Bearer {runtime.config.api_key}":
                 response = JSONResponse(status_code=401, content={"detail": "Unauthorized"})
@@ -67,9 +69,10 @@ app.add_middleware(AuthMiddleware)
 app.include_router(dashboard_router)
 app.include_router(data_router)
 app.include_router(gmail_router)
-app.include_router(schedule_router)
+app.include_router(automation_router)
 app.include_router(session_router)
 app.include_router(skills_router)
+app.include_router(webhooks_router)
 
 
 @app.get("/health")

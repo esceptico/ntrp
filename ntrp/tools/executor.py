@@ -16,7 +16,7 @@ class ToolExecutor:
 
         deps = ToolDeps(
             search_index=runtime.indexer.index,
-            schedule_store=runtime.schedule_store,
+            automation_service=runtime.automation_service,
             skill_registry=runtime.skill_registry,
             notifier_service=runtime.notifier_service,
         )

@@ -44,7 +44,7 @@ Skip ephemeral noise: billing alerts, CI failures, token events, connection requ
 
 **Directives** — set_directives updates persistent rules injected into your system prompt. When the user tells you how to behave, what to do or avoid, or asks you to change your style/tone — call set_directives. Read current directives first, then write the full updated version.
 
-**Scheduling** — schedule_task (create recurring/one-time agent tasks), list_schedules, cancel_schedule, get_schedule_result (last execution output). Tasks run autonomously at the specified time with full tool access.
+**Automations** — create_automation (time-scheduled or event-triggered agent tasks), list_automations, delete_automation, get_automation_result (last execution output). Automations run autonomously with full tool access.
 
 ## MEMORY
 
@@ -225,19 +225,6 @@ def _time_gap(last_activity: datetime | None) -> str:
     if hours < 1:
         return f"Note: Last interaction was {int(gap / 60)} minutes ago."
     return f"Note: Last interaction was {hours:.1f} hours ago."
-
-
-_SCHEDULED_TASK_SUFFIX = (
-    "\n\nYou are executing a scheduled task autonomously. "
-    "Do the work described directly — gather information, produce output, and return the result. "
-    "Do not schedule new tasks or ask for confirmation. "
-    "Return only the final output — no preamble, no narration, no thinking out loud. "
-    "If the user asked to be notified, told, or written to — use the notify tool."
-)
-
-
-def scheduled_task_suffix() -> str:
-    return _SCHEDULED_TASK_SUFFIX
 
 
 def build_system_blocks(

@@ -11,9 +11,10 @@ CREDENTIALS_PATH = NTRP_DIR / "gmail_credentials.json"
 SCOPES_GMAIL_READ = ["https://www.googleapis.com/auth/gmail.readonly"]
 SCOPES_GMAIL_SEND = ["https://www.googleapis.com/auth/gmail.send"]
 SCOPES_CALENDAR = ["https://www.googleapis.com/auth/calendar"]
+SCOPES_PUBSUB = ["https://www.googleapis.com/auth/pubsub"]
 
-# Default scopes for new tokens (Gmail + Calendar for unified auth)
-SCOPES_ALL = SCOPES_GMAIL_READ + SCOPES_GMAIL_SEND + SCOPES_CALENDAR
+# Default scopes for new tokens (Gmail + Calendar + Pub/Sub for push notifications)
+SCOPES_ALL = SCOPES_GMAIL_READ + SCOPES_GMAIL_SEND + SCOPES_CALENDAR + SCOPES_PUBSUB
 
 
 def discover_gmail_tokens() -> list[Path]:

@@ -1,19 +1,30 @@
 import { useEffect } from "react";
-import type { Schedule } from "../../../api/client.js";
+import type { Automation } from "../../../api/client.js";
 import { colors } from "../../ui/index.js";
 import { wrapText } from "../../../lib/utils.js";
 import { formatRelativeTime } from "../../../lib/format.js";
 
 interface ResultViewerProps {
-  schedule: Schedule;
+  automation: Automation;
   scroll: number;
   setScroll: React.Dispatch<React.SetStateAction<number>>;
   width: number;
   height: number;
 }
 
-export function ResultViewer({ schedule, scroll, setScroll, width, height }: ResultViewerProps) {
-  const s = schedule;
+function triggerLabel(trigger: Automation["trigger"]): string {
+  switch (trigger.type) {
+    case "time": {
+      let base = trigger.every ? `every ${trigger.every}` : trigger.at ?? "";
+      if (trigger.start && trigger.end) base += ` (${trigger.start}\u2013${trigger.end})`;
+      return trigger.days ? `${base}  ${trigger.days}` : base;
+    }
+    case "event": return `on:${trigger.event_type}`;
+  }
+}
+
+export function ResultViewer({ automation, scroll, setScroll, width, height }: ResultViewerProps) {
+  const s = automation;
   const enabled = s.enabled;
   const isRunning = !!s.running_since;
   const statusIcon = isRunning ? "\u25B6" : enabled ? "\u2713" : "\u23F8";
@@ -52,7 +63,7 @@ export function ResultViewer({ schedule, scroll, setScroll, width, height }: Res
       <box marginTop={1} flexDirection="column">
         <text>
           <span fg={colors.text.muted}>{statusIcon} {statusLabel}</span>
-          <span fg={colors.text.muted}>  {s.time_of_day}  {s.recurrence}</span>
+          <span fg={colors.text.muted}>  {triggerLabel(s.trigger)}</span>
           {s.writable && <span fg={colors.text.muted}>  {"\u270E"}</span>}
         </text>
         <text>

@@ -16,7 +16,7 @@ import {
   type SessionListItem,
 } from "../api/client.js";
 
-type ViewMode = "chat" | "memory" | "settings" | "schedules" | "dashboard" | "sessions";
+type ViewMode = "chat" | "memory" | "settings" | "automations" | "dashboard" | "sessions";
 
 function findSession(sessions: SessionListItem[], query: string): SessionListItem | undefined {
   const q = query.toLowerCase();
@@ -50,7 +50,7 @@ type CommandHandler = (ctx: CommandContext, args: string[]) => boolean | Promise
 
 const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   memory: ({ setViewMode }) => { setViewMode("memory"); return true; },
-  schedules: ({ setViewMode }) => { setViewMode("schedules"); return true; },
+  automations: ({ setViewMode }) => { setViewMode("automations"); return true; },
   dashboard: ({ setViewMode }) => { setViewMode("dashboard"); return true; },
   theme: ({ openThemePicker }) => { openThemePicker(); return true; },
   settings: ({ toggleSettings }) => { toggleSettings(); return true; },

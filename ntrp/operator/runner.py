@@ -32,10 +32,11 @@ class OperatorDeps:
 @dataclass(frozen=True)
 class RunRequest:
     prompt: str
-    prompt_suffix: str
     writable: bool
     notifiers: list[str]
     source_id: str
+    prompt_suffix: str = ""
+    model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -72,9 +73,17 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
             executor = executor.with_registry(run_registry)
             tools = [*tools, notify_tool.to_dict()]
 
+    agent_config = deps.config
+    if request.model:
+        agent_config = AgentConfig(
+            model=request.model,
+            explore_model=deps.config.explore_model,
+            max_depth=deps.config.max_depth,
+        )
+
     agent = create_agent(
         executor=executor,
-        config=deps.config,
+        config=agent_config,
         tools=tools,
         system_prompt=system_prompt,
         session_state=session_state,

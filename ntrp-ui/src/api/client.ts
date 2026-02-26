@@ -354,12 +354,28 @@ export async function updateBrowser(
   return api.patch(`${config.serverUrl}/config`, body);
 }
 
-export interface Schedule {
+export interface TimeTrigger {
+  type: "time";
+  at?: string;
+  days?: string;
+  every?: string;
+  start?: string;
+  end?: string;
+}
+
+export interface EventTrigger {
+  type: "event";
+  event_type: string;
+}
+
+export type Trigger = TimeTrigger | EventTrigger;
+
+export interface Automation {
   task_id: string;
   name: string;
   description: string;
-  time_of_day: string;
-  recurrence: string;
+  model: string | null;
+  trigger: Trigger;
   enabled: boolean;
   created_at: string;
   last_run_at: string | null;
@@ -370,32 +386,66 @@ export interface Schedule {
   running_since: string | null;
 }
 
-export async function getSchedules(config: Config): Promise<{ schedules: Schedule[] }> {
-  return api.get<{ schedules: Schedule[] }>(`${config.serverUrl}/schedules`);
+export interface CreateAutomationData {
+  name: string;
+  description: string;
+  model?: string;
+  trigger_type: "time" | "event";
+  at?: string;
+  days?: string;
+  every?: string;
+  start?: string;
+  end?: string;
+  event_type?: string;
+  notifiers: string[];
+  writable: boolean;
 }
 
-export async function toggleSchedule(config: Config, taskId: string): Promise<{ enabled: boolean }> {
-  return api.post<{ enabled: boolean }>(`${config.serverUrl}/schedules/${taskId}/toggle`);
+export interface UpdateAutomationData {
+  name?: string;
+  description?: string;
+  model?: string;
+  trigger_type?: "time" | "event";
+  at?: string;
+  days?: string;
+  every?: string;
+  start?: string;
+  end?: string;
+  event_type?: string;
+  notifiers?: string[];
+  writable?: boolean;
 }
 
-export async function updateSchedule(config: Config, taskId: string, data: { name?: string; description?: string }): Promise<{ name: string; description: string }> {
-  return api.patch<{ name: string; description: string }>(`${config.serverUrl}/schedules/${taskId}`, data);
+export async function createAutomation(config: Config, data: CreateAutomationData): Promise<Automation> {
+  return api.post<Automation>(`${config.serverUrl}/automations`, data);
 }
 
-export async function deleteSchedule(config: Config, taskId: string): Promise<{ status: string }> {
-  return api.delete<{ status: string }>(`${config.serverUrl}/schedules/${taskId}`);
+export async function getAutomations(config: Config): Promise<{ automations: Automation[] }> {
+  return api.get<{ automations: Automation[] }>(`${config.serverUrl}/automations`);
 }
 
-export async function getScheduleDetail(config: Config, taskId: string): Promise<Schedule> {
-  return api.get<Schedule>(`${config.serverUrl}/schedules/${taskId}`);
+export async function toggleAutomation(config: Config, taskId: string): Promise<{ enabled: boolean }> {
+  return api.post<{ enabled: boolean }>(`${config.serverUrl}/automations/${taskId}/toggle`);
+}
+
+export async function updateAutomation(config: Config, taskId: string, data: UpdateAutomationData): Promise<Automation> {
+  return api.patch<Automation>(`${config.serverUrl}/automations/${taskId}`, data);
+}
+
+export async function deleteAutomation(config: Config, taskId: string): Promise<{ status: string }> {
+  return api.delete<{ status: string }>(`${config.serverUrl}/automations/${taskId}`);
+}
+
+export async function getAutomationDetail(config: Config, taskId: string): Promise<Automation> {
+  return api.get<Automation>(`${config.serverUrl}/automations/${taskId}`);
 }
 
 export async function toggleWritable(config: Config, taskId: string): Promise<{ writable: boolean }> {
-  return api.post<{ writable: boolean }>(`${config.serverUrl}/schedules/${taskId}/writable`);
+  return api.post<{ writable: boolean }>(`${config.serverUrl}/automations/${taskId}/writable`);
 }
 
-export async function runSchedule(config: Config, taskId: string): Promise<{ status: string }> {
-  return api.post<{ status: string }>(`${config.serverUrl}/schedules/${taskId}/run`);
+export async function runAutomation(config: Config, taskId: string): Promise<{ status: string }> {
+  return api.post<{ status: string }>(`${config.serverUrl}/automations/${taskId}/run`);
 }
 
 export interface NotifierSummary {
@@ -407,12 +457,12 @@ export async function getNotifiers(config: Config): Promise<{ notifiers: Notifie
   return api.get<{ notifiers: NotifierSummary[] }>(`${config.serverUrl}/notifiers`);
 }
 
-export async function setScheduleNotifiers(
+export async function setAutomationNotifiers(
   config: Config,
   taskId: string,
   notifiers: string[]
 ): Promise<{ notifiers: string[] }> {
-  return api.put<{ notifiers: string[] }>(`${config.serverUrl}/schedules/${taskId}/notifiers`, { notifiers });
+  return api.put<{ notifiers: string[] }>(`${config.serverUrl}/automations/${taskId}/notifiers`, { notifiers });
 }
 
 export interface NotifierConfigData {

@@ -15,9 +15,14 @@ from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.notifiers.service import NotifierService
 from ntrp.notifiers.store import NotifierStore
 from ntrp.operator.runner import OperatorDeps
-from ntrp.schedule.scheduler import Scheduler
-from ntrp.schedule.service import ScheduleService
-from ntrp.schedule.store import ScheduleStore
+from ntrp.monitor.service import Monitor
+from ntrp.monitor.calendar import CalendarMonitor
+from ntrp.monitor.gmail import GmailMonitor
+from ntrp.monitor.store import MonitorStateStore
+from ntrp.events.triggers import TRIGGER_EVENT_TYPES, TriggerEvent
+from ntrp.automation.scheduler import Scheduler
+from ntrp.automation.service import AutomationService
+from ntrp.automation.store import AutomationStore
 from ntrp.server.dashboard import DashboardCollector
 from ntrp.server.indexer import Indexer
 from ntrp.server.sources import SourceManager
@@ -27,7 +32,8 @@ from ntrp.services.lifecycle import wire_events
 from ntrp.services.session import SessionService
 from ntrp.skills.registry import SkillRegistry
 from ntrp.skills.service import SKILLS_DIRS, SkillService
-from ntrp.sources.base import Indexable
+from ntrp.sources.base import CalendarSource, Indexable
+from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.tools.executor import ToolExecutor
 
 _logger = get_logger(__name__)
@@ -51,16 +57,18 @@ class Runtime:
         self.indexables: dict[str, Indexable] = {}
         self.executor: ToolExecutor | None = None
 
-        self.schedule_store: ScheduleStore | None = None
+        self.automation_store: AutomationStore | None = None
         self.notifier_store: NotifierStore | None = None
         self.scheduler: Scheduler | None = None
-        self.schedule_service: ScheduleService | None = None
+        self.automation_service: AutomationService | None = None
         self.run_registry = RunRegistry()
 
         self.skill_registry = SkillRegistry()
         self.skill_service: SkillService | None = None
         self.notifier_service: NotifierService | None = None
         self.notification_log: NotificationLogStore | None = None
+        self.monitor: Monitor | None = None
+        self.monitor_store: MonitorStateStore | None = None
         self.dashboard = DashboardCollector()
         self.config_service: ConfigService | None = None
         self._connected = False
@@ -132,14 +140,17 @@ class Runtime:
         await session_store.init_schema()
         self.session_service = SessionService(session_store)
 
-        self.schedule_store = ScheduleStore(self._sessions_conn)
-        await self.schedule_store.init_schema()
+        self.automation_store = AutomationStore(self._sessions_conn)
+        await self.automation_store.init_schema()
 
         self.notifier_store = NotifierStore(self._sessions_conn)
         await self.notifier_store.init_schema()
 
         self.notification_log = NotificationLogStore(self._sessions_conn)
         await self.notification_log.init_schema()
+
+        self.monitor_store = MonitorStateStore(self._sessions_conn)
+        await self.monitor_store.init_schema()
 
         _logger.info("Connecting search index")
         await self.indexer.connect()
@@ -170,10 +181,16 @@ class Runtime:
         await self.notifier_service.seed_defaults()
         await self.notifier_service.rebuild()
 
+        self.scheduler = Scheduler(store=self.automation_store, build_deps=self.build_operator_deps)
+
+        self.automation_service = AutomationService(
+            store=self.automation_store,
+            scheduler=self.scheduler,
+            get_notifiers=lambda: self.notifier_service.notifiers if self.notifier_service else {},
+        )
+
         _logger.info("Registering tools")
         self.executor = ToolExecutor(runtime=self)
-
-        self.schedule_service = ScheduleService(store=self.schedule_store, runtime=self)
         self.config_service = ConfigService(runtime=self)
 
         self._connected = True
@@ -184,6 +201,8 @@ class Runtime:
         )
 
     async def close(self) -> None:
+        if self.monitor:
+            await self.monitor.stop()
         if self.scheduler:
             await self.scheduler.stop()
         if self.memory:
@@ -227,9 +246,37 @@ class Runtime:
         )
 
     def start_scheduler(self) -> None:
-        if self.schedule_store and self.executor and self.notification_log:
-            self.scheduler = Scheduler(runtime=self, store=self.schedule_store)
-            self.scheduler.start()
+        self.scheduler.start()
+        self._wire_event_triggers()
+
+    def _wire_event_triggers(self) -> None:
+        async def on_trigger(event: TriggerEvent) -> None:
+            if self.scheduler:
+                await self.scheduler.fire_event(event.event_type, event.event_key, event.format_context())
+
+        for event_cls in TRIGGER_EVENT_TYPES:
+            self.channel.subscribe(event_cls, on_trigger)
+
+    def start_monitor(self) -> None:
+        if self.monitor_store is None:
+            raise RuntimeError("Monitor state store is not initialized")
+
+        self.monitor = Monitor(self.channel)
+        calendar_source = self.source_mgr.sources.get("calendar")
+        if calendar_source and isinstance(calendar_source, CalendarSource):
+            self.monitor.register(CalendarMonitor(calendar_source, state_store=self.monitor_store))
+
+        gmail_source = self.source_mgr.sources.get("gmail")
+        if gmail_source and self.config.gcp_project:
+            if isinstance(gmail_source, MultiGmailSource):
+                gmail_monitor = GmailMonitor(
+                    sources=gmail_source.sources,
+                    project=self.config.gcp_project,
+                    state_store=self.monitor_store,
+                )
+                self.monitor.register(gmail_monitor)
+
+        self.monitor.start()
 
     def start_consolidation(self) -> None:
         if self.memory:
@@ -258,6 +305,7 @@ async def get_runtime_async() -> Runtime:
             await _runtime.connect()
             _runtime.start_indexing()
             _runtime.start_scheduler()
+            _runtime.start_monitor()
             _runtime.start_consolidation()
     return _runtime
 

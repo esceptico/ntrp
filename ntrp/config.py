@@ -67,6 +67,9 @@ class Config(BaseSettings):
     # Telegram bot token (optional) - no prefix, standard env var
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
 
+    # Google Cloud project (optional) - needed for Gmail Pub/Sub monitor
+    gcp_project: str | None = Field(default=None, alias="GOOGLE_CLOUD_PROJECT")
+
     # Obsidian vault
     vault_path: Path | None = None
 

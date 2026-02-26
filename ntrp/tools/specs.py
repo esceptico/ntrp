@@ -2,9 +2,17 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from ntrp.schedule.store import ScheduleStore
+from ntrp.automation.service import AutomationService
 from ntrp.skills.registry import SkillRegistry
 from ntrp.skills.tool import UseSkillTool
+from ntrp.tools.automation import (
+    CreateAutomationTool,
+    DeleteAutomationTool,
+    GetAutomationResultTool,
+    ListAutomationsTool,
+    RunAutomationTool,
+    UpdateAutomationTool,
+)
 from ntrp.tools.bash import BashTool
 from ntrp.tools.browser import BrowserTool
 from ntrp.tools.calendar import (
@@ -27,7 +35,6 @@ from ntrp.tools.notes import (
     NotesTool,
     ReadNoteTool,
 )
-from ntrp.tools.schedule import CancelScheduleTool, GetScheduleResultTool, ListSchedulesTool, ScheduleTaskTool
 from ntrp.tools.time import CurrentTimeTool
 from ntrp.tools.web import WebFetchTool, WebSearchTool
 
@@ -35,7 +42,7 @@ from ntrp.tools.web import WebFetchTool, WebSearchTool
 @dataclass(frozen=True)
 class ToolDeps:
     search_index: Any | None = None
-    schedule_store: ScheduleStore | None = None
+    automation_service: AutomationService | None = None
     skill_registry: SkillRegistry | None = None
     notifier_service: Any | None = None
 
@@ -89,14 +96,18 @@ def _create_memory_tools(deps: ToolDeps) -> list[Tool]:
     ]
 
 
-def _create_schedule_tools(deps: ToolDeps) -> list[Tool]:
-    if not deps.schedule_store:
+def _create_automation_tools(deps: ToolDeps) -> list[Tool]:
+    if not deps.automation_service:
         return []
+    svc = deps.automation_service
+    ns = deps.notifier_service
     return [
-        ScheduleTaskTool(deps.schedule_store, notifier_service=deps.notifier_service),
-        ListSchedulesTool(deps.schedule_store),
-        CancelScheduleTool(deps.schedule_store),
-        GetScheduleResultTool(deps.schedule_store),
+        CreateAutomationTool(svc, notifier_service=ns),
+        ListAutomationsTool(svc),
+        UpdateAutomationTool(svc, notifier_service=ns),
+        DeleteAutomationTool(svc),
+        GetAutomationResultTool(svc),
+        RunAutomationTool(svc),
     ]
 
 
@@ -125,7 +136,7 @@ TOOL_FACTORIES: list[ToolFactory] = [
     _create_browser_tools,
     _create_web_tools,
     _create_memory_tools,
-    _create_schedule_tools,
+    _create_automation_tools,
     _create_core_tools,
     _create_skill_tools,
 ]

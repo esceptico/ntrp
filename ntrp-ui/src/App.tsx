@@ -23,7 +23,7 @@ import {
   SessionPicker,
   ThemePicker,
   MemoryViewer,
-  SchedulesViewer,
+  AutomationsViewer,
   DashboardViewer,
   ToolChainDisplay,
   ApprovalDialog,
@@ -33,7 +33,7 @@ import { Sidebar } from "./components/Sidebar.js";
 import { COMMANDS } from "./lib/commands.js";
 import { getSkills, deleteSession, listSessions, restoreSession, permanentlyDeleteSession, type Skill } from "./api/client.js";
 
-type ViewMode = "chat" | "memory" | "settings" | "schedules" | "dashboard" | "sessions";
+type ViewMode = "chat" | "memory" | "settings" | "automations" | "dashboard" | "sessions";
 
 import type { Settings } from "./hooks/useSettings.js";
 
@@ -373,7 +373,7 @@ function AppContent({
 
       {/* Overlays — Dialog handles absolute positioning and dimming */}
       {viewMode === "memory" && <MemoryViewer config={config} onClose={closeView} />}
-      {viewMode === "schedules" && <SchedulesViewer config={config} onClose={closeView} />}
+      {viewMode === "automations" && <AutomationsViewer config={config} onClose={closeView} />}
       {viewMode === "dashboard" && <DashboardViewer config={config} onClose={closeView} />}
       {viewMode === "sessions" && (
         <SessionPicker

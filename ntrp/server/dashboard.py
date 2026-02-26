@@ -104,9 +104,9 @@ class DashboardCollector:
         }
 
         indexer_progress = runtime.indexer.progress
-        schedule_tasks = None
-        if runtime.schedule_service:
-            schedule_tasks = await runtime.schedule_service.list_all()
+        automations = None
+        if runtime.automation_service:
+            automations = await runtime.automation_service.list_all()
 
         memory_stats = None
         memory_consolidating = False
@@ -124,7 +124,7 @@ class DashboardCollector:
                 "error": runtime.indexer.error,
             },
             "scheduler": {
-                "running": runtime.schedule_service.is_running if runtime.schedule_service else False,
+                "running": runtime.automation_service.is_running if runtime.automation_service else False,
                 "active_task": None,
                 "total_scheduled": 0,
                 "enabled_count": 0,
@@ -156,14 +156,14 @@ class DashboardCollector:
                 "recent_facts": [],
             }
 
-        if schedule_tasks is not None:
-            enabled = [t for t in schedule_tasks if t.enabled]
-            running = [t for t in schedule_tasks if t.running_since]
+        if automations is not None:
+            enabled = [t for t in automations if t.enabled]
+            running = [t for t in automations if t.running_since]
             next_runs = [t.next_run_at.timestamp() for t in enabled if t.next_run_at]
             background["scheduler"] = {
-                "running": runtime.schedule_service.is_running if runtime.schedule_service else False,
+                "running": runtime.automation_service.is_running if runtime.automation_service else False,
                 "active_task": running[0].description[:60] if running else None,
-                "total_scheduled": len(schedule_tasks),
+                "total_scheduled": len(automations),
                 "enabled_count": len(enabled),
                 "next_run_at": min(next_runs) if next_runs else None,
             }

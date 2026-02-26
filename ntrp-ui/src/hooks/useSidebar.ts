@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { Config } from "../types.js";
-import { getStats, getContextUsage, getSchedules, listSessions, type Stats, type Schedule, type SessionListItem } from "../api/client.js";
+import { getStats, getContextUsage, getAutomations, listSessions, type Stats, type Automation, type SessionListItem } from "../api/client.js";
 
 const POLL_INTERVAL = 60_000;
 
@@ -13,11 +13,11 @@ export interface SidebarData {
     message_count: number;
     tool_count: number;
   } | null;
-  nextSchedules: Schedule[];
+  nextAutomations: Automation[];
   sessions: SessionListItem[];
 }
 
-const EMPTY: SidebarData = { stats: null, context: null, nextSchedules: [], sessions: [] };
+const EMPTY: SidebarData = { stats: null, context: null, nextAutomations: [], sessions: [] };
 
 export function useSidebar(config: Config, active: boolean, messageCount: number, sessionId: string | null) {
   const [data, setData] = useState<SidebarData>(EMPTY);
@@ -29,20 +29,20 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
     if (!activeRef.current) return;
     try {
       const sid = sessionIdRef.current ?? undefined;
-      const [stats, context, schedulesResult, sessionsResult] = await Promise.all([
+      const [stats, context, automationsResult, sessionsResult] = await Promise.all([
         getStats(config),
         getContextUsage(config, sid),
-        getSchedules(config),
+        getAutomations(config),
         listSessions(config).catch(() => ({ sessions: [] })),
       ]);
       if (!activeRef.current) return;
 
-      const nextSchedules = schedulesResult.schedules
+      const nextAutomations = automationsResult.automations
         .filter(s => s.enabled && s.next_run_at)
         .sort((a, b) => new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime())
         .slice(0, 3);
 
-      setData({ stats, context, nextSchedules, sessions: sessionsResult.sessions });
+      setData({ stats, context, nextAutomations, sessions: sessionsResult.sessions });
     } catch {
       // ignore
     }
@@ -53,7 +53,7 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
     if (active) refresh();
   }, [active, sessionId, messageCount, refresh]);
 
-  // Fallback poll for external changes (schedules, etc.)
+  // Fallback poll for external changes
   useEffect(() => {
     if (!active) return;
     activeRef.current = true;
