@@ -1,16 +1,13 @@
-import asyncio
 from typing import Any
 
 from pydantic import BaseModel, Field
+from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
 
 from ntrp.logging import get_logger
 from ntrp.notifiers.base import Notifier
 from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
-
-NOTIFY_MAX_RETRIES = 3
-NOTIFY_RETRY_DELAY = 2  # seconds
 
 _logger = get_logger(__name__)
 
@@ -23,6 +20,16 @@ NOTIFY_DESCRIPTION = (
 class NotifyInput(BaseModel):
     subject: str = Field(description="Short notification subject/title")
     body: str = Field(description="Notification body — concise, informative")
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=2, max=10),
+    before_sleep=before_sleep_log(_logger, "WARNING"),
+    reraise=True,
+)
+async def _send_with_retry(notifier: Notifier, subject: str, body: str) -> None:
+    await notifier.send(subject, body)
 
 
 class NotifyTool(Tool):
@@ -55,10 +62,10 @@ class NotifyTool(Tool):
 
         for notifier in self._notifiers:
             try:
-                await self._send_with_retry(notifier, subject, body)
+                await _send_with_retry(notifier, subject, body)
                 sent.append(notifier.channel)
             except Exception:
-                _logger.exception("Notifier %s failed after %d attempts", notifier.channel, NOTIFY_MAX_RETRIES)
+                _logger.exception("Notifier %s failed after retries", notifier.channel)
                 failed.append(notifier.channel)
 
         try:
@@ -76,15 +83,3 @@ class NotifyTool(Tool):
             content=f"Notification sent to: {', '.join(sent)}",
             preview=f"Sent ({len(sent)})",
         )
-
-    @staticmethod
-    async def _send_with_retry(notifier: Notifier, subject: str, body: str) -> None:
-        for attempt in range(NOTIFY_MAX_RETRIES):
-            try:
-                await notifier.send(subject, body)
-                return
-            except Exception:
-                if attempt == NOTIFY_MAX_RETRIES - 1:
-                    raise
-                _logger.warning("Notifier %s attempt %d failed, retrying", notifier.channel, attempt + 1)
-                await asyncio.sleep(NOTIFY_RETRY_DELAY * (attempt + 1))

@@ -1,16 +1,13 @@
-import asyncio
 import json
 from typing import Literal
 
 from pydantic import BaseModel
+from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
 
 from ntrp.constants import (
     CONSOLIDATION_SEARCH_LIMIT,
     CONSOLIDATION_TEMPERATURE,
 )
-
-CONSOLIDATION_MAX_RETRIES = 2
-CONSOLIDATION_RETRY_DELAY = 3  # seconds
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact, Observation
@@ -81,32 +78,31 @@ async def _llm_consolidation_decisions(
         observations_json=observations_json,
     )
 
-    for attempt in range(CONSOLIDATION_MAX_RETRIES + 1):
-        try:
-            client = get_completion_client(model)
-            response = await client.completion(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                response_format=ConsolidationResponse,
-                temperature=CONSOLIDATION_TEMPERATURE,
-            )
-            content = response.choices[0].message.content
-            if not content:
-                return []
+    try:
+        return await _call_consolidation_llm(prompt, model)
+    except Exception as e:
+        _logger.warning("Consolidation LLM failed after retries: %s", e)
+        return []
 
-            parsed = ConsolidationResponse.model_validate_json(content)
-            return parsed.actions
 
-        except Exception as e:
-            if attempt < CONSOLIDATION_MAX_RETRIES:
-                delay = CONSOLIDATION_RETRY_DELAY * (attempt + 1)
-                _logger.warning("Consolidation LLM failed (attempt %d/%d): %s, retrying in %ds",
-                                attempt + 1, CONSOLIDATION_MAX_RETRIES + 1, e, delay)
-                await asyncio.sleep(delay)
-            else:
-                _logger.warning("Consolidation LLM failed after %d attempts: %s", attempt + 1, e)
-
-    return []
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=3, min=3, max=15),
+    before_sleep=before_sleep_log(_logger, "WARNING"),
+    reraise=True,
+)
+async def _call_consolidation_llm(prompt: str, model: str) -> list[ConsolidationAction]:
+    client = get_completion_client(model)
+    response = await client.completion(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        response_format=ConsolidationResponse,
+        temperature=CONSOLIDATION_TEMPERATURE,
+    )
+    content = response.choices[0].message.content
+    if not content:
+        return []
+    return ConsolidationResponse.model_validate_json(content).actions
 
 
 async def _execute_action(
