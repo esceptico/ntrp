@@ -1,15 +1,11 @@
 from typing import TYPE_CHECKING
 
 from ntrp.events.internal import (
-    ConsolidationCompleted,
     FactCreated,
     FactDeleted,
     FactUpdated,
     MemoryCleared,
-    RunCompleted,
-    RunStarted,
     SourceChanged,
-    ToolExecuted,
 )
 from ntrp.sources.base import Indexable
 
@@ -47,13 +43,6 @@ async def _on_source_changed(runtime: "Runtime", event: SourceChanged) -> None:
 
 def wire_events(runtime: "Runtime") -> None:
     ch = runtime.channel
-
-    # Dashboard
-    ch.subscribe(ToolExecuted, runtime.dashboard.on_tool_executed)
-    ch.subscribe(RunStarted, runtime.dashboard.on_run_started)
-    ch.subscribe(RunCompleted, runtime.dashboard.on_run_completed)
-    ch.subscribe(FactCreated, runtime.dashboard.on_fact_created)
-    ch.subscribe(ConsolidationCompleted, runtime.dashboard.on_consolidation_completed)
 
     # Memory → search index bridge
     ch.subscribe(FactCreated, lambda e: _on_fact_upserted(runtime, e))

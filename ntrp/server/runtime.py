@@ -23,7 +23,6 @@ from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.notifiers.service import NotifierService
 from ntrp.notifiers.store import NotifierStore
 from ntrp.operator.runner import OperatorDeps
-from ntrp.server.dashboard import DashboardCollector
 from ntrp.server.indexer import Indexer
 from ntrp.server.sources import SourceManager
 from ntrp.server.state import RunRegistry
@@ -69,7 +68,6 @@ class Runtime:
         self.notification_log: NotificationLogStore | None = None
         self.monitor: Monitor | None = None
         self.monitor_store: MonitorStateStore | None = None
-        self.dashboard = DashboardCollector()
         self.config_service: ConfigService | None = None
         self._connected = False
         self._config_lock = asyncio.Lock()

@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ntrp.server.routers.automation import router as automation_router
-from ntrp.server.routers.dashboard import router as dashboard_router
 from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
 from ntrp.server.routers.session import router as session_router
@@ -66,7 +65,6 @@ class AuthMiddleware:
 app.add_middleware(AuthMiddleware)
 
 
-app.include_router(dashboard_router)
 app.include_router(data_router)
 app.include_router(gmail_router)
 app.include_router(automation_router)

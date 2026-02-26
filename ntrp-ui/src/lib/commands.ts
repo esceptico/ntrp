@@ -11,7 +11,6 @@ export const COMMANDS = [
   { name: "automations", description: "View and manage automations" },
   { name: "theme", description: "Choose a theme" },
   { name: "settings", description: "Model, connections, and UI settings" },
-  { name: "dashboard", description: "Server dashboard and diagnostics" },
   { name: "compact", description: "Summarize old messages to save tokens" },
   { name: "clear", description: "Clear current session messages" },
   { name: "purge", description: "Clear graph memory (keeps note embeddings)" },
