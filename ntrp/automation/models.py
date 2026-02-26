@@ -1,8 +1,9 @@
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
-from typing import Callable, Literal
+from typing import Literal
 
 from ntrp.constants import (
     AUTOMATION_EVENT_APPROACHING_DEFAULT_LEAD_MINUTES,
@@ -239,7 +240,7 @@ class EventTrigger:
     def one_shot(self) -> bool:
         return False
 
-    def next_run(self, after: datetime) -> datetime | None:  # noqa: ARG002
+    def next_run(self, after: datetime) -> datetime | None:
         return None
 
 
@@ -269,8 +270,8 @@ def _build_time_trigger(
     at: str | None,
     days: str | None,
     every: str | None,
-    event_type: str | None,  # noqa: ARG001
-    lead_minutes: int | str | None,  # noqa: ARG001
+    event_type: str | None,
+    lead_minutes: int | str | None,
     start: str | None,
     end: str | None,
 ) -> tuple[Trigger, datetime | None]:
@@ -280,13 +281,13 @@ def _build_time_trigger(
 
 def _build_event_trigger(
     *,
-    at: str | None,  # noqa: ARG001
-    days: str | None,  # noqa: ARG001
-    every: str | None,  # noqa: ARG001
+    at: str | None,
+    days: str | None,
+    every: str | None,
     event_type: str | None,
     lead_minutes: int | str | None,
-    start: str | None,  # noqa: ARG001
-    end: str | None,  # noqa: ARG001
+    start: str | None,
+    end: str | None,
 ) -> tuple[Trigger, datetime | None]:
     if not event_type:
         raise ValueError("'event_type' is required for event trigger")

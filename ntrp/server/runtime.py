@@ -1,28 +1,28 @@
 import asyncio
 
 import ntrp.database as database
+from ntrp.automation.scheduler import Scheduler
+from ntrp.automation.service import AutomationService
+from ntrp.automation.store import AutomationStore
 from ntrp.channel import Channel
 from ntrp.config import Config, get_config
 from ntrp.context.store import SessionStore
 from ntrp.core.factory import AgentConfig
+from ntrp.events.triggers import TRIGGER_EVENT_TYPES, TriggerEvent
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import init as llm_init
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.indexable import MemoryIndexable
 from ntrp.memory.service import MemoryService
+from ntrp.monitor.calendar import CalendarMonitor
+from ntrp.monitor.gmail import GmailMonitor
+from ntrp.monitor.service import Monitor
+from ntrp.monitor.store import MonitorStateStore
 from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.notifiers.service import NotifierService
 from ntrp.notifiers.store import NotifierStore
 from ntrp.operator.runner import OperatorDeps
-from ntrp.monitor.service import Monitor
-from ntrp.monitor.calendar import CalendarMonitor
-from ntrp.monitor.gmail import GmailMonitor
-from ntrp.monitor.store import MonitorStateStore
-from ntrp.events.triggers import TRIGGER_EVENT_TYPES, TriggerEvent
-from ntrp.automation.scheduler import Scheduler
-from ntrp.automation.service import AutomationService
-from ntrp.automation.store import AutomationStore
 from ntrp.server.dashboard import DashboardCollector
 from ntrp.server.indexer import Indexer
 from ntrp.server.sources import SourceManager

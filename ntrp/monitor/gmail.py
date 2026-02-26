@@ -1,5 +1,4 @@
 import asyncio
-import concurrent.futures
 import json
 from collections.abc import Coroutine
 from typing import Any
@@ -117,10 +116,14 @@ class GmailMonitor:
     def _register_watch(self, src: GmailSource) -> tuple[str, int] | None:
         try:
             service = src._get_service()
-            resp = service.users().watch(
-                userId="me",
-                body={"topicName": self._topic, "labelIds": ["INBOX"]},
-            ).execute()
+            resp = (
+                service.users()
+                .watch(
+                    userId="me",
+                    body={"topicName": self._topic, "labelIds": ["INBOX"]},
+                )
+                .execute()
+            )
             email = src.get_email_address().lower()
             history_id = int(resp["historyId"])
             self._email_to_source[email] = src
@@ -245,11 +248,15 @@ class GmailMonitor:
     def _fetch_history(self, src: GmailSource, start_history_id: int) -> list[str]:
         service = src._get_service()
         msg_ids: list[str] = []
-        request = service.users().history().list(
-            userId="me",
-            startHistoryId=start_history_id,
-            historyTypes=["messageAdded"],
-            labelId="INBOX",
+        request = (
+            service.users()
+            .history()
+            .list(
+                userId="me",
+                startHistoryId=start_history_id,
+                historyTypes=["messageAdded"],
+                labelId="INBOX",
+            )
         )
         while request is not None:
             try:

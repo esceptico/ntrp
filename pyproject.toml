@@ -80,6 +80,7 @@ ignore = [
     "SIM103", # return condition directly - ternary can hurt readability
     "SIM105", # contextlib.suppress - try/except/pass is often clearer
     "SIM108", # ternary operator - explicit if/else is often clearer
+    "RUF001", # en-dash lmao
     "RUF003", # Comment contains ambiguous poo poo -_-
     "RUF005", # list concat - [a] + [b] is fine
     "RUF006", # asyncio task reference - not always needed

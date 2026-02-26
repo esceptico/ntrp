@@ -4,10 +4,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.dashboard import router as dashboard_router
 from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
-from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.routers.webhooks import router as webhooks_router

@@ -2,6 +2,9 @@ import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
+from ntrp.automation.models import Automation
+from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
+from ntrp.automation.store import AutomationStore
 from ntrp.constants import (
     SCHEDULER_DEDUP_TTL,
     SCHEDULER_EVENT_MAX_RETRIES,
@@ -10,12 +13,9 @@ from ntrp.constants import (
     SCHEDULER_POLL_INTERVAL,
     SCHEDULER_STOP_TIMEOUT,
 )
-from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
 from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, TriggerEvent
 from ntrp.logging import get_logger
 from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent
-from ntrp.automation.models import Automation
-from ntrp.automation.store import AutomationStore
 
 _logger = get_logger(__name__)
 
@@ -83,7 +83,8 @@ class Scheduler:
             await self.store.set_next_run(automation.task_id, next_run)
             _logger.warning(
                 "Skipped missed run of automation %s, advanced to %s",
-                automation.task_id, next_run,
+                automation.task_id,
+                next_run,
             )
 
         await self._drain_event_backlog()
@@ -186,7 +187,7 @@ class Scheduler:
                 event_type == EVENT_APPROACHING
                 and isinstance(event, EventApproaching)
                 and getattr(automation.trigger, "lead_minutes", None) is not None
-                and event.minutes_until > int(getattr(automation.trigger, "lead_minutes"))
+                and event.minutes_until > int(automation.trigger.lead_minutes)
             ):
                 continue
             claimed = await self.store.claim_event(automation.task_id, event_key, now)

@@ -8,7 +8,6 @@ from ntrp.events.triggers import EVENT_APPROACHING, NEW_EMAIL
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
-
 # --- Descriptions ---
 
 CREATE_AUTOMATION_DESCRIPTION = (
@@ -43,6 +42,7 @@ RUN_AUTOMATION_DESCRIPTION = (
 
 
 # --- Helpers ---
+
 
 def _format_automation_list(automations: list[Automation]) -> str:
     lines = []
@@ -79,6 +79,7 @@ def _enrich_schema_with_notifiers(schema: dict, notifier_service: Any) -> dict:
 
 # --- Input Models ---
 
+
 class CreateAutomationInput(BaseModel):
     name: str = Field(description="Short human-readable label (e.g. 'morning briefing', 'pre-meeting prep')")
     description: str = Field(description="What the agent should do (natural language task)")
@@ -107,7 +108,10 @@ class CreateAutomationInput(BaseModel):
         default=None,
         description="End of active window in HH:MM (24h). Only for interval mode. Must be set with 'start'.",
     )
-    event_type: str | None = Field(default=None, description=f"Event type to react to (e.g. '{EVENT_APPROACHING}', '{NEW_EMAIL}'). Required for trigger_type='event'")
+    event_type: str | None = Field(
+        default=None,
+        description=f"Event type to react to (e.g. '{EVENT_APPROACHING}', '{NEW_EMAIL}'). Required for trigger_type='event'",
+    )
     lead_minutes: int | str | None = Field(
         default=None,
         description="For event_approaching only: trigger when event is this many minutes away (default 60).",
@@ -127,11 +131,17 @@ class UpdateAutomationInput(BaseModel):
         json_schema_extra={"enum": ["time", "event"]},
     )
     at: str | None = Field(default=None, description="New time of day HH:MM (24h). For schedule-based time triggers.")
-    days: str | None = Field(default=None, description="New days: 'daily', 'weekdays', or comma-separated (e.g. 'mon,wed,fri')")
-    every: str | None = Field(default=None, description="New interval: e.g. '30m', '2h'. For interval-based time triggers.")
+    days: str | None = Field(
+        default=None, description="New days: 'daily', 'weekdays', or comma-separated (e.g. 'mon,wed,fri')"
+    )
+    every: str | None = Field(
+        default=None, description="New interval: e.g. '30m', '2h'. For interval-based time triggers."
+    )
     start: str | None = Field(default=None, description="New active window start HH:MM (interval mode only)")
     end: str | None = Field(default=None, description="New active window end HH:MM (interval mode only)")
-    event_type: str | None = Field(default=None, description=f"New event type (e.g. '{EVENT_APPROACHING}', '{NEW_EMAIL}')")
+    event_type: str | None = Field(
+        default=None, description=f"New event type (e.g. '{EVENT_APPROACHING}', '{NEW_EMAIL}')"
+    )
     lead_minutes: int | str | None = Field(
         default=None,
         description="New lead time for event_approaching (minutes or duration like '2h30m')",
@@ -154,6 +164,7 @@ class RunAutomationInput(BaseModel):
 
 
 # --- Tools ---
+
 
 class CreateAutomationTool(Tool):
     name = "create_automation"
@@ -233,9 +244,19 @@ class CreateAutomationTool(Tool):
     ) -> ToolResult:
         try:
             automation = await self.service.create(
-                name=name, description=description, trigger_type=trigger_type,
-                at=at, days=days, every=every, event_type=event_type,
-                lead_minutes=lead_minutes, notifiers=notifiers, writable=writable, start=start, end=end, model=model,
+                name=name,
+                description=description,
+                trigger_type=trigger_type,
+                at=at,
+                days=days,
+                every=every,
+                event_type=event_type,
+                lead_minutes=lead_minutes,
+                notifiers=notifiers,
+                writable=writable,
+                start=start,
+                end=end,
+                model=model,
             )
         except ValueError as e:
             return ToolResult(content=f"Error: {e}", preview="Failed", is_error=True)
@@ -314,10 +335,19 @@ class UpdateAutomationTool(Tool):
 
         changes = []
         fields = {
-            "name": name, "description": description, "enabled": enabled,
-            "writable": writable, "model": model, "trigger_type": trigger_type,
-            "at": at, "days": days, "every": every, "event_type": event_type, "lead_minutes": lead_minutes,
-            "start": start, "end": end,
+            "name": name,
+            "description": description,
+            "enabled": enabled,
+            "writable": writable,
+            "model": model,
+            "trigger_type": trigger_type,
+            "at": at,
+            "days": days,
+            "every": every,
+            "event_type": event_type,
+            "lead_minutes": lead_minutes,
+            "start": start,
+            "end": end,
         }
         for key, value in fields.items():
             if value is not None:
@@ -354,10 +384,21 @@ class UpdateAutomationTool(Tool):
     ) -> ToolResult:
         try:
             automation = await self.service.update(
-                task_id, name=name, description=description, model=model,
-                trigger_type=trigger_type, at=at, days=days, every=every,
-                event_type=event_type, lead_minutes=lead_minutes, start=start, end=end,
-                notifiers=notifiers, writable=writable, enabled=enabled,
+                task_id,
+                name=name,
+                description=description,
+                model=model,
+                trigger_type=trigger_type,
+                at=at,
+                days=days,
+                every=every,
+                event_type=event_type,
+                lead_minutes=lead_minutes,
+                start=start,
+                end=end,
+                notifiers=notifiers,
+                writable=writable,
+                enabled=enabled,
             )
         except KeyError:
             return ToolResult(content=f"Error: automation '{task_id}' not found", preview="Not found", is_error=True)

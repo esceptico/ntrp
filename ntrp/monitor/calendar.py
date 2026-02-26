@@ -97,4 +97,3 @@ class CalendarMonitor:
         if start.tzinfo is None:
             return start.replace(tzinfo=UTC)
         return start.astimezone(UTC)
-

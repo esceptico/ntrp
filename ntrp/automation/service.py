@@ -2,11 +2,11 @@ import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from ntrp.llm.models import get_models
 from ntrp.automation.models import Automation, Trigger, build_trigger
 from ntrp.automation.store import AutomationStore
+from ntrp.llm.models import get_models
 
 if TYPE_CHECKING:
     from ntrp.automation.scheduler import Scheduler
@@ -116,7 +116,16 @@ class AutomationService:
         if unknown:
             raise ValueError(f"Unknown notifier(s): {', '.join(sorted(unknown))}")
 
-    def _build_metadata_changes(self, *, name: str | None, description: str | None, writable: bool | None, enabled: bool | None, model: str | None, notifiers: list[str] | None) -> dict[str, Any]:
+    def _build_metadata_changes(
+        self,
+        *,
+        name: str | None,
+        description: str | None,
+        writable: bool | None,
+        enabled: bool | None,
+        model: str | None,
+        notifiers: list[str] | None,
+    ) -> dict[str, Any]:
         changes: dict[str, Any] = {}
         if name is not None:
             changes["name"] = name
@@ -178,7 +187,12 @@ class AutomationService:
     ) -> Automation:
         task = await self.get(task_id)
         changes = self._build_metadata_changes(
-            name=name, description=description, writable=writable, enabled=enabled, model=model, notifiers=notifiers,
+            name=name,
+            description=description,
+            writable=writable,
+            enabled=enabled,
+            model=model,
+            notifiers=notifiers,
         )
 
         trigger_patch = TriggerPatch(

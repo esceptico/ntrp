@@ -2,16 +2,16 @@ from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ntrp.notifiers.service import NotifierService
 from ntrp.automation.models import Automation
 from ntrp.automation.service import AutomationService
+from ntrp.notifiers.service import NotifierService
 from ntrp.server.runtime import get_runtime
 from ntrp.server.schemas import (
     CreateAutomationRequest,
     CreateNotifierRequest,
     SetNotifiersRequest,
-    UpdateNotifierRequest,
     UpdateAutomationRequest,
+    UpdateNotifierRequest,
 )
 
 router = APIRouter(tags=["automations"])
@@ -50,7 +50,9 @@ def _require_notifier_service() -> NotifierService:
 
 
 @router.post("/automations")
-async def create_automation(request: CreateAutomationRequest, svc: AutomationService = Depends(_require_automation_service)):
+async def create_automation(
+    request: CreateAutomationRequest, svc: AutomationService = Depends(_require_automation_service)
+):
     try:
         automation = await svc.create(
             name=request.name,
