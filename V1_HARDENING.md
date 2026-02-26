@@ -3,9 +3,9 @@
 ## Must fix (security/stability)
 
 - [x] **Path traversal in notes tools** — `Path(vault) / user_input` doesn't prevent `../../`. Need `resolve()` + check under vault. Same in Gmail token deletion route.
-- [ ] **Pagination validation** — list endpoints accept unbounded `limit`/`offset`. Cap and validate.
-- [ ] **Skill installation safety** — no hash verification, no file size limit, no directory depth limit on GitHub downloads.
-- [ ] **Streaming endpoint error handling** — `svc.prepare()` failure in `/chat/stream` has no clean error response.
+- [x] **Pagination validation** — list endpoints accept unbounded `limit`/`offset`. Cap and validate.
+- [x] **Skill installation safety** — no hash verification, no file size limit, no directory depth limit on GitHub downloads.
+- [x] **Streaming endpoint error handling** — `svc.prepare()` failure in `/chat/stream` has no clean error response.
 
 ## Should fix (robustness)
 
