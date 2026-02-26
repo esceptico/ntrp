@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.memory.service import MemoryService
 from ntrp.server.runtime import get_runtime
@@ -15,7 +15,11 @@ def _require_memory() -> MemoryService:
 
 
 @router.get("/facts")
-async def get_facts(limit: int = 100, offset: int = 0, svc: MemoryService = Depends(_require_memory)):
+async def get_facts(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    svc: MemoryService = Depends(_require_memory),
+):
     facts, total = await svc.facts.list_recent(limit=limit, offset=offset)
     return {
         "facts": [
@@ -87,7 +91,10 @@ async def delete_fact(fact_id: int, svc: MemoryService = Depends(_require_memory
 
 
 @router.get("/observations")
-async def get_observations(limit: int = 50, svc: MemoryService = Depends(_require_memory)):
+async def get_observations(
+    limit: int = Query(default=50, ge=1, le=500),
+    svc: MemoryService = Depends(_require_memory),
+):
     observations = await svc.observations.list_recent(limit=limit)
     return {
         "observations": [
@@ -159,7 +166,10 @@ async def delete_observation(observation_id: int, svc: MemoryService = Depends(_
 
 
 @router.get("/dreams")
-async def get_dreams(limit: int = 50, svc: MemoryService = Depends(_require_memory)):
+async def get_dreams(
+    limit: int = Query(default=50, ge=1, le=500),
+    svc: MemoryService = Depends(_require_memory),
+):
     dreams = await svc.dreams.list_recent(limit=limit)
     return {
         "dreams": [
