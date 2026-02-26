@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -7,6 +8,9 @@ from ntrp.notifiers.base import Notifier
 from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
+
+NOTIFY_MAX_RETRIES = 3
+NOTIFY_RETRY_DELAY = 2  # seconds
 
 _logger = get_logger(__name__)
 
@@ -51,10 +55,10 @@ class NotifyTool(Tool):
 
         for notifier in self._notifiers:
             try:
-                await notifier.send(subject, body)
+                await self._send_with_retry(notifier, subject, body)
                 sent.append(notifier.channel)
             except Exception:
-                _logger.exception("Notifier %s failed", notifier.channel)
+                _logger.exception("Notifier %s failed after %d attempts", notifier.channel, NOTIFY_MAX_RETRIES)
                 failed.append(notifier.channel)
 
         try:
@@ -72,3 +76,15 @@ class NotifyTool(Tool):
             content=f"Notification sent to: {', '.join(sent)}",
             preview=f"Sent ({len(sent)})",
         )
+
+    @staticmethod
+    async def _send_with_retry(notifier: Notifier, subject: str, body: str) -> None:
+        for attempt in range(NOTIFY_MAX_RETRIES):
+            try:
+                await notifier.send(subject, body)
+                return
+            except Exception:
+                if attempt == NOTIFY_MAX_RETRIES - 1:
+                    raise
+                _logger.warning("Notifier %s attempt %d failed, retrying", notifier.channel, attempt + 1)
+                await asyncio.sleep(NOTIFY_RETRY_DELAY * (attempt + 1))
