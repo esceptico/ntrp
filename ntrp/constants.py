@@ -64,6 +64,12 @@ SNIPPET_TRUNCATE = 120
 URL_TRUNCATE = 60
 
 
+# --- Chat Extraction ---
+
+EXTRACTION_EVERY_N_TURNS = 10  # extract after every N completed runs
+EXTRACTION_CONTEXT_MESSAGES = 10  # preceding messages included for LLM understanding
+
+
 # --- Memory ---
 
 # Decay formula: score = DECAY_RATE ^ (hours / strength)

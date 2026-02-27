@@ -160,7 +160,15 @@ async def _run_headless(prompt: str):
             result = await agent.run(task=prompt, history=None)
             console.print(result)
         finally:
-            runtime.channel.publish(RunCompleted(run_id=run_id, usage=agent.usage, result=result))
+            runtime.channel.publish(
+                RunCompleted(
+                    run_id=run_id,
+                    session_id=session_state.session_id,
+                    messages=tuple(agent.messages),
+                    usage=agent.usage,
+                    result=result,
+                )
+            )
     finally:
         await runtime.close()
 
