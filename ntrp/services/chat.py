@@ -200,7 +200,6 @@ class ChatService:
                 memory=ctx.memory,
                 channel=ctx.channel,
                 run_id=run.run_id,
-                cancel_check=lambda: run.cancelled,
                 io=IOBridge(
                     approval_queue=run.approval_queue,
                 ),

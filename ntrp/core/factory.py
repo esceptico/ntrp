@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from dataclasses import dataclass
 
 from ntrp.channel import Channel
@@ -28,7 +27,6 @@ def create_agent(
     memory: FactMemory | None,
     channel: Channel,
     run_id: str,
-    cancel_check: Callable[[], bool] | None = None,
     io: IOBridge | None = None,
     extra_auto_approve: set[str] | None = None,
 ) -> Agent:
@@ -54,7 +52,6 @@ def create_agent(
         model=config.model,
         max_depth=config.max_depth,
         current_depth=0,
-        cancel_check=cancel_check,
     )
 
     return Agent(
@@ -65,5 +62,4 @@ def create_agent(
         ctx=tool_ctx,
         max_depth=config.max_depth,
         current_depth=0,
-        cancel_check=cancel_check,
     )

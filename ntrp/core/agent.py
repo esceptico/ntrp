@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from ntrp.constants import AGENT_MAX_ITERATIONS
@@ -31,7 +31,6 @@ class Agent:
         current_depth: int = 0,
         parent_id: str | None = None,
         on_state_change: StateCallback | None = None,
-        cancel_check: Callable[[], bool] | None = None,
     ):
         self.tools = tools
         self.executor = tool_executor
@@ -41,7 +40,6 @@ class Agent:
         self.current_depth = current_depth
         self.parent_id = parent_id
         self.on_state_change = on_state_change
-        self.cancel_check = cancel_check
         self.ctx = ctx
 
         self._state = AgentState.IDLE
@@ -58,9 +56,6 @@ class Agent:
             self._state = new_state
             if self.on_state_change:
                 await self.on_state_change(new_state)
-
-    def _is_cancelled(self) -> bool:
-        return self.cancel_check is not None and self.cancel_check()
 
     def _init_messages(self, task: str, history: list[dict] | None) -> None:
         if history:
@@ -125,7 +120,6 @@ class Agent:
             ctx=self.ctx,
             depth=self.current_depth,
             parent_id=self.parent_id,
-            is_cancelled=self._is_cancelled,
         )
 
     async def stream(self, task: str, history: list[dict] | None = None) -> AsyncGenerator[SSEEvent | str]:
@@ -137,69 +131,54 @@ class Agent:
         runner = self._create_tool_runner()
 
         iteration = 0
-        while True:
-            if AGENT_MAX_ITERATIONS is not None and iteration >= AGENT_MAX_ITERATIONS:
-                await self._set_state(AgentState.IDLE)
-                yield f"Stopped: reached max iterations ({AGENT_MAX_ITERATIONS})."
-                return
+        try:
+            while True:
+                if AGENT_MAX_ITERATIONS is not None and iteration >= AGENT_MAX_ITERATIONS:
+                    await self._set_state(AgentState.IDLE)
+                    yield f"Stopped: reached max iterations ({AGENT_MAX_ITERATIONS})."
+                    return
 
-            if self._is_cancelled():
-                await self._set_state(AgentState.IDLE)
-                yield "Cancelled."
-                return
-
-            await self._set_state(AgentState.THINKING)
-            async for event in self._maybe_compact():
-                yield event
-
-            try:
-                response = await self._call_llm()
-            except asyncio.CancelledError:
-                await self._set_state(AgentState.IDLE)
-                yield "Cancelled."
-                return
-            except Exception:
-                _logger.exception("LLM call failed (model=%s)", self.model)
-                await self._set_state(AgentState.IDLE)
-                raise
-
-            message = response.choices[0].message
-            self.messages.append(normalize_assistant_message(message))
-            self._track_usage(response)
-
-            if self._is_cancelled():
-                await self._set_state(AgentState.IDLE)
-                yield "Cancelled."
-                return
-
-            if not message.tool_calls:
-                await self._set_state(AgentState.RESPONDING)
-                await self._set_state(AgentState.IDLE)
-                yield (message.content or "").strip()
-                return
-
-            if text := (message.content or "").strip():
-                yield TextEvent(content=text)
-
-            await self._set_state(AgentState.TOOL_CALL)
-            calls = parse_tool_calls(message.tool_calls)
-
-            results: dict[str, str] = {}
-
-            try:
-                async for event in runner.execute_all(calls):
-                    if isinstance(event, ToolResultEvent):
-                        results[event.tool_id] = event.result
+                await self._set_state(AgentState.THINKING)
+                async for event in self._maybe_compact():
                     yield event
 
-                if self._is_cancelled():
+                try:
+                    response = await self._call_llm()
+                except Exception:
+                    _logger.exception("LLM call failed (model=%s)", self.model)
                     await self._set_state(AgentState.IDLE)
-                    yield "Cancelled."
-                    return
-            finally:
-                self._append_tool_results(message.tool_calls, results)
+                    raise
 
-            iteration += 1
+                message = response.choices[0].message
+                self.messages.append(normalize_assistant_message(message))
+                self._track_usage(response)
+
+                if not message.tool_calls:
+                    await self._set_state(AgentState.RESPONDING)
+                    await self._set_state(AgentState.IDLE)
+                    yield (message.content or "").strip()
+                    return
+
+                if text := (message.content or "").strip():
+                    yield TextEvent(content=text)
+
+                await self._set_state(AgentState.TOOL_CALL)
+                calls = parse_tool_calls(message.tool_calls)
+
+                results: dict[str, str] = {}
+
+                try:
+                    async for event in runner.execute_all(calls):
+                        if isinstance(event, ToolResultEvent):
+                            results[event.tool_id] = event.result
+                        yield event
+                finally:
+                    self._append_tool_results(message.tool_calls, results)
+
+                iteration += 1
+        except asyncio.CancelledError:
+            await self._set_state(AgentState.IDLE)
+            yield "Cancelled."
 
     async def run(self, task: str, history: list[dict] | None = None) -> str:
         result = ""
