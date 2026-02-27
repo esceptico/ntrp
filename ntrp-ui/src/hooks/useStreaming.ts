@@ -221,7 +221,22 @@ export function useStreaming({
         setStatus(Status.IDLE);
         break;
       case "cancelled":
-        setToolChain([]);
+        setToolChain((prev) => {
+          const containers = prev.filter(
+            (item) => (item.name === "explore" || item.name === "delegate") && prev.some((c) => c.parentId === item.id)
+          );
+          for (const container of containers) {
+            const childCount = prev.filter((c) => c.parentId === container.id).length;
+            addMessage({
+              role: "tool",
+              content: "Cancelled",
+              toolName: container.name,
+              toolDescription: container.description,
+              toolCount: childCount,
+            });
+          }
+          return [];
+        });
         setStatus(Status.IDLE);
         setIsStreaming(false);
         break;
