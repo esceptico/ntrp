@@ -1,5 +1,3 @@
-import os
-
 from ntrp.llm.anthropic import AnthropicClient
 from ntrp.llm.base import CompletionClient, EmbeddingClient
 from ntrp.llm.gemini import GeminiClient
@@ -17,12 +15,13 @@ def init(config) -> None:
     _api_keys[Provider.ANTHROPIC] = config.anthropic_api_key
     _api_keys[Provider.OPENAI] = config.openai_api_key
     _api_keys[Provider.GOOGLE] = config.gemini_api_key
+    # pydantic-settings lowercases all dotenv keys when case_sensitive=False (default)
     for model in get_models().values():
         if model.provider == Provider.CUSTOM and model.api_key_env:
-            _api_keys[model.id] = os.environ.get(model.api_key_env)
+            _api_keys[model.id] = config.model_extra.get(model.api_key_env.lower())
     for model in get_embedding_models().values():
         if model.provider == Provider.CUSTOM and model.api_key_env:
-            _api_keys[model.id] = os.environ.get(model.api_key_env)
+            _api_keys[model.id] = config.model_extra.get(model.api_key_env.lower())
 
 
 def get_completion_client(model_id: str) -> CompletionClient:
