@@ -229,6 +229,7 @@ class ChatService:
             _logger.exception("Chat stream failed (run_id=%s, session_id=%s)", run.run_id, session_state.session_id)
             yield ErrorEvent(message=str(e), recoverable=False).to_sse_string()
             run.status = RunStatus.ERROR
+            ctx.run_registry.cleanup_old_runs()
 
         finally:
             if agent:

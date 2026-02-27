@@ -1,6 +1,6 @@
 import asyncio
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 import ntrp.database as database
 from ntrp.automation.scheduler import Scheduler
@@ -212,6 +212,7 @@ class Runtime:
         await self.indexer.stop()
         await self.indexer.close()
         await llm_close()
+        await self.channel.stop()
 
     # --- Queries ---
 
@@ -296,5 +297,5 @@ class Runtime:
 def get_runtime(request: Request) -> Runtime:
     runtime: Runtime | None = getattr(request.app.state, "runtime", None)
     if runtime is None or not runtime.connected:
-        raise RuntimeError("Runtime not initialized")
+        raise HTTPException(status_code=503, detail="Server is initializing")
     return runtime
