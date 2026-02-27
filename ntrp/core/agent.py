@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
@@ -153,6 +154,10 @@ class Agent:
 
             try:
                 response = await self._call_llm()
+            except asyncio.CancelledError:
+                await self._set_state(AgentState.IDLE)
+                yield "Cancelled."
+                return
             except Exception:
                 _logger.exception("LLM call failed (model=%s)", self.model)
                 await self._set_state(AgentState.IDLE)
