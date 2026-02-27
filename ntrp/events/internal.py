@@ -14,6 +14,8 @@ class RunStarted:
 @dataclass(frozen=True)
 class RunCompleted:
     run_id: str
+    session_id: str
+    messages: tuple[dict, ...]
     usage: Usage
     result: str | None
 

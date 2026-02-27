@@ -97,6 +97,14 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
     try:
         output = await agent.run(request.prompt)
     finally:
-        deps.channel.publish(RunCompleted(run_id=run_id, usage=agent.usage, result=output))
+        deps.channel.publish(
+            RunCompleted(
+                run_id=run_id,
+                session_id=session_state.session_id,
+                messages=tuple(agent.messages),
+                usage=agent.usage,
+                result=output,
+            )
+        )
 
     return RunResult(run_id=run_id, output=output, usage=agent.usage)

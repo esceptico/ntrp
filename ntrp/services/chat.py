@@ -241,6 +241,8 @@ class ChatService:
             ctx.channel.publish(
                 RunCompleted(
                     run_id=run.run_id,
+                    session_id=session_state.session_id,
+                    messages=tuple(run.messages),
                     usage=run.usage,
                     result=result,
                 )
