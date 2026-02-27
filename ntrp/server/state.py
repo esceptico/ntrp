@@ -58,6 +58,7 @@ class RunRegistry:
             run.cancelled = True
             run.status = RunStatus.CANCELLED
             run.updated_at = datetime.now(UTC)
+        self.cleanup_old_runs()
 
     def cleanup_old_runs(self, max_age_hours: int = 24) -> int:
         now = datetime.now(UTC)

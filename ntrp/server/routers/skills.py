@@ -1,14 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from ntrp.server.runtime import get_runtime
+from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import InstallRequest
 from ntrp.skills.service import SkillService
 
 router = APIRouter(tags=["skills"])
 
 
-def _require_skill_service() -> SkillService:
-    runtime = get_runtime()
+def _require_skill_service(runtime: Runtime = Depends(get_runtime)) -> SkillService:
     if not runtime.skill_service:
         raise HTTPException(status_code=503, detail="Skill service not available")
     return runtime.skill_service

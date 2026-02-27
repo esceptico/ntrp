@@ -2,6 +2,7 @@ import json
 from typing import Literal
 
 from pydantic import BaseModel
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
 from ntrp.constants import (
     CONSOLIDATION_SEARCH_LIMIT,
@@ -78,23 +79,30 @@ async def _llm_consolidation_decisions(
     )
 
     try:
-        client = get_completion_client(model)
-        response = await client.completion(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            response_format=ConsolidationResponse,
-            temperature=CONSOLIDATION_TEMPERATURE,
-        )
-        content = response.choices[0].message.content
-        if not content:
-            return []
-
-        parsed = ConsolidationResponse.model_validate_json(content)
-        return parsed.actions
-
+        return await _call_consolidation_llm(prompt, model)
     except Exception as e:
-        _logger.warning("Consolidation LLM failed: %s", e)
+        _logger.warning("Consolidation LLM failed after retries: %s", e)
         return []
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=3, min=3, max=15),
+    before_sleep=before_sleep_log(_logger, "WARNING"),
+    reraise=True,
+)
+async def _call_consolidation_llm(prompt: str, model: str) -> list[ConsolidationAction]:
+    client = get_completion_client(model)
+    response = await client.completion(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        response_format=ConsolidationResponse,
+        temperature=CONSOLIDATION_TEMPERATURE,
+    )
+    content = response.choices[0].message.content
+    if not content:
+        return []
+    return ConsolidationResponse.model_validate_json(content).actions
 
 
 async def _execute_action(

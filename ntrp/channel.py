@@ -70,6 +70,13 @@ class Channel:
             task.add_done_callback(self._workers.discard)
         return True
 
+    async def stop(self) -> None:
+        for task in list(self._workers):
+            task.cancel()
+        if self._workers:
+            await asyncio.gather(*self._workers, return_exceptions=True)
+        self._workers.clear()
+
     async def _worker_loop(self) -> None:
         while True:
             handler, event = await self._queue.get()

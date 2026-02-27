@@ -11,7 +11,6 @@ _PARSE_MODE = "MarkdownV2"
 
 
 async def _send(session: aiohttp.ClientSession, content: str, token: str, chat_id: str):
-
     parts = await telegramify(content, interpreters_use=[TextInterpreter()], max_word_count=_MAX_WORD_COUNT)
     chunks = [p.content for p in parts if p.content]  # text interpreter only returns text parts
 

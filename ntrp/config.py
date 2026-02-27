@@ -14,18 +14,33 @@ SETTINGS_PATH = NTRP_DIR / "settings.json"
 _logger = get_logger(__name__)
 
 
+SETTINGS_BACKUP_PATH = NTRP_DIR / "settings.json.bak"
+
+
 def load_user_settings() -> dict:
     if not SETTINGS_PATH.exists():
         return {}
     try:
         return json.loads(SETTINGS_PATH.read_text())
     except (json.JSONDecodeError, OSError):
-        _logger.warning("Failed to load user settings", exc_info=True)
+        _logger.warning("Failed to load user settings, trying backup", exc_info=True)
+        if SETTINGS_BACKUP_PATH.exists():
+            try:
+                data = json.loads(SETTINGS_BACKUP_PATH.read_text())
+                _logger.info("Restored settings from backup")
+                return data
+            except (json.JSONDecodeError, OSError):
+                _logger.warning("Backup settings also corrupted")
         return {}
 
 
 def save_user_settings(settings: dict) -> None:
     NTRP_DIR.mkdir(exist_ok=True)
+    if SETTINGS_PATH.exists():
+        try:
+            SETTINGS_PATH.replace(SETTINGS_BACKUP_PATH)
+        except OSError:
+            pass
     SETTINGS_PATH.write_text(json.dumps(settings, indent=2))
 
 

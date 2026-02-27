@@ -1,6 +1,7 @@
 import asyncio
+import contextlib
 import json
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from ntrp.constants import OFFLOAD_PREVIEW_CHARS, OFFLOAD_THRESHOLD
@@ -26,13 +27,11 @@ class ToolRunner:
         ctx: ToolContext,
         depth: int,
         parent_id: str | None,
-        is_cancelled: Callable[[], bool],
     ):
         self.executor = executor
         self.ctx = ctx
         self.depth = depth
         self.parent_id = parent_id or "root"
-        self.is_cancelled = is_cancelled
         self._offload_counter = 0
 
     def _maybe_offload(self, tool_name: str, result: ToolResult) -> ToolResult:
@@ -187,19 +186,23 @@ class ToolRunner:
             finally:
                 results_queue.finish()
 
-        asyncio.create_task(run_all())
+        task = asyncio.create_task(run_all())
 
-        async for r in results_queue:
-            yield await self._make_result_event(
-                call=r.call,
-                result=ToolResult(content=r.content, preview=r.preview, is_error=r.is_error, data=r.data),
-                duration_ms=r.duration_ms,
-            )
+        try:
+            async for r in results_queue:
+                yield await self._make_result_event(
+                    call=r.call,
+                    result=ToolResult(content=r.content, preview=r.preview, is_error=r.is_error, data=r.data),
+                    duration_ms=r.duration_ms,
+                )
+        finally:
+            if not task.done():
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
 
     async def _execute_sequential(self, calls: list[PendingToolCall]) -> AsyncGenerator[SSEEvent]:
         for call in calls:
-            if self.is_cancelled():
-                return
             async for event in self._execute_single(call):
                 yield event
 

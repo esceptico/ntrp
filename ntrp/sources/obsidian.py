@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from collections.abc import Iterator
 from datetime import datetime
@@ -6,6 +7,8 @@ from pathlib import Path
 
 from ntrp.sources.base import NotesSource, Source
 from ntrp.sources.models import RawItem
+
+_logger = logging.getLogger(__name__)
 
 
 def _walk_markdown_files(root_path: Path) -> Iterator[tuple[Path, str]]:
@@ -22,9 +25,15 @@ class ObsidianSource(Source, NotesSource):
     name = "notes"
 
     def __init__(self, vault_path: Path):
-        self.vault_path = vault_path
+        self.vault_path = vault_path.resolve()
         if not self.vault_path.exists():
             raise ValueError(f"Vault path does not exist: {self.vault_path}")
+
+    def _safe_path(self, relative_path: str) -> Path:
+        resolved = (self.vault_path / relative_path).resolve()
+        if not resolved.is_relative_to(self.vault_path):
+            raise ValueError(f"Path escapes vault: {relative_path}")
+        return resolved
 
     @property
     def details(self) -> dict:
@@ -72,11 +81,11 @@ class ObsidianSource(Source, NotesSource):
                 },
             )
         except Exception as e:
-            print(f"Warning: Could not read {filepath}: {e}")
+            _logger.warning("Could not read %s: %s", filepath, e)
             return None
 
     def read(self, source_id: str) -> str | None:
-        filepath = self.vault_path / source_id
+        filepath = self._safe_path(source_id)
         if not filepath.exists():
             return None
         try:
@@ -109,13 +118,13 @@ class ObsidianSource(Source, NotesSource):
         return result
 
     def scan_item(self, source_id: str) -> RawItem | None:
-        filepath = self.vault_path / source_id
+        filepath = self._safe_path(source_id)
         if not filepath.exists():
             return None
         return self._read_file(filepath, source_id)
 
     def write(self, relative_path: str, content: str) -> bool:
-        filepath = self.vault_path / relative_path
+        filepath = self._safe_path(relative_path)
         try:
             filepath.parent.mkdir(parents=True, exist_ok=True)
             filepath.write_text(content, encoding="utf-8")
@@ -124,10 +133,13 @@ class ObsidianSource(Source, NotesSource):
             return False
 
     def exists(self, relative_path: str) -> bool:
-        return (self.vault_path / relative_path).exists()
+        try:
+            return self._safe_path(relative_path).exists()
+        except ValueError:
+            return False
 
     def delete(self, relative_path: str) -> bool:
-        filepath = self.vault_path / relative_path
+        filepath = self._safe_path(relative_path)
         try:
             if filepath.exists():
                 filepath.unlink()
@@ -137,8 +149,8 @@ class ObsidianSource(Source, NotesSource):
             return False
 
     def move(self, source_path: str, dest_path: str) -> bool:
-        source = self.vault_path / source_path
-        dest = self.vault_path / dest_path
+        source = self._safe_path(source_path)
+        dest = self._safe_path(dest_path)
         try:
             if not source.exists():
                 return False

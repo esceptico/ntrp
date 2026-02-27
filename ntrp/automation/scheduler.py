@@ -77,14 +77,16 @@ class Scheduler:
 
         now = datetime.now(UTC)
         for automation in await self.store.list_due(now):
+            missed_at = automation.next_run_at
             next_run = self._advance_to_future(automation, now)
             if not next_run:
                 continue
             await self.store.set_next_run(automation.task_id, next_run)
             _logger.warning(
-                "Skipped missed run of automation %s, advanced to %s",
+                "Missed run of automation %s (was due %s), advanced to %s",
                 automation.task_id,
-                next_run,
+                missed_at.isoformat() if missed_at else "unknown",
+                next_run.isoformat(),
             )
 
         await self._drain_event_backlog()

@@ -1,6 +1,7 @@
 from typing import Any
 
 from pydantic import BaseModel, Field
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
 from ntrp.logging import get_logger
 from ntrp.notifiers.base import Notifier
@@ -19,6 +20,16 @@ NOTIFY_DESCRIPTION = (
 class NotifyInput(BaseModel):
     subject: str = Field(description="Short notification subject/title")
     body: str = Field(description="Notification body — concise, informative")
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=2, max=10),
+    before_sleep=before_sleep_log(_logger, "WARNING"),
+    reraise=True,
+)
+async def _send_with_retry(notifier: Notifier, subject: str, body: str) -> None:
+    await notifier.send(subject, body)
 
 
 class NotifyTool(Tool):
@@ -51,10 +62,10 @@ class NotifyTool(Tool):
 
         for notifier in self._notifiers:
             try:
-                await notifier.send(subject, body)
+                await _send_with_retry(notifier, subject, body)
                 sent.append(notifier.channel)
             except Exception:
-                _logger.exception("Notifier %s failed", notifier.channel)
+                _logger.exception("Notifier %s failed after retries", notifier.channel)
                 failed.append(notifier.channel)
 
         try:

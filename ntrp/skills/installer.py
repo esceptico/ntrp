@@ -7,6 +7,8 @@ from ntrp.logging import get_logger
 _logger = get_logger(__name__)
 
 GITHUB_API = "https://api.github.com"
+MAX_DIR_DEPTH = 5
+MAX_FILE_SIZE = 512 * 1024  # 512 KB
 
 
 async def install_from_github(source: str, target_dir: Path) -> str:
@@ -48,7 +50,11 @@ async def _download_dir(
     repo: str,
     path: str,
     target: Path,
+    _depth: int = 0,
 ) -> None:
+    if _depth > MAX_DIR_DEPTH:
+        raise ValueError(f"Skill directory too deeply nested (max {MAX_DIR_DEPTH} levels)")
+
     url = f"{GITHUB_API}/repos/{owner}/{repo}/contents/{path}"
     resp = await client.get(url, headers={"Accept": "application/vnd.github.v3+json"})
     resp.raise_for_status()
@@ -57,12 +63,24 @@ async def _download_dir(
     target.mkdir(parents=True, exist_ok=True)
 
     for item in items:
+        name = item["name"]
+        if "/" in name or name in (".", ".."):
+            raise ValueError(f"Invalid filename from GitHub API: {name}")
+
+        dest = (target / name).resolve()
+        if not dest.is_relative_to(target.resolve()):
+            raise ValueError(f"Path escapes skill directory: {name}")
+
         if item["type"] == "file":
+            size = item.get("size", 0)
+            if size > MAX_FILE_SIZE:
+                _logger.warning("Skipping oversized file %s (%d bytes)", name, size)
+                continue
             file_resp = await client.get(item["download_url"])
             file_resp.raise_for_status()
-            (target / item["name"]).write_bytes(file_resp.content)
+            dest.write_bytes(file_resp.content)
         elif item["type"] == "dir":
-            await _download_dir(client, owner, repo, f"{path}/{item['name']}", target / item["name"])
+            await _download_dir(client, owner, repo, f"{path}/{name}", target / name, _depth + 1)
 
 
 def _cleanup(path: Path) -> None:

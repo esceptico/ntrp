@@ -29,6 +29,8 @@ async def run_agent_loop(ctx: "ChatContext", agent):
                     result = item
                 elif isinstance(item, SSEEvent):
                     await queue.put(item)
+        except asyncio.CancelledError:
+            result = "Cancelled."
         finally:
             await queue.put(None)
         return result
@@ -38,6 +40,9 @@ async def run_agent_loop(ctx: "ChatContext", agent):
     try:
         while True:
             if ctx.run.cancelled:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
                 yield CancelledEvent(run_id=ctx.run.run_id).to_sse_string()
                 return
 

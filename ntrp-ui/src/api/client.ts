@@ -97,12 +97,12 @@ export async function getHistory(config: Config, sessionId?: string): Promise<{ 
   return api.get(`${config.serverUrl}/session/history${params}`);
 }
 
-export async function checkHealth(config: Config): Promise<boolean> {
+export async function checkHealth(config: Config): Promise<{ ok: boolean; version: string | null }> {
   try {
-    await api.get(`${config.serverUrl}/health`);
-    return true;
+    const res = await api.get<{ status: string; version?: string }>(`${config.serverUrl}/health`);
+    return { ok: true, version: res.version ?? null };
   } catch {
-    return false;
+    return { ok: false, version: null };
   }
 }
 

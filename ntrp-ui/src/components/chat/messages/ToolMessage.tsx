@@ -14,12 +14,14 @@ interface DelegateMessageProps {
   description?: string;
   toolCount?: number;
   duration?: number;
+  cancelled?: boolean;
 }
 
 const DelegateMessage = memo(function DelegateMessage({
   description,
   toolCount,
   duration,
+  cancelled,
 }: DelegateMessageProps) {
   useThemeVersion();
   const { width: terminalWidth } = useDimensions();
@@ -30,6 +32,7 @@ const DelegateMessage = memo(function DelegateMessage({
   const descText = description || "delegate";
   const contentWidth = Math.max(0, terminalWidth - 7);
   const descWidth = Math.max(0, contentWidth - 2 - stats.length);
+  const statusLabel = cancelled ? "Cancelled" : "Done";
 
   return (
     <box flexDirection="column" overflow="hidden" paddingLeft={3}>
@@ -38,7 +41,7 @@ const DelegateMessage = memo(function DelegateMessage({
         <span fg={colors.text.muted}>{truncateText(descText, descWidth)}</span>
         {stats && <span fg={colors.text.disabled}>{stats}</span>}
       </text>
-      <text><span fg={colors.text.disabled}>{"  "} Done</span></text>
+      <text><span fg={colors.text.disabled}>{"  "} {statusLabel}</span></text>
     </box>
   );
 });
@@ -73,6 +76,7 @@ export const ToolMessage = memo(function ToolMessage({
         description={description}
         toolCount={toolCount}
         duration={duration}
+        cancelled={content === "Cancelled"}
       />
     );
   }

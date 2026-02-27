@@ -141,7 +141,6 @@ async def _run_headless(prompt: str):
             model=runtime.config.chat_model,
             max_depth=runtime.config.max_depth,
             current_depth=0,
-            cancel_check=None,
         )
 
         agent = Agent(
@@ -152,7 +151,6 @@ async def _run_headless(prompt: str):
             ctx=tool_ctx,
             max_depth=runtime.config.max_depth,
             current_depth=0,
-            cancel_check=None,
         )
 
         console.print(f"[dim]Running: {prompt}[/dim]\n")

@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=100_000)
     skip_approvals: bool = False
     session_id: str | None = None
 

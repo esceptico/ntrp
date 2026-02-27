@@ -1,12 +1,12 @@
 import secrets
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
 from ntrp.events.triggers import NewEmail
 from ntrp.logging import get_logger
-from ntrp.server.runtime import get_runtime
+from ntrp.server.runtime import Runtime, get_runtime
 
 _logger = get_logger(__name__)
 
@@ -24,11 +24,11 @@ class EmailWebhookPayload(BaseModel):
 @router.post("/email")
 async def email_webhook(
     payload: EmailWebhookPayload,
+    runtime: Runtime = Depends(get_runtime),
     authorization: str | None = Header(default=None),
     webhook_token: str | None = Header(default=None, alias="X-Webhook-Token"),
 ):
     """Receive new-email notifications from an external webhook service."""
-    runtime = get_runtime()
     expected_token = runtime.config.webhook_token or runtime.config.api_key
     has_valid_header = bool(webhook_token) and secrets.compare_digest(webhook_token, expected_token)
     has_valid_bearer = authorization == f"Bearer {expected_token}"

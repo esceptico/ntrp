@@ -96,27 +96,36 @@ def _advance_to_days(candidate: datetime, target_days: frozenset[int]) -> dateti
 
 
 def compute_next_schedule(at: str, days: str, after: datetime) -> datetime:
-    after_local = after.astimezone()
+    local_tz = after.astimezone().tzinfo
+    after_local = after.astimezone(local_tz)
     schedule_time = time.fromisoformat(at)
-    candidate = after_local.replace(
+
+    # Build candidate in naive local, then localize to handle DST gaps/overlaps
+    candidate_naive = after_local.replace(
         hour=schedule_time.hour,
         minute=schedule_time.minute,
         second=0,
         microsecond=0,
+        tzinfo=None,
     )
 
-    if candidate <= after_local:
-        candidate += timedelta(days=1)
+    if candidate_naive <= after_local.replace(tzinfo=None):
+        candidate_naive += timedelta(days=1)
 
     if days == "weekly":
-        # Legacy: repeat on the same weekday as "after".
         target_weekday = after_local.weekday()
-        days_ahead = (target_weekday - candidate.weekday()) % DAYS_IN_WEEK
+        days_ahead = (target_weekday - candidate_naive.weekday()) % DAYS_IN_WEEK
         if days_ahead:
-            candidate += timedelta(days=days_ahead)
+            candidate_naive += timedelta(days=days_ahead)
     else:
-        candidate = _advance_to_days(candidate, resolve_days(days))
+        # _advance_to_days works on naive datetimes too
+        candidate_tz = candidate_naive.replace(tzinfo=local_tz)
+        candidate_tz = _advance_to_days(candidate_tz, resolve_days(days))
+        candidate_naive = candidate_tz.replace(tzinfo=None)
 
+    # fold=0 picks the first occurrence during fall-back overlap;
+    # for spring-forward gaps, Python adjusts to valid time automatically
+    candidate = candidate_naive.replace(tzinfo=local_tz, fold=0)
     return candidate.astimezone(UTC)
 
 

@@ -16,6 +16,7 @@ interface UsageData {
 
 interface SidebarProps {
   serverConfig: ServerConfig | null;
+  serverVersion: string | null;
   data: SidebarData;
   usage: UsageData;
   width: number;
@@ -161,7 +162,7 @@ function SessionRow({ session, isCurrent, width }: { session: { session_id: stri
   );
 }
 
-export function Sidebar({ serverConfig, data, usage, width, height, currentSessionId, currentSessionName }: SidebarProps) {
+export function Sidebar({ serverConfig, serverVersion, data, usage, width, height, currentSessionId, currentSessionName }: SidebarProps) {
   const { accentValue } = useAccentColor();
   const contentWidth = width - 2; // padding
 
@@ -179,7 +180,7 @@ export function Sidebar({ serverConfig, data, usage, width, height, currentSessi
       {/* Title */}
       <text>
         <span fg={accentValue}>ntrp</span>
-        <span fg={D}> v0.1.0</span>
+        {serverVersion && <span fg={D}> v{serverVersion}</span>}
       </text>
 
       {/* Models */}

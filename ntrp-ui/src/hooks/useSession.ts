@@ -25,6 +25,7 @@ export function useSession(config: Config) {
   const [sources, setSources] = useState<string[]>([]);
   const [skipApprovals, setSkipApprovals] = useState(false);
   const [serverConnected, setServerConnected] = useState(false);
+  const [serverVersion, setServerVersion] = useState<string | null>(null);
   const [serverConfig, setServerConfig] = useState<ServerConfig | null>(null);
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
   const [history, setHistory] = useState<HistoryMessage[]>([]);
@@ -34,20 +35,22 @@ export function useSession(config: Config) {
     if (initRef.current) return;
     initRef.current = true;
 
-    async function waitForServer(maxAttempts = 30, intervalMs = 1000): Promise<boolean> {
+    async function waitForServer(maxAttempts = 30, intervalMs = 1000): Promise<{ ok: boolean; version: string | null }> {
       for (let i = 0; i < maxAttempts; i++) {
-        if (await checkHealth(config)) return true;
+        const health = await checkHealth(config);
+        if (health.ok) return health;
         await new Promise((r) => setTimeout(r, intervalMs));
       }
-      return false;
+      return { ok: false, version: null };
     }
 
     async function init() {
       try {
-        const healthy = await waitForServer();
-        setServerConnected(healthy);
+        const health = await waitForServer();
+        setServerConnected(health.ok);
+        setServerVersion(health.version);
 
-        if (healthy) {
+        if (health.ok) {
           const [session, configData, idxStatus, historyData] = await Promise.all([
             getSession(config),
             getServerConfig(config),
@@ -160,6 +163,7 @@ export function useSession(config: Config) {
     sources,
     skipApprovals,
     serverConnected,
+    serverVersion,
     serverConfig,
     indexStatus,
     history,
