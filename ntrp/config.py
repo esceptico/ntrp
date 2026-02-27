@@ -49,7 +49,7 @@ class Config(BaseSettings):
         env_prefix="NTRP_",
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore",
+        extra="allow",
         validate_assignment=True,
         populate_by_name=True,
     )
@@ -58,7 +58,6 @@ class Config(BaseSettings):
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
-    openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
 
     # Model IDs (must match entries in llm/models.py DEFAULTS or user config)
     chat_model: str
