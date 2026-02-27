@@ -1,6 +1,5 @@
 """Tests for per-turn memory extraction via RunCompleted events."""
 
-import asyncio
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -8,18 +7,17 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 
+import ntrp.config
+import ntrp.llm.models as llm_models
 from ntrp.channel import Channel
-from ntrp.constants import EXTRACTION_CONTEXT_MESSAGES, EXTRACTION_EVERY_N_TURNS
+from ntrp.config import Config
+from ntrp.constants import EXTRACTION_EVERY_N_TURNS
 from ntrp.events.internal import RunCompleted
+from ntrp.llm.models import EmbeddingModel, Provider
+from ntrp.memory.facts import FactMemory
 from ntrp.memory.service import MemoryService
 from ntrp.usage import Usage
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
-
-import ntrp.config
-import ntrp.llm.models as llm_models
-from ntrp.config import Config
-from ntrp.llm.models import EmbeddingModel, Provider
-from ntrp.memory.facts import FactMemory
 
 
 async def _mock_embed_one(text: str):
@@ -85,7 +83,7 @@ class TestExtractionTurnCounter:
 
         mock_extract = AsyncMock(return_value=["User likes Python"])
         with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            for i in range(EXTRACTION_EVERY_N_TURNS - 1):
+            for _i in range(EXTRACTION_EVERY_N_TURNS - 1):
                 event = _make_event("sess-1", _make_messages(4))
                 await svc._on_run_completed(event)
 
@@ -98,7 +96,7 @@ class TestExtractionTurnCounter:
 
         mock_extract = AsyncMock(return_value=["User likes Python"])
         with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            for i in range(EXTRACTION_EVERY_N_TURNS):
+            for _i in range(EXTRACTION_EVERY_N_TURNS):
                 event = _make_event("sess-1", _make_messages(4))
                 await svc._on_run_completed(event)
 
@@ -111,7 +109,7 @@ class TestExtractionTurnCounter:
 
         mock_extract = AsyncMock(return_value=[])
         with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            for i in range(EXTRACTION_EVERY_N_TURNS * 3):
+            for _i in range(EXTRACTION_EVERY_N_TURNS * 3):
                 event = _make_event("sess-1", _make_messages(4))
                 await svc._on_run_completed(event)
 
@@ -130,14 +128,14 @@ class TestExtractionCursor:
         with patch("ntrp.memory.service.extract_from_chat", mock_extract):
             # First batch: 10 messages
             msgs1 = _make_messages(10)
-            for i in range(EXTRACTION_EVERY_N_TURNS):
+            for _i in range(EXTRACTION_EVERY_N_TURNS):
                 await svc._on_run_completed(_make_event("sess-1", msgs1))
 
             assert svc._cursors["sess-1"] == 10
 
             # Second batch: 20 messages (10 old + 10 new)
             msgs2 = _make_messages(20)
-            for i in range(EXTRACTION_EVERY_N_TURNS):
+            for _i in range(EXTRACTION_EVERY_N_TURNS):
                 await svc._on_run_completed(_make_event("sess-1", msgs2))
 
             assert svc._cursors["sess-1"] == 20
@@ -157,14 +155,14 @@ class TestExtractionCursor:
         with patch("ntrp.memory.service.extract_from_chat", mock_extract):
             # First batch: 30 messages
             msgs1 = _make_messages(30)
-            for i in range(EXTRACTION_EVERY_N_TURNS):
+            for _i in range(EXTRACTION_EVERY_N_TURNS):
                 await svc._on_run_completed(_make_event("sess-1", msgs1))
 
             assert svc._cursors["sess-1"] == 30
 
             # Second batch: 50 messages (30 old + 20 new)
             msgs2 = _make_messages(50)
-            for i in range(EXTRACTION_EVERY_N_TURNS):
+            for _i in range(EXTRACTION_EVERY_N_TURNS):
                 await svc._on_run_completed(_make_event("sess-1", msgs2))
 
             # context_start = max(0, 30 - 10) = 20
@@ -183,7 +181,7 @@ class TestExtractionSkips:
 
         mock_extract = AsyncMock(return_value=[])
         with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            for i in range(EXTRACTION_EVERY_N_TURNS):
+            for _i in range(EXTRACTION_EVERY_N_TURNS):
                 event = RunCompleted(
                     run_id="run-1",
                     session_id="sess-1",
@@ -204,7 +202,7 @@ class TestExtractionSkips:
 
         mock_extract = AsyncMock(return_value=[])
         with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            for i in range(EXTRACTION_EVERY_N_TURNS):
+            for _i in range(EXTRACTION_EVERY_N_TURNS):
                 event = _make_event("sess-1", ())
                 await svc._on_run_completed(event)
 
@@ -221,7 +219,7 @@ class TestExtractionRemember:
 
         mock_extract = AsyncMock(return_value=["User prefers dark mode", "User works at Acme"])
         with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            for i in range(EXTRACTION_EVERY_N_TURNS):
+            for _i in range(EXTRACTION_EVERY_N_TURNS):
                 event = _make_event("sess-1", _make_messages(6))
                 await svc._on_run_completed(event)
 
@@ -238,7 +236,7 @@ class TestExtractionRemember:
         mock_extract = AsyncMock(return_value=[])
         with patch("ntrp.memory.service.extract_from_chat", mock_extract):
             # Interleave two sessions, each below threshold
-            for i in range(EXTRACTION_EVERY_N_TURNS - 1):
+            for _i in range(EXTRACTION_EVERY_N_TURNS - 1):
                 await svc._on_run_completed(_make_event("sess-1", _make_messages(4)))
                 await svc._on_run_completed(_make_event("sess-2", _make_messages(4)))
 
