@@ -113,7 +113,9 @@ async def get_session(
 
 
 @router.post("/session/clear")
-async def clear_session(svc: SessionService = Depends(_require_session_service), req: ClearSessionRequest | None = None):
+async def clear_session(
+    svc: SessionService = Depends(_require_session_service), req: ClearSessionRequest | None = None
+):
     target_id = req.session_id if req else None
 
     data = await svc.load(target_id)
@@ -133,7 +135,9 @@ async def clear_session(svc: SessionService = Depends(_require_session_service),
 
 
 @router.post("/sessions")
-async def create_session(svc: SessionService = Depends(_require_session_service), req: CreateSessionRequest | None = None):
+async def create_session(
+    svc: SessionService = Depends(_require_session_service), req: CreateSessionRequest | None = None
+):
     name = req.name if req else None
     state = svc.create(name=name)
     await svc.save(state, [])
@@ -153,7 +157,9 @@ async def list_sessions(svc: SessionService = Depends(_require_session_service))
 
 
 @router.patch("/sessions/{session_id}")
-async def rename_session(session_id: str, req: RenameSessionRequest, svc: SessionService = Depends(_require_session_service)):
+async def rename_session(
+    session_id: str, req: RenameSessionRequest, svc: SessionService = Depends(_require_session_service)
+):
     updated = await svc.rename(session_id, req.name)
     if not updated:
         raise HTTPException(status_code=404, detail="Session not found")

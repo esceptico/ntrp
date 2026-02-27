@@ -2,7 +2,7 @@ import json
 from typing import Literal
 
 from pydantic import BaseModel
-from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
 from ntrp.constants import (
     CONSOLIDATION_SEARCH_LIMIT,

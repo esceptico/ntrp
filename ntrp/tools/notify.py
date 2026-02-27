@@ -1,7 +1,7 @@
 from typing import Any
 
 from pydantic import BaseModel, Field
-from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
 from ntrp.logging import get_logger
 from ntrp.notifiers.base import Notifier
