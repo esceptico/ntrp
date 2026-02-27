@@ -32,6 +32,7 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
     test_config = Config(
         vault_path=tmp_path / "vault",
         openai_api_key="test-key",
+        api_key="test-api-key",
         memory=True,
         embedding_model="test-embedding",
         memory_model="gemini-3-flash-preview",
@@ -70,7 +71,8 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
 @pytest_asyncio.fixture
 async def test_client(test_runtime: Runtime) -> AsyncGenerator[AsyncClient]:
     """HTTP client for API testing"""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    headers = {"authorization": f"Bearer {test_runtime.config.api_key}"}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=headers) as client:
         yield client
 
 
@@ -299,6 +301,7 @@ class TestMemoryDisabled:
         test_config = Config(
             vault_path=tmp_path / "vault",
             openai_api_key="test-key",
+            api_key="test-api-key",
             memory=False,
             chat_model="gemini-3-flash-preview",
             memory_model="gemini-3-flash-preview",
@@ -312,7 +315,8 @@ class TestMemoryDisabled:
         await runtime.connect()
         app.state.runtime = runtime
 
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        headers = {"authorization": f"Bearer {runtime.config.api_key}"}
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=headers) as client:
             responses = await asyncio.gather(
                 client.patch("/facts/1", json={"text": "test"}),
                 client.delete("/facts/1"),
