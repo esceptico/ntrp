@@ -1,12 +1,16 @@
 from typing import TYPE_CHECKING
 
+from ntrp.logging import get_logger
 from ntrp.tools.core.base import ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
+from ntrp.tools.discover import discover_user_tools
 from ntrp.tools.specs import ALL_TOOLS
 
 if TYPE_CHECKING:
     from ntrp.server.runtime import Runtime
+
+_logger = get_logger(__name__)
 
 
 class ToolExecutor:
@@ -15,6 +19,12 @@ class ToolExecutor:
         self.registry = ToolRegistry()
         for cls in ALL_TOOLS:
             self.registry.register(cls())
+        for cls in discover_user_tools():
+            if cls.name in self.registry:
+                _logger.warning("User tool %r skipped — conflicts with built-in", cls.name)
+            else:
+                self.registry.register(cls())
+                _logger.info("Loaded user tool: %s", cls.name)
 
     def with_registry(self, registry: ToolRegistry) -> "ToolExecutor":
         clone = ToolExecutor.__new__(ToolExecutor)
