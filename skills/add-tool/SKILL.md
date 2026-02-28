@@ -7,7 +7,7 @@ description: Create a custom user tool in ~/.ntrp/tools/ — auto-discovered at 
 
 Help the user create a custom tool. User tools live in `~/.ntrp/tools/` as Python files and are auto-discovered at startup.
 
-**Important**: Use `bash` to create directories and copy files. Use `read_file` to read and verify. Do not generate tool code from scratch — start from the scaffold.
+**Important**: Use `bash` to run scripts and apply edits. Use `read_file` to read and verify. Do not generate tool code from scratch — start from the scaffold.
 
 ## Step 1: Gather requirements
 
@@ -17,17 +17,15 @@ Ask the user:
 3. Does it modify external state? (if yes → `mutates = True`, needs approval flow)
 4. Does it need an existing source or service? (see available services below)
 
-## Step 2: Copy the scaffold
+## Step 2: Scaffold the tool file
 
-The scaffold template is at `<skill_path>/assets/scaffold.py` (where `<skill_path>` is the `path` attribute from the `<skill>` tag above).
-
-1. Use `read_file` to read the scaffold
-2. Use `bash` to create the target directory and copy:
+Run the scaffold script (path is relative to the `path` attribute from the `<skill>` tag above):
 
 ```bash
-mkdir -p ~/.ntrp/tools
-cp <skill_path>/assets/scaffold.py ~/.ntrp/tools/<tool_name>.py
+bash <skill_path>/scripts/scaffold.sh <tool_name>
 ```
+
+This creates `~/.ntrp/tools/<tool_name>.py` from the template.
 
 ## Step 3: Customize
 

@@ -33,6 +33,7 @@ class UseSkillTool(Tool):
             )
 
         meta = registry.get(skill)
+        body = body.replace("<skill_path>", str(meta.path))
         content = f'<skill name="{skill}" path="{meta.path}">\n{body}\n</skill>'
         if args:
             content += f"\n\nARGUMENTS: {args}"
