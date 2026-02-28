@@ -56,8 +56,7 @@ def create_spawn_fn(
             registry=executor.registry,
             run=child_run,
             io=calling_ctx.io,
-            memory=executor.runtime.memory,
-            sources=executor.runtime.source_mgr.sources,
+            services=calling_ctx.services,
             channel=calling_ctx.channel,
             ledger=calling_ctx.ledger,
         )

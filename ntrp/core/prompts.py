@@ -124,6 +124,11 @@ STATIC_BLOCK = env.from_string("""{{ base_prompt }}
 **Calendar**{{ " — " + (sources.calendar.accounts | join(", ")) if sources.calendar.accounts }}
 {%- endif %}
 {% endfor %}
+{% if notifier_names %}
+
+## NOTIFIERS
+Available notification channels: {{ notifier_names | join(", ") }}. Use these names in the `notifiers` field when creating automations.
+{% endif %}
 {% if skills_xml %}
 
 ## SKILLS
@@ -233,6 +238,7 @@ def build_system_blocks(
     memory_context: str | None = None,
     skills_context: str | None = None,
     directives: str | None = None,
+    notifier_names: list[str] | None = None,
     use_cache_control: bool = False,
 ) -> list[dict]:
     """Build system prompt as a list of content blocks.
@@ -249,6 +255,7 @@ def build_system_blocks(
         directives=directives,
         sources=source_details,
         skills_xml=skills_context,
+        notifier_names=notifier_names,
     )
     static_block: dict = {"type": "text", "text": static}
     if use_cache_control:
@@ -282,6 +289,7 @@ def build_system_prompt(
     memory_context: str | None = None,
     skills_context: str | None = None,
     directives: str | None = None,
+    notifier_names: list[str] | None = None,
 ) -> str:
     """Build system prompt as a single string (for non-chat callers like scheduler/CLI)."""
     blocks = build_system_blocks(
@@ -290,5 +298,6 @@ def build_system_prompt(
         memory_context=memory_context,
         skills_context=skills_context,
         directives=directives,
+        notifier_names=notifier_names,
     )
     return "\n\n".join(b["text"] for b in blocks)

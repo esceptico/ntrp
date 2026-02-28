@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from ntrp.tools.core.base import ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
-from ntrp.tools.specs import TOOL_FACTORIES, ToolDeps
+from ntrp.tools.specs import ALL_TOOLS
 
 if TYPE_CHECKING:
     from ntrp.server.runtime import Runtime
@@ -13,16 +13,8 @@ class ToolExecutor:
     def __init__(self, runtime: "Runtime"):
         self.runtime = runtime
         self.registry = ToolRegistry()
-
-        deps = ToolDeps(
-            search_index=runtime.indexer.index,
-            automation_service=runtime.automation_service,
-            skill_registry=runtime.skill_registry,
-            notifier_service=runtime.notifier_service,
-        )
-        for create_tools in TOOL_FACTORIES:
-            for tool in create_tools(deps):
-                self.registry.register(tool)
+        for cls in ALL_TOOLS:
+            self.registry.register(cls())
 
     def with_registry(self, registry: ToolRegistry) -> "ToolExecutor":
         clone = ToolExecutor.__new__(ToolExecutor)
@@ -42,8 +34,7 @@ class ToolExecutor:
 
     def get_tools(self, mutates: bool | None = None) -> list[dict]:
         return self.registry.get_schemas(
-            sources=self.runtime.source_mgr.sources,
-            has_memory=self.runtime.memory is not None,
+            capabilities=frozenset(self.runtime.tool_services),
             mutates=mutates,
         )
 

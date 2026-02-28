@@ -5,7 +5,6 @@ from ntrp.context.models import SessionState
 from ntrp.core.agent import Agent
 from ntrp.core.ledger import ExplorationLedger
 from ntrp.core.spawner import create_spawn_fn
-from ntrp.memory.facts import FactMemory
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 from ntrp.tools.executor import ToolExecutor
 
@@ -24,7 +23,6 @@ def create_agent(
     tools: list[dict],
     system_prompt: str | list[dict],
     session_state: SessionState,
-    memory: FactMemory | None,
     channel: Channel,
     run_id: str,
     io: IOBridge | None = None,
@@ -42,8 +40,7 @@ def create_agent(
         registry=executor.registry,
         run=run_ctx,
         io=io or IOBridge(),
-        memory=memory,
-        sources=executor.runtime.source_mgr.sources,
+        services=executor.runtime.tool_services,
         channel=channel,
         ledger=ExplorationLedger(),
     )

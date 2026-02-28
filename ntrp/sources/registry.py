@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from typing import NamedTuple
 
 from ntrp.config import Config
 from ntrp.sources.base import Source
@@ -11,12 +10,15 @@ from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.sources.obsidian import ObsidianSource
 
 
-class SourceDef(NamedTuple):
-    enabled: Callable[[Config], bool]
-    create: Callable[[Config], Source | None]
+def _create_notes(config: Config) -> Source | None:
+    if config.vault_path is None:
+        return None
+    return ObsidianSource(vault_path=config.vault_path)
 
 
-def _create_gmail(config: Config):
+def _create_gmail(config: Config) -> Source | None:
+    if not config.gmail:
+        return None
     token_paths = discover_gmail_tokens()
     if not token_paths:
         return None
@@ -24,7 +26,9 @@ def _create_gmail(config: Config):
     return source if source.sources else None
 
 
-def _create_calendar(config: Config):
+def _create_calendar(config: Config) -> Source | None:
+    if not config.calendar:
+        return None
     token_paths = discover_calendar_tokens()
     if not token_paths:
         return None
@@ -32,25 +36,22 @@ def _create_calendar(config: Config):
     return source if source.sources else None
 
 
-SOURCES: dict[str, SourceDef] = {
-    "notes": SourceDef(
-        enabled=lambda c: c.vault_path is not None,
-        create=lambda c: ObsidianSource(vault_path=c.vault_path),
-    ),
-    "gmail": SourceDef(
-        enabled=lambda c: c.gmail,
-        create=_create_gmail,
-    ),
-    "calendar": SourceDef(
-        enabled=lambda c: c.calendar,
-        create=_create_calendar,
-    ),
-    "browser": SourceDef(
-        enabled=lambda c: c.browser is not None,
-        create=lambda c: BrowserHistorySource(browser_name=c.browser, days_back=c.browser_days),
-    ),
-    "web": SourceDef(
-        enabled=lambda c: c.exa_api_key is not None,
-        create=lambda c: WebSource(api_key=c.exa_api_key),
-    ),
+def _create_browser(config: Config) -> Source | None:
+    if config.browser is None:
+        return None
+    return BrowserHistorySource(browser_name=config.browser, days_back=config.browser_days)
+
+
+def _create_web(config: Config) -> Source | None:
+    if config.exa_api_key is None:
+        return None
+    return WebSource(api_key=config.exa_api_key)
+
+
+SOURCES: dict[str, Callable[[Config], Source | None]] = {
+    "notes": _create_notes,
+    "gmail": _create_gmail,
+    "calendar": _create_calendar,
+    "browser": _create_browser,
+    "web": _create_web,
 }
