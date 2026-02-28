@@ -46,7 +46,7 @@ def _format_messages(messages: tuple[dict, ...]) -> str:
     parts = []
     for msg in messages:
         role = msg["role"]
-        if role == "tool":
+        if role in ("tool", "system"):
             continue
         content = msg["content"]
         if not content or not isinstance(content, str):

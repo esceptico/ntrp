@@ -50,8 +50,7 @@ class Tool(ABC):
     display_name: str
     description: str
     mutates: bool = False
-    source_type: ClassVar[type | None] = None
-    requires_memory: ClassVar[bool] = False
+    requires: ClassVar[frozenset[str]] = frozenset()
     input_model: ClassVar[type[BaseModel] | None] = None
 
     async def approval_info(self, execution: ToolExecution, **kwargs: Any) -> ApprovalInfo | None:

@@ -34,7 +34,7 @@ class SendEmailTool(Tool):
     display_name = "SendEmail"
     description = SEND_EMAIL_DESCRIPTION
     mutates = True
-    source_type = EmailSource
+    requires = frozenset({"gmail"})
     input_model = SendEmailInput
 
     async def approval_info(
@@ -64,7 +64,7 @@ class ReadEmailTool(Tool):
     name = "read_email"
     display_name = "ReadEmail"
     description = READ_EMAIL_DESCRIPTION
-    source_type = EmailSource
+    requires = frozenset({"gmail"})
     input_model = ReadEmailInput
 
     async def execute(self, execution: ToolExecution, email_id: str, **kwargs: Any) -> ToolResult:
@@ -120,7 +120,7 @@ class EmailsTool(Tool):
     name = "emails"
     display_name = "Emails"
     description = EMAILS_DESCRIPTION
-    source_type = EmailSource
+    requires = frozenset({"gmail"})
     input_model = EmailsInput
 
     async def execute(

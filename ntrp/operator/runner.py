@@ -58,6 +58,7 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
         source_details=deps.source_details,
         memory_context=memory_context,
         directives=load_directives(),
+        notifier_names=list(deps.notifiers) if deps.notifiers else None,
     )
     system_prompt += request.prompt_suffix
 
@@ -87,7 +88,6 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
         tools=tools,
         system_prompt=system_prompt,
         session_state=session_state,
-        memory=deps.memory,
         channel=deps.channel,
         run_id=run_id,
     )

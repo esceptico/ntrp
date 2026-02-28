@@ -88,7 +88,7 @@ class CalendarTool(Tool):
     name = "calendar"
     display_name = "Calendar"
     description = CALENDAR_DESCRIPTION
-    source_type = CalendarSource
+    requires = frozenset({"calendar"})
     input_model = CalendarInput
 
     async def execute(
@@ -159,7 +159,7 @@ class CreateCalendarEventTool(Tool):
     display_name = "CreateEvent"
     description = CREATE_CALENDAR_EVENT_DESCRIPTION
     mutates = True
-    source_type = CalendarSource
+    requires = frozenset({"calendar"})
     input_model = CreateCalendarEventInput
 
     async def approval_info(
@@ -235,7 +235,7 @@ class EditCalendarEventTool(Tool):
     display_name = "EditEvent"
     description = EDIT_CALENDAR_EVENT_DESCRIPTION
     mutates = True
-    source_type = CalendarSource
+    requires = frozenset({"calendar"})
     input_model = EditCalendarEventInput
 
     async def approval_info(
@@ -311,7 +311,7 @@ class DeleteCalendarEventTool(Tool):
     display_name = "DeleteEvent"
     description = DELETE_CALENDAR_EVENT_DESCRIPTION
     mutates = True
-    source_type = CalendarSource
+    requires = frozenset({"calendar"})
     input_model = DeleteCalendarEventInput
 
     async def approval_info(self, execution: ToolExecution, event_id: str, **kwargs: Any) -> ApprovalInfo | None:

@@ -131,8 +131,7 @@ async def _run_headless(prompt: str):
                 explore_model=runtime.config.explore_model,
             ),
             io=IOBridge(),
-            memory=runtime.memory,
-            sources=runtime.source_mgr.sources,
+            services=runtime.tool_services,
             channel=runtime.channel,
         )
 

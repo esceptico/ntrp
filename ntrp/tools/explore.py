@@ -63,8 +63,9 @@ class ExploreTool(Tool):
             ledger_summary = await ctx.ledger.summary(exclude_id=tool_id)
 
         user_facts = []
-        if ctx.memory:
-            user_facts = await ctx.memory.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=5)
+        memory = ctx.services.get("memory")
+        if memory:
+            user_facts = await memory.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=5)
 
         return EXPLORE_SYSTEM_PROMPT.render(
             base_prompt=EXPLORE_PROMPTS[depth],
@@ -102,7 +103,7 @@ class ExploreTool(Tool):
         if depth == "quick" or remaining <= 1:
             tool_names.discard("explore")
 
-        tools = ctx.registry.get_schemas(names=tool_names, sources=ctx.sources, has_memory=ctx.memory is not None)
+        tools = ctx.registry.get_schemas(names=tool_names, capabilities=ctx.capabilities)
         prompt = await self._build_prompt(ctx, depth, remaining, execution.tool_id)
         timeout = DEPTH_TIMEOUTS[depth]
 

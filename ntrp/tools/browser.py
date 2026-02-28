@@ -26,7 +26,7 @@ class BrowserTool(Tool):
     name = "browser"
     display_name = "Browser"
     description = BROWSER_DESCRIPTION
-    source_type = BrowserSource
+    requires = frozenset({"browser"})
     input_model = BrowserInput
 
     async def execute(

@@ -44,8 +44,9 @@ class Runtime:
     def __init__(self, config: Config | None = None):
         self.config = config or get_config()
         self.channel = Channel()
+        self._services: dict[str, object] = {}
 
-        self.source_mgr = SourceManager(self.config, self.channel)
+        self.source_mgr = SourceManager(self._services, self.config, self.channel)
 
         self.embedding = self.config.embedding
         self.indexer = Indexer(db_path=self.config.search_db_path, embedding=self.embedding, channel=self.channel)
@@ -53,7 +54,6 @@ class Runtime:
         self.session_service: SessionService | None = None
         self._sessions_conn = None
 
-        self.memory: FactMemory | None = None
         self.memory_service: MemoryService | None = None
         self.indexables: dict[str, Indexable] = {}
         self.executor: ToolExecutor | None = None
@@ -61,10 +61,8 @@ class Runtime:
         self.automation_store: AutomationStore | None = None
         self.notifier_store: NotifierStore | None = None
         self.scheduler: Scheduler | None = None
-        self.automation_service: AutomationService | None = None
         self.run_registry = RunRegistry()
 
-        self.skill_registry = SkillRegistry()
         self.skill_service: SkillService | None = None
         self.notifier_service: NotifierService | None = None
         self.notification_log: NotificationLogStore | None = None
@@ -78,6 +76,22 @@ class Runtime:
     def connected(self) -> bool:
         return self._connected
 
+    @property
+    def memory(self) -> FactMemory | None:
+        return self._services.get("memory")
+
+    @property
+    def automation_service(self) -> AutomationService | None:
+        return self._services.get("automation")
+
+    @property
+    def skill_registry(self) -> SkillRegistry | None:
+        return self._services.get("skill_registry")
+
+    @property
+    def tool_services(self) -> dict[str, object]:
+        return self._services
+
     # --- Subsystem lifecycle ---
 
     async def reload_config(self) -> None:
@@ -90,7 +104,7 @@ class Runtime:
 
     async def _sync_memory(self) -> None:
         if self.config.memory and not self.memory:
-            self.memory = await FactMemory.create(
+            self._services["memory"] = await FactMemory.create(
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
                 extraction_model=self.config.memory_model,
@@ -104,7 +118,7 @@ class Runtime:
             if self.memory_service:
                 self.memory_service.close()
             await self.memory.close()
-            self.memory = None
+            self._services.pop("memory", None)
             self.memory_service = None
 
     async def _sync_embedding(self) -> None:
@@ -154,6 +168,8 @@ class Runtime:
 
         _logger.info("Connecting search index")
         await self.indexer.connect()
+        if self.indexer.index:
+            self._services["search_index"] = self.indexer.index
 
         wire_events(self)
 
@@ -162,7 +178,7 @@ class Runtime:
 
         if self.config.memory:
             _logger.info("Initializing memory")
-            self.memory = await FactMemory.create(
+            self._services["memory"] = await FactMemory.create(
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
                 extraction_model=self.config.memory_model,
@@ -171,8 +187,10 @@ class Runtime:
             self.memory_service = MemoryService(self.memory, self.channel)
             self.indexables["memory"] = MemoryIndexable(self.memory.db)
 
-        self.skill_registry.load(SKILLS_DIRS)
-        self.skill_service = SkillService(self.skill_registry)
+        skill_registry = SkillRegistry()
+        skill_registry.load(SKILLS_DIRS)
+        self._services["skill_registry"] = skill_registry
+        self.skill_service = SkillService(skill_registry)
 
         self.notifier_service = NotifierService(
             store=self.notifier_store,
@@ -183,7 +201,7 @@ class Runtime:
 
         self.scheduler = Scheduler(store=self.automation_store, build_deps=self.build_operator_deps)
 
-        self.automation_service = AutomationService(
+        self._services["automation"] = AutomationService(
             store=self.automation_store,
             scheduler=self.scheduler,
             get_notifiers=lambda: self.notifier_service.notifiers if self.notifier_service else {},

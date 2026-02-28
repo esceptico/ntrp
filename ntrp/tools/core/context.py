@@ -9,8 +9,6 @@ from ntrp.core.ledger import ExplorationLedger
 from ntrp.events.sse import ApprovalNeededEvent
 
 if TYPE_CHECKING:
-    from ntrp.memory.facts import FactMemory
-    from ntrp.sources.base import Source
     from ntrp.tools.core.base import ToolResult
     from ntrp.tools.core.registry import ToolRegistry
 
@@ -60,8 +58,7 @@ class ToolContext:
     registry: "ToolRegistry"
     run: RunContext
     io: IOBridge
-    memory: "FactMemory | None" = None
-    sources: "dict[str, Source]" = field(default_factory=dict)
+    services: dict[str, Any] = field(default_factory=dict)
     channel: Channel = field(default_factory=Channel)
     ledger: ExplorationLedger | None = None
     spawn_fn: Callable[..., Awaitable[str]] | None = None
@@ -78,8 +75,12 @@ class ToolContext:
     def auto_approve(self) -> set[str]:
         return self.session_state.auto_approve | self.run.extra_auto_approve
 
+    @property
+    def capabilities(self) -> frozenset[str]:
+        return frozenset(self.services)
+
     def get_source[T](self, source_type: type[T]) -> T | None:
-        for s in self.sources.values():
+        for s in self.services.values():
             if isinstance(s, source_type):
                 return s
         return None

@@ -81,11 +81,8 @@ class NotesTool(Tool):
     name = "notes"
     display_name = "Notes"
     description = NOTES_DESCRIPTION
-    source_type = NotesSource
+    requires = frozenset({"notes"})
     input_model = NotesInput
-
-    def __init__(self, search_index: Any | None = None):
-        self.search_index = search_index
 
     async def execute(
         self,
@@ -97,7 +94,8 @@ class NotesTool(Tool):
         source = execution.ctx.get_source(NotesSource)
         limit = limit or DEFAULT_LIST_LIMIT
         if query:
-            return await self._search(source, query, limit)
+            search_index = execution.ctx.services.get("search_index")
+            return await self._search(source, query, limit, search_index)
         return self._list(source, limit)
 
     def _list(self, source: NotesSource, limit: int) -> ToolResult:
@@ -119,12 +117,12 @@ class NotesTool(Tool):
 
         return ToolResult(content=content, preview=f"{showing} notes")
 
-    async def _search(self, source: NotesSource, query: str, limit: int) -> ToolResult:
+    async def _search(self, source: NotesSource, query: str, limit: int, search_index: Any | None = None) -> ToolResult:
         query = simplify_query(query)
 
-        if self.search_index:
+        if search_index:
             try:
-                results = await self.search_index.search(query, sources=["notes"], limit=limit)
+                results = await search_index.search(query, sources=["notes"], limit=limit)
                 if results:
                     output = []
                     for item in results:
@@ -172,7 +170,7 @@ class ReadNoteTool(Tool):
     name = "read_note"
     display_name = "ReadNote"
     description = READ_NOTE_DESCRIPTION
-    source_type = NotesSource
+    requires = frozenset({"notes"})
     input_model = ReadNoteInput
 
     async def execute(
@@ -205,7 +203,7 @@ class EditNoteTool(Tool):
     display_name = "EditNote"
     description = EDIT_NOTE_DESCRIPTION
     mutates = True
-    source_type = NotesSource
+    requires = frozenset({"notes"})
     input_model = EditNoteInput
 
     async def approval_info(
@@ -267,7 +265,7 @@ class CreateNoteTool(Tool):
     display_name = "CreateNote"
     description = CREATE_NOTE_DESCRIPTION
     mutates = True
-    source_type = NotesSource
+    requires = frozenset({"notes"})
     input_model = CreateNoteInput
 
     async def approval_info(
@@ -309,7 +307,7 @@ class DeleteNoteTool(Tool):
     display_name = "DeleteNote"
     description = DELETE_NOTE_DESCRIPTION
     mutates = True
-    source_type = NotesSource
+    requires = frozenset({"notes"})
     input_model = DeleteNoteInput
 
     async def approval_info(self, execution: ToolExecution, path: str, **kwargs: Any) -> ApprovalInfo | None:
@@ -343,7 +341,7 @@ class MoveNoteTool(Tool):
     display_name = "MoveNote"
     description = MOVE_NOTE_DESCRIPTION
     mutates = True
-    source_type = NotesSource
+    requires = frozenset({"notes"})
     input_model = MoveNoteInput
 
     async def approval_info(

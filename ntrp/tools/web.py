@@ -42,7 +42,7 @@ class WebSearchTool(Tool):
     name = "web_search"
     display_name = "WebSearch"
     description = WEB_SEARCH_DESCRIPTION
-    source_type = WebSearchSource
+    requires = frozenset({"web"})
     input_model = WebSearchInput
 
     async def execute(
@@ -90,7 +90,7 @@ class WebFetchTool(Tool):
     name = "web_fetch"
     display_name = "WebFetch"
     description = WEB_FETCH_DESCRIPTION
-    source_type = WebSearchSource
+    requires = frozenset({"web"})
     input_model = WebFetchInput
 
     async def execute(self, execution: ToolExecution, url: str, **kwargs: Any) -> ToolResult:

@@ -3,7 +3,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from ntrp.automation.models import Automation, build_trigger
-from ntrp.automation.service import AutomationService
 from ntrp.events.triggers import EVENT_APPROACHING, NEW_EMAIL
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
@@ -58,23 +57,6 @@ def _format_automation_list(automations: list[Automation]) -> str:
             f"  next: {next_run} · last: {last_run}" + (f"\n  model: {a.model}" if a.model else "")
         )
     return "\n\n".join(lines)
-
-
-def _get_available_notifiers(notifier_service: Any) -> dict[str, str]:
-    if not notifier_service:
-        return {}
-    svc_notifiers = notifier_service.notifiers
-    if not svc_notifiers:
-        return {}
-    return {name: n.channel for name, n in svc_notifiers.items()}
-
-
-def _enrich_schema_with_notifiers(schema: dict, notifier_service: Any) -> dict:
-    available = _get_available_notifiers(notifier_service)
-    if available:
-        items = ", ".join(f"{name} ({ntype})" for name, ntype in available.items())
-        schema["function"]["description"] += f"\nAvailable notifiers: {items}"
-    return schema
 
 
 # --- Input Models ---
@@ -169,14 +151,8 @@ class CreateAutomationTool(Tool):
     display_name = "CreateAutomation"
     description = CREATE_AUTOMATION_DESCRIPTION
     mutates = True
+    requires = frozenset({"automation"})
     input_model = CreateAutomationInput
-
-    def __init__(self, service: AutomationService, notifier_service: Any = None):
-        self.service = service
-        self.notifier_service = notifier_service
-
-    def to_dict(self) -> dict:
-        return _enrich_schema_with_notifiers(super().to_dict(), self.notifier_service)
 
     async def approval_info(
         self,
@@ -241,7 +217,7 @@ class CreateAutomationTool(Tool):
         **kwargs: Any,
     ) -> ToolResult:
         try:
-            automation = await self.service.create(
+            automation = await execution.ctx.services["automation"].create(
                 name=name,
                 description=description,
                 trigger_type=trigger_type,
@@ -278,13 +254,11 @@ class ListAutomationsTool(Tool):
     name = "list_automations"
     display_name = "ListAutomations"
     description = LIST_AUTOMATIONS_DESCRIPTION
+    requires = frozenset({"automation"})
     input_model = None
 
-    def __init__(self, service: AutomationService):
-        self.service = service
-
     async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult:
-        automations = await self.service.list_all()
+        automations = await execution.ctx.services["automation"].list_all()
         if not automations:
             return ToolResult(content="No automations.", preview="0 automations")
 
@@ -297,14 +271,8 @@ class UpdateAutomationTool(Tool):
     display_name = "UpdateAutomation"
     description = UPDATE_AUTOMATION_DESCRIPTION
     mutates = True
+    requires = frozenset({"automation"})
     input_model = UpdateAutomationInput
-
-    def __init__(self, service: AutomationService, notifier_service: Any = None):
-        self.service = service
-        self.notifier_service = notifier_service
-
-    def to_dict(self) -> dict:
-        return _enrich_schema_with_notifiers(super().to_dict(), self.notifier_service)
 
     async def approval_info(
         self,
@@ -327,7 +295,7 @@ class UpdateAutomationTool(Tool):
         **kwargs: Any,
     ) -> ApprovalInfo | None:
         try:
-            automation = await self.service.get(task_id)
+            automation = await execution.ctx.services["automation"].get(task_id)
         except KeyError:
             return None
 
@@ -381,7 +349,7 @@ class UpdateAutomationTool(Tool):
         **kwargs: Any,
     ) -> ToolResult:
         try:
-            automation = await self.service.update(
+            automation = await execution.ctx.services["automation"].update(
                 task_id,
                 name=name,
                 description=description,
@@ -421,22 +389,20 @@ class DeleteAutomationTool(Tool):
     display_name = "DeleteAutomation"
     description = DELETE_AUTOMATION_DESCRIPTION
     mutates = True
+    requires = frozenset({"automation"})
     input_model = DeleteAutomationInput
-
-    def __init__(self, service: AutomationService):
-        self.service = service
 
     async def approval_info(self, execution: ToolExecution, task_id: str, **kwargs: Any) -> ApprovalInfo | None:
         try:
-            automation = await self.service.get(task_id)
+            automation = await execution.ctx.services["automation"].get(task_id)
         except KeyError:
             return None
         return ApprovalInfo(description=f"Delete: {automation.description}", preview=None, diff=None)
 
     async def execute(self, execution: ToolExecution, task_id: str, **kwargs: Any) -> ToolResult:
         try:
-            automation = await self.service.get(task_id)
-            await self.service.delete(task_id)
+            automation = await execution.ctx.services["automation"].get(task_id)
+            await execution.ctx.services["automation"].delete(task_id)
         except KeyError:
             return ToolResult(content=f"Error: automation '{task_id}' not found", preview="Not found", is_error=True)
 
@@ -447,14 +413,12 @@ class GetAutomationResultTool(Tool):
     name = "get_automation_result"
     display_name = "AutomationResult"
     description = GET_AUTOMATION_RESULT_DESCRIPTION
+    requires = frozenset({"automation"})
     input_model = GetAutomationResultInput
-
-    def __init__(self, service: AutomationService):
-        self.service = service
 
     async def execute(self, execution: ToolExecution, task_id: str, **kwargs: Any) -> ToolResult:
         try:
-            automation = await self.service.get(task_id)
+            automation = await execution.ctx.services["automation"].get(task_id)
         except KeyError:
             return ToolResult(content=f"Error: automation '{task_id}' not found", preview="Not found", is_error=True)
 
@@ -478,14 +442,12 @@ class RunAutomationTool(Tool):
     display_name = "RunAutomation"
     description = RUN_AUTOMATION_DESCRIPTION
     mutates = True
+    requires = frozenset({"automation"})
     input_model = RunAutomationInput
-
-    def __init__(self, service: AutomationService):
-        self.service = service
 
     async def approval_info(self, execution: ToolExecution, task_id: str, **kwargs: Any) -> ApprovalInfo | None:
         try:
-            automation = await self.service.get(task_id)
+            automation = await execution.ctx.services["automation"].get(task_id)
         except KeyError:
             return None
         return ApprovalInfo(
@@ -496,7 +458,7 @@ class RunAutomationTool(Tool):
 
     async def execute(self, execution: ToolExecution, task_id: str, **kwargs: Any) -> ToolResult:
         try:
-            await self.service.run_now(task_id)
+            await execution.ctx.services["automation"].run_now(task_id)
         except KeyError:
             return ToolResult(content=f"Error: automation '{task_id}' not found", preview="Not found", is_error=True)
         except RuntimeError as e:

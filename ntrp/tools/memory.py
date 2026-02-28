@@ -45,7 +45,7 @@ class RememberTool(Tool):
     display_name = "Remember"
     description = REMEMBER_DESCRIPTION
     mutates = True
-    requires_memory = True
+    requires = frozenset({"memory"})
     input_model = RememberInput
 
     async def approval_info(self, execution: ToolExecution, fact: str, **kwargs: Any) -> ApprovalInfo | None:
@@ -59,7 +59,7 @@ class RememberTool(Tool):
         happened_at: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
-        memory = execution.ctx.memory
+        memory = execution.ctx.services["memory"]
         event_time = datetime.fromisoformat(happened_at) if happened_at else None
 
         result = await memory.remember(
@@ -93,13 +93,13 @@ class RecallTool(Tool):
     name = "recall"
     display_name = "Recall"
     description = RECALL_DESCRIPTION
-    requires_memory = True
+    requires = frozenset({"memory"})
     input_model = RecallInput
 
     async def execute(
         self, execution: ToolExecution, query: str, limit: int = _DEFAULT_RECALL_LIMIT, **kwargs: Any
     ) -> ToolResult:
-        memory = execution.ctx.memory
+        memory = execution.ctx.services["memory"]
         context = await memory.recall(query=query, limit=limit)
         formatted = format_memory_context(
             query_facts=context.facts,
@@ -125,13 +125,13 @@ class ForgetTool(Tool):
     display_name = "Forget"
     description = FORGET_DESCRIPTION
     mutates = True
-    requires_memory = True
+    requires = frozenset({"memory"})
     input_model = ForgetInput
 
     async def approval_info(self, execution: ToolExecution, query: str, **kwargs: Any) -> ApprovalInfo | None:
         return ApprovalInfo(description=query, preview=None, diff=None)
 
     async def execute(self, execution: ToolExecution, query: str, **kwargs: Any) -> ToolResult:
-        memory = execution.ctx.memory
+        memory = execution.ctx.services["memory"]
         count = await memory.forget(query=query)
         return ToolResult(content=f"Forgot {count} fact(s) related to '{query}'.", preview=f"Forgot {count}")
