@@ -21,6 +21,7 @@ from ntrp.sources.google.gmail import (
 _logger = get_logger(__name__)
 
 WATCH_RENEWAL_INTERVAL = 6 * 3600  # re-register watches every 6 hours (expire after 7 days)
+STREAMING_RECONNECT_DELAY = 30
 STOP_TIMEOUT = 5.0
 _STATE_NAMESPACE = "monitor.gmail.history_ids"
 
@@ -70,11 +71,9 @@ class GmailMonitor:
         await self._restore_history_ids()
         new_ids = await asyncio.to_thread(self._setup_watches)
         for email, history_id in new_ids.items():
-            # Never advance existing cursor on startup;
-            # we may still need to backfill unseen history.
-            self._history_ids.setdefault(email, history_id)
+            self._history_ids[email] = history_id
         await self._persist_history_ids()
-        self._start_streaming_if_possible()
+        self._start_streaming()
         self._spawn_task(self._watch_renewal_loop())
 
     async def stop(self) -> None:
@@ -145,17 +144,38 @@ class GmailMonitor:
 
     # --- Pub/Sub streaming ---
 
-    def _start_streaming_if_possible(self) -> None:
+    def _start_streaming(self) -> None:
         if not self._sources:
             _logger.warning("Gmail monitor has no sources; skipping streaming startup")
             return
+        if self._streaming_future and not self._streaming_future.done():
+            return
+        if self._subscriber:
+            self._subscriber.close()
         creds = self._sources[0]._get_credentials()
         self._subscriber = pubsub_v1.SubscriberClient(credentials=creds)
         self._streaming_future = self._subscriber.subscribe(
             self._subscription,
             callback=self._on_message,
         )
+        self._streaming_future.add_done_callback(self._on_streaming_done)
         _logger.info("Gmail monitor streaming from %s", self._subscription)
+
+    def _on_streaming_done(self, future) -> None:
+        if self._stopping:
+            return
+        try:
+            future.result()
+        except Exception:
+            _logger.exception("Gmail Pub/Sub streaming pull died")
+        if self._loop and not self._stopping:
+            self._loop.call_soon_threadsafe(self._spawn_task, self._reconnect_streaming())
+
+    async def _reconnect_streaming(self) -> None:
+        _logger.info("Reconnecting Gmail Pub/Sub streaming in %ds", STREAMING_RECONNECT_DELAY)
+        await asyncio.sleep(STREAMING_RECONNECT_DELAY)
+        if not self._stopping:
+            self._start_streaming()
 
     def _on_message(self, message: pubsub_v1.subscriber.message.Message) -> None:
         try:
