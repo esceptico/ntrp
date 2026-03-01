@@ -38,7 +38,8 @@ function SectionHeader({ label }: { label: string }) {
   );
 }
 
-function formatModel(model: string): string {
+function formatModel(model?: string | null): string {
+  if (!model) return "—";
   const parts = model.split("/");
   return parts[parts.length - 1];
 }
