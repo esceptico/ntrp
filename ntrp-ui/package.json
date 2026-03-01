@@ -1,6 +1,6 @@
 {
   "name": "ntrp-cli",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "ntrp – personal entropy reduction system",
   "type": "module",
   "bin": {
@@ -12,7 +12,7 @@
   "scripts": {
     "start": "bun run src/index.tsx",
     "dev": "bun --watch run src/index.tsx",
-    "build": "bun build ./src/index.tsx --minify --target=bun --outdir ./dist && echo '#!/usr/bin/env bun' | cat - ./dist/index.js > ./dist/tmp && mv ./dist/tmp ./dist/index.js && chmod +x ./dist/index.js",
+    "build": "bun build ./src/index.tsx --minify --target=bun --outdir ./dist && chmod +x ./dist/index.js",
     "prepublishOnly": "bun run build"
   },
   "repository": {
