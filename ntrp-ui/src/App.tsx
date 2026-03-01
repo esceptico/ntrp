@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRenderer } from "@opentui/react";
 import type { Selection } from "@opentui/core";
 import type { Message, Config } from "./types.js";
-import { defaultConfig } from "./types.js";
 import { colors, setTheme, themeNames, type Theme } from "./components/ui/index.js";
 import { BULLET } from "./lib/constants.js";
 import {
@@ -28,8 +27,10 @@ import {
   ApprovalDialog,
   ErrorBoundary,
 } from "./components/index.js";
+import { Setup } from "./components/Setup.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { COMMANDS } from "./lib/commands.js";
+import { setApiKey } from "./api/fetch.js";
 import { getSkills, deleteSession, listSessions, restoreSession, permanentlyDeleteSession, type Skill } from "./api/client.js";
 
 type ViewMode = "chat" | "memory" | "settings" | "automations" | "sessions";
@@ -487,7 +488,23 @@ function AppWithAccent({ config }: { config: Config }) {
   );
 }
 
-export default function App({ config = defaultConfig }: { config?: Config }) {
+export default function App({ config: initialConfig }: { config: Config }) {
+  const [config, setConfig] = useState(initialConfig);
+
+  const handleConnect = useCallback((newConfig: Config) => {
+    setApiKey(newConfig.apiKey);
+    setConfig(newConfig);
+  }, []);
+
+  if (config.needsSetup) {
+    return (
+      <Setup
+        initialServerUrl={config.serverUrl}
+        onConnect={handleConnect}
+      />
+    );
+  }
+
   return (
     <DimensionsProvider>
       <AppWithAccent config={config} />

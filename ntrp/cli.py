@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 import click
 from rich.console import Console
@@ -52,8 +53,8 @@ def status(ctx):
 
 
 @main.command()
-@click.option("--host", default="127.0.0.1", help="Host to bind to")
-@click.option("--port", default=8000, help="Port to bind to")
+@click.option("--host", default=lambda: os.environ.get("NTRP_HOST", "127.0.0.1"), help="Host to bind to")
+@click.option("--port", default=lambda: int(os.environ.get("NTRP_PORT", "8000")), help="Port to bind to")
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")
 @click.pass_context
 def serve(ctx, host: str, port: int, reload: bool):
