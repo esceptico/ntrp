@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="ntrp",
     description="Personal entropy reduction system - API server",
-    version="0.3.3",
+    version="0.3.4",
     lifespan=lifespan,
 )
 
