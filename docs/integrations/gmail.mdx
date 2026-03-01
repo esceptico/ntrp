@@ -1,0 +1,63 @@
+---
+title: "Gmail"
+description: "Connect Gmail to read, search, and send emails."
+---
+
+## Setup
+
+<Steps>
+
+### Enable Gmail in config
+
+```bash
+export NTRP_GMAIL=true
+```
+
+### Create Google OAuth credentials
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com)
+2. Create a project (or select existing)
+3. Enable the **Gmail API**
+4. Create OAuth 2.0 credentials (Desktop application)
+5. Download the credentials JSON
+
+### Place credentials
+
+Save the downloaded file as `~/.ntrp/credentials.json`.
+
+### Authenticate
+
+Start the server and the TUI. On first use of any email tool, ntrp will open a browser window for OAuth consent. The token is saved to `~/.ntrp/gmail_token.json`.
+
+</Steps>
+
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NTRP_GMAIL` | `false` | Enable Gmail integration |
+| `NTRP_GMAIL_DAYS` | `30` | Days of email history to index |
+
+## Available tools
+
+| Tool | Description |
+|------|-------------|
+| `emails` | Search and list emails by date or query |
+| `read_email` | Get full email content by ID |
+| `send_email` | Send an email (requires approval) |
+
+## Multiple accounts
+
+Add additional Gmail accounts via the API:
+
+```bash
+curl -X POST http://localhost:8000/gmail/add \
+  -H "Authorization: Bearer $NTRP_API_KEY"
+```
+
+List connected accounts:
+
+```bash
+curl http://localhost:8000/gmail/accounts \
+  -H "Authorization: Bearer $NTRP_API_KEY"
+```

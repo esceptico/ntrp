@@ -1,0 +1,42 @@
+---
+title: "Authentication"
+description: "API key authentication for the ntrp server."
+---
+
+## API key
+
+ntrp uses Bearer token authentication. Include the key in the `Authorization` header:
+
+```bash
+Authorization: Bearer YOUR_API_KEY
+```
+
+## Getting a key
+
+An API key is generated on first `ntrp serve`:
+
+```bash
+uv run ntrp serve
+# Your API key: nBx7k2...
+# Enter this in the TUI to connect. It won't be shown again.
+```
+
+## Resetting a key
+
+```bash
+uv run ntrp serve --reset-key
+```
+
+This invalidates the old key immediately.
+
+## Storage
+
+The server stores only a salted SHA-256 hash of the key — the plaintext is never persisted. The TUI client stores the plaintext in your OS keychain.
+
+## Public endpoints
+
+The `/health` endpoint is always public (no auth required). This allows Docker healthchecks and monitoring tools to work without credentials.
+
+## Webhook authentication
+
+Webhook endpoints (`/webhooks/email`) use a separate `NTRP_WEBHOOK_TOKEN` for authentication, passed via `X-Webhook-Token` header or Bearer token.

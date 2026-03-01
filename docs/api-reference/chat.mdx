@@ -1,0 +1,80 @@
+---
+title: "Chat"
+description: "Send messages and receive streamed agent responses."
+---
+
+## Send message
+
+<ParamField body="message" type="string" required>
+  The user message to send.
+</ParamField>
+
+<ParamField query="session_id" type="string">
+  Target session. Uses current session if omitted.
+</ParamField>
+
+<ParamField query="skip_approvals" type="boolean" default="false">
+  Auto-approve all tool calls.
+</ParamField>
+
+```bash
+curl -X POST http://localhost:8000/chat \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What meetings do I have today?"}' \
+  --no-buffer
+```
+
+Returns an SSE stream. See [Streaming](/api-reference/streaming) for event types.
+
+## Submit tool result
+
+Approve or reject a pending tool call.
+
+```bash
+curl -X POST http://localhost:8000/tool-result \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "run_id": "run_abc",
+    "tool_id": "tc_abc123",
+    "result": "Approved",
+    "approved": true
+  }'
+```
+
+## Cancel
+
+Cancel a running agent loop.
+
+```bash
+curl -X POST http://localhost:8000/cancel \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Context usage
+
+Get current token usage for the session.
+
+```bash
+curl http://localhost:8000/context \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+```json
+{
+  "total_tokens": 12500,
+  "model_limit": 200000,
+  "message_count": 15,
+  "tool_count": 8
+}
+```
+
+## Compact context
+
+Compress conversation history to free token space.
+
+```bash
+curl -X POST http://localhost:8000/compact \
+  -H "Authorization: Bearer $API_KEY"
+```

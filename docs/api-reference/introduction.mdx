@@ -1,0 +1,61 @@
+---
+title: "API Overview"
+description: "HTTP API for building on top of ntrp."
+---
+
+## Base URL
+
+```
+http://localhost:8000
+```
+
+Configure with `NTRP_HOST` and `NTRP_PORT`.
+
+## Authentication
+
+All endpoints except `/health` require a Bearer token:
+
+```bash
+curl http://localhost:8000/session \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+See [Authentication](/api-reference/authentication) for details.
+
+## Response format
+
+All endpoints return JSON. Streaming endpoints (`/chat`) use Server-Sent Events (SSE).
+
+## Endpoints
+
+| Group | Endpoints | Description |
+|-------|-----------|-------------|
+| [Chat](/api-reference/chat) | `POST /chat`, `POST /cancel` | Agent conversation with streaming |
+| [Sessions](/api-reference/sessions) | `/session*`, `/sessions*` | Session management |
+| [Memory](/api-reference/memory) | `/facts*`, `/observations*`, `/dreams*` | Memory CRUD |
+| [Automations](/api-reference/automations) | `/automations*` | Scheduled tasks |
+| [Config](/api-reference/config) | `/config*`, `/models*` | Server configuration |
+| Health | `GET /health` | Server status (public) |
+
+## Health check
+
+```bash
+curl http://localhost:8000/health
+```
+
+```json
+{
+  "status": "ok",
+  "version": "0.3.1"
+}
+```
+
+Pass a Bearer token to also verify authentication:
+
+```json
+{
+  "status": "ok",
+  "version": "0.3.1",
+  "auth": true
+}
+```

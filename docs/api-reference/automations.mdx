@@ -1,0 +1,95 @@
+---
+title: "Automations"
+description: "Create and manage scheduled automations."
+---
+
+## Create automation
+
+```bash
+curl -X POST http://localhost:8000/automations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Morning briefing",
+    "description": "Summarize unread emails and today calendar",
+    "trigger": {
+      "type": "time",
+      "at": "09:00",
+      "days": "weekdays"
+    },
+    "notifiers": ["telegram"]
+  }'
+```
+
+### Trigger options
+
+**Scheduled:**
+```json
+{"type": "time", "at": "09:00", "days": "weekdays"}
+{"type": "time", "at": "22:00", "days": "mon,wed,fri"}
+{"type": "time", "at": "08:00"}
+```
+
+**Interval:**
+```json
+{"type": "time", "every": "2h"}
+{"type": "time", "every": "30m"}
+```
+
+**Event-driven:**
+```json
+{"type": "event", "event_type": "calendar", "lead_minutes": 15}
+```
+
+## List automations
+
+```bash
+curl http://localhost:8000/automations \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Get automation
+
+```bash
+curl http://localhost:8000/automations/1 \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Update automation
+
+```bash
+curl -X PATCH http://localhost:8000/automations/1 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"description": "New task description"}'
+```
+
+## Toggle enable/disable
+
+```bash
+curl -X POST http://localhost:8000/automations/1/toggle \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Toggle writable
+
+Allow the automation to modify data (memory, notes, emails):
+
+```bash
+curl -X POST http://localhost:8000/automations/1/writable \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Run immediately
+
+```bash
+curl -X POST http://localhost:8000/automations/1/run \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Delete automation
+
+```bash
+curl -X DELETE http://localhost:8000/automations/1 \
+  -H "Authorization: Bearer $API_KEY"
+```

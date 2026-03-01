@@ -1,0 +1,126 @@
+---
+title: "Memory"
+description: "CRUD operations for facts, observations, and dreams."
+---
+
+## Facts
+
+### List facts
+
+```bash
+curl "http://localhost:8000/facts?limit=20&offset=0" \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### Get fact
+
+```bash
+curl http://localhost:8000/facts/42 \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Returns the fact with its entities and linked facts.
+
+### Update fact
+
+```bash
+curl -X PATCH http://localhost:8000/facts/42 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Updated fact text"}'
+```
+
+### Delete fact
+
+```bash
+curl -X DELETE http://localhost:8000/facts/42 \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Observations
+
+### List observations
+
+```bash
+curl http://localhost:8000/observations \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### Get observation
+
+```bash
+curl http://localhost:8000/observations/7 \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Returns the observation with its supporting facts.
+
+### Update observation
+
+```bash
+curl -X PATCH http://localhost:8000/observations/7 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"summary": "Updated observation"}'
+```
+
+### Delete observation
+
+```bash
+curl -X DELETE http://localhost:8000/observations/7 \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Dreams
+
+### List dreams
+
+```bash
+curl http://localhost:8000/dreams \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### Get dream
+
+```bash
+curl http://localhost:8000/dreams/3 \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### Delete dream
+
+```bash
+curl -X DELETE http://localhost:8000/dreams/3 \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Stats
+
+```bash
+curl http://localhost:8000/stats \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+```json
+{
+  "fact_count": 245,
+  "observation_count": 38,
+  "dream_count": 5
+}
+```
+
+## Purge
+
+Delete all memory data:
+
+```bash
+curl -X POST http://localhost:8000/memory/clear \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Clear only observations (keep facts):
+
+```bash
+curl -X POST http://localhost:8000/memory/observations/clear \
+  -H "Authorization: Bearer $API_KEY"
+```

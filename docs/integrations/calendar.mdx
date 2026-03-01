@@ -1,0 +1,44 @@
+---
+title: "Google Calendar"
+description: "Connect Google Calendar to view, create, and manage events."
+---
+
+## Setup
+
+Google Calendar uses the same OAuth credentials as Gmail.
+
+<Steps>
+
+### Enable Calendar in config
+
+```bash
+export NTRP_CALENDAR=true
+```
+
+### Ensure OAuth credentials exist
+
+If you've already set up Gmail, the same `~/.ntrp/credentials.json` works. Otherwise, follow the [Gmail setup](/integrations/gmail) steps but also enable the **Google Calendar API**.
+
+### Authenticate
+
+On first calendar tool use, ntrp opens a browser for OAuth consent.
+
+</Steps>
+
+## Available tools
+
+| Tool | Description |
+|------|-------------|
+| `calendar` | Search and list events |
+| `create_calendar_event` | Create an event (requires approval) |
+| `edit_calendar_event` | Edit an event (requires approval) |
+| `delete_calendar_event` | Delete an event (requires approval) |
+
+## Event-driven automations
+
+Calendar events can trigger automations. For example, get a briefing 15 minutes before each meeting:
+
+```
+Create an automation that triggers 15 minutes before any calendar event.
+It should recall memory about the attendees and summarize recent interactions.
+```

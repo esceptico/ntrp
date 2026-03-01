@@ -1,0 +1,84 @@
+---
+title: "Config"
+description: "Server configuration and model management."
+---
+
+## Get config
+
+```bash
+curl http://localhost:8000/config \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+```json
+{
+  "chat_model": "claude-sonnet-4-6",
+  "explore_model": "claude-sonnet-4-6",
+  "memory_model": "claude-sonnet-4-6",
+  "embedding_model": "text-embedding-3-small",
+  "has_notes": true,
+  "has_browser": false,
+  "sources": {
+    "gmail": {"enabled": true, "connected": true},
+    "calendar": {"enabled": false, "connected": false},
+    "memory": {"enabled": true},
+    "web": {"connected": true}
+  }
+}
+```
+
+## Update config
+
+```bash
+curl -X PATCH http://localhost:8000/config \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"chat_model": "gpt-5.2"}'
+```
+
+## List available models
+
+### Chat/explore/memory models
+
+```bash
+curl http://localhost:8000/models \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### Embedding models
+
+```bash
+curl http://localhost:8000/models/embedding \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Change embedding model
+
+Changing the embedding model triggers a full re-index of memory:
+
+```bash
+curl -X POST http://localhost:8000/config/embedding \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"embedding_model": "text-embedding-3-large"}'
+```
+
+## Directives
+
+System directives customize the agent's behavior.
+
+### Get directives
+
+```bash
+curl http://localhost:8000/directives \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### Update directives
+
+```bash
+curl -X PUT http://localhost:8000/directives \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"directives": "Always respond in Spanish. Be concise."}'
+```

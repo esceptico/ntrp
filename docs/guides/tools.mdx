@@ -1,0 +1,94 @@
+---
+title: "Tools"
+description: "All tools available to the ntrp agent."
+---
+
+## Overview
+
+Tools are capabilities the agent can invoke during a conversation. Some tools require your approval before executing (marked with 🔒).
+
+## System & files
+
+| Tool | Description | Approval |
+|------|-------------|----------|
+| `bash` | Execute shell commands | 🔒 Dangerous commands |
+| `read_file` | Read file contents | — |
+| `current_time` | Get current date and time | — |
+
+## Notes (Obsidian)
+
+Requires `NTRP_VAULT_PATH` to be set.
+
+| Tool | Description | Approval |
+|------|-------------|----------|
+| `notes` | Search and list notes | — |
+| `edit_note` | Edit a note | 🔒 |
+| `create_note` | Create a new note | 🔒 |
+| `delete_note` | Delete a note | 🔒 |
+| `move_note` | Move/rename a note | 🔒 |
+
+## Email
+
+Requires Gmail to be connected.
+
+| Tool | Description | Approval |
+|------|-------------|----------|
+| `emails` | Search and list emails | — |
+| `read_email` | Read full email content | — |
+| `send_email` | Send an email | 🔒 |
+
+## Calendar
+
+Requires Google Calendar to be connected.
+
+| Tool | Description | Approval |
+|------|-------------|----------|
+| `calendar` | Search and list events | — |
+| `create_calendar_event` | Create an event | 🔒 |
+| `edit_calendar_event` | Edit an event | 🔒 |
+| `delete_calendar_event` | Delete an event | 🔒 |
+
+## Memory
+
+| Tool | Description | Approval |
+|------|-------------|----------|
+| `remember` | Store a fact | 🔒 |
+| `recall` | Search stored knowledge | — |
+| `forget` | Delete facts by query | 🔒 |
+
+## Web
+
+Requires `EXA_API_KEY` for web search. Browser requires `NTRP_BROWSER` to be set.
+
+| Tool | Description | Approval |
+|------|-------------|----------|
+| `web_search` | Search the web (via Exa) | — |
+| `web_fetch` | Fetch content from a URL | — |
+| `browser` | Search browser history | — |
+
+## Automations
+
+| Tool | Description | Approval |
+|------|-------------|----------|
+| `create_automation` | Schedule a task | 🔒 |
+| `list_automations` | List all automations | — |
+| `update_automation` | Modify an automation | 🔒 |
+| `delete_automation` | Remove an automation | 🔒 |
+| `run_automation` | Trigger immediate run | 🔒 |
+| `get_automation_result` | Get last run result | — |
+
+## Notifications
+
+| Tool | Description | Approval |
+|------|-------------|----------|
+| `notify` | Send a notification | 🔒 |
+
+## Approval flow
+
+When a tool requires approval, the TUI shows a dialog with the tool name, arguments, and options to approve, reject, or always-allow that tool for the session.
+
+Double-tap `Tab` to toggle auto-approve mode, which skips approval dialogs for the current session.
+
+## User-defined tools
+
+Create custom tools in `~/.ntrp/tools/`. Each tool is a directory with a `TOOL.md` describing its interface and an executable script.

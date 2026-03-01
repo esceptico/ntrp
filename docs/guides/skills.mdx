@@ -1,0 +1,60 @@
+---
+title: "Skills"
+description: "Installable commands that extend ntrp's capabilities."
+---
+
+## Overview
+
+Skills are user-facing commands that add new functionality to ntrp. They're distinct from tools — skills are invoked with `/skill-name` in chat and can orchestrate multiple tool calls.
+
+## Builtin skills
+
+| Skill | Description |
+|-------|-------------|
+| `/add-model` | Register a custom LLM endpoint interactively |
+| `/add-tool` | Install a user-defined tool |
+| `/init` | Initialize memory by scanning connected sources |
+
+## Skill locations
+
+Skills are discovered from three locations (in order):
+
+1. `skills/` — builtin skills (shipped with ntrp)
+2. `.skills/` — project-level skills (per-directory)
+3. `~/.ntrp/skills/` — global user skills
+
+## Installing skills
+
+Install a skill from GitHub:
+
+```bash
+curl -X POST http://localhost:8000/skills/install \
+  -H "Authorization: Bearer $NTRP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"source": "owner/repo/path/to/skill"}'
+```
+
+Or ask the agent:
+
+```
+Install the skill from github.com/user/repo/my-skill
+```
+
+## Creating a skill
+
+A skill is a directory containing at minimum a `SKILL.md` file:
+
+```
+my-skill/
+├── SKILL.md       # Description, parameters, instructions
+└── run.py         # Optional executable
+```
+
+The `SKILL.md` tells the agent what the skill does and how to execute it. The agent follows these instructions when the user invokes `/my-skill`.
+
+## Managing skills
+
+| Command | Description |
+|---------|-------------|
+| `GET /skills` | List installed skills |
+| `DELETE /skills/{name}` | Uninstall a skill |

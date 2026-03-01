@@ -1,0 +1,43 @@
+---
+title: "Obsidian"
+description: "Connect your Obsidian vault for note reading and editing."
+---
+
+## Setup
+
+Point ntrp at your vault directory:
+
+```bash
+export NTRP_VAULT_PATH=/path/to/your/vault
+```
+
+No additional authentication needed — ntrp reads and writes files directly.
+
+## Available tools
+
+| Tool | Description |
+|------|-------------|
+| `notes` | Search and list notes |
+| `edit_note` | Edit note content (requires approval) |
+| `create_note` | Create a new note (requires approval) |
+| `delete_note` | Delete a note (requires approval) |
+| `move_note` | Move or rename a note (requires approval) |
+
+## Indexing
+
+When indexing is enabled and an embedding model is configured, ntrp indexes your vault for semantic search. Notes are chunked, embedded, and searchable alongside other sources.
+
+Start indexing manually:
+
+```
+/index
+```
+
+## How it works
+
+ntrp treats your vault as a first-class data source. Notes are:
+
+- Searchable via the `notes` tool (filename and content search)
+- Indexed for semantic retrieval (when embeddings are configured)
+- Editable by the agent (with your approval)
+- Used as context when relevant to your questions

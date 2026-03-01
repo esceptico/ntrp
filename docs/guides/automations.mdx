@@ -1,0 +1,81 @@
+---
+title: "Automations"
+description: "Schedule tasks that run autonomously."
+---
+
+## Overview
+
+Automations let ntrp act on its own — daily summaries, inbox monitoring, reminders, or any task you'd otherwise forget to do manually.
+
+Each automation has a **trigger** (when to run), a **description** (what to do in natural language), and optional **notifiers** (where to send results).
+
+## Trigger types
+
+### Scheduled (time-based)
+
+Run at a specific time, optionally on specific days:
+
+```
+Every weekday at 09:00 → "Summarize my unread emails and calendar for today"
+Every day at 22:00 → "Review what I committed today and update my work log"
+```
+
+### Interval
+
+Run repeatedly at a fixed interval:
+
+```
+Every 2h → "Check for new emails from VIP senders and notify me"
+Every 30m → "Monitor the deployment pipeline status"
+```
+
+### Event-driven
+
+Trigger before calendar events:
+
+```
+15 minutes before any meeting → "Pull up notes about attendees from memory"
+```
+
+## Creating automations
+
+Use the `create_automation` tool in chat:
+
+```
+Create an automation that runs every weekday at 9am
+to summarize my unread emails and today's calendar.
+Send the result to my Telegram.
+```
+
+Or use the API directly:
+
+```bash
+curl -X POST http://localhost:8000/automations \
+  -H "Authorization: Bearer $NTRP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Morning briefing",
+    "description": "Summarize unread emails and today calendar events",
+    "trigger": {"type": "time", "at": "09:00", "days": "weekdays"},
+    "notifiers": ["telegram"]
+  }'
+```
+
+## Permissions
+
+By default, automations run with **read-only** tools. Toggle `writable` to allow an automation to modify memory, send emails, or create calendar events.
+
+## Notifiers
+
+Automations can send results to:
+
+- **Telegram** — requires `TELEGRAM_BOT_TOKEN` and a configured user ID
+- **Email** — sends via your connected Gmail account
+
+Configure notifiers in settings or via the `/automations` view.
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `/automations` | Open the automations viewer |

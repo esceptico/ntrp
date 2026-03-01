@@ -1,0 +1,123 @@
+---
+title: "Configuration"
+description: "Environment variables, model selection, and settings."
+---
+
+## Config resolution
+
+ntrp resolves configuration in this order (highest priority first):
+
+1. **Environment variables** — `NTRP_*` prefix or standard provider key names
+2. **`.env` files** — loaded from `~/.ntrp/.env` and `./.env` (project directory)
+3. **Settings file** — `~/.ntrp/settings.json` (persisted via TUI settings)
+4. **Auto-detection** — models resolved from available provider keys
+
+## LLM providers
+
+Set at least one provider API key. ntrp auto-selects models based on what's available.
+
+| Env var | Chat model | Memory model | Embedding model |
+|---------|-----------|-------------|----------------|
+| `ANTHROPIC_API_KEY` | claude-sonnet-4-6 | claude-sonnet-4-6 | — |
+| `OPENAI_API_KEY` | gpt-5.2 | gpt-5.2 | text-embedding-3-small |
+| `GEMINI_API_KEY` | gemini-3-pro-preview | gemini-3-flash-preview | gemini-embedding-001 |
+
+Override auto-detection with explicit model IDs:
+
+```bash
+export NTRP_CHAT_MODEL=claude-sonnet-4-6
+export NTRP_MEMORY_MODEL=claude-haiku-4-5
+export NTRP_EMBEDDING_MODEL=text-embedding-3-small
+```
+
+<Note>Embedding is optional. Without it, vector search is disabled but ntrp still works with full-text search.</Note>
+
+## Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NTRP_HOST` | `127.0.0.1` | Server bind address |
+| `NTRP_PORT` | `8000` | Server port |
+
+## Features
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NTRP_MEMORY` | `true` | Enable persistent memory |
+| `NTRP_GMAIL` | `false` | Enable Gmail integration |
+| `NTRP_GMAIL_DAYS` | `30` | Days of email history to index |
+| `NTRP_CALENDAR` | `false` | Enable Google Calendar |
+| `NTRP_VAULT_PATH` | — | Path to Obsidian vault |
+| `NTRP_BROWSER` | — | Browser type: `chrome`, `safari`, or `arc` |
+| `NTRP_BROWSER_DAYS` | `30` | Days of browser history |
+
+## Optional integrations
+
+| Variable | Description |
+|----------|-------------|
+| `EXA_API_KEY` | Exa.ai for web search |
+| `TELEGRAM_BOT_TOKEN` | Telegram notifications |
+
+## Agent behavior
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NTRP_MAX_DEPTH` | `8` | Max agentic recursion depth |
+
+## Authentication
+
+On first `ntrp serve`, an API key is generated and printed. The server stores only a salted SHA-256 hash — the plaintext key is never persisted.
+
+```bash
+# Generate a new key
+ntrp serve --reset-key
+```
+
+The TUI client stores the key in your OS keychain (macOS Keychain, Linux libsecret). Fallback: `~/.ntrp/settings.json`.
+
+| Variable | Description |
+|----------|-------------|
+| `NTRP_WEBHOOK_TOKEN` | Separate token for webhook endpoints (email notifications) |
+
+## Custom models
+
+Add OpenRouter, Ollama, vLLM, or any OpenAI-compatible endpoint via `~/.ntrp/models.json`:
+
+```json
+[
+  {
+    "id": "deepseek-r1",
+    "provider": "custom",
+    "api_base": "https://openrouter.ai/api/v1",
+    "api_key_env": "OPENROUTER_API_KEY",
+    "max_output_tokens": 8192,
+    "max_context_tokens": 64000
+  }
+]
+```
+
+Or use the `/add-model` skill in the TUI to configure interactively.
+
+## Settings file
+
+`~/.ntrp/settings.json` stores persisted configuration. Fields set here act as defaults that environment variables can override.
+
+```json
+{
+  "chat_model": "claude-sonnet-4-6",
+  "memory_model": "claude-sonnet-4-6",
+  "embedding_model": "text-embedding-3-small",
+  "vault_path": "/Users/you/notes",
+  "api_key_hash": "a1b2c3:..."
+}
+```
+
+## .env file
+
+Copy `.env.example` to `.env` (or `~/.ntrp/.env` for global config):
+
+```bash
+cp .env.example .env
+```
+
+Both locations are loaded automatically. Project-level `.env` takes precedence.

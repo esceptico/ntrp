@@ -1,0 +1,89 @@
+---
+title: "Memory"
+description: "How ntrp builds and maintains persistent memory."
+---
+
+## Overview
+
+ntrp's memory system stores knowledge as a graph of **facts**, **observations**, and **dreams**. Unlike simple chat history, this is structured long-term memory that grows, consolidates, and surfaces relevant context automatically.
+
+## Data model
+
+```
+Facts ────────► Observations
+  │                  │
+  └──── Entities ────┘
+
+Dreams (cross-domain insights)
+```
+
+### Facts
+
+Atomic pieces of information extracted from conversations and sources.
+
+> "Alice joined the backend team in March 2025"
+
+Each fact has:
+- Vector embedding for semantic search
+- Timestamps (`created_at`, `happened_at`)
+- Access tracking with decay (less-accessed facts fade)
+- Entity references (people, projects, places)
+
+### Observations
+
+Higher-level patterns synthesized from multiple facts.
+
+> "Alice transitioned from mobile to backend development, taking on infrastructure responsibilities"
+
+Observations track their source facts and maintain a change history as new evidence arrives.
+
+### Dreams
+
+Cross-domain insights that connect seemingly unrelated facts.
+
+> "Pattern: work stress correlates with reduced exercise frequency"
+
+Generated during daily consolidation by clustering facts across domains.
+
+## Write path
+
+When ntrp learns something new:
+
+1. **Extract** — fact is created from conversation or source data
+2. **Embed** — vector encoding for similarity search
+3. **Link** — entities extracted and connected in the knowledge graph
+4. **Queue** — fact queued for consolidation
+
+## Consolidation
+
+A background loop runs every 30 seconds:
+
+1. **Per-fact** — search for similar observations, decide whether to update existing or create new
+2. **Temporal pass** — find trends and transitions across an entity's facts
+3. **Observation merge** — deduplicate similar observations (cosine > 0.90)
+4. **Fact merge** — deduplicate near-identical facts
+5. **Dream pass** — cluster facts, discover cross-domain patterns
+
+## Retrieval
+
+When you ask ntrp something, it retrieves context in two phases:
+
+1. **Observations** — vector + full-text hybrid search, top 5 results
+2. **Facts** — vector + FTS + entity expansion + temporal context, reranked
+
+This gives the agent both high-level understanding (observations) and specific details (facts).
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `/memory` | Open the memory viewer |
+| `/purge confirm` | Delete all memory data |
+
+## Tools
+
+The agent uses these tools to interact with memory:
+
+- **remember** — store a fact (requires approval)
+- **recall** — semantic search across facts and observations
+- **forget** — delete facts matching a query

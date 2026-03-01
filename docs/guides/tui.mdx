@@ -1,0 +1,80 @@
+---
+title: "TUI Guide"
+description: "Terminal UI keyboard shortcuts and commands."
+---
+
+## Keyboard shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Enter` | Send message |
+| `Escape` | Cancel running agent |
+| `Ctrl+C` | Exit |
+| `Ctrl+L` | Toggle sidebar |
+| `Ctrl+N` | New session |
+| `Shift+Tab` | Cycle to next session |
+| `Tab Tab` | Toggle auto-approve mode |
+
+## Slash commands
+
+| Command | Description |
+|---------|-------------|
+| `/new [name]` | Start a new session |
+| `/sessions` | Switch, create, or delete sessions |
+| `/name <name>` | Rename current session |
+| `/delete [query]` | Archive a session |
+| `/restore <query>` | Restore an archived session |
+| `/init` | Scan sources and learn about you |
+| `/index` | Re-index notes for semantic search |
+| `/memory` | View memory (facts, observations) |
+| `/automations` | View and manage automations |
+| `/theme` | Choose a theme |
+| `/settings` | Model, connections, and UI settings |
+| `/compact` | Summarize old messages to save tokens |
+| `/clear` | Clear current session messages |
+| `/purge confirm` | Delete all memory data |
+| `/logout` | Clear credentials and disconnect |
+| `/exit` | Exit application |
+
+Skills installed via `/skills` also appear as slash commands.
+
+## Views
+
+### Chat
+
+The default view. Type messages, see agent responses with tool call visualizations and approval dialogs.
+
+### Memory viewer (`/memory`)
+
+Browse facts, observations, and dreams. Edit or delete entries.
+
+### Automations viewer (`/automations`)
+
+List automations with their schedules, toggle enable/disable, trigger manual runs.
+
+### Session picker (`/sessions`)
+
+Switch between sessions, create new ones, archive or permanently delete old sessions.
+
+### Settings (`/settings`)
+
+Configure models, integrations, server connection, and UI preferences.
+
+## Sidebar
+
+The sidebar (toggle with `Ctrl+L`) shows:
+
+- Server URL and version
+- Current models
+- Context usage (token bar)
+- Session cost tracking
+- Memory stats
+- Connected sources
+- Upcoming automations
+- Recent sessions
+
+Requires terminal width of at least 94 columns.
+
+## Auto-approve mode
+
+Double-tap `Tab` to toggle. When enabled, tool approvals are skipped for the current session. Useful for hands-off tasks where you trust the agent's actions.

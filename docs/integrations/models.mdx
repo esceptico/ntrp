@@ -1,0 +1,104 @@
+---
+title: "Custom Models"
+description: "Use OpenRouter, Ollama, vLLM, or any OpenAI-compatible endpoint."
+---
+
+## Overview
+
+ntrp supports any OpenAI-compatible API endpoint. Register custom models via `~/.ntrp/models.json` or the `/add-model` skill.
+
+## models.json
+
+Create `~/.ntrp/models.json` with an array of model definitions:
+
+```json
+[
+  {
+    "id": "deepseek-r1",
+    "provider": "custom",
+    "api_base": "https://openrouter.ai/api/v1",
+    "api_key_env": "OPENROUTER_API_KEY",
+    "max_output_tokens": 8192,
+    "max_context_tokens": 64000
+  },
+  {
+    "id": "llama-local",
+    "provider": "custom",
+    "api_base": "http://localhost:11434/v1",
+    "max_output_tokens": 4096,
+    "max_context_tokens": 32000
+  }
+]
+```
+
+## Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | Model identifier (used in config) |
+| `provider` | Yes | Must be `"custom"` |
+| `api_base` | Yes | Base URL of the OpenAI-compatible API |
+| `api_key_env` | No | Env var name containing the API key |
+| `max_output_tokens` | Yes | Maximum output tokens |
+| `max_context_tokens` | Yes | Maximum context window |
+
+## Using custom models
+
+After adding to `models.json`, set the model in your environment or settings:
+
+```bash
+export NTRP_CHAT_MODEL=deepseek-r1
+```
+
+Or change it in the TUI via `/settings`.
+
+## Providers
+
+### OpenRouter
+
+```json
+{
+  "id": "openrouter/deepseek-r1",
+  "provider": "custom",
+  "api_base": "https://openrouter.ai/api/v1",
+  "api_key_env": "OPENROUTER_API_KEY",
+  "max_output_tokens": 8192,
+  "max_context_tokens": 64000
+}
+```
+
+### Ollama
+
+```json
+{
+  "id": "llama3",
+  "provider": "custom",
+  "api_base": "http://localhost:11434/v1",
+  "max_output_tokens": 4096,
+  "max_context_tokens": 128000
+}
+```
+
+No `api_key_env` needed for local Ollama.
+
+### vLLM
+
+```json
+{
+  "id": "my-model",
+  "provider": "custom",
+  "api_base": "http://localhost:8080/v1",
+  "max_output_tokens": 4096,
+  "max_context_tokens": 32000
+}
+```
+
+## Interactive setup
+
+Use the `/add-model` skill in chat for guided model registration:
+
+```
+/add-model
+```
+
+The agent will walk you through configuring the endpoint.

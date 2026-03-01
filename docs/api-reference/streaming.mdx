@@ -1,0 +1,136 @@
+---
+title: "Streaming"
+description: "Server-Sent Events for real-time agent execution."
+---
+
+## Overview
+
+The `POST /chat` endpoint returns a Server-Sent Events (SSE) stream. Each event has a `type` field indicating what happened.
+
+## Event types
+
+### `thinking`
+
+Agent is processing. Includes a status message.
+
+```json
+{"type": "thinking", "content": "Searching memory..."}
+```
+
+### `text`
+
+Streamed response text (arrives in chunks).
+
+```json
+{"type": "text", "content": "Based on your "}
+```
+
+### `tool_call`
+
+Agent invoked a tool.
+
+```json
+{
+  "type": "tool_call",
+  "name": "recall",
+  "args": {"query": "meeting notes"},
+  "tool_id": "tc_abc123",
+  "depth": 0
+}
+```
+
+### `tool_result`
+
+Tool execution completed.
+
+```json
+{
+  "type": "tool_result",
+  "tool_id": "tc_abc123",
+  "content": "Found 3 relevant facts...",
+  "preview": "3 facts found",
+  "duration": 0.45
+}
+```
+
+### `approval_needed`
+
+Tool requires user approval before executing.
+
+```json
+{
+  "type": "approval_needed",
+  "tool_id": "tc_abc123",
+  "name": "send_email",
+  "args": {"to": "alice@example.com", "subject": "..."},
+  "description": "Send email to alice@example.com"
+}
+```
+
+Respond with `POST /tool-result` to approve or reject.
+
+### `session_info`
+
+Session metadata update.
+
+```json
+{
+  "type": "session_info",
+  "session_id": "abc-123",
+  "session_name": "Work planning"
+}
+```
+
+### `done`
+
+Execution complete. Includes token usage.
+
+```json
+{
+  "type": "done",
+  "usage": {
+    "prompt_tokens": 1500,
+    "completion_tokens": 200,
+    "cache_read_tokens": 800,
+    "cost": 0.012
+  }
+}
+```
+
+### `error`
+
+An error occurred.
+
+```json
+{"type": "error", "content": "Rate limit exceeded", "fatal": false}
+```
+
+### `cancelled`
+
+User cancelled the run.
+
+```json
+{"type": "cancelled"}
+```
+
+## Approval flow
+
+When `approval_needed` is received:
+
+1. Display the tool call to the user
+2. Collect their decision (approve/reject)
+3. Submit via `POST /tool-result`:
+
+```bash
+curl -X POST http://localhost:8000/tool-result \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "run_id": "run_abc",
+    "tool_id": "tc_abc123",
+    "result": "Approved",
+    "approved": true
+  }'
+```
+
+The stream continues after approval.

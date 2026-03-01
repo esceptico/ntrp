@@ -1,0 +1,90 @@
+---
+title: "Sessions"
+description: "Manage conversation sessions."
+---
+
+## Get current session
+
+```bash
+curl http://localhost:8000/session \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+```json
+{
+  "session_id": "abc-123",
+  "name": "Work planning",
+  "sources": ["memory", "gmail", "calendar"]
+}
+```
+
+## Get session history
+
+```bash
+curl http://localhost:8000/session/history?session_id=abc-123 \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Create session
+
+```bash
+curl -X POST http://localhost:8000/sessions \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Project review"}'
+```
+
+## List sessions
+
+```bash
+curl http://localhost:8000/sessions \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Returns up to 20 most recent sessions.
+
+## Rename session
+
+```bash
+curl -X PATCH http://localhost:8000/sessions/abc-123 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "New name"}'
+```
+
+## Archive session
+
+```bash
+curl -X DELETE http://localhost:8000/sessions/abc-123 \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Archived sessions can be restored.
+
+## Restore archived session
+
+```bash
+curl -X POST http://localhost:8000/sessions/abc-123/restore \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Permanently delete
+
+```bash
+curl -X DELETE http://localhost:8000/sessions/abc-123/permanent \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Clear session history
+
+```bash
+curl -X POST http://localhost:8000/session/clear \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## List archived sessions
+
+```bash
+curl http://localhost:8000/sessions/archived \
+  -H "Authorization: Bearer $API_KEY"
+```
