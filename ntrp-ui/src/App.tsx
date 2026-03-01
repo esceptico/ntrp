@@ -302,6 +302,7 @@ function AppContent({
           <Sidebar
             serverConfig={serverConfig}
             serverVersion={serverVersion}
+            serverUrl={config.serverUrl}
             data={sidebarData}
             usage={streaming.usage}
             width={SIDEBAR_WIDTH}
@@ -354,7 +355,7 @@ function AppContent({
         {/* Status — pinned above input */}
         {!serverConnected && (
           <box flexShrink={0}>
-            <text><span fg={colors.status.error}>{BULLET} Server not connected. Run: ntrp serve</span></text>
+            <text><span fg={colors.status.error}>{BULLET} Server not connected. Reconnecting...</span></text>
           </box>
         )}
 
