@@ -33,20 +33,33 @@ I built this for myself. ADHD and scattered attention meant I kept losing track 
 ![](docs/images/sources.png)
 </details>
 
-## Quick start
+## Install
 
 ```bash
-git clone https://github.com/esceptico/ntrp.git
-cd ntrp
-uv sync
-cd ntrp-ui && bun install && cd ..
-
-cp .env.example .env
-# Edit .env – set at least one LLM key, model variables, and NTRP_API_KEY
-
-uv run ntrp serve              # backend
-NTRP_API_KEY=<key> bun run ntrp-ui/src/index.tsx  # UI (separate terminal)
+uv tool install ntrp    # backend (or: pip install ntrp)
+bun install -g ntrp-cli # terminal UI (or: npx ntrp-cli)
 ```
+
+## Quick start
+
+Create `~/.ntrp/.env` with at least one LLM provider key and model variables (see [.env.example](.env.example)):
+
+```bash
+mkdir -p ~/.ntrp
+cat > ~/.ntrp/.env << 'EOF'
+ANTHROPIC_API_KEY=sk-ant-...
+NTRP_CHAT_MODEL=claude-sonnet-4-6
+NTRP_MEMORY_MODEL=claude-sonnet-4-6
+NTRP_EMBEDDING_MODEL=text-embedding-3-small
+EOF
+```
+
+```bash
+ntrp serve   # starts backend, prints a one-time API key
+ntrp         # terminal UI (separate terminal) – paste the key on first launch
+```
+
+The server generates an API key on first run and prints it once. Enter it in the UI setup screen — it's saved to your system keychain. Use `ntrp serve --reset-key` to regenerate.
 
 See [docs/setup.md](docs/setup.md) for Google OAuth, Telegram, Obsidian, custom models, Docker, and other integrations.
 

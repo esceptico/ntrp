@@ -71,8 +71,16 @@ class AuthMiddleware:
         public_paths = {"/health"}
         if request.url.path not in public_paths:
             token = _extract_bearer_token(request)
-            if not token or not runtime.config.api_key_hash or not verify_api_key(token, runtime.config.api_key_hash):
-                response = JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+            if not token:
+                detail = "Missing API key. Include Authorization: Bearer <key> header."
+            elif not runtime.config.api_key_hash:
+                detail = "No API key configured. Restart server to generate one."
+            elif not verify_api_key(token, runtime.config.api_key_hash):
+                detail = "Invalid API key. Run 'ntrp serve --reset-key' to generate a new one."
+            else:
+                detail = None
+            if detail:
+                response = JSONResponse(status_code=401, content={"detail": detail})
                 await response(scope, receive, send)
                 return
 

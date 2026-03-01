@@ -86,7 +86,7 @@ def generate_api_key() -> tuple[str, str]:
 class Config(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="NTRP_",
-        env_file=".env",
+        env_file=(NTRP_DIR / ".env", ".env"),
         env_file_encoding="utf-8",
         extra="allow",
         validate_assignment=True,

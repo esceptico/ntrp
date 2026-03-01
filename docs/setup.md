@@ -3,25 +3,32 @@
 ## Requirements
 
 - Python 3.13+
-- [uv](https://docs.astral.sh/uv/)
+- [uv](https://docs.astral.sh/uv/) or pip
 - [Bun](https://bun.sh/) (for the terminal UI)
+
+## Install
+
+```bash
+uv tool install ntrp    # or: pip install ntrp
+bun install -g ntrp-cli # or: npx ntrp-cli
+```
 
 ## Quick Start
 
-```bash
-git clone https://github.com/esceptico/ntrp.git
-cd ntrp
-uv sync
-cd ntrp-ui && bun install && cd ..
-cp .env.example .env
-```
-
-Edit `.env` — you need at least one LLM provider key and the three model variables. See `.env.example` for all options.
+Create `~/.ntrp/.env` with at least one LLM provider key and the model variables. See [.env.example](../.env.example) for all options.
 
 ```bash
-uv run ntrp serve              # backend
-cd ntrp-ui && bun run src/index.tsx  # UI (separate terminal)
+mkdir -p ~/.ntrp
+cp .env.example ~/.ntrp/.env   # if developing from source
+# or create ~/.ntrp/.env manually with your keys
 ```
+
+```bash
+ntrp serve   # starts backend, prints a one-time API key
+ntrp         # terminal UI (separate terminal) – paste the key on first launch
+```
+
+Config priority: environment variables > CWD `.env` > `~/.ntrp/.env` > defaults.
 
 ## Custom Models
 
@@ -168,10 +175,16 @@ Gmail and Calendar tokens are stored in `~/.ntrp/` (covered by the data volume).
 
 ## API Authentication
 
-When exposing the server beyond localhost, set a bearer token:
+The server generates and stores a hashed API key on first run. The plaintext key is printed once — enter it in the terminal UI setup screen or pass it via `--token`:
 
-```
-NTRP_API_KEY=your-secret-key
+```bash
+ntrp --token <key>           # or set NTRP_API_KEY env var
 ```
 
-All API requests must then include `Authorization: Bearer your-secret-key`.
+To regenerate the key:
+
+```bash
+ntrp serve --reset-key
+```
+
+All API requests require `Authorization: Bearer <key>`.
