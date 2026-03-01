@@ -1,0 +1,36 @@
+name: Publish CLI
+
+on:
+  push:
+    tags:
+      - "cli-v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        working-directory: ntrp-ui
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        working-directory: ntrp-ui
+        run: bun run build
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - run: npm install -g npm@latest
+
+      - name: Publish
+        working-directory: ntrp-ui
+        run: npm publish --provenance
