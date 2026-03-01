@@ -15,6 +15,7 @@ import {
   restoreSession,
   type SessionListItem,
 } from "../api/client.js";
+import { deleteCredentials } from "../lib/secrets.js";
 
 type ViewMode = "chat" | "memory" | "settings" | "automations" | "sessions";
 
@@ -44,6 +45,7 @@ interface CommandContext {
   switchSession: (sessionId: string) => Promise<{ history: HistoryMessage[] } | null>;
   resetForSessionSwitch: (newHistory?: Message[]) => void;
   refreshSidebar: () => void;
+  logout: () => void;
 }
 
 type CommandHandler = (ctx: CommandContext, args: string[]) => boolean | Promise<boolean>;
@@ -204,6 +206,12 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     } catch (error) {
       addMessage({ role: "error", content: `${error}` });
     }
+    return true;
+  },
+
+  logout: async ({ logout }) => {
+    await deleteCredentials();
+    logout();
     return true;
   },
 

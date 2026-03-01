@@ -1,13 +1,12 @@
 import { useState, useCallback } from "react";
 import { useKeypress, type Key } from "../hooks/useKeypress.js";
 import { useTextInput } from "../hooks/useTextInput.js";
-import { colors } from "./ui/index.js";
+import { Dialog, colors, Hints } from "./ui/index.js";
 import { TextInputField } from "./ui/input/TextInputField.js";
 import { checkHealth } from "../api/client.js";
 import { setApiKey } from "../api/fetch.js";
 import { setCredentials } from "../lib/secrets.js";
 import type { Config } from "../types.js";
-import { BULLET } from "../lib/constants.js";
 
 type Field = "serverUrl" | "apiKey";
 
@@ -101,49 +100,51 @@ export function Setup({ initialServerUrl, onConnect }: SetupProps) {
 
   const maskedKey = apiKey ? "\u2022".repeat(Math.min(apiKey.length, 40)) : "";
 
+  const items = [
+    { field: "serverUrl" as Field, label: "Server URL", value: serverUrl, cursor: serverUrlCursor, placeholder: "http://localhost:8000" },
+    { field: "apiKey" as Field, label: "API Key", value: apiKey, displayValue: maskedKey, cursor: apiKeyCursor, placeholder: "your-api-key" },
+  ];
+
+  const footer = connecting
+    ? <text><span fg={colors.text.muted}>Connecting...</span></text>
+    : <Hints items={[["enter", "connect"], ["tab/↑↓", "switch"]]} />;
+
   return (
-    <box flexDirection="column" paddingTop={2} paddingLeft={4}>
-      <text><span fg={colors.text.primary}><strong>ntrp</strong></span><span fg={colors.text.muted}> — setup</span></text>
+    <Dialog title="CONNECT" size="medium" onClose={() => {}} footer={footer}>
+      {() => (
+        <box flexDirection="column">
+          {items.map((item) => {
+            const selected = item.field === activeField;
+            const isEditing = selected;
 
-      <box flexDirection="column" marginTop={2} gap={1}>
-        <box flexDirection="row">
-          <box width={14} flexShrink={0}>
-            <text><span fg={activeField === "serverUrl" ? colors.text.primary : colors.text.secondary}>Server URL</span></text>
-          </box>
-          <text><span fg={colors.text.muted}> </span></text>
-          {activeField === "serverUrl" ? (
-            <TextInputField value={serverUrl} cursorPos={serverUrlCursor} placeholder="http://localhost:8000" />
-          ) : (
-            <text><span fg={colors.text.secondary}>{serverUrl || "http://localhost:8000"}</span></text>
+            return (
+              <box key={item.label} flexDirection="row">
+                <text>
+                  <span fg={selected ? colors.text.primary : colors.text.disabled}>{selected ? "▸ " : "  "}</span>
+                  <span fg={selected ? colors.text.primary : colors.text.secondary}>{item.label.padEnd(14)}</span>
+                </text>
+                {isEditing ? (
+                  <TextInputField
+                    value={item.value}
+                    cursorPos={item.cursor}
+                    placeholder={item.placeholder}
+                  />
+                ) : (
+                  <text>
+                    <span fg={colors.text.muted}>{item.displayValue ?? (item.value || item.placeholder)}</span>
+                  </text>
+                )}
+              </box>
+            );
+          })}
+
+          {error && (
+            <box marginTop={1}>
+              <text><span fg={colors.status.error}>  {error}</span></text>
+            </box>
           )}
-        </box>
-
-        <box flexDirection="row">
-          <box width={14} flexShrink={0}>
-            <text><span fg={activeField === "apiKey" ? colors.text.primary : colors.text.secondary}>API Key</span></text>
-          </box>
-          <text><span fg={colors.text.muted}> </span></text>
-          {activeField === "apiKey" ? (
-            <TextInputField value={apiKey} cursorPos={apiKeyCursor} placeholder="your-api-key" />
-          ) : (
-            <text><span fg={colors.text.secondary}>{maskedKey || "your-api-key"}</span></text>
-          )}
-        </box>
-      </box>
-
-      <box marginTop={2}>
-        {connecting ? (
-          <text><span fg={colors.text.muted}>Connecting...</span></text>
-        ) : (
-          <text><span fg={colors.text.muted}>press </span><span fg={colors.text.primary}>enter</span><span fg={colors.text.muted}> to connect  </span><span fg={colors.text.disabled}>tab to switch fields</span></text>
-        )}
-      </box>
-
-      {error && (
-        <box marginTop={1}>
-          <text><span fg={colors.status.error}>{BULLET} {error}</span></text>
         </box>
       )}
-    </box>
+    </Dialog>
   );
 }

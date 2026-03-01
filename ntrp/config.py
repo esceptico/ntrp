@@ -94,6 +94,10 @@ class Config(BaseSettings):
     # Agent depth limit
     max_depth: int = 8
 
+    # Server
+    host: str = "127.0.0.1"
+    port: int = 8000
+
     # API authentication
     api_key: str
     webhook_token: str | None = None

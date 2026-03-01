@@ -45,6 +45,7 @@ interface AppContentProps {
   toggleSettings: () => void;
   setThemeByName: (name: string) => void;
   showSettings: boolean;
+  logout: () => void;
 }
 
 function AppContent({
@@ -54,7 +55,8 @@ function AppContent({
   closeSettings,
   toggleSettings,
   setThemeByName,
-  showSettings
+  showSettings,
+  logout
 }: AppContentProps) {
   const renderer = useRenderer();
 
@@ -164,6 +166,7 @@ function AppContent({
     switchSession,
     resetForSessionSwitch,
     refreshSidebar,
+    logout,
   });
 
   const allCommands = useMemo(() => [
@@ -461,7 +464,7 @@ function AppContent({
   );
 }
 
-function AppWithAccent({ config }: { config: Config }) {
+function AppWithAccent({ config, logout }: { config: Config; logout: () => void }) {
   const { settings, updateSetting, closeSettings, toggleSettings, showSettings } = useSettings(config);
 
   // Sync colors before children render — setTheme mutates colors/accentColors in place
@@ -483,6 +486,7 @@ function AppWithAccent({ config }: { config: Config }) {
         toggleSettings={toggleSettings}
         setThemeByName={setThemeByName}
         showSettings={showSettings}
+        logout={logout}
       />
     </AccentColorProvider>
   );
@@ -496,18 +500,25 @@ export default function App({ config: initialConfig }: { config: Config }) {
     setConfig(newConfig);
   }, []);
 
+  const handleLogout = useCallback(() => {
+    setApiKey("");
+    setConfig((c) => ({ ...c, apiKey: "", needsSetup: true }));
+  }, []);
+
   if (config.needsSetup) {
     return (
-      <Setup
-        initialServerUrl={config.serverUrl}
-        onConnect={handleConnect}
-      />
+      <DimensionsProvider>
+        <Setup
+          initialServerUrl={config.serverUrl}
+          onConnect={handleConnect}
+        />
+      </DimensionsProvider>
     );
   }
 
   return (
     <DimensionsProvider>
-      <AppWithAccent config={config} />
+      <AppWithAccent config={config} logout={handleLogout} />
     </DimensionsProvider>
   );
 }

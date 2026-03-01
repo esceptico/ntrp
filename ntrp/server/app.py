@@ -84,8 +84,12 @@ app.include_router(webhooks_router)
 
 
 @app.get("/health")
-async def health(runtime: Runtime = Depends(get_runtime)):
-    return {"status": "ok" if runtime.connected else "unavailable", "version": app.version}
+async def health(request: Request, runtime: Runtime = Depends(get_runtime)):
+    result: dict = {"status": "ok" if runtime.connected else "unavailable", "version": app.version}
+    auth = request.headers.get("authorization", "")
+    if auth:
+        result["auth"] = auth == f"Bearer {runtime.config.api_key}"
+    return result
 
 
 @app.get("/index/status")

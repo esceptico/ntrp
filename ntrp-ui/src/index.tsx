@@ -3,6 +3,7 @@ import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import App from "./App.js";
 import { setApiKey } from "./api/fetch.js";
+import { checkHealth } from "./api/client.js";
 import { getCredentials } from "./lib/secrets.js";
 import type { Config } from "./types.js";
 
@@ -37,13 +38,20 @@ const envServer = process.env.NTRP_SERVER_URL;
 const envToken = process.env.NTRP_API_KEY;
 const saved = await getCredentials();
 
-const config: Config = {
-  serverUrl: cliServer || envServer || saved.serverUrl || "http://localhost:8000",
-  apiKey: cliToken || envToken || saved.apiKey || "",
-  needsSetup: !cliToken && !envToken && !saved.apiKey,
-};
+const serverUrl = cliServer || envServer || saved.serverUrl || "http://localhost:8000";
+const apiKey = cliToken || envToken || saved.apiKey || "";
+let needsSetup = !apiKey;
 
-if (config.apiKey) setApiKey(config.apiKey);
+// Verify saved credentials actually work
+if (apiKey && !cliToken && !envToken) {
+  setApiKey(apiKey);
+  const health = await checkHealth({ serverUrl, apiKey, needsSetup: false });
+  if (!health.ok) needsSetup = true;
+}
+
+const config: Config = { serverUrl, apiKey, needsSetup };
+
+if (apiKey) setApiKey(apiKey);
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
