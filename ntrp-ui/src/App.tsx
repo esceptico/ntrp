@@ -46,6 +46,7 @@ interface AppContentProps {
   setThemeByName: (name: string) => void;
   showSettings: boolean;
   logout: () => void;
+  onServerChange: (config: Config) => void;
 }
 
 function AppContent({
@@ -56,7 +57,8 @@ function AppContent({
   toggleSettings,
   setThemeByName,
   showSettings,
-  logout
+  logout,
+  onServerChange
 }: AppContentProps) {
   const renderer = useRenderer();
 
@@ -457,6 +459,7 @@ function AppContent({
           onServerConfigChange={(newConfig) => updateServerConfig(newConfig)}
           onRefreshIndexStatus={refreshIndexStatus}
           onClose={closeSettings}
+          onServerCredentialsChange={onServerChange}
         />
       )}
     </box>
@@ -464,7 +467,7 @@ function AppContent({
   );
 }
 
-function AppWithAccent({ config, logout }: { config: Config; logout: () => void }) {
+function AppWithAccent({ config, logout, onServerChange }: { config: Config; logout: () => void; onServerChange: (config: Config) => void }) {
   const { settings, updateSetting, closeSettings, toggleSettings, showSettings } = useSettings(config);
 
   // Sync colors before children render — setTheme mutates colors/accentColors in place
@@ -487,6 +490,7 @@ function AppWithAccent({ config, logout }: { config: Config; logout: () => void 
         setThemeByName={setThemeByName}
         showSettings={showSettings}
         logout={logout}
+        onServerChange={onServerChange}
       />
     </AccentColorProvider>
   );
@@ -518,7 +522,7 @@ export default function App({ config: initialConfig }: { config: Config }) {
 
   return (
     <DimensionsProvider>
-      <AppWithAccent config={config} logout={handleLogout} />
+      <AppWithAccent config={config} logout={handleLogout} onServerChange={handleConnect} />
     </DimensionsProvider>
   );
 }

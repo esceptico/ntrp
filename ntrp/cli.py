@@ -6,7 +6,7 @@ import click
 import uvicorn
 from rich.console import Console
 
-from ntrp.config import get_config
+from ntrp.config import generate_api_key, get_config, load_user_settings, save_user_settings
 from ntrp.core.agent import Agent
 from ntrp.core.prompts import build_system_prompt
 from ntrp.core.spawner import create_spawn_fn
@@ -16,6 +16,19 @@ from ntrp.server.runtime import Runtime
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 
 console = Console()
+
+
+def _require_chat_model(config) -> None:
+    if not config.chat_model:
+        console.print("[red]Error:[/red] No chat model configured.")
+        console.print()
+        console.print("Set a provider API key:")
+        console.print("  ANTHROPIC_API_KEY")
+        console.print("  OPENAI_API_KEY")
+        console.print("  GEMINI_API_KEY")
+        console.print()
+        console.print("Or specify a model directly: NTRP_CHAT_MODEL=<model>")
+        raise SystemExit(1)
 
 
 @click.group()
@@ -30,16 +43,32 @@ def status():
     console.print("[bold]ntrp status[/bold]")
     console.print()
     console.print(f"Database dir: [cyan]{config.db_dir}[/cyan]")
-    console.print(f"Embedding model: {config.embedding_model}")
-    console.print(f"Chat model: {config.chat_model}")
+    console.print(f"Chat model: {config.chat_model or '[dim]not set[/dim]'}")
+    console.print(f"Memory model: {config.memory_model or '[dim]not set[/dim]'}")
+    console.print(f"Embedding model: {config.embedding_model or '[dim]not set[/dim]'}")
 
 
 @main.command()
 @click.option("--host", default=None, help="Host to bind to (or NTRP_HOST)")
 @click.option("--port", default=None, type=int, help="Port to bind to (or NTRP_PORT)")
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")
-def serve(host: str | None, port: int | None, reload: bool):
+@click.option("--reset-key", is_flag=True, help="Generate a new API key")
+def serve(host: str | None, port: int | None, reload: bool, reset_key: bool):
+    """Start the ntrp API server."""
     config = get_config()
+    _require_chat_model(config)
+
+    if reset_key or not config.api_key_hash:
+        settings = load_user_settings()
+        plaintext, hashed = generate_api_key()
+        settings["api_key_hash"] = hashed
+        save_user_settings(settings)
+        config.api_key_hash = hashed
+        label = "New API key" if reset_key else "Your API key"
+        console.print(f"[bold]{label}:[/bold] [cyan]{plaintext}[/cyan]")
+        console.print("[dim]Enter this in the TUI to connect. It won't be shown again.[/dim]")
+        console.print()
+
     host = host or config.host
     port = port or config.port
 

@@ -42,11 +42,11 @@ const serverUrl = cliServer || envServer || saved.serverUrl || "http://localhost
 const apiKey = cliToken || envToken || saved.apiKey || "";
 let needsSetup = !apiKey;
 
-// Verify saved credentials actually work
+// Verify saved credentials — only invalidate if server is reachable but auth fails
 if (apiKey && !cliToken && !envToken) {
   setApiKey(apiKey);
   const health = await checkHealth({ serverUrl, apiKey, needsSetup: false });
-  if (!health.ok) needsSetup = true;
+  if (!health.ok && health.version !== null) needsSetup = true;
 }
 
 const config: Config = { serverUrl, apiKey, needsSetup };

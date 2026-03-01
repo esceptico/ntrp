@@ -1,4 +1,8 @@
+import hashlib
+import hmac
 import json
+import os
+import secrets
 from pathlib import Path
 
 from pydantic import Field, field_validator, model_validator
@@ -15,6 +19,13 @@ _logger = get_logger(__name__)
 
 
 SETTINGS_BACKUP_PATH = NTRP_DIR / "settings.json.bak"
+
+# Provider → (chat_model, memory_model, embedding_model)
+MODEL_DEFAULTS = {
+    "ANTHROPIC_API_KEY": ("claude-sonnet-4-6", "claude-sonnet-4-6", None),
+    "OPENAI_API_KEY": ("gpt-5.2", "gpt-5.2", "text-embedding-3-small"),
+    "GEMINI_API_KEY": ("gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-embedding-001"),
+}
 
 
 def load_user_settings() -> dict:
@@ -44,6 +55,34 @@ def save_user_settings(settings: dict) -> None:
     SETTINGS_PATH.write_text(json.dumps(settings, indent=2))
 
 
+# --- API key hashing ---
+
+def _hash_key(key: str, salt: bytes) -> str:
+    return hashlib.sha256(salt + key.encode()).hexdigest()
+
+
+
+def hash_api_key(key: str) -> str:
+    salt = secrets.token_bytes(16)
+    h = _hash_key(key, salt)
+    return f"{salt.hex()}:{h}"
+
+
+def verify_api_key(key: str, stored_hash: str) -> bool:
+    try:
+        salt_hex, h = stored_hash.split(":", 1)
+        salt = bytes.fromhex(salt_hex)
+        return hmac.compare_digest(_hash_key(key, salt), h)
+    except (ValueError, IndexError):
+        return False
+
+
+def generate_api_key() -> tuple[str, str]:
+    """Returns (plaintext_key, salted_hash)."""
+    key = secrets.token_urlsafe(32)
+    return key, hash_api_key(key)
+
+
 class Config(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="NTRP_",
@@ -60,10 +99,10 @@ class Config(BaseSettings):
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
 
     # Model IDs (must match entries in llm/models.py DEFAULTS or user config)
-    chat_model: str
+    chat_model: str | None = None
     explore_model: str | None = None
-    memory_model: str
-    embedding_model: str
+    memory_model: str | None = None
+    embedding_model: str | None = None
 
     # Memory (graph-based knowledge store)
     memory: bool = True
@@ -98,15 +137,26 @@ class Config(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
 
-    # API authentication
-    api_key: str
+    # API authentication (salted hash, not plaintext)
+    api_key_hash: str | None = None
     webhook_token: str | None = None
 
     @model_validator(mode="after")
-    def _default_explore_model(self) -> "Config":
-        if not self.explore_model:
+    def _resolve_model_defaults(self) -> "Config":
+        if not self.chat_model:
+            for env_var, (chat, memory, _) in MODEL_DEFAULTS.items():
+                if os.environ.get(env_var) or getattr(self, env_var.lower(), None):
+                    self.chat_model = chat
+                    if not self.memory_model:
+                        self.memory_model = memory
+                    break
+        if not self.explore_model and self.chat_model:
             self.explore_model = self.chat_model
-            _logger.info("explore_model not set, defaulting to chat_model: %s", self.chat_model)
+        if not self.embedding_model:
+            for env_var, (_, _, embedding) in MODEL_DEFAULTS.items():
+                if embedding and (os.environ.get(env_var) or getattr(self, env_var.lower(), None)):
+                    self.embedding_model = embedding
+                    break
         return self
 
     @field_validator("chat_model", "explore_model", "memory_model")
@@ -121,7 +171,9 @@ class Config(BaseSettings):
 
     @field_validator("embedding_model")
     @classmethod
-    def _validate_embedding_model(cls, v: str) -> str:
+    def _validate_embedding_model(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
         models = get_embedding_models()
         if v not in models:
             raise ValueError(f"Unknown embedding model: {v}. Available: {', '.join(models)}")
@@ -142,7 +194,9 @@ class Config(BaseSettings):
         return v
 
     @property
-    def embedding(self) -> EmbeddingConfig:
+    def embedding(self) -> EmbeddingConfig | None:
+        if not self.embedding_model:
+            return None
         model = get_embedding_model(self.embedding_model)
         return EmbeddingConfig(
             model=model.id,
@@ -196,11 +250,20 @@ def get_config() -> Config:
 
     # Build config: init args (settings.json) > env vars > defaults
     overrides = {k: settings[k] for k in PERSIST_KEYS if k in settings}
+
+    # Restore api_key_hash from settings
+    if "api_key_hash" in settings:
+        overrides["api_key_hash"] = settings["api_key_hash"]
+
     config = Config(**overrides)  # type: ignore - pydantic handles validation
 
-    # Persist defaulted explore_model so it stops mirroring chat_model on reload
-    if "explore_model" not in settings:
-        settings["explore_model"] = config.explore_model
+    # Persist defaulted models
+    changed = False
+    for key in ("chat_model", "explore_model", "memory_model"):
+        if key not in settings and getattr(config, key):
+            settings[key] = getattr(config, key)
+            changed = True
+    if changed:
         save_user_settings(settings)
 
     return config

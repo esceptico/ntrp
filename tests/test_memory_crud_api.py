@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from ntrp.config import Config
+from ntrp.config import Config, hash_api_key
 from ntrp.server.app import app
 from ntrp.server.runtime import Runtime
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
@@ -32,7 +32,7 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
     test_config = Config(
         vault_path=tmp_path / "vault",
         openai_api_key="test-key",
-        api_key="test-api-key",
+        api_key_hash=hash_api_key("test-api-key"),
         memory=True,
         embedding_model="test-embedding",
         memory_model="gemini-3-flash-preview",
@@ -71,7 +71,7 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
 @pytest_asyncio.fixture
 async def test_client(test_runtime: Runtime) -> AsyncGenerator[AsyncClient]:
     """HTTP client for API testing"""
-    headers = {"authorization": f"Bearer {test_runtime.config.api_key}"}
+    headers = {"authorization": "Bearer test-api-key"}
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=headers) as client:
         yield client
 
@@ -301,7 +301,7 @@ class TestMemoryDisabled:
         test_config = Config(
             vault_path=tmp_path / "vault",
             openai_api_key="test-key",
-            api_key="test-api-key",
+            api_key_hash=hash_api_key("test-api-key"),
             memory=False,
             chat_model="gemini-3-flash-preview",
             memory_model="gemini-3-flash-preview",
@@ -315,7 +315,7 @@ class TestMemoryDisabled:
         await runtime.connect()
         app.state.runtime = runtime
 
-        headers = {"authorization": f"Bearer {runtime.config.api_key}"}
+        headers = {"authorization": "Bearer test-api-key"}
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=headers) as client:
             responses = await asyncio.gather(
                 client.patch("/facts/1", json={"text": "test"}),

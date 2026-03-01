@@ -46,6 +46,7 @@ interface SettingsDialogProps {
   onServerConfigChange: (config: ServerConfig) => void;
   onRefreshIndexStatus: () => Promise<void>;
   onClose: () => void;
+  onServerCredentialsChange: (config: Config) => void;
 }
 
 export function SettingsDialog({
@@ -57,6 +58,7 @@ export function SettingsDialog({
   onServerConfigChange,
   onRefreshIndexStatus,
   onClose,
+  onServerCredentialsChange,
 }: SettingsDialogProps) {
   const accent = getAccent(settings.ui.accentColor);
 
@@ -234,13 +236,14 @@ export function SettingsDialog({
         return;
       }
       await setCredentials(url, key);
+      onServerCredentialsChange({ serverUrl: url, apiKey: key, needsSetup: false });
       setEditingServer(false);
     } catch {
       setServerError("Could not connect to server");
     } finally {
       setServerSaving(false);
     }
-  }, [serverUrl, serverApiKey, serverSaving]);
+  }, [serverUrl, serverApiKey, serverSaving, onServerCredentialsChange]);
 
   const handleCancelServerEdit = useCallback(() => {
     setServerUrl(config.serverUrl);

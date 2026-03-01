@@ -49,7 +49,7 @@ class Runtime:
         self.source_mgr = SourceManager(self._services, self.config, self.channel)
 
         self.embedding = self.config.embedding
-        self.indexer = Indexer(db_path=self.config.search_db_path, embedding=self.embedding, channel=self.channel)
+        self.indexer = Indexer(db_path=self.config.search_db_path, embedding=self.embedding, channel=self.channel) if self.embedding else None
 
         self.session_service: SessionService | None = None
         self._sessions_conn = None
@@ -125,7 +125,8 @@ class Runtime:
         new_embedding = self.config.embedding
         if new_embedding != self.embedding:
             self.embedding = new_embedding
-            await self.indexer.update_embedding(new_embedding)
+            if self.indexer:
+                await self.indexer.update_embedding(new_embedding)
             if self.memory:
                 self.memory.start_reembed(new_embedding, rebuild=True)
 
@@ -166,10 +167,11 @@ class Runtime:
         self.monitor_store = MonitorStateStore(self._sessions_conn)
         await self.monitor_store.init_schema()
 
-        _logger.info("Connecting search index")
-        await self.indexer.connect()
-        if self.indexer.index:
-            self._services["search_index"] = self.indexer.index
+        if self.indexer:
+            _logger.info("Connecting search index")
+            await self.indexer.connect()
+            if self.indexer.index:
+                self._services["search_index"] = self.indexer.index
 
         wire_events(self)
 
@@ -227,8 +229,9 @@ class Runtime:
             await self.memory.close()
         if self._sessions_conn:
             await self._sessions_conn.close()
-        await self.indexer.stop()
-        await self.indexer.close()
+        if self.indexer:
+            await self.indexer.stop()
+            await self.indexer.close()
         await llm_close()
         await self.channel.stop()
 
@@ -242,7 +245,7 @@ class Runtime:
 
     def get_source_errors(self) -> dict[str, str]:
         errors = dict(self.source_mgr.errors)
-        if self.indexer.error:
+        if self.indexer and self.indexer.error:
             errors["index"] = self.indexer.error
         return errors
 
@@ -302,10 +305,11 @@ class Runtime:
             self.memory.start_consolidation()
 
     def start_indexing(self) -> None:
-        self.indexer.start(list(self.indexables.values()))
+        if self.indexer:
+            self.indexer.start(list(self.indexables.values()))
 
     async def get_index_status(self) -> dict:
-        status = await self.indexer.get_status()
+        status = await self.indexer.get_status() if self.indexer else {"status": "disabled"}
         if self.memory:
             status["reembedding"] = self.memory.reembed_running
             status["reembed_progress"] = self.memory.reembed_progress

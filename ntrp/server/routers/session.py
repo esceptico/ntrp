@@ -260,7 +260,7 @@ async def update_embedding_model(
     return {
         "status": "reindexing",
         "embedding_model": req.embedding_model,
-        "embedding_dim": runtime.config.embedding.dim,
+        "embedding_dim": runtime.config.embedding.dim if runtime.config.embedding else None,
     }
 
 
@@ -274,6 +274,8 @@ async def get_context_usage(
     session_id: str | None = None,
 ):
     model = runtime.config.chat_model
+    if not model:
+        raise HTTPException(status_code=503, detail="No chat model configured")
     model_limit = get_model(model).max_context_tokens
 
     data = await svc.load(session_id)

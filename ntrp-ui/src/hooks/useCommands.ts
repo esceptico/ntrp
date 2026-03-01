@@ -226,7 +226,7 @@ export function useCommands(context: CommandContext) {
 
   const handleCommand = useCallback(
     async (command: string): Promise<boolean> => {
-      const parts = command.replace("/", "").split(" ");
+      const parts = command.slice(1).split(" ");
       const cmd = parts[0].toLowerCase();
 
       const handler = COMMAND_HANDLERS[cmd];

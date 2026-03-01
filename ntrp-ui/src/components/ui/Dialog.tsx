@@ -6,11 +6,12 @@ interface DialogProps {
   title: string;
   size: "medium" | "large" | "full";
   onClose: () => void;
+  closable?: boolean;
   footer?: React.ReactNode;
   children: (dims: { width: number; height: number }) => React.ReactNode;
 }
 
-export function Dialog({ title, size, footer, children }: DialogProps) {
+export function Dialog({ title, size, closable = true, footer, children }: DialogProps) {
   const { width: W, height: H } = useDimensions();
 
   let dialogW: number;
@@ -47,7 +48,7 @@ export function Dialog({ title, size, footer, children }: DialogProps) {
         >
           <box flexShrink={0} paddingX={1} flexDirection="row" justifyContent="space-between">
             <text><span fg={colors.text.primary}><strong>{title}</strong></span></text>
-            <text><span fg={colors.text.muted}>esc close</span></text>
+            {closable && <text><span fg={colors.text.muted}>esc close</span></text>}
           </box>
           <box flexGrow={1} overflow="hidden" paddingX={1} height={contentH}>
             {children({ width: contentW, height: contentH })}

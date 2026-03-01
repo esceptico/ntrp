@@ -110,7 +110,7 @@ export function Setup({ initialServerUrl, onConnect }: SetupProps) {
     : <Hints items={[["enter", "connect"], ["tab/↑↓", "switch"]]} />;
 
   return (
-    <Dialog title="CONNECT" size="medium" onClose={() => {}} footer={footer}>
+    <Dialog title="CONNECT" size="medium" onClose={() => {}} closable={false} footer={footer}>
       {() => (
         <box flexDirection="column">
           {items.map((item) => {

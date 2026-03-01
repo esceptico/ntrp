@@ -29,9 +29,11 @@ async def email_webhook(
     webhook_token: str | None = Header(default=None, alias="X-Webhook-Token"),
 ):
     """Receive new-email notifications from an external webhook service."""
-    expected_token = runtime.config.webhook_token or runtime.config.api_key
+    expected_token = runtime.config.webhook_token
+    if not expected_token:
+        raise HTTPException(status_code=503, detail="Webhook token not configured")
     has_valid_header = bool(webhook_token) and secrets.compare_digest(webhook_token, expected_token)
-    has_valid_bearer = authorization == f"Bearer {expected_token}"
+    has_valid_bearer = bool(authorization) and secrets.compare_digest(authorization, f"Bearer {expected_token}")
     if not has_valid_header and not has_valid_bearer:
         raise HTTPException(status_code=401, detail="Unauthorized webhook request")
 
