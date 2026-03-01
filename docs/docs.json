@@ -3,9 +3,9 @@
   "theme": "mint",
   "name": "ntrp",
   "colors": {
-    "primary": "#6D28D9",
-    "light": "#8B5CF6",
-    "dark": "#5B21B6"
+    "primary": "#64748B",
+    "light": "#94A3B8",
+    "dark": "#475569"
   },
   "favicon": "/favicon.svg",
   "navigation": {
