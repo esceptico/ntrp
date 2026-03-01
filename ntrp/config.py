@@ -57,9 +57,9 @@ def save_user_settings(settings: dict) -> None:
 
 # --- API key hashing ---
 
+
 def _hash_key(key: str, salt: bytes) -> str:
     return hashlib.sha256(salt + key.encode()).hexdigest()
-
 
 
 def hash_api_key(key: str) -> str:

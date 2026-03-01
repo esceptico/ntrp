@@ -49,7 +49,11 @@ class Runtime:
         self.source_mgr = SourceManager(self._services, self.config, self.channel)
 
         self.embedding = self.config.embedding
-        self.indexer = Indexer(db_path=self.config.search_db_path, embedding=self.embedding, channel=self.channel) if self.embedding else None
+        self.indexer = (
+            Indexer(db_path=self.config.search_db_path, embedding=self.embedding, channel=self.channel)
+            if self.embedding
+            else None
+        )
 
         self.session_service: SessionService | None = None
         self._sessions_conn = None
