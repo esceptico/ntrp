@@ -46,7 +46,7 @@ dev = [
 ]
 
 [project.scripts]
-ntrp = "ntrp.cli:main"
+ntrp-server = "ntrp.cli:main"
 
 [build-system]
 requires = ["hatchling"]

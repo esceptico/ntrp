@@ -13,10 +13,10 @@ Authorization: Bearer YOUR_API_KEY
 
 ## Getting a key
 
-An API key is generated on first `ntrp serve`:
+An API key is generated on first `ntrp-server serve`:
 
 ```bash
-uv run ntrp serve
+uv run ntrp-server serve
 # Your API key: nBx7k2...
 # Enter this in the TUI to connect. It won't be shown again.
 ```
@@ -24,7 +24,7 @@ uv run ntrp serve
 ## Resetting a key
 
 ```bash
-uv run ntrp serve --reset-key
+uv run ntrp-server serve --reset-key
 ```
 
 This invalidates the old key immediately.

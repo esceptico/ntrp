@@ -41,8 +41,8 @@ bun install -g ntrp-cli # terminal UI (or: npx ntrp-cli)
 ```
 
 ```bash
-ntrp serve   # starts backend, prints a one-time API key
-ntrp         # terminal UI (separate terminal) – paste the key on first launch
+ntrp-server serve   # starts backend, prints a one-time API key
+ntrp                # terminal UI (separate terminal) – paste the key on first launch
 ```
 
 Full setup guide, integrations, and API reference at **[ntrp.mintlify.app](https://ntrp.mintlify.app)**.

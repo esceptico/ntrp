@@ -17,6 +17,10 @@ for (let i = 0; i < args.length; i++) {
     cliServer = args[++i]!;
   } else if (args[i] === "--token" && args[i + 1]) {
     cliToken = args[++i]!;
+  } else if (args[i] === "--version" || args[i] === "-v") {
+    const pkg = await import("../package.json");
+    console.log(pkg.version);
+    process.exit(0);
   } else if (args[i] === "--help" || args[i] === "-h") {
     console.log(`
 ntrp - Personal entropy reduction system
@@ -27,6 +31,7 @@ Usage:
 Options:
   --server URL     Server URL (default: http://localhost:8000)
   --token TOKEN    API key for server authentication (or set NTRP_API_KEY)
+  --version, -v    Show version
   --help, -h       Show this help
 `);
     process.exit(0);

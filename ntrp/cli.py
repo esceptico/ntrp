@@ -32,6 +32,7 @@ def _require_chat_model(config) -> None:
 
 
 @click.group()
+@click.version_option(package_name="ntrp")
 def main():
     """ntrp - personal entropy reduction system"""
 

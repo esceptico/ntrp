@@ -66,11 +66,11 @@ export NTRP_EMBEDDING_MODEL=text-embedding-3-small
 
 ## Authentication
 
-On first `ntrp serve`, an API key is generated and printed. The server stores only a salted SHA-256 hash — the plaintext key is never persisted.
+On first `ntrp-server serve`, an API key is generated and printed. The server stores only a salted SHA-256 hash — the plaintext key is never persisted.
 
 ```bash
 # Generate a new key
-ntrp serve --reset-key
+ntrp-server serve --reset-key
 ```
 
 The TUI client stores the key in your OS keychain (macOS Keychain, Linux libsecret). Fallback: `~/.ntrp/settings.json`.

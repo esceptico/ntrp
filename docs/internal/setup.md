@@ -24,8 +24,8 @@ cp .env.example ~/.ntrp/.env   # if developing from source
 ```
 
 ```bash
-ntrp serve   # starts backend, prints a one-time API key
-ntrp         # terminal UI (separate terminal) – paste the key on first launch
+ntrp-server serve   # starts backend, prints a one-time API key
+ntrp                # terminal UI (separate terminal) – paste the key on first launch
 ```
 
 Config priority: environment variables > CWD `.env` > `~/.ntrp/.env` > defaults.
@@ -178,13 +178,13 @@ Gmail and Calendar tokens are stored in `~/.ntrp/` (covered by the data volume).
 The server generates and stores a hashed API key on first run. The plaintext key is printed once — enter it in the terminal UI setup screen or pass it via `--token`:
 
 ```bash
-ntrp --token <key>           # or set NTRP_API_KEY env var
+ntrp --token <key>             # or set NTRP_API_KEY env var
 ```
 
 To regenerate the key:
 
 ```bash
-ntrp serve --reset-key
+ntrp-server serve --reset-key
 ```
 
 All API requests require `Authorization: Bearer <key>`.
