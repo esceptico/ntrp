@@ -5,8 +5,7 @@ import warnings
 from ntrp.tools.web import WebFetchTool, WebSearchTool
 
 warnings.warn(
-    "ntrp.tools.web_fetch is deprecated, use ntrp.tools.web instead. "
-    "This module will be removed in a future release.",
+    "ntrp.tools.web_fetch is deprecated, use ntrp.tools.web instead. This module will be removed in a future release.",
     DeprecationWarning,
     stacklevel=2,
 )
