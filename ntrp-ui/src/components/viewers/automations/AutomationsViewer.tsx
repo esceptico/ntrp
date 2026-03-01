@@ -12,6 +12,7 @@ import {
   SCHEDULE_DAYS,
   INTERVAL_DAYS,
   DAY_NAMES,
+  EVENT_TYPES,
   type CreateFocus,
 } from "./AutomationCreateView.js";
 import { ResultViewer } from "./ResultViewer.js";
@@ -487,7 +488,11 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
         }
         if (createFocus === "event_type") {
           if (key.name === "left" || key.name === "h" || key.name === "right" || key.name === "l") {
-            setCreateEventType((t) => t === "event_approaching" ? "new_email" : "event_approaching");
+            const types = EVENT_TYPES;
+            setCreateEventType((t) => {
+              const i = types.indexOf(t as typeof types[number]);
+              return types[(i + 1) % types.length];
+            });
           }
           return;
         }

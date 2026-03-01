@@ -8,7 +8,7 @@ export const TRIGGER_TYPES = ["time", "event"] as const;
 export const SCHEDULE_MODES = ["schedule", "interval"] as const;
 export const SCHEDULE_DAYS = ["once", "daily", "weekdays", "custom"] as const;
 export const INTERVAL_DAYS = ["always", "weekdays", "custom"] as const;
-export const EVENT_TYPES = ["event_approaching", "new_email"] as const;
+export const EVENT_TYPES = ["event_approaching"] as const;
 export const DAY_NAMES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
 interface AutomationCreateViewProps {
