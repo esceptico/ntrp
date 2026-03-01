@@ -4,6 +4,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from ntrp.config import verify_api_key
 from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
@@ -44,6 +45,13 @@ app.add_middleware(
 )
 
 
+def _extract_bearer_token(request: Request) -> str:
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Bearer "):
+        return auth.removeprefix("Bearer ").strip()
+    return ""
+
+
 class AuthMiddleware:
     """Pure ASGI middleware — doesn't buffer streaming responses."""
 
@@ -63,8 +71,8 @@ class AuthMiddleware:
 
         public_paths = {"/health", "/webhooks/email"}
         if request.url.path not in public_paths:
-            auth = request.headers.get("authorization", "")
-            if auth != f"Bearer {runtime.config.api_key}":
+            token = _extract_bearer_token(request)
+            if not token or not runtime.config.api_key_hash or not verify_api_key(token, runtime.config.api_key_hash):
                 response = JSONResponse(status_code=401, content={"detail": "Unauthorized"})
                 await response(scope, receive, send)
                 return
@@ -84,8 +92,12 @@ app.include_router(webhooks_router)
 
 
 @app.get("/health")
-async def health(runtime: Runtime = Depends(get_runtime)):
-    return {"status": "ok" if runtime.connected else "unavailable", "version": app.version}
+async def health(request: Request, runtime: Runtime = Depends(get_runtime)):
+    result: dict = {"status": "ok" if runtime.connected else "unavailable", "version": app.version}
+    token = _extract_bearer_token(request)
+    if token and runtime.config.api_key_hash:
+        result["auth"] = verify_api_key(token, runtime.config.api_key_hash)
+    return result
 
 
 @app.get("/index/status")

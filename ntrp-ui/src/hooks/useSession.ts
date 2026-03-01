@@ -31,49 +31,67 @@ export function useSession(config: Config) {
   const [history, setHistory] = useState<HistoryMessage[]>([]);
   const initRef = useRef(false);
 
+  const initializeSession = useCallback(async () => {
+    try {
+      const health = await checkHealth(config);
+      if (!health.ok) return false;
+
+      const [session, configData, idxStatus, historyData] = await Promise.all([
+        getSession(config),
+        getServerConfig(config),
+        getIndexStatus(config).catch(() => null),
+        getHistory(config).catch(() => ({ messages: [] })),
+      ]);
+
+      setSessionId(session.session_id);
+      setSessionName(session.name ?? null);
+      setSources(session.sources);
+      setServerConfig(configData);
+      setHistory(historyData.messages);
+      setServerConnected(true);
+      setServerVersion(health.version);
+
+      if (idxStatus?.indexing || idxStatus?.reembedding) {
+        setIndexStatus(idxStatus);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }, [config]);
+
+  // Initial connection with retry
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
 
-    async function waitForServer(maxAttempts = 30, intervalMs = 1000): Promise<{ ok: boolean; version: string | null }> {
-      for (let i = 0; i < maxAttempts; i++) {
-        const health = await checkHealth(config);
-        if (health.ok) return health;
-        await new Promise((r) => setTimeout(r, intervalMs));
-      }
-      return { ok: false, version: null };
-    }
-
+    let cancelled = false;
     async function init() {
-      try {
-        const health = await waitForServer();
-        setServerConnected(health.ok);
-        setServerVersion(health.version);
-
-        if (health.ok) {
-          const [session, configData, idxStatus, historyData] = await Promise.all([
-            getSession(config),
-            getServerConfig(config),
-            getIndexStatus(config).catch(() => null),
-            getHistory(config).catch(() => ({ messages: [] })),
-          ]);
-
-          setSessionId(session.session_id);
-          setSessionName(session.name ?? null);
-          setSources(session.sources);
-          setServerConfig(configData);
-          setHistory(historyData.messages);
-
-          if (idxStatus?.indexing || idxStatus?.reembedding) {
-            setIndexStatus(idxStatus);
-          }
-        }
-      } catch {
-        setServerConnected(false);
+      for (let i = 0; i < 30 && !cancelled; i++) {
+        if (await initializeSession()) return;
+        await new Promise((r) => setTimeout(r, 1000));
       }
     }
     init();
-  }, [config]);
+    return () => { cancelled = true; };
+  }, [initializeSession]);
+
+  // Heartbeat: detect server going down, reconnect when it comes back
+  useEffect(() => {
+    if (!initRef.current) return;
+
+    const intervalMs = serverConnected ? 10000 : 3000;
+    const poll = setInterval(async () => {
+      const health = await checkHealth(config);
+      if (health.ok && !serverConnected) {
+        await initializeSession();
+      } else if (!health.ok && serverConnected) {
+        setServerConnected(false);
+      }
+    }, intervalMs);
+
+    return () => clearInterval(poll);
+  }, [serverConnected, config, initializeSession]);
 
   useEffect(() => {
     if (!serverConnected) return;

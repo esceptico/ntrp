@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRenderer } from "@opentui/react";
 import type { Selection } from "@opentui/core";
 import type { Message, Config } from "./types.js";
-import { defaultConfig } from "./types.js";
 import { colors, setTheme, themeNames, type Theme } from "./components/ui/index.js";
 import { BULLET } from "./lib/constants.js";
 import {
@@ -28,8 +27,10 @@ import {
   ApprovalDialog,
   ErrorBoundary,
 } from "./components/index.js";
+import { Setup } from "./components/Setup.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { COMMANDS } from "./lib/commands.js";
+import { setApiKey } from "./api/fetch.js";
 import { getSkills, deleteSession, listSessions, restoreSession, permanentlyDeleteSession, type Skill } from "./api/client.js";
 
 type ViewMode = "chat" | "memory" | "settings" | "automations" | "sessions";
@@ -44,6 +45,8 @@ interface AppContentProps {
   toggleSettings: () => void;
   setThemeByName: (name: string) => void;
   showSettings: boolean;
+  logout: () => void;
+  onServerChange: (config: Config) => void;
 }
 
 function AppContent({
@@ -53,7 +56,9 @@ function AppContent({
   closeSettings,
   toggleSettings,
   setThemeByName,
-  showSettings
+  showSettings,
+  logout,
+  onServerChange
 }: AppContentProps) {
   const renderer = useRenderer();
 
@@ -163,6 +168,7 @@ function AppContent({
     switchSession,
     resetForSessionSwitch,
     refreshSidebar,
+    logout,
   });
 
   const allCommands = useMemo(() => [
@@ -296,6 +302,7 @@ function AppContent({
           <Sidebar
             serverConfig={serverConfig}
             serverVersion={serverVersion}
+            serverUrl={config.serverUrl}
             data={sidebarData}
             usage={streaming.usage}
             width={SIDEBAR_WIDTH}
@@ -348,7 +355,7 @@ function AppContent({
         {/* Status — pinned above input */}
         {!serverConnected && (
           <box flexShrink={0}>
-            <text><span fg={colors.status.error}>{BULLET} Server not connected. Run: ntrp serve</span></text>
+            <text><span fg={colors.status.error}>{BULLET} Server not connected. Reconnecting...</span></text>
           </box>
         )}
 
@@ -453,6 +460,7 @@ function AppContent({
           onServerConfigChange={(newConfig) => updateServerConfig(newConfig)}
           onRefreshIndexStatus={refreshIndexStatus}
           onClose={closeSettings}
+          onServerCredentialsChange={onServerChange}
         />
       )}
     </box>
@@ -460,7 +468,7 @@ function AppContent({
   );
 }
 
-function AppWithAccent({ config }: { config: Config }) {
+function AppWithAccent({ config, logout, onServerChange }: { config: Config; logout: () => void; onServerChange: (config: Config) => void }) {
   const { settings, updateSetting, closeSettings, toggleSettings, showSettings } = useSettings(config);
 
   // Sync colors before children render — setTheme mutates colors/accentColors in place
@@ -482,15 +490,40 @@ function AppWithAccent({ config }: { config: Config }) {
         toggleSettings={toggleSettings}
         setThemeByName={setThemeByName}
         showSettings={showSettings}
+        logout={logout}
+        onServerChange={onServerChange}
       />
     </AccentColorProvider>
   );
 }
 
-export default function App({ config = defaultConfig }: { config?: Config }) {
+export default function App({ config: initialConfig }: { config: Config }) {
+  const [config, setConfig] = useState(initialConfig);
+
+  const handleConnect = useCallback((newConfig: Config) => {
+    setApiKey(newConfig.apiKey);
+    setConfig(newConfig);
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    setApiKey("");
+    setConfig((c) => ({ ...c, apiKey: "", needsSetup: true }));
+  }, []);
+
+  if (config.needsSetup) {
+    return (
+      <DimensionsProvider>
+        <Setup
+          initialServerUrl={config.serverUrl}
+          onConnect={handleConnect}
+        />
+      </DimensionsProvider>
+    );
+  }
+
   return (
     <DimensionsProvider>
-      <AppWithAccent config={config} />
+      <AppWithAccent config={config} logout={handleLogout} onServerChange={handleConnect} />
     </DimensionsProvider>
   );
 }

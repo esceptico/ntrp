@@ -23,7 +23,10 @@ import { SectionId, SECTION_IDS, SECTION_LABELS, LIMIT_ITEMS, CONNECTION_ITEMS, 
 import { ModelDropdown } from "./ModelDropdown.js";
 import { BrowserDropdown } from "./BrowserDropdown.js";
 import { ConnectionsSection } from "./ConnectionsSection.js";
-import { AgentSection, DirectivesSection, LimitsSection, NotifiersSection, SkillsSection } from "./sections/index.js";
+import { AgentSection, DirectivesSection, LimitsSection, NotifiersSection, ServerSection, SkillsSection } from "./sections/index.js";
+import { setCredentials } from "../../../lib/secrets.js";
+import { checkHealth } from "../../../api/client.js";
+import { setApiKey as setFetchApiKey } from "../../../api/fetch.js";
 import { useTextInput } from "../../../hooks/useTextInput.js";
 import { useNotifiers } from "../../../hooks/useNotifiers.js";
 import { useSkills } from "../../../hooks/useSkills.js";
@@ -43,6 +46,7 @@ interface SettingsDialogProps {
   onServerConfigChange: (config: ServerConfig) => void;
   onRefreshIndexStatus: () => Promise<void>;
   onClose: () => void;
+  onServerCredentialsChange: (config: Config) => void;
 }
 
 export function SettingsDialog({
@@ -54,12 +58,22 @@ export function SettingsDialog({
   onServerConfigChange,
   onRefreshIndexStatus,
   onClose,
+  onServerCredentialsChange,
 }: SettingsDialogProps) {
   const accent = getAccent(settings.ui.accentColor);
 
-  const [activeSection, setActiveSection] = useState<SectionId>("agent");
+  const [activeSection, setActiveSection] = useState<SectionId>("server");
   const [agentIndex, setAgentIndex] = useState(0);
   const [limitsIndex, setLimitsIndex] = useState(0);
+
+  const [serverIndex, setServerIndex] = useState(0);
+  const [editingServer, setEditingServer] = useState(false);
+  const [serverUrl, setServerUrl] = useState(config.serverUrl);
+  const [serverUrlCursor, setServerUrlCursor] = useState(0);
+  const [serverApiKey, setServerApiKey] = useState(config.apiKey);
+  const [serverApiKeyCursor, setServerApiKeyCursor] = useState(0);
+  const [serverSaving, setServerSaving] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const [connectionItem, setConnectionItem] = useState<ConnectionItem>("vault");
   const [googleAccounts, setGoogleAccounts] = useState<GoogleAccount[]>([]);
@@ -189,6 +203,57 @@ export function SettingsDialog({
     }
   }, [config, googleAccounts, selectedGoogleIndex, actionInProgress]);
 
+  const { handleKey: handleServerUrlKey } = useTextInput({
+    text: serverUrl,
+    cursorPos: serverUrlCursor,
+    setText: setServerUrl,
+    setCursorPos: setServerUrlCursor,
+  });
+
+  const { handleKey: handleServerApiKeyKey } = useTextInput({
+    text: serverApiKey,
+    cursorPos: serverApiKeyCursor,
+    setText: setServerApiKey,
+    setCursorPos: setServerApiKeyCursor,
+  });
+
+  const handleSaveServer = useCallback(async () => {
+    if (serverSaving) return;
+    const url = serverUrl.trim();
+    const key = serverApiKey.trim();
+    if (!url || !key) {
+      setServerError("Both fields are required");
+      return;
+    }
+    setServerError(null);
+    setServerSaving(true);
+    try {
+      setFetchApiKey(key);
+      const health = await checkHealth({ serverUrl: url, apiKey: key, needsSetup: false });
+      if (!health.ok) {
+        setServerError("Could not connect to server");
+        setServerSaving(false);
+        return;
+      }
+      await setCredentials(url, key);
+      onServerCredentialsChange({ serverUrl: url, apiKey: key, needsSetup: false });
+      setEditingServer(false);
+    } catch {
+      setServerError("Could not connect to server");
+    } finally {
+      setServerSaving(false);
+    }
+  }, [serverUrl, serverApiKey, serverSaving, onServerCredentialsChange]);
+
+  const handleCancelServerEdit = useCallback(() => {
+    setServerUrl(config.serverUrl);
+    setServerApiKey(config.apiKey);
+    setServerUrlCursor(0);
+    setServerApiKeyCursor(0);
+    setServerError(null);
+    setEditingServer(false);
+  }, [config]);
+
   const { handleKey: handleDirectivesKey } = useTextInput({
     text: directivesContent,
     cursorPos: directivesCursorPos,
@@ -300,6 +365,10 @@ export function SettingsDialog({
       if (dropdownTarget || actionInProgress) return;
 
       if (key.name === "escape" || key.name === "q") {
+        if (activeSection === "server" && editingServer) {
+          handleCancelServerEdit();
+          return;
+        }
         if (activeSection === "notifiers" && notifiers.mode !== "list") {
           notifiers.handleKeypress(key);
           return;
@@ -317,6 +386,10 @@ export function SettingsDialog({
       }
 
       if (key.name === "tab") {
+        if (activeSection === "server" && editingServer) {
+          setServerIndex((i) => (i === 0 ? 1 : 0));
+          return;
+        }
         if (activeSection === "notifiers" && notifiers.mode !== "list") return;
         if (activeSection === "skills" && skills.mode !== "list") return;
         if (activeSection === "directives" && editingDirectives) return;
@@ -327,7 +400,27 @@ export function SettingsDialog({
         return;
       }
 
-      if (activeSection === "agent") {
+      if (activeSection === "server") {
+        if (editingServer) {
+          if (key.name === "s" && key.ctrl) {
+            handleSaveServer();
+          } else if (serverIndex === 0) {
+            handleServerUrlKey(key);
+          } else {
+            handleServerApiKeyKey(key);
+          }
+        } else {
+          if (key.name === "up" || key.name === "k") {
+            setServerIndex((i) => Math.max(0, i - 1));
+          } else if (key.name === "down" || key.name === "j") {
+            setServerIndex((i) => Math.min(1, i + 1));
+          } else if (key.name === "return" || key.name === "space") {
+            setServerUrlCursor(serverUrl.length);
+            setServerApiKeyCursor(serverApiKey.length);
+            setEditingServer(true);
+          }
+        }
+      } else if (activeSection === "agent") {
         if (key.name === "up" || key.name === "k") {
           setAgentIndex((i) => Math.max(0, i - 1));
         } else if (key.name === "down" || key.name === "j") {
@@ -408,6 +501,7 @@ export function SettingsDialog({
       connectionItem, googleAccounts, selectedGoogleIndex, serverConfig,
       handleAddGoogle, handleRemoveGoogle, handleStartVaultEdit, handleToggleSource, actionInProgress,
       notifiers, skills,
+      editingServer, serverIndex, serverUrl, serverApiKey, handleServerUrlKey, handleServerApiKeyKey, handleSaveServer, handleCancelServerEdit,
       editingDirectives, handleDirectivesKey, handleSaveDirectives, handleCancelDirectives, handleStartDirectivesEdit,
     ]
   );
@@ -574,6 +668,20 @@ export function SettingsDialog({
 
               {/* Detail pane */}
               <box flexDirection="column" width={detailWidth} height={contentHeight} overflow="hidden">
+                {activeSection === "server" && (
+                  <ServerSection
+                    serverUrl={serverUrl}
+                    serverUrlCursor={serverUrlCursor}
+                    apiKey={serverApiKey}
+                    apiKeyCursor={serverApiKeyCursor}
+                    selectedIndex={serverIndex}
+                    editing={editingServer}
+                    accent={accent}
+                    saving={serverSaving}
+                    error={serverError}
+                  />
+                )}
+
                 {activeSection === "agent" && (
                   <AgentSection
                     chatModel={chatModel}

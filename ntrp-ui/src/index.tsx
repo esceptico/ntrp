@@ -3,23 +3,26 @@ import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import App from "./App.js";
 import { setApiKey } from "./api/fetch.js";
-import { defaultConfig, type Config } from "./types.js";
+import { checkHealth } from "./api/client.js";
+import { getCredentials } from "./lib/secrets.js";
+import type { Config } from "./types.js";
 
 // Parse CLI args
 const args = process.argv.slice(2);
-const config: Config = { ...defaultConfig };
+let cliServer: string | undefined;
+let cliToken: string | undefined;
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--server" && args[i + 1]) {
-    config.serverUrl = args[++i]!;
+    cliServer = args[++i]!;
   } else if (args[i] === "--token" && args[i + 1]) {
-    config.apiKey = args[++i]!;
+    cliToken = args[++i]!;
   } else if (args[i] === "--help" || args[i] === "-h") {
     console.log(`
 ntrp - Personal entropy reduction system
 
 Usage:
-  ntrp-ui [options]
+  ntrp [options]
 
 Options:
   --server URL     Server URL (default: http://localhost:8000)
@@ -30,7 +33,25 @@ Options:
   }
 }
 
-if (config.apiKey) setApiKey(config.apiKey);
+// Config resolution: CLI > env > keychain > defaults
+const envServer = process.env.NTRP_SERVER_URL;
+const envToken = process.env.NTRP_API_KEY;
+const saved = await getCredentials();
+
+const serverUrl = cliServer || envServer || saved.serverUrl || "http://localhost:8000";
+const apiKey = cliToken || envToken || saved.apiKey || "";
+let needsSetup = !apiKey;
+
+// Verify saved credentials — only invalidate if server is reachable but auth fails
+if (apiKey && !cliToken && !envToken) {
+  setApiKey(apiKey);
+  const health = await checkHealth({ serverUrl, apiKey, needsSetup: false });
+  if (!health.ok && health.version !== null) needsSetup = true;
+}
+
+const config: Config = { serverUrl, apiKey, needsSetup };
+
+if (apiKey) setApiKey(apiKey);
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,

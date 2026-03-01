@@ -1,70 +1,76 @@
 import asyncio
+import secrets
+import socket
 
 import click
+import uvicorn
 from rich.console import Console
 
-from ntrp.config import Config
+from ntrp.config import generate_api_key, get_config, load_user_settings, save_user_settings
+from ntrp.core.agent import Agent
+from ntrp.core.prompts import build_system_prompt
+from ntrp.core.spawner import create_spawn_fn
+from ntrp.events.internal import RunCompleted, RunStarted
 from ntrp.logging import UVICORN_LOG_CONFIG
+from ntrp.server.runtime import Runtime
+from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 
 console = Console()
 
 
-@click.group(invoke_without_command=True)
-@click.pass_context
-def main(ctx):
-    """ntrp - personal entropy reduction system"""
-    try:
-        ctx.ensure_object(dict)
-        ctx.obj["config"] = Config()
-    except ValueError as e:
-        # Only fail if we're running a command that needs config
-        ctx.obj["config_error"] = str(e)
+def _require_chat_model(config) -> None:
+    if not config.chat_model:
+        console.print("[red]Error:[/red] No chat model configured.")
+        console.print()
+        console.print("Set a provider API key:")
+        console.print("  ANTHROPIC_API_KEY")
+        console.print("  OPENAI_API_KEY")
+        console.print("  GEMINI_API_KEY")
+        console.print()
+        console.print("Or specify a model directly: NTRP_CHAT_MODEL=<model>")
+        raise SystemExit(1)
 
-    # If no subcommand, show help
-    if ctx.invoked_subcommand is None:
-        console.print("[bold]ntrp[/bold] - personal entropy reduction system\n")
-        console.print("Run [cyan]ntrp serve[/cyan] to start the server.")
-        console.print("\nUse [cyan]ntrp --help[/cyan] for all commands.")
+
+@click.group()
+def main():
+    """ntrp - personal entropy reduction system"""
 
 
 @main.command()
-@click.pass_context
-def status(ctx):
+def status():
     """Show current status of ntrp."""
-    if "config_error" in ctx.obj:
-        console.print(f"[red]Error:[/red] {ctx.obj['config_error']}")
-        console.print()
-        console.print("[bold]Required environment variables:[/bold]")
-        console.print("  OPENAI_API_KEY - your OpenAI API key")
-        console.print()
-        console.print("[bold]Optional environment variables:[/bold]")
-        console.print("  ANTHROPIC_API_KEY, GEMINI_API_KEY - LLM provider keys")
-        console.print("  EXA_API_KEY - for web search")
-        raise SystemExit(1)
-
-    config = ctx.obj["config"]
-
+    config = get_config()
     console.print("[bold]ntrp status[/bold]")
     console.print()
     console.print(f"Database dir: [cyan]{config.db_dir}[/cyan]")
-    console.print(f"Embedding model: {config.embedding_model}")
-    console.print(f"Chat model: {config.chat_model}")
+    console.print(f"Chat model: {config.chat_model or '[dim]not set[/dim]'}")
+    console.print(f"Memory model: {config.memory_model or '[dim]not set[/dim]'}")
+    console.print(f"Embedding model: {config.embedding_model or '[dim]not set[/dim]'}")
 
 
 @main.command()
-@click.option("--host", default="127.0.0.1", help="Host to bind to")
-@click.option("--port", default=8000, help="Port to bind to")
+@click.option("--host", default=None, help="Host to bind to (or NTRP_HOST)")
+@click.option("--port", default=None, type=int, help="Port to bind to (or NTRP_PORT)")
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")
-@click.pass_context
-def serve(ctx, host: str, port: int, reload: bool):
+@click.option("--reset-key", is_flag=True, help="Generate a new API key")
+def serve(host: str | None, port: int | None, reload: bool, reset_key: bool):
     """Start the ntrp API server."""
-    if "config_error" in ctx.obj:
-        console.print(f"[red]Error:[/red] {ctx.obj['config_error']}")
-        raise SystemExit(1)
+    config = get_config()
+    _require_chat_model(config)
 
-    import socket
+    if reset_key or not config.api_key_hash:
+        settings = load_user_settings()
+        plaintext, hashed = generate_api_key()
+        settings["api_key_hash"] = hashed
+        save_user_settings(settings)
+        config.api_key_hash = hashed
+        label = "New API key" if reset_key else "Your API key"
+        console.print(f"[bold]{label}:[/bold] [cyan]{plaintext}[/cyan]")
+        console.print("[dim]Enter this in the TUI to connect. It won't be shown again.[/dim]")
+        console.print()
 
-    import uvicorn
+    host = host or config.host
+    port = port or config.port
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
@@ -89,26 +95,12 @@ def serve(ctx, host: str, port: int, reload: bool):
 
 @main.command()
 @click.option("-p", "--prompt", required=True, help="The prompt to execute")
-@click.pass_context
-def run(ctx, prompt: str):
+def run(prompt: str):
     """Run agent once with a prompt (headless, non-interactive mode)."""
-    if "config_error" in ctx.obj:
-        console.print(f"[red]Error:[/red] {ctx.obj['config_error']}")
-        raise SystemExit(1)
-
     asyncio.run(_run_headless(prompt))
 
 
 async def _run_headless(prompt: str):
-    import secrets
-
-    from ntrp.core.agent import Agent
-    from ntrp.core.prompts import build_system_prompt
-    from ntrp.core.spawner import create_spawn_fn
-    from ntrp.events import RunCompleted, RunStarted
-    from ntrp.server.runtime import Runtime
-    from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
-
     runtime = Runtime()
     await runtime.connect()
 

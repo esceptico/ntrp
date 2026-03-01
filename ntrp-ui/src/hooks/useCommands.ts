@@ -15,6 +15,7 @@ import {
   restoreSession,
   type SessionListItem,
 } from "../api/client.js";
+import { deleteCredentials } from "../lib/secrets.js";
 
 type ViewMode = "chat" | "memory" | "settings" | "automations" | "sessions";
 
@@ -44,6 +45,7 @@ interface CommandContext {
   switchSession: (sessionId: string) => Promise<{ history: HistoryMessage[] } | null>;
   resetForSessionSwitch: (newHistory?: Message[]) => void;
   refreshSidebar: () => void;
+  logout: () => void;
 }
 
 type CommandHandler = (ctx: CommandContext, args: string[]) => boolean | Promise<boolean>;
@@ -77,7 +79,11 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  purge: async ({ config, addMessage }) => {
+  purge: async ({ config, addMessage }, args) => {
+    if (args[0] !== "confirm") {
+      addMessage({ role: "status", content: "This will delete all memory facts and links. Type /purge confirm to proceed." });
+      return true;
+    }
     try {
       const result = await purgeMemory(config);
       const { facts, links } = result.deleted;
@@ -207,6 +213,12 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
+  logout: async ({ logout }) => {
+    await deleteCredentials();
+    logout();
+    return true;
+  },
+
   model: ({ toggleSettings }) => { toggleSettings(); return true; },
   exit: ({ exit }) => { exit(); return true; },
   quit: ({ exit }) => { exit(); return true; },
@@ -218,7 +230,7 @@ export function useCommands(context: CommandContext) {
 
   const handleCommand = useCallback(
     async (command: string): Promise<boolean> => {
-      const parts = command.replace("/", "").split(" ");
+      const parts = command.slice(1).split(" ");
       const cmd = parts[0].toLowerCase();
 
       const handler = COMMAND_HANDLERS[cmd];
