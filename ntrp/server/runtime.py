@@ -180,7 +180,7 @@ class Runtime:
         if notes := self.source_mgr.sources.get("notes"):
             self.indexables["notes"] = notes
 
-        if self.config.memory:
+        if self.config.memory and self.embedding:
             _logger.info("Initializing memory")
             self._services["memory"] = await FactMemory.create(
                 db_path=self.config.memory_db_path,
@@ -190,6 +190,8 @@ class Runtime:
             )
             self.memory_service = MemoryService(self.memory, self.channel)
             self.indexables["memory"] = MemoryIndexable(self.memory.db)
+        elif self.config.memory:
+            _logger.warning("Memory enabled but no embedding model configured — skipping")
 
         skill_registry = SkillRegistry()
         skill_registry.load(SKILLS_DIRS)
