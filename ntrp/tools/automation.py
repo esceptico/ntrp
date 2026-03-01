@@ -3,7 +3,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from ntrp.automation.models import Automation, build_trigger
-from ntrp.events.triggers import EVENT_APPROACHING, NEW_EMAIL
+from ntrp.events.triggers import EVENT_APPROACHING
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
@@ -12,7 +12,7 @@ from ntrp.tools.core.context import ToolExecution
 CREATE_AUTOMATION_DESCRIPTION = (
     "Create an automation — a task the agent runs autonomously. "
     "Trigger types: 'time' (runs at a scheduled time or interval), 'event' (runs when an event fires, "
-    f"e.g. '{EVENT_APPROACHING}', '{NEW_EMAIL}'). "
+    f"e.g. '{EVENT_APPROACHING}'). "
     "Time triggers support two modes: schedule ('at' a specific time) or interval ('every' N hours/minutes). "
     "Optional model override per automation (falls back to default chat model when omitted). "
     "Read-only by default, set writable=true for memory/note writes. "
@@ -91,7 +91,7 @@ class CreateAutomationInput(BaseModel):
     )
     event_type: str | None = Field(
         default=None,
-        description=f"Event type to react to (e.g. '{EVENT_APPROACHING}', '{NEW_EMAIL}'). Required for trigger_type='event'",
+        description=f"Event type to react to (e.g. '{EVENT_APPROACHING}'). Required for trigger_type='event'",
     )
     lead_minutes: int | str | None = Field(
         default=None,
@@ -119,9 +119,7 @@ class UpdateAutomationInput(BaseModel):
     )
     start: str | None = Field(default=None, description="New active window start HH:MM (interval mode only)")
     end: str | None = Field(default=None, description="New active window end HH:MM (interval mode only)")
-    event_type: str | None = Field(
-        default=None, description=f"New event type (e.g. '{EVENT_APPROACHING}', '{NEW_EMAIL}')"
-    )
+    event_type: str | None = Field(default=None, description=f"New event type (e.g. '{EVENT_APPROACHING}')")
     lead_minutes: int | str | None = Field(
         default=None,
         description="New lead time for event_approaching (minutes or duration like '2h30m')",

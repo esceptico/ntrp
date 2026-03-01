@@ -10,7 +10,6 @@ from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
 from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.skills import router as skills_router
-from ntrp.server.routers.webhooks import router as webhooks_router
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import CancelRequest, ChatRequest, ToolResultRequest
 from ntrp.services.chat import ChatService
@@ -69,7 +68,7 @@ class AuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        public_paths = {"/health", "/webhooks/email"}
+        public_paths = {"/health"}
         if request.url.path not in public_paths:
             token = _extract_bearer_token(request)
             if not token or not runtime.config.api_key_hash or not verify_api_key(token, runtime.config.api_key_hash):
@@ -88,7 +87,6 @@ app.include_router(gmail_router)
 app.include_router(automation_router)
 app.include_router(session_router)
 app.include_router(skills_router)
-app.include_router(webhooks_router)
 
 
 @app.get("/health")

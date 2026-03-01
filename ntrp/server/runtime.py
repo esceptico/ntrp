@@ -18,7 +18,6 @@ from ntrp.memory.facts import FactMemory
 from ntrp.memory.indexable import MemoryIndexable
 from ntrp.memory.service import MemoryService
 from ntrp.monitor.calendar import CalendarMonitor
-from ntrp.monitor.gmail import GmailMonitor
 from ntrp.monitor.service import Monitor
 from ntrp.monitor.store import MonitorStateStore
 from ntrp.notifiers.log_store import NotificationLogStore
@@ -34,7 +33,6 @@ from ntrp.services.session import SessionService
 from ntrp.skills.registry import SkillRegistry
 from ntrp.skills.service import SKILLS_DIRS, SkillService
 from ntrp.sources.base import CalendarSource, Indexable
-from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.tools.executor import ToolExecutor
 
 _logger = get_logger(__name__)
@@ -291,16 +289,6 @@ class Runtime:
         calendar_source = self.source_mgr.sources.get("calendar")
         if calendar_source and isinstance(calendar_source, CalendarSource):
             self.monitor.register(CalendarMonitor(calendar_source, state_store=self.monitor_store))
-
-        gmail_source = self.source_mgr.sources.get("gmail")
-        if gmail_source and self.config.gcp_project:
-            if isinstance(gmail_source, MultiGmailSource):
-                gmail_monitor = GmailMonitor(
-                    sources=gmail_source.sources,
-                    project=self.config.gcp_project,
-                    state_store=self.monitor_store,
-                )
-                self.monitor.register(gmail_monitor)
 
         self.monitor.start()
 
