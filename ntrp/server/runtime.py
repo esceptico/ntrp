@@ -100,12 +100,12 @@ class Runtime:
         async with self._config_lock:
             self.config = get_config()
             self.source_mgr.sync(self.config)
-            await self._sync_memory()
             await self._sync_embedding()
+            await self._sync_memory()
             self._sync_indexables()
 
     async def _sync_memory(self) -> None:
-        if self.config.memory and not self.memory:
+        if self.config.memory and not self.memory and self.embedding:
             self._services["memory"] = await FactMemory.create(
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
