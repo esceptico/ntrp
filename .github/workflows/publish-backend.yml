@@ -1,9 +1,7 @@
 name: Publish Backend
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_call:
 
 jobs:
   publish:

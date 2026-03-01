@@ -1,0 +1,33 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.check.outputs.backend }}
+      cli: ${{ steps.check.outputs.cli }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - id: check
+        run: |
+          files=$(git diff --name-only HEAD~1 HEAD)
+          echo "$files" | grep -qE '^(ntrp/|pyproject\.toml|uv\.lock)' && echo "backend=true" >> "$GITHUB_OUTPUT" || true
+          echo "$files" | grep -qE '^ntrp-ui/' && echo "cli=true" >> "$GITHUB_OUTPUT" || true
+
+  backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    uses: ./.github/workflows/publish-backend.yml
+
+  cli:
+    needs: changes
+    if: needs.changes.outputs.cli == 'true'
+    uses: ./.github/workflows/publish-cli.yml
