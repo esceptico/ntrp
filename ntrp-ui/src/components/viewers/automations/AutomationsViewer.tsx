@@ -4,7 +4,7 @@ import type { Automation, CreateAutomationData, UpdateAutomationData } from "../
 import { useKeypress, type Key } from "../../../hooks/index.js";
 import { useInlineTextInput } from "../../../hooks/useInlineTextInput.js";
 import { useTextInput } from "../../../hooks/useTextInput.js";
-import { Dialog, Loading, colors, BaseSelectionList, Hints } from "../../ui/index.js";
+import { Dialog, Loading, colors, BaseSelectionList, Hints, SelectList } from "../../ui/index.js";
 import { useAutomations } from "../../../hooks/useAutomations.js";
 import { AutomationItem } from "./AutomationItem.js";
 import {
@@ -16,7 +16,6 @@ import {
   type CreateFocus,
 } from "./AutomationCreateView.js";
 import { ResultViewer } from "./ResultViewer.js";
-import { ModelDropdown } from "../../dialogs/settings/ModelDropdown.js";
 
 interface AutomationsViewerProps {
   config: Config;
@@ -607,15 +606,22 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
   const createCanSave = createMode && !saving && getCreateValidationError() === null;
 
   if (showModelDropdown && createMode) {
+    const currentModel = createModelOptions[createModelIndex] ?? DEFAULT_MODEL_OPTION;
     return (
       <Dialog title="AUTOMATION MODEL" size="medium" onClose={() => setShowModelDropdown(false)}>
-        {({ width }) => (
-          <ModelDropdown
-            models={createModelOptions}
-            currentModel={createModelOptions[createModelIndex] ?? DEFAULT_MODEL_OPTION}
+        {({ width, height }) => (
+          <SelectList
+            options={createModelOptions.map(m => ({
+              value: m,
+              title: m,
+              indicator: m === currentModel ? "●" : undefined,
+            }))}
+            search
+            initialIndex={Math.max(0, createModelIndex)}
+            visibleLines={height}
             width={Math.min(50, width)}
-            onSelect={(model) => {
-              const idx = createModelOptions.indexOf(model);
+            onSelect={(opt) => {
+              const idx = createModelOptions.indexOf(opt.value);
               if (idx >= 0) setCreateModelIndex(idx);
               setShowModelDropdown(false);
             }}

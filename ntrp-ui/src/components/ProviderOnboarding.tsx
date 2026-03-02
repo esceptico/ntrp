@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect } from "react";
 import { useKeypress, type Key } from "../hooks/useKeypress.js";
 import { useTextInput } from "../hooks/useTextInput.js";
-import { Dialog, BaseSelectionList, colors, Hints, type RenderItemContext } from "./ui/index.js";
+import { Dialog, colors, Hints, SelectList, type SelectOption } from "./ui/index.js";
 import { TextInputField } from "./ui/input/TextInputField.js";
-import { getProviders, connectProvider, addCustomModel, type ProviderInfo } from "../api/client.js";
+import { getProviders, connectProvider, updateConfig, addCustomModel, type ProviderInfo } from "../api/client.js";
 import type { Config } from "../types.js";
 
 type Step = "providers" | "apiKey" | "modelSelect" | "customModel";
@@ -36,7 +36,6 @@ interface ProviderOnboardingProps {
 export function ProviderOnboarding({ config, closable = false, onClose, onDone }: ProviderOnboardingProps) {
   const [step, setStep] = useState<Step>("providers");
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectedProvider, setSelectedProvider] = useState<ProviderInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -52,7 +51,6 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
   });
 
   // Model selection
-  const [modelIndex, setModelIndex] = useState(0);
   const [modelList, setModelList] = useState<string[]>([]);
 
   // Custom model form
@@ -83,8 +81,8 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
 
   useEffect(() => { refreshProviders(); }, [refreshProviders]);
 
-  const handleSelectProvider = useCallback(() => {
-    const provider = providers[selectedIndex];
+  const handleSelectProvider = useCallback((providerId: string) => {
+    const provider = providers.find(p => p.id === providerId);
     if (!provider) return;
 
     if (provider.id === "custom") {
@@ -104,7 +102,9 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
       return;
     }
 
-    if (provider.connected && !provider.from_env) {
+    if (provider.connected) {
+      setSelectedProvider(provider);
+      setStep("modelSelect");
       return;
     }
 
@@ -113,7 +113,7 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
     setApiKeyCursor(0);
     setError(null);
     setStep("apiKey");
-  }, [providers, selectedIndex]);
+  }, [providers]);
 
   const handleSubmitApiKey = useCallback(async () => {
     const key = apiKeyValue.trim();
@@ -129,7 +129,6 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
       const models = Array.isArray(selectedProvider.models) ? selectedProvider.models.filter((m): m is string => typeof m === "string") : [];
       if (models.length > 0) {
         setModelList(models);
-        setModelIndex(0);
         setStep("modelSelect");
       } else {
         setStep("providers");
@@ -141,22 +140,23 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
     }
   }, [apiKeyValue, selectedProvider, config, refreshProviders]);
 
-  const handleSelectModel = useCallback(async () => {
-    const model = modelList[modelIndex];
-    if (!model || !selectedProvider) return;
-
+  const handleSelectModel = useCallback(async (model: string) => {
     setSaving(true);
     setError(null);
     try {
-      await connectProvider(config, selectedProvider.id, apiKeyValue.trim(), model);
+      await updateConfig(config, { chat_model: model });
       await refreshProviders();
-      setStep("providers");
+      if (!closable) {
+        onDone();
+      } else {
+        setStep("providers");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to set model");
     } finally {
       setSaving(false);
     }
-  }, [modelList, modelIndex, selectedProvider, config, apiKeyValue, refreshProviders]);
+  }, [config, refreshProviders, closable, onDone]);
 
   const handleSubmitCustomModel = useCallback(async () => {
     const id = modelId.trim();
@@ -194,28 +194,6 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
     (key: Key) => {
       if (saving) return;
 
-      if (step === "providers") {
-        if (key.name === "escape") {
-          if (hasConnected || closable) {
-            if (hasConnected) onDone();
-            else onClose();
-          }
-          return;
-        }
-        if (key.name === "up" || key.name === "k") {
-          setSelectedIndex(i => Math.max(0, i - 1));
-          return;
-        }
-        if (key.name === "down" || key.name === "j") {
-          setSelectedIndex(i => Math.min(providers.length - 1, i + 1));
-          return;
-        }
-        if (key.name === "return") {
-          handleSelectProvider();
-          return;
-        }
-      }
-
       if (step === "apiKey") {
         if (key.name === "escape") {
           setStep("providers");
@@ -227,26 +205,6 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
         }
         apiKeyInput.handleKey(key);
         return;
-      }
-
-      if (step === "modelSelect") {
-        if (key.name === "escape") {
-          // Skip model selection, go back
-          setStep("providers");
-          return;
-        }
-        if (key.name === "up" || key.name === "k") {
-          setModelIndex(i => Math.max(0, i - 1));
-          return;
-        }
-        if (key.name === "down" || key.name === "j") {
-          setModelIndex(i => Math.min(modelList.length - 1, i + 1));
-          return;
-        }
-        if (key.name === "return") {
-          handleSelectModel();
-          return;
-        }
       }
 
       if (step === "customModel") {
@@ -313,62 +271,89 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
       }
     },
     [
-      step, saving, providers, selectedIndex, hasConnected, closable,
-      handleSelectProvider, handleSubmitApiKey, handleSelectModel, handleSubmitCustomModel,
-      apiKeyInput, modelList, modelIndex, customField, presetIndex,
+      step, saving,
+      handleSubmitApiKey, handleSubmitCustomModel,
+      apiKeyInput, customField, presetIndex,
       baseUrlInput, modelIdInput, customApiKeyInput, contextWindowInput,
-      onClose, onDone,
     ]
   );
 
-  useKeypress(handleKeypress, { isActive: true });
+  useKeypress(handleKeypress, { isActive: step === "apiKey" || step === "customModel" });
 
   const renderProviderList = () => {
     const subtitle = hasConnected
       ? "Add another provider or press esc to start"
       : "Connect an LLM provider to get started";
 
-    const footer = hasConnected
-      ? <Hints items={[["enter", "select"], ["\u2191\u2193", "navigate"], ["esc", "done"]]} />
-      : <Hints items={[["enter", "select"], ["\u2191\u2193", "navigate"]]} />;
+    const providerOptions: SelectOption[] = providers.map(p => {
+      let description = "";
+      if (p.id === "custom") {
+        const count = p.model_count ?? 0;
+        if (count > 0) description = `${count} model${count !== 1 ? "s" : ""}`;
+      } else {
+        const parts: string[] = [];
+        if (p.connected) parts.push("\u2713");
+        if (p.connected && p.key_hint) parts.push(p.key_hint);
+        if (p.from_env) parts.push("(env)");
+        description = parts.join(" ");
+      }
+      return { value: p.id, title: p.name, description };
+    });
+
+    const providerClose = () => {
+      if (hasConnected) onDone();
+      else if (closable) onClose();
+    };
+
+    const footer = (
+      <box flexDirection="column">
+        <text><span fg={colors.text.muted}>{subtitle}</span></text>
+      </box>
+    );
 
     return (
-      <Dialog title="PROVIDERS" size="medium" onClose={onClose} closable={closable} footer={footer}>
-        {() => (
-          <box flexDirection="column">
-            <box marginBottom={1}>
-              <text><span fg={colors.text.muted}>{subtitle}</span></text>
-            </box>
-            <BaseSelectionList
-              items={providers}
-              selectedIndex={selectedIndex}
-              visibleLines={8}
-              getKey={(p) => p.id}
-              renderItem={(provider: ProviderInfo, ctx: RenderItemContext) => {
-                if (provider.id === "custom") {
-                  const count = provider.model_count ?? 0;
-                  return (
-                    <text>
-                      <span fg={ctx.colors.text}>{provider.name}</span>
-                      {count > 0 && <span fg={colors.text.muted}>{` (${count} model${count !== 1 ? "s" : ""})`}</span>}
-                    </text>
-                  );
-                }
+      <Dialog title="PROVIDERS" size="medium" onClose={providerClose} closable={hasConnected || closable} footer={footer}>
+        {({ height }) => (
+          <SelectList
+            options={providerOptions}
+            visibleLines={Math.min(8, height)}
+            isActive={step === "providers" && !saving}
+            onSelect={(opt) => handleSelectProvider(opt.value)}
+            onClose={providerClose}
+            renderItem={(opt, ctx) => {
+              const provider = providers.find(p => p.id === opt.value);
+              if (!provider) return <text><span fg={ctx.colors.text}>{opt.title}</span></text>;
 
-                const connected = provider.connected;
-                const fromEnv = provider.from_env;
-
+              if (provider.id === "custom") {
                 return (
                   <text>
                     <span fg={ctx.colors.text}>{provider.name}</span>
-                    {connected && <span fg={colors.status.success}>{" \u2713"}</span>}
-                    {connected && provider.key_hint && <span fg={colors.text.disabled}>{` ${provider.key_hint}`}</span>}
-                    {fromEnv && <span fg={colors.text.muted}>{" (env)"}</span>}
+                    {opt.description && <span fg={colors.text.muted}> {opt.description}</span>}
                   </text>
                 );
-              }}
-            />
-          </box>
+              }
+
+              const modelNames = Array.isArray(provider.models)
+                ? provider.models.filter((m): m is string => typeof m === "string").slice(0, 3).join(", ")
+                : "";
+
+              return (
+                <box flexDirection="column">
+                  <text>
+                    <span fg={ctx.colors.text}>{provider.name}</span>
+                    {provider.connected && <span fg={colors.status.success}>{" \u2713"}</span>}
+                    {provider.connected && provider.key_hint && <span fg={colors.text.disabled}>{` ${provider.key_hint}`}</span>}
+                    {provider.from_env && <span fg={colors.text.muted}>{" (env)"}</span>}
+                  </text>
+                  {modelNames && (
+                    <text>
+                      <span fg={colors.text.disabled}>{"  "}{modelNames}</span>
+                    </text>
+                  )}
+                </box>
+              );
+            }}
+          />
         )}
       </Dialog>
     );
@@ -413,22 +398,22 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
   };
 
   const renderModelSelect = () => {
+    const modelOptions: SelectOption[] = modelList.map(m => ({ value: m, title: m }));
+
     const footer = saving
       ? <text><span fg={colors.text.muted}>Saving...</span></text>
-      : <Hints items={[["enter", "select"], ["\u2191\u2193", "navigate"], ["esc", "skip"]]} />;
+      : undefined;
 
     return (
       <Dialog title="DEFAULT CHAT MODEL" size="medium" onClose={() => setStep("providers")} closable footer={footer}>
-        {() => (
+        {({ height }) => (
           <box flexDirection="column">
-            <BaseSelectionList
-              items={modelList}
-              selectedIndex={modelIndex}
-              visibleLines={8}
-              getKey={(m) => m}
-              renderItem={(model: string, ctx: RenderItemContext) => (
-                <text><span fg={ctx.colors.text}>{model}</span></text>
-              )}
+            <SelectList
+              options={modelOptions}
+              visibleLines={Math.min(8, height)}
+              isActive={step === "modelSelect" && !saving}
+              onSelect={(opt) => handleSelectModel(opt.value)}
+              onClose={() => setStep("providers")}
             />
             {error && (
               <box marginTop={1}>
