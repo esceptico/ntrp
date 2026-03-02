@@ -4,8 +4,8 @@
 
 I built this for myself. ADHD and scattered attention meant I kept losing track of things (e.g. what I said, what I planned, what I was supposed to follow up on). So I made an assistant that hooks into my stuff and actually remembers.
 
-![](docs/images/screen1.png)
-![](docs/images/screen2.png)
+![](docs/internal/images/screen1.png)
+![](docs/internal/images/screen2.png)
 
 ## What it does
 
@@ -18,19 +18,19 @@ I built this for myself. ADHD and scattered attention meant I kept losing track 
 <details>
 <summary>Memory</summary>
 
-![](docs/images/memory.png)
+![](docs/internal/images/memory.png)
 </details>
 
 <details>
 <summary>Schedules</summary>
 
-![](docs/images/schedules.png)
+![](docs/internal/images/schedules.png)
 </details>
 
 <details>
 <summary>Connections</summary>
 
-![](docs/images/sources.png)
+![](docs/internal/images/sources.png)
 </details>
 
 ## Install
