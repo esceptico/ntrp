@@ -3,6 +3,8 @@ import { RGBA } from "@opentui/core";
 import { useDimensions } from "../../contexts/index.js";
 import { colors, useThemeVersion } from "./colors.js";
 
+const OVERLAY_BG = RGBA.fromInts(0, 0, 0, 150);
+
 interface DialogProps {
   title: string;
   size?: "medium" | "large" | "full";
@@ -38,7 +40,7 @@ export function Dialog({ title, size = "medium", closable = true, footer, childr
   const contentMaxH = maxH - 3 - (footer ? 1 : 0);
 
   return (
-    <box position="absolute" top={0} left={0} width={W} height={H} backgroundColor={RGBA.fromInts(0, 0, 0, 150)}>
+    <box position="absolute" top={0} left={0} width={W} height={H} backgroundColor={OVERLAY_BG}>
       <box alignItems="center" paddingTop={offsetY}>
         <box
           maxWidth={maxW}
