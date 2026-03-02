@@ -100,7 +100,7 @@ class CalendarTool(Tool):
         limit: int = _DEFAULT_CALENDAR_LIMIT,
         **kwargs: Any,
     ) -> ToolResult:
-        source = execution.ctx.get_source(CalendarSource)
+        source = execution.ctx.get_source(CalendarSource, "calendar")
         if query:
             return self._search(source, query, limit)
         return self._list(source, days_forward, days_back, limit)
@@ -204,7 +204,7 @@ class CreateCalendarEventTool(Tool):
         end_dt = _parse_datetime(end) if end else None
         attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
 
-        source = execution.ctx.get_source(CalendarSource)
+        source = execution.ctx.get_source(CalendarSource, "calendar")
         result = source.create_event(
             account=account or "",
             summary=summary,
@@ -289,7 +289,7 @@ class EditCalendarEventTool(Tool):
 
         attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
 
-        source = execution.ctx.get_source(CalendarSource)
+        source = execution.ctx.get_source(CalendarSource, "calendar")
         result = source.update_event(
             event_id=event_id,
             summary=summary,
@@ -318,6 +318,6 @@ class DeleteCalendarEventTool(Tool):
         return ApprovalInfo(description=event_id, preview=None, diff=None)
 
     async def execute(self, execution: ToolExecution, event_id: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(CalendarSource)
+        source = execution.ctx.get_source(CalendarSource, "calendar")
         result = source.delete_event(event_id)
         return ToolResult(content=result, preview="Deleted")

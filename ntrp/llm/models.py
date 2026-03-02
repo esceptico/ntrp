@@ -254,14 +254,3 @@ def remove_custom_model(model_id: str) -> None:
         raw.pop(model_id, None)
         _models_path().write_text(json.dumps(raw, indent=2))
 
-
-def reload_custom_models() -> None:
-    global _custom_loaded
-    to_remove = [mid for mid, m in _models.items() if m.provider == Provider.CUSTOM]
-    for mid in to_remove:
-        del _models[mid]
-    to_remove = [mid for mid, m in _embedding_models.items() if m.provider == Provider.CUSTOM]
-    for mid in to_remove:
-        del _embedding_models[mid]
-    _custom_loaded = False
-    load_custom_models()

@@ -3,13 +3,15 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
 
-from ntrp.config import PROVIDER_KEY_FIELDS, mask_api_key
+from ntrp.config import PROVIDER_KEY_FIELDS, SERVICE_KEY_FIELDS, mask_api_key
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
 from ntrp.llm.models import (
     Provider,
     add_custom_model,
+    get_embedding_models as get_embedding_models_fn,
     get_embedding_models_by_provider,
     get_model,
+    get_models as get_models_fn,
     get_models_by_provider,
     list_embedding_models,
     list_models,
@@ -21,6 +23,7 @@ from ntrp.server.schemas import (
     ClearSessionRequest,
     CompactRequest,
     ConnectProviderRequest,
+    ConnectServiceRequest,
     CreateSessionRequest,
     RenameSessionRequest,
     SessionResponse,
@@ -220,8 +223,13 @@ async def get_config(runtime: Runtime = Depends(get_runtime)):
 
 @router.get("/models")
 async def get_models(runtime: Runtime = Depends(get_runtime)):
+    all_models = get_models_fn()
+    groups: dict[str, list[str]] = {}
+    for mid, m in all_models.items():
+        groups.setdefault(m.provider.value, []).append(mid)
     return {
         "models": list_models(),
+        "groups": [{"provider": p, "models": ms} for p, ms in groups.items()],
         "chat_model": runtime.config.chat_model,
         "explore_model": runtime.config.explore_model,
         "memory_model": runtime.config.memory_model,
@@ -326,6 +334,58 @@ async def disconnect_provider(
     return {"status": "disconnected", "provider": provider_id}
 
 
+# --- Services ---
+
+
+SERVICE_META = {
+    "exa": {"name": "Exa (Web Search)", "env_var": "EXA_API_KEY"},
+    "telegram": {"name": "Telegram", "env_var": "TELEGRAM_BOT_TOKEN"},
+}
+
+
+@router.get("/services")
+async def get_services(runtime: Runtime = Depends(get_runtime)):
+    config = runtime.config
+    services = []
+    for sid, meta in SERVICE_META.items():
+        field = SERVICE_KEY_FIELDS[sid]
+        key = getattr(config, field, None)
+        from_env = bool(os.environ.get(meta["env_var"]))
+        services.append({
+            "id": sid,
+            "name": meta["name"],
+            "connected": bool(key),
+            "key_hint": mask_api_key(key),
+            "from_env": from_env,
+        })
+    return {"services": services}
+
+
+@router.post("/services/{service_id}/connect")
+async def connect_service(
+    service_id: str,
+    req: ConnectServiceRequest,
+    cfg_svc: ConfigService = Depends(_require_config_service),
+):
+    try:
+        await cfg_svc.connect_service(service_id, req.api_key)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "connected", "service": service_id}
+
+
+@router.delete("/services/{service_id}")
+async def disconnect_service(
+    service_id: str,
+    cfg_svc: ConfigService = Depends(_require_config_service),
+):
+    try:
+        await cfg_svc.disconnect_service(service_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "disconnected", "service": service_id}
+
+
 # --- Custom models ---
 
 
@@ -391,6 +451,8 @@ async def delete_custom_model(
 
     if clear_fields:
         await cfg_svc.update(**clear_fields)
+    else:
+        await runtime.reload_config()
 
     return {"status": "deleted", "model_id": model_id}
 
@@ -400,8 +462,13 @@ async def delete_custom_model(
 
 @router.get("/models/embedding")
 async def get_embedding_models(runtime: Runtime = Depends(get_runtime)):
+    all_models = get_embedding_models_fn()
+    groups: dict[str, list[str]] = {}
+    for mid, m in all_models.items():
+        groups.setdefault(m.provider.value, []).append(mid)
     return {
         "models": list_embedding_models(),
+        "groups": [{"provider": p, "models": ms} for p, ms in groups.items()],
         "current": runtime.config.embedding_model,
     }
 

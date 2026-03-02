@@ -41,6 +41,11 @@ PROVIDER_KEY_FIELDS = {
     "google": "gemini_api_key",
 }
 
+SERVICE_KEY_FIELDS = {
+    "exa": "exa_api_key",
+    "telegram": "telegram_bot_token",
+}
+
 # Provider → (chat_model, memory_model, embedding_model)
 MODEL_DEFAULTS = {
     "ANTHROPIC_API_KEY": ("claude-sonnet-4-6", "claude-sonnet-4-6", None),
@@ -294,15 +299,12 @@ def get_config() -> Config:
         if provider_id in provider_keys and not os.environ.get(alias):
             overrides[field] = provider_keys[provider_id]
 
-    config = Config(**overrides)  # type: ignore - pydantic handles validation
+    # Load stored service keys (env vars still take priority)
+    service_keys = settings.get("service_keys", {})
+    for service_id, field in SERVICE_KEY_FIELDS.items():
+        alias = field.upper()
+        if service_id in service_keys and not os.environ.get(alias):
+            overrides[field] = service_keys[service_id]
 
-    # Persist defaulted models
-    changed = False
-    for key in ("chat_model", "explore_model", "memory_model"):
-        if key not in settings and getattr(config, key):
-            settings[key] = getattr(config, key)
-            changed = True
-    if changed:
-        save_user_settings(settings)
-
+    config = Config(_env_file=(NTRP_DIR / ".env", ".env"), **overrides)  # type: ignore - pydantic handles validation
     return config

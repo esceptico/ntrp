@@ -141,6 +141,10 @@ class ConnectProviderRequest(BaseModel):
     chat_model: str | None = None
 
 
+class ConnectServiceRequest(BaseModel):
+    api_key: str = Field(..., min_length=1)
+
+
 class AddCustomModelRequest(BaseModel):
     model_id: str = Field(..., min_length=1)
     base_url: str = Field(..., min_length=1)

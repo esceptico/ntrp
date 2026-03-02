@@ -102,7 +102,7 @@ async def health(request: Request, runtime: Runtime = Depends(get_runtime)):
     result: dict = {
         "status": "ok" if runtime.connected else "unavailable",
         "version": app.version,
-        "has_providers": bool(runtime.config.chat_model),
+        "has_providers": runtime.config.has_any_model,
     }
     token = _extract_bearer_token(request)
     if token and runtime.config.api_key_hash:

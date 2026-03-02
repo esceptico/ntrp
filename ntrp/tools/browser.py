@@ -32,7 +32,7 @@ class BrowserTool(Tool):
     async def execute(
         self, execution: ToolExecution, query: str | None = None, days: int = 7, limit: int = 30, **kwargs: Any
     ) -> ToolResult:
-        source = execution.ctx.get_source(BrowserSource)
+        source = execution.ctx.get_source(BrowserSource, "browser")
         if query:
             return self._search(source, query, limit)
         return self._list(source, days, limit)
