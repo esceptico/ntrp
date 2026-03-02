@@ -70,8 +70,8 @@ export function FactDetailsView({
   const textColor = isFocused ? colors.text.primary : colors.text.secondary;
   const labelColor = colors.text.muted;
 
-  const typeLabel = fact.fact_type === "world" ? "world" : "experience";
-  const typeColor = fact.fact_type === "world" ? colors.status.warning : accentValue;
+  const typeLabel = fact.source_type;
+  const typeColor = accentValue;
 
   const sectionFocused = (section: FactDetailSection) => isFocused && focusedSection === section;
   const textWidth = width - 2;
@@ -132,8 +132,6 @@ export function FactDetailsView({
         <text>
           <span fg={typeColor}>{typeLabel}</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
-          <span fg={labelColor}>{fact.source_type}</span>
-          <span fg={colors.text.disabled}> {"\u2502"} </span>
           <span fg={labelColor}>{"\u00D7"}{fact.access_count}</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
           <span fg={labelColor}>{formatTimeAgo(fact.created_at)}</span>
@@ -151,9 +149,8 @@ export function FactDetailsView({
             renderItem={(entity, _idx, selected) => (
               <text>
                 <span fg={selected && sectionFocused(FACT_SECTIONS.ENTITIES) ? textColor : colors.text.secondary}>
-                  {"\u2022"} {entity.name}{" "}
+                  {"\u2022"} {entity.name}
                 </span>
-                <span fg={colors.text.muted}>({entity.type})</span>
               </text>
             )}
             width={textWidth}

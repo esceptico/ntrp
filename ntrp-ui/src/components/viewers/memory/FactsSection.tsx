@@ -1,6 +1,6 @@
 import type { Fact, FactDetails } from "../../../api/client.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
-import { useAccentColor } from "../../../hooks/index.js";
+
 import { formatTimeAgo } from "../../../lib/format.js";
 import { FactDetailsView, type FactDetailSection } from "./FactDetailsView.js";
 import { ListDetailSection } from "./ListDetailSection.js";
@@ -57,14 +57,11 @@ export function FactsSection({
   confirmDelete,
   saving,
 }: FactsSectionProps) {
-  const { accentValue } = useAccentColor();
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
   const detailWidth = Math.max(0, width - listWidth - 1);
 
   const renderItem = (fact: Fact, ctx: RenderItemContext) => {
     const textWidth = listWidth - 4;
-    const typeTag = fact.fact_type === "world" ? "world" : "exp";
-    const typeColor = fact.fact_type === "world" ? colors.status.warning : accentValue;
     const tagColor = ctx.isSelected ? colors.text.secondary : colors.text.disabled;
 
     return (
@@ -73,8 +70,7 @@ export function FactsSection({
           <span fg={ctx.colors.text}>{truncateText(fact.text, textWidth)}</span>
         </text>
         <text>
-          <span fg={ctx.isSelected ? typeColor : tagColor}>[{typeTag}]</span>
-          <span fg={tagColor}> [{fact.source_type}] [{shortTime(fact.created_at)}]</span>
+          <span fg={tagColor}>[{fact.source_type}] [{shortTime(fact.created_at)}]</span>
         </text>
       </box>
     );

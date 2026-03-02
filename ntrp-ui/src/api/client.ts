@@ -145,6 +145,37 @@ export async function disconnectProvider(
   return api.delete(`${config.serverUrl}/providers/${providerId}`);
 }
 
+// --- Services ---
+
+
+export interface ServiceInfo {
+  id: string;
+  name: string;
+  connected: boolean;
+  key_hint?: string | null;
+  from_env?: boolean;
+}
+
+export async function getServices(config: Config): Promise<{ services: ServiceInfo[] }> {
+  return api.get<{ services: ServiceInfo[] }>(`${config.serverUrl}/services`);
+}
+
+export async function connectService(
+  config: Config,
+  serviceId: string,
+  apiKey: string,
+): Promise<{ status: string; service: string }> {
+  return api.post(`${config.serverUrl}/services/${serviceId}/connect`, { api_key: apiKey });
+}
+
+export async function disconnectService(
+  config: Config,
+  serviceId: string,
+): Promise<{ status: string; service: string }> {
+  return api.delete(`${config.serverUrl}/services/${serviceId}`);
+}
+
+
 export async function addCustomModel(
   config: Config,
   data: { model_id: string; base_url: string; context_window: number; max_output_tokens?: number; api_key?: string },
@@ -163,7 +194,6 @@ export async function removeCustomModel(
 export interface Fact {
   id: number;
   text: string;
-  fact_type: string;
   source_type: string;
   created_at: string;
 }
@@ -172,13 +202,12 @@ export interface FactDetails {
   fact: {
     id: number;
     text: string;
-    fact_type: string;
     source_type: string;
     source_ref: string | null;
     created_at: string;
     access_count: number;
   };
-  entities: Array<{ name: string; type: string }>;
+  entities: Array<{ name: string; entity_id: number }>;
   linked_facts: Array<{
     id: number;
     text: string;
@@ -253,8 +282,14 @@ export async function updateConfig(
   return api.patch(`${config.serverUrl}/config`, patch);
 }
 
+export interface ModelGroup {
+  provider: string;
+  models: string[];
+}
+
 export async function getSupportedModels(config: Config): Promise<{
   models: string[];
+  groups: ModelGroup[];
   chat_model: string;
   explore_model: string;
   memory_model: string;
@@ -264,6 +299,7 @@ export async function getSupportedModels(config: Config): Promise<{
 
 export async function getEmbeddingModels(config: Config): Promise<{
   models: string[];
+  groups: ModelGroup[];
   current: string;
 }> {
   return api.get(`${config.serverUrl}/models/embedding`);
@@ -606,14 +642,12 @@ export async function updateFact(
   fact: {
     id: number;
     text: string;
-    fact_type: string;
     source_type: string;
     source_ref: string | null;
     created_at: string;
     access_count: number;
   };
-  entity_refs: Array<{ name: string; type: string }>;
-  links_created: number;
+  entity_refs: Array<{ name: string; entity_id: number }>;
 }> {
   return api.patch(`${config.serverUrl}/facts/${factId}`, { text });
 }
@@ -622,10 +656,9 @@ export async function deleteFact(
   config: Config,
   factId: number
 ): Promise<{
+  status: string;
   fact_id: number;
-  deleted_entities: number;
-  deleted_links: number;
-  deleted_fact_observations: number;
+  cascaded: { entity_refs: number };
 }> {
   return api.delete(`${config.serverUrl}/facts/${factId}`);
 }
