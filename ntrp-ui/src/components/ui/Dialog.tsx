@@ -1,7 +1,7 @@
 import React from "react";
 import { RGBA } from "@opentui/core";
 import { useDimensions } from "../../contexts/index.js";
-import { colors } from "./colors.js";
+import { colors, useThemeVersion } from "./colors.js";
 
 interface DialogProps {
   title: string;
@@ -13,6 +13,7 @@ interface DialogProps {
 }
 
 export function Dialog({ title, size = "medium", closable = true, footer, children }: DialogProps) {
+  useThemeVersion();
   const { width: W, height: H } = useDimensions();
 
   let maxW: number;

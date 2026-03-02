@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useScrollOffset } from "../../hooks/useScrollOffset.js";
 import { useKeypress, useAccentColor, type Key } from "../../hooks/index.js";
-import { colors } from "./colors.js";
+import { colors, useThemeVersion } from "./colors.js";
 import { Dialog } from "./Dialog.js";
 import { Hints } from "./Hints.js";
 import { BULLET } from "../../lib/constants.js";
@@ -101,6 +101,7 @@ export function SelectList<T = string>({
   width,
   isActive = true,
 }: SelectListProps<T>) {
+  useThemeVersion();
   const { accentValue } = useAccentColor();
   const [query, setQuery] = useState("");
   const [selectedIdx, setSelectedIdx] = useState(0);
