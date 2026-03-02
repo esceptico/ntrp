@@ -43,7 +43,7 @@ export function DirectivesSection({
           />
         </box>
         <box marginTop={1}>
-          <Hints items={[["ctrl+s", "save"], ["esc", "cancel"]]} />
+          <Hints items={[["^s", "save"], ["esc", "cancel"]]} />
         </box>
       </box>
     );

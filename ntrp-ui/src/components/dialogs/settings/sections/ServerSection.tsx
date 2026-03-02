@@ -79,7 +79,7 @@ export function ServerSection({
       {editing && (
         <box marginTop={1}>
           <text>
-            <span fg={colors.text.disabled}>  tab to switch  ctrl+s to save  esc to cancel</span>
+            <span fg={colors.text.disabled}>  tab to switch  ^s to save  esc to cancel</span>
           </text>
         </box>
       )}

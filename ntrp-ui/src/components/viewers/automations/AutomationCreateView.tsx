@@ -375,14 +375,6 @@ export function AutomationCreateView({
         </box>
       )}
 
-      {!saving && !nameValue.trim() && !descValue.trim() && (
-        <box marginTop={1}>
-          <box flexDirection="row">
-            {labelCell("HELP", false)}
-            <text><span fg={colors.text.muted}>↑↓ navigate  enter edit  ←→ adjust  ctrl+s save</span></text>
-          </box>
-        </box>
-      )}
     </box>
   );
 }

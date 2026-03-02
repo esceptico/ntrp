@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { useRenderer } from "@opentui/react";
 import { useKeypress, type Key } from "../hooks/useKeypress.js";
 import { useTextInput } from "../hooks/useTextInput.js";
 import { Dialog, colors, Hints, SelectList, type SelectOption } from "./ui/index.js";
@@ -34,6 +35,7 @@ interface ProviderOnboardingProps {
 }
 
 export function ProviderOnboarding({ config, closable = false, onClose, onDone }: ProviderOnboardingProps) {
+  const renderer = useRenderer();
   const [step, setStep] = useState<Step>("providers");
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<ProviderInfo | null>(null);
@@ -278,6 +280,11 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
     ]
   );
 
+  const handleCtrlC = useCallback((key: Key) => {
+    if (key.ctrl && key.name === "c") renderer.destroy();
+  }, [renderer]);
+
+  useKeypress(handleCtrlC, { isActive: true });
   useKeypress(handleKeypress, { isActive: step === "apiKey" || step === "customModel" });
 
   const renderProviderList = () => {

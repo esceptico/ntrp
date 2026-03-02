@@ -653,8 +653,8 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
       ? <text><span fg={colors.text.muted}>{editingTaskId ? "Updating..." : "Creating..."}</span></text>
       : <Hints
         items={createEditing
-          ? [["type", "input"], ["esc", "done"], [createCanSave ? "^S" : "^S(off)", "save"]]
-          : [["↑↓", "navigate"], ["enter", "edit"], ["←→", "adjust"], [createCanSave ? "^S" : "^S(off)", "save"], ["esc", "cancel"]]
+          ? [["type", "input"], ["esc", "done"], [createCanSave ? "^s" : "^S(off)", "save"]]
+          : [["↑↓", "navigate"], ["enter", "edit"], ["←→", "adjust"], [createCanSave ? "^s" : "^S(off)", "save"], ["esc", "cancel"]]
         }
       />;
     if (confirmDelete) return <Hints items={[["y", "confirm"], ["n", "cancel"]]} />;
