@@ -38,25 +38,3 @@ export function NumberRow({ item, value, selected, accent, sliderWidth = 16 }: N
   );
 }
 
-interface ModelSelectorProps extends RowProps {
-  label: string;
-  currentModel: string;
-  maxWidth: number;
-}
-
-export function ModelSelector({ label, currentModel, selected, accent, maxWidth }: ModelSelectorProps) {
-  const model = currentModel || "";
-  const shortName = model.split("/").pop() || model || "—";
-  const displayName = shortName.length > maxWidth ? shortName.slice(0, maxWidth - 3) + "..." : shortName;
-  const paddedLabel = label.padEnd(LABEL_WIDTH);
-
-  return (
-    <text>
-      <SelectionIndicator selected={selected} accent={accent} />
-      <span fg={selected ? colors.text.primary : colors.text.secondary}>{paddedLabel}</span>
-      <span fg={colors.text.muted}>[</span>
-      <span fg={selected ? accent : colors.text.primary}> {displayName} </span>
-      <span fg={colors.text.muted}>▾]</span>
-    </text>
-  );
-}

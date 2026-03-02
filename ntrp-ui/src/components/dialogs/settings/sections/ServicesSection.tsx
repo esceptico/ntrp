@@ -1,8 +1,8 @@
 import { colors } from "../../../ui/index.js";
-import type { ProviderInfo } from "../../../../api/client.js";
+import type { ServiceInfo } from "../../../../api/client.js";
 
-interface ProvidersSectionProps {
-  providers: ProviderInfo[];
+interface ServicesSectionProps {
+  services: ServiceInfo[];
   selectedIndex: number;
   accent: string;
   editing: boolean;
@@ -13,8 +13,8 @@ interface ProvidersSectionProps {
   confirmingDisconnect: boolean;
 }
 
-export function ProvidersSection({
-  providers,
+export function ServicesSection({
+  services,
   selectedIndex,
   accent,
   editing,
@@ -23,8 +23,8 @@ export function ProvidersSection({
   saving,
   error,
   confirmingDisconnect,
-}: ProvidersSectionProps) {
-  if (providers.length === 0) {
+}: ServicesSectionProps) {
+  if (services.length === 0) {
     return (
       <box flexDirection="column">
         <text><span fg={colors.text.muted}>  Loading...</span></text>
@@ -32,41 +32,30 @@ export function ProvidersSection({
     );
   }
 
-  const provider = providers[selectedIndex];
+  const service = services[selectedIndex];
   const maskedKey = keyValue ? "\u2022".repeat(Math.min(keyValue.length, 40)) : "";
 
   return (
     <box flexDirection="column">
-      {providers.map((p, i) => {
+      {services.map((s, i) => {
         const selected = i === selectedIndex;
-        const isCustom = p.id === "custom";
-        const isEditing = selected && editing && !isCustom;
+        const isEditing = selected && editing;
 
         return (
-          <box key={p.id} flexDirection="column">
+          <box key={s.id} flexDirection="column">
             <box flexDirection="row">
               <text>
                 <span fg={selected ? accent : colors.text.disabled}>{selected ? "\u25B8 " : "  "}</span>
-                <span fg={selected ? colors.text.primary : colors.text.secondary}>{p.name.padEnd(28)}</span>
+                <span fg={selected ? colors.text.primary : colors.text.secondary}>{s.name.padEnd(24)}</span>
               </text>
-              {isCustom ? (
+              {s.connected ? (
                 <text>
-                  <span fg={p.connected ? colors.status.success : colors.text.disabled}>
-                    {p.model_count ? `${p.model_count} model${p.model_count !== 1 ? "s" : ""}` : "none"}
-                  </span>
+                  <span fg={colors.status.success}>{"\u2713 "}</span>
+                  <span fg={colors.text.disabled}>{s.key_hint ?? ""}</span>
+                  {s.from_env && <span fg={colors.text.muted}>{" (env)"}</span>}
                 </text>
               ) : (
-                <text>
-                  {p.connected ? (
-                    <>
-                      <span fg={colors.status.success}>{"\u2713 "}</span>
-                      <span fg={colors.text.disabled}>{p.key_hint ?? ""}</span>
-                      {p.from_env && <span fg={colors.text.muted}>{" (env)"}</span>}
-                    </>
-                  ) : (
-                    <span fg={colors.text.disabled}>not connected</span>
-                  )}
-                </text>
+                <text><span fg={colors.text.disabled}>not connected</span></text>
               )}
             </box>
             {isEditing && (
@@ -90,7 +79,7 @@ export function ProvidersSection({
             )}
             {selected && confirmingDisconnect && (
               <box marginLeft={2}>
-                <text><span fg={colors.status.warning}>  Disconnect {p.name}? (y/n)</span></text>
+                <text><span fg={colors.status.warning}>  Disconnect {s.name}? (y/n)</span></text>
               </box>
             )}
           </box>
@@ -113,12 +102,10 @@ export function ProvidersSection({
         <box marginTop={1}>
           <text>
             <span fg={colors.text.disabled}>  </span>
-            {provider && provider.id !== "custom" && provider.connected && !provider.from_env ? (
+            {service?.connected && !service.from_env ? (
               <span fg={colors.text.disabled}>enter edit · d disconnect</span>
-            ) : provider?.from_env ? (
+            ) : service?.from_env ? (
               <span fg={colors.text.disabled}>set via environment variable</span>
-            ) : provider?.id === "custom" ? (
-              <span fg={colors.text.disabled}>use /connect to manage custom models</span>
             ) : (
               <span fg={colors.text.disabled}>enter to add key</span>
             )}
