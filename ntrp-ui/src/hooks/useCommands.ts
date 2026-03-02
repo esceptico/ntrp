@@ -17,7 +17,7 @@ import {
 } from "../api/client.js";
 import { deleteCredentials } from "../lib/secrets.js";
 
-type ViewMode = "chat" | "memory" | "settings" | "automations" | "sessions";
+type ViewMode = "chat" | "memory" | "settings" | "automations" | "sessions" | "providers";
 
 function findSession(sessions: SessionListItem[], query: string): SessionListItem | undefined {
   const q = query.toLowerCase();
@@ -51,6 +51,7 @@ interface CommandContext {
 type CommandHandler = (ctx: CommandContext, args: string[]) => boolean | Promise<boolean>;
 
 const COMMAND_HANDLERS: Record<string, CommandHandler> = {
+  connect: ({ setViewMode }) => { setViewMode("providers"); return true; },
   memory: ({ setViewMode }) => { setViewMode("memory"); return true; },
   automations: ({ setViewMode }) => { setViewMode("automations"); return true; },
   theme: ({ openThemePicker }) => { openThemePicker(); return true; },

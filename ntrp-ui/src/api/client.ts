@@ -97,14 +97,66 @@ export async function getHistory(config: Config, sessionId?: string): Promise<{ 
   return api.get(`${config.serverUrl}/session/history${params}`);
 }
 
-export async function checkHealth(config: Config): Promise<{ ok: boolean; version: string | null }> {
+export async function checkHealth(config: Config): Promise<{ ok: boolean; version: string | null; hasProviders: boolean }> {
   try {
-    const res = await api.get<{ status: string; version?: string; auth?: boolean }>(`${config.serverUrl}/health`);
+    const res = await api.get<{ status: string; version?: string; auth?: boolean; has_providers?: boolean }>(`${config.serverUrl}/health`);
     const ok = res.auth !== false;
-    return { ok, version: res.version ?? null };
+    return { ok, version: res.version ?? null, hasProviders: res.has_providers ?? true };
   } catch {
-    return { ok: false, version: null };
+    return { ok: false, version: null, hasProviders: true };
   }
+}
+
+
+// --- Providers ---
+
+
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  connected: boolean;
+  key_hint?: string | null;
+  from_env?: boolean;
+  models: string[] | Array<{ id: string; base_url: string; context_window: number }>;
+  embedding_models?: string[];
+  model_count?: number;
+}
+
+export async function getProviders(config: Config): Promise<{ providers: ProviderInfo[] }> {
+  return api.get<{ providers: ProviderInfo[] }>(`${config.serverUrl}/providers`);
+}
+
+export async function connectProvider(
+  config: Config,
+  providerId: string,
+  apiKey: string,
+  chatModel?: string,
+): Promise<{ status: string; provider: string }> {
+  return api.post(`${config.serverUrl}/providers/${providerId}/connect`, {
+    api_key: apiKey,
+    chat_model: chatModel ?? null,
+  });
+}
+
+export async function disconnectProvider(
+  config: Config,
+  providerId: string,
+): Promise<{ status: string; provider: string }> {
+  return api.delete(`${config.serverUrl}/providers/${providerId}`);
+}
+
+export async function addCustomModel(
+  config: Config,
+  data: { model_id: string; base_url: string; context_window: number; max_output_tokens?: number; api_key?: string },
+): Promise<{ status: string; model_id: string }> {
+  return api.post(`${config.serverUrl}/models/custom`, data);
+}
+
+export async function removeCustomModel(
+  config: Config,
+  modelId: string,
+): Promise<{ status: string; model_id: string }> {
+  return api.delete(`${config.serverUrl}/models/custom/${modelId}`);
 }
 
 

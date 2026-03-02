@@ -136,5 +136,21 @@ class UpdateNotifierRequest(BaseModel):
 # --- Skills ---
 
 
+class ConnectProviderRequest(BaseModel):
+    api_key: str = Field(..., min_length=1)
+    chat_model: str | None = None
+
+
+class AddCustomModelRequest(BaseModel):
+    model_id: str = Field(..., min_length=1)
+    base_url: str = Field(..., min_length=1)
+    context_window: int = Field(..., gt=0)
+    max_output_tokens: int = 8192
+    api_key: str | None = None
+
+
+# --- Skills ---
+
+
 class InstallRequest(BaseModel):
     source: str = Field(..., min_length=5, description="GitHub path: owner/repo/path/to/skill")

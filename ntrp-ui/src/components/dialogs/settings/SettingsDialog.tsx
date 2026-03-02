@@ -23,7 +23,7 @@ import { SectionId, SECTION_IDS, SECTION_LABELS, LIMIT_ITEMS, CONNECTION_ITEMS, 
 import { ModelDropdown } from "./ModelDropdown.js";
 import { BrowserDropdown } from "./BrowserDropdown.js";
 import { ConnectionsSection } from "./ConnectionsSection.js";
-import { AgentSection, DirectivesSection, LimitsSection, NotifiersSection, ServerSection, SkillsSection } from "./sections/index.js";
+import { AgentSection, DirectivesSection, LimitsSection, NotifiersSection, ProvidersSection, ServerSection, SkillsSection } from "./sections/index.js";
 import { setCredentials } from "../../../lib/secrets.js";
 import { checkHealth } from "../../../api/client.js";
 import { setApiKey as setFetchApiKey } from "../../../api/fetch.js";
@@ -66,6 +66,7 @@ export function SettingsDialog({
   const [agentIndex, setAgentIndex] = useState(0);
   const [limitsIndex, setLimitsIndex] = useState(0);
 
+  const [providersIndex, setProvidersIndex] = useState(0);
   const [serverIndex, setServerIndex] = useState(0);
   const [editingServer, setEditingServer] = useState(false);
   const [serverUrl, setServerUrl] = useState(config.serverUrl);
@@ -400,7 +401,13 @@ export function SettingsDialog({
         return;
       }
 
-      if (activeSection === "server") {
+      if (activeSection === "providers") {
+        if (key.name === "up" || key.name === "k") {
+          setProvidersIndex(i => Math.max(0, i - 1));
+        } else if (key.name === "down" || key.name === "j") {
+          setProvidersIndex(i => Math.min(4, i + 1)); // 3 providers + custom
+        }
+      } else if (activeSection === "server") {
         if (editingServer) {
           if (key.name === "s" && key.ctrl) {
             handleSaveServer();
@@ -668,6 +675,14 @@ export function SettingsDialog({
 
               {/* Detail pane */}
               <box flexDirection="column" width={detailWidth} height={contentHeight} overflow="hidden">
+                {activeSection === "providers" && (
+                  <ProvidersSection
+                    config={config}
+                    selectedIndex={providersIndex}
+                    accent={accent}
+                  />
+                )}
+
                 {activeSection === "server" && (
                   <ServerSection
                     serverUrl={serverUrl}

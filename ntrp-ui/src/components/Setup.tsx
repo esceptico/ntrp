@@ -66,7 +66,7 @@ export function Setup({ initialServerUrl, onConnect }: SetupProps) {
       }
 
       await setCredentials(url, key);
-      onConnect(config);
+      onConnect({ ...config, needsProvider: !health.hasProviders });
     } catch {
       setError("Could not connect to server");
       setConnecting(false);

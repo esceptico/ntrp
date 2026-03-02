@@ -1,12 +1,26 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
 
+from ntrp.config import PROVIDER_KEY_FIELDS, mask_api_key
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
-from ntrp.llm.models import get_model, list_embedding_models, list_models
+from ntrp.llm.models import (
+    Provider,
+    add_custom_model,
+    get_embedding_models_by_provider,
+    get_model,
+    get_models_by_provider,
+    list_embedding_models,
+    list_models,
+    remove_custom_model,
+)
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
+    AddCustomModelRequest,
     ClearSessionRequest,
     CompactRequest,
+    ConnectProviderRequest,
     CreateSessionRequest,
     RenameSessionRequest,
     SessionResponse,
@@ -228,6 +242,157 @@ async def update_config(
     except (ValueError, ValidationError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     return _config_response(runtime)
+
+
+# --- Providers ---
+
+
+PROVIDER_META = {
+    "anthropic": {"name": "Anthropic", "env_var": "ANTHROPIC_API_KEY", "provider": Provider.ANTHROPIC},
+    "openai": {"name": "OpenAI", "env_var": "OPENAI_API_KEY", "provider": Provider.OPENAI},
+    "google": {"name": "Google", "env_var": "GEMINI_API_KEY", "provider": Provider.GOOGLE},
+}
+
+
+@router.get("/providers")
+async def get_providers(runtime: Runtime = Depends(get_runtime)):
+    config = runtime.config
+    providers = []
+
+    for pid, meta in PROVIDER_META.items():
+        field = PROVIDER_KEY_FIELDS[pid]
+        key = getattr(config, field, None)
+        from_env = bool(os.environ.get(meta["env_var"]))
+
+        models = get_models_by_provider(meta["provider"])
+        embedding_models = get_embedding_models_by_provider(meta["provider"])
+
+        providers.append({
+            "id": pid,
+            "name": meta["name"],
+            "connected": bool(key),
+            "key_hint": mask_api_key(key),
+            "from_env": from_env,
+            "models": list(models.keys()),
+            "embedding_models": list(embedding_models.keys()),
+        })
+
+    # Custom models entry
+    custom_models = get_models_by_provider(Provider.CUSTOM)
+    providers.append({
+        "id": "custom",
+        "name": "Custom (OpenAI-compatible)",
+        "connected": bool(custom_models),
+        "model_count": len(custom_models),
+        "models": [
+            {"id": mid, "base_url": m.base_url, "context_window": m.max_context_tokens}
+            for mid, m in custom_models.items()
+        ],
+    })
+
+    return {"providers": providers}
+
+
+@router.post("/providers/{provider_id}/connect")
+async def connect_provider(
+    provider_id: str,
+    req: ConnectProviderRequest,
+    runtime: Runtime = Depends(get_runtime),
+    cfg_svc: ConfigService = Depends(_require_config_service),
+):
+    try:
+        await cfg_svc.connect_provider(provider_id, req.api_key)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if req.chat_model:
+        try:
+            await cfg_svc.update(chat_model=req.chat_model)
+        except (ValueError, ValidationError) as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    return {"status": "connected", "provider": provider_id}
+
+
+@router.delete("/providers/{provider_id}")
+async def disconnect_provider(
+    provider_id: str,
+    cfg_svc: ConfigService = Depends(_require_config_service),
+):
+    try:
+        await cfg_svc.disconnect_provider(provider_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "disconnected", "provider": provider_id}
+
+
+# --- Custom models ---
+
+
+@router.post("/models/custom")
+async def create_custom_model(
+    req: AddCustomModelRequest,
+    runtime: Runtime = Depends(get_runtime),
+    cfg_svc: ConfigService = Depends(_require_config_service),
+):
+    try:
+        model = add_custom_model(
+            model_id=req.model_id,
+            base_url=req.base_url,
+            context_window=req.context_window,
+            max_output_tokens=req.max_output_tokens,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Store API key in settings.json if provided
+    if req.api_key:
+        from ntrp.config import load_user_settings, save_user_settings
+
+        settings = load_user_settings()
+        custom_keys = settings.setdefault("custom_model_keys", {})
+        custom_keys[req.model_id] = req.api_key
+        save_user_settings(settings)
+
+    # Reinit router to pick up new key
+    await runtime.reload_config()
+
+    return {"status": "created", "model_id": model.id}
+
+
+@router.delete("/models/custom/{model_id:path}")
+async def delete_custom_model(
+    model_id: str,
+    runtime: Runtime = Depends(get_runtime),
+    cfg_svc: ConfigService = Depends(_require_config_service),
+):
+    # Check if active model is being removed
+    config = runtime.config
+    clear_fields = {}
+    for key in ("chat_model", "explore_model", "memory_model"):
+        if getattr(config, key) == model_id:
+            clear_fields[key] = None
+
+    try:
+        remove_custom_model(model_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Remove stored API key
+    from ntrp.config import load_user_settings, save_user_settings
+
+    settings = load_user_settings()
+    custom_keys = settings.get("custom_model_keys", {})
+    if model_id in custom_keys:
+        del custom_keys[model_id]
+        if not custom_keys:
+            settings.pop("custom_model_keys", None)
+        save_user_settings(settings)
+
+    if clear_fields:
+        await cfg_svc.update(**clear_fields)
+
+    return {"status": "deleted", "model_id": model_id}
 
 
 # --- Embedding ---

@@ -9,7 +9,14 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ntrp.embedder import EmbeddingConfig
-from ntrp.llm.models import get_embedding_model, get_embedding_models, get_models, load_custom_models
+from ntrp.llm.models import (
+    Provider,
+    get_embedding_model,
+    get_embedding_models,
+    get_models,
+    get_models_by_provider,
+    load_custom_models,
+)
 from ntrp.logging import get_logger
 
 NTRP_DIR = Path.home() / ".ntrp"
@@ -20,12 +27,32 @@ _logger = get_logger(__name__)
 
 SETTINGS_BACKUP_PATH = NTRP_DIR / "settings.json.bak"
 
+
+def set_ntrp_dir(path: str | Path) -> None:
+    global NTRP_DIR, SETTINGS_PATH, SETTINGS_BACKUP_PATH
+    NTRP_DIR = Path(path)
+    SETTINGS_PATH = NTRP_DIR / "settings.json"
+    SETTINGS_BACKUP_PATH = NTRP_DIR / "settings.json.bak"
+
+# Provider → (chat_model, memory_model, embedding_model)
+PROVIDER_KEY_FIELDS = {
+    "anthropic": "anthropic_api_key",
+    "openai": "openai_api_key",
+    "google": "gemini_api_key",
+}
+
 # Provider → (chat_model, memory_model, embedding_model)
 MODEL_DEFAULTS = {
     "ANTHROPIC_API_KEY": ("claude-sonnet-4-6", "claude-sonnet-4-6", None),
     "OPENAI_API_KEY": ("gpt-5.2", "gpt-5.2", "text-embedding-3-small"),
     "GEMINI_API_KEY": ("gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-embedding-001"),
 }
+
+
+def mask_api_key(key: str | None) -> str | None:
+    if not key or len(key) < 8:
+        return "****" if key else None
+    return key[:4] + "..." + key[-4:]
 
 
 def load_user_settings() -> dict:
@@ -53,6 +80,7 @@ def save_user_settings(settings: dict) -> None:
         except OSError:
             pass
     SETTINGS_PATH.write_text(json.dumps(settings, indent=2))
+    SETTINGS_PATH.chmod(0o600)
 
 
 # --- API key hashing ---
@@ -190,6 +218,14 @@ class Config(BaseSettings):
         return v
 
     @property
+    def has_providers(self) -> bool:
+        return bool(self.anthropic_api_key or self.openai_api_key or self.gemini_api_key)
+
+    @property
+    def has_any_model(self) -> bool:
+        return self.has_providers or bool(get_models_by_provider(Provider.CUSTOM))
+
+    @property
     def embedding(self) -> EmbeddingConfig | None:
         if not self.embedding_model:
             return None
@@ -250,6 +286,13 @@ def get_config() -> Config:
     # Restore api_key_hash from settings
     if "api_key_hash" in settings:
         overrides["api_key_hash"] = settings["api_key_hash"]
+
+    # Load stored provider keys (env vars still take priority)
+    provider_keys = settings.get("provider_keys", {})
+    for provider_id, field in PROVIDER_KEY_FIELDS.items():
+        alias = field.upper()
+        if provider_id in provider_keys and not os.environ.get(alias):
+            overrides[field] = provider_keys[provider_id]
 
     config = Config(**overrides)  # type: ignore - pydantic handles validation
 

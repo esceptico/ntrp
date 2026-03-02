@@ -28,12 +28,13 @@ import {
   ErrorBoundary,
 } from "./components/index.js";
 import { Setup } from "./components/Setup.js";
+import { ProviderOnboarding } from "./components/ProviderOnboarding.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { COMMANDS } from "./lib/commands.js";
 import { setApiKey } from "./api/fetch.js";
 import { getSkills, deleteSession, listSessions, restoreSession, permanentlyDeleteSession, type Skill } from "./api/client.js";
 
-type ViewMode = "chat" | "memory" | "settings" | "automations" | "sessions";
+type ViewMode = "chat" | "memory" | "settings" | "automations" | "sessions" | "providers";
 
 import type { Settings } from "./hooks/useSettings.js";
 
@@ -443,6 +444,14 @@ function AppContent({
           onClose={closeView}
         />
       )}
+      {viewMode === "providers" && (
+        <ProviderOnboarding
+          config={config}
+          closable
+          onClose={closeView}
+          onDone={closeView}
+        />
+      )}
       {showThemePicker && (
         <ThemePicker
           current={settings.ui.theme}
@@ -516,6 +525,18 @@ export default function App({ config: initialConfig }: { config: Config }) {
         <Setup
           initialServerUrl={config.serverUrl}
           onConnect={handleConnect}
+        />
+      </DimensionsProvider>
+    );
+  }
+
+  if (config.needsProvider) {
+    return (
+      <DimensionsProvider>
+        <ProviderOnboarding
+          config={config}
+          onClose={() => {}}
+          onDone={() => setConfig(c => ({ ...c, needsProvider: false }))}
         />
       </DimensionsProvider>
     );
