@@ -13,13 +13,13 @@ interface TreeNode extends ToolChainItem {
 function getStatusColor(status: ToolChainItem["status"]): string {
   switch (status) {
     case "error":
-      return colors.text.muted;
+      return colors.tool.error;
     case "running":
-      return colors.text.secondary;
+      return colors.tool.running;
     case "done":
-      return colors.text.disabled;
+      return colors.text.muted;
     case "pending":
-      return colors.text.disabled;
+      return colors.tool.pending;
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
