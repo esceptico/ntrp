@@ -11,6 +11,7 @@ export const COMMANDS = [
   { name: "automations", description: "View and manage automations" },
   { name: "theme", description: "Choose a theme" },
   { name: "connect", description: "Manage LLM providers" },
+  { name: "models", description: "Switch models (agent, explore, memory, embedding)" },
   { name: "settings", description: "Model, connections, and UI settings" },
   { name: "compact", description: "Summarize old messages to save tokens" },
   { name: "clear", description: "Clear current session messages" },
