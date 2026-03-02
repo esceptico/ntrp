@@ -136,6 +136,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
 
   // Create mode state
   const [createFocus, setCreateFocus] = useState<CreateFocus>("name");
+  const [createEditing, setCreateEditing] = useState(false);
   const [createTriggerType, setCreateTriggerType] = useState<"time" | "event">("time");
   const [createScheduleMode, setCreateScheduleMode] = useState<"schedule" | "interval">("schedule");
   const [createDaysOption, setCreateDaysOption] = useState("once");
@@ -193,6 +194,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     setEditingTaskId(null);
     setCreateMode(false);
     setCreateFocus("name");
+    setCreateEditing(false);
     setCreateTriggerType("time");
     setCreateScheduleMode("schedule");
     setCreateDaysOption("once");
@@ -381,6 +383,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
 
       // Create mode
       if (createMode) {
+        // Ctrl+S saves from any state
         if (key.ctrl && key.name === "s") {
           const validationError = getCreateValidationError();
           if (validationError) {
@@ -411,123 +414,133 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
           }
           return;
         }
+
+        // Escape: undrill or exit
         if (key.name === "escape") {
-          resetCreateState();
-          return;
-        }
-        if (key.name === "tab") {
-          setCreateFocus((f) => {
-            const order = createFocusOrder({
-              triggerType: createTriggerType,
-              scheduleMode: createScheduleMode,
-              daysOption: createDaysOption,
-              eventType: createEventType,
-              hasNotifiers: availableNotifiers.length > 0,
-            });
-            const idx = order.indexOf(f);
-            return order[(idx + 1) % order.length];
-          });
+          if (createEditing) {
+            setCreateEditing(false);
+          } else {
+            resetCreateState();
+          }
           return;
         }
 
-        // Selector fields
-        if (createFocus === "trigger_type") {
-          if (key.name === "left" || key.name === "h" || key.name === "right" || key.name === "l") {
+        // --- Drilled into a field ---
+        if (createEditing) {
+          if (createFocus === "day_picker") {
+            if (key.name === "left" || key.name === "h") {
+              setCreateDayCursor((i) => Math.max(0, i - 1));
+            } else if (key.name === "right" || key.name === "l") {
+              setCreateDayCursor((i) => Math.min(DAY_NAMES.length - 1, i + 1));
+            } else if (key.name === "space" || key.name === "return") {
+              const day = DAY_NAMES[createDayCursor];
+              if (day) {
+                setCreateCustomDays((prev) =>
+                  prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+                );
+              }
+            }
+          } else if (createFocus === "notifiers") {
+            if (key.name === "up" || key.name === "k") {
+              setCreateNotifierCursor((i) => Math.max(0, i - 1));
+            } else if (key.name === "down" || key.name === "j") {
+              setCreateNotifierCursor((i) => Math.min(availableNotifiers.length - 1, i + 1));
+            } else if (key.name === "space" || key.name === "return") {
+              const notifier = availableNotifiers[createNotifierCursor];
+              if (notifier) {
+                setCreateNotifiers((prev) =>
+                  prev.includes(notifier.name) ? prev.filter((n) => n !== notifier.name) : [...prev, notifier.name]
+                );
+              }
+            }
+          } else if (createFocus === "name") {
+            nameInput.handleKey(key);
+          } else if (createFocus === "description") {
+            descInput.handleKey(key);
+          } else if (createFocus === "time") {
+            timeInput.handleKey(key);
+          } else if (createFocus === "interval") {
+            intervalInput.handleKey(key);
+          } else if (createFocus === "start") {
+            startInput.handleKey(key);
+          } else if (createFocus === "end") {
+            endInput.handleKey(key);
+          } else if (createFocus === "event_lead") {
+            eventLeadInput.handleKey(key);
+          }
+          return;
+        }
+
+        // --- Navigation mode (not editing) ---
+        const focusOrder = createFocusOrder({
+          triggerType: createTriggerType,
+          scheduleMode: createScheduleMode,
+          daysOption: createDaysOption,
+          eventType: createEventType,
+          hasNotifiers: availableNotifiers.length > 0,
+        });
+        const focusIdx = focusOrder.indexOf(createFocus);
+
+        // ↑↓ navigate fields
+        if (key.name === "up" || key.name === "k") {
+          if (focusIdx > 0) setCreateFocus(focusOrder[focusIdx - 1]);
+          return;
+        }
+        if (key.name === "down" || key.name === "j") {
+          if (focusIdx < focusOrder.length - 1) setCreateFocus(focusOrder[focusIdx + 1]);
+          return;
+        }
+
+        // ←→ for selector fields
+        if (key.name === "left" || key.name === "h" || key.name === "right" || key.name === "l") {
+          if (createFocus === "trigger_type") {
             setCreateTriggerType((t) => t === "time" ? "event" : "time");
-          }
-          return;
-        }
-        if (createFocus === "model") {
-          if (key.name === "return" || key.name === "space") {
-            setShowModelDropdown(true);
-          }
-          return;
-        }
-        if (createFocus === "mode") {
-          if (key.name === "left" || key.name === "h" || key.name === "right" || key.name === "l") {
+          } else if (createFocus === "mode") {
             setCreateScheduleMode((m) => m === "schedule" ? "interval" : "schedule");
             setCreateDaysOption((d) => {
-              // Reset to a valid default when switching modes
               if (d === "once") return "always";
               if (d === "always") return "once";
               return d;
             });
-          }
-          return;
-        }
-        if (createFocus === "days") {
-          const opts: string[] = createScheduleMode === "schedule" ? [...SCHEDULE_DAYS] : [...INTERVAL_DAYS];
-          if (key.name === "left" || key.name === "h") {
-            setCreateDaysOption((d) => {
-              const idx = opts.indexOf(d);
-              return opts[Math.max(0, idx - 1)] ?? d;
-            });
-          } else if (key.name === "right" || key.name === "l") {
-            setCreateDaysOption((d) => {
-              const idx = opts.indexOf(d);
-              return opts[Math.min(opts.length - 1, idx + 1)] ?? d;
-            });
-          }
-          return;
-        }
-        if (createFocus === "day_picker") {
-          if (key.name === "left" || key.name === "h") {
-            setCreateDayCursor((i) => Math.max(0, i - 1));
-          } else if (key.name === "right" || key.name === "l") {
-            setCreateDayCursor((i) => Math.min(DAY_NAMES.length - 1, i + 1));
-          } else if (key.name === "space" || key.name === "return") {
-            const day = DAY_NAMES[createDayCursor];
-            if (day) {
-              setCreateCustomDays((prev) =>
-                prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
-              );
+          } else if (createFocus === "days") {
+            const opts: string[] = createScheduleMode === "schedule" ? [...SCHEDULE_DAYS] : [...INTERVAL_DAYS];
+            if (key.name === "left" || key.name === "h") {
+              setCreateDaysOption((d) => {
+                const idx = opts.indexOf(d);
+                return opts[Math.max(0, idx - 1)] ?? d;
+              });
+            } else {
+              setCreateDaysOption((d) => {
+                const idx = opts.indexOf(d);
+                return opts[Math.min(opts.length - 1, idx + 1)] ?? d;
+              });
             }
-          }
-          return;
-        }
-        if (createFocus === "event_type") {
-          if (key.name === "left" || key.name === "h" || key.name === "right" || key.name === "l") {
+          } else if (createFocus === "event_type") {
             const types = EVENT_TYPES;
             setCreateEventType((t) => {
               const i = types.indexOf(t as typeof types[number]);
               return types[(i + 1) % types.length];
             });
-          }
-          return;
-        }
-        if (createFocus === "event_lead") {
-          if (eventLeadInput.handleKey(key)) return;
-          return;
-        }
-        if (createFocus === "notifiers") {
-          if (key.name === "up" || key.name === "k") {
-            setCreateNotifierCursor((i) => Math.max(0, i - 1));
-          } else if (key.name === "down" || key.name === "j") {
-            setCreateNotifierCursor((i) => Math.min(availableNotifiers.length - 1, i + 1));
-          } else if (key.name === "space" || key.name === "return") {
-            const notifier = availableNotifiers[createNotifierCursor];
-            if (notifier) {
-              setCreateNotifiers((prev) =>
-                prev.includes(notifier.name) ? prev.filter((n) => n !== notifier.name) : [...prev, notifier.name]
-              );
-            }
-          }
-          return;
-        }
-        if (createFocus === "writable") {
-          if (key.name === "space" || key.name === "return") {
+          } else if (createFocus === "writable") {
             setCreateWritable((w) => !w);
           }
           return;
         }
 
-        // Text fields: route to controlled input handlers
-        if (createFocus === "name" && nameInput.handleKey(key)) return;
-        if (createFocus === "description" && descInput.handleKey(key)) return;
-        if (createFocus === "time" && timeInput.handleKey(key)) return;
-        if (createFocus === "interval" && intervalInput.handleKey(key)) return;
-        if (createFocus === "start" && startInput.handleKey(key)) return;
-        if (createFocus === "end" && endInput.handleKey(key)) return;
+        // Enter/Space: drill into field or toggle
+        if (key.name === "return" || key.name === "space") {
+          const textFields: CreateFocus[] = ["name", "description", "time", "interval", "start", "end", "event_lead"];
+          const listFields: CreateFocus[] = ["notifiers", "day_picker"];
+          if (textFields.includes(createFocus) || listFields.includes(createFocus)) {
+            setCreateEditing(true);
+          } else if (createFocus === "model") {
+            setShowModelDropdown(true);
+          } else if (createFocus === "writable") {
+            setCreateWritable((w) => !w);
+          }
+          // selectors: no-op on Enter (use ←→)
+          return;
+        }
         return;
       }
 
@@ -568,6 +581,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
         loadAutomations();
       } else if (key.name === "n") {
         setEditingTaskId(null);
+        setCreateEditing(false);
         nameInput.reset();
         setCreateModelCustomOption(null);
         setCreateModelIndex(0);
@@ -587,17 +601,18 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     [
       onClose, automations, selectedIndex, handleToggle, handleToggleWritable,
       confirmDelete, handleDelete, loadAutomations, handleViewResult, handleRun,
-      viewingResult, createMode, createFocus, createTriggerType, createScheduleMode,
+      viewingResult, createMode, createFocus, createEditing, createTriggerType, createScheduleMode,
       createDaysOption, createEventType, createNotifierCursor, createCustomDays, createDayCursor,
       createModelIndex, createModelOptions, selectedModel,
       handleCreate, handleUpdate, resetCreateState, getCreateValidationError,
       openFullEditor, editingTaskId,
       setSelectedIndex, setConfirmDelete, setViewingResult,
-      setLoading, setCreateMode, setCreateFocus, setCreateTriggerType,
+      setLoading, setCreateMode, setCreateFocus, setCreateEditing, setCreateTriggerType,
       setCreateScheduleMode, setCreateDaysOption, setCreateEventType, setCreateWritable,
       setCreateNotifiers, setCreateNotifierCursor, setCreateCustomDays, setCreateDayCursor, setEditingTaskId,
       setCreateError,
       nameInput, descInput, timeInput, intervalInput, startInput, endInput, eventLeadInput, parseLeadToMinutes,
+      availableNotifiers,
     ]
   );
 
@@ -637,13 +652,10 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     if (createMode) return saving
       ? <text><span fg={colors.text.muted}>{editingTaskId ? "Updating..." : "Creating..."}</span></text>
       : <Hints
-        items={[
-          [createCanSave ? "^S" : "^S(disabled)", "save"],
-          ["esc", "cancel"],
-          ["tab", "next"],
-          ["arrows", "move/select"],
-          ["space", "toggle"],
-        ]}
+        items={createEditing
+          ? [["type", "input"], ["esc", "done"], [createCanSave ? "^S" : "^S(off)", "save"]]
+          : [["↑↓", "navigate"], ["enter", "edit"], ["←→", "adjust"], [createCanSave ? "^S" : "^S(off)", "save"], ["esc", "cancel"]]
+        }
       />;
     if (confirmDelete) return <Hints items={[["y", "confirm"], ["n", "cancel"]]} />;
     return <Hints items={[["n", "new"], ["enter", "detail"], ["spc", "toggle"], ["e", "edit"], ["x", "run"], ["d", "del"]]} />;
@@ -689,6 +701,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
           return (
             <AutomationCreateView
               focus={createFocus}
+              editing={createEditing}
               triggerType={createTriggerType}
               scheduleMode={createScheduleMode}
               daysOption={createDaysOption}

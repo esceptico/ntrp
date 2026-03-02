@@ -13,6 +13,7 @@ export const DAY_NAMES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as co
 
 interface AutomationCreateViewProps {
   focus: CreateFocus;
+  editing: boolean;
   triggerType: "time" | "event";
   scheduleMode: "schedule" | "interval";
   daysOption: string;
@@ -46,6 +47,7 @@ interface AutomationCreateViewProps {
 
 export function AutomationCreateView({
   focus,
+  editing,
   triggerType,
   scheduleMode,
   daysOption,
@@ -177,8 +179,9 @@ export function AutomationCreateView({
           value={nameValue}
           cursorPos={nameCursorPos}
           placeholder="My morning digest"
-          showCursor={focus === "name"}
+          showCursor={editing && focus === "name"}
         />
+        {focus === "name" && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
       </box>
 
       <box flexDirection="row">
@@ -190,9 +193,10 @@ export function AutomationCreateView({
             onValueChange={() => {}}
             onCursorChange={() => {}}
             placeholder="Send a summary + inbox triage suggestions"
-            showCursor={focus === "description"}
+            showCursor={editing && focus === "description"}
           />
         </box>
+        {focus === "description" && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
       </box>
 
       <box flexDirection="row">
@@ -201,7 +205,7 @@ export function AutomationCreateView({
           <span fg={focus === "model" ? colors.text.primary : colors.text.secondary}>
             {selectedModel || "default"}
           </span>
-          <span fg={colors.text.muted}> (enter to choose)</span>
+          {focus === "model" && <span fg={colors.text.muted}> enter to choose</span>}
         </text>
       </box>
 
@@ -220,8 +224,9 @@ export function AutomationCreateView({
                 value={timeValue}
                 cursorPos={timeCursorPos}
                 placeholder="09:00"
-                showCursor={focus === "time"}
+                showCursor={editing && focus === "time"}
               />
+              {focus === "time" && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
             </box>
           ) : (
             <>
@@ -231,8 +236,9 @@ export function AutomationCreateView({
                   value={intervalValue}
                   cursorPos={intervalCursorPos}
                   placeholder="30m"
-                  showCursor={focus === "interval"}
+                  showCursor={editing && focus === "interval"}
                 />
+                {focus === "interval" && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
               </box>
               <box flexDirection="row">
                 {labelCell("WINDOW", focus === "start" || focus === "end")}
@@ -240,7 +246,7 @@ export function AutomationCreateView({
                   value={startValue}
                   cursorPos={startCursorPos}
                   placeholder="08:00"
-                  showCursor={focus === "start"}
+                  showCursor={editing && focus === "start"}
                 />
                 <text><span fg={colors.text.muted}> </span></text>
                 <text><span fg={colors.text.muted}>{renderWindowBar(startValue, endValue)}</span></text>
@@ -249,8 +255,9 @@ export function AutomationCreateView({
                   value={endValue}
                   cursorPos={endCursorPos}
                   placeholder="18:00"
-                  showCursor={focus === "end"}
+                  showCursor={editing && focus === "end"}
                 />
+                {(focus === "start" || focus === "end") && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
               </box>
             </>
           )}
@@ -264,10 +271,11 @@ export function AutomationCreateView({
                 <box flexDirection="row" flexWrap="wrap">
                   {DAY_NAMES.map((day, idx) => {
                     const isSelected = customDays.includes(day);
-                    const isCursor = focus === "day_picker" && idx === dayCursor;
+                    const isCursor = editing && focus === "day_picker" && idx === dayCursor;
                     return dayCell(day, isSelected, isCursor);
                   })}
                 </box>
+                {focus === "day_picker" && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
               </box>
               <box flexDirection="row">
                 <box width={LABEL_WIDTH} />
@@ -293,8 +301,9 @@ export function AutomationCreateView({
                 value={eventLeadValue}
                 cursorPos={eventLeadCursorPos}
                 placeholder="60m"
-                showCursor={focus === "event_lead"}
+                showCursor={editing && focus === "event_lead"}
               />
+              {focus === "event_lead" && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
             </box>
           )}
         </>
@@ -307,10 +316,11 @@ export function AutomationCreateView({
           <box flexDirection="row">
             {labelCell("NOTIFIERS", focus === "notifiers")}
             <text><span fg={colors.text.muted}>select targets</span></text>
+            {focus === "notifiers" && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
           </box>
           <box flexDirection="column">
             {availableNotifiers.map((notifier, idx) => {
-              const isCursor = focus === "notifiers" && idx === notifierCursor;
+              const isCursor = editing && focus === "notifiers" && idx === notifierCursor;
               const isChecked = notifiers.includes(notifier.name);
               return (
                 <box key={notifier.name} flexDirection="row">
@@ -369,7 +379,7 @@ export function AutomationCreateView({
         <box marginTop={1}>
           <box flexDirection="row">
             {labelCell("HELP", false)}
-            <text><span fg={colors.text.muted}>tab next  arrows move/select  space toggle  ctrl+s save</span></text>
+            <text><span fg={colors.text.muted}>↑↓ navigate  enter edit  ←→ adjust  ctrl+s save</span></text>
           </box>
         </box>
       )}
