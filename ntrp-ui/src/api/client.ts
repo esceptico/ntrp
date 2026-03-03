@@ -117,6 +117,7 @@ export interface ProviderInfo {
   connected: boolean;
   key_hint?: string | null;
   from_env?: boolean;
+  auth_method?: "oauth" | "api_key" | null;
   models: string[] | Array<{ id: string; base_url: string; context_window: number }>;
   embedding_models?: string[];
   model_count?: number;
@@ -143,6 +144,20 @@ export async function disconnectProvider(
   providerId: string,
 ): Promise<{ status: string; provider: string }> {
   return api.delete(`${config.serverUrl}/providers/${providerId}`);
+}
+
+export async function connectProviderOAuth(
+  config: Config,
+  providerId: string,
+): Promise<{ status: string; provider: string; auth_method: string }> {
+  return api.post(`${config.serverUrl}/providers/${providerId}/oauth`, {});
+}
+
+export async function disconnectProviderOAuth(
+  config: Config,
+  providerId: string,
+): Promise<{ status: string; provider: string }> {
+  return api.delete(`${config.serverUrl}/providers/${providerId}/oauth`);
 }
 
 // --- Services ---
@@ -229,6 +244,7 @@ export interface ServerConfig {
   explore_model: string;
   memory_model: string;
   embedding_model: string;
+  anthropic_auth?: "oauth" | "api_key" | null;
   vault_path: string;
   browser: string | null;
   gmail_enabled: boolean;

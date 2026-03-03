@@ -7,7 +7,7 @@ description: "Get ntrp running in 5 minutes."
 
 - Python 3.13+ with [uv](https://docs.astral.sh/uv/)
 - [Bun](https://bun.sh) runtime
-- An LLM provider API key (Anthropic, OpenAI, or Google) — can be configured during setup
+- An LLM provider: Anthropic (API key or Claude Pro/Max subscription), OpenAI, or Google — can be configured during setup
 
 ## Install
 
@@ -72,15 +72,15 @@ Enter this in the TUI to connect. It won't be shown again.
 In a separate terminal:
 
 <Tabs>
+  <Tab title="Installed">
+    ```bash
+    ntrp
+    ```
+  </Tab>
   <Tab title="From source">
     ```bash
     cd ntrp-ui
     bun run start
-    ```
-  </Tab>
-  <Tab title="Installed">
-    ```bash
-    ntrp
     ```
   </Tab>
 </Tabs>

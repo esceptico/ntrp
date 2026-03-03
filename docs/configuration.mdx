@@ -22,6 +22,12 @@ Set at least one provider API key. ntrp auto-selects models based on what's avai
 | `OPENAI_API_KEY` | gpt-5.2 | gpt-5.2 | text-embedding-3-small |
 | `GEMINI_API_KEY` | gemini-3-pro-preview | gemini-3-flash-preview | gemini-embedding-001 |
 
+### Claude OAuth (Pro/Max)
+
+Instead of an API key, you can use your Claude Pro or Max subscription. In the TUI, run `/connect` → select Anthropic → choose "Claude Pro/Max". Your browser will open for authorization. Tokens are stored in `~/.ntrp/settings.json` under the `claude_oauth` key and refresh automatically.
+
+ntrp also picks up existing Claude Code credentials from `~/.claude/.credentials.json` if present.
+
 Override auto-detection with explicit model IDs:
 
 ```bash

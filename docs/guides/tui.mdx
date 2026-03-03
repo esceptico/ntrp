@@ -13,7 +13,7 @@ On first launch (or after `/logout`), the TUI shows a **CONNECT** dialog asking 
 | `Enter` | Connect |
 | `Ctrl+C` | Exit |
 
-After connecting, if no LLM provider is configured, a **provider onboarding** dialog appears where you can connect a provider and choose a default model.
+After connecting, if no LLM provider is configured, a **provider onboarding** dialog appears where you can connect a provider and choose a default model. For Anthropic, you can choose between an API key or OAuth sign-in with a Claude Pro/Max subscription.
 
 ## Keyboard shortcuts
 
@@ -90,7 +90,7 @@ Switch between sessions, create new ones, archive or permanently delete old sess
 The sidebar (toggle with `Ctrl+L`) shows:
 
 - Server URL and version
-- Current models
+- Current models (with `oauth` tag when using Claude OAuth)
 - Context usage (token bar)
 - Session cost tracking
 - Memory stats

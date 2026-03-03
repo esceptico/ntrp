@@ -1,3 +1,5 @@
+import hashlib
+
 from ntrp.llm.anthropic import AnthropicClient
 from ntrp.llm.base import CompletionClient, EmbeddingClient
 from ntrp.llm.gemini import GeminiClient
@@ -7,6 +9,8 @@ from ntrp.llm.openai import OpenAIClient
 _completion_clients: dict[str, CompletionClient] = {}
 _embedding_clients: dict[str, EmbeddingClient] = {}
 _api_keys: dict[Provider | str, str | None] = {}
+_last_oauth_fingerprint: str | None = None
+_stale_clients: list[CompletionClient] = []
 
 
 def init(config) -> None:
@@ -33,14 +37,41 @@ def init(config) -> None:
             _api_keys[model.id] = config.model_extra.get(model.api_key_env.lower())
 
 
+def _token_fingerprint(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()[:16]
+
+
+def _get_anthropic_client() -> AnthropicClient:
+    global _last_oauth_fingerprint
+
+    from ntrp.llm.claude_oauth import get_access_token
+
+    token = get_access_token()
+    if token:
+        fp = _token_fingerprint(token)
+        if fp == _last_oauth_fingerprint and "anthropic" in _completion_clients:
+            return _completion_clients["anthropic"]  # type: ignore[return-value]
+        _last_oauth_fingerprint = fp
+        client = AnthropicClient(auth_token=token)
+    else:
+        _last_oauth_fingerprint = None
+        client = AnthropicClient(api_key=_api_keys.get(Provider.ANTHROPIC))
+
+    if old := _completion_clients.get("anthropic"):
+        _stale_clients.append(old)
+    _completion_clients["anthropic"] = client
+    return client
+
+
 def get_completion_client(model_id: str) -> CompletionClient:
     model = get_model(model_id)
+    if model.provider == Provider.ANTHROPIC:
+        return _get_anthropic_client()
+
     cache_key = model.id if model.provider == Provider.CUSTOM else (model.base_url or model.provider.value)
     if cache_key not in _completion_clients:
         key = _api_keys.get(model.provider)
         match model.provider:
-            case Provider.ANTHROPIC:
-                _completion_clients[cache_key] = AnthropicClient(api_key=key)
             case Provider.OPENAI:
                 _completion_clients[cache_key] = OpenAIClient(api_key=key)
             case Provider.GOOGLE:
@@ -70,6 +101,9 @@ def get_embedding_client(model_id: str) -> EmbeddingClient:
 
 
 async def close() -> None:
+    for client in _stale_clients:
+        await client.close()
+    _stale_clients.clear()
     for client in _completion_clients.values():
         await client.close()
     for client in _embedding_clients.values():

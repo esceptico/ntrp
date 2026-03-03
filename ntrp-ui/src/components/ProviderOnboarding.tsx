@@ -4,10 +4,10 @@ import { useKeypress, type Key } from "../hooks/useKeypress.js";
 import { useTextInput } from "../hooks/useTextInput.js";
 import { Dialog, colors, Hints, SelectList, type SelectOption } from "./ui/index.js";
 import { TextInputField } from "./ui/input/TextInputField.js";
-import { getProviders, connectProvider, updateConfig, addCustomModel, type ProviderInfo } from "../api/client.js";
+import { getProviders, connectProvider, connectProviderOAuth, updateConfig, addCustomModel, type ProviderInfo } from "../api/client.js";
 import type { Config } from "../types.js";
 
-type Step = "providers" | "apiKey" | "modelSelect" | "customModel";
+type Step = "providers" | "authMethod" | "apiKey" | "modelSelect" | "customModel";
 
 interface CustomPreset {
   name: string;
@@ -26,6 +26,11 @@ const CUSTOM_PRESETS: CustomPreset[] = [
 
 type CustomField = "preset" | "baseUrl" | "modelId" | "apiKey" | "contextWindow";
 const CUSTOM_FIELDS: CustomField[] = ["preset", "baseUrl", "modelId", "apiKey", "contextWindow"];
+
+function getStringModels(provider: ProviderInfo | null | undefined): string[] {
+  if (!provider?.models || !Array.isArray(provider.models)) return [];
+  return provider.models.filter((m): m is string => typeof m === "string");
+}
 
 interface ProviderOnboardingProps {
   config: Config;
@@ -78,10 +83,20 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
     try {
       const result = await getProviders(config);
       setProviders(result.providers);
-    } catch {}
+      return result.providers;
+    } catch {
+      return providers;
+    }
   }, [config]);
 
   useEffect(() => { refreshProviders(); }, [refreshProviders]);
+
+  const showModels = useCallback((provider: ProviderInfo | null | undefined) => {
+    setModelList(getStringModels(provider));
+    setStep("modelSelect");
+  }, []);
+
+  // --- Handlers ---
 
   const handleSelectProvider = useCallback((providerId: string) => {
     const provider = providers.find(p => p.id === providerId);
@@ -104,18 +119,54 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
       return;
     }
 
-    if (provider.connected) {
-      setSelectedProvider(provider);
-      setStep("modelSelect");
+    setSelectedProvider(provider);
+    setError(null);
+
+    if (provider.id === "anthropic") {
+      setStep("authMethod");
+    } else if (provider.connected) {
+      showModels(provider);
+    } else {
+      setApiKeyValue("");
+      setApiKeyCursor(0);
+      setStep("apiKey");
+    }
+  }, [providers, showModels]);
+
+  const handleSelectAuthMethod = useCallback(async (method: string) => {
+    // Already connected with this method — just show models
+    if (method === selectedProvider?.auth_method) {
+      showModels(selectedProvider);
       return;
     }
 
-    setSelectedProvider(provider);
+    if (method === "oauth") {
+      setSaving(true);
+      setError(null);
+      try {
+        await connectProviderOAuth(config, "anthropic");
+        const fresh = await refreshProviders();
+        const provider = fresh.find(p => p.id === "anthropic") ?? null;
+        setSelectedProvider(provider);
+        if (hasConnected) {
+          setStep("providers");
+        } else {
+          showModels(provider);
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "OAuth failed");
+        setStep("authMethod");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    // API key flow
     setApiKeyValue("");
     setApiKeyCursor(0);
-    setError(null);
     setStep("apiKey");
-  }, [providers]);
+  }, [config, selectedProvider, hasConnected, refreshProviders, showModels]);
 
   const handleSubmitApiKey = useCallback(async () => {
     const key = apiKeyValue.trim();
@@ -126,21 +177,17 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
     try {
       await connectProvider(config, selectedProvider.id, key);
       await refreshProviders();
-
-      // Move to model selection
-      const models = Array.isArray(selectedProvider.models) ? selectedProvider.models.filter((m): m is string => typeof m === "string") : [];
-      if (models.length > 0) {
-        setModelList(models);
-        setStep("modelSelect");
-      } else {
+      if (hasConnected) {
         setStep("providers");
+      } else {
+        showModels(selectedProvider);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to connect");
     } finally {
       setSaving(false);
     }
-  }, [apiKeyValue, selectedProvider, config, refreshProviders]);
+  }, [apiKeyValue, selectedProvider, hasConnected, config, refreshProviders, showModels]);
 
   const handleSelectModel = useCallback(async (model: string) => {
     setSaving(true);
@@ -192,28 +239,21 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
     }
   }, [modelId, baseUrl, contextWindow, customApiKey, config, refreshProviders]);
 
+  // --- Keypress ---
+
   const handleKeypress = useCallback(
     (key: Key) => {
       if (saving) return;
 
       if (step === "apiKey") {
-        if (key.name === "escape") {
-          setStep("providers");
-          return;
-        }
-        if (key.name === "return") {
-          handleSubmitApiKey();
-          return;
-        }
+        if (key.name === "escape") { setStep("providers"); return; }
+        if (key.name === "return") { handleSubmitApiKey(); return; }
         apiKeyInput.handleKey(key);
         return;
       }
 
       if (step === "customModel") {
-        if (key.name === "escape") {
-          setStep("providers");
-          return;
-        }
+        if (key.name === "escape") { setStep("providers"); return; }
 
         if (customField === "preset") {
           if (key.name === "left" || key.name === "h") {
@@ -236,36 +276,23 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
             });
             return;
           }
-          if (key.name === "return" || key.name === "tab") {
-            setCustomField("baseUrl");
-            return;
-          }
+          if (key.name === "return" || key.name === "tab") { setCustomField("baseUrl"); return; }
           return;
         }
 
-        // Tab/return advance to next field
         if (key.name === "tab" || key.name === "return") {
           const idx = CUSTOM_FIELDS.indexOf(customField);
-          if (customField === "contextWindow" && key.name === "return") {
-            handleSubmitCustomModel();
-            return;
-          }
-          if (idx < CUSTOM_FIELDS.length - 1) {
-            setCustomField(CUSTOM_FIELDS[idx + 1]);
-          }
+          if (customField === "contextWindow" && key.name === "return") { handleSubmitCustomModel(); return; }
+          if (idx < CUSTOM_FIELDS.length - 1) setCustomField(CUSTOM_FIELDS[idx + 1]);
           return;
         }
 
-        // Shift+tab goes back
         if (key.shift && key.name === "tab") {
           const idx = CUSTOM_FIELDS.indexOf(customField);
-          if (idx > 0) {
-            setCustomField(CUSTOM_FIELDS[idx - 1]);
-          }
+          if (idx > 0) setCustomField(CUSTOM_FIELDS[idx - 1]);
           return;
         }
 
-        // Route to the right text input
         if (customField === "baseUrl") baseUrlInput.handleKey(key);
         else if (customField === "modelId") modelIdInput.handleKey(key);
         else if (customField === "apiKey") customApiKeyInput.handleKey(key);
@@ -286,6 +313,14 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
 
   useKeypress(handleCtrlC, { isActive: true });
   useKeypress(handleKeypress, { isActive: step === "apiKey" || step === "customModel" });
+
+  // --- Render ---
+
+  const renderError = () => error && (
+    <box marginTop={1}>
+      <text><span fg={colors.status.error}>  {error}</span></text>
+    </box>
+  );
 
   const renderProviderList = () => {
     const subtitle = hasConnected
@@ -312,14 +347,14 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
       else if (closable) onClose();
     };
 
-    const footer = (
-      <box flexDirection="column">
-        <text><span fg={colors.text.muted}>{subtitle}</span></text>
-      </box>
-    );
-
     return (
-      <Dialog title="PROVIDERS" size="medium" onClose={providerClose} closable={hasConnected || closable} footer={footer}>
+      <Dialog
+        title="PROVIDERS"
+        size="medium"
+        onClose={providerClose}
+        closable={hasConnected || closable}
+        footer={<text><span fg={colors.text.muted}>{subtitle}</span></text>}
+      >
         {({ height }) => (
           <SelectList
             options={providerOptions}
@@ -340,9 +375,7 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
                 );
               }
 
-              const modelNames = Array.isArray(provider.models)
-                ? provider.models.filter((m): m is string => typeof m === "string").slice(0, 3).join(", ")
-                : "";
+              const modelNames = getStringModels(provider).slice(0, 3).join(", ");
 
               return (
                 <box flexDirection="column">
@@ -353,14 +386,41 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
                     {provider.from_env && <span fg={colors.text.muted}>{" (env)"}</span>}
                   </text>
                   {modelNames && (
-                    <text>
-                      <span fg={colors.text.disabled}>{"  "}{modelNames}</span>
-                    </text>
+                    <text><span fg={colors.text.disabled}>{"  "}{modelNames}</span></text>
                   )}
                 </box>
               );
             }}
           />
+        )}
+      </Dialog>
+    );
+  };
+
+  const renderAuthMethodStep = () => {
+    const currentMethod = selectedProvider?.auth_method;
+    const options: SelectOption[] = [
+      { value: "oauth", title: "Claude Pro/Max", description: currentMethod === "oauth" ? "\u2713 connected" : "uses your subscription" },
+      { value: "api_key", title: "API Key", description: currentMethod === "api_key" ? "\u2713 connected" : "pay-per-use" },
+    ];
+
+    const footer = saving
+      ? <text><span fg={colors.text.muted}>Connecting... (check your browser)</span></text>
+      : <Hints items={[["enter", "select"], ["esc", "back"]]} />;
+
+    return (
+      <Dialog title="ANTHROPIC" size="medium" onClose={() => setStep("providers")} closable footer={footer}>
+        {({ height }) => (
+          <box flexDirection="column">
+            <SelectList
+              options={options}
+              visibleLines={Math.min(4, height)}
+              isActive={step === "authMethod" && !saving}
+              onSelect={(opt) => handleSelectAuthMethod(opt.value)}
+              onClose={() => setStep("providers")}
+            />
+            {renderError()}
+          </box>
         )}
       </Dialog>
     );
@@ -393,11 +453,7 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
                 </text>
               )}
             </box>
-            {error && (
-              <box marginTop={1}>
-                <text><span fg={colors.status.error}>  {error}</span></text>
-              </box>
-            )}
+            {renderError()}
           </box>
         )}
       </Dialog>
@@ -406,10 +462,7 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
 
   const renderModelSelect = () => {
     const modelOptions: SelectOption[] = modelList.map(m => ({ value: m, title: m }));
-
-    const footer = saving
-      ? <text><span fg={colors.text.muted}>Saving...</span></text>
-      : undefined;
+    const footer = saving ? <text><span fg={colors.text.muted}>Saving...</span></text> : undefined;
 
     return (
       <Dialog title="DEFAULT CHAT MODEL" size="medium" onClose={() => setStep("providers")} closable footer={footer}>
@@ -422,11 +475,7 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
               onSelect={(opt) => handleSelectModel(opt.value)}
               onClose={() => setStep("providers")}
             />
-            {error && (
-              <box marginTop={1}>
-                <text><span fg={colors.status.error}>  {error}</span></text>
-              </box>
-            )}
+            {renderError()}
           </box>
         )}
       </Dialog>
@@ -451,7 +500,6 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
       <Dialog title="ADD CUSTOM MODEL" size="medium" onClose={() => setStep("providers")} closable footer={footer}>
         {() => (
           <box flexDirection="column">
-            {/* Preset selector */}
             <box marginBottom={1}>
               <text>
                 <span fg={customField === "preset" ? colors.text.primary : colors.text.disabled}>{customField === "preset" ? "\u25B8 " : "  "}</span>
@@ -466,7 +514,6 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
               </text>
             </box>
 
-            {/* Text fields */}
             {fieldItems.map((item) => {
               const isActive = item.field === customField;
               const displayValue = item.masked && item.value ? "\u2022".repeat(Math.min(item.value.length, 40)) : item.value;
@@ -503,11 +550,7 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
               );
             })}
 
-            {error && (
-              <box marginTop={1}>
-                <text><span fg={colors.status.error}>  {error}</span></text>
-              </box>
-            )}
+            {renderError()}
           </box>
         )}
       </Dialog>
@@ -515,6 +558,7 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
   };
 
   if (step === "providers") return renderProviderList();
+  if (step === "authMethod") return renderAuthMethodStep();
   if (step === "apiKey") return renderApiKeyStep();
   if (step === "modelSelect") return renderModelSelect();
   if (step === "customModel") return renderCustomModelForm();

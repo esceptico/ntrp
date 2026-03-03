@@ -195,6 +195,7 @@ export function Sidebar({ serverConfig, serverVersion, serverUrl, data, usage, w
           <text>
             <span fg={D}>chat </span>
             <span fg={S}>{truncateText(formatModel(serverConfig.chat_model), contentWidth - 5)}</span>
+            {serverConfig.anthropic_auth === "oauth" && serverConfig.chat_model?.startsWith("claude") && <span fg={D}> oauth</span>}
           </text>
           <text>
             <span fg={D}>expl </span>

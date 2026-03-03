@@ -24,8 +24,14 @@ _FINISH_REASONS = {
 
 
 class AnthropicClient(CompletionClient):
-    def __init__(self, api_key: str | None = None):
-        self._client = anthropic.AsyncAnthropic(api_key=api_key)
+    def __init__(self, api_key: str | None = None, auth_token: str | None = None):
+        kwargs: dict = {}
+        if auth_token:
+            kwargs["auth_token"] = auth_token
+            kwargs["default_headers"] = {"anthropic-beta": "oauth-2025-04-20"}
+        else:
+            kwargs["api_key"] = api_key
+        self._client = anthropic.AsyncAnthropic(**kwargs)
 
     async def _completion(
         self,
