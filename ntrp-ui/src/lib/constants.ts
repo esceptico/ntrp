@@ -17,8 +17,8 @@ export const MAX_TOOL_DESCRIPTION_CHARS = 120;
 export const MAX_TOOL_RESULT_LINE_CHARS = 60;
 export const MIN_DELEGATE_DURATION_SHOW = 5;
 
-export const INDEX_STATUS_POLL_MS = 1000;
-export const INDEX_DONE_HIDE_MS = 2000;
+export const INDEX_STATUS_POLL_MS = 500;
+export const INDEX_DONE_HIDE_MS = 1000;
 
 export const Status = {
   IDLE: "idle",

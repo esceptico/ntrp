@@ -8,7 +8,11 @@ from ntrp.usage import Pricing
 
 _logger = get_logger(__name__)
 
-MODELS_PATH = Path.home() / ".ntrp" / "models.json"
+
+def _models_path() -> Path:
+    from ntrp.config import NTRP_DIR
+
+    return NTRP_DIR / "models.json"
 
 
 class Provider(Enum):
@@ -97,17 +101,17 @@ def load_custom_models() -> None:
         return
     _custom_loaded = True
 
-    if not MODELS_PATH.exists():
+    if not _models_path().exists():
         return
 
     try:
-        raw = json.loads(MODELS_PATH.read_text())
+        raw = json.loads(_models_path().read_text())
     except (json.JSONDecodeError, OSError):
-        _logger.warning("Failed to read %s", MODELS_PATH, exc_info=True)
+        _logger.warning("Failed to read %s", _models_path(), exc_info=True)
         return
 
     if not isinstance(raw, dict):
-        _logger.warning("%s: expected a JSON object, got %s", MODELS_PATH, type(raw).__name__)
+        _logger.warning("%s: expected a JSON object, got %s", _models_path(), type(raw).__name__)
         return
 
     embedding_raw = {}
@@ -184,9 +188,68 @@ def get_models() -> dict[str, Model]:
     return _models
 
 
+def get_models_by_provider(provider: Provider) -> dict[str, Model]:
+    return {mid: m for mid, m in _models.items() if m.provider == provider}
+
+
 def list_embedding_models() -> list[str]:
     return list(_embedding_models)
 
 
 def get_embedding_models() -> dict[str, EmbeddingModel]:
     return _embedding_models
+
+
+def get_embedding_models_by_provider(provider: Provider) -> dict[str, EmbeddingModel]:
+    return {mid: m for mid, m in _embedding_models.items() if m.provider == provider}
+
+
+def add_custom_model(
+    model_id: str,
+    base_url: str,
+    context_window: int,
+    max_output_tokens: int = 8192,
+    api_key_env: str | None = None,
+) -> Model:
+    raw = {}
+    if _models_path().exists():
+        try:
+            raw = json.loads(_models_path().read_text())
+        except (json.JSONDecodeError, OSError):
+            raw = {}
+
+    entry: dict = {"base_url": base_url, "context_window": context_window}
+    if max_output_tokens != 8192:
+        entry["max_output_tokens"] = max_output_tokens
+    if api_key_env:
+        entry["api_key_env"] = api_key_env
+
+    raw[model_id] = entry
+    _models_path().parent.mkdir(exist_ok=True)
+    _models_path().write_text(json.dumps(raw, indent=2))
+
+    model = Model(
+        id=model_id,
+        provider=Provider.CUSTOM,
+        max_context_tokens=context_window,
+        max_output_tokens=max_output_tokens,
+        base_url=base_url,
+        api_key_env=api_key_env,
+    )
+    _models[model_id] = model
+    return model
+
+
+def remove_custom_model(model_id: str) -> None:
+    if model_id not in _models or _models[model_id].provider != Provider.CUSTOM:
+        raise ValueError(f"Not a custom model: {model_id}")
+
+    del _models[model_id]
+
+    if _models_path().exists():
+        try:
+            raw = json.loads(_models_path().read_text())
+        except (json.JSONDecodeError, OSError):
+            return
+        raw.pop(model_id, None)
+        _models_path().write_text(json.dumps(raw, indent=2))

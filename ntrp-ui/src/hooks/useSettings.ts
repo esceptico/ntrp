@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { accentColors, themeNames, type AccentColor, type Theme } from "../components/ui/colors.js";
+import { accentNames, themeNames, type AccentColor, type Theme } from "../components/ui/colors.js";
 import { updateConfig } from "../api/client.js";
 import type { Config } from "../types.js";
 import * as fs from "fs";
@@ -22,7 +22,7 @@ export interface Settings {
 
 const defaultSettings: Settings = {
   ui: {
-    accentColor: "gray",
+    accentColor: "blue",
     theme: "dark",
   },
   agent: {
@@ -40,8 +40,15 @@ function loadSettings(): Settings {
       const parsed = JSON.parse(data);
       if (typeof parsed !== "object" || parsed === null) return defaultSettings;
       const ui = { ...defaultSettings.ui, ...parsed.ui };
-      if (!(ui.accentColor in accentColors)) ui.accentColor = defaultSettings.ui.accentColor;
+
+      // Migrate old combo themes (e.g., "dark-blue" → theme: "dark", accent: "blue")
+      for (const name of accentNames) {
+        if (ui.theme === `dark-${name}`) { ui.theme = "dark"; ui.accentColor = name; break; }
+        if (ui.theme === `light-${name}`) { ui.theme = "light"; ui.accentColor = name; break; }
+      }
+
       if (!themeNames.includes(ui.theme)) ui.theme = defaultSettings.ui.theme;
+      if (!(accentNames as readonly string[]).includes(ui.accentColor)) ui.accentColor = defaultSettings.ui.accentColor;
       return {
         ui,
         agent: { ...defaultSettings.agent, ...parsed.agent },
@@ -58,7 +65,19 @@ function saveSettings(settings: Settings): void {
     if (!fs.existsSync(SETTINGS_DIR)) {
       fs.mkdirSync(SETTINGS_DIR, { recursive: true });
     }
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+    // Merge into existing file to preserve backend keys (api_key_hash, provider_keys, etc.)
+    let existing: Record<string, unknown> = {};
+    try {
+      if (fs.existsSync(SETTINGS_FILE)) {
+        const data = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf-8"));
+        if (typeof data === "object" && data !== null) existing = data;
+      }
+    } catch {
+      return; // Don't clobber a file we can't read cleanly
+    }
+    existing.ui = settings.ui;
+    existing.agent = settings.agent;
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(existing, null, 2));
   } catch {
     // Ignore save errors
   }

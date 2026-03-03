@@ -46,15 +46,17 @@ const saved = await getCredentials();
 const serverUrl = cliServer || envServer || saved.serverUrl || "http://localhost:8000";
 const apiKey = cliToken || envToken || saved.apiKey || "";
 let needsSetup = !apiKey;
+let needsProvider = false;
 
 // Verify saved credentials — only invalidate if server is reachable but auth fails
 if (apiKey && !cliToken && !envToken) {
   setApiKey(apiKey);
   const health = await checkHealth({ serverUrl, apiKey, needsSetup: false });
   if (!health.ok && health.version !== null) needsSetup = true;
+  if (health.ok && !health.hasProviders) needsProvider = true;
 }
 
-const config: Config = { serverUrl, apiKey, needsSetup };
+const config: Config = { serverUrl, apiKey, needsSetup, needsProvider };
 
 if (apiKey) setApiKey(apiKey);
 

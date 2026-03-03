@@ -1,6 +1,5 @@
 import { colors, truncateText, SelectionIndicator, Hints } from "../../ui/index.js";
 import { TextInputField } from "../../ui/input/TextInputField.js";
-import { CHECKBOX_CHECKED, CHECKBOX_UNCHECKED } from "../../../lib/constants.js";
 import type { ServerConfig, GoogleAccount } from "../../../api/client.js";
 import { CONNECTION_LABELS, type ConnectionItem } from "./config.js";
 
@@ -37,8 +36,7 @@ export function ConnectionsSection({
   updatingBrowser,
   browserError,
 }: ConnectionsSectionProps) {
-  const labelWidth = 14;
-  const valueWidth = Math.max(0, width - labelWidth - 6);
+  const valueWidth = Math.max(0, width - 20);
   const sources = serverConfig?.sources;
   const isGoogleSource = GOOGLE_SOURCES.includes(selectedItem);
   const sourceEnabled = isGoogleSource && sources?.[selectedItem]?.enabled;
@@ -46,12 +44,10 @@ export function ConnectionsSection({
   return (
     <box flexDirection="column">
       {/* Vault / Notes */}
-      <SourceRow item="vault" selected={selectedItem === "vault"} accent={accent}>
+      <Row item="vault" selected={selectedItem === "vault"} accent={accent}>
         {editingVault ? (
           <box flexDirection="row">
-            <text>
-              <span fg={colors.text.muted}>[</span>
-            </text>
+            <text><span fg={colors.text.muted}>[</span></text>
             <TextInputField
               value={vaultPath}
               cursorPos={vaultCursorPos}
@@ -59,9 +55,7 @@ export function ConnectionsSection({
               showCursor={true}
               textColor={colors.text.primary}
             />
-            <text>
-              <span fg={colors.text.muted}>]</span>
-            </text>
+            <text><span fg={colors.text.muted}>]</span></text>
           </box>
         ) : updatingVault ? (
           <text><span fg={colors.status.warning}>Updating...</span></text>
@@ -72,7 +66,7 @@ export function ConnectionsSection({
             </span>
           </text>
         )}
-      </SourceRow>
+      </Row>
       {vaultError && (
         <box marginLeft={4}>
           <text><span fg={colors.status.error}>{vaultError}</span></text>
@@ -80,43 +74,21 @@ export function ConnectionsSection({
       )}
 
       {/* Gmail */}
-      <GoogleSourceRow
-        item="gmail"
-        selectedItem={selectedItem}
-        sources={sources}
-        googleAccounts={googleAccounts}
-        accent={accent}
-      />
+      <GoogleRow item="gmail" selectedItem={selectedItem} sources={sources} accounts={googleAccounts} accent={accent} />
 
       {selectedItem === "gmail" && sourceEnabled && googleAccounts.length > 0 && (
-        <GoogleAccountList
-          accounts={googleAccounts}
-          selectedIndex={selectedGoogleIndex}
-          accent={accent}
-          valueWidth={valueWidth}
-        />
+        <AccountList accounts={googleAccounts} selectedIndex={selectedGoogleIndex} accent={accent} valueWidth={valueWidth} />
       )}
 
       {/* Calendar */}
-      <GoogleSourceRow
-        item="calendar"
-        selectedItem={selectedItem}
-        sources={sources}
-        googleAccounts={googleAccounts}
-        accent={accent}
-      />
+      <GoogleRow item="calendar" selectedItem={selectedItem} sources={sources} accounts={googleAccounts} accent={accent} />
 
       {selectedItem === "calendar" && sourceEnabled && googleAccounts.length > 0 && (
-        <GoogleAccountList
-          accounts={googleAccounts}
-          selectedIndex={selectedGoogleIndex}
-          accent={accent}
-          valueWidth={valueWidth}
-        />
+        <AccountList accounts={googleAccounts} selectedIndex={selectedGoogleIndex} accent={accent} valueWidth={valueWidth} />
       )}
 
       {/* Browser */}
-      <SourceRow item="browser" selected={selectedItem === "browser"} accent={accent}>
+      <Row item="browser" selected={selectedItem === "browser"} accent={accent}>
         {updatingBrowser ? (
           <text><span fg={colors.status.warning}>Updating...</span></text>
         ) : serverConfig?.has_browser ? (
@@ -124,7 +96,7 @@ export function ConnectionsSection({
         ) : (
           <text><span fg={colors.text.muted}>Not configured</span></text>
         )}
-      </SourceRow>
+      </Row>
       {browserError && (
         <box marginLeft={4}>
           <text><span fg={colors.status.error}>{browserError}</span></text>
@@ -132,33 +104,33 @@ export function ConnectionsSection({
       )}
 
       {/* Memory */}
-      <SourceRow item="memory" selected={selectedItem === "memory"} accent={accent}>
-        <ToggleIndicator source={sources?.memory} accent={accent} />
+      <Row item="memory" selected={selectedItem === "memory"} accent={accent}>
+        <Toggle enabled={sources?.memory?.enabled} accent={accent} />
         <text>
           <span fg={sources?.memory?.enabled ? colors.text.primary : colors.text.muted}>
             {sources?.memory?.enabled ? "Active" : "Disabled"}
           </span>
         </text>
-      </SourceRow>
+      </Row>
 
       {/* Web Search */}
-      <SourceRow item="web" selected={selectedItem === "web"} accent={accent}>
+      <Row item="web" selected={selectedItem === "web"} accent={accent}>
         <text>
           <span fg={sources?.web?.connected ? colors.text.primary : colors.text.muted}>
             {sources?.web?.connected ? "Connected" : "Not configured"}
           </span>
         </text>
-      </SourceRow>
+      </Row>
 
-      {/* Help text */}
+      {/* Hints — always visible */}
       <box marginTop={1}>
-        {getHints(selectedItem, editingVault, sourceEnabled)}
+        <HintRow item={selectedItem} editingVault={editingVault} sourceEnabled={sourceEnabled} />
       </box>
     </box>
   );
 }
 
-function getHints(item: ConnectionItem, editingVault: boolean, sourceEnabled?: boolean): React.ReactNode {
+function HintRow({ item, editingVault, sourceEnabled }: { item: ConnectionItem; editingVault: boolean; sourceEnabled?: boolean }) {
   switch (item) {
     case "vault":
       return editingVault
@@ -166,66 +138,65 @@ function getHints(item: ConnectionItem, editingVault: boolean, sourceEnabled?: b
         : <Hints items={[["enter", "edit path"]]} />;
     case "gmail":
     case "calendar":
-      return sourceEnabled
-        ? <Hints items={[["enter", "toggle"], ["a", "add account"], ["d", "remove"]]} />
-        : <Hints items={[["enter", "toggle"]]} />;
+      if (sourceEnabled) {
+        return <Hints items={[["enter", "toggle"], ["a", "add account"], ["d", "remove account"]]} />;
+      }
+      return <Hints items={[["enter", "enable"]]} />;
     case "memory":
       return <Hints items={[["enter", "toggle"]]} />;
     case "browser":
       return <Hints items={[["enter", "change browser"]]} />;
     case "web":
-      return null;
+      return <Hints items={[]} />;
   }
 }
 
-interface GoogleSourceRowProps {
+function GoogleRow({ item, selectedItem, sources, accounts, accent }: {
   item: ConnectionItem;
   selectedItem: ConnectionItem;
   sources?: Record<string, { enabled?: boolean; connected?: boolean }>;
-  googleAccounts: GoogleAccount[];
+  accounts: GoogleAccount[];
   accent: string;
-}
-
-function GoogleSourceRow({ item, selectedItem, sources, googleAccounts, accent }: GoogleSourceRowProps) {
+}) {
   const source = sources?.[item];
-  const hasTokens = googleAccounts.length > 0;
+  const hasTokens = accounts.length > 0;
+  const selected = selectedItem === item;
+
   return (
-    <SourceRow item={item} selected={selectedItem === item} accent={accent}>
-      <ToggleIndicator source={source ? { ...source, connected: hasTokens } : source} accent={accent} />
+    <Row item={item} selected={selected} accent={accent}>
+      <Toggle enabled={source?.enabled} connected={hasTokens} accent={accent} />
       {source?.enabled ? (
         hasTokens ? (
           <text>
             <span fg={colors.text.primary}>
-              {googleAccounts.length} account{googleAccounts.length !== 1 ? "s" : ""}
+              {accounts.length} account{accounts.length !== 1 ? "s" : ""}
             </span>
           </text>
         ) : (
-          <text><span fg={colors.status.warning}>No tokens</span></text>
+          <text><span fg={colors.status.warning}>No accounts</span></text>
         )
       ) : (
         <text><span fg={colors.text.muted}>Disabled</span></text>
       )}
-    </SourceRow>
+    </Row>
   );
 }
 
-interface GoogleAccountListProps {
+function AccountList({ accounts, selectedIndex, accent, valueWidth }: {
   accounts: GoogleAccount[];
   selectedIndex: number;
   accent: string;
   valueWidth: number;
-}
-
-function GoogleAccountList({ accounts, selectedIndex, accent, valueWidth }: GoogleAccountListProps) {
+}) {
   return (
     <box flexDirection="column" marginLeft={4}>
       {accounts.map((account, i) => {
-        const isSelected = i === selectedIndex;
+        const selected = i === selectedIndex;
         const email = account.email || account.token_file;
         return (
           <text key={account.token_file}>
-            <SelectionIndicator selected={isSelected} accent={accent} />
-            <span fg={account.error ? colors.status.error : (isSelected ? accent : colors.text.secondary)}>
+            <SelectionIndicator selected={selected} accent={accent} />
+            <span fg={account.error ? colors.status.error : (selected ? accent : colors.text.secondary)}>
               {truncateText(email, valueWidth - 4)}
             </span>
             {account.error && <span fg={colors.status.error}> !</span>}
@@ -236,14 +207,12 @@ function GoogleAccountList({ accounts, selectedIndex, accent, valueWidth }: Goog
   );
 }
 
-interface SourceRowProps {
+function Row({ item, selected, accent, children }: {
   item: ConnectionItem;
   selected: boolean;
   accent: string;
   children: React.ReactNode;
-}
-
-function SourceRow({ item, selected, accent, children }: SourceRowProps) {
+}) {
   const label = CONNECTION_LABELS[item].padEnd(14);
   return (
     <box flexDirection="row">
@@ -256,18 +225,10 @@ function SourceRow({ item, selected, accent, children }: SourceRowProps) {
   );
 }
 
-interface ToggleIndicatorProps {
-  source?: { enabled?: boolean; connected?: boolean };
-  accent: string;
-}
-
-function ToggleIndicator({ source, accent }: ToggleIndicatorProps) {
-  const enabled = source?.enabled ?? false;
-  const connected = source?.connected ?? false;
-
+function Toggle({ enabled, connected, accent }: { enabled?: boolean; connected?: boolean; accent: string }) {
   if (!enabled) {
-    return <text><span fg={colors.text.muted}>{CHECKBOX_UNCHECKED}</span></text>;
+    return <text><span fg={colors.text.muted}>○ </span></text>;
   }
-  const indicatorColor = connected ? accent : colors.status.warning;
-  return <text><span fg={indicatorColor}>{CHECKBOX_CHECKED}</span></text>;
+  const color = connected !== false ? accent : colors.status.warning;
+  return <text><span fg={color}>● </span></text>;
 }

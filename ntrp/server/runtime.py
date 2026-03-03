@@ -99,6 +99,8 @@ class Runtime:
     async def reload_config(self) -> None:
         async with self._config_lock:
             self.config = get_config()
+            await llm_close()
+            llm_init(self.config)
             self.source_mgr.sync(self.config)
             await self._sync_embedding()
             await self._sync_memory()
@@ -133,13 +135,15 @@ class Runtime:
                 self.memory.start_reembed(new_embedding, rebuild=True)
 
     def _sync_indexables(self) -> None:
+        prev = set(self.indexables.keys())
         self.indexables.clear()
         for name, source in self.source_mgr.sources.items():
             if isinstance(source, Indexable):
                 self.indexables[name] = source
         if self.memory:
             self.indexables["memory"] = MemoryIndexable(self.memory.db)
-        self.start_indexing()
+        if set(self.indexables.keys()) != prev:
+            self.start_indexing()
 
     # --- Connect / close ---
 

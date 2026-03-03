@@ -51,7 +51,7 @@ class SendEmailTool(Tool):
         body: str,
         **kwargs: Any,
     ) -> ToolResult:
-        source = execution.ctx.get_source(EmailSource)
+        source = execution.ctx.get_source(EmailSource, "gmail")
         result = source.send_email(account=account, to=to, subject=subject, body=body)
         return ToolResult(content=result, preview="Sent")
 
@@ -68,7 +68,7 @@ class ReadEmailTool(Tool):
     input_model = ReadEmailInput
 
     async def execute(self, execution: ToolExecution, email_id: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(EmailSource)
+        source = execution.ctx.get_source(EmailSource, "gmail")
         content = source.read(email_id)
         if not content:
             return ToolResult(
@@ -131,7 +131,7 @@ class EmailsTool(Tool):
         limit: int = _DEFAULT_EMAIL_LIMIT,
         **kwargs: Any,
     ) -> ToolResult:
-        source = execution.ctx.get_source(EmailSource)
+        source = execution.ctx.get_source(EmailSource, "gmail")
         if query:
             return self._search(source, query, limit)
         return self._list(source, days, limit)

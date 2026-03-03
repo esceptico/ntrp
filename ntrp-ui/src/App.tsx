@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRenderer } from "@opentui/react";
 import type { Selection } from "@opentui/core";
 import type { Message, Config } from "./types.js";
-import { colors, setTheme, themeNames, type Theme } from "./components/ui/index.js";
+import { colors, setTheme, useThemeVersion, themeNames, type Theme } from "./components/ui/index.js";
 import { BULLET } from "./lib/constants.js";
 import {
   useSettings,
@@ -14,26 +14,28 @@ import {
   AccentColorProvider,
   type Key,
 } from "./hooks/index.js";
-import { DimensionsProvider, useDimensions } from "./contexts/index.js";
+import { DimensionsProvider, useDimensions, DialogProvider, useDialog } from "./contexts/index.js";
 import {
   InputArea,
   MessageDisplay,
   SettingsDialog,
   SessionPicker,
-  ThemePicker,
   MemoryViewer,
   AutomationsViewer,
   ToolChainDisplay,
   ApprovalDialog,
   ErrorBoundary,
+  ModelPicker,
+  ThemePicker,
 } from "./components/index.js";
 import { Setup } from "./components/Setup.js";
+import { ProviderOnboarding } from "./components/ProviderOnboarding.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { COMMANDS } from "./lib/commands.js";
 import { setApiKey } from "./api/fetch.js";
 import { getSkills, deleteSession, listSessions, restoreSession, permanentlyDeleteSession, type Skill } from "./api/client.js";
 
-type ViewMode = "chat" | "memory" | "settings" | "automations" | "sessions";
+type ViewMode = "chat" | "memory" | "automations";
 
 import type { Settings } from "./hooks/useSettings.js";
 
@@ -61,6 +63,7 @@ function AppContent({
   onServerChange
 }: AppContentProps) {
   const renderer = useRenderer();
+  useThemeVersion();
 
   const session = useSession(config);
   const {
@@ -92,7 +95,7 @@ function AppContent({
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
   const [sidebarVisible, setSidebarVisible] = useState(true);
-  const [showThemePicker, setShowThemePicker] = useState(false);
+  const dialog = useDialog();
 
   const [skills, setSkills] = useState<Skill[]>([]);
   useEffect(() => {
@@ -146,9 +149,101 @@ function AppContent({
   const showSidebar = sidebarVisible && width >= 94 && serverConnected;
   const { data: sidebarData, refresh: refreshSidebar } = useSidebar(config, showSidebar, messages.length, sessionId);
 
-  const isInChatMode = viewMode === "chat" && !showSettings && !showThemePicker;
+  const isInChatMode = viewMode === "chat" && !showSettings && !dialog.isOpen;
 
-  const openThemePicker = useCallback(() => setShowThemePicker(true), []);
+  const startNewSession = useCallback(async () => {
+    const newId = await createNewSession();
+    if (newId) {
+      resetForSessionSwitch([]);
+      refreshSidebar();
+    }
+  }, [createNewSession, resetForSessionSwitch, refreshSidebar]);
+
+  const openDialog = useCallback((id: string) => {
+    switch (id) {
+      case "sessions":
+        dialog.open(
+          <SessionPicker
+            config={config}
+            currentSessionId={sessionId}
+            onSwitch={async (targetId) => {
+              const result = await switchSession(targetId);
+              if (result) {
+                const historyMessages: Message[] = result.history.map((msg, i) => ({
+                  id: `h-${i}`, role: msg.role, content: msg.content,
+                }));
+                resetForSessionSwitch(historyMessages);
+                refreshSidebar();
+              } else {
+                addMessage({ role: "error", content: "Failed to switch session" } as Message);
+              }
+            }}
+            onDelete={async (targetId) => {
+              try {
+                await deleteSession(config, targetId);
+                if (targetId === sessionId) {
+                  const { sessions } = await listSessions(config);
+                  const next = sessions.find(s => s.session_id !== targetId);
+                  if (next) {
+                    const result = await switchSession(next.session_id);
+                    if (result) {
+                      resetForSessionSwitch(result.history.map((msg, i) => ({
+                        id: `h-${i}`, role: msg.role, content: msg.content,
+                      })));
+                    } else {
+                      await startNewSession();
+                    }
+                  } else {
+                    await startNewSession();
+                  }
+                }
+                refreshSidebar();
+              } catch {}
+            }}
+            onRestore={async (targetId) => {
+              try { await restoreSession(config, targetId); refreshSidebar(); } catch {}
+            }}
+            onPermanentDelete={async (targetId) => {
+              try { await permanentlyDeleteSession(config, targetId); } catch {}
+            }}
+            onNew={startNewSession}
+            onClose={() => dialog.close()}
+          />
+        );
+        break;
+      case "models":
+        dialog.open(
+          <ModelPicker
+            config={config}
+            serverConfig={serverConfig}
+            onModelChange={(type, model) => updateServerConfig({ [`${type}_model`]: model })}
+            onServerConfigChange={(newConfig) => updateServerConfig(newConfig)}
+            onRefreshIndexStatus={refreshIndexStatus}
+            onClose={() => dialog.close()}
+          />
+        );
+        break;
+      case "providers":
+        dialog.open(
+          <ProviderOnboarding config={config} closable onClose={() => dialog.close()} onDone={() => dialog.close()} />
+        );
+        break;
+      case "theme":
+        dialog.open(
+          <ThemePicker
+            currentTheme={settings.ui.theme}
+            currentAccent={settings.ui.accentColor}
+            onSelect={(theme, accent) => {
+              setThemeByName(theme);
+              if (accent !== settings.ui.accentColor) updateSetting("ui", "accentColor", accent);
+              dialog.close();
+            }}
+            onClose={() => dialog.close()}
+          />
+        );
+        break;
+    }
+  }, [config, sessionId, serverConfig, settings.ui.theme, settings.ui.accentColor, dialog, switchSession, resetForSessionSwitch, refreshSidebar, addMessage, startNewSession, updateServerConfig, refreshIndexStatus, setThemeByName, updateSetting]);
 
   const { handleCommand } = useCommands({
     config,
@@ -161,7 +256,7 @@ function AppContent({
     sendMessage,
     setStatus,
     toggleSettings,
-    openThemePicker,
+    openDialog,
     exit: () => renderer.destroy(),
     refreshIndexStatus,
     createNewSession,
@@ -235,14 +330,6 @@ function AppContent({
     }
   }, [sidebarData.sessions, sessionId, switchSession, resetForSessionSwitch, refreshSidebar]);
 
-  const startNewSession = useCallback(async () => {
-    const newId = await createNewSession();
-    if (newId) {
-      resetForSessionSwitch([]);
-      refreshSidebar();
-    }
-  }, [createNewSession, resetForSessionSwitch, refreshSidebar]);
-
   const tabPendingRef = useRef(false);
   const tabTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -255,11 +342,11 @@ function AppContent({
         setSidebarVisible(v => !v);
         return;
       }
-      if (key.ctrl && key.name === "n" && !isStreaming && viewMode === "chat" && !showSettings) {
+      if (key.ctrl && key.name === "n" && !isStreaming && viewMode === "chat" && !showSettings && !dialog.isOpen) {
         startNewSession();
         return;
       }
-      if (key.name === "escape" && isStreaming) {
+      if (key.name === "escape" && isStreaming && !dialog.isOpen) {
         cancel();
       }
       if (key.shift && key.name === "tab" && !showSettings && !isStreaming && viewMode === "chat") {
@@ -281,12 +368,12 @@ function AppContent({
         return;
       }
     },
-    [renderer, isStreaming, cancel, showSettings, viewMode, toggleSkipApprovals, cycleSession, startNewSession]
+    [renderer, isStreaming, cancel, showSettings, viewMode, dialog.isOpen, toggleSkipApprovals, cycleSession, startNewSession]
   );
 
   useKeypress(handleGlobalKeypress, { isActive: true });
 
-  const hasOverlay = viewMode !== "chat" || showThemePicker;
+  const hasOverlay = viewMode !== "chat" || dialog.isOpen;
 
   const contentHeight = height - 2; // paddingTop + paddingBottom
   const mainPadding = 4; // paddingLeft(2) + paddingRight(2)
@@ -379,84 +466,15 @@ function AppContent({
       </DimensionsProvider>
       </box>
 
-      {/* Overlays — Dialog handles absolute positioning and dimming */}
+      {/* Overlays */}
       {viewMode === "memory" && <MemoryViewer config={config} onClose={closeView} />}
       {viewMode === "automations" && <AutomationsViewer config={config} onClose={closeView} />}
-      {viewMode === "sessions" && (
-        <SessionPicker
-          config={config}
-          currentSessionId={sessionId}
-          onSwitch={async (targetId) => {
-            const result = await switchSession(targetId);
-            if (result) {
-              const historyMessages: Message[] = result.history.map((msg, i) => ({
-                id: `h-${i}`,
-                role: msg.role,
-                content: msg.content,
-              }));
-              resetForSessionSwitch(historyMessages);
-              refreshSidebar();
-            } else {
-              addMessage({ role: "error", content: "Failed to switch session" } as Message);
-            }
-          }}
-          onDelete={async (targetId) => {
-            try {
-              await deleteSession(config, targetId);
-              if (targetId === sessionId) {
-                const { sessions } = await listSessions(config);
-                const next = sessions.find(s => s.session_id !== targetId);
-                if (next) {
-                  const result = await switchSession(next.session_id);
-                  if (result) {
-                    resetForSessionSwitch(result.history.map((msg, i) => ({
-                      id: `h-${i}`, role: msg.role, content: msg.content,
-                    })));
-                  } else {
-                    await startNewSession();
-                  }
-                } else {
-                  await startNewSession();
-                }
-              }
-              refreshSidebar();
-            } catch {
-              // ignore
-            }
-          }}
-          onRestore={async (targetId) => {
-            try {
-              await restoreSession(config, targetId);
-              refreshSidebar();
-            } catch {
-              // ignore
-            }
-          }}
-          onPermanentDelete={async (targetId) => {
-            try {
-              await permanentlyDeleteSession(config, targetId);
-            } catch {
-              // ignore
-            }
-          }}
-          onNew={startNewSession}
-          onClose={closeView}
-        />
-      )}
-      {showThemePicker && (
-        <ThemePicker
-          current={settings.ui.theme}
-          onSelect={(theme) => setThemeByName(theme)}
-          onClose={() => setShowThemePicker(false)}
-        />
-      )}
       {showSettings && (
         <SettingsDialog
           config={config}
           serverConfig={serverConfig}
           settings={settings}
           onUpdate={updateSetting}
-          onModelChange={(type: "chat" | "explore" | "memory", model: string) => updateServerConfig({ [`${type}_model`]: model })}
           onServerConfigChange={(newConfig) => updateServerConfig(newConfig)}
           onRefreshIndexStatus={refreshIndexStatus}
           onClose={closeSettings}
@@ -471,8 +489,8 @@ function AppContent({
 function AppWithAccent({ config, logout, onServerChange }: { config: Config; logout: () => void; onServerChange: (config: Config) => void }) {
   const { settings, updateSetting, closeSettings, toggleSettings, showSettings } = useSettings(config);
 
-  // Sync colors before children render — setTheme mutates colors/accentColors in place
-  setTheme(settings.ui.theme);
+  // Sync colors before children render — setTheme mutates colors/currentAccent in place
+  setTheme(settings.ui.theme, settings.ui.accentColor);
 
   const setThemeByName = useCallback((name: string) => {
     if (themeNames.includes(name as Theme)) {
@@ -481,18 +499,20 @@ function AppWithAccent({ config, logout, onServerChange }: { config: Config; log
   }, [updateSetting]);
 
   return (
-    <AccentColorProvider accent={settings.ui.accentColor} theme={settings.ui.theme}>
-      <AppContent
-        config={config}
-        settings={settings}
-        updateSetting={updateSetting}
-        closeSettings={closeSettings}
-        toggleSettings={toggleSettings}
-        setThemeByName={setThemeByName}
-        showSettings={showSettings}
-        logout={logout}
-        onServerChange={onServerChange}
-      />
+    <AccentColorProvider>
+      <DialogProvider>
+        <AppContent
+          config={config}
+          settings={settings}
+          updateSetting={updateSetting}
+          closeSettings={closeSettings}
+          toggleSettings={toggleSettings}
+          setThemeByName={setThemeByName}
+          showSettings={showSettings}
+          logout={logout}
+          onServerChange={onServerChange}
+        />
+      </DialogProvider>
     </AccentColorProvider>
   );
 }
@@ -516,6 +536,18 @@ export default function App({ config: initialConfig }: { config: Config }) {
         <Setup
           initialServerUrl={config.serverUrl}
           onConnect={handleConnect}
+        />
+      </DimensionsProvider>
+    );
+  }
+
+  if (config.needsProvider) {
+    return (
+      <DimensionsProvider>
+        <ProviderOnboarding
+          config={config}
+          onClose={() => {}}
+          onDone={() => setConfig(c => ({ ...c, needsProvider: false }))}
         />
       </DimensionsProvider>
     );

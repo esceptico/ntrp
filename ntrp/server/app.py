@@ -99,7 +99,11 @@ app.include_router(skills_router)
 
 @app.get("/health")
 async def health(request: Request, runtime: Runtime = Depends(get_runtime)):
-    result: dict = {"status": "ok" if runtime.connected else "unavailable", "version": app.version}
+    result: dict = {
+        "status": "ok" if runtime.connected else "unavailable",
+        "version": app.version,
+        "has_providers": runtime.config.has_any_model,
+    }
     token = _extract_bearer_token(request)
     if token and runtime.config.api_key_hash:
         result["auth"] = verify_api_key(token, runtime.config.api_key_hash)

@@ -15,12 +15,21 @@ def init(config) -> None:
     _api_keys[Provider.ANTHROPIC] = config.anthropic_api_key
     _api_keys[Provider.OPENAI] = config.openai_api_key
     _api_keys[Provider.GOOGLE] = config.gemini_api_key
-    # pydantic-settings lowercases all dotenv keys when case_sensitive=False (default)
+
+    # Load stored custom model keys (direct API keys from onboarding)
+    from ntrp.config import load_user_settings
+
+    settings = load_user_settings()
+    custom_keys = settings.get("custom_model_keys", {})
+    for model_id, key in custom_keys.items():
+        _api_keys[model_id] = key
+
+    # Fallback: env var lookup via api_key_env (legacy / power-user)
     for model in get_models().values():
-        if model.provider == Provider.CUSTOM and model.api_key_env:
+        if model.provider == Provider.CUSTOM and model.api_key_env and model.id not in _api_keys:
             _api_keys[model.id] = config.model_extra.get(model.api_key_env.lower())
     for model in get_embedding_models().values():
-        if model.provider == Provider.CUSTOM and model.api_key_env:
+        if model.provider == Provider.CUSTOM and model.api_key_env and model.id not in _api_keys:
             _api_keys[model.id] = config.model_extra.get(model.api_key_env.lower())
 
 

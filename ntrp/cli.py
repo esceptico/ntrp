@@ -6,7 +6,7 @@ import click
 import uvicorn
 from rich.console import Console
 
-from ntrp.config import generate_api_key, get_config, load_user_settings, save_user_settings
+from ntrp.config import generate_api_key, get_config, load_user_settings, save_user_settings, set_ntrp_dir
 from ntrp.core.agent import Agent
 from ntrp.core.prompts import build_system_prompt
 from ntrp.core.spawner import create_spawn_fn
@@ -54,10 +54,12 @@ def status():
 @click.option("--port", default=None, type=int, help="Port to bind to (or NTRP_PORT)")
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")
 @click.option("--reset-key", is_flag=True, help="Generate a new API key")
-def serve(host: str | None, port: int | None, reload: bool, reset_key: bool):
+@click.option("--dir", "data_dir", default=None, type=click.Path(), help="Data directory (default: ~/.ntrp)")
+def serve(host: str | None, port: int | None, reload: bool, reset_key: bool, data_dir: str | None):
     """Start the ntrp API server."""
+    if data_dir:
+        set_ntrp_dir(data_dir)
     config = get_config()
-    _require_chat_model(config)
 
     if reset_key or not config.api_key_hash:
         settings = load_user_settings()
@@ -98,6 +100,8 @@ def serve(host: str | None, port: int | None, reload: bool, reset_key: bool):
 @click.option("-p", "--prompt", required=True, help="The prompt to execute")
 def run(prompt: str):
     """Run agent once with a prompt (headless, non-interactive mode)."""
+    config = get_config()
+    _require_chat_model(config)
     asyncio.run(_run_headless(prompt))
 
 

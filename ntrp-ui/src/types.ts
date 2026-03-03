@@ -125,4 +125,5 @@ export interface Config {
   serverUrl: string;
   apiKey: string;
   needsSetup: boolean;
+  needsProvider?: boolean;
 }

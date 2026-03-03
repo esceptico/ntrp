@@ -53,7 +53,7 @@ class WebSearchTool(Tool):
         category: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
-        source = execution.ctx.get_source(WebSearchSource)
+        source = execution.ctx.get_source(WebSearchSource, "web")
         try:
             results = source.search_with_details(
                 query=query,
@@ -101,7 +101,7 @@ class WebFetchTool(Tool):
                 is_error=True,
             )
 
-        source = execution.ctx.get_source(WebSearchSource)
+        source = execution.ctx.get_source(WebSearchSource, "web")
         try:
             results = source.get_contents([url])
 

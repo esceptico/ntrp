@@ -341,7 +341,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
 
     const tab = activeTab === "facts" ? factsTab : obsTab;
 
-    if (tab.editMode) return <Hints items={[["^S", "save"], ["esc", "cancel"], ["←→", "cursor"]]} />;
+    if (tab.editMode) return <Hints items={[["^s", "save"], ["esc", "cancel"], ["←→", "cursor"]]} />;
     if (tab.confirmDelete) return <Hints items={[["y", "confirm"], ["any", "cancel"]]} />;
     if (tab.focusPane === "details") {
       return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ["enter", "expand"], ["e", "edit"], ["d", "del"]]} />;

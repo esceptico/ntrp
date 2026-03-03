@@ -1,13 +1,14 @@
 /**
- * NTRP Color System — dark/light bases + mono accent variations.
+ * NTRP Color System — dark/light bases + curated themes + configurable accent.
  *
- * Adding an accent: add an entry to `accents`.
- * Everything else (setTheme, /theme command, settings) picks it up automatically.
+ * Base themes (dark, light) support user-selected accent overlay.
+ * Curated themes (tokyonight, catppuccin, rosepine, nord) have built-in accents.
  */
 
 import { useSyncExternalStore } from "react";
 
-export type AccentColor = "gray";
+export type AccentColor = "blue" | "cyan" | "green" | "purple" | "rose" | "amber" | "red";
+export const accentNames: AccentColor[] = ["blue", "cyan", "green", "purple", "rose", "amber", "red"];
 
 type Palette = {
   text: { primary: string; secondary: string; muted: string; disabled: string };
@@ -32,19 +33,19 @@ type Palette = {
 const bases = {
 
   dark: {
-    text: { primary: "#c8c8c8", secondary: "#888888", muted: "#6a6a6a", disabled: "#505050" },
+    text: { primary: "#c8c8c8", secondary: "#888888", muted: "#7a7a7a", disabled: "#505050" },
     status: { success: "#888888", error: "#888888", warning: "#888888", processing: "#c8c8c8", processingShimmer: "#e0e0e0" },
     selection: { active: "#c8c8c8", indicator: "#c8c8c8" },
     panel: { title: "#c8c8c8", subtitle: "#888888" },
-    tabs: { active: "#c8c8c8", inactive: "#6a6a6a", separator: "#3a3a3a" },
-    list: { itemText: "#c8c8c8", itemTextSelected: "#c8c8c8", itemDetail: "#6a6a6a", scrollArrow: "#6a6a6a" },
+    tabs: { active: "#c8c8c8", inactive: "#7a7a7a", separator: "#3a3a3a" },
+    list: { itemText: "#c8c8c8", itemTextSelected: "#c8c8c8", itemDetail: "#7a7a7a", scrollArrow: "#7a7a7a" },
     keyValue: { label: "#c8c8c8", value: "#888888" },
     background: { base: "#181818", panel: "#101010", element: "#2c2c2c", menu: "#2c2c2c" },
     border: "#3a3a3a",
     divider: "#3a3a3a",
-    footer: "#6a6a6a",
+    footer: "#7a7a7a",
     diff: { added: "#888888", addedBg: "#2c2c2c", removed: "#6a6a6a", removedBg: "#212121" },
-    tool: { pending: "#6a6a6a", running: "#888888", completed: "#c8c8c8", error: "#888888" },
+    tool: { pending: "#7a7a7a", running: "#888888", completed: "#c8c8c8", error: "#888888" },
     contrast: "#000000",
     accent: { primary: "#c8c8c8", shimmer: "#e0e0e0" },
   },
@@ -69,7 +70,7 @@ const bases = {
 
 } satisfies Record<string, Palette>;
 
-// -- Accent colors ----------------------------------------------------------
+// -- Accent definitions (dark/light variants) -------------------------------
 
 const accents = {
   blue:   { dark: { primary: "#7aa2f7", shimmer: "#82aaff" }, light: { primary: "#3b6dd4", shimmer: "#5a88e0" } },
@@ -81,37 +82,101 @@ const accents = {
   red:    { dark: { primary: "#e06c75", shimmer: "#f07080" }, light: { primary: "#c04048", shimmer: "#d05058" } },
 } as const;
 
-type AccentName = keyof typeof accents;
-type BaseName = keyof typeof bases;
+export { accents };
 
-// -- Generate palettes: base + base-accent combos ---------------------------
+// -- Curated themes ---------------------------------------------------------
 
-function withAccent(base: Palette, accent: { primary: string; shimmer: string }): Palette {
-  return {
-    ...base,
-    selection: { active: accent.primary, indicator: accent.primary },
-    accent,
-  };
-}
+const curatedThemes = {
 
-const palettes: Record<string, Palette> = {};
+  flexoki: {
+    text: { primary: "#CECDC3", secondary: "#9C9B95", muted: "#878580", disabled: "#575653" },
+    status: { success: "#879A39", error: "#D14D41", warning: "#DA702C", processing: "#DA702C", processingShimmer: "#D0A215" },
+    selection: { active: "#DA702C", indicator: "#DA702C" },
+    panel: { title: "#CECDC3", subtitle: "#9C9B95" },
+    tabs: { active: "#DA702C", inactive: "#878580", separator: "#343331" },
+    list: { itemText: "#CECDC3", itemTextSelected: "#CECDC3", itemDetail: "#878580", scrollArrow: "#878580" },
+    keyValue: { label: "#CECDC3", value: "#9C9B95" },
+    background: { base: "#100F0F", panel: "#1C1B1A", element: "#282726", menu: "#282726" },
+    border: "#575653",
+    divider: "#575653",
+    footer: "#878580",
+    diff: { added: "#879A39", addedBg: "#1A2D1A", removed: "#D14D41", removedBg: "#2D1A1A" },
+    tool: { pending: "#878580", running: "#DA702C", completed: "#879A39", error: "#D14D41" },
+    contrast: "#000000",
+    accent: { primary: "#DA702C", shimmer: "#D0A215" },
+  },
 
-for (const baseName of Object.keys(bases) as BaseName[]) {
-  // plain base (no accent color)
-  palettes[baseName] = bases[baseName];
-  // accented variants
-  for (const accentName of Object.keys(accents) as AccentName[]) {
-    palettes[`${baseName}-${accentName}`] = withAccent(bases[baseName], accents[accentName][baseName]);
-  }
-}
+  onedark: {
+    text: { primary: "#ABB2BF", secondary: "#848B98", muted: "#636D83", disabled: "#495163" },
+    status: { success: "#98C379", error: "#E06C75", warning: "#D19A66", processing: "#61AFEF", processingShimmer: "#C678DD" },
+    selection: { active: "#61AFEF", indicator: "#61AFEF" },
+    panel: { title: "#ABB2BF", subtitle: "#848B98" },
+    tabs: { active: "#61AFEF", inactive: "#636D83", separator: "#2C313A" },
+    list: { itemText: "#ABB2BF", itemTextSelected: "#ABB2BF", itemDetail: "#636D83", scrollArrow: "#636D83" },
+    keyValue: { label: "#ABB2BF", value: "#848B98" },
+    background: { base: "#282C34", panel: "#21252B", element: "#353B45", menu: "#353B45" },
+    border: "#393F4A",
+    divider: "#393F4A",
+    footer: "#636D83",
+    diff: { added: "#98C379", addedBg: "#2C382B", removed: "#E06C75", removedBg: "#3A2D2F" },
+    tool: { pending: "#636D83", running: "#61AFEF", completed: "#98C379", error: "#E06C75" },
+    contrast: "#000000",
+    accent: { primary: "#61AFEF", shimmer: "#C678DD" },
+  },
+
+  vercel: {
+    text: { primary: "#EDEDED", secondary: "#A1A1A1", muted: "#878787", disabled: "#454545" },
+    status: { success: "#46A758", error: "#E5484D", warning: "#FFB224", processing: "#0070F3", processingShimmer: "#52A8FF" },
+    selection: { active: "#0070F3", indicator: "#0070F3" },
+    panel: { title: "#EDEDED", subtitle: "#A1A1A1" },
+    tabs: { active: "#52A8FF", inactive: "#878787", separator: "#1F1F1F" },
+    list: { itemText: "#EDEDED", itemTextSelected: "#EDEDED", itemDetail: "#878787", scrollArrow: "#878787" },
+    keyValue: { label: "#EDEDED", value: "#A1A1A1" },
+    background: { base: "#000000", panel: "#0A0A0A", element: "#1A1A1A", menu: "#1A1A1A" },
+    border: "#292929",
+    divider: "#292929",
+    footer: "#878787",
+    diff: { added: "#63C46D", addedBg: "#0B1D0F", removed: "#FF6166", removedBg: "#2A1314" },
+    tool: { pending: "#878787", running: "#0070F3", completed: "#46A758", error: "#E5484D" },
+    contrast: "#000000",
+    accent: { primary: "#0070F3", shimmer: "#52A8FF" },
+  },
+
+  nord: {
+    text: { primary: "#ECEFF4", secondary: "#D8DEE9", muted: "#97A1B2", disabled: "#4C566A" },
+    status: { success: "#A3BE8C", error: "#BF616A", warning: "#D08770", processing: "#88C0D0", processingShimmer: "#81A1C1" },
+    selection: { active: "#88C0D0", indicator: "#88C0D0" },
+    panel: { title: "#ECEFF4", subtitle: "#D8DEE9" },
+    tabs: { active: "#88C0D0", inactive: "#97A1B2", separator: "#434C5E" },
+    list: { itemText: "#ECEFF4", itemTextSelected: "#ECEFF4", itemDetail: "#97A1B2", scrollArrow: "#97A1B2" },
+    keyValue: { label: "#ECEFF4", value: "#D8DEE9" },
+    background: { base: "#2E3440", panel: "#3B4252", element: "#434C5E", menu: "#434C5E" },
+    border: "#4C566A",
+    divider: "#4C566A",
+    footer: "#97A1B2",
+    diff: { added: "#A3BE8C", addedBg: "#303D38", removed: "#BF616A", removedBg: "#3D3038" },
+    tool: { pending: "#97A1B2", running: "#88C0D0", completed: "#A3BE8C", error: "#BF616A" },
+    contrast: "#000000",
+    accent: { primary: "#88C0D0", shimmer: "#81A1C1" },
+  },
+
+} satisfies Record<string, Palette>;
+
+// -- Build palettes map -----------------------------------------------------
+
+const palettes: Record<string, Palette> = { ...bases, ...curatedThemes };
 
 export { palettes };
 export type Theme = string;
 export const themeNames = Object.keys(palettes);
 
-// -- Exports (mutated in place by setTheme) ---------------------------------
+export function isBaseTheme(theme: string): boolean {
+  return theme === "dark" || theme === "light";
+}
 
-export const accentColors = { gray: { ...palettes.dark.accent } };
+// -- Runtime state (mutated in place by setTheme) ---------------------------
+
+export const currentAccent = { primary: "#7aa2f7", shimmer: "#82aaff" };
 
 export const colors: Omit<Palette, "accent"> = {
   text: { ...palettes.dark.text },
@@ -130,14 +195,7 @@ export const colors: Omit<Palette, "accent"> = {
   contrast: palettes.dark.contrast,
 };
 
-let currentAccent: AccentColor = "gray";
-
-export function syncAccentColor(color: AccentColor) {
-  currentAccent = color;
-}
-
 // Theme version — incremented on every setTheme call.
-// Used by useThemeVersion() to force re-renders in memoized components.
 let _themeVersion = 0;
 const _listeners = new Set<() => void>();
 
@@ -147,9 +205,10 @@ export function subscribeThemeVersion(cb: () => void) {
   return () => { _listeners.delete(cb); };
 }
 
-export function setTheme(theme: Theme) {
+export function setTheme(theme: Theme, accent?: AccentColor) {
   const p = palettes[theme];
   if (!p) return;
+
   Object.assign(colors.text, p.text);
   Object.assign(colors.status, p.status);
   Object.assign(colors.selection, p.selection);
@@ -164,7 +223,17 @@ export function setTheme(theme: Theme) {
   Object.assign(colors.diff, p.diff);
   Object.assign(colors.tool, p.tool);
   colors.contrast = p.contrast;
-  Object.assign(accentColors.gray, p.accent);
+
+  if (isBaseTheme(theme) && accent && accents[accent]) {
+    const a = accents[accent][theme as "dark" | "light"];
+    Object.assign(colors.selection, { active: a.primary, indicator: a.primary });
+    currentAccent.primary = a.primary;
+    currentAccent.shimmer = a.shimmer;
+  } else {
+    currentAccent.primary = p.accent.primary;
+    currentAccent.shimmer = p.accent.shimmer;
+  }
+
   _themeVersion++;
   for (const cb of _listeners) cb();
 }

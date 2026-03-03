@@ -84,7 +84,7 @@ export function useTextInput({
       }
 
       if (key.name === "delete") {
-        if (pos < text.length) {
+        if (pos < textRef.current.length) {
           setText((v) => v.slice(0, pos) + v.slice(pos + 1));
         }
         return true;
@@ -150,7 +150,7 @@ export function useTextInput({
         return true;
       }
       if (key.name === "right") {
-        moveCursor(Math.min(text.length, pos + 1));
+        moveCursor(Math.min(textRef.current.length, pos + 1));
         return true;
       }
 
@@ -159,7 +159,7 @@ export function useTextInput({
         return true;
       }
       if (key.name === "end" || (key.name === "e" && key.ctrl)) {
-        moveCursor(text.length);
+        moveCursor(textRef.current.length);
         return true;
       }
 
@@ -171,7 +171,7 @@ export function useTextInput({
 
       return false;
     },
-    [text, findPrevWordBoundary, findNextWordBoundary, setText, moveCursor, insertAt]
+    [findPrevWordBoundary, findNextWordBoundary, setText, moveCursor, insertAt]
   );
 
   return {

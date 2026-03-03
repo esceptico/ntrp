@@ -39,6 +39,23 @@ Trigger before calendar events:
 
 ## Creating automations
 
+### From the TUI
+
+Open `/automations` and press `n` to create. The form uses drill navigation:
+
+| Shortcut | Action |
+|----------|--------|
+| `↑↓` | Navigate between fields |
+| `Enter` | Drill into a field to edit |
+| `←→` | Adjust selector fields (trigger type, mode, days) |
+| `Space` | Toggle checkboxes (notifiers, days, writable) |
+| `Escape` | Stop editing / exit form |
+| `Ctrl+S` | Save |
+
+To edit an existing automation, highlight it and press `e`.
+
+### From chat
+
 Use the `create_automation` tool in chat:
 
 ```
@@ -47,7 +64,7 @@ to summarize my unread emails and today's calendar.
 Send the result to my Telegram.
 ```
 
-Or use the API directly:
+### Via the API
 
 ```bash
 curl -X POST http://localhost:8000/automations \
@@ -55,7 +72,7 @@ curl -X POST http://localhost:8000/automations \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Morning briefing",
-    "description": "Summarize unread emails and today calendar events",
+    "description": "Summarize unread emails and today's calendar events",
     "trigger": {"type": "time", "at": "09:00", "days": "weekdays"},
     "notifiers": ["telegram"]
   }'
@@ -72,10 +89,4 @@ Automations can send results to:
 - **Telegram** — requires `TELEGRAM_BOT_TOKEN` and a configured user ID
 - **Email** — sends via your connected Gmail account
 
-Configure notifiers in settings or via the `/automations` view.
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `/automations` | Open the automations viewer |
+Configure notifiers in settings or via `/automations`.

@@ -197,7 +197,7 @@ function FormMode({ notifiers, accent }: NotifiersSectionProps) {
         </box>
       )}
       <box marginTop={1}>
-        <Hints items={[["↑↓", "field"], ["enter", "next/save"], ["ctrl+s", "save"], ["esc", "cancel"]]} />
+        <Hints items={[["↑↓", "field"], ["enter", "next/save"], ["^s", "save"], ["esc", "cancel"]]} />
       </box>
     </box>
   );

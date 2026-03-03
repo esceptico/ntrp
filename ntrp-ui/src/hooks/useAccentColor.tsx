@@ -1,37 +1,23 @@
-import React, { createContext, useContext, useEffect, useMemo } from "react";
-import { accentColors, syncAccentColor, type AccentColor, type Theme } from "../components/ui/colors.js";
+import React, { createContext, useContext, useMemo } from "react";
+import { currentAccent, useThemeVersion } from "../components/ui/colors.js";
 
 interface AccentColorContextValue {
-  accent: AccentColor;
   accentValue: string;
   shimmerValue: string;
 }
 
 const AccentColorContext = createContext<AccentColorContextValue>({
-  accent: "gray",
-  accentValue: accentColors.gray.primary,
-  shimmerValue: accentColors.gray.shimmer,
+  accentValue: currentAccent.primary,
+  shimmerValue: currentAccent.shimmer,
 });
 
-interface AccentColorProviderProps {
-  accent: AccentColor;
-  theme: Theme;
-  children: React.ReactNode;
-}
+export function AccentColorProvider({ children }: { children: React.ReactNode }) {
+  const themeVersion = useThemeVersion();
 
-export function AccentColorProvider({ accent, theme, children }: AccentColorProviderProps) {
-  useEffect(() => {
-    syncAccentColor(accent);
-  }, [accent]);
-
-  // accentColors is mutated in place by setTheme() before this renders,
-  // so reading it here gives the current theme's values.
-  // theme dep forces recompute when theme changes.
   const value = useMemo(() => ({
-    accent,
-    accentValue: accentColors[accent].primary,
-    shimmerValue: accentColors[accent].shimmer,
-  }), [accent, theme]);
+    accentValue: currentAccent.primary,
+    shimmerValue: currentAccent.shimmer,
+  }), [themeVersion]);
 
   return (
     <AccentColorContext.Provider value={value}>

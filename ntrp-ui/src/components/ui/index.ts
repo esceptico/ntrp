@@ -1,4 +1,4 @@
-export { colors, accentColors, palettes, setTheme, useThemeVersion, themeNames, type AccentColor, type Theme } from "./colors.js";
+export { colors, currentAccent, accents, palettes, setTheme, useThemeVersion, themeNames, accentNames, isBaseTheme, type AccentColor, type Theme } from "./colors.js";
 
 export { truncateText } from "../../lib/utils.js";
 
@@ -18,3 +18,4 @@ export { TextEditArea } from "./TextEditArea.js";
 
 export { Dialog } from "./Dialog.js";
 export { Hints } from "./Hints.js";
+export { SelectList, DialogSelect, type SelectOption, type SelectKeybind, type SelectListProps, type DialogSelectProps } from "./SelectList.js";

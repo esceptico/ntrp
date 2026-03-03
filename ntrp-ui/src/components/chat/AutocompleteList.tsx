@@ -1,5 +1,6 @@
 import type { SlashCommand } from "../../types.js";
 import { BaseSelectionList, colors } from "../ui/index.js";
+import { useContentWidth } from "../../contexts/index.js";
 import { SplitBorder } from "../ui/border.js";
 
 interface AutocompleteListProps {
@@ -11,6 +12,7 @@ interface AutocompleteListProps {
 const MAX_VISIBLE = 10;
 
 export function AutocompleteList({ commands, selectedIndex, accentValue }: AutocompleteListProps) {
+  const contentWidth = useContentWidth();
   const maxName = commands.length > 0 ? Math.max(...commands.map((c) => c.name.length)) : 0;
 
   return (
@@ -24,6 +26,7 @@ export function AutocompleteList({ commands, selectedIndex, accentValue }: Autoc
         selectedIndex={selectedIndex}
         visibleLines={Math.min(MAX_VISIBLE, commands.length || MAX_VISIBLE)}
         showIndicator={false}
+        width={contentWidth - 1}
         renderItem={(cmd, ctx) => {
           const display = `/${cmd.name}`.padEnd(maxName + 3);
           return (
@@ -32,6 +35,7 @@ export function AutocompleteList({ commands, selectedIndex, accentValue }: Autoc
               paddingRight={2}
               backgroundColor={ctx.isSelected ? accentValue : colors.background.menu}
               flexDirection="row"
+              flexGrow={1}
             >
               <text fg={ctx.isSelected ? colors.contrast : colors.text.primary} flexShrink={0}>
                 {display}

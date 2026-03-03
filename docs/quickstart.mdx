@@ -7,7 +7,7 @@ description: "Get ntrp running in 5 minutes."
 
 - Python 3.13+ with [uv](https://docs.astral.sh/uv/)
 - [Bun](https://bun.sh) runtime
-- At least one LLM provider API key (Anthropic, OpenAI, or Google)
+- An LLM provider API key (Anthropic, OpenAI, or Google) — can be configured during setup
 
 ## Install
 
@@ -32,12 +32,12 @@ description: "Get ntrp running in 5 minutes."
 
 <Steps>
 
-### Set your LLM provider key
+### Set your LLM provider key (optional)
 
-Export at least one provider API key. ntrp auto-selects models based on the provider.
+You can export a provider API key now, or configure it interactively in the TUI after connecting.
 
 ```bash
-# Pick one:
+# Pick one (or skip and configure in the TUI):
 export ANTHROPIC_API_KEY=sk-ant-...
 export OPENAI_API_KEY=sk-...
 export GEMINI_API_KEY=...
@@ -85,13 +85,16 @@ In a separate terminal:
   </Tab>
 </Tabs>
 
-Paste your API key in the connection dialog and you're in.
+Paste your API key in the connection dialog. If no LLM provider is configured, a provider setup screen appears where you can connect a provider and choose a default model.
 
 </Steps>
 
 ## What's next?
 
 <CardGroup cols={2}>
+  <Card title="TUI Guide" icon="terminal" href="/guides/tui">
+    Keyboard shortcuts and slash commands.
+  </Card>
   <Card title="Configuration" icon="gear" href="/configuration">
     Customize models, enable integrations, and tune settings.
   </Card>
@@ -100,8 +103,5 @@ Paste your API key in the connection dialog and you're in.
   </Card>
   <Card title="Connect Gmail" icon="envelope" href="/integrations/gmail">
     Let ntrp read and send emails.
-  </Card>
-  <Card title="TUI Guide" icon="terminal" href="/guides/tui">
-    Keyboard shortcuts and slash commands.
   </Card>
 </CardGroup>

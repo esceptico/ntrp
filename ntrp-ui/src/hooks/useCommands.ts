@@ -17,7 +17,7 @@ import {
 } from "../api/client.js";
 import { deleteCredentials } from "../lib/secrets.js";
 
-type ViewMode = "chat" | "memory" | "settings" | "automations" | "sessions";
+type ViewMode = "chat" | "memory" | "automations";
 
 function findSession(sessions: SessionListItem[], query: string): SessionListItem | undefined {
   const q = query.toLowerCase();
@@ -38,7 +38,7 @@ interface CommandContext {
   sendMessage: (msg: string) => void;
   setStatus: (status: StatusType) => void;
   toggleSettings: () => void;
-  openThemePicker: () => void;
+  openDialog: (id: string) => void;
   exit: () => void;
   refreshIndexStatus: () => Promise<void>;
   createNewSession: (name?: string) => Promise<string | null>;
@@ -51,9 +51,10 @@ interface CommandContext {
 type CommandHandler = (ctx: CommandContext, args: string[]) => boolean | Promise<boolean>;
 
 const COMMAND_HANDLERS: Record<string, CommandHandler> = {
+  connect: ({ openDialog }) => { openDialog("providers"); return true; },
   memory: ({ setViewMode }) => { setViewMode("memory"); return true; },
   automations: ({ setViewMode }) => { setViewMode("automations"); return true; },
-  theme: ({ openThemePicker }) => { openThemePicker(); return true; },
+  theme: ({ openDialog }) => { openDialog("theme"); return true; },
   settings: ({ toggleSettings }) => { toggleSettings(); return true; },
 
   compact: async ({ config, sessionId, addMessage, setStatus }) => {
@@ -122,7 +123,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  sessions: ({ setViewMode }) => { setViewMode("sessions"); return true; },
+  sessions: ({ openDialog }) => { openDialog("sessions"); return true; },
 
   name: async ({ config, sessionId, addMessage, updateSessionInfo, refreshSidebar }, args) => {
     const name = args.join(" ").trim();
@@ -219,7 +220,8 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  model: ({ toggleSettings }) => { toggleSettings(); return true; },
+  models: ({ openDialog }) => { openDialog("models"); return true; },
+  model: ({ openDialog }) => { openDialog("models"); return true; },
   exit: ({ exit }) => { exit(); return true; },
   quit: ({ exit }) => { exit(); return true; },
 };

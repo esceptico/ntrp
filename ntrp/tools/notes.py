@@ -91,7 +91,7 @@ class NotesTool(Tool):
         limit: int | None = None,
         **kwargs: Any,
     ) -> ToolResult:
-        source = execution.ctx.get_source(NotesSource)
+        source = execution.ctx.get_source(NotesSource, "notes")
         limit = limit or DEFAULT_LIST_LIMIT
         if query:
             search_index = execution.ctx.services.get("search_index")
@@ -176,7 +176,7 @@ class ReadNoteTool(Tool):
     async def execute(
         self, execution: ToolExecution, path: str, offset: int | None = None, limit: int | None = None, **kwargs: Any
     ) -> ToolResult:
-        source = execution.ctx.get_source(NotesSource)
+        source = execution.ctx.get_source(NotesSource, "notes")
         offset = offset or 1
         limit = limit or DEFAULT_READ_LINES
         content = source.read(path)
@@ -209,7 +209,7 @@ class EditNoteTool(Tool):
     async def approval_info(
         self, execution: ToolExecution, path: str, find: str, replace: str = "", **kwargs: Any
     ) -> ApprovalInfo | None:
-        source = execution.ctx.get_source(NotesSource)
+        source = execution.ctx.get_source(NotesSource, "notes")
         original = source.read(path)
         if original is None or find not in original:
             return None
@@ -224,7 +224,7 @@ class EditNoteTool(Tool):
     async def execute(
         self, execution: ToolExecution, path: str, find: str, replace: str = "", **kwargs: Any
     ) -> ToolResult:
-        source = execution.ctx.get_source(NotesSource)
+        source = execution.ctx.get_source(NotesSource, "notes")
         original = source.read(path)
         if original is None:
             return ToolResult(
@@ -271,7 +271,7 @@ class CreateNoteTool(Tool):
     async def approval_info(
         self, execution: ToolExecution, path: str, content: str, **kwargs: Any
     ) -> ApprovalInfo | None:
-        source = execution.ctx.get_source(NotesSource)
+        source = execution.ctx.get_source(NotesSource, "notes")
         if not path.endswith(".md"):
             path = path + ".md"
         if source.exists(path):
@@ -282,7 +282,7 @@ class CreateNoteTool(Tool):
         return ApprovalInfo(description=path, preview=preview_content, diff=None)
 
     async def execute(self, execution: ToolExecution, path: str, content: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(NotesSource)
+        source = execution.ctx.get_source(NotesSource, "notes")
         if not path.endswith(".md"):
             path = path + ".md"
 
@@ -311,13 +311,13 @@ class DeleteNoteTool(Tool):
     input_model = DeleteNoteInput
 
     async def approval_info(self, execution: ToolExecution, path: str, **kwargs: Any) -> ApprovalInfo | None:
-        source = execution.ctx.get_source(NotesSource)
+        source = execution.ctx.get_source(NotesSource, "notes")
         if source.read(path) is None:
             return None
         return ApprovalInfo(description=path, preview=None, diff=None)
 
     async def execute(self, execution: ToolExecution, path: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(NotesSource)
+        source = execution.ctx.get_source(NotesSource, "notes")
         original = source.read(path)
         if original is None:
             return ToolResult(
@@ -347,13 +347,13 @@ class MoveNoteTool(Tool):
     async def approval_info(
         self, execution: ToolExecution, path: str, new_path: str, **kwargs: Any
     ) -> ApprovalInfo | None:
-        source = execution.ctx.get_source(NotesSource)
+        source = execution.ctx.get_source(NotesSource, "notes")
         if not source.exists(path):
             return None
         return ApprovalInfo(description=f"{path} → {new_path}", preview=None, diff=None)
 
     async def execute(self, execution: ToolExecution, path: str, new_path: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(NotesSource)
+        source = execution.ctx.get_source(NotesSource, "notes")
         if not new_path.endswith(".md"):
             new_path = new_path + ".md"
 

@@ -2,28 +2,33 @@ import { useCallback, useEffect, useState } from "react";
 import type { Config } from "../../../types.js";
 import type { Settings } from "../../../hooks/useSettings.js";
 import { useKeypress, type Key } from "../../../hooks/useKeypress.js";
-import { Dialog, colors, accentColors, Hints } from "../../ui/index.js";
+import { Dialog, colors, Hints } from "../../ui/index.js";
+import { useAccentColor } from "../../../hooks/index.js";
 import {
-  getSupportedModels,
-  updateConfig,
   getGoogleAccounts,
   addGoogleAccount,
   removeGoogleAccount,
-  getEmbeddingModels,
-  updateEmbeddingModel,
+  updateConfig,
   updateVaultPath,
   updateBrowser,
   getServerConfig,
   getDirectives,
   updateDirectives,
+  getProviders,
+  connectProvider,
+  disconnectProvider,
+  getServices,
+  connectService,
+  disconnectService,
   type ServerConfig,
   type GoogleAccount,
+  type ProviderInfo,
+  type ServiceInfo,
 } from "../../../api/client.js";
 import { SectionId, SECTION_IDS, SECTION_LABELS, LIMIT_ITEMS, CONNECTION_ITEMS, TOGGLEABLE_SOURCES, type ConnectionItem } from "./config.js";
-import { ModelDropdown } from "./ModelDropdown.js";
-import { BrowserDropdown } from "./BrowserDropdown.js";
+import { DialogSelect, type SelectOption } from "../../ui/index.js";
 import { ConnectionsSection } from "./ConnectionsSection.js";
-import { AgentSection, DirectivesSection, LimitsSection, NotifiersSection, ServerSection, SkillsSection } from "./sections/index.js";
+import { DirectivesSection, LimitsSection, NotifiersSection, ProvidersSection, ServerSection, ServicesSection, SkillsSection } from "./sections/index.js";
 import { setCredentials } from "../../../lib/secrets.js";
 import { checkHealth } from "../../../api/client.js";
 import { setApiKey as setFetchApiKey } from "../../../api/fetch.js";
@@ -31,18 +36,11 @@ import { useTextInput } from "../../../hooks/useTextInput.js";
 import { useNotifiers } from "../../../hooks/useNotifiers.js";
 import { useSkills } from "../../../hooks/useSkills.js";
 
-function getAccent(accentColor: keyof typeof accentColors) {
-  return accentColors[accentColor].primary;
-}
-
-type DropdownTarget = "chat" | "explore" | "memory" | "embedding" | null;
-
 interface SettingsDialogProps {
   config: Config;
   serverConfig: ServerConfig | null;
   settings: Settings;
   onUpdate: (category: keyof Settings, key: string, value: unknown) => void;
-  onModelChange: (type: "chat" | "explore" | "memory", model: string) => void;
   onServerConfigChange: (config: ServerConfig) => void;
   onRefreshIndexStatus: () => Promise<void>;
   onClose: () => void;
@@ -54,17 +52,34 @@ export function SettingsDialog({
   serverConfig,
   settings,
   onUpdate,
-  onModelChange,
   onServerConfigChange,
   onRefreshIndexStatus,
   onClose,
   onServerCredentialsChange,
 }: SettingsDialogProps) {
-  const accent = getAccent(settings.ui.accentColor);
+  const { accentValue: accent } = useAccentColor();
 
   const [activeSection, setActiveSection] = useState<SectionId>("server");
-  const [agentIndex, setAgentIndex] = useState(0);
+  const [drilled, setDrilled] = useState(false);
   const [limitsIndex, setLimitsIndex] = useState(0);
+
+  const [providersIndex, setProvidersIndex] = useState(0);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [editingProvider, setEditingProvider] = useState(false);
+  const [providerKeyValue, setProviderKeyValue] = useState("");
+  const [providerKeyCursor, setProviderKeyCursor] = useState(0);
+  const [providerSaving, setProviderSaving] = useState(false);
+  const [providerError, setProviderError] = useState<string | null>(null);
+  const [providerConfirmDisconnect, setProviderConfirmDisconnect] = useState(false);
+
+  const [servicesIndex, setServicesIndex] = useState(0);
+  const [services, setServices] = useState<ServiceInfo[]>([]);
+  const [editingService, setEditingService] = useState(false);
+  const [serviceKeyValue, setServiceKeyValue] = useState("");
+  const [serviceKeyCursor, setServiceKeyCursor] = useState(0);
+  const [serviceSaving, setServiceSaving] = useState(false);
+  const [serviceError, setServiceError] = useState<string | null>(null);
+  const [serviceConfirmDisconnect, setServiceConfirmDisconnect] = useState(false);
 
   const [serverIndex, setServerIndex] = useState(0);
   const [editingServer, setEditingServer] = useState(false);
@@ -90,16 +105,6 @@ export function SettingsDialog({
   const [updatingBrowser, setUpdatingBrowser] = useState(false);
   const [browserError, setBrowserError] = useState<string | null>(null);
 
-  const [models, setModels] = useState<string[]>([]);
-  const [chatModel, setChatModel] = useState(serverConfig?.chat_model ?? "");
-  const [exploreModel, setExploreModel] = useState(serverConfig?.explore_model ?? "");
-  const [memoryModel, setMemoryModel] = useState(serverConfig?.memory_model ?? "");
-  const [embeddingModels, setEmbeddingModels] = useState<string[]>([]);
-  const [embeddingModel, setEmbeddingModel] = useState(serverConfig?.embedding_model ?? "");
-  const [modelUpdating, setModelUpdating] = useState(false);
-  const [dropdownTarget, setDropdownTarget] = useState<DropdownTarget>(null);
-  const [pendingEmbeddingModel, setPendingEmbeddingModel] = useState<string | null>(null);
-
   const [directivesContent, setDirectivesContent] = useState("");
   const [directivesSaved, setDirectivesSaved] = useState("");
   const [directivesCursorPos, setDirectivesCursorPos] = useState(0);
@@ -109,24 +114,31 @@ export function SettingsDialog({
   const notifiers = useNotifiers(config);
   const skills = useSkills(config);
 
-  useEffect(() => {
-    getSupportedModels(config)
-      .then((result) => {
-        setModels(result.models);
-        if (!chatModel) setChatModel(result.chat_model);
-        if (!exploreModel) setExploreModel(result.explore_model);
-        if (!memoryModel) setMemoryModel(result.memory_model);
-      })
-      .catch(() => {});
-    getEmbeddingModels(config)
-      .then((result) => {
-        setEmbeddingModels(result.models);
-        if (!embeddingModel) setEmbeddingModel(result.current);
-      })
-      .catch(() => {});
-  }, [config]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { handleKey: handleProviderKeyInput } = useTextInput({
+    text: providerKeyValue,
+    cursorPos: providerKeyCursor,
+    setText: setProviderKeyValue,
+    setCursorPos: setProviderKeyCursor,
+  });
+
+  const { handleKey: handleServiceKeyInput } = useTextInput({
+    text: serviceKeyValue,
+    cursorPos: serviceKeyCursor,
+    setText: setServiceKeyValue,
+    setCursorPos: setServiceKeyCursor,
+  });
+
+  const refreshProviders = useCallback(() => {
+    getProviders(config).then(r => setProviders(r.providers)).catch(() => {});
+  }, [config]);
+
+  const refreshServices = useCallback(() => {
+    getServices(config).then(r => setServices(r.services)).catch(() => {});
+  }, [config]);
 
   useEffect(() => {
+    refreshProviders();
+    refreshServices();
     getGoogleAccounts(config)
       .then((result) => setGoogleAccounts(result.accounts))
       .catch(() => {});
@@ -136,42 +148,87 @@ export function SettingsDialog({
         setDirectivesSaved(result.content);
       })
       .catch(() => {});
-  }, [config]);
+  }, [config]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const agentTotalItems = 4;
   const limitsTotalItems = LIMIT_ITEMS.length;
 
-  const selectModel = useCallback(
-    (modelType: "chat" | "explore" | "memory", modelName: string) => {
-      if (modelUpdating) return;
-      if (modelType === "chat") {
-        if (modelName === chatModel) return;
-        setChatModel(modelName);
-        onModelChange("chat", modelName);
-        setModelUpdating(true);
-        updateConfig(config, { chat_model: modelName })
-          .catch(() => {})
-          .finally(() => setModelUpdating(false));
-      } else if (modelType === "explore") {
-        if (modelName === exploreModel) return;
-        setExploreModel(modelName);
-        onModelChange("explore", modelName);
-        setModelUpdating(true);
-        updateConfig(config, { explore_model: modelName })
-          .catch(() => {})
-          .finally(() => setModelUpdating(false));
-      } else {
-        if (modelName === memoryModel) return;
-        setMemoryModel(modelName);
-        onModelChange("memory", modelName);
-        setModelUpdating(true);
-        updateConfig(config, { memory_model: modelName })
-          .catch(() => {})
-          .finally(() => setModelUpdating(false));
-      }
-    },
-    [config, chatModel, exploreModel, memoryModel, modelUpdating, onModelChange]
-  );
+  // --- Provider key editing ---
+
+  const handleSaveProviderKey = useCallback(async () => {
+    const key = providerKeyValue.trim();
+    const provider = providers[providersIndex];
+    if (!key || !provider || provider.id === "custom") return;
+
+    setProviderSaving(true);
+    setProviderError(null);
+    try {
+      await connectProvider(config, provider.id, key);
+      refreshProviders();
+      setEditingProvider(false);
+      setProviderKeyValue("");
+      setProviderKeyCursor(0);
+    } catch (e) {
+      setProviderError(e instanceof Error ? e.message : "Failed to connect");
+    } finally {
+      setProviderSaving(false);
+    }
+  }, [providerKeyValue, providers, providersIndex, config, refreshProviders]);
+
+  const handleDisconnectProvider = useCallback(async () => {
+    const provider = providers[providersIndex];
+    if (!provider) return;
+    setProviderSaving(true);
+    setProviderError(null);
+    try {
+      await disconnectProvider(config, provider.id);
+      refreshProviders();
+    } catch (e) {
+      setProviderError(e instanceof Error ? e.message : "Failed to disconnect");
+    } finally {
+      setProviderSaving(false);
+      setProviderConfirmDisconnect(false);
+    }
+  }, [providers, providersIndex, config, refreshProviders]);
+
+  // --- Service key editing ---
+
+  const handleSaveServiceKey = useCallback(async () => {
+    const key = serviceKeyValue.trim();
+    const service = services[servicesIndex];
+    if (!key || !service) return;
+
+    setServiceSaving(true);
+    setServiceError(null);
+    try {
+      await connectService(config, service.id, key);
+      refreshServices();
+      setEditingService(false);
+      setServiceKeyValue("");
+      setServiceKeyCursor(0);
+    } catch (e) {
+      setServiceError(e instanceof Error ? e.message : "Failed to connect");
+    } finally {
+      setServiceSaving(false);
+    }
+  }, [serviceKeyValue, services, servicesIndex, config, refreshServices]);
+
+  const handleDisconnectService = useCallback(async () => {
+    const service = services[servicesIndex];
+    if (!service) return;
+    setServiceSaving(true);
+    setServiceError(null);
+    try {
+      await disconnectService(config, service.id);
+      refreshServices();
+    } catch (e) {
+      setServiceError(e instanceof Error ? e.message : "Failed to disconnect");
+    } finally {
+      setServiceSaving(false);
+      setServiceConfirmDisconnect(false);
+    }
+  }, [services, servicesIndex, config, refreshServices]);
+
+  // --- Google / connections ---
 
   const handleAddGoogle = useCallback(async () => {
     if (actionInProgress) return;
@@ -360,50 +417,147 @@ export function SettingsDialog({
     }
   }, [config, serverConfig, actionInProgress, onServerConfigChange]);
 
+  // --- Undrill helper: reset section-specific editing state ---
+  const undrill = useCallback(() => {
+    if (editingServer) { handleCancelServerEdit(); return; }
+    if (editingProvider) { setEditingProvider(false); setProviderKeyValue(""); setProviderKeyCursor(0); setProviderError(null); return; }
+    if (providerConfirmDisconnect) { setProviderConfirmDisconnect(false); return; }
+    if (editingService) { setEditingService(false); setServiceKeyValue(""); setServiceKeyCursor(0); setServiceError(null); return; }
+    if (serviceConfirmDisconnect) { setServiceConfirmDisconnect(false); return; }
+    if (editingDirectives) { handleCancelDirectives(); return; }
+    if (editingVault) { handleCancelVaultEdit(); return; }
+    if (activeSection === "notifiers" && notifiers.mode !== "list") { notifiers.handleKeypress({ name: "escape" } as Key); return; }
+    if (activeSection === "skills" && skills.mode !== "list") { skills.handleKeypress({ name: "escape" } as Key); return; }
+    setDrilled(false);
+  }, [
+    editingServer, handleCancelServerEdit,
+    editingProvider, providerConfirmDisconnect,
+    editingService, serviceConfirmDisconnect,
+    editingDirectives, handleCancelDirectives,
+    editingVault, handleCancelVaultEdit,
+    activeSection, notifiers, skills,
+  ]);
+
+  // Check if section has active inline editing
+  const isSectionEditing = useCallback(() => {
+    if (activeSection === "server" && editingServer) return true;
+    if (activeSection === "providers" && (editingProvider || providerConfirmDisconnect)) return true;
+    if (activeSection === "services" && (editingService || serviceConfirmDisconnect)) return true;
+    if (activeSection === "directives" && editingDirectives) return true;
+    if (activeSection === "connections" && editingVault) return true;
+    if (activeSection === "notifiers" && notifiers.mode !== "list") return true;
+    if (activeSection === "skills" && skills.mode !== "list") return true;
+    return false;
+  }, [activeSection, editingServer, editingProvider, providerConfirmDisconnect, editingService, serviceConfirmDisconnect, editingDirectives, editingVault, notifiers.mode, skills.mode]);
+
   const handleKeypress = useCallback(
     (key: Key) => {
-      if (dropdownTarget || actionInProgress) return;
+      if (actionInProgress) return;
 
+      // --- Escape ---
       if (key.name === "escape" || key.name === "q") {
-        if (activeSection === "server" && editingServer) {
-          handleCancelServerEdit();
-          return;
-        }
-        if (activeSection === "notifiers" && notifiers.mode !== "list") {
-          notifiers.handleKeypress(key);
-          return;
-        }
-        if (activeSection === "skills" && skills.mode !== "list") {
-          skills.handleKeypress(key);
-          return;
-        }
-        if (activeSection === "directives" && editingDirectives) {
-          handleCancelDirectives();
+        if (drilled) {
+          if (isSectionEditing()) {
+            undrill();
+          } else {
+            setDrilled(false);
+          }
           return;
         }
         onClose();
         return;
       }
 
-      if (key.name === "tab") {
-        if (activeSection === "server" && editingServer) {
-          setServerIndex((i) => (i === 0 ? 1 : 0));
+      // --- Section-level navigation (not drilled) ---
+      if (!drilled) {
+        const idx = SECTION_IDS.indexOf(activeSection);
+        if (key.name === "up" || key.name === "k") {
+          if (idx > 0) setActiveSection(SECTION_IDS[idx - 1]);
           return;
         }
-        if (activeSection === "notifiers" && notifiers.mode !== "list") return;
-        if (activeSection === "skills" && skills.mode !== "list") return;
-        if (activeSection === "directives" && editingDirectives) return;
-        const direction = key.shift ? -1 : 1;
-        const idx = SECTION_IDS.indexOf(activeSection);
-        const next = (idx + direction + SECTION_IDS.length) % SECTION_IDS.length;
-        setActiveSection(SECTION_IDS[next]);
+        if (key.name === "down" || key.name === "j") {
+          if (idx < SECTION_IDS.length - 1) setActiveSection(SECTION_IDS[idx + 1]);
+          return;
+        }
+        if (key.name === "return" || key.name === "space") {
+          setDrilled(true);
+          return;
+        }
         return;
       }
 
-      if (activeSection === "server") {
+      // --- Drilled into section ---
+
+      if (activeSection === "providers") {
+        if (providerConfirmDisconnect) {
+          if (key.sequence === "y") handleDisconnectProvider();
+          else setProviderConfirmDisconnect(false);
+          return;
+        }
+        if (editingProvider) {
+          if (key.name === "return") {
+            handleSaveProviderKey();
+          } else {
+            handleProviderKeyInput(key);
+          }
+          return;
+        }
+        if (key.name === "up" || key.name === "k") {
+          setProvidersIndex(i => Math.max(0, i - 1));
+        } else if (key.name === "down" || key.name === "j") {
+          setProvidersIndex(i => Math.min(providers.length - 1, i + 1));
+        } else if (key.name === "return" || key.name === "space") {
+          const p = providers[providersIndex];
+          if (p && p.id !== "custom" && !p.from_env) {
+            setProviderKeyValue("");
+            setProviderKeyCursor(0);
+            setProviderError(null);
+            setEditingProvider(true);
+          }
+        } else if (key.sequence === "d") {
+          const p = providers[providersIndex];
+          if (p && p.id !== "custom" && p.connected && !p.from_env) {
+            setProviderConfirmDisconnect(true);
+          }
+        }
+      } else if (activeSection === "services") {
+        if (serviceConfirmDisconnect) {
+          if (key.sequence === "y") handleDisconnectService();
+          else setServiceConfirmDisconnect(false);
+          return;
+        }
+        if (editingService) {
+          if (key.name === "return") {
+            handleSaveServiceKey();
+          } else {
+            handleServiceKeyInput(key);
+          }
+          return;
+        }
+        if (key.name === "up" || key.name === "k") {
+          setServicesIndex(i => Math.max(0, i - 1));
+        } else if (key.name === "down" || key.name === "j") {
+          setServicesIndex(i => Math.min(services.length - 1, i + 1));
+        } else if (key.name === "return" || key.name === "space") {
+          const s = services[servicesIndex];
+          if (s && !s.from_env) {
+            setServiceKeyValue("");
+            setServiceKeyCursor(0);
+            setServiceError(null);
+            setEditingService(true);
+          }
+        } else if (key.sequence === "d") {
+          const s = services[servicesIndex];
+          if (s && s.connected && !s.from_env) {
+            setServiceConfirmDisconnect(true);
+          }
+        }
+      } else if (activeSection === "server") {
         if (editingServer) {
           if (key.name === "s" && key.ctrl) {
             handleSaveServer();
+          } else if (key.name === "tab") {
+            setServerIndex((i) => (i === 0 ? 1 : 0));
           } else if (serverIndex === 0) {
             handleServerUrlKey(key);
           } else {
@@ -419,17 +573,6 @@ export function SettingsDialog({
             setServerApiKeyCursor(serverApiKey.length);
             setEditingServer(true);
           }
-        }
-      } else if (activeSection === "agent") {
-        if (key.name === "up" || key.name === "k") {
-          setAgentIndex((i) => Math.max(0, i - 1));
-        } else if (key.name === "down" || key.name === "j") {
-          setAgentIndex((i) => Math.min(agentTotalItems - 1, i + 1));
-        } else if (key.name === "return" || key.name === "space") {
-          if (agentIndex === 0) setDropdownTarget("chat");
-          else if (agentIndex === 1) setDropdownTarget("explore");
-          else if (agentIndex === 2) setDropdownTarget("memory");
-          else if (agentIndex === 3) setDropdownTarget("embedding");
         }
       } else if (activeSection === "directives") {
         if (editingDirectives) {
@@ -495,14 +638,17 @@ export function SettingsDialog({
       }
     },
     [
-      activeSection, agentIndex, limitsIndex,
-      agentTotalItems, limitsTotalItems,
-      settings, onUpdate, onClose, dropdownTarget,
+      activeSection, limitsIndex, drilled,
+      limitsTotalItems,
+      settings, onUpdate, onClose, actionInProgress,
       connectionItem, googleAccounts, selectedGoogleIndex, serverConfig,
-      handleAddGoogle, handleRemoveGoogle, handleStartVaultEdit, handleToggleSource, actionInProgress,
+      handleAddGoogle, handleRemoveGoogle, handleStartVaultEdit, handleToggleSource,
       notifiers, skills,
-      editingServer, serverIndex, serverUrl, serverApiKey, handleServerUrlKey, handleServerApiKeyKey, handleSaveServer, handleCancelServerEdit,
-      editingDirectives, handleDirectivesKey, handleSaveDirectives, handleCancelDirectives, handleStartDirectivesEdit,
+      editingServer, serverIndex, serverUrl, serverApiKey, handleServerUrlKey, handleServerApiKeyKey, handleSaveServer,
+      editingDirectives, handleDirectivesKey, handleSaveDirectives, handleStartDirectivesEdit,
+      editingProvider, providerConfirmDisconnect, providers, providersIndex, handleProviderKeyInput, handleSaveProviderKey, handleDisconnectProvider,
+      editingService, serviceConfirmDisconnect, services, servicesIndex, handleServiceKeyInput, handleSaveServiceKey, handleDisconnectService,
+      undrill, isSectionEditing,
     ]
   );
 
@@ -521,122 +667,42 @@ export function SettingsDialog({
     [handleVaultKey, handleSaveVault, handleCancelVaultEdit]
   );
 
-  useKeypress(handleKeypress, { isActive: !dropdownTarget && !editingVault && !showingBrowserDropdown });
+  useKeypress(handleKeypress, { isActive: !editingVault && !showingBrowserDropdown });
   useKeypress(handleVaultEditKeypress, { isActive: editingVault && !updatingVault });
 
-  const handleEmbeddingConfirm = useCallback(async () => {
-    if (!pendingEmbeddingModel || actionInProgress) return;
-    setActionInProgress("Re-indexing...");
-    try {
-      const result = await updateEmbeddingModel(config, pendingEmbeddingModel);
-      if (result.status === "reindexing") {
-        setEmbeddingModel(pendingEmbeddingModel);
-        const updatedConfig = await getServerConfig(config);
-        onServerConfigChange(updatedConfig);
-        await onRefreshIndexStatus();
-        onClose();
-      }
-    } catch {
-    } finally {
-      setPendingEmbeddingModel(null);
-      setActionInProgress(null);
-    }
-  }, [config, pendingEmbeddingModel, actionInProgress, onServerConfigChange, onRefreshIndexStatus, onClose]);
-
-  const handleEmbeddingKeypress = useCallback(
-    (key: Key) => {
-      if (key.name === "escape" || key.sequence === "n") {
-        setPendingEmbeddingModel(null);
-      } else if (key.name === "return" || key.sequence === "y") {
-        handleEmbeddingConfirm();
-      }
-    },
-    [handleEmbeddingConfirm]
-  );
-
-  useKeypress(handleEmbeddingKeypress, { isActive: !!pendingEmbeddingModel && !actionInProgress });
-
-  if (pendingEmbeddingModel) {
-    return (
-      <Dialog title="CONFIRM RE-INDEX" size="medium" onClose={() => setPendingEmbeddingModel(null)}>
-        {() => (
-          <box flexDirection="column">
-            <text><span fg={colors.text.primary}>Change embedding model to:</span></text>
-            <text><span fg={accent}><strong> {pendingEmbeddingModel}</strong></span></text>
-            <box marginTop={1}>
-              <text><span fg={colors.status.warning}>⚠ This will clear the search index and re-embed all content.</span></text>
-            </box>
-            {actionInProgress ? (
-              <box marginTop={1}>
-                <text><span fg={colors.text.muted}>{actionInProgress}</span></text>
-              </box>
-            ) : (
-              <box marginTop={1}>
-                <Hints items={[["y", "confirm"], ["n/esc", "cancel"]]} />
-              </box>
-            )}
-          </box>
-        )}
-      </Dialog>
-    );
-  }
-
-  if (dropdownTarget) {
-    const isEmbedding = dropdownTarget === "embedding";
-    const title = dropdownTarget === "chat" ? "Agent Model" : dropdownTarget === "explore" ? "Explore Model" : dropdownTarget === "memory" ? "Memory Model" : "Embedding Model";
-    const currentModel = dropdownTarget === "chat" ? chatModel : dropdownTarget === "explore" ? exploreModel : dropdownTarget === "memory" ? memoryModel : embeddingModel;
-    const modelList = isEmbedding ? embeddingModels : models;
-
-    return (
-      <Dialog title={title} size="medium" onClose={() => setDropdownTarget(null)}>
-        {({ width }) => (
-          <ModelDropdown
-            models={modelList}
-            currentModel={currentModel}
-            width={Math.min(50, width)}
-            onSelect={(model) => {
-              if (isEmbedding) {
-                if (model !== embeddingModel) {
-                  setPendingEmbeddingModel(model);
-                }
-              } else {
-                selectModel(dropdownTarget as "chat" | "explore" | "memory", model);
-              }
-              setDropdownTarget(null);
-            }}
-            onClose={() => setDropdownTarget(null)}
-          />
-        )}
-      </Dialog>
-    );
-  }
+  const browserOptions: SelectOption<string | null>[] = [
+    { value: "chrome", title: "Chrome", indicator: serverConfig?.browser === "chrome" ? "●" : undefined },
+    { value: "safari", title: "Safari", indicator: serverConfig?.browser === "safari" ? "●" : undefined },
+    { value: "arc", title: "Arc", indicator: serverConfig?.browser === "arc" ? "●" : undefined },
+    { value: null, title: "None (disable)", indicator: serverConfig?.browser == null ? "●" : undefined },
+  ];
 
   if (showingBrowserDropdown) {
     return (
-      <Dialog title="Browser" size="medium" onClose={() => setShowingBrowserDropdown(false)}>
-        {({ width }) => (
-          <BrowserDropdown
-            currentBrowser={serverConfig?.browser || null}
-            width={Math.min(50, width)}
-            onSelect={handleSelectBrowser}
-            onClose={() => setShowingBrowserDropdown(false)}
-          />
-        )}
-      </Dialog>
+      <DialogSelect<string | null>
+        title="Browser"
+        options={browserOptions}
+        initialIndex={Math.max(0, browserOptions.findIndex(o => o.value === (serverConfig?.browser || null)))}
+        onSelect={(opt) => handleSelectBrowser(opt.value)}
+        onClose={() => setShowingBrowserDropdown(false)}
+      />
     );
   }
+
+  const footerHints = drilled
+    ? [["↑↓", "navigate"], ["enter", "select"], ["←→", "adjust"], ["esc", "back"]] as [string, string][]
+    : [["↑↓", "section"], ["enter", "open"], ["esc", "close"]] as [string, string][];
 
   return (
     <Dialog
       title="PREFERENCES"
       size="large"
       onClose={onClose}
-      footer={<Hints items={[["tab", "section"], ["↑↓", "navigate"], ["enter", "select"], ["←→", "adjust"], ["esc", "close"]]} />}
+      footer={<Hints items={footerHints} />}
     >
       {({ width, height }) => {
         const sidebarWidth = 16;
         const detailWidth = Math.max(0, width - sidebarWidth - 3);
-        const modelNameWidth = Math.max(0, detailWidth - 20);
         const contentHeight = Math.max(1, height - 1);
 
         return (
@@ -668,6 +734,34 @@ export function SettingsDialog({
 
               {/* Detail pane */}
               <box flexDirection="column" width={detailWidth} height={contentHeight} overflow="hidden">
+                {activeSection === "providers" && (
+                  <ProvidersSection
+                    providers={providers}
+                    selectedIndex={providersIndex}
+                    accent={accent}
+                    editing={editingProvider}
+                    keyValue={providerKeyValue}
+                    keyCursor={providerKeyCursor}
+                    saving={providerSaving}
+                    error={providerError}
+                    confirmingDisconnect={providerConfirmDisconnect}
+                  />
+                )}
+
+                {activeSection === "services" && (
+                  <ServicesSection
+                    services={services}
+                    selectedIndex={servicesIndex}
+                    accent={accent}
+                    editing={editingService}
+                    keyValue={serviceKeyValue}
+                    keyCursor={serviceKeyCursor}
+                    saving={serviceSaving}
+                    error={serviceError}
+                    confirmingDisconnect={serviceConfirmDisconnect}
+                  />
+                )}
+
                 {activeSection === "server" && (
                   <ServerSection
                     serverUrl={serverUrl}
@@ -679,18 +773,6 @@ export function SettingsDialog({
                     accent={accent}
                     saving={serverSaving}
                     error={serverError}
-                  />
-                )}
-
-                {activeSection === "agent" && (
-                  <AgentSection
-                    chatModel={chatModel}
-                    exploreModel={exploreModel}
-                    memoryModel={memoryModel}
-                    embeddingModel={embeddingModel}
-                    selectedIndex={agentIndex}
-                    accent={accent}
-                    modelNameWidth={modelNameWidth}
                   />
                 )}
 
