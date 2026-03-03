@@ -1,6 +1,6 @@
 ---
 title: "Configuration"
-description: "Environment variables, model selection, and settings."
+description: "Reference for all environment variables and settings."
 ---
 
 ## Config resolution
@@ -81,22 +81,7 @@ The TUI client stores the key in your OS keychain (macOS Keychain, Linux libsecr
 
 ## Custom models
 
-Add OpenRouter, Ollama, vLLM, or any OpenAI-compatible endpoint via `~/.ntrp/models.json`:
-
-```json
-[
-  {
-    "id": "deepseek-r1",
-    "provider": "custom",
-    "api_base": "https://openrouter.ai/api/v1",
-    "api_key_env": "OPENROUTER_API_KEY",
-    "max_output_tokens": 8192,
-    "max_context_tokens": 64000
-  }
-]
-```
-
-Or use the `/add-model` skill in the TUI to configure interactively.
+See [Custom Models](/integrations/models) for registering OpenRouter, Ollama, vLLM, or any OpenAI-compatible endpoint.
 
 ## Settings file
 
@@ -112,12 +97,3 @@ Or use the `/add-model` skill in the TUI to configure interactively.
 }
 ```
 
-## .env file
-
-Copy `.env.example` to `.env` (or `~/.ntrp/.env` for global config):
-
-```bash
-cp .env.example .env
-```
-
-Both locations are loaded automatically. Project-level `.env` takes precedence.

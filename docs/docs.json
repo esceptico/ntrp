@@ -18,7 +18,7 @@
             "pages": [
               "index",
               "quickstart",
-              "configuration"
+              "guides/tui"
             ]
           },
           {
@@ -27,8 +27,7 @@
               "guides/memory",
               "guides/automations",
               "guides/tools",
-              "guides/skills",
-              "guides/tui"
+              "guides/skills"
             ]
           },
           {
@@ -39,6 +38,12 @@
               "integrations/calendar",
               "integrations/obsidian",
               "integrations/browser"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "configuration"
             ]
           }
         ]
