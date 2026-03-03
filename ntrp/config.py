@@ -34,6 +34,7 @@ def set_ntrp_dir(path: str | Path) -> None:
     SETTINGS_PATH = NTRP_DIR / "settings.json"
     SETTINGS_BACKUP_PATH = NTRP_DIR / "settings.json.bak"
 
+
 # Provider → (chat_model, memory_model, embedding_model)
 PROVIDER_KEY_FIELDS = {
     "anthropic": "anthropic_api_key",

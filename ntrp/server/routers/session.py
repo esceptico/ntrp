@@ -8,14 +8,18 @@ from ntrp.constants import HISTORY_MESSAGE_LIMIT
 from ntrp.llm.models import (
     Provider,
     add_custom_model,
-    get_embedding_models as get_embedding_models_fn,
     get_embedding_models_by_provider,
     get_model,
-    get_models as get_models_fn,
     get_models_by_provider,
     list_embedding_models,
     list_models,
     remove_custom_model,
+)
+from ntrp.llm.models import (
+    get_embedding_models as get_embedding_models_fn,
+)
+from ntrp.llm.models import (
+    get_models as get_models_fn,
 )
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
@@ -275,28 +279,32 @@ async def get_providers(runtime: Runtime = Depends(get_runtime)):
         models = get_models_by_provider(meta["provider"])
         embedding_models = get_embedding_models_by_provider(meta["provider"])
 
-        providers.append({
-            "id": pid,
-            "name": meta["name"],
-            "connected": bool(key),
-            "key_hint": mask_api_key(key),
-            "from_env": from_env,
-            "models": list(models.keys()),
-            "embedding_models": list(embedding_models.keys()),
-        })
+        providers.append(
+            {
+                "id": pid,
+                "name": meta["name"],
+                "connected": bool(key),
+                "key_hint": mask_api_key(key),
+                "from_env": from_env,
+                "models": list(models.keys()),
+                "embedding_models": list(embedding_models.keys()),
+            }
+        )
 
     # Custom models entry
     custom_models = get_models_by_provider(Provider.CUSTOM)
-    providers.append({
-        "id": "custom",
-        "name": "Custom (OpenAI-compatible)",
-        "connected": bool(custom_models),
-        "model_count": len(custom_models),
-        "models": [
-            {"id": mid, "base_url": m.base_url, "context_window": m.max_context_tokens}
-            for mid, m in custom_models.items()
-        ],
-    })
+    providers.append(
+        {
+            "id": "custom",
+            "name": "Custom (OpenAI-compatible)",
+            "connected": bool(custom_models),
+            "model_count": len(custom_models),
+            "models": [
+                {"id": mid, "base_url": m.base_url, "context_window": m.max_context_tokens}
+                for mid, m in custom_models.items()
+            ],
+        }
+    )
 
     return {"providers": providers}
 
@@ -351,13 +359,15 @@ async def get_services(runtime: Runtime = Depends(get_runtime)):
         field = SERVICE_KEY_FIELDS[sid]
         key = getattr(config, field, None)
         from_env = bool(os.environ.get(meta["env_var"]))
-        services.append({
-            "id": sid,
-            "name": meta["name"],
-            "connected": bool(key),
-            "key_hint": mask_api_key(key),
-            "from_env": from_env,
-        })
+        services.append(
+            {
+                "id": sid,
+                "name": meta["name"],
+                "connected": bool(key),
+                "key_hint": mask_api_key(key),
+                "from_env": from_env,
+            }
+        )
     return {"services": services}
 
 

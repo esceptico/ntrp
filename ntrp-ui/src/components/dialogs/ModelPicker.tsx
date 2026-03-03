@@ -41,7 +41,7 @@ function buildModelOptions(modelList: string[], groups: ModelGroup[], currentMod
 
 const MODEL_TYPES: { type: ModelType; label: string; description: string }[] = [
   { type: "chat", label: "Agent", description: "Main conversation model" },
-  { type: "explore", label: "Explore", description: "Code exploration & research" },
+  { type: "explore", label: "Explore", description: "Deep research & exploration" },
   { type: "memory", label: "Memory", description: "Fact extraction & consolidation" },
   { type: "embedding", label: "Embedding", description: "Vector embeddings for search" },
 ];

@@ -253,4 +253,3 @@ def remove_custom_model(model_id: str) -> None:
             return
         raw.pop(model_id, None)
         _models_path().write_text(json.dumps(raw, indent=2))
-
