@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -34,13 +35,9 @@ def discover_calendar_tokens() -> list[Path]:
     return sorted(calendar_tokens + gmail_tokens)
 
 
-def get_next_gmail_token_path() -> Path:
-    """Get path for next Gmail token (for adding new account)."""
-    existing = discover_gmail_tokens()
-    if not existing:
-        return NTRP_DIR / "gmail_token.json"
-    n = len(existing) + 1
-    return NTRP_DIR / f"gmail_token_{n}.json"
+def gmail_token_path(email: str) -> Path:
+    """Get token path for a Gmail account by email."""
+    return NTRP_DIR / f"gmail_token_{email}.json"
 
 
 def get_google_credentials(
@@ -70,9 +67,17 @@ def get_google_credentials(
         creds = Credentials.from_authorized_user_file(str(token_path))
 
     if not creds or not creds.valid:
+        refreshed = False
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
+            try:
+                creds.refresh(Request())
+                refreshed = True
+            except RefreshError:
+                raise PermissionError(
+                    f"Google token expired and refresh failed: {token_path.name}\n"
+                    "Delete the token file and re-add the account."
+                )
+        if not refreshed:
             if not CREDENTIALS_PATH.exists():
                 raise FileNotFoundError(
                     f"Google credentials not found at {CREDENTIALS_PATH}\n"
@@ -126,7 +131,7 @@ def add_gmail_account() -> str:
     profile = service.users().getProfile(userId="me").execute()
     email = profile.get("emailAddress", "unknown")
 
-    token_path = get_next_gmail_token_path()
+    token_path = gmail_token_path(email)
     NTRP_DIR.mkdir(parents=True, exist_ok=True)
     token_path.write_text(creds.to_json())
 
