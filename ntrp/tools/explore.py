@@ -75,20 +75,6 @@ class ExploreTool(Tool):
             user_facts=user_facts,
         )
 
-    EXPLORE_TOOLS = {
-        "notes",
-        "read_note",
-        "emails",
-        "read_email",
-        "calendar",
-        "browser",
-        "recall",
-        "web_search",
-        "web_fetch",
-        "explore",
-        "current_time",
-    }
-
     async def execute(self, execution: ToolExecution, task: str, depth: str = "normal", **kwargs) -> ToolResult:
         ctx = execution.ctx
 
@@ -99,11 +85,11 @@ class ExploreTool(Tool):
             await ctx.ledger.register(execution.tool_id, task, depth)
 
         remaining = ctx.run.max_depth - ctx.run.current_depth - 1
-        tool_names = set(self.EXPLORE_TOOLS)
-        if depth == "quick" or remaining <= 1:
-            tool_names.discard("explore")
+        exclude = {"explore"} if depth == "quick" or remaining <= 1 else None
 
-        tools = ctx.registry.get_schemas(names=tool_names, capabilities=ctx.capabilities)
+        tools = ctx.registry.get_schemas(mutates=False, capabilities=ctx.capabilities)
+        if exclude:
+            tools = [t for t in tools if t["name"] not in exclude]
         prompt = await self._build_prompt(ctx, depth, remaining, execution.tool_id)
         timeout = DEPTH_TIMEOUTS[depth]
 
