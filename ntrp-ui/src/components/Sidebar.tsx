@@ -169,10 +169,24 @@ function SessionRow({ session, isCurrent, glowColor, width }: { session: { sessi
   );
 }
 
-function getGlowColor(state: SessionNotification | undefined, accentValue: string, pulse: boolean): string | undefined {
+function parseHex(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+function lerpColor(a: string, b: string, t: number): string {
+  const [ar, ag, ab] = parseHex(a);
+  const [br, bg, bb] = parseHex(b);
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${bl.toString(16).padStart(2, "0")}`;
+}
+
+function getGlowColor(state: SessionNotification | undefined, streamingColor: string): string | undefined {
   if (!state) return undefined;
   switch (state) {
-    case "streaming": return pulse ? accentValue : D;
+    case "streaming": return streamingColor;
     case "done": return colors.status.success;
     case "approval": return colors.status.warning;
     case "error": return colors.status.error;
@@ -187,12 +201,17 @@ export function Sidebar({ serverConfig, serverVersion, serverUrl, data, usage, w
     sessionStates ? [...sessionStates.values()].includes("streaming") : false,
   [sessionStates]);
 
-  const [pulse, setPulse] = useState(true);
+  const [phase, setPhase] = useState(0);
   useEffect(() => {
-    if (!hasStreaming) { setPulse(true); return; }
-    const id = setInterval(() => setPulse(p => !p), 800);
+    if (!hasStreaming) { setPhase(0); return; }
+    const id = setInterval(() => setPhase(p => (p + 1) % 60), 50);
     return () => clearInterval(id);
   }, [hasStreaming]);
+
+  // Smooth sine wave pulse: 0 = dim, 1 = accent
+  const t = hasStreaming ? (Math.sin(phase * Math.PI * 2 / 60) + 1) / 2 : 1;
+  const dimColor = colors.text.disabled;
+  const streamingColor = hasStreaming ? lerpColor(dimColor, accentValue, t) : accentValue;
 
   const MAX_SESSIONS = 5;
   const visibleSessions = data.sessions.slice(0, MAX_SESSIONS);
@@ -316,7 +335,7 @@ export function Sidebar({ serverConfig, serverVersion, serverUrl, data, usage, w
               key={s.session_id}
               session={s}
               isCurrent={s.session_id === currentSessionId}
-              glowColor={getGlowColor(sessionStates?.get(s.session_id), accentValue, pulse)}
+              glowColor={getGlowColor(sessionStates?.get(s.session_id), streamingColor)}
               width={contentWidth}
             />
           ))}
