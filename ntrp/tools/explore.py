@@ -89,7 +89,7 @@ class ExploreTool(Tool):
 
         tools = ctx.registry.get_schemas(mutates=False, capabilities=ctx.capabilities)
         if exclude:
-            tools = [t for t in tools if t["name"] not in exclude]
+            tools = [t for t in tools if t["function"]["name"] not in exclude]
         prompt = await self._build_prompt(ctx, depth, remaining, execution.tool_id)
         timeout = DEPTH_TIMEOUTS[depth]
 
