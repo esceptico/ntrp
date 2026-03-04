@@ -45,7 +45,7 @@ def _refresh_token(refresh_token: str) -> dict:
         "client_id": CLIENT_ID,
         "refresh_token": refresh_token,
     }
-    resp = httpx.post(TOKEN_URL, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    resp = httpx.post(TOKEN_URL, json=data)
     resp.raise_for_status()
     return resp.json()
 
@@ -173,7 +173,7 @@ def login() -> dict:
         "code_verifier": verifier,
         "redirect_uri": redirect_uri,
     }
-    resp = httpx.post(TOKEN_URL, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    resp = httpx.post(TOKEN_URL, json=data)
     if resp.status_code != 200:
         _logger.error("Token exchange failed (%d): %s", resp.status_code, resp.text)
         try:
