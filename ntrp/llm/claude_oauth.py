@@ -21,7 +21,7 @@ _logger = get_logger(__name__)
 CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 AUTH_URL = "https://claude.ai/oauth/authorize"
 TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
-SCOPES = "user:profile user:inference user:sessions:claude_code user:mcp_servers"
+SCOPES = "user:profile user:inference"
 
 REFRESH_BUFFER = 300  # refresh 5min before expiry
 
@@ -135,7 +135,6 @@ def login() -> dict:
     redirect_uri = f"http://localhost:{port}/callback"
 
     params = {
-        "code": "true",
         "client_id": CLIENT_ID,
         "response_type": "code",
         "redirect_uri": redirect_uri,
