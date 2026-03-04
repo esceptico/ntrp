@@ -30,7 +30,7 @@ DAY_KEYWORDS: dict[str, frozenset[int]] = {
 }
 VALID_DAY_SPECS = frozenset((*DAY_KEYWORDS.keys(), "weekly"))
 
-_INTERVAL_RE = re.compile(r"^(?:(\d+)h)?(?:(\d+)m)?$")
+_INTERVAL_RE = re.compile(r"^(?:(\d+)h)?(?:(\d+)m?)?$")
 _TIME_RE = re.compile(r"^(\d{1,2}):(\d{2})$")
 
 
