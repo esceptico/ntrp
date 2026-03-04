@@ -6,18 +6,20 @@ from pydantic import ValidationError
 
 from ntrp.config import PROVIDER_KEY_FIELDS, SERVICE_KEY_FIELDS, mask_api_key
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
-from ntrp.llm.claude_oauth import clear as clear_oauth
 from ntrp.llm.claude_oauth import is_configured as oauth_configured
 from ntrp.llm.claude_oauth import login as oauth_login
 from ntrp.llm.models import (
+    OAUTH_PREFIX,
     Provider,
     add_custom_model,
     get_embedding_models_by_provider,
     get_model,
     get_models_by_provider,
+    is_oauth_model,
     list_embedding_models,
     list_models,
     remove_custom_model,
+    strip_oauth_prefix,
 )
 from ntrp.llm.models import (
     get_embedding_models as get_embedding_models_fn,
@@ -64,14 +66,11 @@ def _config_response(rt: Runtime) -> dict:
     has_google = rt.source_mgr.has_google_auth()
     memory_connected = rt.memory is not None
 
-    anthropic_auth = "oauth" if oauth_configured() else ("api_key" if config.anthropic_api_key else None)
-
     return {
         "chat_model": config.chat_model,
         "explore_model": config.explore_model,
         "memory_model": config.memory_model,
         "embedding_model": config.embedding_model,
-        "anthropic_auth": anthropic_auth,
         "vault_path": config.vault_path,
         "browser": config.browser,
         "gmail_enabled": config.gmail,
@@ -237,13 +236,20 @@ async def get_models(runtime: Runtime = Depends(get_runtime)):
     all_models = get_models_fn()
     groups: dict[str, list[str]] = {}
     for mid, m in all_models.items():
-        groups.setdefault(m.provider.value, []).append(mid)
+        provider_key = m.provider.value
+        groups.setdefault(provider_key, []).append(mid)
+
+    # Add Claude Pro/Max group when OAuth is configured
+    config = runtime.config
+    if oauth_configured() and Provider.ANTHROPIC.value in groups:
+        groups["claude_oauth"] = [f"{OAUTH_PREFIX}{mid}" for mid in groups[Provider.ANTHROPIC.value]]
+
     return {
         "models": list_models(),
         "groups": [{"provider": p, "models": ms} for p, ms in groups.items()],
-        "chat_model": runtime.config.chat_model,
-        "explore_model": runtime.config.explore_model,
-        "memory_model": runtime.config.memory_model,
+        "chat_model": config.chat_model,
+        "explore_model": config.explore_model,
+        "memory_model": config.memory_model,
     }
 
 
@@ -286,21 +292,25 @@ async def get_providers(runtime: Runtime = Depends(get_runtime)):
         models = get_models_by_provider(meta["provider"])
         embedding_models = get_embedding_models_by_provider(meta["provider"])
 
-        has_oauth = pid == "anthropic" and oauth_configured()
-        connected = bool(key) or has_oauth
-
-        entry = {
+        providers.append({
             "id": pid,
             "name": meta["name"],
-            "connected": connected,
+            "connected": bool(key),
             "key_hint": mask_api_key(key),
             "from_env": from_env,
             "models": list(models.keys()),
             "embedding_models": list(embedding_models.keys()),
-        }
-        if pid == "anthropic":
-            entry["auth_method"] = "oauth" if has_oauth else ("api_key" if key else None)
-        providers.append(entry)
+        })
+
+    # Claude Pro/Max (OAuth) — separate provider
+    if oauth_configured():
+        anthropic_models = get_models_by_provider(Provider.ANTHROPIC)
+        providers.append({
+            "id": "claude_oauth",
+            "name": "Claude Pro/Max",
+            "connected": True,
+            "models": list(anthropic_models.keys()),
+        })
 
     # Custom models entry
     custom_models = get_models_by_provider(Provider.CUSTOM)
@@ -348,18 +358,9 @@ async def connect_anthropic_oauth(
     try:
         await asyncio.to_thread(oauth_login)
         await runtime.reload_config()
-        return {"status": "connected", "provider": "anthropic", "auth_method": "oauth"}
+        return {"status": "connected", "provider": "anthropic"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.delete("/providers/anthropic/oauth")
-async def disconnect_anthropic_oauth(
-    runtime: Runtime = Depends(get_runtime),
-):
-    clear_oauth()
-    await runtime.reload_config()
-    return {"status": "disconnected", "provider": "anthropic"}
 
 
 @router.delete("/providers/{provider_id}")

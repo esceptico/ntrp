@@ -7,7 +7,7 @@ import { TextInputField } from "./ui/input/TextInputField.js";
 import { getProviders, connectProvider, connectProviderOAuth, updateConfig, addCustomModel, type ProviderInfo } from "../api/client.js";
 import type { Config } from "../types.js";
 
-type Step = "providers" | "authMethod" | "apiKey" | "modelSelect" | "customModel";
+type Step = "providers" | "apiKey" | "modelSelect" | "customModel";
 
 interface CustomPreset {
   name: string;
@@ -98,7 +98,7 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
 
   // --- Handlers ---
 
-  const handleSelectProvider = useCallback((providerId: string) => {
+  const handleSelectProvider = useCallback(async (providerId: string) => {
     const provider = providers.find(p => p.id === providerId);
     if (!provider) return;
 
@@ -122,8 +122,28 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
     setSelectedProvider(provider);
     setError(null);
 
-    if (provider.id === "anthropic") {
-      setStep("authMethod");
+    if (provider.id === "claude_oauth") {
+      if (provider.connected) {
+        showModels(provider);
+      } else {
+        // Run OAuth flow
+        setSaving(true);
+        try {
+          await connectProviderOAuth(config, "anthropic");
+          const fresh = await refreshProviders();
+          const updated = fresh.find(p => p.id === "claude_oauth");
+          if (!updated) {
+            setError("OAuth connected but provider not found — try again");
+            return;
+          }
+          setSelectedProvider(updated);
+          showModels(updated);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "OAuth failed");
+        } finally {
+          setSaving(false);
+        }
+      }
     } else if (provider.connected) {
       showModels(provider);
     } else {
@@ -131,42 +151,7 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
       setApiKeyCursor(0);
       setStep("apiKey");
     }
-  }, [providers, showModels]);
-
-  const handleSelectAuthMethod = useCallback(async (method: string) => {
-    // Already connected with this method — just show models
-    if (method === selectedProvider?.auth_method) {
-      showModels(selectedProvider);
-      return;
-    }
-
-    if (method === "oauth") {
-      setSaving(true);
-      setError(null);
-      try {
-        await connectProviderOAuth(config, "anthropic");
-        const fresh = await refreshProviders();
-        const provider = fresh.find(p => p.id === "anthropic") ?? null;
-        setSelectedProvider(provider);
-        if (hasConnected) {
-          setStep("providers");
-        } else {
-          showModels(provider);
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "OAuth failed");
-        setStep("authMethod");
-      } finally {
-        setSaving(false);
-      }
-      return;
-    }
-
-    // API key flow
-    setApiKeyValue("");
-    setApiKeyCursor(0);
-    setStep("apiKey");
-  }, [config, selectedProvider, hasConnected, refreshProviders, showModels]);
+  }, [providers, config, refreshProviders, showModels]);
 
   const handleSubmitApiKey = useCallback(async () => {
     const key = apiKeyValue.trim();
@@ -190,10 +175,11 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
   }, [apiKeyValue, selectedProvider, hasConnected, config, refreshProviders, showModels]);
 
   const handleSelectModel = useCallback(async (model: string) => {
+    const modelId = selectedProvider?.id === "claude_oauth" ? `oauth:${model}` : model;
     setSaving(true);
     setError(null);
     try {
-      await updateConfig(config, { chat_model: model });
+      await updateConfig(config, { chat_model: modelId });
       await refreshProviders();
       if (!closable) {
         onDone();
@@ -205,7 +191,7 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
     } finally {
       setSaving(false);
     }
-  }, [config, refreshProviders, closable, onDone]);
+  }, [config, selectedProvider, refreshProviders, closable, onDone]);
 
   const handleSubmitCustomModel = useCallback(async () => {
     const id = modelId.trim();
@@ -323,9 +309,11 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
   );
 
   const renderProviderList = () => {
-    const subtitle = hasConnected
-      ? "Add another provider or press esc to start"
-      : "Connect an LLM provider to get started";
+    const subtitle = closable
+      ? "Manage providers and API keys"
+      : hasConnected
+        ? "Add another provider or press esc to start"
+        : "Connect an LLM provider to get started";
 
     const providerOptions: SelectOption[] = providers.map(p => {
       let description = "";
@@ -358,7 +346,7 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
         {({ height }) => (
           <SelectList
             options={providerOptions}
-            visibleLines={Math.min(8, height)}
+            visibleLines={height}
             isActive={step === "providers" && !saving}
             onSelect={(opt) => handleSelectProvider(opt.value)}
             onClose={providerClose}
@@ -392,35 +380,6 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
               );
             }}
           />
-        )}
-      </Dialog>
-    );
-  };
-
-  const renderAuthMethodStep = () => {
-    const currentMethod = selectedProvider?.auth_method;
-    const options: SelectOption[] = [
-      { value: "oauth", title: "Claude Pro/Max", description: currentMethod === "oauth" ? "\u2713 connected" : "uses your subscription" },
-      { value: "api_key", title: "API Key", description: currentMethod === "api_key" ? "\u2713 connected" : "pay-per-use" },
-    ];
-
-    const footer = saving
-      ? <text><span fg={colors.text.muted}>Connecting... (check your browser)</span></text>
-      : <Hints items={[["enter", "select"], ["esc", "back"]]} />;
-
-    return (
-      <Dialog title="ANTHROPIC" size="medium" onClose={() => setStep("providers")} closable footer={footer}>
-        {({ height }) => (
-          <box flexDirection="column">
-            <SelectList
-              options={options}
-              visibleLines={Math.min(4, height)}
-              isActive={step === "authMethod" && !saving}
-              onSelect={(opt) => handleSelectAuthMethod(opt.value)}
-              onClose={() => setStep("providers")}
-            />
-            {renderError()}
-          </box>
         )}
       </Dialog>
     );
@@ -470,7 +429,7 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
           <box flexDirection="column">
             <SelectList
               options={modelOptions}
-              visibleLines={Math.min(8, height)}
+              visibleLines={height}
               isActive={step === "modelSelect" && !saving}
               onSelect={(opt) => handleSelectModel(opt.value)}
               onClose={() => setStep("providers")}
@@ -558,7 +517,6 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
   };
 
   if (step === "providers") return renderProviderList();
-  if (step === "authMethod") return renderAuthMethodStep();
   if (step === "apiKey") return renderApiKeyStep();
   if (step === "modelSelect") return renderModelSelect();
   if (step === "customModel") return renderCustomModelForm();

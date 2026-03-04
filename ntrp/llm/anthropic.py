@@ -4,7 +4,7 @@ import anthropic
 from pydantic import BaseModel
 
 from ntrp.llm.base import CompletionClient
-from ntrp.llm.models import get_model
+from ntrp.llm.models import get_model, strip_oauth_prefix
 from ntrp.llm.types import (
     Choice,
     CompletionResponse,
@@ -44,6 +44,7 @@ class AnthropicClient(CompletionClient):
         response_format: type[BaseModel] | None = None,
         **kwargs,
     ) -> CompletionResponse:
+        model = strip_oauth_prefix(model)
         if max_tokens is None:
             max_tokens = get_model(model).max_output_tokens
 

@@ -194,8 +194,11 @@ class Config(BaseSettings):
     def _validate_model(cls, v: str | None) -> str | None:
         if v is None:
             return v
+        from ntrp.llm.models import strip_oauth_prefix
+
+        raw = strip_oauth_prefix(v)
         models = get_models()
-        if v not in models:
+        if raw not in models:
             raise ValueError(f"Unknown model: {v}. Available: {', '.join(models)}")
         return v
 

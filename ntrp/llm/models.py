@@ -168,10 +168,22 @@ def load_custom_models() -> None:
         _logger.info("Registered custom embedding model: %s (base_url=%s)", model_id, emb.base_url)
 
 
+OAUTH_PREFIX = "oauth:"
+
+
+def strip_oauth_prefix(model_id: str) -> str:
+    return model_id.removeprefix(OAUTH_PREFIX)
+
+
+def is_oauth_model(model_id: str) -> bool:
+    return model_id.startswith(OAUTH_PREFIX)
+
+
 def get_model(model_id: str) -> Model:
-    if model_id not in _models:
-        raise ValueError(f"Unknown model: {model_id}. Available: {', '.join(_models)}")
-    return _models[model_id]
+    raw_id = strip_oauth_prefix(model_id)
+    if raw_id not in _models:
+        raise ValueError(f"Unknown model: {raw_id}. Available: {', '.join(_models)}")
+    return _models[raw_id]
 
 
 def get_embedding_model(model_id: str) -> EmbeddingModel:

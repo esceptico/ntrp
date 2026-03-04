@@ -18,33 +18,17 @@ export function Dialog({ title, size = "medium", closable = true, footer, childr
   useThemeVersion();
   const { width: W, height: H } = useDimensions();
 
-  let maxW: number;
-  let maxH: number;
-  switch (size) {
-    case "medium":
-      maxW = Math.min(60, W - 4);
-      maxH = Math.min(20, H - 6);
-      break;
-    case "large":
-      maxW = Math.min(80, W - 4);
-      maxH = Math.min(30, H - 4);
-      break;
-    case "full":
-      maxW = W - 8;
-      maxH = H - 4;
-      break;
-  }
-
-  const offsetY = Math.max(1, Math.floor((H - maxH) / 2));
-  const contentW = maxW - 4;
-  const contentMaxH = maxH - 3 - (footer ? 1 : 0);
+  const dialogW = size === "full" ? W - 8 : size === "large" ? Math.min(80, W - 4) : Math.min(60, W - 4);
+  const contentW = dialogW - 4;
+  // Scrollbox height cap — matches OpenCode: min(content, terminal/2 - overhead)
+  const contentMaxH = Math.floor(H / 2) - 6;
 
   return (
     <box position="absolute" top={0} left={0} width={W} height={H} backgroundColor={OVERLAY_BG}>
-      <box alignItems="center" paddingTop={offsetY}>
+      <box alignItems="center" paddingTop={Math.floor(H / 4)}>
         <box
-          maxWidth={maxW}
-          maxHeight={maxH}
+          width={dialogW}
+          maxWidth={W - 2}
           backgroundColor={colors.background.element}
           border
           borderStyle="rounded"
@@ -54,7 +38,7 @@ export function Dialog({ title, size = "medium", closable = true, footer, childr
             <text><span fg={colors.text.primary}><strong>{title}</strong></span></text>
             {closable && <text><span fg={colors.text.muted}>esc</span></text>}
           </box>
-          <box flexGrow={1} overflow="hidden" paddingX={1} maxHeight={contentMaxH}>
+          <box paddingX={1}>
             {children({ width: contentW, height: contentMaxH })}
           </box>
           {footer && (

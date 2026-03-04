@@ -3,7 +3,7 @@ import hashlib
 from ntrp.llm.anthropic import AnthropicClient
 from ntrp.llm.base import CompletionClient, EmbeddingClient
 from ntrp.llm.gemini import GeminiClient
-from ntrp.llm.models import Provider, get_embedding_model, get_embedding_models, get_model, get_models
+from ntrp.llm.models import Provider, get_embedding_model, get_embedding_models, get_model, get_models, is_oauth_model
 from ntrp.llm.openai import OpenAIClient
 
 _completion_clients: dict[str, CompletionClient] = {}
@@ -20,7 +20,6 @@ def init(config) -> None:
     _api_keys[Provider.OPENAI] = config.openai_api_key
     _api_keys[Provider.GOOGLE] = config.gemini_api_key
 
-    # Load stored custom model keys (direct API keys from onboarding)
     from ntrp.config import load_user_settings
 
     settings = load_user_settings()
@@ -41,32 +40,40 @@ def _token_fingerprint(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()[:16]
 
 
-def _get_anthropic_client() -> AnthropicClient:
+def _get_anthropic_oauth_client() -> AnthropicClient:
     global _last_oauth_fingerprint
 
     from ntrp.llm.claude_oauth import get_access_token
 
     token = get_access_token()
-    if token:
-        fp = _token_fingerprint(token)
-        if fp == _last_oauth_fingerprint and "anthropic" in _completion_clients:
-            return _completion_clients["anthropic"]  # type: ignore[return-value]
-        _last_oauth_fingerprint = fp
-        client = AnthropicClient(auth_token=token)
-    else:
-        _last_oauth_fingerprint = None
-        client = AnthropicClient(api_key=_api_keys.get(Provider.ANTHROPIC))
+    if not token:
+        raise ValueError("Claude OAuth not configured — connect via Claude Pro/Max provider")
 
-    if old := _completion_clients.get("anthropic"):
+    fp = _token_fingerprint(token)
+    if fp == _last_oauth_fingerprint and "anthropic_oauth" in _completion_clients:
+        return _completion_clients["anthropic_oauth"]  # type: ignore[return-value]
+    _last_oauth_fingerprint = fp
+    client = AnthropicClient(auth_token=token)
+
+    if old := _completion_clients.get("anthropic_oauth"):
         _stale_clients.append(old)
-    _completion_clients["anthropic"] = client
+    _completion_clients["anthropic_oauth"] = client
     return client
+
+
+def _get_anthropic_apikey_client() -> AnthropicClient:
+    if "anthropic" not in _completion_clients:
+        client = AnthropicClient(api_key=_api_keys.get(Provider.ANTHROPIC))
+        _completion_clients["anthropic"] = client
+    return _completion_clients["anthropic"]  # type: ignore[return-value]
 
 
 def get_completion_client(model_id: str) -> CompletionClient:
     model = get_model(model_id)
     if model.provider == Provider.ANTHROPIC:
-        return _get_anthropic_client()
+        if is_oauth_model(model_id):
+            return _get_anthropic_oauth_client()
+        return _get_anthropic_apikey_client()
 
     cache_key = model.id if model.provider == Provider.CUSTOM else (model.base_url or model.provider.value)
     if cache_key not in _completion_clients:

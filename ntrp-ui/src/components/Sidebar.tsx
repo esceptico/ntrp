@@ -192,23 +192,19 @@ export function Sidebar({ serverConfig, serverVersion, serverUrl, data, usage, w
       {serverConfig && (
         <box flexDirection="column">
           <SectionHeader label="MODELS" />
-          <text>
-            <span fg={D}>chat </span>
-            <span fg={S}>{truncateText(formatModel(serverConfig.chat_model), contentWidth - 5)}</span>
-            {serverConfig.anthropic_auth === "oauth" && serverConfig.chat_model?.startsWith("claude") && <span fg={D}> oauth</span>}
-          </text>
-          <text>
-            <span fg={D}>expl </span>
-            <span fg={S}>{truncateText(formatModel(serverConfig.explore_model), contentWidth - 5)}</span>
-          </text>
-          <text>
-            <span fg={D}>mem  </span>
-            <span fg={S}>{truncateText(formatModel(serverConfig.memory_model), contentWidth - 5)}</span>
-          </text>
-          <text>
-            <span fg={D}>emb  </span>
-            <span fg={S}>{truncateText(formatModel(serverConfig.embedding_model), contentWidth - 5)}</span>
-          </text>
+          {(["chat", "expl", "mem", "emb"] as const).map((label) => {
+            const key = { chat: "chat_model", expl: "explore_model", mem: "memory_model", emb: "embedding_model" }[label] as keyof typeof serverConfig;
+            const raw = (serverConfig[key] as string) ?? "";
+            const isOAuth = raw.startsWith("oauth:");
+            const display = formatModel(isOAuth ? raw.slice(6) : raw);
+            return (
+              <text key={label}>
+                <span fg={D}>{label.padEnd(5)}</span>
+                <span fg={S}>{truncateText(display, contentWidth - 5 - (isOAuth ? 4 : 0))}</span>
+                {isOAuth && <span fg={D}> sub</span>}
+              </text>
+            );
+          })}
         </box>
       )}
 

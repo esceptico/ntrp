@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import { useScrollOffset } from "../../hooks/useScrollOffset.js";
+import type { ScrollBoxRenderable } from "@opentui/core";
 import { useKeypress, useAccentColor, type Key } from "../../hooks/index.js";
 import { colors, useThemeVersion } from "./colors.js";
 import { Dialog } from "./Dialog.js";
@@ -138,9 +138,35 @@ export function SelectList<T = string>({
     }
   }, [selectedIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Scroll calculation: map selectedIdx to entry index for scroll offset
   const selectedEntryIdx = selectableIndices[selectedIdx] ?? 0;
-  const { scrollOffset } = useScrollOffset(selectedEntryIdx, entries.length, visibleLines);
+  const scrollRef = useRef<ScrollBoxRenderable | null>(null);
+
+  // Reset scroll position when filter changes (matching OpenCode)
+  useEffect(() => {
+    setTimeout(() => {
+      const scroll = scrollRef.current;
+      if (!scroll) return;
+      scroll.scrollTo(0);
+    }, 0);
+  }, [query]);
+
+  // Scroll selected item into view (matching OpenCode's moveTo)
+  useEffect(() => {
+    setTimeout(() => {
+      const scroll = scrollRef.current;
+      if (!scroll) return;
+      const target = scroll.getChildren().find((child) => child.id === `entry-${selectedEntryIdx}`);
+      if (!target) return;
+      const y = target.y - scroll.y;
+      if (y >= scroll.height) {
+        scroll.scrollBy(y - scroll.height + 1);
+      }
+      if (y < 0) {
+        scroll.scrollBy(y);
+        if (selectedIdx === 0) scroll.scrollTo(0);
+      }
+    }, 0);
+  }, [selectedEntryIdx, selectedIdx]);
 
   const handleKeypress = useCallback((key: Key) => {
     // Custom keybinds first
@@ -185,39 +211,43 @@ export function SelectList<T = string>({
 
   useKeypress(handleKeypress, { isActive });
 
-  // Render
-  const visible = entries.slice(scrollOffset, scrollOffset + visibleLines);
-
   return (
     <box flexDirection="column" width={width}>
       {search && (
-        <box flexDirection="row">
-          <text><span fg={colors.text.muted}>/ </span></text>
-          <input
-            value={query}
-            onInput={(value: string) => { setQuery(value); setSelectedIdx(0); }}
-            focused={isActive}
-            textColor={colors.text.primary}
-            focusedTextColor={colors.text.primary}
-            cursorColor={accentValue}
-            placeholder={searchPlaceholder}
-            placeholderColor={colors.text.disabled}
-            width={Math.max(10, (width ?? 40) - 4)}
-          />
-        </box>
+        <input
+          value={query}
+          onInput={(value: string) => { setQuery(value); setSelectedIdx(0); }}
+          focused={isActive}
+          textColor={colors.text.primary}
+          focusedTextColor={colors.text.primary}
+          cursorColor={accentValue}
+          placeholder={searchPlaceholder}
+          placeholderColor={colors.text.disabled}
+          width={Math.max(10, (width ?? 40) - 2)}
+        />
       )}
 
-      <box flexDirection="column" marginTop={search ? 1 : 0}>
-        {totalSelectable === 0 ? (
+      {totalSelectable === 0 ? (
+        <box>
           <text><span fg={colors.text.muted}>  {emptyMessage}</span></text>
-        ) : (
-          visible.map((entry, vi) => {
-            const actualIdx = scrollOffset + vi;
-
+        </box>
+      ) : (
+        <scrollbox
+          key={query ? "flat" : "grouped"}
+          maxHeight={visibleLines - (search ? 1 : 0)}
+          verticalScrollbarOptions={{
+            visible: true,
+            trackOptions: {
+              backgroundColor: colors.background.element,
+              foregroundColor: colors.border,
+            },
+          }}
+          ref={(r: ScrollBoxRenderable) => { scrollRef.current = r; }}
+        >
+          {entries.map((entry, actualIdx) => {
             if (entry.type === "header") {
-              const isFirst = actualIdx === 0;
               return (
-                <box key={`h-${entry.category}`} paddingTop={isFirst ? 0 : 1}>
+                <box key={`h-${entry.category}`} id={`entry-${actualIdx}`} paddingTop={actualIdx === 0 ? 0 : 1}>
                   <text>
                     <span fg={accentValue}><strong>   {entry.category}</strong></span>
                   </text>
@@ -238,7 +268,7 @@ export function SelectList<T = string>({
                 },
               };
               return (
-                <box key={String(option.value)} flexDirection="row">
+                <box key={String(option.value)} id={`entry-${actualIdx}`} flexDirection="row">
                   <box width={2} flexShrink={0}>
                     <text>
                       <span fg={isSelected ? colors.selection.active : colors.text.disabled}>
@@ -251,10 +281,10 @@ export function SelectList<T = string>({
               );
             }
 
-            // Default rendering: indicator + title + description
             return (
               <box
                 key={String(option.value)}
+                id={`entry-${actualIdx}`}
                 flexDirection="row"
                 backgroundColor={isSelected ? accentValue : undefined}
               >
@@ -273,9 +303,9 @@ export function SelectList<T = string>({
                 </text>
               </box>
             );
-          })
-        )}
-      </box>
+          })}
+        </scrollbox>
+      )}
     </box>
   );
 }
