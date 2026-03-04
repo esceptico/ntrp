@@ -237,11 +237,13 @@ export function SettingsDialog({
       await addGoogleAccount(config);
       const accounts = await getGoogleAccounts(config);
       setGoogleAccounts(accounts.accounts);
+      const updatedConfig = await getServerConfig(config);
+      onServerConfigChange(updatedConfig);
     } catch {
     } finally {
       setActionInProgress(null);
     }
-  }, [config, actionInProgress]);
+  }, [config, actionInProgress, onServerConfigChange]);
 
   const handleRemoveGoogle = useCallback(async () => {
     if (actionInProgress || googleAccounts.length === 0) return;
@@ -254,11 +256,13 @@ export function SettingsDialog({
       const accounts = await getGoogleAccounts(config);
       setGoogleAccounts(accounts.accounts);
       setSelectedGoogleIndex(Math.max(0, selectedGoogleIndex - 1));
+      const updatedConfig = await getServerConfig(config);
+      onServerConfigChange(updatedConfig);
     } catch {
     } finally {
       setActionInProgress(null);
     }
-  }, [config, googleAccounts, selectedGoogleIndex, actionInProgress]);
+  }, [config, googleAccounts, selectedGoogleIndex, actionInProgress, onServerConfigChange]);
 
   const { handleKey: handleServerUrlKey } = useTextInput({
     text: serverUrl,
