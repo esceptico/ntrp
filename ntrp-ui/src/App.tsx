@@ -321,15 +321,17 @@ function AppContent({
     const nextIdx = (currentIdx + 1) % sessions.length;
     const target = sessions[nextIdx];
     if (!target) return;
+
+    // Switch view immediately (cached state or empty)
+    switchToSession(target.session_id);
+    refreshSidebar();
+
+    // Fetch metadata + history in background
     const result = await switchSession(target.session_id);
     if (result) {
-      const historyMessages: Message[] = result.history.map((msg, i) => ({
-        id: `h-${i}`,
-        role: msg.role,
-        content: msg.content,
-      }));
-      switchToSession(target.session_id, historyMessages);
-      refreshSidebar();
+      switchToSession(target.session_id, result.history.map((msg, i) => ({
+        id: `h-${i}`, role: msg.role, content: msg.content,
+      })));
     }
   }, [sidebarData.sessions, sessionId, switchSession, switchToSession, refreshSidebar]);
 
