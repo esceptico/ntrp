@@ -1,7 +1,7 @@
 import React from "react";
 import { colors } from "./ui/colors.js";
 import { truncateText, formatAge } from "../lib/utils.js";
-import { useAccentColor } from "../hooks/index.js";
+import { useAccentColor, type SessionNotification } from "../hooks/index.js";
 import type { ServerConfig, Automation } from "../api/client.js";
 import type { SidebarData } from "../hooks/useSidebar.js";
 
@@ -24,6 +24,7 @@ interface SidebarProps {
   height: number;
   currentSessionId: string | null;
   currentSessionName: string | null;
+  sessionStates?: Map<string, SessionNotification>;
 }
 
 const H = colors.text.secondary; // header (brighter)
@@ -150,24 +151,35 @@ function AutomationRow({ automation, width }: { automation: Automation; width: n
   );
 }
 
-function SessionRow({ session, isCurrent, width }: { session: { session_id: string; name: string | null; message_count: number; last_activity: string }; isCurrent: boolean; width: number }) {
+function SessionRow({ session, isCurrent, glowColor, width }: { session: { session_id: string; name: string | null; message_count: number; last_activity: string }; isCurrent: boolean; glowColor?: string; width: number }) {
   const indicator = isCurrent ? "\u25B8 " : "  ";
   const label = session.name || session.session_id;
   const age = formatAge(session.last_activity);
   const suffix = ` ${age}`;
   const nameWidth = Math.max(4, width - indicator.length - suffix.length);
   const displayName = truncateText(label, nameWidth);
+  const nameColor = isCurrent ? H : glowColor ?? S;
 
   return (
     <text>
       <span fg={isCurrent ? H : D}>{indicator}</span>
-      <span fg={isCurrent ? H : S}>{displayName}</span>
+      <span fg={nameColor}>{displayName}</span>
       <span fg={D}>{suffix}</span>
     </text>
   );
 }
 
-export function Sidebar({ serverConfig, serverVersion, serverUrl, data, usage, width, height, currentSessionId, currentSessionName }: SidebarProps) {
+function getGlowColor(state: SessionNotification | undefined, accentValue: string): string | undefined {
+  if (!state) return undefined;
+  switch (state) {
+    case "streaming": return accentValue;
+    case "done": return colors.status.success;
+    case "approval": return colors.status.warning;
+    case "error": return colors.status.error;
+  }
+}
+
+export function Sidebar({ serverConfig, serverVersion, serverUrl, data, usage, width, height, currentSessionId, currentSessionName, sessionStates }: SidebarProps) {
   const { accentValue } = useAccentColor();
   const contentWidth = width - 2; // padding
 
@@ -293,6 +305,7 @@ export function Sidebar({ serverConfig, serverVersion, serverUrl, data, usage, w
               key={s.session_id}
               session={s}
               isCurrent={s.session_id === currentSessionId}
+              glowColor={getGlowColor(sessionStates?.get(s.session_id), accentValue)}
               width={contentWidth}
             />
           ))}

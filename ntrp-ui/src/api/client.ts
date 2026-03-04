@@ -5,7 +5,8 @@ export async function* streamChat(
   message: string,
   sessionId: string | null,
   config: Config,
-  skipApprovals: boolean = false
+  skipApprovals: boolean = false,
+  signal?: AbortSignal,
 ): AsyncGenerator<ServerEvent, void, unknown> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const apiKey = getApiKey();
@@ -15,6 +16,7 @@ export async function* streamChat(
     method: "POST",
     headers,
     body: JSON.stringify({ message, session_id: sessionId, skip_approvals: skipApprovals }),
+    signal,
   });
 
   if (!response.ok) {
@@ -53,6 +55,9 @@ export async function* streamChat(
       }
     }
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return;
+    }
     if (error instanceof TypeError && (error.message === "terminated" || error.message.includes("terminated"))) {
       const errorEvent: ServerEvent = { type: "error", message: "Connection to server was terminated unexpectedly", recoverable: false };
       yield errorEvent;

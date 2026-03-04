@@ -115,13 +115,15 @@ function AppContent({
     status,
     toolChain,
     pendingApproval,
+    sessionStates,
     addMessage,
     clearMessages,
     sendMessage,
     handleApproval,
     cancel,
     setStatus,
-    resetForSessionSwitch,
+    switchToSession,
+    deleteSessionState,
   } = streaming;
 
   const [copiedFlash, setCopiedFlash] = useState(false);
@@ -154,10 +156,10 @@ function AppContent({
   const startNewSession = useCallback(async () => {
     const newId = await createNewSession();
     if (newId) {
-      resetForSessionSwitch([]);
+      switchToSession(newId, []);
       refreshSidebar();
     }
-  }, [createNewSession, resetForSessionSwitch, refreshSidebar]);
+  }, [createNewSession, switchToSession, refreshSidebar]);
 
   const openDialog = useCallback((id: string) => {
     switch (id) {
@@ -172,7 +174,7 @@ function AppContent({
                 const historyMessages: Message[] = result.history.map((msg, i) => ({
                   id: `h-${i}`, role: msg.role, content: msg.content,
                 }));
-                resetForSessionSwitch(historyMessages);
+                switchToSession(targetId, historyMessages);
                 refreshSidebar();
               } else {
                 addMessage({ role: "error", content: "Failed to switch session" } as Message);
@@ -180,6 +182,7 @@ function AppContent({
             }}
             onDelete={async (targetId) => {
               try {
+                deleteSessionState(targetId);
                 await deleteSession(config, targetId);
                 if (targetId === sessionId) {
                   const { sessions } = await listSessions(config);
@@ -187,7 +190,7 @@ function AppContent({
                   if (next) {
                     const result = await switchSession(next.session_id);
                     if (result) {
-                      resetForSessionSwitch(result.history.map((msg, i) => ({
+                      switchToSession(next.session_id, result.history.map((msg, i) => ({
                         id: `h-${i}`, role: msg.role, content: msg.content,
                       })));
                     } else {
@@ -243,7 +246,7 @@ function AppContent({
         );
         break;
     }
-  }, [config, sessionId, serverConfig, settings.ui.theme, settings.ui.accentColor, dialog, switchSession, resetForSessionSwitch, refreshSidebar, addMessage, startNewSession, updateServerConfig, refreshIndexStatus, setThemeByName, updateSetting]);
+  }, [config, sessionId, serverConfig, settings.ui.theme, settings.ui.accentColor, dialog, switchSession, switchToSession, deleteSessionState, refreshSidebar, addMessage, startNewSession, updateServerConfig, refreshIndexStatus, setThemeByName, updateSetting]);
 
   const { handleCommand } = useCommands({
     config,
@@ -261,7 +264,7 @@ function AppContent({
     refreshIndexStatus,
     createNewSession,
     switchSession,
-    resetForSessionSwitch,
+    switchToSession,
     refreshSidebar,
     logout,
   });
@@ -277,7 +280,7 @@ function AppContent({
       if (!trimmed) return;
 
       if (trimmed.startsWith("/")) {
-        if (isStreaming || pendingApproval) return;
+        if (pendingApproval) return;
         const handled = await handleCommand(trimmed);
         if (handled) return;
         const cmdName = trimmed.slice(1).split(" ")[0];
@@ -325,10 +328,10 @@ function AppContent({
         role: msg.role,
         content: msg.content,
       }));
-      resetForSessionSwitch(historyMessages);
+      switchToSession(target.session_id, historyMessages);
       refreshSidebar();
     }
-  }, [sidebarData.sessions, sessionId, switchSession, resetForSessionSwitch, refreshSidebar]);
+  }, [sidebarData.sessions, sessionId, switchSession, switchToSession, refreshSidebar]);
 
   const tabPendingRef = useRef(false);
   const tabTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -342,14 +345,14 @@ function AppContent({
         setSidebarVisible(v => !v);
         return;
       }
-      if (key.ctrl && key.name === "n" && !isStreaming && viewMode === "chat" && !showSettings && !dialog.isOpen) {
+      if (key.ctrl && key.name === "n" && viewMode === "chat" && !showSettings && !dialog.isOpen) {
         startNewSession();
         return;
       }
       if (key.name === "escape" && isStreaming && !dialog.isOpen) {
         cancel();
       }
-      if (key.shift && key.name === "tab" && !showSettings && !isStreaming && viewMode === "chat") {
+      if (key.shift && key.name === "tab" && !showSettings && viewMode === "chat") {
         cycleSession();
         return;
       }
@@ -396,6 +399,7 @@ function AppContent({
             height={contentHeight}
             currentSessionId={sessionId}
             currentSessionName={sessionName}
+            sessionStates={sessionStates}
           />
           <box width={1} height={contentHeight} flexShrink={0} flexDirection="column">
             {Array.from({ length: contentHeight }).map((_, i) => (
