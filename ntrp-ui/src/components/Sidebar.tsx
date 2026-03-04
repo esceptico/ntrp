@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { colors } from "./ui/colors.js";
 import { truncateText, formatAge } from "../lib/utils.js";
 import { useAccentColor, type SessionNotification } from "../hooks/index.js";
@@ -169,10 +169,10 @@ function SessionRow({ session, isCurrent, glowColor, width }: { session: { sessi
   );
 }
 
-function getGlowColor(state: SessionNotification | undefined, accentValue: string): string | undefined {
+function getGlowColor(state: SessionNotification | undefined, accentValue: string, pulse: boolean): string | undefined {
   if (!state) return undefined;
   switch (state) {
-    case "streaming": return accentValue;
+    case "streaming": return pulse ? accentValue : D;
     case "done": return colors.status.success;
     case "approval": return colors.status.warning;
     case "error": return colors.status.error;
@@ -182,6 +182,17 @@ function getGlowColor(state: SessionNotification | undefined, accentValue: strin
 export function Sidebar({ serverConfig, serverVersion, serverUrl, data, usage, width, height, currentSessionId, currentSessionName, sessionStates }: SidebarProps) {
   const { accentValue } = useAccentColor();
   const contentWidth = width - 2; // padding
+
+  const hasStreaming = useMemo(() =>
+    sessionStates ? [...sessionStates.values()].includes("streaming") : false,
+  [sessionStates]);
+
+  const [pulse, setPulse] = useState(true);
+  useEffect(() => {
+    if (!hasStreaming) { setPulse(true); return; }
+    const id = setInterval(() => setPulse(p => !p), 800);
+    return () => clearInterval(id);
+  }, [hasStreaming]);
 
   const MAX_SESSIONS = 5;
   const visibleSessions = data.sessions.slice(0, MAX_SESSIONS);
@@ -305,7 +316,7 @@ export function Sidebar({ serverConfig, serverVersion, serverUrl, data, usage, w
               key={s.session_id}
               session={s}
               isCurrent={s.session_id === currentSessionId}
-              glowColor={getGlowColor(sessionStates?.get(s.session_id), accentValue)}
+              glowColor={getGlowColor(sessionStates?.get(s.session_id), accentValue, pulse)}
               width={contentWidth}
             />
           ))}
