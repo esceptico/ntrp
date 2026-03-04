@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 from ntrp.config import PERSIST_KEYS, PROVIDER_KEY_FIELDS, SERVICE_KEY_FIELDS, load_user_settings, save_user_settings
 from ntrp.llm.claude_oauth import clear as clear_oauth
-from ntrp.llm.models import OAUTH_PREFIX, Provider, get_models_by_provider, is_oauth_model
+from ntrp.llm.models import Provider, get_models_by_provider, is_oauth_model
 
 if TYPE_CHECKING:
     from ntrp.server.runtime import Runtime

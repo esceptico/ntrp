@@ -15,11 +15,9 @@ from ntrp.llm.models import (
     get_embedding_models_by_provider,
     get_model,
     get_models_by_provider,
-    is_oauth_model,
     list_embedding_models,
     list_models,
     remove_custom_model,
-    strip_oauth_prefix,
 )
 from ntrp.llm.models import (
     get_embedding_models as get_embedding_models_fn,
@@ -292,25 +290,29 @@ async def get_providers(runtime: Runtime = Depends(get_runtime)):
         models = get_models_by_provider(meta["provider"])
         embedding_models = get_embedding_models_by_provider(meta["provider"])
 
-        providers.append({
-            "id": pid,
-            "name": meta["name"],
-            "connected": bool(key),
-            "key_hint": mask_api_key(key),
-            "from_env": from_env,
-            "models": list(models.keys()),
-            "embedding_models": list(embedding_models.keys()),
-        })
+        providers.append(
+            {
+                "id": pid,
+                "name": meta["name"],
+                "connected": bool(key),
+                "key_hint": mask_api_key(key),
+                "from_env": from_env,
+                "models": list(models.keys()),
+                "embedding_models": list(embedding_models.keys()),
+            }
+        )
 
     # Claude Pro/Max (OAuth) — separate provider
     if oauth_configured():
         anthropic_models = get_models_by_provider(Provider.ANTHROPIC)
-        providers.append({
-            "id": "claude_oauth",
-            "name": "Claude Pro/Max",
-            "connected": True,
-            "models": list(anthropic_models.keys()),
-        })
+        providers.append(
+            {
+                "id": "claude_oauth",
+                "name": "Claude Pro/Max",
+                "connected": True,
+                "models": list(anthropic_models.keys()),
+            }
+        )
 
     # Custom models entry
     custom_models = get_models_by_provider(Provider.CUSTOM)
