@@ -32,9 +32,11 @@ async def gmail_accounts():
                 }
             )
         except Exception as e:
+            name = token_path.stem
+            email = name.removeprefix("gmail_token_") if name.startswith("gmail_token_") else None
             accounts.append(
                 {
-                    "email": None,
+                    "email": email,
                     "token_file": token_path.name,
                     "error": str(e),
                 }
