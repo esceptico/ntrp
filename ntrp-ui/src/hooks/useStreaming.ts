@@ -308,7 +308,10 @@ export function useStreaming({
       }
     }
 
-    syncView(targetId);
+    // text/question only update pendingText (not visible) — skip re-render
+    if (event.type !== "text" && event.type !== "question" && event.type !== "session_info") {
+      syncView(targetId);
+    }
   }, [addMessageToSession, syncView, updateSessionStates]);
 
   const sendMessage = useCallback(async (message: string) => {

@@ -187,7 +187,7 @@ function getGlowColor(state: SessionNotification | undefined, streamingColor: st
   if (!state) return undefined;
   switch (state) {
     case "streaming": return streamingColor;
-    case "done": return colors.status.success;
+    case "done": return streamingColor;
     case "approval": return colors.status.warning;
     case "error": return colors.status.error;
   }
