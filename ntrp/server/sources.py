@@ -25,7 +25,11 @@ class SourceManager:
 
     @property
     def errors(self) -> dict[str, str]:
-        return dict(self._errors)
+        errors = dict(self._errors)
+        for name, source in self.sources.items():
+            if source.errors and name not in errors:
+                errors[name] = "; ".join(f"{k}: {v}" for k, v in source.errors.items())
+        return errors
 
     def get_details(self) -> dict[str, dict]:
         return {name: s.details for name, s in self.sources.items()}

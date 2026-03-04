@@ -79,14 +79,14 @@ function ContextBar({ total, limit, width }: { total: number | null; limit: numb
   );
 }
 
-interface SourceEntry { key: string; label: string; on: boolean }
+interface SourceEntry { key: string; label: string; on: boolean; error?: boolean }
 
 function getSourceEntries(cfg: ServerConfig): SourceEntry[] {
   const sources = cfg.sources;
   return [
     { key: "vault", label: "notes", on: !!cfg.has_notes },
-    { key: "gmail", label: "gmail", on: !!sources?.gmail?.enabled && !!sources?.gmail?.connected },
-    { key: "calendar", label: "cal", on: !!sources?.calendar?.enabled && !!sources?.calendar?.connected },
+    { key: "gmail", label: "gmail", on: !!sources?.gmail?.enabled && !!sources?.gmail?.connected, error: !!sources?.gmail?.error },
+    { key: "calendar", label: "cal", on: !!sources?.calendar?.enabled && !!sources?.calendar?.connected, error: !!sources?.calendar?.error },
     { key: "browser", label: "browser", on: !!cfg.has_browser },
     { key: "memory", label: "memory", on: !!sources?.memory?.enabled },
     { key: "web", label: "web", on: !!sources?.web?.connected },
@@ -97,12 +97,15 @@ function SourcesList({ cfg }: { cfg: ServerConfig }) {
   const entries = getSourceEntries(cfg);
   return (
     <box flexDirection="column">
-      {entries.map(({ key, label, on }) => (
-        <text key={key}>
-          <span fg={on ? S : D}>{on ? "\u2022" : "\u00B7"}</span>
-          <span fg={on ? S : D}> {label}</span>
-        </text>
-      ))}
+      {entries.map(({ key, label, on, error }) => {
+        const color = error ? colors.status.error : on ? S : D;
+        return (
+          <text key={key}>
+            <span fg={color}>{error ? "!" : on ? "\u2022" : "\u00B7"}</span>
+            <span fg={color}> {label}</span>
+          </text>
+        );
+      })}
     </box>
   );
 }

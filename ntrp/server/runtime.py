@@ -298,6 +298,13 @@ class Runtime:
 
         self.monitor.start()
 
+    async def restart_monitor(self) -> None:
+        if self.monitor_store is None:
+            return
+        if self.monitor:
+            await self.monitor.stop()
+        self.start_monitor()
+
     def start_consolidation(self) -> None:
         if self.memory:
             self.memory.start_consolidation()

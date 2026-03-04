@@ -1,6 +1,8 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 
+from google.auth.exceptions import RefreshError
+
 from ntrp.channel import Channel
 from ntrp.constants import (
     MONITOR_CALENDAR_DAYS,
@@ -12,6 +14,7 @@ from ntrp.events.triggers import EventApproaching
 from ntrp.logging import get_logger
 from ntrp.monitor.store import MonitorStateStore
 from ntrp.sources.base import CalendarSource
+from ntrp.sources.google.calendar import MultiCalendarSource
 
 _logger = get_logger(__name__)
 
@@ -47,11 +50,23 @@ class CalendarMonitor:
 
     async def _loop(self) -> None:
         while True:
-            events = await asyncio.to_thread(self._poll)
+            try:
+                events = await asyncio.to_thread(self._poll)
+            except RefreshError as e:
+                self._mark_auth_error(str(e))
+                _logger.warning("Calendar monitor stopped: Google token expired or revoked")
+                return
             if self._channel:
                 for event in events:
                     self._channel.publish(event)
             await asyncio.sleep(MONITOR_POLL_INTERVAL)
+
+    def _mark_auth_error(self, error: str) -> None:
+        if not isinstance(self._source, MultiCalendarSource):
+            return
+        for src in self._source.sources:
+            if src._creds and not src._creds.valid:
+                src.auth_error = error
 
     def _poll(self) -> list[EventApproaching]:
         now = datetime.now(UTC)
@@ -60,6 +75,8 @@ class CalendarMonitor:
 
         try:
             items = self._source.get_upcoming(days=MONITOR_CALENDAR_DAYS, limit=MONITOR_CALENDAR_LIMIT)
+        except RefreshError:
+            raise
         except (OSError, ValueError) as e:
             _logger.warning("Failed to fetch upcoming calendar events: %s", e)
             return events

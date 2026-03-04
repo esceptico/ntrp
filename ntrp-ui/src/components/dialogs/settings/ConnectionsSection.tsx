@@ -154,18 +154,21 @@ function HintRow({ item, editingVault, sourceEnabled }: { item: ConnectionItem; 
 function GoogleRow({ item, selectedItem, sources, accounts, accent }: {
   item: ConnectionItem;
   selectedItem: ConnectionItem;
-  sources?: Record<string, { enabled?: boolean; connected?: boolean }>;
+  sources?: Record<string, { enabled?: boolean; connected?: boolean; error?: string }>;
   accounts: GoogleAccount[];
   accent: string;
 }) {
   const source = sources?.[item];
   const hasTokens = accounts.length > 0;
   const selected = selectedItem === item;
+  const hasError = !!source?.error;
 
   return (
     <Row item={item} selected={selected} accent={accent}>
-      <Toggle enabled={source?.enabled} connected={hasTokens} accent={accent} />
-      {source?.enabled ? (
+      <Toggle enabled={source?.enabled} connected={hasTokens} error={hasError} accent={accent} />
+      {hasError ? (
+        <text><span fg={colors.status.error}>Auth expired — remove & re-add account</span></text>
+      ) : source?.enabled ? (
         hasTokens ? (
           <text>
             <span fg={colors.text.primary}>
@@ -225,10 +228,10 @@ function Row({ item, selected, accent, children }: {
   );
 }
 
-function Toggle({ enabled, connected, accent }: { enabled?: boolean; connected?: boolean; accent: string }) {
+function Toggle({ enabled, connected, error, accent }: { enabled?: boolean; connected?: boolean; error?: boolean; accent: string }) {
   if (!enabled) {
     return <text><span fg={colors.text.muted}>○ </span></text>;
   }
-  const color = connected !== false ? accent : colors.status.warning;
+  const color = error ? colors.status.error : connected !== false ? accent : colors.status.warning;
   return <text><span fg={color}>● </span></text>;
 }

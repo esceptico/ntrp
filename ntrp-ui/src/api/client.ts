@@ -233,6 +233,7 @@ export interface FactDetails {
 export interface SourceInfo {
   enabled?: boolean;
   connected: boolean;
+  error?: string;
   accounts?: string[];
   path?: string;
   type?: string;

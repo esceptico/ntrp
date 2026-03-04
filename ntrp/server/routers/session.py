@@ -77,8 +77,16 @@ def _config_response(rt: Runtime) -> dict:
         "max_depth": config.max_depth,
         "memory_enabled": memory_connected,
         "sources": {
-            "gmail": {"enabled": config.gmail, "connected": has_google},
-            "calendar": {"enabled": config.calendar, "connected": has_google},
+            "gmail": {
+                "enabled": config.gmail,
+                "connected": has_google,
+                **({"error": rt.source_mgr.errors["gmail"]} if "gmail" in rt.source_mgr.errors else {}),
+            },
+            "calendar": {
+                "enabled": config.calendar,
+                "connected": has_google,
+                **({"error": rt.source_mgr.errors["calendar"]} if "calendar" in rt.source_mgr.errors else {}),
+            },
             "memory": {"enabled": config.memory, "connected": memory_connected},
             "web": {"connected": "web" in rt.source_mgr.sources},
             "notes": {

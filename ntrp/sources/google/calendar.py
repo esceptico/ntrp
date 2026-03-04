@@ -102,6 +102,7 @@ class GoogleCalendar:
         self._creds = None
         self._events_cache: dict[str, dict] = {}
         self._email_address: str | None = None
+        self.auth_error: str | None = None
 
     def _has_calendar_scope(self) -> bool:
         if self._creds and self._creds.scopes:
@@ -385,7 +386,12 @@ class MultiCalendarSource(Source, CalendarSource):
 
     @property
     def errors(self) -> dict[str, str]:
-        return self._errors
+        errors = dict(self._errors)
+        for src in self.sources:
+            if src.auth_error:
+                key = src.get_email_address() or src.token_path.name
+                errors[key] = src.auth_error
+        return errors
 
     @property
     def details(self) -> dict:

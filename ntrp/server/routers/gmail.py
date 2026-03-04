@@ -55,6 +55,8 @@ async def gmail_add(runtime: Runtime = Depends(get_runtime)):
     try:
         email = await asyncio.to_thread(add_gmail_account)
         await runtime.source_mgr.reinit("gmail", runtime.config)
+        await runtime.source_mgr.reinit("calendar", runtime.config)
+        await runtime.restart_monitor()
 
         return {"email": email, "status": "connected"}
     except Exception as e:
@@ -83,6 +85,8 @@ async def gmail_remove(token_file: str, runtime: Runtime = Depends(get_runtime))
 
         token_path.unlink()
         await runtime.source_mgr.reinit("gmail", runtime.config)
+        await runtime.source_mgr.reinit("calendar", runtime.config)
+        await runtime.restart_monitor()
 
         return {"email": email, "status": "removed"}
     except Exception as e:
