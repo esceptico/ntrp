@@ -103,6 +103,26 @@ export function useConnections(
     }
   }, [config, serverConfig, actionInProgress, onServerConfigChange]);
 
+  const WEB_MODES = ["auto", "exa", "ddgs", "none"] as const;
+
+  const handleChangeWebSearch = useCallback(async (direction: 1 | -1) => {
+    if (!serverConfig) return;
+    const current = serverConfig.web_search ?? "auto";
+    const idx = WEB_MODES.indexOf(current);
+    const next = WEB_MODES[(idx + direction + WEB_MODES.length) % WEB_MODES.length];
+    setActionInProgress("Updating...");
+    try {
+      await updateConfig(config, { web_search: next });
+      const updatedConfig = await getServerConfig(config);
+      onServerConfigChange(updatedConfig);
+    } catch (err) {
+      setActionInProgress(err instanceof Error ? err.message : "Failed to update web search");
+      await new Promise(r => setTimeout(r, 1500));
+    } finally {
+      setActionInProgress(null);
+    }
+  }, [config, serverConfig, onServerConfigChange]);
+
   const handleSelectBrowser = useCallback(async (browser: string | null) => {
     setShowingBrowserDropdown(false);
     if (browser === serverConfig?.browser) return;
@@ -161,6 +181,10 @@ export function useConnections(
       } else if (TOGGLEABLE_SOURCES.includes(connectionItem)) {
         handleToggleSource(connectionItem);
       }
+    } else if ((key.name === "right" || key.name === "l") && connectionItem === "web") {
+      handleChangeWebSearch(1);
+    } else if ((key.name === "left" || key.name === "h") && connectionItem === "web") {
+      handleChangeWebSearch(-1);
     } else if (key.sequence === "a" && isGoogleSource && sourceEnabled) {
       handleAddGoogle();
     } else if ((key.sequence === "d" || key.name === "delete") && isGoogleSource && sourceEnabled) {
@@ -169,7 +193,7 @@ export function useConnections(
   }, [
     connectionItem, serverConfig, googleAccounts, selectedGoogleIndex,
     vault.editingVault, vault.handleCancelVaultEdit, vault.handleSaveVault, vault.handleVaultKey,
-    vault.handleStartVaultEdit, handleToggleSource, handleAddGoogle, handleRemoveGoogle,
+    vault.handleStartVaultEdit, handleToggleSource, handleChangeWebSearch, handleAddGoogle, handleRemoveGoogle,
   ]);
 
   return {

@@ -94,9 +94,11 @@ export function ConnectionsSection({ connections: c, serverConfig, accent, width
       {/* Web Search */}
       <Row item="web" selected={c.connectionItem === "web"} accent={accent}>
         <text>
+          {c.connectionItem === "web" && <span fg={colors.text.muted}>◂ </span>}
           <span fg={sources?.web?.connected ? colors.text.primary : colors.text.muted}>
             {formatWebSearchStatus(serverConfig)}
           </span>
+          {c.connectionItem === "web" && <span fg={colors.text.muted}> ▸</span>}
         </text>
       </Row>
       {/* Hints — always visible */}
@@ -124,7 +126,7 @@ function HintRow({ item, editingVault, sourceEnabled }: { item: ConnectionItem; 
     case "browser":
       return <Hints items={[["enter", "change browser"]]} />;
     case "web":
-      return <Hints items={[["enter", "cycle mode"]]} />;
+      return <Hints items={[["←→", "change mode"]]} />;
   }
 }
 

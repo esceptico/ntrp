@@ -3,8 +3,9 @@ from exa_py import Exa
 from ntrp.sources.base import Source, WebContentResult, WebSearchResult, WebSearchSource
 
 
-class WebSource(Source, WebSearchSource):
+class ExaWebSource(Source, WebSearchSource):
     name = "web"
+    provider = "exa"
 
     def __init__(self, api_key: str):
         if not api_key:

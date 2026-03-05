@@ -4,13 +4,7 @@ from urllib.error import URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-try:
-    from ddgs import DDGS
-except ImportError as e:
-    DDGS = None  # type: ignore[assignment]
-    _DDGS_IMPORT_ERROR = e
-else:
-    _DDGS_IMPORT_ERROR = None
+from ddgs import DDGS
 
 from ntrp.sources.base import Source, WebContentResult, WebSearchResult, WebSearchSource
 
@@ -38,12 +32,9 @@ def _guess_title(url: str) -> str:
     return parsed.netloc or url
 
 
-class WebSource(Source, WebSearchSource):
+class DDGSWebSource(Source, WebSearchSource):
     name = "web"
-
-    def __init__(self):
-        if DDGS is None:
-            raise ValueError("WEB_SEARCH=ddgs requires the optional 'ddgs' package") from _DDGS_IMPORT_ERROR
+    provider = "ddgs"
 
     def search_with_details(
         self,

@@ -64,16 +64,7 @@ def _config_response(rt: Runtime) -> dict:
     has_google = rt.source_mgr.has_google_auth()
     memory_connected = rt.memory is not None
     web_source = rt.source_mgr.sources.get("web")
-    if web_source:
-        module = web_source.__class__.__module__
-        if module.endswith(".exa"):
-            web_provider = "exa"
-        elif module.endswith(".ddgs"):
-            web_provider = "ddgs"
-        else:
-            web_provider = "unknown"
-    else:
-        web_provider = "none"
+    web_provider = getattr(web_source, "provider", "unknown") if web_source else "none"
 
     return {
         "chat_model": config.chat_model,
