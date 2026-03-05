@@ -79,6 +79,7 @@ export function useStreaming({
 }: UseStreamingOptions) {
   const sessionsRef = useRef(new Map<string, SessionStreamState>());
   const viewedIdRef = useRef<string | null>(sessionId);
+  const mountedRef = useRef(true);
   const skipApprovalsRef = useRef(skipApprovals);
   skipApprovalsRef.current = skipApprovals;
   const onSessionInfoRef = useRef(onSessionInfo);
@@ -86,12 +87,23 @@ export function useStreaming({
   const configRef = useRef(config);
   configRef.current = config;
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [status, setStatus] = useState<StatusType>(Status.IDLE);
-  const [toolChain, setToolChain] = useState<ToolChainItem[]>([]);
-  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
-  const [usage, setUsage] = useState({ ...ZERO_USAGE });
+  interface ViewState {
+    messages: Message[];
+    isStreaming: boolean;
+    status: StatusType;
+    toolChain: ToolChainItem[];
+    pendingApproval: PendingApproval | null;
+    usage: SessionStreamState["usage"];
+  }
+
+  const [view, setView] = useState<ViewState>({
+    messages: [],
+    isStreaming: false,
+    status: Status.IDLE,
+    toolChain: [],
+    pendingApproval: null,
+    usage: { ...ZERO_USAGE },
+  });
   const [sessionStates, setSessionStates] = useState<Map<string, SessionNotification>>(new Map());
 
   const getSession = useCallback((id: string): SessionStreamState => {
@@ -103,26 +115,41 @@ export function useStreaming({
     return s;
   }, []);
 
+  const lastSyncRef = useRef<ViewState | null>(null);
+
   const syncView = useCallback((targetId: string) => {
-    if (targetId !== viewedIdRef.current) return;
+    if (!mountedRef.current || targetId !== viewedIdRef.current) return;
     const s = sessionsRef.current.get(targetId);
     if (!s) return;
-    setMessages([...s.messages]);
-    setIsStreaming(s.isStreaming);
-    setStatus(s.status);
-    setToolChain([...s.toolChain]);
-    setPendingApproval(s.pendingApproval);
-    setUsage({ ...s.usage });
+    const last = lastSyncRef.current;
+    if (last
+      && last.messages === s.messages
+      && last.isStreaming === s.isStreaming
+      && last.status === s.status
+      && last.toolChain === s.toolChain
+      && last.pendingApproval === s.pendingApproval
+      && last.usage === s.usage
+    ) return;
+    const next: ViewState = {
+      messages: s.messages, isStreaming: s.isStreaming, status: s.status,
+      toolChain: s.toolChain, pendingApproval: s.pendingApproval, usage: s.usage,
+    };
+    lastSyncRef.current = next;
+    setView(next);
   }, []);
 
   const updateSessionStates = useCallback(() => {
+    if (!mountedRef.current) return;
     const states = new Map<string, SessionNotification>();
     for (const [id, s] of sessionsRef.current) {
       if (id === viewedIdRef.current) continue;
       if (s.notification) states.set(id, s.notification);
       else if (s.isStreaming) states.set(id, "streaming");
     }
-    setSessionStates(states);
+    setSessionStates(prev => {
+      if (prev.size === states.size && [...prev].every(([k, v]) => states.get(k) === v)) return prev;
+      return states;
+    });
   }, []);
 
   const generateId = useCallback((s: SessionStreamState) => {
@@ -134,10 +161,8 @@ export function useStreaming({
       ? truncateText(msg.content, MAX_TOOL_MESSAGE_CHARS, 'end')
       : msg.content;
     const withId: Message = { ...msg, content, id: msg.id ?? generateId(s) } as Message;
-    s.messages.push(withId);
-    if (s.messages.length > MAX_MESSAGES) {
-      s.messages = s.messages.slice(-MAX_MESSAGES);
-    }
+    const updated = [...s.messages, withId];
+    s.messages = updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
   }, [generateId]);
 
   const addMessage = useCallback((msg: MessageInput) => {
@@ -212,6 +237,7 @@ export function useStreaming({
         const startTime = s.toolStart.get(event.tool_id);
         const duration = startTime ? Math.round((Date.now() - startTime) / 1000) : undefined;
         s.toolStart.delete(event.tool_id);
+        s.toolDesc.delete(event.tool_id);
         const autoApproved = s.autoApprovedIds.delete(event.tool_id);
         const childCount = s.toolChain.filter((item) => item.parentId === event.tool_id).length;
 
@@ -266,6 +292,7 @@ export function useStreaming({
           cost: s.usage.cost + (event.usage.cost || 0),
           lastCost: event.usage.cost || 0,
         };
+        s.pendingApproval = null;
         s.status = Status.IDLE;
         s.toolChain = s.toolChain.map((item) =>
           item.status === "running" ? { ...item, status: "done" as const } : item
@@ -293,6 +320,7 @@ export function useStreaming({
           });
         }
         s.toolChain = [];
+        s.pendingApproval = null;
         s.status = Status.IDLE;
         s.isStreaming = false;
         break;
@@ -308,8 +336,11 @@ export function useStreaming({
       }
     }
 
-    // text/question only update pendingText (not visible) — skip re-render
-    if (event.type !== "text" && event.type !== "question" && event.type !== "session_info") {
+    // text/question: only pendingText (not visible), session_info: only runId — skip re-render
+    // thinking: only status — set directly to avoid full sync
+    if (event.type === "thinking") {
+      if (targetId === viewedIdRef.current) setView(prev => prev.status === s.status ? prev : { ...prev, status: s.status });
+    } else if (event.type !== "text" && event.type !== "question" && event.type !== "session_info") {
       syncView(targetId);
     }
   }, [addMessageToSession, syncView, updateSessionStates]);
@@ -318,6 +349,7 @@ export function useStreaming({
     const targetId = viewedIdRef.current;
     if (!targetId) return;
     const s = getSession(targetId);
+    if (s.isStreaming) return;
 
     addMessageToSession(s, { role: "user", content: message });
     s.isStreaming = true;
@@ -331,11 +363,19 @@ export function useStreaming({
     updateSessionStates();
 
     try {
+      let lastYield = Date.now();
       for await (const event of streamChat(message, targetId, configRef.current, skipApprovalsRef.current, s.abortController.signal)) {
         await handleEventForSession(targetId, s, event);
+        const now = Date.now();
+        if (now - lastYield > 16) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+          lastYield = Date.now();
+        }
       }
     } catch (error) {
-      if (!(error instanceof DOMException && error.name === "AbortError")) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        s.pendingText = "";
+      } else {
         addMessageToSession(s, { role: "error", content: `${error}` });
       }
     }
@@ -372,12 +412,18 @@ export function useStreaming({
     }
 
     const resultText = approved ? "Approved" : feedback || "";
-    await submitToolResult(s.runId, s.pendingApproval.toolId, resultText, approved, configRef.current);
+    try {
+      await submitToolResult(s.runId, s.pendingApproval.toolId, resultText, approved, configRef.current);
+    } catch (err) {
+      addMessageToSession(s, { role: "error", content: `Approval failed: ${err}` });
+      syncView(id);
+      return;
+    }
 
     s.pendingApproval = null;
     s.status = Status.THINKING;
     syncView(id);
-  }, [syncView]);
+  }, [addMessageToSession, syncView]);
 
   const cancel = useCallback(async () => {
     const id = viewedIdRef.current;
@@ -396,12 +442,13 @@ export function useStreaming({
     const target = getSession(targetId);
     target.notification = null;
 
-    if (history && !target.historyLoaded) {
+    if (history && !target.historyLoaded && !target.isStreaming) {
       target.messages = history;
       target.historyLoaded = true;
     }
 
     viewedIdRef.current = targetId;
+    lastSyncRef.current = null;
     syncView(targetId);
     updateSessionStates();
   }, [getSession, syncView, updateSessionStates]);
@@ -425,39 +472,36 @@ export function useStreaming({
     }
   }, [updateSessionStates]);
 
-  // Sync when sessionId prop changes (initial load or external update)
   useEffect(() => {
-    if (sessionId && sessionId !== viewedIdRef.current) {
+    if (!sessionId) return;
+    const s = getSession(sessionId);
+    if (sessionId !== viewedIdRef.current) {
       viewedIdRef.current = sessionId;
-      const s = getSession(sessionId);
-      if (!s.historyLoaded && initialMessages && initialMessages.length > 0) {
-        s.messages = initialMessages;
-        s.historyLoaded = true;
-      }
-      syncView(sessionId);
       updateSessionStates();
     }
+    if (!s.historyLoaded && initialMessages && initialMessages.length > 0) {
+      s.messages = initialMessages;
+      s.historyLoaded = true;
+    }
+    syncView(sessionId);
   }, [sessionId, initialMessages, getSession, syncView, updateSessionStates]);
 
-  // Load initial messages for the first session
   useEffect(() => {
-    if (sessionId && initialMessages && initialMessages.length > 0) {
-      const s = getSession(sessionId);
-      if (!s.historyLoaded) {
-        s.messages = initialMessages;
-        s.historyLoaded = true;
-        syncView(sessionId);
+    return () => {
+      mountedRef.current = false;
+      for (const s of sessionsRef.current.values()) {
+        s.abortController?.abort();
       }
-    }
-  }, [sessionId, initialMessages, getSession, syncView]);
+    };
+  }, []);
 
   return {
-    messages,
-    isStreaming,
-    status,
-    toolChain,
-    pendingApproval,
-    usage,
+    messages: view.messages,
+    isStreaming: view.isStreaming,
+    status: view.status,
+    toolChain: view.toolChain,
+    pendingApproval: view.pendingApproval,
+    usage: view.usage,
     sessionStates,
     addMessage,
     clearMessages,

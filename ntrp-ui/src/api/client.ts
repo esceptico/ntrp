@@ -54,6 +54,18 @@ export async function* streamChat(
         }
       }
     }
+
+    // Flush remaining decoder bytes and process any trailing event
+    buffer += decoder.decode();
+    const remaining = buffer.trim();
+    if (remaining.startsWith("data: ")) {
+      try {
+        const parsed = JSON.parse(remaining.slice(6));
+        if (parsed && typeof parsed.type === "string") {
+          yield parsed as ServerEvent;
+        }
+      } catch {}
+    }
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       return;

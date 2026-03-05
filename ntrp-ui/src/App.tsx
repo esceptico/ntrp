@@ -30,7 +30,7 @@ import {
 } from "./components/index.js";
 import { Setup } from "./components/Setup.js";
 import { ProviderOnboarding } from "./components/ProviderOnboarding.js";
-import { Sidebar } from "./components/Sidebar.js";
+import { Sidebar } from "./components/sidebar/index.js";
 import { COMMANDS } from "./lib/commands.js";
 import { setApiKey } from "./api/fetch.js";
 import { getSkills, deleteSession, listSessions, restoreSession, permanentlyDeleteSession, type Skill } from "./api/client.js";
@@ -156,6 +156,7 @@ function AppContent({
   const startNewSession = useCallback(async () => {
     const newId = await createNewSession();
     if (newId) {
+      setMessageQueue([]);
       switchToSession(newId, []);
       refreshSidebar();
     }
@@ -265,6 +266,7 @@ function AppContent({
     createNewSession,
     switchSession,
     switchToSession,
+    deleteSessionState,
     refreshSidebar,
     logout,
   });
@@ -314,7 +316,12 @@ function AppContent({
 
   const closeView = useCallback(() => setViewMode("chat"), []);
 
+  const isCyclingRef = useRef(false);
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+
   const cycleSession = useCallback(async () => {
+    if (isCyclingRef.current) return;
     const sessions = sidebarData.sessions;
     if (sessions.length < 2) return;
     const currentIdx = sessions.findIndex(s => s.session_id === sessionId);
@@ -322,18 +329,23 @@ function AppContent({
     const target = sessions[nextIdx];
     if (!target) return;
 
-    // Switch view immediately (cached state or empty)
+    isCyclingRef.current = true;
+    setMessageQueue([]);
     switchToSession(target.session_id);
-    refreshSidebar();
 
-    // Fetch metadata + history in background
-    const result = await switchSession(target.session_id);
-    if (result) {
-      switchToSession(target.session_id, result.history.map((msg, i) => ({
-        id: `h-${i}`, role: msg.role, content: msg.content,
-      })));
+    try {
+      const result = await switchSession(target.session_id);
+      if (result) {
+        switchToSession(target.session_id, result.history.map((msg, i) => ({
+          id: `h-${i}`, role: msg.role, content: msg.content,
+        })));
+      } else {
+        switchToSession(sessionIdRef.current!);
+      }
+    } finally {
+      isCyclingRef.current = false;
     }
-  }, [sidebarData.sessions, sessionId, switchSession, switchToSession, refreshSidebar]);
+  }, [sidebarData.sessions, sessionId, switchSession, switchToSession]);
 
   const tabPendingRef = useRef(false);
   const tabTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -354,7 +366,7 @@ function AppContent({
       if (key.name === "escape" && isStreaming && !dialog.isOpen) {
         cancel();
       }
-      if (key.shift && key.name === "tab" && !showSettings && viewMode === "chat") {
+      if (key.shift && key.name === "tab" && !showSettings && viewMode === "chat" && !dialog.isOpen && !pendingApproval) {
         cycleSession();
         return;
       }
@@ -373,7 +385,7 @@ function AppContent({
         return;
       }
     },
-    [renderer, isStreaming, cancel, showSettings, viewMode, dialog.isOpen, toggleSkipApprovals, cycleSession, startNewSession]
+    [renderer, isStreaming, pendingApproval, cancel, showSettings, viewMode, dialog.isOpen, toggleSkipApprovals, cycleSession, startNewSession]
   );
 
   useKeypress(handleGlobalKeypress, { isActive: true });

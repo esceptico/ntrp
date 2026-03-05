@@ -44,6 +44,7 @@ interface CommandContext {
   createNewSession: (name?: string) => Promise<string | null>;
   switchSession: (sessionId: string) => Promise<{ history: HistoryMessage[] } | null>;
   switchToSession: (sessionId: string, history?: Message[]) => void;
+  deleteSessionState: (sessionId: string) => void;
   refreshSidebar: () => void;
   logout: () => void;
 }
@@ -145,7 +146,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  delete: async ({ config, sessionId, addMessage, createNewSession, switchToSession, switchSession, refreshSidebar }, args) => {
+  delete: async ({ config, sessionId, addMessage, createNewSession, switchToSession, deleteSessionState, switchSession, refreshSidebar }, args) => {
     const query = args.join(" ").trim();
     try {
       const { sessions } = await listSessions(config);
@@ -165,6 +166,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
         return true;
       }
 
+      deleteSessionState(targetId);
       await deleteSession(config, targetId);
 
       if (targetId === sessionId) {
