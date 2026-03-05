@@ -26,22 +26,26 @@ async def list_mcp_servers(runtime: Runtime = Depends(get_runtime)):
         tools = []
         if session and session.connected:
             for t in session.all_tools:
-                tools.append({
-                    "name": t.name,
-                    "description": t.description or "",
-                    "enabled": allowed is None or t.name in allowed,
-                })
-        servers.append({
-            "name": name,
-            "transport": raw.get("transport", "unknown"),
-            "connected": session.connected if session else False,
-            "tool_count": len(session.tools) if session else 0,
-            "error": error,
-            "command": raw.get("command"),
-            "args": raw.get("args"),
-            "url": raw.get("url"),
-            "tools": tools,
-        })
+                tools.append(
+                    {
+                        "name": t.name,
+                        "description": t.description or "",
+                        "enabled": allowed is None or t.name in allowed,
+                    }
+                )
+        servers.append(
+            {
+                "name": name,
+                "transport": raw.get("transport", "unknown"),
+                "connected": session.connected if session else False,
+                "tool_count": len(session.tools) if session else 0,
+                "error": error,
+                "command": raw.get("command"),
+                "args": raw.get("args"),
+                "url": raw.get("url"),
+                "tools": tools,
+            }
+        )
     return {"servers": servers}
 
 
