@@ -4,6 +4,7 @@ import json
 import os
 import secrets
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -150,6 +151,8 @@ class Config(BaseSettings):
 
     # Exa.ai for web search (optional) - no prefix, standard env var
     exa_api_key: str | None = Field(default=None, alias="EXA_API_KEY")
+    # Web search provider selection (auto, exa, ddgs, none)
+    web_search: Literal["auto", "exa", "ddgs", "none"] = Field(default="auto", alias="WEB_SEARCH")
 
     # Telegram bot token (optional) - no prefix, standard env var
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
@@ -222,6 +225,18 @@ class Config(BaseSettings):
             return None
         return v
 
+    @field_validator("web_search", mode="before")
+    @classmethod
+    def _normalize_web_search(cls, v: str | None) -> str:
+        if v is None:
+            return "auto"
+        normalized = str(v).strip().lower()
+        if normalized in ("", "auto"):
+            return "auto"
+        if normalized in ("exa", "ddgs", "none"):
+            return normalized
+        raise ValueError("web_search must be one of: auto, exa, ddgs, none")
+
     @field_validator("browser_days")
     @classmethod
     def _validate_browser_days(cls, v: int) -> int:
@@ -279,6 +294,7 @@ PERSIST_KEYS = frozenset(
         "calendar",
         "max_depth",
         "mcp_servers",
+        "web_search",
     }
 )
 

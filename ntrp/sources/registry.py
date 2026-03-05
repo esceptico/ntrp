@@ -3,7 +3,6 @@ from collections.abc import Callable
 from ntrp.config import Config
 from ntrp.sources.base import Source
 from ntrp.sources.browser import BrowserHistorySource
-from ntrp.sources.exa import WebSource
 from ntrp.sources.google.auth import discover_calendar_tokens, discover_gmail_tokens
 from ntrp.sources.google.calendar import MultiCalendarSource
 from ntrp.sources.google.gmail import MultiGmailSource
@@ -43,9 +42,28 @@ def _create_browser(config: Config) -> Source | None:
 
 
 def _create_web(config: Config) -> Source | None:
-    if config.exa_api_key is None:
+    mode = config.web_search
+    if mode == "none":
         return None
-    return WebSource(api_key=config.exa_api_key)
+    if mode == "ddgs":
+        from ntrp.sources.ddgs import WebSource as DDGSWebSource
+
+        return DDGSWebSource()
+    if mode == "exa":
+        if config.exa_api_key is None:
+            raise ValueError("WEB_SEARCH=exa requires EXA_API_KEY")
+        from ntrp.sources.exa import WebSource as ExaWebSource
+
+        return ExaWebSource(api_key=config.exa_api_key)
+
+    # auto: prefer Exa when configured, otherwise default to DDGS
+    if config.exa_api_key:
+        from ntrp.sources.exa import WebSource as ExaWebSource
+
+        return ExaWebSource(api_key=config.exa_api_key)
+    from ntrp.sources.ddgs import WebSource as DDGSWebSource
+
+    return DDGSWebSource()
 
 
 SOURCES: dict[str, Callable[[Config], Source | None]] = {

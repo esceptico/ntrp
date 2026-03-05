@@ -95,11 +95,10 @@ export function ConnectionsSection({ connections: c, serverConfig, accent, width
       <Row item="web" selected={c.connectionItem === "web"} accent={accent}>
         <text>
           <span fg={sources?.web?.connected ? colors.text.primary : colors.text.muted}>
-            {sources?.web?.connected ? "Connected" : "Not configured"}
+            {formatWebSearchStatus(serverConfig)}
           </span>
         </text>
       </Row>
-
       {/* Hints — always visible */}
       <box marginTop={1}>
         <HintRow item={c.connectionItem} editingVault={c.vault.editingVault} sourceEnabled={sourceEnabled} />
@@ -125,8 +124,20 @@ function HintRow({ item, editingVault, sourceEnabled }: { item: ConnectionItem; 
     case "browser":
       return <Hints items={[["enter", "change browser"]]} />;
     case "web":
-      return <Hints items={[]} />;
+      return <Hints items={[["enter", "cycle mode"]]} />;
   }
+}
+
+function formatWebSearchStatus(serverConfig: ServerConfig | null): string {
+  if (!serverConfig) return "Loading...";
+  const mode = serverConfig.web_search;
+  const provider = serverConfig.web_search_provider;
+  if (mode === "none") return "Disabled";
+  if (mode === "auto") {
+    if (provider === "none") return "Auto (disabled)";
+    return `Auto (${provider.toUpperCase()})`;
+  }
+  return `${mode.toUpperCase()}${provider !== "none" ? ` (${provider.toUpperCase()})` : ""}`;
 }
 
 function GoogleRow({ item, selectedItem, sources, accounts, accent }: {

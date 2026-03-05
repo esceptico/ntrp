@@ -61,7 +61,8 @@ export NTRP_EMBEDDING_MODEL=text-embedding-3-small
 
 | Variable | Description |
 |----------|-------------|
-| `EXA_API_KEY` | Exa.ai for web search |
+| `EXA_API_KEY` | Exa.ai API key for web search (required only when `WEB_SEARCH=exa`) |
+| `WEB_SEARCH` | Web provider mode: `auto` (default), `exa`, `ddgs`, or `none` |
 | `TELEGRAM_BOT_TOKEN` | Telegram notifications |
 
 ## Agent behavior
@@ -102,4 +103,3 @@ See [Custom Models](/integrations/models) for registering OpenRouter, Ollama, vL
   "api_key_hash": "a1b2c3:..."
 }
 ```
-

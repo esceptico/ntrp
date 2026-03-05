@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 # --- Chat / run ---
@@ -60,6 +62,7 @@ class UpdateConfigRequest(BaseModel):
     vault_path: str | None = None
     browser: str | None = None
     browser_days: int | None = None
+    web_search: Literal["auto", "exa", "ddgs", "none"] | None = None
     sources: SourceToggles | None = None
 
 

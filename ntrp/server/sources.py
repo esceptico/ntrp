@@ -42,6 +42,8 @@ class SourceManager:
             try:
                 source = factory(config)
             except Exception as e:
+                self._target.pop(name, None)
+                self._source_names.discard(name)
                 self._errors[name] = str(e)
                 continue
 
@@ -74,6 +76,8 @@ class SourceManager:
                 self._target[name] = source
                 self._source_names.add(name)
         except Exception as e:
+            self._target.pop(name, None)
+            self._source_names.discard(name)
             self._errors[name] = str(e)
             return None
         self._channel.publish(SourceChanged(source_name=name))

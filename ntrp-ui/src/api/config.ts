@@ -8,6 +8,8 @@ export interface SourceInfo {
   accounts?: string[];
   path?: string;
   type?: string;
+  mode?: "auto" | "exa" | "ddgs" | "none";
+  provider?: "exa" | "ddgs" | "none" | "unknown";
 }
 
 export interface ServerConfig {
@@ -15,6 +17,8 @@ export interface ServerConfig {
   explore_model: string;
   memory_model: string;
   embedding_model: string;
+  web_search: "auto" | "exa" | "ddgs" | "none";
+  web_search_provider: "exa" | "ddgs" | "none" | "unknown";
   vault_path: string;
   browser: string | null;
   gmail_enabled: boolean;
@@ -36,7 +40,7 @@ export async function getServerConfig(config: Config): Promise<ServerConfig> {
 
 export async function updateConfig(
   config: Config,
-  patch: Partial<Pick<ServerConfig, "chat_model" | "explore_model" | "memory_model" | "max_depth">> & {
+  patch: Partial<Pick<ServerConfig, "chat_model" | "explore_model" | "memory_model" | "max_depth" | "web_search">> & {
     sources?: Record<string, boolean>;
   }
 ): Promise<Record<string, unknown>> {
