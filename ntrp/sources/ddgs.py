@@ -55,14 +55,12 @@ class DDGSWebSource(Source, WebSearchSource):
                     continue
                 if not title:
                     title = _guess_title(url)
-                highlights = [snippet] if snippet else None
                 results.append(
                     WebSearchResult(
                         title=title,
                         url=url,
                         published_date=str(published) if published else None,
                         summary=snippet or None,
-                        highlights=highlights,
                     )
                 )
         return results
