@@ -1,30 +1,15 @@
-import { colors } from "../../../ui/index.js";
+import { colors, Hints } from "../../../ui/index.js";
 import type { ServiceInfo } from "../../../../api/client.js";
+import type { UseCredentialSectionResult } from "../../../../hooks/settings/useCredentialSection.js";
+import { MaskedKeyInput } from "./shared.js";
 
 interface ServicesSectionProps {
-  services: ServiceInfo[];
-  selectedIndex: number;
+  services: UseCredentialSectionResult<ServiceInfo>;
   accent: string;
-  editing: boolean;
-  keyValue: string;
-  keyCursor: number;
-  saving: boolean;
-  error: string | null;
-  confirmingDisconnect: boolean;
 }
 
-export function ServicesSection({
-  services,
-  selectedIndex,
-  accent,
-  editing,
-  keyValue,
-  keyCursor,
-  saving,
-  error,
-  confirmingDisconnect,
-}: ServicesSectionProps) {
-  if (services.length === 0) {
+export function ServicesSection({ services: s, accent }: ServicesSectionProps) {
+  if (s.items.length === 0) {
     return (
       <box flexDirection="column">
         <text><span fg={colors.text.muted}>  Loading...</span></text>
@@ -32,27 +17,26 @@ export function ServicesSection({
     );
   }
 
-  const service = services[selectedIndex];
-  const maskedKey = keyValue ? "\u2022".repeat(Math.min(keyValue.length, 40)) : "";
+  const current = s.items[s.selectedIndex];
 
   return (
     <box flexDirection="column">
-      {services.map((s, i) => {
-        const selected = i === selectedIndex;
-        const isEditing = selected && editing;
+      {s.items.map((service, i) => {
+        const selected = i === s.selectedIndex;
+        const isEditing = selected && s.editing;
 
         return (
-          <box key={s.id} flexDirection="column">
+          <box key={service.id} flexDirection="column">
             <box flexDirection="row">
               <text>
                 <span fg={selected ? accent : colors.text.disabled}>{selected ? "\u25B8 " : "  "}</span>
-                <span fg={selected ? colors.text.primary : colors.text.secondary}>{s.name.padEnd(24)}</span>
+                <span fg={selected ? colors.text.primary : colors.text.secondary}>{service.name.padEnd(24)}</span>
               </text>
-              {s.connected ? (
+              {service.connected ? (
                 <text>
                   <span fg={colors.status.success}>{"\u2713 "}</span>
-                  <span fg={colors.text.disabled}>{s.key_hint ?? ""}</span>
-                  {s.from_env && <span fg={colors.text.muted}>{" (env)"}</span>}
+                  <span fg={colors.text.disabled}>{service.key_hint ?? ""}</span>
+                  {service.from_env && <span fg={colors.text.muted}>{" (env)"}</span>}
                 </text>
               ) : (
                 <text><span fg={colors.text.disabled}>not connected</span></text>
@@ -62,60 +46,46 @@ export function ServicesSection({
               <box marginLeft={2}>
                 <box flexDirection="row">
                   <text><span fg={colors.text.primary}>{"  API Key".padEnd(14)}</span></text>
-                  {keyValue ? (
-                    <text>
-                      <span fg={colors.text.primary}>{maskedKey.slice(0, keyCursor)}</span>
-                      <span bg={colors.text.primary} fg={colors.contrast}>{maskedKey[keyCursor] || " "}</span>
-                      <span fg={colors.text.primary}>{maskedKey.slice(keyCursor + 1)}</span>
-                    </text>
-                  ) : (
-                    <text>
-                      <span fg={colors.text.muted}>paste key...</span>
-                      <span bg={colors.text.primary} fg={colors.contrast}>{" "}</span>
-                    </text>
-                  )}
+                  <MaskedKeyInput value={s.keyValue} cursor={s.keyCursor} />
                 </box>
               </box>
             )}
-            {selected && confirmingDisconnect && (
+            {selected && s.confirmDisconnect && (
               <box marginLeft={2}>
-                <text><span fg={colors.status.warning}>  Disconnect {s.name}? (y/n)</span></text>
+                <text><span fg={colors.status.warning}>  Disconnect {service.name}? (y/n)</span></text>
               </box>
             )}
           </box>
         );
       })}
 
-      {error && (
+      {s.error && (
         <box marginTop={1}>
-          <text><span fg={colors.status.error}>  {error}</span></text>
+          <text><span fg={colors.status.error}>  {s.error}</span></text>
         </box>
       )}
 
-      {saving && (
+      {s.saving && (
         <box marginTop={1}>
           <text><span fg={colors.text.muted}>  Saving...</span></text>
         </box>
       )}
 
-      {!editing && !confirmingDisconnect && !saving && (
-        <box marginTop={1}>
-          <text>
-            <span fg={colors.text.disabled}>  </span>
-            {service?.connected && !service.from_env ? (
-              <span fg={colors.text.disabled}>enter edit · d disconnect</span>
-            ) : service?.from_env ? (
-              <span fg={colors.text.disabled}>set via environment variable</span>
-            ) : (
-              <span fg={colors.text.disabled}>enter to add key</span>
-            )}
-          </text>
+      {!s.editing && !s.confirmDisconnect && !s.saving && (
+        <box marginTop={1} marginLeft={2}>
+          {current?.connected && !current.from_env ? (
+            <Hints items={[["enter", "edit"], ["d", "disconnect"]]} />
+          ) : current?.from_env ? (
+            <text><span fg={colors.text.disabled}>set via environment variable</span></text>
+          ) : (
+            <Hints items={[["enter", "add key"]]} />
+          )}
         </box>
       )}
 
-      {editing && (
-        <box marginTop={1}>
-          <text><span fg={colors.text.disabled}>  enter to save · esc to cancel</span></text>
+      {s.editing && (
+        <box marginTop={1} marginLeft={2}>
+          <Hints items={[["enter", "save"], ["esc", "cancel"]]} />
         </box>
       )}
     </box>

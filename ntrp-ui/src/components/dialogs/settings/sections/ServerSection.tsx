@@ -1,41 +1,25 @@
-import { colors } from "../../../ui/index.js";
+import { colors, Hints } from "../../../ui/index.js";
 import { TextInputField } from "../../../ui/input/TextInputField.js";
+import type { UseServerConnectionResult } from "../../../../hooks/settings/useServerConnection.js";
 
 interface ServerSectionProps {
-  serverUrl: string;
-  serverUrlCursor: number;
-  apiKey: string;
-  apiKeyCursor: number;
-  selectedIndex: number;
-  editing: boolean;
+  server: UseServerConnectionResult;
   accent: string;
-  saving: boolean;
-  error: string | null;
 }
 
-export function ServerSection({
-  serverUrl,
-  serverUrlCursor,
-  apiKey,
-  apiKeyCursor,
-  selectedIndex,
-  editing,
-  accent,
-  saving,
-  error,
-}: ServerSectionProps) {
-  const maskedKey = apiKey ? "\u2022".repeat(Math.min(apiKey.length, 40)) : "";
+export function ServerSection({ server: s, accent }: ServerSectionProps) {
+  const maskedKey = s.serverApiKey ? "\u2022".repeat(Math.min(s.serverApiKey.length, 40)) : "";
 
   const items = [
-    { label: "Server URL", value: serverUrl, cursor: serverUrlCursor, placeholder: "http://localhost:8000" },
-    { label: "API Key", value: apiKey, displayValue: maskedKey, cursor: apiKeyCursor, placeholder: "your-api-key" },
+    { label: "Server URL", value: s.serverUrl, cursor: s.serverUrlCursor, placeholder: "http://localhost:8000" },
+    { label: "API Key", value: s.serverApiKey, displayValue: maskedKey, cursor: s.serverApiKeyCursor, placeholder: "your-api-key" },
   ];
 
   return (
     <box flexDirection="column">
       {items.map((item, i) => {
-        const selected = i === selectedIndex;
-        const isEditing = selected && editing;
+        const selected = i === s.serverIndex;
+        const isEditing = selected && s.editingServer;
 
         return (
           <box key={item.label} flexDirection="row">
@@ -45,7 +29,7 @@ export function ServerSection({
             </text>
             {isEditing ? (
               <TextInputField
-                value={i === 1 ? item.value : item.value}
+                value={item.value}
                 cursorPos={item.cursor}
                 placeholder={item.placeholder}
               />
@@ -58,29 +42,27 @@ export function ServerSection({
         );
       })}
 
-      {saving && (
+      {s.serverSaving && (
         <box marginTop={1}>
           <text><span fg={colors.text.muted}>  Saving...</span></text>
         </box>
       )}
 
-      {error && (
+      {s.serverError && (
         <box marginTop={1}>
-          <text><span fg={colors.status.error}>  {error}</span></text>
+          <text><span fg={colors.status.error}>  {s.serverError}</span></text>
         </box>
       )}
 
-      {!editing && !saving && (
-        <box marginTop={1}>
-          <text><span fg={colors.text.disabled}>  enter to edit  </span></text>
+      {!s.editingServer && !s.serverSaving && (
+        <box marginTop={1} marginLeft={2}>
+          <Hints items={[["enter", "edit"]]} />
         </box>
       )}
 
-      {editing && (
-        <box marginTop={1}>
-          <text>
-            <span fg={colors.text.disabled}>  tab to switch  ^s to save  esc to cancel</span>
-          </text>
+      {s.editingServer && (
+        <box marginTop={1} marginLeft={2}>
+          <Hints items={[["tab", "switch"], ["^s", "save"], ["esc", "cancel"]]} />
         </box>
       )}
     </box>

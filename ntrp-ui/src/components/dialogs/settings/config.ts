@@ -38,3 +38,15 @@ export const CONNECTION_LABELS = {
 } satisfies Record<ConnectionItem, string>;
 
 export const TOGGLEABLE_SOURCES: ConnectionItem[] = ["gmail", "calendar", "memory"];
+
+export const NOTIFIER_TYPE_ORDER = ["email", "telegram", "bash"] as const;
+export const NOTIFIER_TYPE_LABELS: Record<string, string> = {
+  email: "Email",
+  telegram: "Telegram",
+  bash: "Bash",
+};
+export const NOTIFIER_TYPE_DESCRIPTIONS: Record<string, string> = {
+  email: "Send via connected Gmail",
+  telegram: "Send via Telegram bot",
+  bash: "Run shell command",
+};

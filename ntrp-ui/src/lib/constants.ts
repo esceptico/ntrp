@@ -1,6 +1,6 @@
 export const BULLET = "\u23FA";
 
-export const INDICATOR_SELECTED = "\u203A ";
+export const INDICATOR_SELECTED = "\u25B8 ";
 export const INDICATOR_UNSELECTED = "  ";
 export const CURSOR_CHAR = "\u2588";
 export const CHECKBOX_CHECKED = "[\u2022] ";

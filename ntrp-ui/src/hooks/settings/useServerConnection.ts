@@ -5,10 +5,10 @@ import { setApiKey as setFetchApiKey } from "../../api/fetch.js";
 import { setCredentials } from "../../lib/secrets.js";
 import { useTextInput } from "../useTextInput.js";
 import type { Key } from "../useKeypress.js";
+import { handleListNav } from "../keyUtils.js";
 
 export interface UseServerConnectionResult {
   serverIndex: number;
-  setServerIndex: React.Dispatch<React.SetStateAction<number>>;
   editingServer: boolean;
   serverUrl: string;
   serverUrlCursor: number;
@@ -16,13 +16,9 @@ export interface UseServerConnectionResult {
   serverApiKeyCursor: number;
   serverSaving: boolean;
   serverError: string | null;
-  setServerUrlCursor: React.Dispatch<React.SetStateAction<number>>;
-  setServerApiKeyCursor: React.Dispatch<React.SetStateAction<number>>;
-  setEditingServer: React.Dispatch<React.SetStateAction<boolean>>;
-  handleSaveServer: () => Promise<void>;
-  handleCancelServerEdit: () => void;
-  handleServerUrlKey: (key: Key) => boolean;
-  handleServerApiKeyKey: (key: Key) => boolean;
+  handleKeypress: (key: Key) => void;
+  isEditing: boolean;
+  cancelEdit: () => void;
 }
 
 export function useServerConnection(
@@ -89,9 +85,32 @@ export function useServerConnection(
     setEditingServer(false);
   }, [config]);
 
+  const isEditing = editingServer;
+
+  const handleKeypress = useCallback((key: Key) => {
+    if (editingServer) {
+      if (key.name === "s" && key.ctrl) {
+        handleSaveServer();
+      } else if (key.name === "tab") {
+        setServerIndex(i => (i === 0 ? 1 : 0));
+      } else if (serverIndex === 0) {
+        handleServerUrlKey(key);
+      } else {
+        handleServerApiKeyKey(key);
+      }
+    } else {
+      if (handleListNav(key, 2, setServerIndex)) {
+        // handled
+      } else if (key.name === "return" || key.name === "space") {
+        setServerUrlCursor(serverUrl.length);
+        setServerApiKeyCursor(serverApiKey.length);
+        setEditingServer(true);
+      }
+    }
+  }, [editingServer, serverIndex, serverUrl, serverApiKey, handleSaveServer, handleServerUrlKey, handleServerApiKeyKey]);
+
   return {
     serverIndex,
-    setServerIndex,
     editingServer,
     serverUrl,
     serverUrlCursor,
@@ -99,12 +118,8 @@ export function useServerConnection(
     serverApiKeyCursor,
     serverSaving,
     serverError,
-    setServerUrlCursor,
-    setServerApiKeyCursor,
-    setEditingServer,
-    handleSaveServer,
-    handleCancelServerEdit,
-    handleServerUrlKey,
-    handleServerApiKeyKey,
+    handleKeypress,
+    isEditing,
+    cancelEdit: handleCancelServerEdit,
   };
 }

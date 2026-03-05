@@ -2,62 +2,40 @@ import { colors, truncateText, SelectionIndicator, Hints } from "../../ui/index.
 import { TextInputField } from "../../ui/input/TextInputField.js";
 import type { ServerConfig, GoogleAccount } from "../../../api/client.js";
 import { CONNECTION_LABELS, type ConnectionItem } from "./config.js";
+import type { UseConnectionsResult } from "../../../hooks/settings/useConnections.js";
 
 const GOOGLE_SOURCES: ConnectionItem[] = ["gmail", "calendar"];
 
 interface ConnectionsSectionProps {
+  connections: UseConnectionsResult;
   serverConfig: ServerConfig | null;
-  googleAccounts: GoogleAccount[];
-  selectedItem: ConnectionItem;
-  selectedGoogleIndex: number;
   accent: string;
   width: number;
-  editingVault: boolean;
-  vaultPath: string;
-  vaultCursorPos: number;
-  updatingVault: boolean;
-  vaultError: string | null;
-  updatingBrowser: boolean;
-  browserError: string | null;
 }
 
-export function ConnectionsSection({
-  serverConfig,
-  googleAccounts,
-  selectedItem,
-  selectedGoogleIndex,
-  accent,
-  width,
-  editingVault,
-  vaultPath,
-  vaultCursorPos,
-  updatingVault,
-  vaultError,
-  updatingBrowser,
-  browserError,
-}: ConnectionsSectionProps) {
+export function ConnectionsSection({ connections: c, serverConfig, accent, width }: ConnectionsSectionProps) {
   const valueWidth = Math.max(0, width - 20);
   const sources = serverConfig?.sources;
-  const isGoogleSource = GOOGLE_SOURCES.includes(selectedItem);
-  const sourceEnabled = isGoogleSource && sources?.[selectedItem]?.enabled;
+  const isGoogleSource = GOOGLE_SOURCES.includes(c.connectionItem);
+  const sourceEnabled = isGoogleSource && sources?.[c.connectionItem]?.enabled;
 
   return (
     <box flexDirection="column">
       {/* Vault / Notes */}
-      <Row item="vault" selected={selectedItem === "vault"} accent={accent}>
-        {editingVault ? (
+      <Row item="vault" selected={c.connectionItem === "vault"} accent={accent}>
+        {c.vault.editingVault ? (
           <box flexDirection="row">
             <text><span fg={colors.text.muted}>[</span></text>
             <TextInputField
-              value={vaultPath}
-              cursorPos={vaultCursorPos}
+              value={c.vault.vaultPath}
+              cursorPos={c.vault.vaultCursorPos}
               placeholder="Enter vault path..."
               showCursor={true}
               textColor={colors.text.primary}
             />
             <text><span fg={colors.text.muted}>]</span></text>
           </box>
-        ) : updatingVault ? (
+        ) : c.vault.updatingVault ? (
           <text><span fg={colors.status.warning}>Updating...</span></text>
         ) : (
           <text>
@@ -67,29 +45,29 @@ export function ConnectionsSection({
           </text>
         )}
       </Row>
-      {vaultError && (
+      {c.vault.vaultError && (
         <box marginLeft={4}>
-          <text><span fg={colors.status.error}>{vaultError}</span></text>
+          <text><span fg={colors.status.error}>{c.vault.vaultError}</span></text>
         </box>
       )}
 
       {/* Gmail */}
-      <GoogleRow item="gmail" selectedItem={selectedItem} sources={sources} accounts={googleAccounts} accent={accent} />
+      <GoogleRow item="gmail" selectedItem={c.connectionItem} sources={sources} accounts={c.googleAccounts} accent={accent} />
 
-      {selectedItem === "gmail" && sourceEnabled && googleAccounts.length > 0 && (
-        <AccountList accounts={googleAccounts} selectedIndex={selectedGoogleIndex} accent={accent} valueWidth={valueWidth} />
+      {c.connectionItem === "gmail" && sourceEnabled && c.googleAccounts.length > 0 && (
+        <AccountList accounts={c.googleAccounts} selectedIndex={c.selectedGoogleIndex} accent={accent} valueWidth={valueWidth} />
       )}
 
       {/* Calendar */}
-      <GoogleRow item="calendar" selectedItem={selectedItem} sources={sources} accounts={googleAccounts} accent={accent} />
+      <GoogleRow item="calendar" selectedItem={c.connectionItem} sources={sources} accounts={c.googleAccounts} accent={accent} />
 
-      {selectedItem === "calendar" && sourceEnabled && googleAccounts.length > 0 && (
-        <AccountList accounts={googleAccounts} selectedIndex={selectedGoogleIndex} accent={accent} valueWidth={valueWidth} />
+      {c.connectionItem === "calendar" && sourceEnabled && c.googleAccounts.length > 0 && (
+        <AccountList accounts={c.googleAccounts} selectedIndex={c.selectedGoogleIndex} accent={accent} valueWidth={valueWidth} />
       )}
 
       {/* Browser */}
-      <Row item="browser" selected={selectedItem === "browser"} accent={accent}>
-        {updatingBrowser ? (
+      <Row item="browser" selected={c.connectionItem === "browser"} accent={accent}>
+        {c.updatingBrowser ? (
           <text><span fg={colors.status.warning}>Updating...</span></text>
         ) : serverConfig?.has_browser ? (
           <text><span fg={colors.text.primary}>{serverConfig.browser}</span></text>
@@ -97,14 +75,14 @@ export function ConnectionsSection({
           <text><span fg={colors.text.muted}>Not configured</span></text>
         )}
       </Row>
-      {browserError && (
+      {c.browserError && (
         <box marginLeft={4}>
-          <text><span fg={colors.status.error}>{browserError}</span></text>
+          <text><span fg={colors.status.error}>{c.browserError}</span></text>
         </box>
       )}
 
       {/* Memory */}
-      <Row item="memory" selected={selectedItem === "memory"} accent={accent}>
+      <Row item="memory" selected={c.connectionItem === "memory"} accent={accent}>
         <Toggle enabled={sources?.memory?.enabled} accent={accent} />
         <text>
           <span fg={sources?.memory?.enabled ? colors.text.primary : colors.text.muted}>
@@ -114,7 +92,7 @@ export function ConnectionsSection({
       </Row>
 
       {/* Web Search */}
-      <Row item="web" selected={selectedItem === "web"} accent={accent}>
+      <Row item="web" selected={c.connectionItem === "web"} accent={accent}>
         <text>
           <span fg={sources?.web?.connected ? colors.text.primary : colors.text.muted}>
             {sources?.web?.connected ? "Connected" : "Not configured"}
@@ -124,7 +102,7 @@ export function ConnectionsSection({
 
       {/* Hints — always visible */}
       <box marginTop={1}>
-        <HintRow item={selectedItem} editingVault={editingVault} sourceEnabled={sourceEnabled} />
+        <HintRow item={c.connectionItem} editingVault={c.vault.editingVault} sourceEnabled={sourceEnabled} />
       </box>
     </box>
   );

@@ -1,25 +1,16 @@
 import { colors } from "../../../ui/colors.js";
 import { TextEditArea } from "../../../ui/TextEditArea.js";
 import { Hints } from "../../../ui/index.js";
+import type { UseDirectivesResult } from "../../../../hooks/settings/useDirectives.js";
 
 interface DirectivesSectionProps {
-  content: string;
-  cursorPos: number;
-  editing: boolean;
-  saving: boolean;
+  directives: UseDirectivesResult;
   accent: string;
   height: number;
 }
 
-export function DirectivesSection({
-  content,
-  cursorPos,
-  editing,
-  saving,
-  accent,
-  height,
-}: DirectivesSectionProps) {
-  if (saving) {
+export function DirectivesSection({ directives: d, accent, height }: DirectivesSectionProps) {
+  if (d.savingDirectives) {
     return (
       <box flexDirection="column">
         <text><span fg={colors.text.muted}>Saving...</span></text>
@@ -27,7 +18,7 @@ export function DirectivesSection({
     );
   }
 
-  if (editing) {
+  if (d.editingDirectives) {
     return (
       <box flexDirection="column" height={height}>
         <box marginBottom={1}>
@@ -35,8 +26,8 @@ export function DirectivesSection({
         </box>
         <box flexGrow={1} overflow="hidden">
           <TextEditArea
-            value={content}
-            cursorPos={cursorPos}
+            value={d.directivesContent}
+            cursorPos={d.directivesCursorPos}
             onValueChange={() => {}}
             onCursorChange={() => {}}
             placeholder="Enter directives..."
@@ -49,7 +40,7 @@ export function DirectivesSection({
     );
   }
 
-  if (!content) {
+  if (!d.directivesContent) {
     return (
       <box flexDirection="column">
         <text><span fg={colors.text.muted}>No directives set.</span></text>
@@ -60,7 +51,7 @@ export function DirectivesSection({
     );
   }
 
-  const lines = content.split("\n");
+  const lines = d.directivesContent.split("\n");
   return (
     <box flexDirection="column" height={height}>
       <box flexGrow={1} flexDirection="column" overflow="hidden">

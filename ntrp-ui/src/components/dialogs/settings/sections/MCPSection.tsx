@@ -1,22 +1,9 @@
-import { colors } from "../../../ui/index.js";
-import type { MCPServerInfo } from "../../../../api/client.js";
+import { colors, Hints } from "../../../ui/index.js";
+import type { UseMCPServersResult } from "../../../../hooks/settings/useMCPServers.js";
 
 interface MCPSectionProps {
-  servers: MCPServerInfo[];
-  selectedIndex: number;
+  mcp: UseMCPServersResult;
   accent: string;
-  adding: boolean;
-  addField: "name" | "transport" | "command" | "url";
-  name: string;
-  nameCursor: number;
-  transport: "stdio" | "http";
-  command: string;
-  commandCursor: number;
-  url: string;
-  urlCursor: number;
-  saving: boolean;
-  error: string | null;
-  confirmingRemove: boolean;
 }
 
 const LABEL_WIDTH = 14;
@@ -39,27 +26,11 @@ function TextInput({ value, cursor, placeholder }: { value: string; cursor: numb
   );
 }
 
-export function MCPSection({
-  servers,
-  selectedIndex,
-  accent,
-  adding,
-  addField,
-  name,
-  nameCursor,
-  transport,
-  command,
-  commandCursor,
-  url,
-  urlCursor,
-  saving,
-  error,
-  confirmingRemove,
-}: MCPSectionProps) {
+export function MCPSection({ mcp: m, accent }: MCPSectionProps) {
   return (
     <box flexDirection="column">
-      {servers.map((s, i) => {
-        const selected = i === selectedIndex && !adding;
+      {m.mcpServers.map((s, i) => {
+        const selected = i === m.mcpIndex && !m.mcpAdding;
         return (
           <box key={s.name} flexDirection="column">
             <box flexDirection="row">
@@ -89,7 +60,7 @@ export function MCPSection({
                 <text><span fg={colors.status.error}>{"  "}{s.error}</span></text>
               </box>
             )}
-            {selected && confirmingRemove && (
+            {selected && m.mcpConfirmRemove && (
               <box marginLeft={2}>
                 <text><span fg={colors.status.warning}>{"  "}Remove {s.name}? (y/n)</span></text>
               </box>
@@ -98,54 +69,54 @@ export function MCPSection({
         );
       })}
 
-      {adding && (
-        <box flexDirection="column" marginTop={servers.length > 0 ? 1 : 0}>
+      {m.mcpAdding && (
+        <box flexDirection="column" marginTop={m.mcpServers.length > 0 ? 1 : 0}>
           <text><span fg={accent}>{"\u25B8 "}</span><span fg={accent}><strong>New Server</strong></span></text>
 
           <box marginLeft={2} flexDirection="column">
             <box flexDirection="row">
               <text>
-                <span fg={addField === "name" ? colors.text.primary : colors.text.secondary}>{"  Name".padEnd(LABEL_WIDTH)}</span>
+                <span fg={m.mcpAddField === "name" ? colors.text.primary : colors.text.secondary}>{"  Name".padEnd(LABEL_WIDTH)}</span>
               </text>
-              {addField === "name" ? (
-                <TextInput value={name} cursor={nameCursor} placeholder="server-name" />
+              {m.mcpAddField === "name" ? (
+                <TextInput value={m.mcpName} cursor={m.mcpNameCursor} placeholder="server-name" />
               ) : (
-                <text><span fg={name ? colors.text.primary : colors.text.muted}>{name || "..."}</span></text>
+                <text><span fg={m.mcpName ? colors.text.primary : colors.text.muted}>{m.mcpName || "..."}</span></text>
               )}
             </box>
 
             <box flexDirection="row">
               <text>
-                <span fg={addField === "transport" ? colors.text.primary : colors.text.secondary}>{"  Transport".padEnd(LABEL_WIDTH)}</span>
+                <span fg={m.mcpAddField === "transport" ? colors.text.primary : colors.text.secondary}>{"  Transport".padEnd(LABEL_WIDTH)}</span>
               </text>
               <text>
-                <span fg={transport === "stdio" ? accent : colors.text.disabled}>stdio</span>
+                <span fg={m.mcpTransport === "stdio" ? accent : colors.text.disabled}>stdio</span>
                 <span fg={colors.text.muted}>{" / "}</span>
-                <span fg={transport === "http" ? accent : colors.text.disabled}>http</span>
-                {addField === "transport" && <span fg={colors.text.muted}>{" (← → to switch)"}</span>}
+                <span fg={m.mcpTransport === "http" ? accent : colors.text.disabled}>http</span>
+                {m.mcpAddField === "transport" && <span fg={colors.text.muted}>{" (\u2190 \u2192 to switch)"}</span>}
               </text>
             </box>
 
-            {transport === "stdio" ? (
+            {m.mcpTransport === "stdio" ? (
               <box flexDirection="row">
                 <text>
-                  <span fg={addField === "command" ? colors.text.primary : colors.text.secondary}>{"  Command".padEnd(LABEL_WIDTH)}</span>
+                  <span fg={m.mcpAddField === "command" ? colors.text.primary : colors.text.secondary}>{"  Command".padEnd(LABEL_WIDTH)}</span>
                 </text>
-                {addField === "command" ? (
-                  <TextInput value={command} cursor={commandCursor} placeholder="npx -y @server/pkg" />
+                {m.mcpAddField === "command" ? (
+                  <TextInput value={m.mcpCommand} cursor={m.mcpCommandCursor} placeholder="npx -y @server/pkg" />
                 ) : (
-                  <text><span fg={command ? colors.text.primary : colors.text.muted}>{command || "..."}</span></text>
+                  <text><span fg={m.mcpCommand ? colors.text.primary : colors.text.muted}>{m.mcpCommand || "..."}</span></text>
                 )}
               </box>
             ) : (
               <box flexDirection="row">
                 <text>
-                  <span fg={addField === "url" ? colors.text.primary : colors.text.secondary}>{"  URL".padEnd(LABEL_WIDTH)}</span>
+                  <span fg={m.mcpAddField === "url" ? colors.text.primary : colors.text.secondary}>{"  URL".padEnd(LABEL_WIDTH)}</span>
                 </text>
-                {addField === "url" ? (
-                  <TextInput value={url} cursor={urlCursor} placeholder="http://localhost:8080/mcp" />
+                {m.mcpAddField === "url" ? (
+                  <TextInput value={m.mcpUrl} cursor={m.mcpUrlCursor} placeholder="http://localhost:8080/mcp" />
                 ) : (
-                  <text><span fg={url ? colors.text.primary : colors.text.muted}>{url || "..."}</span></text>
+                  <text><span fg={m.mcpUrl ? colors.text.primary : colors.text.muted}>{m.mcpUrl || "..."}</span></text>
                 )}
               </box>
             )}
@@ -153,34 +124,31 @@ export function MCPSection({
         </box>
       )}
 
-      {error && (
+      {m.mcpError && (
         <box marginTop={1}>
-          <text><span fg={colors.status.error}>{"  "}{error}</span></text>
+          <text><span fg={colors.status.error}>{"  "}{m.mcpError}</span></text>
         </box>
       )}
 
-      {saving && (
+      {m.mcpSaving && (
         <box marginTop={1}>
           <text><span fg={colors.text.muted}>{"  "}Saving...</span></text>
         </box>
       )}
 
-      {!adding && !confirmingRemove && !saving && (
-        <box marginTop={1}>
-          <text>
-            <span fg={colors.text.disabled}>{"  "}</span>
-            {servers.length > 0 && servers[selectedIndex] ? (
-              <span fg={colors.text.disabled}>a add · d remove</span>
-            ) : (
-              <span fg={colors.text.disabled}>a add server</span>
-            )}
-          </text>
+      {!m.mcpAdding && !m.mcpConfirmRemove && !m.mcpSaving && (
+        <box marginTop={1} marginLeft={2}>
+          {m.mcpServers.length > 0 && m.mcpServers[m.mcpIndex] ? (
+            <Hints items={[["a", "add"], ["d", "remove"]]} />
+          ) : (
+            <Hints items={[["a", "add server"]]} />
+          )}
         </box>
       )}
 
-      {adding && !saving && (
-        <box marginTop={1}>
-          <text><span fg={colors.text.disabled}>{"  "}tab next · ctrl+s save · esc cancel</span></text>
+      {m.mcpAdding && !m.mcpSaving && (
+        <box marginTop={1} marginLeft={2}>
+          <Hints items={[["tab", "next"], ["^s", "save"], ["esc", "cancel"]]} />
         </box>
       )}
     </box>

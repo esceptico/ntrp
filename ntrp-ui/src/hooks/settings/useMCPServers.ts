@@ -4,17 +4,13 @@ import type { MCPServerInfo } from "../../api/client.js";
 import { getMCPServers, addMCPServer, removeMCPServer } from "../../api/client.js";
 import { useTextInput } from "../useTextInput.js";
 import type { Key } from "../useKeypress.js";
+import { handleListNav } from "../keyUtils.js";
 
 export interface UseMCPServersResult {
   mcpServers: MCPServerInfo[];
   mcpIndex: number;
-  setMcpIndex: React.Dispatch<React.SetStateAction<number>>;
-
   mcpAdding: boolean;
-  setMcpAdding: React.Dispatch<React.SetStateAction<boolean>>;
   mcpAddField: "name" | "transport" | "command" | "url";
-  setMcpAddField: React.Dispatch<React.SetStateAction<"name" | "transport" | "command" | "url">>;
-
   mcpName: string;
   mcpNameCursor: number;
   mcpTransport: "stdio" | "http";
@@ -22,22 +18,13 @@ export interface UseMCPServersResult {
   mcpCommandCursor: number;
   mcpUrl: string;
   mcpUrlCursor: number;
-
   mcpSaving: boolean;
   mcpError: string | null;
   mcpConfirmRemove: boolean;
-  setMcpConfirmRemove: React.Dispatch<React.SetStateAction<boolean>>;
-
-  handleMcpAdd: () => Promise<void>;
-  handleMcpRemove: () => Promise<void>;
-  handleMcpStartAdd: () => void;
-  handleMcpCancelAdd: () => void;
-  handleMcpToggleTransport: () => void;
-  handleMcpNameKey: (key: Key) => boolean;
-  handleMcpCommandKey: (key: Key) => boolean;
-  handleMcpUrlKey: (key: Key) => boolean;
-
   refreshMcpServers: () => void;
+  handleKeypress: (key: Key) => void;
+  isEditing: boolean;
+  cancelEdit: () => void;
 }
 
 export function useMCPServers(config: Config): UseMCPServersResult {
@@ -91,6 +78,13 @@ export function useMCPServers(config: Config): UseMCPServersResult {
 
   const handleMcpCancelAdd = useCallback(() => {
     setMcpAdding(false);
+    setMcpName("");
+    setMcpNameCursor(0);
+    setMcpTransport("stdio");
+    setMcpCommand("");
+    setMcpCommandCursor(0);
+    setMcpUrl("");
+    setMcpUrlCursor(0);
     setMcpError(null);
   }, []);
 
@@ -153,14 +147,59 @@ export function useMCPServers(config: Config): UseMCPServersResult {
     }
   }, [mcpSaving, mcpServers, mcpIndex, config, refreshMcpServers]);
 
+  const isEditing = mcpAdding || mcpConfirmRemove;
+
+  const cancelEdit = useCallback(() => {
+    if (mcpAdding) handleMcpCancelAdd();
+    else if (mcpConfirmRemove) setMcpConfirmRemove(false);
+  }, [mcpAdding, mcpConfirmRemove, handleMcpCancelAdd]);
+
+  const handleKeypress = useCallback((key: Key) => {
+    if (mcpConfirmRemove) {
+      if (key.sequence === "y") handleMcpRemove();
+      else setMcpConfirmRemove(false);
+      return;
+    }
+    if (mcpAdding) {
+      if (key.name === "s" && key.ctrl) {
+        handleMcpAdd();
+      } else if (key.name === "tab") {
+        const fields = mcpTransport === "stdio"
+          ? ["name", "transport", "command"] as const
+          : ["name", "transport", "url"] as const;
+        const idx = (fields as readonly string[]).indexOf(mcpAddField);
+        setMcpAddField(fields[(idx + 1) % fields.length]);
+      } else if (mcpAddField === "transport") {
+        if (key.name === "left" || key.name === "right" || key.name === "h" || key.name === "l") {
+          handleMcpToggleTransport();
+        }
+      } else if (mcpAddField === "name") {
+        handleMcpNameKey(key);
+      } else if (mcpAddField === "command") {
+        handleMcpCommandKey(key);
+      } else if (mcpAddField === "url") {
+        handleMcpUrlKey(key);
+      }
+      return;
+    }
+    if (handleListNav(key, mcpServers.length, setMcpIndex)) {
+      // handled
+    } else if (key.sequence === "a") {
+      handleMcpStartAdd();
+    } else if (key.sequence === "d") {
+      if (mcpServers.length > 0) setMcpConfirmRemove(true);
+    }
+  }, [
+    mcpConfirmRemove, mcpAdding, mcpTransport, mcpAddField, mcpServers.length,
+    handleMcpRemove, handleMcpAdd, handleMcpToggleTransport,
+    handleMcpNameKey, handleMcpCommandKey, handleMcpUrlKey, handleMcpStartAdd,
+  ]);
+
   return {
     mcpServers,
     mcpIndex,
-    setMcpIndex,
     mcpAdding,
-    setMcpAdding,
     mcpAddField,
-    setMcpAddField,
     mcpName,
     mcpNameCursor,
     mcpTransport,
@@ -171,15 +210,9 @@ export function useMCPServers(config: Config): UseMCPServersResult {
     mcpSaving,
     mcpError,
     mcpConfirmRemove,
-    setMcpConfirmRemove,
-    handleMcpAdd,
-    handleMcpRemove,
-    handleMcpStartAdd,
-    handleMcpCancelAdd,
-    handleMcpToggleTransport,
-    handleMcpNameKey,
-    handleMcpCommandKey,
-    handleMcpUrlKey,
     refreshMcpServers,
+    handleKeypress,
+    isEditing,
+    cancelEdit,
   };
 }

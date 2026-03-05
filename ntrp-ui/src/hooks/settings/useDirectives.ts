@@ -10,11 +10,10 @@ export interface UseDirectivesResult {
   editingDirectives: boolean;
   savingDirectives: boolean;
   directivesError: string | null;
-  handleSaveDirectives: () => Promise<void>;
-  handleCancelDirectives: () => void;
-  handleStartDirectivesEdit: () => void;
-  handleDirectivesKey: (key: Key) => boolean;
   loadDirectives: () => void;
+  handleKeypress: (key: Key) => void;
+  isEditing: boolean;
+  cancelEdit: () => void;
 }
 
 export function useDirectives(config: Config): UseDirectivesResult {
@@ -68,16 +67,26 @@ export function useDirectives(config: Config): UseDirectivesResult {
     setEditingDirectives(true);
   }, [directivesContent]);
 
+  const isEditing = editingDirectives;
+
+  const handleKeypress = useCallback((key: Key) => {
+    if (editingDirectives) {
+      if (key.name === "s" && key.ctrl) handleSaveDirectives();
+      else handleDirectivesKey(key);
+    } else if (key.name === "return" || key.name === "space") {
+      handleStartDirectivesEdit();
+    }
+  }, [editingDirectives, handleSaveDirectives, handleDirectivesKey, handleStartDirectivesEdit]);
+
   return {
     directivesContent,
     directivesCursorPos,
     editingDirectives,
     savingDirectives,
     directivesError,
-    handleSaveDirectives,
-    handleCancelDirectives,
-    handleStartDirectivesEdit,
-    handleDirectivesKey,
     loadDirectives,
+    handleKeypress,
+    isEditing,
+    cancelEdit: handleCancelDirectives,
   };
 }

@@ -1,30 +1,15 @@
-import { colors } from "../../../ui/index.js";
+import { colors, Hints } from "../../../ui/index.js";
 import type { ProviderInfo } from "../../../../api/client.js";
+import type { UseCredentialSectionResult } from "../../../../hooks/settings/useCredentialSection.js";
+import { MaskedKeyInput } from "./shared.js";
 
 interface ProvidersSectionProps {
-  providers: ProviderInfo[];
-  selectedIndex: number;
+  providers: UseCredentialSectionResult<ProviderInfo>;
   accent: string;
-  editing: boolean;
-  keyValue: string;
-  keyCursor: number;
-  saving: boolean;
-  error: string | null;
-  confirmingDisconnect: boolean;
 }
 
-export function ProvidersSection({
-  providers,
-  selectedIndex,
-  accent,
-  editing,
-  keyValue,
-  keyCursor,
-  saving,
-  error,
-  confirmingDisconnect,
-}: ProvidersSectionProps) {
-  if (providers.length === 0) {
+export function ProvidersSection({ providers: s, accent }: ProvidersSectionProps) {
+  if (s.items.length === 0) {
     return (
       <box flexDirection="column">
         <text><span fg={colors.text.muted}>  Loading...</span></text>
@@ -32,36 +17,35 @@ export function ProvidersSection({
     );
   }
 
-  const provider = providers[selectedIndex];
-  const maskedKey = keyValue ? "\u2022".repeat(Math.min(keyValue.length, 40)) : "";
+  const current = s.items[s.selectedIndex];
 
   return (
     <box flexDirection="column">
-      {providers.map((p, i) => {
-        const selected = i === selectedIndex;
-        const isCustom = p.id === "custom";
-        const isEditing = selected && editing && !isCustom;
+      {s.items.map((provider, i) => {
+        const selected = i === s.selectedIndex;
+        const isCustom = provider.id === "custom";
+        const isEditing = selected && s.editing && !isCustom;
 
         return (
-          <box key={p.id} flexDirection="column">
+          <box key={provider.id} flexDirection="column">
             <box flexDirection="row">
               <text>
                 <span fg={selected ? accent : colors.text.disabled}>{selected ? "\u25B8 " : "  "}</span>
-                <span fg={selected ? colors.text.primary : colors.text.secondary}>{p.name.padEnd(28)}</span>
+                <span fg={selected ? colors.text.primary : colors.text.secondary}>{provider.name.padEnd(28)}</span>
               </text>
               {isCustom ? (
                 <text>
-                  <span fg={p.connected ? colors.status.success : colors.text.disabled}>
-                    {p.model_count ? `${p.model_count} model${p.model_count !== 1 ? "s" : ""}` : "none"}
+                  <span fg={provider.connected ? colors.status.success : colors.text.disabled}>
+                    {provider.model_count ? `${provider.model_count} model${provider.model_count !== 1 ? "s" : ""}` : "none"}
                   </span>
                 </text>
               ) : (
                 <text>
-                  {p.connected ? (
+                  {provider.connected ? (
                     <>
                       <span fg={colors.status.success}>{"\u2713 "}</span>
-                      <span fg={colors.text.disabled}>{p.key_hint ?? ""}</span>
-                      {p.from_env && <span fg={colors.text.muted}>{" (env)"}</span>}
+                      <span fg={colors.text.disabled}>{provider.key_hint ?? ""}</span>
+                      {provider.from_env && <span fg={colors.text.muted}>{" (env)"}</span>}
                     </>
                   ) : (
                     <span fg={colors.text.disabled}>not connected</span>
@@ -73,62 +57,48 @@ export function ProvidersSection({
               <box marginLeft={2}>
                 <box flexDirection="row">
                   <text><span fg={colors.text.primary}>{"  API Key".padEnd(14)}</span></text>
-                  {keyValue ? (
-                    <text>
-                      <span fg={colors.text.primary}>{maskedKey.slice(0, keyCursor)}</span>
-                      <span bg={colors.text.primary} fg={colors.contrast}>{maskedKey[keyCursor] || " "}</span>
-                      <span fg={colors.text.primary}>{maskedKey.slice(keyCursor + 1)}</span>
-                    </text>
-                  ) : (
-                    <text>
-                      <span fg={colors.text.muted}>paste key...</span>
-                      <span bg={colors.text.primary} fg={colors.contrast}>{" "}</span>
-                    </text>
-                  )}
+                  <MaskedKeyInput value={s.keyValue} cursor={s.keyCursor} />
                 </box>
               </box>
             )}
-            {selected && confirmingDisconnect && (
+            {selected && s.confirmDisconnect && (
               <box marginLeft={2}>
-                <text><span fg={colors.status.warning}>  Disconnect {p.name}? (y/n)</span></text>
+                <text><span fg={colors.status.warning}>  Disconnect {provider.name}? (y/n)</span></text>
               </box>
             )}
           </box>
         );
       })}
 
-      {error && (
+      {s.error && (
         <box marginTop={1}>
-          <text><span fg={colors.status.error}>  {error}</span></text>
+          <text><span fg={colors.status.error}>  {s.error}</span></text>
         </box>
       )}
 
-      {saving && (
+      {s.saving && (
         <box marginTop={1}>
           <text><span fg={colors.text.muted}>  Saving...</span></text>
         </box>
       )}
 
-      {!editing && !confirmingDisconnect && !saving && (
-        <box marginTop={1}>
-          <text>
-            <span fg={colors.text.disabled}>  </span>
-            {provider && provider.id !== "custom" && provider.connected && !provider.from_env ? (
-              <span fg={colors.text.disabled}>enter edit · d disconnect</span>
-            ) : provider?.from_env ? (
-              <span fg={colors.text.disabled}>set via environment variable</span>
-            ) : provider?.id === "custom" ? (
-              <span fg={colors.text.disabled}>use /connect to manage custom models</span>
-            ) : (
-              <span fg={colors.text.disabled}>enter to add key</span>
-            )}
-          </text>
+      {!s.editing && !s.confirmDisconnect && !s.saving && (
+        <box marginTop={1} marginLeft={2}>
+          {current && current.id !== "custom" && current.connected && !current.from_env ? (
+            <Hints items={[["enter", "edit"], ["d", "disconnect"]]} />
+          ) : current?.from_env ? (
+            <text><span fg={colors.text.disabled}>set via environment variable</span></text>
+          ) : current?.id === "custom" ? (
+            <text><span fg={colors.text.disabled}>use /connect to manage custom models</span></text>
+          ) : (
+            <Hints items={[["enter", "add key"]]} />
+          )}
         </box>
       )}
 
-      {editing && (
-        <box marginTop={1}>
-          <text><span fg={colors.text.disabled}>  enter to save · esc to cancel</span></text>
+      {s.editing && (
+        <box marginTop={1} marginLeft={2}>
+          <Hints items={[["enter", "save"], ["esc", "cancel"]]} />
         </box>
       )}
     </box>

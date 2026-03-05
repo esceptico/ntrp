@@ -30,7 +30,7 @@ export function emptyForm(): FormFields {
   };
 }
 
-export function fieldCountForType(type: string): number {
+function fieldCountForType(type: string): number {
   if (type === "email") return 3;
   if (type === "telegram") return 2;
   return 2;
@@ -44,7 +44,7 @@ interface UseNotifierFormOptions {
   onModeChange: (mode: NotifierMode) => void;
 }
 
-export interface UseNotifierFormResult {
+interface UseNotifierFormResult {
   form: FormFields;
   formType: string;
   activeField: number;

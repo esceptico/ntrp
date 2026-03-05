@@ -3,6 +3,7 @@ import type { Config } from "../types.js";
 import { getSkills, installSkill, removeSkill, type Skill } from "../api/client.js";
 import type { Key } from "./useKeypress.js";
 import { useTextInput } from "./useTextInput.js";
+import { handleListNav } from "./keyUtils.js";
 
 export type SkillsMode = "list" | "install" | "confirm-delete";
 
@@ -16,6 +17,8 @@ export interface UseSkillsResult {
   installSource: string;
   installCursor: number;
   handleKeypress: (key: Key) => void;
+  isEditing: boolean;
+  cancelEdit: () => void;
 }
 
 export function useSkills(config: Config): UseSkillsResult {
@@ -84,10 +87,8 @@ export function useSkills(config: Config): UseSkillsResult {
   const handleKeypress = useCallback(
     (key: Key) => {
       if (mode === "list") {
-        if (key.name === "up" || key.name === "k") {
-          setSelectedIndex((i) => Math.max(0, i - 1));
-        } else if (key.name === "down" || key.name === "j") {
-          setSelectedIndex((i) => Math.min(skills.length - 1, i + 1));
+        if (handleListNav(key, skills.length, setSelectedIndex)) {
+          // handled
         } else if (key.sequence === "a") {
           setMode("install");
           setError(null);
@@ -116,8 +117,21 @@ export function useSkills(config: Config): UseSkillsResult {
     [mode, skills.length, handleInstall, handleDelete, handleInstallKey]
   );
 
+  const isEditing = mode !== "list";
+
+  const cancelEdit = useCallback(() => {
+    if (mode === "install") {
+      setMode("list");
+      setInstallSource("");
+      setInstallCursor(0);
+      setError(null);
+    } else if (mode === "confirm-delete") {
+      setMode("list");
+    }
+  }, [mode]);
+
   return {
     mode, skills, selectedIndex, loading, installing, error,
-    installSource, installCursor, handleKeypress,
+    installSource, installCursor, handleKeypress, isEditing, cancelEdit,
   };
 }

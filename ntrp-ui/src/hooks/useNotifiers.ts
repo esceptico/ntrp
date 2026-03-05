@@ -14,20 +14,10 @@ import {
   emptyForm,
   type FormFields,
 } from "./useNotifierForm.js";
+import { handleListNav } from "./keyUtils.js";
+import { NOTIFIER_TYPE_ORDER as TYPE_ORDER } from "../components/dialogs/settings/config.js";
 
 export type NotifierMode = "list" | "add-type" | "add-form" | "edit-form" | "confirm-delete";
-
-const TYPE_ORDER = ["email", "telegram", "bash"] as const;
-const TYPE_LABELS: Record<string, string> = {
-  email: "Email",
-  telegram: "Telegram",
-  bash: "Bash",
-};
-const TYPE_DESCRIPTIONS: Record<string, string> = {
-  email: "Send via connected Gmail",
-  telegram: "Send via Telegram bot",
-  bash: "Run shell command",
-};
 
 export interface UseNotifiersResult {
   configs: NotifierConfigData[];
@@ -43,6 +33,8 @@ export interface UseNotifiersResult {
   testing: boolean;
   testResult: { name: string; ok: boolean; error?: string } | null;
   handleKeypress: (key: Key) => void;
+  isEditing: boolean;
+  cancelEdit: () => void;
 }
 
 export function useNotifiers(config: Config): UseNotifiersResult {
@@ -116,10 +108,8 @@ export function useNotifiers(config: Config): UseNotifiersResult {
       if (formHook.saving) return;
 
       if (mode === "list") {
-        if (key.name === "j" || key.name === "down") {
-          setSelectedIndex((i) => Math.min(configs.length - 1, i + 1));
-        } else if (key.name === "k" || key.name === "up") {
-          setSelectedIndex((i) => Math.max(0, i - 1));
+        if (handleListNav(key, configs.length, setSelectedIndex)) {
+          // handled
         } else if (key.sequence === "a") {
           setTypeSelectIndex(0);
           setMode("add-type");
@@ -172,12 +162,23 @@ export function useNotifiers(config: Config): UseNotifiersResult {
     ]
   );
 
+  const isEditing = mode !== "list";
+
+  const cancelEdit = useCallback(() => {
+    if (mode === "add-type" || mode === "confirm-delete") {
+      setMode("list");
+    } else if (mode === "add-form" || mode === "edit-form") {
+      formHook.resetForm();
+      setMode("list");
+    }
+  }, [mode, formHook]);
+
   return {
     configs, types, selectedIndex, mode,
     form: formHook.form, formType: formHook.formType, activeField: formHook.activeField,
-    error: formHook.error, typeSelectIndex, loading, testing, testResult, handleKeypress,
+    error: formHook.error, typeSelectIndex, loading, testing, testResult,
+    handleKeypress, isEditing, cancelEdit,
   };
 }
 
-export { TYPE_ORDER, TYPE_LABELS, TYPE_DESCRIPTIONS };
 export type { FormFields } from "./useNotifierForm.js";

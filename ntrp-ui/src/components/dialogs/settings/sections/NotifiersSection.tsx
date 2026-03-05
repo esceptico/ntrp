@@ -1,8 +1,7 @@
 import type React from "react";
 import { colors, SelectionIndicator, TextInputField, Hints } from "../../../ui/index.js";
 import type { UseNotifiersResult } from "../../../../hooks/useNotifiers.js";
-import { TYPE_ORDER, TYPE_LABELS, TYPE_DESCRIPTIONS } from "../../../../hooks/useNotifiers.js";
-import { INDICATOR_SELECTED, INDICATOR_UNSELECTED } from "../../../../lib/constants.js";
+import { NOTIFIER_TYPE_ORDER as TYPE_ORDER, NOTIFIER_TYPE_LABELS as TYPE_LABELS, NOTIFIER_TYPE_DESCRIPTIONS as TYPE_DESCRIPTIONS } from "../config.js";
 
 interface NotifiersSectionProps {
   notifiers: UseNotifiersResult;
@@ -31,14 +30,8 @@ function ListMode({ notifiers, accent }: NotifiersSectionProps) {
         const selected = idx === selectedIndex;
         return (
           <box key={cfg.name} flexDirection="row">
-            <box width={2} flexShrink={0}>
-              <text>
-                <span fg={selected ? accent : colors.text.disabled}>
-                  {selected ? INDICATOR_SELECTED.trimEnd() : INDICATOR_UNSELECTED.trimEnd()}
-                </span>
-              </text>
-            </box>
-            <box width={10} flexShrink={0} marginLeft={1}>
+            <text><SelectionIndicator selected={selected} accent={accent} /></text>
+            <box width={10} flexShrink={0}>
               <text>
                 <span fg={TYPE_COLOR}><strong>{TYPE_LABELS[cfg.type] ?? cfg.type}</strong></span>
               </text>
