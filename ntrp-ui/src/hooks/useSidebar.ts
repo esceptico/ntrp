@@ -48,6 +48,13 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
     }
   }, [config]);
 
+  // Eagerly load sessions on mount so cycleSession always has data
+  useEffect(() => {
+    listSessions(config).then(r => {
+      setData(prev => ({ ...prev, sessions: r.sessions }));
+    }).catch(() => {});
+  }, [config]);
+
   // Refresh on session or message changes
   useEffect(() => {
     if (active) refresh();

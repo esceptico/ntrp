@@ -15,7 +15,7 @@ import {
 
 export type SortOrder = "recent" | "oldest";
 
-interface FactsTabState {
+export interface FactsTabState {
   filteredFacts: Fact[];
   selectedIndex: number;
   factDetails: FactDetails | null;

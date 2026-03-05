@@ -15,7 +15,7 @@ import {
 
 export type SortOrder = "recent" | "oldest";
 
-interface ObservationsTabState {
+export interface ObservationsTabState {
   filteredObservations: Observation[];
   selectedIndex: number;
   obsDetails: ObservationDetails | null;

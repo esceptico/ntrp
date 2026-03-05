@@ -1,6 +1,8 @@
 import { colors, TextInputField, TextEditArea } from "../../ui/index.js";
-import { CHECKBOX_CHECKED, CHECKBOX_UNCHECKED } from "../../../lib/constants.js";
 import type { NotifierSummary } from "../../../api/client.js";
+import { labelCell, selectorRow } from "./FormHelpers.js";
+import { TriggerFields } from "./TriggerFields.js";
+import { NotifierSelector } from "./NotifierSelector.js";
 
 export type CreateFocus = "name" | "description" | "model" | "trigger_type" | "mode" | "time" | "interval" | "start" | "end" | "days" | "day_picker" | "event_type" | "event_lead" | "notifiers" | "writable";
 
@@ -78,84 +80,13 @@ export function AutomationCreateView({
   endCursorPos,
   canSave,
 }: AutomationCreateViewProps) {
-  const LABEL_WIDTH = 14;
-
-  const parseHmToMinutes = (value: string): number | null => {
-    const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
-    if (!m) return null;
-    const hours = Number(m[1]);
-    const mins = Number(m[2]);
-    if (hours < 0 || hours > 23 || mins < 0 || mins > 59) return null;
-    return (hours * 60) + mins;
-  };
-
-  const renderWindowBar = (start: string, end: string): string => {
-    const slots = 32;
-    const startMins = parseHmToMinutes(start);
-    const endMins = parseHmToMinutes(end);
-    if (startMins === null || endMins === null || endMins <= startMins) {
-      return "|--------------------------------|";
-    }
-    const startIdx = Math.max(0, Math.min(slots - 1, Math.floor((startMins / 1440) * slots)));
-    const endIdx = Math.max(startIdx + 1, Math.min(slots, Math.ceil((endMins / 1440) * slots)));
-    let bar = "|";
-    for (let i = 0; i < slots; i++) {
-      bar += i >= startIdx && i < endIdx ? "█" : "-";
-    }
-    bar += "|";
-    return bar;
-  };
-
-  const labelCell = (text: string, focused: boolean) => (
-    <box width={LABEL_WIDTH} flexShrink={0}>
-      <text>
-        <span fg={focused ? colors.selection.active : colors.text.disabled}>{focused ? ">" : " "}</span>
-        <span fg={focused ? colors.text.primary : colors.text.muted}>{` ${text}`}</span>
-      </text>
-    </box>
-  );
-
-  const optionCell = (opt: string, selected: boolean, focused: boolean) => {
-    const fg = selected
-      ? (focused ? colors.text.primary : colors.text.secondary)
-      : colors.text.disabled;
-    return (
-      <text key={opt}>
-        <span fg={fg}>{selected ? `[${opt}]` : ` ${opt} `}</span>
-      </text>
-    );
-  };
-
-  /** Day picker: selected = filled circle, unselected = empty circle. Unmistakable. */
-  const dayCell = (day: string, isSelected: boolean, isCursor: boolean) => {
-    const marker = isSelected ? "\u25CF" : "\u25CB"; // ● vs ○
-    const fg = isSelected
-      ? (isCursor ? colors.selection.active : colors.status.success)
-      : (isCursor ? colors.text.primary : colors.text.disabled);
-    return (
-      <text key={day}>
-        <span fg={fg}>{` ${marker} ${day} `}</span>
-      </text>
-    );
-  };
-
-  const selectorRow = (label: string, focused: boolean, options: readonly string[], selected: string) => (
-    <box flexDirection="row">
-      {labelCell(label, focused)}
-      <box flexDirection="row" flexWrap="wrap">
-        {options.map((opt) => optionCell(opt, opt === selected, focused))}
-      </box>
-    </box>
-  );
-
-  const daysOptions = scheduleMode === "schedule" ? SCHEDULE_DAYS : INTERVAL_DAYS;
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const activeNotifiers = availableNotifiers.filter((notifier) => notifiers.includes(notifier.name));
   const notifierLabel = activeNotifiers.length > 0
     ? activeNotifiers.map((n) => `${n.type}:${n.name}`).join(", ")
     : "none";
   const customDaysLabel = customDays.length > 0 ? customDays.join(",") : "(none)";
   const daysLabel = daysOption === "custom" ? customDaysLabel : daysOption;
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const timePreview = triggerType === "time"
     ? scheduleMode === "schedule"
       ? `${daysLabel} @ ${timeValue || "--:--"}`
@@ -169,7 +100,6 @@ export function AutomationCreateView({
     ? "Select at least one day"
     : null;
   const statusText = `Writable: ${writable ? "yes" : "no"}   Save: ${canSave ? "enabled" : "disabled"}   Conflicts: none`;
-  const nameInputWidth = Math.max(8, width - LABEL_WIDTH);
 
   return (
     <box flexDirection="column" width={width}>
@@ -213,129 +143,37 @@ export function AutomationCreateView({
 
       {selectorRow("TRIGGER", focus === "trigger_type", TRIGGER_TYPES, triggerType)}
 
-      {triggerType === "time" && (
-        <>
-          {selectorRow("MODE", focus === "mode", SCHEDULE_MODES, scheduleMode)}
-
-          {scheduleMode === "schedule" ? (
-            <box flexDirection="row">
-              {labelCell("TIME", focus === "time")}
-              <TextInputField
-                value={timeValue}
-                cursorPos={timeCursorPos}
-                placeholder="09:00"
-                showCursor={editing && focus === "time"}
-              />
-              {focus === "time" && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
-            </box>
-          ) : (
-            <>
-              <box flexDirection="row">
-                {labelCell("EVERY", focus === "interval")}
-                <TextInputField
-                  value={intervalValue}
-                  cursorPos={intervalCursorPos}
-                  placeholder="30m"
-                  showCursor={editing && focus === "interval"}
-                />
-                {focus === "interval" && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
-              </box>
-              <box flexDirection="row">
-                {labelCell("WINDOW", focus === "start" || focus === "end")}
-                <TextInputField
-                  value={startValue}
-                  cursorPos={startCursorPos}
-                  placeholder="08:00"
-                  showCursor={editing && focus === "start"}
-                />
-                <text><span fg={colors.text.muted}> </span></text>
-                <text><span fg={colors.text.muted}>{renderWindowBar(startValue, endValue)}</span></text>
-                <text><span fg={colors.text.muted}> </span></text>
-                <TextInputField
-                  value={endValue}
-                  cursorPos={endCursorPos}
-                  placeholder="18:00"
-                  showCursor={editing && focus === "end"}
-                />
-                {(focus === "start" || focus === "end") && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
-              </box>
-            </>
-          )}
-
-          {selectorRow("DAYS", focus === "days", daysOptions, daysOption)}
-
-          {daysOption === "custom" && (
-            <>
-              <box flexDirection="row">
-                {labelCell("PICK", focus === "day_picker")}
-                <box flexDirection="row" flexWrap="wrap">
-                  {DAY_NAMES.map((day, idx) => {
-                    const isSelected = customDays.includes(day);
-                    const isCursor = editing && focus === "day_picker" && idx === dayCursor;
-                    return dayCell(day, isSelected, isCursor);
-                  })}
-                </box>
-                {focus === "day_picker" && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
-              </box>
-              <box flexDirection="row">
-                <box width={LABEL_WIDTH} />
-                <text>
-                  <span fg={colors.text.muted}>Selected: </span>
-                  <span fg={customDays.length > 0 ? colors.status.success : colors.text.disabled}>
-                    {customDays.length > 0 ? customDays.join(", ") : "none (space to toggle)"}
-                  </span>
-                </text>
-              </box>
-            </>
-          )}
-        </>
-      )}
-
-      {triggerType === "event" && (
-        <>
-          {selectorRow("EVENT", focus === "event_type", EVENT_TYPES, eventType)}
-          {eventType === "event_approaching" && (
-            <box flexDirection="row">
-              {labelCell("LEAD", focus === "event_lead")}
-              <TextInputField
-                value={eventLeadValue}
-                cursorPos={eventLeadCursorPos}
-                placeholder="60m"
-                showCursor={editing && focus === "event_lead"}
-              />
-              {focus === "event_lead" && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
-            </box>
-          )}
-        </>
-      )}
+      <TriggerFields
+        focus={focus}
+        editing={editing}
+        triggerType={triggerType}
+        scheduleMode={scheduleMode}
+        daysOption={daysOption}
+        eventType={eventType}
+        customDays={customDays}
+        dayCursor={dayCursor}
+        timeValue={timeValue}
+        timeCursorPos={timeCursorPos}
+        intervalValue={intervalValue}
+        intervalCursorPos={intervalCursorPos}
+        startValue={startValue}
+        startCursorPos={startCursorPos}
+        endValue={endValue}
+        endCursorPos={endCursorPos}
+        eventLeadValue={eventLeadValue}
+        eventLeadCursorPos={eventLeadCursorPos}
+      />
 
       <box marginTop={1} />
 
       {availableNotifiers.length > 0 && (
-        <>
-          <box flexDirection="row">
-            {labelCell("NOTIFIERS", focus === "notifiers")}
-            <text><span fg={colors.text.muted}>select targets</span></text>
-            {focus === "notifiers" && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
-          </box>
-          <box flexDirection="column">
-            {availableNotifiers.map((notifier, idx) => {
-              const isCursor = editing && focus === "notifiers" && idx === notifierCursor;
-              const isChecked = notifiers.includes(notifier.name);
-              return (
-                <box key={notifier.name} flexDirection="row">
-                  <box width={LABEL_WIDTH} />
-                  <text>
-                    <span fg={isCursor ? colors.selection.active : colors.text.disabled}>{isCursor ? ">" : " "}</span>
-                    <span fg={isChecked ? colors.status.success : colors.text.disabled}>{` ${isChecked ? CHECKBOX_CHECKED : CHECKBOX_UNCHECKED} `}</span>
-                    <span fg={isCursor ? colors.text.primary : colors.text.secondary}>{notifier.name}</span>
-                    <span fg={colors.text.muted}>{` (${notifier.type}) -> ${isChecked ? "configured" : "add..."}`}</span>
-                  </text>
-                </box>
-              );
-            })}
-          </box>
-        </>
+        <NotifierSelector
+          focus={focus}
+          editing={editing}
+          availableNotifiers={availableNotifiers}
+          notifiers={notifiers}
+          notifierCursor={notifierCursor}
+        />
       )}
 
       <box flexDirection="row">

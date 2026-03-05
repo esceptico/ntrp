@@ -15,7 +15,7 @@ import {
 
 export type SortOrder = "recent" | "oldest";
 
-interface DreamsTabState {
+export interface DreamsTabState {
   filteredDreams: Dream[];
   selectedIndex: number;
   dreamDetails: DreamDetails | null;

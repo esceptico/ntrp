@@ -1,6 +1,7 @@
 import type { InputRenderable, TextareaRenderable } from "@opentui/core";
 import { colors } from "../../ui/index.js";
 import { CHECKBOX_CHECKED, CHECKBOX_UNCHECKED } from "../../../lib/constants.js";
+import { labelCell, LABEL_WIDTH } from "./FormHelpers.js";
 import type { EditFocus } from "../../../hooks/useAutomations.js";
 import type { NotifierSummary } from "../../../api/client.js";
 
@@ -29,7 +30,6 @@ export function AutomationEditView({
   nameRef,
   descRef,
 }: AutomationEditViewProps) {
-  const LABEL_WIDTH = 14;
   const nameFocused = editFocus === "name";
   const descFocused = editFocus === "description";
   const notifFocused = editFocus === "notifiers";
@@ -37,15 +37,6 @@ export function AutomationEditView({
     .filter((notifier) => editNotifiers.includes(notifier.name))
     .map((notifier) => notifier.name)
     .join(",");
-
-  const labelCell = (text: string, focused: boolean) => (
-    <box width={LABEL_WIDTH} flexShrink={0}>
-      <text>
-        <span fg={focused ? colors.selection.active : colors.text.disabled}>{focused ? ">" : " "}</span>
-        <span fg={focused ? colors.text.primary : colors.text.muted}>{` ${text}`}</span>
-      </text>
-    </box>
-  );
 
   return (
     <box flexDirection="column" width={width}>

@@ -3,6 +3,25 @@ import type { NumberItem } from "./config.js";
 
 const LABEL_WIDTH = 14;
 
+interface ModelSelectorProps {
+  label: string;
+  currentModel: string;
+  selected: boolean;
+  accent: string;
+  maxWidth: number;
+}
+
+export function ModelSelector({ label, currentModel, selected, accent, maxWidth }: ModelSelectorProps) {
+  const truncated = currentModel.length > maxWidth ? currentModel.slice(0, maxWidth - 1) + "…" : currentModel;
+  return (
+    <text>
+      <SelectionIndicator selected={selected} accent={accent} />
+      <span fg={selected ? colors.text.primary : colors.text.secondary}>{label.padEnd(LABEL_WIDTH)}</span>
+      <span fg={selected ? accent : colors.text.muted}>{truncated}</span>
+    </text>
+  );
+}
+
 interface RowProps {
   selected: boolean;
   accent: string;

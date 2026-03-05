@@ -75,13 +75,13 @@ export function SessionPicker({ config, currentSessionId, onSwitch, onDelete, on
 
   const activeKeybinds: SelectKeybind[] = useMemo(() => [
     { key: "n", label: "new", action: () => { onNew(); onClose(); } },
-    { key: "d", label: "archive", action: (opt) => { setDeleteTarget(opt.value); setConfirmDelete(true); } },
+    { key: "d", label: "archive", action: (opt: SelectOption) => { setDeleteTarget(opt.value); setConfirmDelete(true); } },
     { key: "a", label: "archived", action: () => { setShowArchived(true); loadArchived(); } },
   ], [onNew, onClose, loadArchived]);
 
   const archivedKeybinds: SelectKeybind[] = useMemo(() => [
-    { key: "r", label: "restore", action: (opt) => { onRestore(opt.value).then(() => { if (mountedRef.current) loadArchived(); }); } },
-    { key: "d", label: "delete", action: (opt) => { setDeleteTarget(opt.value); setConfirmDelete(true); } },
+    { key: "r", label: "restore", action: (opt: SelectOption) => { onRestore(opt.value).then(() => { if (mountedRef.current) loadArchived(); }); } },
+    { key: "d", label: "delete", action: (opt: SelectOption) => { setDeleteTarget(opt.value); setConfirmDelete(true); } },
     { key: "a", label: "back", action: () => setShowArchived(false) },
   ], [onRestore, loadArchived]);
 
