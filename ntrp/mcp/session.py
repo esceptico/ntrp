@@ -64,10 +64,10 @@ class MCPServerSession:
             async def _run_http() -> None:
                 try:
                     async with http_client, streamable_http_client(transport.url, http_client=http_client) as (r, w, _):
-                            result["read"] = r
-                            result["write"] = w
-                            ready.set()
-                            await self._http_shutdown.wait()
+                        result["read"] = r
+                        result["write"] = w
+                        ready.set()
+                        await self._http_shutdown.wait()
                 except BaseException as e:
                     result["error"] = e
                     ready.set()

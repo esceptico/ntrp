@@ -200,6 +200,7 @@ async def remove_mcp_server(
 
     # Clean up OAuth tokens if any
     from ntrp.mcp.oauth import clear_tokens
+
     clear_tokens(name)
 
     return {"status": "removed", "name": name}

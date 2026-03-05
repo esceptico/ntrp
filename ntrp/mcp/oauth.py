@@ -115,6 +115,7 @@ def run_mcp_oauth(server_name: str, server_url: str) -> None:
     async def callback_handler() -> tuple[str, str | None]:
         server.timeout = 5
         import time
+
         deadline = time.time() + LOGIN_TIMEOUT
         while not done.is_set():
             if time.time() > deadline:
@@ -145,6 +146,7 @@ def run_mcp_oauth(server_name: str, server_url: str) -> None:
 
     loop = asyncio.new_event_loop()
     try:
+
         async def _run():
             async with create_mcp_http_client(auth=provider) as client:
                 # Make a request to the server URL to trigger the OAuth flow.
