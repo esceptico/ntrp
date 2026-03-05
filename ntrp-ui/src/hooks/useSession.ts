@@ -146,7 +146,15 @@ export function useSession(config: Config) {
     setServerConfig((prev) => prev && { ...prev, ...patch });
   };
 
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+  const sessionNameRef = useRef(sessionName);
+  sessionNameRef.current = sessionName;
+
   const switchSession = useCallback(async (targetSessionId: string): Promise<{ history: HistoryMessage[] } | null> => {
+    const prevId = sessionIdRef.current;
+    const prevName = sessionNameRef.current;
+    setSessionId(targetSessionId);
     try {
       const [session, historyData] = await Promise.all([
         getSession(config, targetSessionId),
@@ -158,6 +166,8 @@ export function useSession(config: Config) {
       setHistory(historyData.messages);
       return { history: historyData.messages };
     } catch {
+      setSessionId(prevId);
+      setSessionName(prevName);
       return null;
     }
   }, [config]);

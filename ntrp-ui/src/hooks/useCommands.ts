@@ -43,7 +43,8 @@ interface CommandContext {
   refreshIndexStatus: () => Promise<void>;
   createNewSession: (name?: string) => Promise<string | null>;
   switchSession: (sessionId: string) => Promise<{ history: HistoryMessage[] } | null>;
-  resetForSessionSwitch: (newHistory?: Message[]) => void;
+  switchToSession: (sessionId: string, history?: Message[]) => void;
+  deleteSessionState: (sessionId: string) => void;
   refreshSidebar: () => void;
   logout: () => void;
 }
@@ -111,11 +112,11 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  new: async ({ addMessage, createNewSession, resetForSessionSwitch, refreshSidebar }, args) => {
+  new: async ({ addMessage, createNewSession, switchToSession, refreshSidebar }, args) => {
     const name = args.join(" ").trim() || undefined;
     const newId = await createNewSession(name);
     if (newId) {
-      resetForSessionSwitch([]);
+      switchToSession(newId, []);
       refreshSidebar();
     } else {
       addMessage({ role: "error", content: "Failed to create session" });
@@ -145,7 +146,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  delete: async ({ config, sessionId, addMessage, createNewSession, resetForSessionSwitch, switchSession, refreshSidebar }, args) => {
+  delete: async ({ config, sessionId, addMessage, createNewSession, switchToSession, deleteSessionState, switchSession, refreshSidebar }, args) => {
     const query = args.join(" ").trim();
     try {
       const { sessions } = await listSessions(config);
@@ -165,6 +166,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
         return true;
       }
 
+      deleteSessionState(targetId);
       await deleteSession(config, targetId);
 
       if (targetId === sessionId) {
@@ -172,16 +174,16 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
         if (next) {
           const result = await switchSession(next.session_id);
           if (result) {
-            resetForSessionSwitch(result.history.map((msg, i) => ({
+            switchToSession(next.session_id, result.history.map((msg, i) => ({
               id: `h-${i}`, role: msg.role, content: msg.content,
             })));
           } else {
-            await createNewSession();
-            resetForSessionSwitch([]);
+            const newId = await createNewSession();
+            if (newId) switchToSession(newId, []);
           }
         } else {
-          await createNewSession();
-          resetForSessionSwitch([]);
+          const newId = await createNewSession();
+          if (newId) switchToSession(newId, []);
         }
       }
 

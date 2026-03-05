@@ -1,12 +1,13 @@
-import { useState, useCallback, useRef, useMemo, memo, useEffect } from "react";
+import { useState, useCallback, useRef, memo, useEffect } from "react";
 import type { TextareaRenderable, KeyEvent } from "@opentui/core";
 import type { SlashCommand } from "../../types.js";
-import { Status, type Status as StatusType } from "../../lib/constants.js";
+import type { Status as StatusType } from "../../lib/constants.js";
 import { colors } from "../ui/colors.js";
 import { useAccentColor } from "../../hooks/index.js";
+import { useAutocomplete } from "../../hooks/useAutocomplete.js";
 import { EmptyBorder } from "../ui/border.js";
-import { BraillePendulum, BrailleCompress, BrailleSort, CyclingStatus } from "../ui/spinners/index.js";
 import { AutocompleteList } from "./AutocompleteList.js";
+import { InputFooter } from "./InputFooter.js";
 
 function formatModel(model?: string): string {
   if (!model) return "";
@@ -47,7 +48,6 @@ export const InputArea = memo(function InputArea({
 
   const inputRef = useRef<TextareaRenderable>(null);
   const [value, setValue] = useState("");
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [escHint, setEscHint] = useState(false);
 
   const escPendingRef = useRef(false);
@@ -59,6 +59,15 @@ export const InputArea = memo(function InputArea({
     };
   }, []);
 
+  const {
+    filteredCommands,
+    showAutocomplete,
+    selectedIndex,
+    resetIndex,
+    getSelectedCommand,
+    handleAutocompleteKey,
+  } = useAutocomplete({ value, commands, inputRef, setValue });
+
   const resetInput = useCallback(() => {
     if (escTimeoutRef.current) {
       clearTimeout(escTimeoutRef.current);
@@ -66,47 +75,29 @@ export const InputArea = memo(function InputArea({
     }
     inputRef.current?.clear();
     setValue("");
-    setSelectedIndex(0);
+    resetIndex();
     escPendingRef.current = false;
     setEscHint(false);
-  }, []);
+  }, [resetIndex]);
 
-  // Filtered commands for autocomplete
-  const filteredCommands = useMemo(() => {
-    if (!value.startsWith("/")) return [];
-    const query = value.slice(1).toLowerCase();
-    if (!query) return commands;
-    return commands.filter(
-      (cmd) => cmd.name.toLowerCase().startsWith(query) || cmd.name.toLowerCase().includes(query)
-    );
-  }, [commands, value]);
-
-  const showAutocomplete = value.startsWith("/") && filteredCommands.length > 0;
-
-  // Keep refs for stable access in callbacks
   const valueRef = useRef(value);
   valueRef.current = value;
-  const showAutocompleteRef = useRef(showAutocomplete);
-  showAutocompleteRef.current = showAutocomplete;
-  const filteredCommandsRef = useRef(filteredCommands);
-  filteredCommandsRef.current = filteredCommands;
-  const selectedIndexRef = useRef(selectedIndex);
-  selectedIndexRef.current = selectedIndex;
 
   const doSubmit = useCallback(() => {
     if (disabled) return;
     const text = inputRef.current?.plainText ?? "";
     if (!text.trim()) return;
 
-    if (showAutocompleteRef.current && filteredCommandsRef.current[selectedIndexRef.current]) {
-      onSubmit(`/${filteredCommandsRef.current[selectedIndexRef.current].name}`);
+    const selected = getSelectedCommand();
+    if (selected) {
+      onSubmit(`/${selected.name}`);
       resetInput();
       return;
     }
 
     onSubmit(text);
     resetInput();
-  }, [disabled, onSubmit, resetInput]);
+  }, [disabled, onSubmit, resetInput, getSelectedCommand]);
 
   const handleKeyDown = useCallback((e: KeyEvent) => {
     if (disabled) {
@@ -114,43 +105,14 @@ export const InputArea = memo(function InputArea({
       return;
     }
 
-    // Enter = submit, Shift+Enter = newline (let textarea handle it)
     if (e.name === "return" && !e.shift) {
       e.preventDefault();
       doSubmit();
       return;
     }
 
-    // Autocomplete navigation
-    if (showAutocompleteRef.current) {
-      if (e.name === "up") {
-        e.preventDefault();
-        setSelectedIndex((i) => Math.max(0, i - 1));
-        return;
-      }
-      if (e.name === "down") {
-        e.preventDefault();
-        setSelectedIndex((i) => Math.min(filteredCommandsRef.current.length - 1, i + 1));
-        return;
-      }
-      if (e.name === "tab" && filteredCommandsRef.current[selectedIndexRef.current]) {
-        e.preventDefault();
-        const cmd = filteredCommandsRef.current[selectedIndexRef.current];
-        const newText = `/${cmd.name} `;
-        const input = inputRef.current;
-        if (input) {
-          const cursor = input.logicalCursor;
-          input.deleteRange(0, 0, cursor.row, cursor.col);
-          input.insertText(newText);
-          input.cursorOffset = newText.length;
-        }
-        setValue(newText);
-        setSelectedIndex(0);
-        return;
-      }
-    }
+    if (handleAutocompleteKey(e)) return;
 
-    // Escape: double-tap to clear
     if (e.name === "escape") {
       if (!valueRef.current) return;
       if (escPendingRef.current) {
@@ -166,19 +128,18 @@ export const InputArea = memo(function InputArea({
       }
       return;
     }
-  }, [disabled, doSubmit, resetInput]);
+  }, [disabled, doSubmit, resetInput, handleAutocompleteKey]);
 
   const handleContentChange = useCallback(() => {
     const text = inputRef.current?.plainText ?? "";
     setValue(text);
-    setSelectedIndex(0);
-  }, []);
+    resetIndex();
+  }, [resetIndex]);
 
   const modelName = formatModel(chatModel);
 
   return (
     <box flexDirection="column" flexShrink={0}>
-      {/* Autocomplete / Help — above input */}
       {showAutocomplete && (
         <AutocompleteList
           commands={filteredCommands}
@@ -187,9 +148,7 @@ export const InputArea = memo(function InputArea({
         />
       )}
 
-      {/* Prompt container — matches OpenCode's structure exactly */}
       <box>
-        {/* Input box with left accent border */}
         <box
           border={["left"]}
           borderColor={accentValue}
@@ -236,7 +195,6 @@ export const InputArea = memo(function InputArea({
             </box>
           </box>
         </box>
-        {/* Bottom cap — half-block transition */}
         <box
           height={1}
           border={["left"]}
@@ -250,69 +208,14 @@ export const InputArea = memo(function InputArea({
             customBorderChars={{ ...EmptyBorder, horizontal: "\u2580" }}
           />
         </box>
-        {/* Footer */}
-        <box flexDirection="row" justifyContent="space-between">
-          {isStreaming || status === Status.COMPRESSING ? (
-            <>
-              <box flexDirection="row" gap={1} flexGrow={1}>
-                <box marginLeft={1}>
-                  {status === Status.COMPRESSING ? (
-                    <BrailleCompress width={8} color={accentValue} interval={30} />
-                  ) : (
-                    <BraillePendulum width={8} color={accentValue} spread={1} interval={20} />
-                  )}
-                </box>
-                {status === Status.COMPRESSING ? (
-                  <text><span fg={colors.text.muted}>compressing context</span></text>
-                ) : (
-                  <CyclingStatus status={status} isStreaming={isStreaming} />
-                )}
-              </box>
-              {isStreaming && (
-                <text>
-                  <span fg={colors.footer}>esc</span>
-                  <span fg={colors.text.disabled}> interrupt</span>
-                </text>
-              )}
-            </>
-          ) : (
-            <>
-              <box flexDirection="row" marginLeft={3}>
-                {indexStatus?.indexing || indexStatus?.reembedding ? (
-                  <box flexDirection="row" gap={1}>
-                    <BrailleSort width={8} color={accentValue} interval={40} />
-                    <text><span fg={colors.text.muted}>{indexStatus.reembedding ? "re-embedding" : "indexing"}</span></text>
-                  </box>
-                ) : null}
-                <text>
-                  {copiedFlash ? (
-                    <span fg={colors.text.muted}>Copied to clipboard</span>
-                  ) : escHint ? (
-                    <span fg={accentValue}>esc again to clear</span>
-                  ) : null}
-                </text>
-              </box>
-              <box gap={2} flexDirection="row">
-                <text>
-                  <span fg={colors.footer}>ctrl+n</span>
-                  <span fg={colors.text.disabled}> new chat</span>
-                </text>
-                <text>
-                  <span fg={colors.footer}>ctrl+l</span>
-                  <span fg={colors.text.disabled}> side panel</span>
-                </text>
-                <text>
-                  <span fg={colors.footer}>tab tab</span>
-                  <span fg={colors.text.disabled}> approvals</span>
-                </text>
-                <text>
-                  <span fg={colors.footer}>shift+tab</span>
-                  <span fg={colors.text.disabled}> switch chat</span>
-                </text>
-              </box>
-            </>
-          )}
-        </box>
+        <InputFooter
+          isStreaming={isStreaming}
+          status={status}
+          accentValue={accentValue}
+          escHint={escHint}
+          copiedFlash={copiedFlash}
+          indexStatus={indexStatus}
+        />
       </box>
     </box>
   );

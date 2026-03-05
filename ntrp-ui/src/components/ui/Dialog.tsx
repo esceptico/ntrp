@@ -20,12 +20,11 @@ export function Dialog({ title, size = "medium", closable = true, footer, childr
 
   const dialogW = size === "full" ? W - 8 : size === "large" ? Math.min(80, W - 4) : Math.min(60, W - 4);
   const contentW = dialogW - 4;
-  // Scrollbox height cap — matches OpenCode: min(content, terminal/2 - overhead)
-  const contentMaxH = Math.floor(H / 2) - 6;
+  const contentMaxH = size === "full" ? H - 10 : Math.floor(H / 2) - 6;
 
   return (
     <box position="absolute" top={0} left={0} width={W} height={H} backgroundColor={OVERLAY_BG}>
-      <box alignItems="center" paddingTop={Math.floor(H / 4)}>
+      <box alignItems="center" paddingTop={size === "full" ? 2 : Math.floor(H / 4)}>
         <box
           width={dialogW}
           maxWidth={W - 2}

@@ -11,6 +11,8 @@ import {
   useSession,
   useStreaming,
   useSidebar,
+  useMessageQueue,
+  useAppDialogs,
   AccentColorProvider,
   type Key,
 } from "./hooks/index.js";
@@ -19,21 +21,18 @@ import {
   InputArea,
   MessageDisplay,
   SettingsDialog,
-  SessionPicker,
   MemoryViewer,
   AutomationsViewer,
   ToolChainDisplay,
   ApprovalDialog,
   ErrorBoundary,
-  ModelPicker,
-  ThemePicker,
 } from "./components/index.js";
 import { Setup } from "./components/Setup.js";
 import { ProviderOnboarding } from "./components/ProviderOnboarding.js";
-import { Sidebar } from "./components/Sidebar.js";
+import { Sidebar } from "./components/sidebar/index.js";
 import { COMMANDS } from "./lib/commands.js";
 import { setApiKey } from "./api/fetch.js";
-import { getSkills, deleteSession, listSessions, restoreSession, permanentlyDeleteSession, type Skill } from "./api/client.js";
+import { getSkills, type Skill } from "./api/client.js";
 
 type ViewMode = "chat" | "memory" | "automations";
 
@@ -93,7 +92,6 @@ function AppContent({
   );
 
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
-  const [messageQueue, setMessageQueue] = useState<string[]>([]);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const dialog = useDialog();
 
@@ -115,14 +113,18 @@ function AppContent({
     status,
     toolChain,
     pendingApproval,
+    sessionStates,
     addMessage,
     clearMessages,
     sendMessage,
     handleApproval,
     cancel,
     setStatus,
-    resetForSessionSwitch,
+    switchToSession,
+    deleteSessionState,
   } = streaming;
+
+  const { messageQueue, enqueue, clearQueue } = useMessageQueue(isStreaming, pendingApproval, sendMessage);
 
   const [copiedFlash, setCopiedFlash] = useState(false);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -154,96 +156,30 @@ function AppContent({
   const startNewSession = useCallback(async () => {
     const newId = await createNewSession();
     if (newId) {
-      resetForSessionSwitch([]);
+      clearQueue();
+      switchToSession(newId, []);
       refreshSidebar();
     }
-  }, [createNewSession, resetForSessionSwitch, refreshSidebar]);
+  }, [createNewSession, switchToSession, refreshSidebar, clearQueue]);
 
-  const openDialog = useCallback((id: string) => {
-    switch (id) {
-      case "sessions":
-        dialog.open(
-          <SessionPicker
-            config={config}
-            currentSessionId={sessionId}
-            onSwitch={async (targetId) => {
-              const result = await switchSession(targetId);
-              if (result) {
-                const historyMessages: Message[] = result.history.map((msg, i) => ({
-                  id: `h-${i}`, role: msg.role, content: msg.content,
-                }));
-                resetForSessionSwitch(historyMessages);
-                refreshSidebar();
-              } else {
-                addMessage({ role: "error", content: "Failed to switch session" } as Message);
-              }
-            }}
-            onDelete={async (targetId) => {
-              try {
-                await deleteSession(config, targetId);
-                if (targetId === sessionId) {
-                  const { sessions } = await listSessions(config);
-                  const next = sessions.find(s => s.session_id !== targetId);
-                  if (next) {
-                    const result = await switchSession(next.session_id);
-                    if (result) {
-                      resetForSessionSwitch(result.history.map((msg, i) => ({
-                        id: `h-${i}`, role: msg.role, content: msg.content,
-                      })));
-                    } else {
-                      await startNewSession();
-                    }
-                  } else {
-                    await startNewSession();
-                  }
-                }
-                refreshSidebar();
-              } catch {}
-            }}
-            onRestore={async (targetId) => {
-              try { await restoreSession(config, targetId); refreshSidebar(); } catch {}
-            }}
-            onPermanentDelete={async (targetId) => {
-              try { await permanentlyDeleteSession(config, targetId); } catch {}
-            }}
-            onNew={startNewSession}
-            onClose={() => dialog.close()}
-          />
-        );
-        break;
-      case "models":
-        dialog.open(
-          <ModelPicker
-            config={config}
-            serverConfig={serverConfig}
-            onModelChange={(type, model) => updateServerConfig({ [`${type}_model`]: model })}
-            onServerConfigChange={(newConfig) => updateServerConfig(newConfig)}
-            onRefreshIndexStatus={refreshIndexStatus}
-            onClose={() => dialog.close()}
-          />
-        );
-        break;
-      case "providers":
-        dialog.open(
-          <ProviderOnboarding config={config} closable onClose={() => dialog.close()} onDone={() => dialog.close()} />
-        );
-        break;
-      case "theme":
-        dialog.open(
-          <ThemePicker
-            currentTheme={settings.ui.theme}
-            currentAccent={settings.ui.accentColor}
-            onSelect={(theme, accent) => {
-              setThemeByName(theme);
-              if (accent !== settings.ui.accentColor) updateSetting("ui", "accentColor", accent);
-              dialog.close();
-            }}
-            onClose={() => dialog.close()}
-          />
-        );
-        break;
-    }
-  }, [config, sessionId, serverConfig, settings.ui.theme, settings.ui.accentColor, dialog, switchSession, resetForSessionSwitch, refreshSidebar, addMessage, startNewSession, updateServerConfig, refreshIndexStatus, setThemeByName, updateSetting]);
+  const { openDialog } = useAppDialogs({
+    config,
+    sessionId,
+    serverConfig,
+    dialog,
+    switchSession,
+    switchToSession,
+    deleteSessionState,
+    addMessage,
+    refreshSidebar,
+    startNewSession,
+    updateServerConfig,
+    refreshIndexStatus,
+    setThemeByName,
+    updateSetting,
+    theme: settings.ui.theme,
+    accentColor: settings.ui.accentColor,
+  });
 
   const { handleCommand } = useCommands({
     config,
@@ -261,7 +197,8 @@ function AppContent({
     refreshIndexStatus,
     createNewSession,
     switchSession,
-    resetForSessionSwitch,
+    switchToSession,
+    deleteSessionState,
     refreshSidebar,
     logout,
   });
@@ -277,7 +214,7 @@ function AppContent({
       if (!trimmed) return;
 
       if (trimmed.startsWith("/")) {
-        if (isStreaming || pendingApproval) return;
+        if (pendingApproval) return;
         const handled = await handleCommand(trimmed);
         if (handled) return;
         const cmdName = trimmed.slice(1).split(" ")[0];
@@ -290,45 +227,47 @@ function AppContent({
       }
 
       if (isStreaming || pendingApproval) {
-        setMessageQueue((prev) => [...prev, trimmed]);
+        enqueue(trimmed);
         return;
       }
 
       sendMessage(trimmed);
     },
-    [isStreaming, pendingApproval, sendMessage, handleCommand, addMessage, skills]
+    [isStreaming, pendingApproval, sendMessage, handleCommand, addMessage, skills, enqueue]
   );
-
-  useEffect(() => {
-    if (!isStreaming && !pendingApproval && messageQueue.length > 0) {
-      const [firstMessage, ...rest] = messageQueue;
-      setMessageQueue(rest);
-      if (firstMessage) {
-        sendMessage(firstMessage);
-      }
-    }
-  }, [isStreaming, pendingApproval, messageQueue, sendMessage]);
 
   const closeView = useCallback(() => setViewMode("chat"), []);
 
+  const isCyclingRef = useRef(false);
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+
   const cycleSession = useCallback(async () => {
+    if (isCyclingRef.current) return;
     const sessions = sidebarData.sessions;
     if (sessions.length < 2) return;
     const currentIdx = sessions.findIndex(s => s.session_id === sessionId);
     const nextIdx = (currentIdx + 1) % sessions.length;
     const target = sessions[nextIdx];
     if (!target) return;
-    const result = await switchSession(target.session_id);
-    if (result) {
-      const historyMessages: Message[] = result.history.map((msg, i) => ({
-        id: `h-${i}`,
-        role: msg.role,
-        content: msg.content,
-      }));
-      resetForSessionSwitch(historyMessages);
-      refreshSidebar();
+
+    isCyclingRef.current = true;
+    clearQueue();
+    switchToSession(target.session_id);
+
+    try {
+      const result = await switchSession(target.session_id);
+      if (result) {
+        switchToSession(target.session_id, result.history.map((msg, i) => ({
+          id: `h-${i}`, role: msg.role, content: msg.content,
+        })));
+      } else {
+        switchToSession(sessionIdRef.current!);
+      }
+    } finally {
+      isCyclingRef.current = false;
     }
-  }, [sidebarData.sessions, sessionId, switchSession, resetForSessionSwitch, refreshSidebar]);
+  }, [sidebarData.sessions, sessionId, switchSession, switchToSession, clearQueue]);
 
   const tabPendingRef = useRef(false);
   const tabTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -342,14 +281,14 @@ function AppContent({
         setSidebarVisible(v => !v);
         return;
       }
-      if (key.ctrl && key.name === "n" && !isStreaming && viewMode === "chat" && !showSettings && !dialog.isOpen) {
+      if (key.ctrl && key.name === "n" && viewMode === "chat" && !showSettings && !dialog.isOpen) {
         startNewSession();
         return;
       }
       if (key.name === "escape" && isStreaming && !dialog.isOpen) {
         cancel();
       }
-      if (key.shift && key.name === "tab" && !showSettings && !isStreaming && viewMode === "chat") {
+      if (key.shift && key.name === "tab" && !showSettings && viewMode === "chat" && !dialog.isOpen && !pendingApproval) {
         cycleSession();
         return;
       }
@@ -368,7 +307,7 @@ function AppContent({
         return;
       }
     },
-    [renderer, isStreaming, cancel, showSettings, viewMode, dialog.isOpen, toggleSkipApprovals, cycleSession, startNewSession]
+    [renderer, isStreaming, pendingApproval, cancel, showSettings, viewMode, dialog.isOpen, toggleSkipApprovals, cycleSession, startNewSession]
   );
 
   useKeypress(handleGlobalKeypress, { isActive: true });
@@ -396,6 +335,7 @@ function AppContent({
             height={contentHeight}
             currentSessionId={sessionId}
             currentSessionName={sessionName}
+            sessionStates={sessionStates}
           />
           <box width={1} height={contentHeight} flexShrink={0} flexDirection="column">
             {Array.from({ length: contentHeight }).map((_, i) => (
