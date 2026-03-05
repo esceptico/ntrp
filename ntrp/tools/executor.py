@@ -25,6 +25,13 @@ class ToolExecutor:
             else:
                 self.registry.register(cls())
                 _logger.info("Loaded user tool: %s", cls.name)
+        if runtime.mcp_manager:
+            for tool in runtime.mcp_manager.tools:
+                if tool.name in self.registry:
+                    _logger.warning("MCP tool %r skipped — conflicts with existing tool", tool.name)
+                else:
+                    self.registry.register(tool)
+                    _logger.info("Loaded MCP tool: %s", tool.name)
 
     def with_registry(self, registry: ToolRegistry) -> "ToolExecutor":
         clone = ToolExecutor.__new__(ToolExecutor)

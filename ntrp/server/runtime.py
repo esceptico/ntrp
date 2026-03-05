@@ -14,6 +14,7 @@ from ntrp.events.triggers import TRIGGER_EVENT_TYPES, TriggerEvent
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import init as llm_init
 from ntrp.logging import get_logger
+from ntrp.mcp.manager import MCPManager
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.indexable import MemoryIndexable
 from ntrp.memory.service import MemoryService
@@ -58,6 +59,7 @@ class Runtime:
 
         self.memory_service: MemoryService | None = None
         self.indexables: dict[str, Indexable] = {}
+        self.mcp_manager: MCPManager | None = None
         self.executor: ToolExecutor | None = None
 
         self.automation_store: AutomationStore | None = None
@@ -105,6 +107,22 @@ class Runtime:
             await self._sync_embedding()
             await self._sync_memory()
             self._sync_indexables()
+            await self._sync_mcp()
+
+    async def _sync_mcp(self) -> None:
+        if self.mcp_manager:
+            await self.mcp_manager.close()
+            self._services.pop("mcp", None)
+            self.mcp_manager = None
+
+        if self.config.mcp_servers:
+            self.mcp_manager = MCPManager()
+            await self.mcp_manager.connect(self.config.mcp_servers)
+            if self.mcp_manager.tools:
+                self._services["mcp"] = self.mcp_manager
+
+        if self.executor:
+            self.executor = ToolExecutor(runtime=self)
 
     async def _sync_memory(self) -> None:
         if self.config.memory and not self.memory and self.embedding:
@@ -217,6 +235,13 @@ class Runtime:
             get_notifiers=lambda: self.notifier_service.notifiers if self.notifier_service else {},
         )
 
+        if self.config.mcp_servers:
+            _logger.info("Connecting MCP servers")
+            self.mcp_manager = MCPManager()
+            await self.mcp_manager.connect(self.config.mcp_servers)
+            if self.mcp_manager.tools:
+                self._services["mcp"] = self.mcp_manager
+
         _logger.info("Registering tools")
         self.executor = ToolExecutor(runtime=self)
         self.config_service = ConfigService(runtime=self)
@@ -233,6 +258,8 @@ class Runtime:
             await self.monitor.stop()
         if self.scheduler:
             await self.scheduler.stop()
+        if self.mcp_manager:
+            await self.mcp_manager.close()
         if self.memory:
             await self.memory.close()
         if self._sessions_conn:

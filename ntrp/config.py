@@ -161,6 +161,9 @@ class Config(BaseSettings):
     browser: str | None = None
     browser_days: int = 30
 
+    # MCP servers
+    mcp_servers: dict[str, dict] | None = None
+
     # Agent depth limit
     max_depth: int = 8
 
@@ -275,6 +278,7 @@ PERSIST_KEYS = frozenset(
         "gmail_days",
         "calendar",
         "max_depth",
+        "mcp_servers",
     }
 )
 

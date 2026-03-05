@@ -9,6 +9,7 @@ from ntrp.config import verify_api_key
 from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
+from ntrp.server.routers.mcp import router as mcp_router
 from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.runtime import Runtime, get_runtime
@@ -96,6 +97,7 @@ app.include_router(gmail_router)
 app.include_router(automation_router)
 app.include_router(session_router)
 app.include_router(skills_router)
+app.include_router(mcp_router)
 
 
 @app.get("/health")

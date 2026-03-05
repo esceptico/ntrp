@@ -124,6 +124,36 @@ class ConfigService:
             save_user_settings(backup)
             raise
 
+    async def add_mcp_server(self, name: str, config: dict) -> None:
+        settings = load_user_settings()
+        backup = dict(settings)
+        mcp_servers = settings.setdefault("mcp_servers", {})
+        mcp_servers[name] = config
+        save_user_settings(settings)
+
+        try:
+            await self.runtime.reload_config()
+        except Exception:
+            save_user_settings(backup)
+            raise
+
+    async def remove_mcp_server(self, name: str) -> None:
+        settings = load_user_settings()
+        backup = dict(settings)
+        mcp_servers = settings.get("mcp_servers", {})
+        mcp_servers.pop(name, None)
+        if not mcp_servers:
+            settings.pop("mcp_servers", None)
+        else:
+            settings["mcp_servers"] = mcp_servers
+        save_user_settings(settings)
+
+        try:
+            await self.runtime.reload_config()
+        except Exception:
+            save_user_settings(backup)
+            raise
+
     async def disconnect_service(self, service_id: str) -> None:
         if service_id not in SERVICE_KEY_FIELDS:
             raise ValueError(f"Unknown service: {service_id}. Available: {', '.join(SERVICE_KEY_FIELDS)}")

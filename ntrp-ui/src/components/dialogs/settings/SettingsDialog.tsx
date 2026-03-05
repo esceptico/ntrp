@@ -7,7 +7,7 @@ import type { ServerConfig } from "../../../api/client.js";
 import { SectionId, SECTION_IDS, SECTION_LABELS } from "./config.js";
 import { DialogSelect, type SelectOption } from "../../ui/index.js";
 import { ConnectionsSection } from "./ConnectionsSection.js";
-import { DirectivesSection, LimitsSection, NotifiersSection, ProvidersSection, ServerSection, ServicesSection, SkillsSection } from "./sections/index.js";
+import { DirectivesSection, LimitsSection, MCPSection, NotifiersSection, ProvidersSection, ServerSection, ServicesSection, SkillsSection } from "./sections/index.js";
 import { useSettingsState } from "../../../hooks/useSettingsState.js";
 import { useSettingsKeypress } from "../../../hooks/useSettingsKeypress.js";
 
@@ -202,6 +202,26 @@ export function SettingsDialog({
 
                 {activeSection === "notifiers" && (
                   <NotifiersSection notifiers={state.notifiers} accent={accent} />
+                )}
+
+                {activeSection === "mcp" && (
+                  <MCPSection
+                    servers={state.mcp.mcpServers}
+                    selectedIndex={state.mcp.mcpIndex}
+                    accent={accent}
+                    adding={state.mcp.mcpAdding}
+                    addField={state.mcp.mcpAddField}
+                    name={state.mcp.mcpName}
+                    nameCursor={state.mcp.mcpNameCursor}
+                    transport={state.mcp.mcpTransport}
+                    command={state.mcp.mcpCommand}
+                    commandCursor={state.mcp.mcpCommandCursor}
+                    url={state.mcp.mcpUrl}
+                    urlCursor={state.mcp.mcpUrlCursor}
+                    saving={state.mcp.mcpSaving}
+                    error={state.mcp.mcpError}
+                    confirmingRemove={state.mcp.mcpConfirmRemove}
+                  />
                 )}
 
                 {activeSection === "limits" && (

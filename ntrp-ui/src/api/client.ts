@@ -10,3 +10,4 @@ export * from "./google.js";
 export * from "./indexing.js";
 export * from "./skills.js";
 export * from "./context.js";
+export * from "./mcp.js";

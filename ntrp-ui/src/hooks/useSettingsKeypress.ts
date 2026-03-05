@@ -68,7 +68,7 @@ export function useSettingsKeypress({
 
     showingBrowserDropdown, setShowingBrowserDropdown, updatingVault,
 
-    notifiers, skills,
+    notifiers, skills, mcp,
   } = state;
 
   const limitsTotalItems = LIMIT_ITEMS.length;
@@ -83,6 +83,8 @@ export function useSettingsKeypress({
     if (editingVault) { handleCancelVaultEdit(); return; }
     if (activeSection === "notifiers" && notifiers.mode !== "list") { notifiers.handleKeypress({ name: "escape" } as Key); return; }
     if (activeSection === "skills" && skills.mode !== "list") { skills.handleKeypress({ name: "escape" } as Key); return; }
+    if (activeSection === "mcp" && mcp.mcpAdding) { mcp.handleMcpCancelAdd(); return; }
+    if (activeSection === "mcp" && mcp.mcpConfirmRemove) { mcp.setMcpConfirmRemove(false); return; }
     setDrilled(false);
   }, [
     editingServer, handleCancelServerEdit,
@@ -93,7 +95,7 @@ export function useSettingsKeypress({
     setProviderConfirmDisconnect, setServiceConfirmDisconnect,
     editingDirectives, handleCancelDirectives,
     editingVault, handleCancelVaultEdit,
-    activeSection, notifiers, skills, setDrilled,
+    activeSection, notifiers, skills, mcp, setDrilled,
   ]);
 
   const isSectionEditing = useCallback(() => {
@@ -104,8 +106,9 @@ export function useSettingsKeypress({
     if (activeSection === "connections" && editingVault) return true;
     if (activeSection === "notifiers" && notifiers.mode !== "list") return true;
     if (activeSection === "skills" && skills.mode !== "list") return true;
+    if (activeSection === "mcp" && (mcp.mcpAdding || mcp.mcpConfirmRemove)) return true;
     return false;
-  }, [activeSection, editingServer, editingProvider, providerConfirmDisconnect, editingService, serviceConfirmDisconnect, editingDirectives, editingVault, notifiers.mode, skills.mode]);
+  }, [activeSection, editingServer, editingProvider, providerConfirmDisconnect, editingService, serviceConfirmDisconnect, editingDirectives, editingVault, notifiers.mode, skills.mode, mcp.mcpAdding, mcp.mcpConfirmRemove]);
 
   const handleKeypress = useCallback(
     (key: Key) => {
@@ -274,6 +277,45 @@ export function useSettingsKeypress({
         skills.handleKeypress(key);
       } else if (activeSection === "notifiers") {
         notifiers.handleKeypress(key);
+      } else if (activeSection === "mcp") {
+        if (mcp.mcpConfirmRemove) {
+          if (key.sequence === "y") mcp.handleMcpRemove();
+          else mcp.setMcpConfirmRemove(false);
+          return;
+        }
+        if (mcp.mcpAdding) {
+          if (key.name === "s" && key.ctrl) {
+            mcp.handleMcpAdd();
+          } else if (key.name === "tab") {
+            const fields = mcp.mcpTransport === "stdio"
+              ? ["name", "transport", "command"] as const
+              : ["name", "transport", "url"] as const;
+            const idx = fields.indexOf(mcp.mcpAddField as typeof fields[number]);
+            mcp.setMcpAddField(fields[(idx + 1) % fields.length]);
+          } else if (mcp.mcpAddField === "transport") {
+            if (key.name === "left" || key.name === "right" || key.name === "h" || key.name === "l") {
+              mcp.handleMcpToggleTransport();
+            }
+          } else if (mcp.mcpAddField === "name") {
+            mcp.handleMcpNameKey(key);
+          } else if (mcp.mcpAddField === "command") {
+            mcp.handleMcpCommandKey(key);
+          } else if (mcp.mcpAddField === "url") {
+            mcp.handleMcpUrlKey(key);
+          }
+          return;
+        }
+        if (key.name === "up" || key.name === "k") {
+          mcp.setMcpIndex(i => Math.max(0, i - 1));
+        } else if (key.name === "down" || key.name === "j") {
+          mcp.setMcpIndex(i => Math.min(mcp.mcpServers.length - 1, i + 1));
+        } else if (key.sequence === "a") {
+          mcp.handleMcpStartAdd();
+        } else if (key.sequence === "d") {
+          if (mcp.mcpServers.length > 0) {
+            mcp.setMcpConfirmRemove(true);
+          }
+        }
       } else if (activeSection === "limits") {
         if (key.name === "up" || key.name === "k") {
           setLimitsIndex((i) => Math.max(0, i - 1));
@@ -296,7 +338,7 @@ export function useSettingsKeypress({
       settings, onUpdate, onClose, actionInProgress,
       connectionItem, googleAccounts, selectedGoogleIndex, serverConfig,
       handleAddGoogle, handleRemoveGoogle, handleStartVaultEdit, handleToggleSource,
-      notifiers, skills,
+      notifiers, skills, mcp,
       editingServer, serverIndex, serverUrl, serverApiKey, handleServerUrlKey, handleServerApiKeyKey, handleSaveServer,
       editingDirectives, handleDirectivesKey, handleSaveDirectives, handleStartDirectivesEdit,
       editingProvider, providerConfirmDisconnect, providers, providersIndex, handleProviderKeyInput, handleSaveProviderKey, handleDisconnectProvider,

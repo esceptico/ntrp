@@ -22,6 +22,7 @@ import { useServices } from "./settings/useServices.js";
 import { useServerConnection } from "./settings/useServerConnection.js";
 import { useDirectives } from "./settings/useDirectives.js";
 import { useVaultPath } from "./settings/useVaultPath.js";
+import { useMCPServers, type UseMCPServersResult } from "./settings/useMCPServers.js";
 
 export interface UseSettingsStateOptions {
   config: Config;
@@ -124,6 +125,7 @@ export interface UseSettingsStateResult {
 
   notifiers: UseNotifiersResult;
   skills: UseSkillsResult;
+  mcp: UseMCPServersResult;
 }
 
 export function useSettingsState({
@@ -139,6 +141,7 @@ export function useSettingsState({
   const server = useServerConnection(config, onServerCredentialsChange);
   const directives = useDirectives(config);
   const vault = useVaultPath(config, serverConfig, onServerConfigChange);
+  const mcp = useMCPServers(config);
 
   // --- Connection state ---
   const [connectionItem, setConnectionItem] = useState<ConnectionItem>("vault");
@@ -160,6 +163,7 @@ export function useSettingsState({
     providers.refreshProviders();
     services.refreshServices();
     directives.loadDirectives();
+    mcp.refreshMcpServers();
     getGoogleAccounts(config)
       .then((result) => setGoogleAccounts(result.accounts))
       .catch(() => {});
@@ -257,5 +261,6 @@ export function useSettingsState({
 
     notifiers,
     skills,
+    mcp,
   };
 }
