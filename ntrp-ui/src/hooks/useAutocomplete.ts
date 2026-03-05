@@ -51,7 +51,7 @@ export function useAutocomplete({ value, commands, inputRef, setValue }: UseAuto
       setSelectedIndex((i) => Math.min(filteredCommandsRef.current.length - 1, i + 1));
       return true;
     }
-    if (e.name === "tab" && filteredCommandsRef.current[selectedIndexRef.current]) {
+    if (e.name === "tab" && !e.shift && filteredCommandsRef.current[selectedIndexRef.current]) {
       e.preventDefault();
       const cmd = filteredCommandsRef.current[selectedIndexRef.current];
       const newText = `/${cmd.name} `;

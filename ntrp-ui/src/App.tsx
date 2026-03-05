@@ -242,7 +242,7 @@ function AppContent({
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
-  const cycleSession = useCallback(async () => {
+  const cycleSession = useCallback(() => {
     if (isCyclingRef.current) return;
     const sessions = sidebarData.sessions;
     if (sessions.length < 2) return;
@@ -254,9 +254,10 @@ function AppContent({
     isCyclingRef.current = true;
     clearQueue();
     switchToSession(target.session_id);
+    // Release lock after a short debounce so rapid cycling works even if the API is slow
+    setTimeout(() => { isCyclingRef.current = false; }, 150);
 
-    try {
-      const result = await switchSession(target.session_id);
+    switchSession(target.session_id).then((result) => {
       if (result) {
         switchToSession(target.session_id, result.history.map((msg, i) => ({
           id: `h-${i}`, role: msg.role, content: msg.content,
@@ -264,9 +265,7 @@ function AppContent({
       } else {
         switchToSession(sessionIdRef.current!);
       }
-    } finally {
-      isCyclingRef.current = false;
-    }
+    });
   }, [sidebarData.sessions, sessionId, switchSession, switchToSession, clearQueue]);
 
   const tabPendingRef = useRef(false);
