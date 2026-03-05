@@ -74,9 +74,12 @@ export function SettingsDialog({
     );
   }
 
-  const footerHints = drilled
-    ? [["↑↓", "navigate"], ["enter", "select"], ["←→", "adjust"], ["esc", "back"]] as [string, string][]
-    : [["↑↓", "section"], ["enter", "open"], ["esc", "close"]] as [string, string][];
+  const inToolsMode = drilled && activeSection === "mcp" && state.mcp.mcpMode === "tools";
+  const footerHints = inToolsMode
+    ? [["↑↓", "navigate"], ["space", "toggle"], ["a", "all/none"], ["^s", "save"], ["esc", "back"]] as [string, string][]
+    : drilled
+      ? [["↑↓", "navigate"], ["enter", "select"], ["←→", "adjust"], ["esc", "back"]] as [string, string][]
+      : [["↑↓", "section"], ["enter", "open"], ["esc", "close"]] as [string, string][];
 
   return (
     <Dialog
@@ -123,10 +126,10 @@ export function SettingsDialog({
                 {activeSection === "services" && <ServicesSection services={state.services} accent={accent} />}
                 {activeSection === "server" && <ServerSection server={state.server} accent={accent} />}
                 {activeSection === "directives" && <DirectivesSection directives={state.directives} accent={accent} height={contentHeight} />}
-                {activeSection === "skills" && <SkillsSection skills={state.skills} accent={accent} width={detailWidth} />}
+                {activeSection === "skills" && <SkillsSection skills={state.skills} accent={accent} width={detailWidth} height={contentHeight} />}
                 {activeSection === "connections" && <ConnectionsSection connections={state.connections} serverConfig={serverConfig} accent={accent} width={detailWidth} />}
                 {activeSection === "notifiers" && <NotifiersSection notifiers={state.notifiers} accent={accent} />}
-                {activeSection === "mcp" && <MCPSection mcp={state.mcp} accent={accent} />}
+                {activeSection === "mcp" && <MCPSection mcp={state.mcp} accent={accent} width={detailWidth} height={contentHeight} />}
                 {activeSection === "limits" && <LimitsSection settings={settings.agent} selectedIndex={state.limits.limitsIndex} accent={accent} />}
               </box>
             </box>

@@ -21,6 +21,16 @@ async def list_mcp_servers(runtime: Runtime = Depends(get_runtime)):
     for name, raw in configs.items():
         session = manager.sessions.get(name) if manager else None
         error = manager.errors.get(name) if manager else None
+        whitelist = raw.get("tools")
+        allowed = set(whitelist) if whitelist is not None else None
+        tools = []
+        if session and session.connected:
+            for t in session.all_tools:
+                tools.append({
+                    "name": t.name,
+                    "description": t.description or "",
+                    "enabled": allowed is None or t.name in allowed,
+                })
         servers.append({
             "name": name,
             "transport": raw.get("transport", "unknown"),
@@ -30,6 +40,7 @@ async def list_mcp_servers(runtime: Runtime = Depends(get_runtime)):
             "command": raw.get("command"),
             "args": raw.get("args"),
             "url": raw.get("url"),
+            "tools": tools,
         })
     return {"servers": servers}
 
@@ -71,6 +82,35 @@ async def add_mcp_server(
         "tool_count": len(session.tools) if session else 0,
         "error": error,
     }
+
+
+class UpdateToolsRequest(BaseModel):
+    tools: list[str] | None
+
+
+@router.put("/servers/{name}/tools")
+async def update_mcp_tools(
+    name: str,
+    req: UpdateToolsRequest,
+    runtime: Runtime = Depends(get_runtime),
+    cfg_svc: ConfigService = Depends(_require_config_service),
+):
+    existing = runtime.config.mcp_servers or {}
+    if name not in existing:
+        raise HTTPException(status_code=404, detail=f"MCP server {name!r} not found")
+
+    config = dict(existing[name])
+    if req.tools is not None:
+        config["tools"] = req.tools
+    else:
+        config.pop("tools", None)
+
+    try:
+        await cfg_svc.update_mcp_server(name, config)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"status": "updated", "name": name, "tool_count": len(req.tools) if req.tools else None}
 
 
 @router.delete("/servers/{name}")

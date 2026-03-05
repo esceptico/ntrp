@@ -40,15 +40,19 @@ class MCPManager:
                 for mcp_tool in session.tools:
                     self._tools.append(MCPTool(name, mcp_tool, session))
                 _logger.info("MCP server %r connected", name, tools=len(session.tools))
-            except Exception as e:
+            except BaseException as e:
                 _logger.warning("Failed to connect MCP server %r: %s", name, e)
                 self._errors[name] = str(e)
+                try:
+                    await session.close()
+                except BaseException:
+                    pass
 
     async def close(self) -> None:
         for name, session in self._sessions.items():
             try:
                 await session.close()
-            except Exception:
+            except BaseException:
                 _logger.warning("Error closing MCP server %r", name, exc_info=True)
         self._sessions.clear()
         self._tools.clear()

@@ -1,6 +1,12 @@
 import type { Config } from "../types.js";
 import { api } from "./fetch.js";
 
+export interface MCPToolInfo {
+  name: string;
+  description: string;
+  enabled: boolean;
+}
+
 export interface MCPServerInfo {
   name: string;
   transport: string;
@@ -10,6 +16,7 @@ export interface MCPServerInfo {
   command?: string | null;
   args?: string[] | null;
   url?: string | null;
+  tools?: MCPToolInfo[];
 }
 
 export async function getMCPServers(config: Config): Promise<{ servers: MCPServerInfo[] }> {
@@ -22,6 +29,14 @@ export async function addMCPServer(
   serverConfig: Record<string, unknown>,
 ): Promise<{ status: string; name: string; connected: boolean; tool_count: number; error?: string | null }> {
   return api.post(`${config.serverUrl}/mcp/servers`, { name, config: serverConfig });
+}
+
+export async function updateMCPTools(
+  config: Config,
+  name: string,
+  tools: string[] | null,
+): Promise<{ status: string }> {
+  return api.put(`${config.serverUrl}/mcp/servers/${encodeURIComponent(name)}/tools`, { tools });
 }
 
 export async function removeMCPServer(

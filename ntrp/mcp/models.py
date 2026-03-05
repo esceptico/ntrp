@@ -11,12 +11,14 @@ class StdioTransport:
 @dataclass(frozen=True)
 class HttpTransport:
     url: str
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class MCPServerConfig:
     name: str
     transport: StdioTransport | HttpTransport
+    tools: list[str] | None = None
 
 
 def parse_server_config(name: str, raw: dict) -> MCPServerConfig:
@@ -34,7 +36,8 @@ def parse_server_config(name: str, raw: dict) -> MCPServerConfig:
         url = raw.get("url")
         if not url:
             raise ValueError(f"MCP server {name!r}: http transport requires 'url'")
-        transport = HttpTransport(url=url)
+        transport = HttpTransport(url=url, headers=raw.get("headers", {}))
     else:
         raise ValueError(f"MCP server {name!r}: unknown transport {transport_type!r} (expected 'stdio' or 'http')")
-    return MCPServerConfig(name=name, transport=transport)
+    tools = raw.get("tools")
+    return MCPServerConfig(name=name, transport=transport, tools=tools)

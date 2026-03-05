@@ -5,9 +5,10 @@ interface SkillsSectionProps {
   skills: UseSkillsResult;
   accent: string;
   width: number;
+  height: number;
 }
 
-function ListMode({ skills: s, accent, width }: SkillsSectionProps) {
+function ListMode({ skills: s, accent, width, height }: SkillsSectionProps) {
   if (s.skills.length === 0) {
     return (
       <box flexDirection="column">
@@ -19,18 +20,33 @@ function ListMode({ skills: s, accent, width }: SkillsSectionProps) {
     );
   }
 
+  // Each skill = 2 lines (name + desc). Reserve 2 lines for hints footer.
+  const linesPerItem = 2;
+  const reservedLines = 2;
+  const visibleCount = Math.max(1, Math.floor((height - reservedLines) / linesPerItem));
+  const maxStart = Math.max(0, s.skills.length - visibleCount);
+  const scrollStart = Math.min(maxStart, Math.max(0, s.selectedIndex - visibleCount + 1));
+  const visibleSkills = s.skills.slice(scrollStart, scrollStart + visibleCount);
+
+  // "  " prefix = 2, " " separator = 1, leave some room for location
+  const nameMaxWidth = Math.max(10, width - 2);
   const descWidth = Math.max(10, width - 4);
 
   return (
     <box flexDirection="column" width={width}>
-      {s.skills.map((skill, idx) => {
+      {visibleSkills.map((skill, vi) => {
+        const idx = scrollStart + vi;
         const selected = idx === s.selectedIndex;
+        const arrow = selected ? "> " : "  ";
+        const nameAndLoc = skill.name + " " + skill.location;
+        const clipped = nameAndLoc.length > nameMaxWidth
+          ? nameAndLoc.slice(0, nameMaxWidth - 1) + "\u2026"
+          : nameAndLoc;
         return (
           <box key={skill.name} flexDirection="column">
             <text>
-              <span fg={selected ? accent : colors.text.disabled}>{selected ? "▸ " : "  "}</span>
-              <span fg={selected ? accent : colors.text.primary}>{skill.name}</span>
-              <span fg={colors.text.disabled}> {skill.location}</span>
+              <span fg={selected ? accent : colors.text.disabled}>{arrow}</span>
+              <span fg={selected ? accent : colors.text.primary}>{clipped}</span>
             </text>
             <text>
               <span fg={colors.text.muted}>{"  "}{truncateText(skill.description, descWidth)}</span>
