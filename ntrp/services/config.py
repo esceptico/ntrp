@@ -152,6 +152,24 @@ class ConfigService:
             save_user_settings(backup)
             raise
 
+    async def toggle_mcp_server(self, name: str, enabled: bool) -> None:
+        settings = load_user_settings()
+        backup = dict(settings)
+        mcp_servers = settings.get("mcp_servers", {})
+        if name not in mcp_servers:
+            raise ValueError(f"MCP server {name!r} not found")
+        if enabled:
+            mcp_servers[name].pop("enabled", None)
+        else:
+            mcp_servers[name]["enabled"] = False
+        save_user_settings(settings)
+
+        try:
+            await self.runtime.reload_config()
+        except Exception:
+            save_user_settings(backup)
+            raise
+
     async def remove_mcp_server(self, name: str) -> None:
         settings = load_user_settings()
         backup = dict(settings)

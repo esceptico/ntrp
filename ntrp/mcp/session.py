@@ -18,6 +18,8 @@ class MCPServerSession:
         self._session: ClientSession | None = None
         self._all_tools: list[McpTool] = []
         self._tools: list[McpTool] = []
+        self._http_task: asyncio.Task | None = None
+        self._http_shutdown: asyncio.Event | None = None
 
     @property
     def name(self) -> str:
@@ -45,11 +47,37 @@ class MCPServerSession:
             )
             read, write = await self._exit_stack.enter_async_context(stdio_client(params))
         elif isinstance(transport, HttpTransport):
-            http_client = create_mcp_http_client(headers=transport.headers or None)
-            await self._exit_stack.enter_async_context(http_client)
-            read, write, _ = await self._exit_stack.enter_async_context(
-                streamable_http_client(transport.url, http_client=http_client)
-            )
+            if transport.auth == "oauth":
+                from ntrp.mcp.oauth import create_oauth_provider
+
+                oauth = create_oauth_provider(self.name, transport.url)
+                http_client = create_mcp_http_client(auth=oauth)
+            else:
+                http_client = create_mcp_http_client(headers=transport.headers or None)
+
+            # Run the HTTP transport in a dedicated task so connect and close
+            # happen in the same task — avoids anyio cancel scope mismatch.
+            self._http_shutdown = asyncio.Event()
+            ready = asyncio.Event()
+            result: dict[str, Any] = {}
+
+            async def _run_http() -> None:
+                try:
+                    async with http_client:
+                        async with streamable_http_client(transport.url, http_client=http_client) as (r, w, _):
+                            result["read"] = r
+                            result["write"] = w
+                            ready.set()
+                            await self._http_shutdown.wait()
+                except BaseException as e:
+                    result["error"] = e
+                    ready.set()
+
+            self._http_task = asyncio.create_task(_run_http())
+            await ready.wait()
+            if "error" in result:
+                raise result["error"]
+            read, write = result["read"], result["write"]
         else:
             raise ValueError(f"Unsupported transport: {type(transport)}")
 
@@ -71,6 +99,7 @@ class MCPServerSession:
         return await self._session.call_tool(tool_name, arguments)
 
     async def close(self) -> None:
+        # Close ClientSession first (stops using the streams)
         try:
             await self._exit_stack.aclose()
         except (RuntimeError, asyncio.CancelledError):
@@ -78,3 +107,14 @@ class MCPServerSession:
         self._session = None
         self._all_tools = []
         self._tools = []
+
+        # Signal the HTTP task to exit — it closes the transport context
+        # in the same task that opened it, avoiding cancel scope mismatch.
+        if self._http_shutdown:
+            self._http_shutdown.set()
+        if self._http_task:
+            try:
+                await self._http_task
+            except BaseException:
+                pass
+            self._http_task = None

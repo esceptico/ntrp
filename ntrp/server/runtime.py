@@ -74,6 +74,7 @@ class Runtime:
         self.monitor_store: MonitorStateStore | None = None
         self.config_service: ConfigService | None = None
         self._connected = False
+        self._closing = False
         self._config_lock = asyncio.Lock()
 
     @property
@@ -99,6 +100,8 @@ class Runtime:
     # --- Subsystem lifecycle ---
 
     async def reload_config(self) -> None:
+        if self._closing:
+            return
         async with self._config_lock:
             self.config = get_config()
             await llm_close()
@@ -254,6 +257,7 @@ class Runtime:
         )
 
     async def close(self) -> None:
+        self._closing = True
         if self.monitor:
             await self.monitor.stop()
         if self.scheduler:

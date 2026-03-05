@@ -83,21 +83,30 @@ function ServerList({ mcp: m, accent, width }: MCPSectionProps) {
   return (
     <box flexDirection="column">
       {m.mcpServers.map((s, i) => {
-        const selected = i === m.mcpIndex && m.mcpMode === "list";
+        const selected = i === m.mcpIndex && (m.mcpMode === "list" || m.mcpMode === "confirm-remove" || m.mcpMode === "oauth");
+        const disabled = !s.enabled;
         const totalTools = (s.tools ?? []).length;
         const toolLabel = s.tool_count === totalTools
           ? `${s.tool_count} tool${s.tool_count !== 1 ? "s" : ""}`
           : `${s.tool_count}/${totalTools} tools`;
+        const needsOAuth = s.auth === "oauth" && !s.connected && s.enabled;
         return (
           <box key={s.name} flexDirection="column">
             <text>
               <span fg={selected ? accent : colors.text.disabled}>{selected ? "> " : "  "}</span>
-              <span fg={selected ? colors.text.primary : colors.text.secondary}>{s.name.padEnd(20)}</span>
-              {s.connected ? (
+              <span fg={disabled ? colors.text.disabled : selected ? colors.text.primary : colors.text.secondary}>{s.name.padEnd(20)}</span>
+              {disabled ? (
+                <span fg={colors.text.disabled}>disabled</span>
+              ) : s.connected ? (
                 <>
                   <span fg={colors.status.success}>{"\u2713 "}</span>
                   <span fg={colors.text.disabled}>{toolLabel}</span>
                   <span fg={colors.text.muted}>{" ("}{s.transport}{")"}</span>
+                </>
+              ) : needsOAuth ? (
+                <>
+                  <span fg={colors.status.warning}>{"\u25CB "}</span>
+                  <span fg={colors.text.muted}>OAuth required</span>
                 </>
               ) : s.error ? (
                 <>
@@ -116,6 +125,11 @@ function ServerList({ mcp: m, accent, width }: MCPSectionProps) {
             {selected && m.mcpMode === "confirm-remove" && (
               <text>
                 <span fg={colors.status.warning}>{"    "}Remove {s.name}? (y/n)</span>
+              </text>
+            )}
+            {selected && m.mcpMode === "oauth" && (
+              <text>
+                <span fg={colors.text.muted}>{"    "}Authenticating in browser...</span>
               </text>
             )}
           </box>
@@ -175,14 +189,27 @@ function ServerList({ mcp: m, accent, width }: MCPSectionProps) {
                 </box>
                 <box flexDirection="row">
                   <text>
-                    <span fg={m.mcpAddField === "headers" ? colors.text.primary : colors.text.secondary}>{"  Headers".padEnd(LABEL_WIDTH)}</span>
+                    <span fg={m.mcpAddField === "auth" ? colors.text.primary : colors.text.secondary}>{"  Auth".padEnd(LABEL_WIDTH)}</span>
                   </text>
-                  {m.mcpAddField === "headers" ? (
-                    <TextInput value={m.mcpHeaders} cursor={m.mcpHeadersCursor} placeholder="Authorization: Bearer token" />
-                  ) : (
-                    <text><span fg={m.mcpHeaders ? colors.text.primary : colors.text.muted}>{m.mcpHeaders || "(optional)"}</span></text>
-                  )}
+                  <text>
+                    <span fg={m.mcpAuth === "none" ? accent : colors.text.disabled}>none</span>
+                    <span fg={colors.text.muted}>{" / "}</span>
+                    <span fg={m.mcpAuth === "oauth" ? accent : colors.text.disabled}>oauth</span>
+                    {m.mcpAddField === "auth" && <span fg={colors.text.muted}>{" (\u2190 \u2192 to switch)"}</span>}
+                  </text>
                 </box>
+                {m.mcpAuth !== "oauth" && (
+                  <box flexDirection="row">
+                    <text>
+                      <span fg={m.mcpAddField === "headers" ? colors.text.primary : colors.text.secondary}>{"  Headers".padEnd(LABEL_WIDTH)}</span>
+                    </text>
+                    {m.mcpAddField === "headers" ? (
+                      <TextInput value={m.mcpHeaders} cursor={m.mcpHeadersCursor} placeholder="Authorization: Bearer token" />
+                    ) : (
+                      <text><span fg={m.mcpHeaders ? colors.text.primary : colors.text.muted}>{m.mcpHeaders || "(optional)"}</span></text>
+                    )}
+                  </box>
+                )}
               </>
             )}
           </box>
@@ -203,13 +230,16 @@ function ServerList({ mcp: m, accent, width }: MCPSectionProps) {
 
       {m.mcpMode === "list" && !m.mcpSaving && (
         <box marginTop={1} marginLeft={2}>
-          {m.mcpServers.length > 0 && m.mcpServers[m.mcpIndex] ? (
-            m.mcpServers[m.mcpIndex]?.connected ? (
-              <Hints items={[["enter", "tools"], ["a", "add"], ["d", "remove"]]} />
-            ) : (
-              <Hints items={[["a", "add"], ["d", "remove"]]} />
-            )
-          ) : (
+          {m.mcpServers.length > 0 && m.mcpServers[m.mcpIndex] ? (() => {
+            const s = m.mcpServers[m.mcpIndex]!;
+            const hints: [string, string][] = [];
+            if (s.connected) hints.push(["enter", "tools"]);
+            hints.push(["a", "add"]);
+            hints.push(["e", s.enabled ? "disable" : "enable"]);
+            if (s.auth === "oauth" && s.enabled) hints.push(["o", "oauth"]);
+            hints.push(["d", "remove"]);
+            return <Hints items={hints} />;
+          })() : (
             <Hints items={[["a", "add server"]]} />
           )}
         </box>

@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -44,6 +46,8 @@ async def list_mcp_servers(runtime: Runtime = Depends(get_runtime)):
                 "args": raw.get("args"),
                 "url": raw.get("url"),
                 "tools": tools,
+                "enabled": raw.get("enabled", True),
+                "auth": raw.get("auth"),
             }
         )
     return {"servers": servers}
@@ -117,6 +121,68 @@ async def update_mcp_tools(
     return {"status": "updated", "name": name, "tool_count": len(req.tools) if req.tools else None}
 
 
+class ToggleEnabledRequest(BaseModel):
+    enabled: bool
+
+
+@router.put("/servers/{name}/enabled")
+async def toggle_mcp_server(
+    name: str,
+    req: ToggleEnabledRequest,
+    runtime: Runtime = Depends(get_runtime),
+    cfg_svc: ConfigService = Depends(_require_config_service),
+):
+    existing = runtime.config.mcp_servers or {}
+    if name not in existing:
+        raise HTTPException(status_code=404, detail=f"MCP server {name!r} not found")
+
+    try:
+        await cfg_svc.toggle_mcp_server(name, req.enabled)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"status": "toggled", "name": name, "enabled": req.enabled}
+
+
+@router.post("/servers/{name}/oauth")
+async def mcp_oauth(
+    name: str,
+    runtime: Runtime = Depends(get_runtime),
+):
+    existing = runtime.config.mcp_servers or {}
+    if name not in existing:
+        raise HTTPException(status_code=404, detail=f"MCP server {name!r} not found")
+
+    raw = existing[name]
+    if raw.get("transport") != "http" or raw.get("auth") != "oauth":
+        raise HTTPException(status_code=400, detail="Server does not use OAuth authentication")
+
+    url = raw.get("url")
+    if not url:
+        raise HTTPException(status_code=400, detail="Server has no URL configured")
+
+    from ntrp.mcp.oauth import run_mcp_oauth
+
+    try:
+        await asyncio.to_thread(run_mcp_oauth, name, url)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Reconnect MCP servers to pick up the new tokens
+    await runtime._sync_mcp()
+
+    manager = runtime.mcp_manager
+    session = manager.sessions.get(name) if manager else None
+    error = manager.errors.get(name) if manager else None
+    return {
+        "status": "connected",
+        "name": name,
+        "connected": session.connected if session else False,
+        "tool_count": len(session.tools) if session else 0,
+        "error": error,
+    }
+
+
 @router.delete("/servers/{name}")
 async def remove_mcp_server(
     name: str,
@@ -131,5 +197,9 @@ async def remove_mcp_server(
         await cfg_svc.remove_mcp_server(name)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+    # Clean up OAuth tokens if any
+    from ntrp.mcp.oauth import clear_tokens
+    clear_tokens(name)
 
     return {"status": "removed", "name": name}

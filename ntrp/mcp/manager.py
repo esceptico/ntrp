@@ -26,6 +26,8 @@ class MCPManager:
 
     async def connect(self, server_configs: dict[str, dict]) -> None:
         for name, raw in server_configs.items():
+            if raw.get("enabled") is False:
+                continue
             try:
                 config = parse_server_config(name, raw)
             except ValueError as e:

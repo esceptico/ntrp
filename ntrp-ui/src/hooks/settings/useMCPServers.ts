@@ -1,13 +1,14 @@
 import { useCallback, useState } from "react";
 import type { Config } from "../../types.js";
 import type { MCPServerInfo } from "../../api/client.js";
-import { getMCPServers, addMCPServer, removeMCPServer, updateMCPTools } from "../../api/client.js";
+import { getMCPServers, addMCPServer, removeMCPServer, updateMCPTools, toggleMCPServer, triggerMCPOAuth } from "../../api/client.js";
 import { useTextInput } from "../useTextInput.js";
 import type { Key } from "../useKeypress.js";
 import { handleListNav } from "../keyUtils.js";
 
-export type MCPAddField = "name" | "transport" | "command" | "url" | "headers";
-export type MCPMode = "list" | "add" | "confirm-remove" | "tools";
+export type MCPAddField = "name" | "transport" | "command" | "url" | "auth" | "headers";
+export type MCPAuth = "none" | "oauth";
+export type MCPMode = "list" | "add" | "confirm-remove" | "tools" | "oauth";
 
 export interface UseMCPServersResult {
   mcpServers: MCPServerInfo[];
@@ -17,6 +18,7 @@ export interface UseMCPServersResult {
   mcpName: string;
   mcpNameCursor: number;
   mcpTransport: "stdio" | "http";
+  mcpAuth: MCPAuth;
   mcpCommand: string;
   mcpCommandCursor: number;
   mcpUrl: string;
@@ -27,6 +29,7 @@ export interface UseMCPServersResult {
   mcpError: string | null;
   mcpToolIndex: number;
   mcpToolEnabled: boolean[];
+  mcpOAuthInProgress: boolean;
   refreshMcpServers: () => void;
   handleKeypress: (key: Key) => void;
   isEditing: boolean;
@@ -42,6 +45,7 @@ export function useMCPServers(config: Config): UseMCPServersResult {
   const [mcpName, setMcpName] = useState("");
   const [mcpNameCursor, setMcpNameCursor] = useState(0);
   const [mcpTransport, setMcpTransport] = useState<"stdio" | "http">("stdio");
+  const [mcpAuth, setMcpAuth] = useState<MCPAuth>("none");
   const [mcpCommand, setMcpCommand] = useState("");
   const [mcpCommandCursor, setMcpCommandCursor] = useState(0);
   const [mcpUrl, setMcpUrl] = useState("");
@@ -51,6 +55,7 @@ export function useMCPServers(config: Config): UseMCPServersResult {
 
   const [mcpSaving, setMcpSaving] = useState(false);
   const [mcpError, setMcpError] = useState<string | null>(null);
+  const [mcpOAuthInProgress, setMcpOAuthInProgress] = useState(false);
 
   // Tool filtering state
   const [mcpToolIndex, setMcpToolIndex] = useState(0);
@@ -80,6 +85,7 @@ export function useMCPServers(config: Config): UseMCPServersResult {
   const resetForm = useCallback(() => {
     setMcpName(""); setMcpNameCursor(0);
     setMcpTransport("stdio");
+    setMcpAuth("none");
     setMcpCommand(""); setMcpCommandCursor(0);
     setMcpUrl(""); setMcpUrlCursor(0);
     setMcpHeaders(""); setMcpHeadersCursor(0);
@@ -105,14 +111,18 @@ export function useMCPServers(config: Config): UseMCPServersResult {
       const url = mcpUrl.trim();
       if (!url) { setMcpError("URL is required"); return; }
       serverConfig = { transport: "http", url } as Record<string, unknown>;
-      const rawHeaders = mcpHeaders.trim();
-      if (rawHeaders) {
-        const headers: Record<string, string> = {};
-        for (const line of rawHeaders.split(",")) {
-          const idx = line.indexOf(":");
-          if (idx > 0) headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+      if (mcpAuth === "oauth") {
+        serverConfig.auth = "oauth";
+      } else {
+        const rawHeaders = mcpHeaders.trim();
+        if (rawHeaders) {
+          const headers: Record<string, string> = {};
+          for (const line of rawHeaders.split(",")) {
+            const idx = line.indexOf(":");
+            if (idx > 0) headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+          }
+          if (Object.keys(headers).length > 0) serverConfig.headers = headers;
         }
-        if (Object.keys(headers).length > 0) serverConfig.headers = headers;
       }
     }
 
@@ -130,7 +140,7 @@ export function useMCPServers(config: Config): UseMCPServersResult {
     } finally {
       setMcpSaving(false);
     }
-  }, [mcpSaving, mcpName, mcpTransport, mcpCommand, mcpUrl, mcpHeaders, config, refreshMcpServers]);
+  }, [mcpSaving, mcpName, mcpTransport, mcpAuth, mcpCommand, mcpUrl, mcpHeaders, config, refreshMcpServers]);
 
   const handleMcpRemove = useCallback(async () => {
     if (mcpSaving) return;
@@ -170,6 +180,40 @@ export function useMCPServers(config: Config): UseMCPServersResult {
       setMcpSaving(false);
     }
   }, [mcpServers, mcpIndex, mcpToolEnabled, mcpSaving, config, refreshMcpServers]);
+
+  const handleToggleEnabled = useCallback(async () => {
+    const server = mcpServers[mcpIndex];
+    if (!server || mcpSaving) return;
+    setMcpSaving(true);
+    setMcpError(null);
+    try {
+      await toggleMCPServer(config, server.name, !server.enabled);
+      refreshMcpServers();
+    } catch (e) {
+      setMcpError(e instanceof Error ? e.message : "Failed to toggle");
+    } finally {
+      setMcpSaving(false);
+    }
+  }, [mcpServers, mcpIndex, mcpSaving, config, refreshMcpServers]);
+
+  const handleOAuth = useCallback(async () => {
+    const server = mcpServers[mcpIndex];
+    if (!server || mcpOAuthInProgress) return;
+    if (server.auth !== "oauth") return;
+    setMcpMode("oauth");
+    setMcpOAuthInProgress(true);
+    setMcpError(null);
+    try {
+      const result = await triggerMCPOAuth(config, server.name);
+      if (result.error) setMcpError(result.error);
+      refreshMcpServers();
+    } catch (e) {
+      setMcpError(e instanceof Error ? e.message : "OAuth failed");
+    } finally {
+      setMcpOAuthInProgress(false);
+      setMcpMode("list");
+    }
+  }, [mcpServers, mcpIndex, mcpOAuthInProgress, config, refreshMcpServers]);
 
   const isEditing = mcpMode !== "list";
 
@@ -216,12 +260,18 @@ export function useMCPServers(config: Config): UseMCPServersResult {
       } else if (key.name === "tab") {
         const fields: MCPAddField[] = mcpTransport === "stdio"
           ? ["name", "transport", "command"]
-          : ["name", "transport", "url", "headers"];
+          : mcpAuth === "oauth"
+            ? ["name", "transport", "url", "auth"]
+            : ["name", "transport", "url", "auth", "headers"];
         const idx = fields.indexOf(mcpAddField);
         setMcpAddField(fields[(idx + 1) % fields.length]);
       } else if (mcpAddField === "transport") {
         if (key.name === "left" || key.name === "right" || key.name === "h" || key.name === "l") {
           setMcpTransport(t => t === "stdio" ? "http" : "stdio");
+        }
+      } else if (mcpAddField === "auth") {
+        if (key.name === "left" || key.name === "right" || key.name === "h" || key.name === "l") {
+          setMcpAuth(a => a === "none" ? "oauth" : "none");
         }
       } else if (mcpAddField === "name") {
         handleMcpNameKey(key);
@@ -242,6 +292,10 @@ export function useMCPServers(config: Config): UseMCPServersResult {
       setMcpMode("add");
       setMcpAddField("name");
       resetForm();
+    } else if (key.sequence === "e") {
+      if (mcpServers.length > 0) handleToggleEnabled();
+    } else if (key.sequence === "o") {
+      if (mcpServers.length > 0) handleOAuth();
     } else if (key.sequence === "d") {
       if (mcpServers.length > 0) setMcpMode("confirm-remove");
     } else if (key.name === "return" || key.sequence === "t") {
@@ -255,19 +309,19 @@ export function useMCPServers(config: Config): UseMCPServersResult {
       }
     }
   }, [
-    mcpMode, mcpTransport, mcpAddField, mcpServers, mcpIndex, mcpToolIndex,
-    handleMcpRemove, handleMcpAdd, handleSaveTools, resetForm,
+    mcpMode, mcpTransport, mcpAuth, mcpAddField, mcpServers, mcpIndex, mcpToolIndex,
+    handleMcpRemove, handleMcpAdd, handleSaveTools, handleToggleEnabled, handleOAuth, resetForm,
     handleMcpNameKey, handleMcpCommandKey, handleMcpUrlKey, handleMcpHeadersKey,
   ]);
 
   return {
     mcpServers, mcpIndex, mcpMode, mcpAddField,
-    mcpName, mcpNameCursor, mcpTransport,
+    mcpName, mcpNameCursor, mcpTransport, mcpAuth,
     mcpCommand, mcpCommandCursor,
     mcpUrl, mcpUrlCursor,
     mcpHeaders, mcpHeadersCursor,
     mcpSaving, mcpError,
-    mcpToolIndex, mcpToolEnabled,
+    mcpToolIndex, mcpToolEnabled, mcpOAuthInProgress,
     refreshMcpServers, handleKeypress, isEditing, cancelEdit,
   };
 }
