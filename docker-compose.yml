@@ -6,7 +6,7 @@ services:
     container_name: ntrp-backend
     restart: unless-stopped
     ports:
-      - "${NTRP_PORT:-8000}:8000"
+      - "${NTRP_PORT:-6877}:6877"
     volumes:
       - ntrp-data:/home/ntrp/.ntrp
       # obsidian vault, comment if not using (and change ro to rw if you need to edit)

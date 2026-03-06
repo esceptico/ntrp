@@ -11,7 +11,7 @@ export function ServerSection({ server: s, accent }: ServerSectionProps) {
   const maskedKey = s.serverApiKey ? "\u2022".repeat(Math.min(s.serverApiKey.length, 40)) : "";
 
   const items = [
-    { label: "Server URL", value: s.serverUrl, cursor: s.serverUrlCursor, placeholder: "http://localhost:8000" },
+    { label: "Server URL", value: s.serverUrl, cursor: s.serverUrlCursor, placeholder: "http://localhost:6877" },
     { label: "API Key", value: s.serverApiKey, displayValue: maskedKey, cursor: s.serverApiKeyCursor, placeholder: "your-api-key" },
   ];
 

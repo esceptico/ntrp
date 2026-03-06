@@ -172,7 +172,7 @@ class Config(BaseSettings):
 
     # Server
     host: str = "127.0.0.1"
-    port: int = 8000
+    port: int = 6877
 
     # API authentication (salted hash, not plaintext)
     api_key_hash: str | None = None

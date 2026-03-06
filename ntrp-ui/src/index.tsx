@@ -29,7 +29,7 @@ Usage:
   ntrp [options]
 
 Options:
-  --server URL     Server URL (default: http://localhost:8000)
+  --server URL     Server URL (default: http://localhost:6877)
   --token TOKEN    API key for server authentication (or set NTRP_API_KEY)
   --version, -v    Show version
   --help, -h       Show this help
@@ -43,7 +43,7 @@ const envServer = process.env.NTRP_SERVER_URL;
 const envToken = process.env.NTRP_API_KEY;
 const saved = await getCredentials();
 
-const serverUrl = cliServer || envServer || saved.serverUrl || "http://localhost:8000";
+const serverUrl = cliServer || envServer || saved.serverUrl || "http://localhost:6877";
 const apiKey = cliToken || envToken || saved.apiKey || "";
 let needsSetup = !apiKey;
 let needsProvider = false;

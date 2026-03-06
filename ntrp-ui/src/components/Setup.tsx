@@ -128,7 +128,7 @@ export function Setup({ initialServerUrl, onConnect }: SetupProps) {
         const apiKeyWin = windowText(maskedApiKey, apiKeyCursor, inputMaxWidth);
 
         const items = [
-          { field: "serverUrl" as Field, label: "Server URL", display: serverUrlWin.text, cursor: serverUrlWin.cursor, displayInactive: serverUrl, placeholder: "http://localhost:8000" },
+          { field: "serverUrl" as Field, label: "Server URL", display: serverUrlWin.text, cursor: serverUrlWin.cursor, displayInactive: serverUrl, placeholder: "http://localhost:6877" },
           { field: "apiKey" as Field, label: "API Key", display: apiKeyWin.text, cursor: apiKeyWin.cursor, displayInactive: maskedApiKey || null, placeholder: "your-api-key" },
         ];
 

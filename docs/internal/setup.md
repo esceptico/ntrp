@@ -171,7 +171,7 @@ cp .env.example .env   # configure your keys
 docker compose up -d
 ```
 
-Data (sessions, memory, search index) is persisted in the `ntrp-data` volume, mapped to `~/.ntrp` inside the container. The server runs as a non-root user and is available at `http://localhost:8000` (or `NTRP_PORT`).
+Data (sessions, memory, search index) is persisted in the `ntrp-data` volume, mapped to `~/.ntrp` inside the container. The server runs as a non-root user and is available at `http://localhost:6877` (or `NTRP_PORT`).
 
 The Obsidian vault is bind-mounted read-only at `/vault`. If you don't use Obsidian, comment out the vault volume in `docker-compose.yml`.
 
