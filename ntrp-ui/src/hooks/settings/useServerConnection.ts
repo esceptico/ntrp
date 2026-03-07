@@ -60,17 +60,17 @@ export function useServerConnection(
     setServerSaving(true);
     try {
       setFetchApiKey(key);
-      const health = await checkHealth({ serverUrl: url, apiKey: key, needsSetup: false });
-      if (!health.ok) {
-        setServerError("Could not connect to server");
-        setServerSaving(false);
-        return;
-      }
       await setCredentials(url, key);
+      const health = await checkHealth({ serverUrl: url, apiKey: key, needsSetup: false });
       onServerCredentialsChange({ serverUrl: url, apiKey: key, needsSetup: false });
       setEditingServer(false);
+      if (!health.ok) {
+        setServerError("Saved. Waiting for server…");
+      }
     } catch {
-      setServerError("Could not connect to server");
+      onServerCredentialsChange({ serverUrl: url, apiKey: key, needsSetup: false });
+      setEditingServer(false);
+      setServerError("Saved. Waiting for server…");
     } finally {
       setServerSaving(false);
     }

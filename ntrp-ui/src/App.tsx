@@ -276,6 +276,10 @@ function AppContent({
         setSidebarVisible(v => !v);
         return;
       }
+      if (key.ctrl && key.sequence === "," && viewMode === "chat" && !dialog.isOpen) {
+        toggleSettings();
+        return;
+      }
       if (key.ctrl && key.name === "n" && viewMode === "chat" && !showSettings && !dialog.isOpen) {
         startNewSession();
         return;
@@ -302,7 +306,7 @@ function AppContent({
         return;
       }
     },
-    [renderer, isStreaming, pendingApproval, cancel, showSettings, viewMode, dialog.isOpen, toggleSkipApprovals, cycleSession, startNewSession]
+    [renderer, isStreaming, pendingApproval, cancel, showSettings, viewMode, dialog.isOpen, toggleSkipApprovals, toggleSettings, cycleSession, startNewSession]
   );
 
   useKeypress(handleGlobalKeypress, { isActive: true });
@@ -377,7 +381,7 @@ function AppContent({
         {/* Status — pinned above input */}
         {!serverConnected && (
           <box flexShrink={0}>
-            <text><span fg={colors.status.error}>{BULLET} Server not connected. Reconnecting...</span></text>
+            <text><span fg={colors.status.error}>{BULLET} Server not connected. Reconnecting… </span><span fg={colors.text.muted}>(Ctrl+, to change)</span></text>
           </box>
         )}
 
