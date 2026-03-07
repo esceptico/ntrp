@@ -13,7 +13,7 @@ class SourceManager:
         self._sources: dict[str, object] = {}
         self._errors: dict[str, str] = {}
         self._channel = channel
-        self._init_sources(config)
+        self.sync(config)
 
     @property
     def sources(self) -> dict[str, object]:
@@ -56,10 +56,6 @@ class SourceManager:
             else:
                 self._errors.pop(name, None)
         return source
-
-    def _init_sources(self, config: Config) -> None:
-        for name in SOURCES:
-            self._apply(name, config)
 
     def sync(self, config: Config) -> None:
         for name in SOURCES:

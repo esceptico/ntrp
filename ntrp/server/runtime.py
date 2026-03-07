@@ -43,7 +43,6 @@ class Runtime:
     def __init__(self, config: Config | None = None):
         self.config = config or get_config()
         self.channel = Channel()
-        self._services: dict[str, object] = {}
 
         self.source_mgr = SourceManager(self.config, self.channel)
 
@@ -57,16 +56,20 @@ class Runtime:
         self.session_service: SessionService | None = None
         self._sessions_conn = None
 
+        self.memory: FactMemory | None = None
         self.memory_service: MemoryService | None = None
+        self.search_index = None
         self.indexables: dict[str, Indexable] = {}
         self.mcp_manager: MCPManager | None = None
         self.executor: ToolExecutor | None = None
 
+        self.automation_service: AutomationService | None = None
         self.automation_store: AutomationStore | None = None
         self.notifier_store: NotifierStore | None = None
         self.scheduler: Scheduler | None = None
         self.run_registry = RunRegistry()
 
+        self.skill_registry: SkillRegistry | None = None
         self.skill_service: SkillService | None = None
         self.notifier_service: NotifierService | None = None
         self.notification_log: NotificationLogStore | None = None
@@ -82,20 +85,19 @@ class Runtime:
         return self._connected
 
     @property
-    def memory(self) -> FactMemory | None:
-        return self._services.get("memory")
-
-    @property
-    def automation_service(self) -> AutomationService | None:
-        return self._services.get("automation")
-
-    @property
-    def skill_registry(self) -> SkillRegistry | None:
-        return self._services.get("skill_registry")
-
-    @property
     def tool_services(self) -> dict[str, object]:
-        return {**self.source_mgr.sources, **self._services}
+        services = dict(self.source_mgr.sources)
+        if self.memory:
+            services["memory"] = self.memory
+        if self.search_index:
+            services["search_index"] = self.search_index
+        if self.automation_service:
+            services["automation"] = self.automation_service
+        if self.skill_registry:
+            services["skill_registry"] = self.skill_registry
+        if self.mcp_manager and self.mcp_manager.tools:
+            services["mcp"] = self.mcp_manager
+        return services
 
     # --- Subsystem lifecycle ---
 
@@ -115,21 +117,18 @@ class Runtime:
     async def _sync_mcp(self) -> None:
         if self.mcp_manager:
             await self.mcp_manager.close()
-            self._services.pop("mcp", None)
             self.mcp_manager = None
 
         if self.config.mcp_servers:
             self.mcp_manager = MCPManager()
             await self.mcp_manager.connect(self.config.mcp_servers)
-            if self.mcp_manager.tools:
-                self._services["mcp"] = self.mcp_manager
 
         if self.executor:
             self.executor = ToolExecutor(runtime=self)
 
     async def _sync_memory(self) -> None:
         if self.config.memory and not self.memory and self.embedding:
-            self._services["memory"] = await FactMemory.create(
+            self.memory = await FactMemory.create(
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
                 extraction_model=self.config.memory_model,
@@ -143,7 +142,7 @@ class Runtime:
             if self.memory_service:
                 self.memory_service.close()
             await self.memory.close()
-            self._services.pop("memory", None)
+            self.memory = None
             self.memory_service = None
 
     async def _sync_embedding(self) -> None:
@@ -214,8 +213,7 @@ class Runtime:
     async def _init_search(self) -> None:
         if self.indexer:
             await self.indexer.connect()
-            if self.indexer.index:
-                self._services["search_index"] = self.indexer.index
+            self.search_index = self.indexer.index
 
     def _init_indexables(self) -> None:
         for name, source in self.source_mgr.sources.items():
@@ -224,7 +222,7 @@ class Runtime:
 
     async def _init_memory(self) -> None:
         if self.config.memory and self.embedding:
-            self._services["memory"] = await FactMemory.create(
+            self.memory = await FactMemory.create(
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
                 extraction_model=self.config.memory_model,
@@ -236,10 +234,9 @@ class Runtime:
             _logger.warning("Memory enabled but no embedding model configured — skipping")
 
     def _init_skills(self) -> None:
-        skill_registry = SkillRegistry()
-        skill_registry.load(SKILLS_DIRS)
-        self._services["skill_registry"] = skill_registry
-        self.skill_service = SkillService(skill_registry)
+        self.skill_registry = SkillRegistry()
+        self.skill_registry.load(SKILLS_DIRS)
+        self.skill_service = SkillService(self.skill_registry)
 
     async def _init_notifiers(self) -> None:
         self.notifier_service = NotifierService(
@@ -251,7 +248,7 @@ class Runtime:
 
     def _init_automation(self) -> None:
         self.scheduler = Scheduler(store=self.automation_store, build_deps=self.build_operator_deps)
-        self._services["automation"] = AutomationService(
+        self.automation_service = AutomationService(
             store=self.automation_store,
             scheduler=self.scheduler,
             get_notifiers=lambda: self.notifier_service.notifiers if self.notifier_service else {},
@@ -261,8 +258,6 @@ class Runtime:
         if self.config.mcp_servers:
             self.mcp_manager = MCPManager()
             await self.mcp_manager.connect(self.config.mcp_servers)
-            if self.mcp_manager.tools:
-                self._services["mcp"] = self.mcp_manager
 
     def _init_tools(self) -> None:
         self.executor = ToolExecutor(runtime=self)

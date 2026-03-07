@@ -5,15 +5,21 @@ from typing import TYPE_CHECKING
 
 from ntrp.logging import get_logger
 from ntrp.notifiers.base import Notifier
-from ntrp.notifiers.factory import create_notifier
+from ntrp.notifiers.bash import BashNotifier
+from ntrp.notifiers.email import EmailNotifier
 from ntrp.notifiers.models import NotifierConfig
 from ntrp.notifiers.store import NotifierStore
+from ntrp.notifiers.telegram import TelegramNotifier
 
 if TYPE_CHECKING:
     from ntrp.server.runtime import Runtime
 
 _logger = get_logger(__name__)
 NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
+
+_NOTIFIER_CLASSES: dict[str, type[Notifier]] = {
+    cls.channel: cls for cls in [EmailNotifier, TelegramNotifier, BashNotifier]
+}
 
 NOTIFIER_FIELDS: dict[str, list[str]] = {
     "email": ["from_account", "to_address"],
@@ -36,7 +42,11 @@ class NotifierService:
         new_notifiers: dict[str, Notifier] = {}
         for cfg in await self.store.list_all():
             try:
-                new_notifiers[cfg.name] = create_notifier(cfg, self.runtime)
+                cls = _NOTIFIER_CLASSES.get(cfg.type)
+                if not cls:
+                    _logger.warning("Unknown notifier type %r for %r", cfg.type, cfg.name)
+                    continue
+                new_notifiers[cfg.name] = cls.from_config(cfg.config, self.runtime)
             except Exception:
                 _logger.exception("Failed to create notifier %r", cfg.name)
         self._notifiers = new_notifiers
