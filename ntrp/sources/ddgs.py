@@ -6,7 +6,7 @@ from urllib.request import Request, urlopen
 
 from ddgs import DDGS
 
-from ntrp.sources.base import Source, WebContentResult, WebSearchResult, WebSearchSource
+from ntrp.sources.base import WebContentResult, WebSearchResult, WebSearchSource
 
 _MAX_FETCH_BYTES = 1_000_000
 
@@ -32,7 +32,7 @@ def _guess_title(url: str) -> str:
     return parsed.netloc or url
 
 
-class DDGSWebSource(Source, WebSearchSource):
+class DDGSWebSource(WebSearchSource):
     name = "web"
     provider = "ddgs"
 

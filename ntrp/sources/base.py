@@ -5,18 +5,6 @@ from typing import Protocol, runtime_checkable
 from ntrp.sources.models import RawItem
 
 
-class Source:
-    name: str
-
-    @property
-    def errors(self) -> dict[str, str]:
-        return {}
-
-    @property
-    def details(self) -> dict:
-        return {}
-
-
 @runtime_checkable
 class Indexable(Protocol):
     name: str

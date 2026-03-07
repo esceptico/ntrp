@@ -11,7 +11,7 @@ from googleapiclient.discovery import build
 
 from ntrp.constants import CONTENT_READ_LIMIT
 from ntrp.core.prompts import env
-from ntrp.sources.base import EmailSource, Source, SourceItem
+from ntrp.sources.base import EmailSource, SourceItem
 from ntrp.sources.google.auth import (
     NTRP_DIR,
     SCOPES_ALL,
@@ -485,7 +485,7 @@ class GmailSource:
         return items
 
 
-class MultiGmailSource(Source, EmailSource):
+class MultiGmailSource(EmailSource):
     """Wrapper for multiple Gmail accounts."""
 
     name = "gmail"

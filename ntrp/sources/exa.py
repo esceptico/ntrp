@@ -1,9 +1,9 @@
 from exa_py import Exa
 
-from ntrp.sources.base import Source, WebContentResult, WebSearchResult, WebSearchSource
+from ntrp.sources.base import WebContentResult, WebSearchResult, WebSearchSource
 
 
-class ExaWebSource(Source, WebSearchSource):
+class ExaWebSource(WebSearchSource):
     name = "web"
     provider = "exa"
 

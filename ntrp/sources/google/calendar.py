@@ -4,7 +4,7 @@ from typing import Any
 
 from googleapiclient.discovery import build
 
-from ntrp.sources.base import CalendarSource, Source
+from ntrp.sources.base import CalendarSource
 from ntrp.sources.google.auth import (
     NTRP_DIR,
     SCOPES_CALENDAR,
@@ -365,7 +365,7 @@ class GoogleCalendar:
         return [self._parse_event(e) for e in events]
 
 
-class MultiCalendarSource(Source, CalendarSource):
+class MultiCalendarSource(CalendarSource):
     name = "calendar"
 
     def __init__(self, token_paths: list[Path], days_back: int, days_ahead: int):

@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 
-from ntrp.sources.base import NotesSource, Source
+from ntrp.sources.base import NotesSource
 from ntrp.sources.models import RawItem
 
 _logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ def _walk_markdown_files(root_path: Path) -> Iterator[tuple[Path, str]]:
                 yield filepath, relative_path
 
 
-class ObsidianSource(Source, NotesSource):
+class ObsidianSource(NotesSource):
     name = "notes"
 
     def __init__(self, vault_path: Path):

@@ -45,7 +45,7 @@ class Runtime:
         self.channel = Channel()
         self._services: dict[str, object] = {}
 
-        self.source_mgr = SourceManager(self._services, self.config, self.channel)
+        self.source_mgr = SourceManager(self.config, self.channel)
 
         self.embedding = self.config.embedding
         self.indexer = (
@@ -95,7 +95,7 @@ class Runtime:
 
     @property
     def tool_services(self) -> dict[str, object]:
-        return self._services
+        return {**self.source_mgr.sources, **self._services}
 
     # --- Subsystem lifecycle ---
 
@@ -172,12 +172,29 @@ class Runtime:
         if self._connected:
             return
 
-        _logger.info("Initializing LLM providers")
         llm_init(self.config)
-        self.config.db_dir.mkdir(exist_ok=True)
+        await self._init_db()
+        await self._init_search()
+        wire_events(self)
+        self._init_indexables()
+        await self._init_memory()
+        self._init_skills()
+        await self._init_notifiers()
+        self._init_automation()
+        await self._init_mcp()
+        self._init_tools()
 
-        _logger.info("Opening database")
+        self._connected = True
+        _logger.info(
+            "Runtime ready",
+            sources=len(self.source_mgr.sources),
+            tools=len(self.executor.registry),
+        )
+
+    async def _init_db(self) -> None:
+        self.config.db_dir.mkdir(exist_ok=True)
         self._sessions_conn = await database.connect(self.config.sessions_db_path)
+
         session_store = SessionStore(self._sessions_conn)
         await session_store.init_schema()
         self.session_service = SessionService(session_store)
@@ -194,19 +211,19 @@ class Runtime:
         self.monitor_store = MonitorStateStore(self._sessions_conn)
         await self.monitor_store.init_schema()
 
+    async def _init_search(self) -> None:
         if self.indexer:
-            _logger.info("Connecting search index")
             await self.indexer.connect()
             if self.indexer.index:
                 self._services["search_index"] = self.indexer.index
 
-        wire_events(self)
+    def _init_indexables(self) -> None:
+        for name, source in self.source_mgr.sources.items():
+            if isinstance(source, Indexable):
+                self.indexables[name] = source
 
-        if notes := self.source_mgr.sources.get("notes"):
-            self.indexables["notes"] = notes
-
+    async def _init_memory(self) -> None:
         if self.config.memory and self.embedding:
-            _logger.info("Initializing memory")
             self._services["memory"] = await FactMemory.create(
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
@@ -218,11 +235,13 @@ class Runtime:
         elif self.config.memory:
             _logger.warning("Memory enabled but no embedding model configured — skipping")
 
+    def _init_skills(self) -> None:
         skill_registry = SkillRegistry()
         skill_registry.load(SKILLS_DIRS)
         self._services["skill_registry"] = skill_registry
         self.skill_service = SkillService(skill_registry)
 
+    async def _init_notifiers(self) -> None:
         self.notifier_service = NotifierService(
             store=self.notifier_store,
             runtime=self,
@@ -230,31 +249,24 @@ class Runtime:
         await self.notifier_service.seed_defaults()
         await self.notifier_service.rebuild()
 
+    def _init_automation(self) -> None:
         self.scheduler = Scheduler(store=self.automation_store, build_deps=self.build_operator_deps)
-
         self._services["automation"] = AutomationService(
             store=self.automation_store,
             scheduler=self.scheduler,
             get_notifiers=lambda: self.notifier_service.notifiers if self.notifier_service else {},
         )
 
+    async def _init_mcp(self) -> None:
         if self.config.mcp_servers:
-            _logger.info("Connecting MCP servers")
             self.mcp_manager = MCPManager()
             await self.mcp_manager.connect(self.config.mcp_servers)
             if self.mcp_manager.tools:
                 self._services["mcp"] = self.mcp_manager
 
-        _logger.info("Registering tools")
+    def _init_tools(self) -> None:
         self.executor = ToolExecutor(runtime=self)
         self.config_service = ConfigService(runtime=self)
-
-        self._connected = True
-        _logger.info(
-            "Runtime ready",
-            sources=len(self.source_mgr.sources),
-            tools=len(self.executor.registry),
-        )
 
     async def close(self) -> None:
         self._closing = True
