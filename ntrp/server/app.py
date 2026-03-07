@@ -14,7 +14,7 @@ from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import CancelRequest, ChatRequest, ToolResultRequest
-from ntrp.services.chat import ChatService
+from ntrp.services.chat import prepare_chat, stream_chat
 
 
 @asynccontextmanager
@@ -131,13 +131,12 @@ async def list_tools(runtime: Runtime = Depends(get_runtime)):
 
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest, runtime: Runtime = Depends(get_runtime)) -> StreamingResponse:
-    svc = ChatService(runtime)
     try:
-        ctx = await svc.prepare(request.message, request.skip_approvals, session_id=request.session_id)
+        ctx = await prepare_chat(runtime, request.message, request.skip_approvals, session_id=request.session_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return StreamingResponse(
-        svc.stream(ctx),
+        stream_chat(ctx),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

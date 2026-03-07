@@ -39,7 +39,7 @@ from ntrp.server.schemas import (
     UpdateDirectivesRequest,
     UpdateEmbeddingRequest,
 )
-from ntrp.services.chat import ChatService
+from ntrp.services.chat import compact_session
 from ntrp.services.config import ConfigService
 from ntrp.services.session import SessionService
 from ntrp.tools.directives import load_directives, save_directives
@@ -588,9 +588,8 @@ async def get_context_usage(
 @router.post("/compact")
 async def compact_context(runtime: Runtime = Depends(get_runtime), req: CompactRequest | None = None):
     session_id = req.session_id if req else None
-    svc = ChatService(runtime)
     try:
-        return await svc.compact(session_id=session_id)
+        return await compact_session(runtime, session_id=session_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

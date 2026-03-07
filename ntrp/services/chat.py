@@ -74,224 +74,221 @@ def _is_anthropic(model: str) -> bool:
     return get_model(model).provider == Provider.ANTHROPIC
 
 
-class ChatService:
-    def __init__(self, runtime: "Runtime"):
-        self.runtime = runtime
+async def _resolve_session(runtime: "Runtime") -> SessionData:
+    data = await runtime.session_service.load()
+    if data and data.messages and len(data.messages) >= 2:
+        return data
+    return SessionData(runtime.session_service.create(), [])
 
-    async def _resolve_session(self) -> SessionData:
-        data = await self.runtime.session_service.load()
-        if data and data.messages and len(data.messages) >= 2:
-            return data
-        return SessionData(self.runtime.session_service.create(), [])
 
-    async def _prepare_messages(
-        self,
-        messages: list[dict],
-        user_message: str,
-        last_activity: datetime | None = None,
-    ) -> list[dict]:
-        runtime = self.runtime
-        memory_context = None
-        if runtime.memory:
-            observations, user_facts = await runtime.memory.get_context()
-            memory_context = format_session_memory(observations=observations, user_facts=user_facts)
+async def _prepare_messages(
+    runtime: "Runtime",
+    messages: list[dict],
+    user_message: str,
+    last_activity: datetime | None = None,
+) -> list[dict]:
+    memory_context = None
+    if runtime.memory:
+        observations, user_facts = await runtime.memory.get_context()
+        memory_context = format_session_memory(observations=observations, user_facts=user_facts)
 
-        skills_context = runtime.skill_registry.to_prompt_xml() if runtime.skill_registry else None
-        directives = load_directives()
+    skills_context = runtime.skill_registry.to_prompt_xml() if runtime.skill_registry else None
+    directives = load_directives()
 
-        notifier_names = list(runtime.notifier_service.notifiers) if runtime.notifier_service else None
+    notifier_names = list(runtime.notifier_service.notifiers) if runtime.notifier_service else None
 
-        system_blocks = build_system_blocks(
-            source_details=runtime.source_mgr.get_details(),
-            last_activity=last_activity,
-            memory_context=memory_context,
-            skills_context=skills_context,
-            directives=directives,
-            notifier_names=notifier_names,
-            use_cache_control=_is_anthropic(runtime.config.chat_model),
-        )
+    system_blocks = build_system_blocks(
+        source_details=runtime.source_mgr.get_details(),
+        last_activity=last_activity,
+        memory_context=memory_context,
+        skills_context=skills_context,
+        directives=directives,
+        notifier_names=notifier_names,
+        use_cache_control=_is_anthropic(runtime.config.chat_model),
+    )
 
-        if not messages:
-            messages = [{"role": "system", "content": system_blocks}]
-        elif isinstance(messages[0], dict) and messages[0]["role"] == "system":
-            messages[0]["content"] = system_blocks
-        else:
-            messages.insert(0, {"role": "system", "content": system_blocks})
+    if not messages:
+        messages = [{"role": "system", "content": system_blocks}]
+    elif isinstance(messages[0], dict) and messages[0]["role"] == "system":
+        messages[0]["content"] = system_blocks
+    else:
+        messages.insert(0, {"role": "system", "content": system_blocks})
 
-        messages.append({"role": "user", "content": user_message})
+    messages.append({"role": "user", "content": user_message})
 
-        return messages
+    return messages
 
-    async def prepare(self, message: str, skip_approvals: bool = False, session_id: str | None = None) -> ChatContext:
-        runtime = self.runtime
-        registry = runtime.run_registry
 
-        if session_id:
-            session_data = await runtime.session_service.load(session_id)
-            if not session_data:
-                session_data = SessionData(runtime.session_service.create(), [])
-        else:
-            session_data = await self._resolve_session()
-        session_state = session_data.state
-        session_state.skip_approvals = skip_approvals
-        messages = session_data.messages
+async def prepare_chat(runtime: "Runtime", message: str, skip_approvals: bool = False, session_id: str | None = None) -> ChatContext:
+    registry = runtime.run_registry
 
-        user_message = message
-        is_init = user_message.strip().lower() == "/init"
-        if is_init:
-            user_message = INIT_INSTRUCTION
-        elif runtime.skill_registry:
-            user_message, _ = expand_skill_command(user_message, runtime.skill_registry)
+    if session_id:
+        session_data = await runtime.session_service.load(session_id)
+        if not session_data:
+            session_data = SessionData(runtime.session_service.create(), [])
+    else:
+        session_data = await _resolve_session(runtime)
+    session_state = session_data.state
+    session_state.skip_approvals = skip_approvals
+    messages = session_data.messages
 
-        if not session_state.name and not is_init and not message.strip().startswith("/"):
-            session_state.name = message.strip()[:50]
+    user_message = message
+    is_init = user_message.strip().lower() == "/init"
+    if is_init:
+        user_message = INIT_INSTRUCTION
+    elif runtime.skill_registry:
+        user_message, _ = expand_skill_command(user_message, runtime.skill_registry)
 
-        messages = await self._prepare_messages(messages, user_message, last_activity=session_state.last_activity)
+    if not session_state.name and not is_init and not message.strip().startswith("/"):
+        session_state.name = message.strip()[:50]
 
-        run = registry.create_run(session_state.session_id)
-        run.messages = messages
-        run.status = RunStatus.RUNNING
+    messages = await _prepare_messages(runtime, messages, user_message, last_activity=session_state.last_activity)
 
-        return ChatContext(
-            run=run,
+    run = registry.create_run(session_state.session_id)
+    run.messages = messages
+    run.status = RunStatus.RUNNING
+
+    return ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=is_init,
+        executor=runtime.executor,
+        tools=runtime.executor.get_tools(),
+        config=AgentConfig(
+            model=runtime.config.chat_model,
+            explore_model=runtime.config.explore_model,
+            max_depth=runtime.config.max_depth,
+        ),
+        channel=runtime.channel,
+        available_sources=runtime.get_available_sources(),
+        source_errors=runtime.get_source_errors(),
+        session_service=runtime.session_service,
+        run_registry=runtime.run_registry,
+    )
+
+
+async def stream_chat(ctx: ChatContext) -> AsyncGenerator[str]:
+    run = ctx.run
+    session_state = ctx.session_state
+
+    run.approval_queue = asyncio.Queue()
+
+    yield SessionInfoEvent(
+        session_id=session_state.session_id,
+        run_id=run.run_id,
+        sources=ctx.available_sources,
+        source_errors=ctx.source_errors,
+        skip_approvals=session_state.skip_approvals,
+        session_name=session_state.name or "",
+    ).to_sse_string()
+
+    yield ThinkingEvent(status="processing...").to_sse_string()
+    ctx.channel.publish(RunStarted(run_id=run.run_id, session_id=session_state.session_id))
+
+    agent: Agent | None = None
+    result: str | None = None
+    try:
+        agent = create_agent(
+            executor=ctx.executor,
+            config=ctx.config,
+            tools=ctx.tools,
+            system_prompt=ctx.run.messages[0]["content"] if ctx.run.messages else [],
             session_state=session_state,
-            is_init=is_init,
-            executor=runtime.executor,
-            tools=runtime.executor.get_tools(),
-            config=AgentConfig(
-                model=runtime.config.chat_model,
-                explore_model=runtime.config.explore_model,
-                max_depth=runtime.config.max_depth,
-            ),
-            channel=runtime.channel,
-            available_sources=runtime.get_available_sources(),
-            source_errors=runtime.get_source_errors(),
-            session_service=runtime.session_service,
-            run_registry=runtime.run_registry,
-        )
-
-    async def stream(self, ctx: ChatContext) -> AsyncGenerator[str]:
-        run = ctx.run
-        session_state = ctx.session_state
-
-        run.approval_queue = asyncio.Queue()
-
-        yield SessionInfoEvent(
-            session_id=session_state.session_id,
+            channel=ctx.channel,
             run_id=run.run_id,
-            sources=ctx.available_sources,
-            source_errors=ctx.source_errors,
-            skip_approvals=session_state.skip_approvals,
-            session_name=session_state.name or "",
-        ).to_sse_string()
-
-        yield ThinkingEvent(status="processing...").to_sse_string()
-        ctx.channel.publish(RunStarted(run_id=run.run_id, session_id=session_state.session_id))
-
-        agent: Agent | None = None
-        result: str | None = None
-        try:
-            agent = create_agent(
-                executor=ctx.executor,
-                config=ctx.config,
-                tools=ctx.tools,
-                system_prompt=ctx.run.messages[0]["content"] if ctx.run.messages else [],
-                session_state=session_state,
-                channel=ctx.channel,
-                run_id=run.run_id,
-                io=IOBridge(
-                    approval_queue=run.approval_queue,
-                ),
-                extra_auto_approve=INIT_AUTO_APPROVE if ctx.is_init else None,
-            )
-
-            async for sse in run_agent_loop(ctx, agent):
-                if isinstance(sse, AgentResult):
-                    result = sse.text
-                else:
-                    yield sse
-
-            if result is None:
-                return  # Cancelled — session saved in finally
-
-            if agent:
-                run.usage = agent.usage
-                run.messages = agent.messages
-
-            if result:
-                yield TextEvent(content=result).to_sse_string()
-
-            yield DoneEvent(run_id=run.run_id, usage=run.usage.to_dict()).to_sse_string()
-            ctx.run_registry.complete_run(run.run_id)
-
-        except Exception as e:
-            _logger.exception("Chat stream failed (run_id=%s, session_id=%s)", run.run_id, session_state.session_id)
-            yield ErrorEvent(message=str(e), recoverable=False).to_sse_string()
-            run.status = RunStatus.ERROR
-            ctx.run_registry.cleanup_old_runs()
-
-        finally:
-            if agent:
-                run.usage = agent.usage
-                run.messages = agent.messages
-            last_tokens = getattr(agent, "_last_input_tokens", None) if agent else None
-            metadata = {"last_input_tokens": last_tokens} if last_tokens is not None else None
-            await ctx.session_service.save(session_state, run.messages, metadata=metadata)
-            ctx.channel.publish(
-                RunCompleted(
-                    run_id=run.run_id,
-                    session_id=session_state.session_id,
-                    messages=tuple(run.messages),
-                    usage=run.usage,
-                    result=result,
-                )
-            )
-
-    async def compact(self, session_id: str | None = None) -> dict:
-        runtime = self.runtime
-        model = runtime.config.chat_model
-
-        data = await runtime.session_service.load(session_id)
-        if not data:
-            return {"status": "no_session", "message": "No active session to compact"}
-
-        session_state = data.state
-        messages = data.messages
-        before_count = len(messages)
-        before_tokens = data.last_input_tokens
-
-        start, end = find_compressible_range(messages)
-        if start == 0 and end == 0:
-            return {
-                "status": "nothing_to_compact",
-                "message": f"Nothing to compact ({before_count} messages)",
-                "message_count": before_count,
-            }
-
-        msg_count = end - start
-        new_messages, was_compressed = await compress_context_async(
-            messages=messages,
-            model=model,
-            force=True,
+            io=IOBridge(
+                approval_queue=run.approval_queue,
+            ),
+            extra_auto_approve=INIT_AUTO_APPROVE if ctx.is_init else None,
         )
 
-        if was_compressed:
-            await runtime.session_service.save(
-                session_state,
-                new_messages,
-                metadata={"last_input_tokens": None},
-            )
-            return {
-                "status": "compacted",
-                "message": f"Compacted {before_count} → {len(new_messages)} messages ({msg_count} summarized)",
-                "before_tokens": before_tokens,
-                "before_messages": before_count,
-                "after_messages": len(new_messages),
-                "messages_compressed": msg_count,
-            }
+        async for sse in run_agent_loop(ctx, agent):
+            if isinstance(sse, AgentResult):
+                result = sse.text
+            else:
+                yield sse
 
+        if result is None:
+            return  # Cancelled — session saved in finally
+
+        if agent:
+            run.usage = agent.usage
+            run.messages = agent.messages
+
+        if result:
+            yield TextEvent(content=result).to_sse_string()
+
+        yield DoneEvent(run_id=run.run_id, usage=run.usage.to_dict()).to_sse_string()
+        ctx.run_registry.complete_run(run.run_id)
+
+    except Exception as e:
+        _logger.exception("Chat stream failed (run_id=%s, session_id=%s)", run.run_id, session_state.session_id)
+        yield ErrorEvent(message=str(e), recoverable=False).to_sse_string()
+        run.status = RunStatus.ERROR
+        ctx.run_registry.cleanup_old_runs()
+
+    finally:
+        if agent:
+            run.usage = agent.usage
+            run.messages = agent.messages
+        last_tokens = getattr(agent, "_last_input_tokens", None) if agent else None
+        metadata = {"last_input_tokens": last_tokens} if last_tokens is not None else None
+        await ctx.session_service.save(session_state, run.messages, metadata=metadata)
+        ctx.channel.publish(
+            RunCompleted(
+                run_id=run.run_id,
+                session_id=session_state.session_id,
+                messages=tuple(run.messages),
+                usage=run.usage,
+                result=result,
+            )
+        )
+
+
+async def compact_session(runtime: "Runtime", session_id: str | None = None) -> dict:
+    model = runtime.config.chat_model
+
+    data = await runtime.session_service.load(session_id)
+    if not data:
+        return {"status": "no_session", "message": "No active session to compact"}
+
+    session_state = data.state
+    messages = data.messages
+    before_count = len(messages)
+    before_tokens = data.last_input_tokens
+
+    start, end = find_compressible_range(messages)
+    if start == 0 and end == 0:
         return {
-            "status": "already_optimal",
-            "message": f"Context already optimal ({before_count} messages)",
+            "status": "nothing_to_compact",
+            "message": f"Nothing to compact ({before_count} messages)",
             "message_count": before_count,
         }
+
+    msg_count = end - start
+    new_messages, was_compressed = await compress_context_async(
+        messages=messages,
+        model=model,
+        force=True,
+    )
+
+    if was_compressed:
+        await runtime.session_service.save(
+            session_state,
+            new_messages,
+            metadata={"last_input_tokens": None},
+        )
+        return {
+            "status": "compacted",
+            "message": f"Compacted {before_count} → {len(new_messages)} messages ({msg_count} summarized)",
+            "before_tokens": before_tokens,
+            "before_messages": before_count,
+            "after_messages": len(new_messages),
+            "messages_compressed": msg_count,
+        }
+
+    return {
+        "status": "already_optimal",
+        "message": f"Context already optimal ({before_count} messages)",
+        "message_count": before_count,
+    }

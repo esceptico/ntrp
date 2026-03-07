@@ -7,13 +7,12 @@ import uvicorn
 from rich.console import Console
 
 from ntrp.config import generate_api_key, get_config, load_user_settings, save_user_settings, set_ntrp_dir
-from ntrp.core.agent import Agent
+from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
-from ntrp.core.spawner import create_spawn_fn
 from ntrp.events.internal import RunCompleted, RunStarted
 from ntrp.logging import UVICORN_LOG_CONFIG
 from ntrp.server.runtime import Runtime
-from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
+from ntrp.tools.core.context import IOBridge
 
 console = Console()
 
@@ -119,34 +118,21 @@ async def _run_headless(prompt: str):
         run_id = secrets.token_hex(4)
         session_state = runtime.session_service.create()
 
-        tool_ctx = ToolContext(
-            session_state=session_state,
-            registry=runtime.executor.registry,
-            run=RunContext(
-                run_id=run_id,
-                max_depth=runtime.config.max_depth,
-                explore_model=runtime.config.explore_model,
-            ),
-            io=IOBridge(),
-            services=runtime.tool_services,
-            channel=runtime.channel,
+        config = AgentConfig(
+            model=runtime.config.chat_model,
+            explore_model=runtime.config.explore_model,
+            max_depth=runtime.config.max_depth,
         )
 
-        tool_ctx.spawn_fn = create_spawn_fn(
+        agent = create_agent(
             executor=runtime.executor,
-            model=runtime.config.chat_model,
-            max_depth=runtime.config.max_depth,
-            current_depth=0,
-        )
-
-        agent = Agent(
+            config=config,
             tools=runtime.executor.get_tools(),
-            tool_executor=runtime.executor,
-            model=runtime.config.chat_model,
             system_prompt=system_prompt,
-            ctx=tool_ctx,
-            max_depth=runtime.config.max_depth,
-            current_depth=0,
+            session_state=session_state,
+            channel=runtime.channel,
+            run_id=run_id,
+            io=IOBridge(),
         )
 
         console.print(f"[dim]Running: {prompt}[/dim]\n")
