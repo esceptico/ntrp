@@ -6,3 +6,4 @@ export { ServerSection } from "./ServerSection.js";
 export { ServicesSection } from "./ServicesSection.js";
 export { SkillsSection } from "./SkillsSection.js";
 export { MCPSection } from "./MCPSection.js";
+export { SidebarSection } from "./SidebarSection.js";

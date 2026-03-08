@@ -177,6 +177,7 @@ class MemoryService:
         return {
             "fact_count": await self.memory.facts.count(),
             "observation_count": await self.memory.observations.count(),
+            "dream_count": await self.memory.dreams.count(),
         }
 
     async def count_unconsolidated(self) -> int:

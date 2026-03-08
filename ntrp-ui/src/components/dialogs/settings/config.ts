@@ -1,4 +1,4 @@
-export const SECTION_IDS = ["server", "providers", "services", "directives", "connections", "skills", "notifiers", "mcp", "limits"] as const;
+export const SECTION_IDS = ["server", "providers", "services", "directives", "connections", "skills", "notifiers", "mcp", "limits", "sidebar"] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 
 export const SECTION_LABELS = {
@@ -11,6 +11,7 @@ export const SECTION_LABELS = {
   notifiers: "Notifiers",
   mcp: "MCP Servers",
   limits: "Limits",
+  sidebar: "Sidebar",
 } satisfies Record<SectionId, string>;
 
 export interface NumberItem {

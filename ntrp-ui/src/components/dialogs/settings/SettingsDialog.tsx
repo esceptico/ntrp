@@ -7,7 +7,7 @@ import type { ServerConfig } from "../../../api/client.js";
 import { SectionId, SECTION_IDS, SECTION_LABELS } from "./config.js";
 import { DialogSelect, type SelectOption } from "../../ui/index.js";
 import { ConnectionsSection } from "./ConnectionsSection.js";
-import { DirectivesSection, LimitsSection, MCPSection, NotifiersSection, ProvidersSection, ServerSection, ServicesSection, SkillsSection } from "./sections/index.js";
+import { DirectivesSection, LimitsSection, MCPSection, NotifiersSection, ProvidersSection, ServerSection, ServicesSection, SkillsSection, SidebarSection } from "./sections/index.js";
 import { useSettingsState } from "../../../hooks/useSettingsState.js";
 import { useSettingsKeypress } from "../../../hooks/useSettingsKeypress.js";
 
@@ -131,6 +131,7 @@ export function SettingsDialog({
                 {activeSection === "notifiers" && <NotifiersSection notifiers={state.notifiers} accent={accent} />}
                 {activeSection === "mcp" && <MCPSection mcp={state.mcp} accent={accent} width={detailWidth} height={contentHeight} />}
                 {activeSection === "limits" && <LimitsSection settings={settings.agent} selectedIndex={state.limits.limitsIndex} accent={accent} />}
+                {activeSection === "sidebar" && <SidebarSection sidebar={settings.sidebar} selectedIndex={state.sidebarSettings.sidebarIndex} accent={accent} />}
               </box>
             </box>
 

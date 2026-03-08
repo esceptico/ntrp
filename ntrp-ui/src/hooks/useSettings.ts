@@ -19,9 +19,15 @@ export interface AgentSettings {
   summaryMaxTokens: number;
 }
 
+export const SIDEBAR_SECTION_IDS = ["models", "context", "usage", "sources", "automations", "sessions", "memory_stats"] as const;
+export type SidebarSectionId = (typeof SIDEBAR_SECTION_IDS)[number];
+
+export type SidebarSettings = Record<SidebarSectionId, boolean>;
+
 export interface Settings {
   ui: UiSettings;
   agent: AgentSettings;
+  sidebar: SidebarSettings;
 }
 
 const defaultSettings: Settings = {
@@ -35,6 +41,15 @@ const defaultSettings: Settings = {
     maxMessages: 120,
     compressionKeepRatio: 20,
     summaryMaxTokens: 1500,
+  },
+  sidebar: {
+    models: true,
+    context: true,
+    usage: true,
+    sources: true,
+    automations: true,
+    sessions: true,
+    memory_stats: false,
   },
 };
 
@@ -60,6 +75,7 @@ function loadSettings(): Settings {
       return {
         ui,
         agent: { ...defaultSettings.agent, ...parsed.agent },
+        sidebar: { ...defaultSettings.sidebar, ...parsed.sidebar },
       };
     }
   } catch {
@@ -85,6 +101,7 @@ function saveSettings(settings: Settings): void {
     }
     existing.ui = settings.ui;
     existing.agent = settings.agent;
+    existing.sidebar = settings.sidebar;
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(existing, null, 2));
   } catch {
     // Ignore save errors

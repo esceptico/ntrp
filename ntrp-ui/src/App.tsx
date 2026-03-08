@@ -150,7 +150,7 @@ function AppContent({
   const { width, height } = useDimensions();
   const SIDEBAR_WIDTH = 32;
   const showSidebar = sidebarVisible && width >= 94 && serverConnected;
-  const { data: sidebarData, refresh: refreshSidebar } = useSidebar(config, showSidebar, messages.length, sessionId);
+  const { data: sidebarData, refresh: refreshSidebar } = useSidebar(config, showSidebar, messages.length, sessionId, settings.sidebar);
 
   const isInChatMode = viewMode === "chat" && !showSettings && !dialog.isOpen;
 
@@ -344,6 +344,7 @@ function AppContent({
             currentSessionId={sessionId}
             currentSessionName={sessionName}
             sessionStates={sessionStates}
+            sections={settings.sidebar}
           />
           <box width={1} height={contentHeight} flexShrink={0} flexDirection="column">
             {Array.from({ length: contentHeight }).map((_, i) => (
