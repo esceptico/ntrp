@@ -442,7 +442,7 @@ export function useStreaming({
     const target = getSession(targetId);
     target.notification = null;
 
-    if (history && !target.historyLoaded && !target.isStreaming) {
+    if (history && !target.isStreaming) {
       target.messages = history;
       target.historyLoaded = true;
     }

@@ -156,6 +156,7 @@ function AppContent({
   const startNewSession = useCallback(async () => {
     const newId = await createNewSession();
     if (newId) {
+      cycleIdRef.current = null;
       clearQueue();
       switchToSession(newId, []);
       refreshSidebar();
@@ -238,31 +239,30 @@ function AppContent({
 
   const closeView = useCallback(() => setViewMode("chat"), []);
 
-  const isCyclingRef = useRef(false);
-  const sessionIdRef = useRef(sessionId);
-  sessionIdRef.current = sessionId;
+  const cycleIdRef = useRef<string | null>(null);
 
   const cycleSession = useCallback(() => {
     const sessions = sidebarData.sessions;
     if (sessions.length < 2) return;
-    const currentIdx = sessions.findIndex(s => s.session_id === sessionIdRef.current);
+    const currentId = cycleIdRef.current ?? sessionId;
+    const currentIdx = sessions.findIndex(s => s.session_id === currentId);
     const nextIdx = (currentIdx + 1) % sessions.length;
     const target = sessions[nextIdx];
     if (!target) return;
 
-    sessionIdRef.current = target.session_id;
+    cycleIdRef.current = target.session_id;
     clearQueue();
     switchToSession(target.session_id);
 
     switchSession(target.session_id).then((result) => {
-      if (sessionIdRef.current !== target.session_id) return;
+      if (cycleIdRef.current !== target.session_id) return;
       if (result) {
         switchToSession(target.session_id, result.history.map((msg, i) => ({
           id: `h-${i}`, role: msg.role, content: msg.content,
         })));
       }
     });
-  }, [sidebarData.sessions, switchSession, switchToSession, clearQueue]);
+  }, [sessionId, sidebarData.sessions, switchSession, switchToSession, clearQueue]);
 
   const tabPendingRef = useRef(false);
   const tabTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);

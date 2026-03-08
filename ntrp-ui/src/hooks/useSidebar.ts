@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { Config } from "../types.js";
-import { getStats, getContextUsage, getAutomations, listSessions, type Stats, type Automation, type SessionListItem } from "../api/client.js";
+import { getContextUsage, getAutomations, listSessions, type Automation, type SessionListItem } from "../api/client.js";
 
 const POLL_INTERVAL = 60_000;
 
 export interface SidebarData {
-  stats: Stats | null;
   context: {
     model: string;
     total: number | null;
@@ -17,7 +16,7 @@ export interface SidebarData {
   sessions: SessionListItem[];
 }
 
-const EMPTY: SidebarData = { stats: null, context: null, nextAutomations: [], sessions: [] };
+const EMPTY: SidebarData = { context: null, nextAutomations: [], sessions: [] };
 
 export function useSidebar(config: Config, active: boolean, messageCount: number, sessionId: string | null) {
   const [data, setData] = useState<SidebarData>(EMPTY);
@@ -25,12 +24,25 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
+  // Session-specific data only (context)
+  const refreshSession = useCallback(async () => {
+    if (!activeRef.current) return;
+    try {
+      const sid = sessionIdRef.current ?? undefined;
+      const context = await getContextUsage(config, sid);
+      if (!activeRef.current) return;
+      setData(prev => ({ ...prev, context }));
+    } catch {
+      // ignore
+    }
+  }, [config]);
+
+  // Full refresh including global data (automations + sessions)
   const refresh = useCallback(async () => {
     if (!activeRef.current) return;
     try {
       const sid = sessionIdRef.current ?? undefined;
-      const [stats, context, automationsResult, sessionsResult] = await Promise.all([
-        getStats(config),
+      const [context, automationsResult, sessionsResult] = await Promise.all([
         getContextUsage(config, sid),
         getAutomations(config),
         listSessions(config).catch(() => ({ sessions: [] })),
@@ -42,7 +54,7 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
         .sort((a, b) => new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime())
         .slice(0, 3);
 
-      setData({ stats, context, nextAutomations, sessions: sessionsResult.sessions });
+      setData({ context, nextAutomations, sessions: sessionsResult.sessions });
     } catch {
       // ignore
     }
@@ -55,12 +67,16 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
     }).catch(() => {});
   }, [config]);
 
-  // Refresh on session or message changes
+  // Refresh session-specific data on tab switch or message changes
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (active) refresh();
-  }, [active, sessionId, messageCount, refresh]);
+    if (!active) return;
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(refreshSession, 150);
+    return () => { if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current); };
+  }, [active, sessionId, messageCount, refreshSession]);
 
-  // Fallback poll for external changes
+  // Fallback poll for all data including global
   useEffect(() => {
     if (!active) return;
     activeRef.current = true;
