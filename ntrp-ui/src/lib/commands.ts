@@ -13,6 +13,8 @@ export const COMMANDS = [
   { name: "connect", description: "Manage LLM providers" },
   { name: "models", description: "Switch models (agent, explore, memory, embedding)" },
   { name: "settings", description: "Model, connections, and UI settings" },
+  { name: "retry", description: "Revert last exchange and resend" },
+  { name: "undo", description: "Revert last exchange" },
   { name: "compact", description: "Summarize old messages to save tokens" },
   { name: "clear", description: "Clear current session messages" },
   { name: "purge", description: "Clear graph memory (keeps note embeddings)" },

@@ -60,6 +60,11 @@ export async function permanentlyDeleteSession(config: Config, sessionId: string
   return api.delete<{ status: string; session_id: string }>(`${config.serverUrl}/sessions/${sessionId}/permanent`);
 }
 
+export async function revertSession(config: Config, sessionId?: string): Promise<{ user_message: string; reverted_count: number }> {
+  const body = sessionId ? { session_id: sessionId } : {};
+  return api.post<{ user_message: string; reverted_count: number }>(`${config.serverUrl}/session/revert`, body);
+}
+
 export async function clearSession(config: Config, sessionId?: string): Promise<{ status: string; session_id: string }> {
   const body = sessionId ? { session_id: sessionId } : {};
   return api.post<{ status: string; session_id: string }>(`${config.serverUrl}/session/clear`, body);

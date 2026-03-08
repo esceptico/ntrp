@@ -56,5 +56,26 @@ class SessionService:
     async def list_archived(self, limit: int = 20) -> list[dict]:
         return await self.store.list_archived_sessions(limit=limit)
 
+    async def revert(self, session_id: str | None = None) -> dict | None:
+        data = await self.load(session_id)
+        if not data or not data.messages:
+            return None
+
+        last_user_idx = None
+        for i in range(len(data.messages) - 1, -1, -1):
+            if data.messages[i].get("role") == "user":
+                last_user_idx = i
+                break
+
+        if last_user_idx is None:
+            return None
+
+        user_message = data.messages[last_user_idx]["content"]
+        reverted_count = len(data.messages) - last_user_idx
+        data.messages = data.messages[:last_user_idx]
+        metadata = {"last_input_tokens": data.last_input_tokens} if data.last_input_tokens else None
+        await self.save(data.state, data.messages, metadata=metadata)
+        return {"user_message": user_message, "reverted_count": reverted_count}
+
     async def permanently_delete(self, session_id: str) -> bool:
         return await self.store.permanently_delete_session(session_id)

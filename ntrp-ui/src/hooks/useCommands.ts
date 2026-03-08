@@ -45,6 +45,7 @@ interface CommandContext {
   switchSession: (sessionId: string) => Promise<{ history: HistoryMessage[] } | null>;
   switchToSession: (sessionId: string, history?: Message[]) => void;
   deleteSessionState: (sessionId: string) => void;
+  revert: () => Promise<string | null>;
   refreshSidebar: () => void;
   logout: () => void;
 }
@@ -93,6 +94,26 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     } catch (error) {
       addMessage({ role: "error", content: `Failed to purge: ${error}` });
     }
+    return true;
+  },
+
+  retry: async ({ addMessage, sendMessage, revert }) => {
+    const userMessage = await revert();
+    if (!userMessage) {
+      addMessage({ role: "error", content: "Nothing to retry" });
+      return true;
+    }
+    sendMessage(userMessage);
+    return true;
+  },
+
+  undo: async ({ addMessage, revert }) => {
+    const userMessage = await revert();
+    if (!userMessage) {
+      addMessage({ role: "error", content: "Nothing to undo" });
+      return true;
+    }
+    addMessage({ role: "status", content: `Reverted: ${userMessage.length > 100 ? userMessage.slice(0, 100) + "…" : userMessage}` });
     return true;
   },
 

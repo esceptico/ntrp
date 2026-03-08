@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { Message, ServerEvent, Config, PendingApproval } from "../types.js";
 import type { ToolChainItem } from "../components/toolchain/types.js";
-import { streamChat, submitToolResult, cancelRun } from "../api/client.js";
+import { streamChat, submitToolResult, cancelRun, revertSession } from "../api/client.js";
 import {
   MAX_MESSAGES,
   MAX_TOOL_MESSAGE_CHARS,
@@ -463,6 +463,33 @@ export function useStreaming({
     }
   }, [syncView]);
 
+  const revert = useCallback(async (): Promise<string | null> => {
+    const id = viewedIdRef.current;
+    if (!id) return null;
+    const s = sessionsRef.current.get(id);
+    if (!s || s.isStreaming) return null;
+
+    try {
+      const result = await revertSession(configRef.current, id);
+
+      // Remove messages from last user message onwards in local state
+      let lastUserIdx = -1;
+      for (let i = s.messages.length - 1; i >= 0; i--) {
+        if (s.messages[i].role === "user") {
+          lastUserIdx = i;
+          break;
+        }
+      }
+      if (lastUserIdx >= 0) {
+        s.messages = s.messages.slice(0, lastUserIdx);
+      }
+      syncView(id);
+      return result.user_message;
+    } catch {
+      return null;
+    }
+  }, [syncView]);
+
   const deleteSessionState = useCallback((targetId: string) => {
     const s = sessionsRef.current.get(targetId);
     if (s) {
@@ -509,6 +536,7 @@ export function useStreaming({
     setStatus: setStatusPublic,
     handleApproval,
     cancel,
+    revert,
     switchToSession,
     deleteSessionState,
   };

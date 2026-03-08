@@ -176,6 +176,17 @@ async def clear_session(
     }
 
 
+@router.post("/session/revert")
+async def revert_session(
+    svc: SessionService = Depends(_require_session_service), req: ClearSessionRequest | None = None
+):
+    target_id = req.session_id if req else None
+    result = await svc.revert(target_id)
+    if not result:
+        raise HTTPException(status_code=400, detail="Nothing to revert")
+    return result
+
+
 # --- Multi-session ---
 
 
