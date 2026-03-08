@@ -7,7 +7,6 @@ import { D, type UsageData } from "./shared.js";
 import { ModelsSection } from "./ModelsSection.js";
 import { ContextSection } from "./ContextSection.js";
 import { UsageSection } from "./UsageSection.js";
-import { MemorySection } from "./MemorySection.js";
 import { SourcesSection } from "./SourcesSection.js";
 import { AutomationsSection } from "./AutomationsSection.js";
 import { SessionsList } from "./SessionsList.js";
@@ -46,8 +45,7 @@ export const Sidebar = React.memo(function Sidebar({ serverConfig, serverVersion
 
         {serverConfig && <ModelsSection cfg={serverConfig} width={contentWidth} />}
         {data.context && <ContextSection context={data.context} width={contentWidth} />}
-        {(usage.prompt > 0 || usage.completion > 0) && <UsageSection usage={usage} />}
-        {data.stats && <MemorySection stats={data.stats} />}
+        <UsageSection usage={usage} />
         {serverConfig && <SourcesSection cfg={serverConfig} />}
         {data.nextAutomations.length > 0 && <AutomationsSection automations={data.nextAutomations} width={contentWidth} />}
 
