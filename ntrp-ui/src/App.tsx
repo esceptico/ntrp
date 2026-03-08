@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRenderer } from "@opentui/react";
-import type { Selection } from "@opentui/core";
+import type { Selection, ScrollBoxRenderable } from "@opentui/core";
 import type { Message, Config } from "./types.js";
 import { colors, setTheme, useThemeVersion, themeNames, type Theme } from "./components/ui/index.js";
 import { BULLET } from "./lib/constants.js";
@@ -241,6 +241,13 @@ function AppContent({
 
   const closeView = useCallback(() => setViewMode("chat"), []);
 
+  const chatScrollRef = useRef<ScrollBoxRenderable | null>(null);
+
+  useEffect(() => {
+    const scroll = chatScrollRef.current;
+    if (scroll) setTimeout(() => scroll.scrollTo(scroll.scrollHeight), 0);
+  }, [sessionId]);
+
   const cycleIdRef = useRef<string | null>(null);
 
   const cycleSession = useCallback(() => {
@@ -350,7 +357,7 @@ function AppContent({
       <box flexDirection="column" flexGrow={1} paddingLeft={2} paddingRight={2} gap={1}>
       <DimensionsProvider padding={0} width={mainWidth}>
         {/* Scrollable message area */}
-        <scrollbox flexGrow={1} stickyScroll={true} stickyStart="bottom" style={{ scrollbarOptions: { visible: false } }}>
+        <scrollbox ref={(r: ScrollBoxRenderable) => { chatScrollRef.current = r; }} flexGrow={1} stickyScroll={true} stickyStart="bottom" style={{ scrollbarOptions: { visible: false } }}>
           {messages.map((item, index) => {
             const prevItem = messages[index - 1];
             const isToolMessage = item.role === "tool" || item.role === "tool_chain";
