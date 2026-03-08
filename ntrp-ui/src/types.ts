@@ -75,6 +75,13 @@ export interface ErrorEvent {
   recoverable: boolean;
 }
 
+export interface BackgroundTaskEvent {
+  type: "background_task";
+  task_id: string;
+  command: string;
+  status: "started" | "completed" | "failed";
+}
+
 export interface CancelledEvent {
   type: "cancelled";
   run_id: string;
@@ -93,6 +100,7 @@ export type ServerEvent =
   | ToolResultEvent
   | ApprovalNeededEvent
   | QuestionEvent
+  | BackgroundTaskEvent
   | SessionInfoEvent
   | DoneEvent
   | ErrorEvent

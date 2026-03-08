@@ -8,6 +8,7 @@ export interface InputFooterProps {
   accentValue: string;
   escHint: boolean;
   copiedFlash: boolean;
+  backgroundTaskCount?: number;
   indexStatus?: {
     indexing: boolean;
     progress: { total: number; done: number };
@@ -16,7 +17,7 @@ export interface InputFooterProps {
   } | null;
 }
 
-export function InputFooter({ isStreaming, status, accentValue, escHint, copiedFlash, indexStatus }: InputFooterProps) {
+export function InputFooter({ isStreaming, status, accentValue, escHint, copiedFlash, backgroundTaskCount, indexStatus }: InputFooterProps) {
   if (isStreaming || status === Status.COMPRESSING) {
     return (
       <box flexDirection="row" justifyContent="space-between">
@@ -33,6 +34,9 @@ export function InputFooter({ isStreaming, status, accentValue, escHint, copiedF
           ) : (
             <CyclingStatus status={status} isStreaming={isStreaming} />
           )}
+          {backgroundTaskCount != null && backgroundTaskCount > 0 && (
+            <text><span fg={colors.text.disabled}>{` · ${backgroundTaskCount} bg`}</span></text>
+          )}
         </box>
         {isStreaming && (
           <text>
@@ -47,7 +51,9 @@ export function InputFooter({ isStreaming, status, accentValue, escHint, copiedF
   return (
     <box flexDirection="row" justifyContent="space-between">
       <box flexDirection="row" marginLeft={3}>
-        {indexStatus?.indexing || indexStatus?.reembedding ? (
+        {backgroundTaskCount != null && backgroundTaskCount > 0 ? (
+          <text><span fg={colors.text.disabled}>{backgroundTaskCount} {backgroundTaskCount === 1 ? "task" : "tasks"} running in background</span></text>
+        ) : indexStatus?.indexing || indexStatus?.reembedding ? (
           <box flexDirection="row" gap={1}>
             <BrailleSort width={8} color={accentValue} interval={40} />
             <text><span fg={colors.text.muted}>{indexStatus.reembedding ? "re-embedding" : "indexing"}</span></text>

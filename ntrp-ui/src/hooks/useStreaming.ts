@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { Message, ServerEvent, Config, PendingApproval } from "../types.js";
 import type { ToolChainItem } from "../components/toolchain/types.js";
-import { streamChat, submitToolResult, cancelRun, revertSession } from "../api/client.js";
+import { connectEvents, sendChatMessage, submitToolResult, cancelRun, revertSession } from "../api/client.js";
 import {
   MAX_MESSAGES,
   MAX_TOOL_MESSAGE_CHARS,
@@ -33,8 +33,8 @@ interface SessionStreamState {
   alwaysAllowedTools: Set<string>;
   autoApprovedIds: Set<string>;
   messageIdCounter: number;
-  abortController: AbortController | null;
   notification: SessionNotification | null;
+  backgroundTaskCount: number;
 }
 
 const ZERO_USAGE = { prompt: 0, completion: 0, cache_read: 0, cache_write: 0, cost: 0, lastCost: 0 };
@@ -57,8 +57,8 @@ function createSessionState(): SessionStreamState {
     alwaysAllowedTools: new Set(),
     autoApprovedIds: new Set(),
     messageIdCounter: 0,
-    abortController: null,
     notification: null,
+    backgroundTaskCount: 0,
   };
 }
 
@@ -86,6 +86,8 @@ export function useStreaming({
   onSessionInfoRef.current = onSessionInfo;
   const configRef = useRef(config);
   configRef.current = config;
+  const disconnectRef = useRef<(() => void) | null>(null);
+  const prevBgCountRef = useRef(0);
 
   interface ViewState {
     messages: Message[];
@@ -94,6 +96,7 @@ export function useStreaming({
     toolChain: ToolChainItem[];
     pendingApproval: PendingApproval | null;
     usage: SessionStreamState["usage"];
+    backgroundTaskCount: number;
   }
 
   const [view, setView] = useState<ViewState>({
@@ -103,6 +106,7 @@ export function useStreaming({
     toolChain: [],
     pendingApproval: null,
     usage: { ...ZERO_USAGE },
+    backgroundTaskCount: 0,
   });
   const [sessionStates, setSessionStates] = useState<Map<string, SessionNotification>>(new Map());
 
@@ -129,10 +133,12 @@ export function useStreaming({
       && last.toolChain === s.toolChain
       && last.pendingApproval === s.pendingApproval
       && last.usage === s.usage
+      && last.backgroundTaskCount === s.backgroundTaskCount
     ) return;
     const next: ViewState = {
       messages: s.messages, isStreaming: s.isStreaming, status: s.status,
       toolChain: s.toolChain, pendingApproval: s.pendingApproval, usage: s.usage,
+      backgroundTaskCount: s.backgroundTaskCount,
     };
     lastSyncRef.current = next;
     setView(next);
@@ -182,6 +188,13 @@ export function useStreaming({
     syncView(id);
   }, [getSession, syncView]);
 
+  const finalizeText = useCallback((s: SessionStreamState) => {
+    s.currentDepth = 0;
+    const finalContent = truncateText(s.pendingText, MAX_ASSISTANT_CHARS, 'end');
+    s.pendingText = "";
+    if (finalContent) addMessageToSession(s, { role: "assistant", content: finalContent });
+  }, [addMessageToSession]);
+
   const handleEventForSession = useCallback(async (
     targetId: string,
     s: SessionStreamState,
@@ -200,7 +213,9 @@ export function useStreaming({
         break;
 
       case "thinking":
-        s.status = event.status?.includes("compress") ? Status.COMPRESSING : Status.THINKING;
+        s.status = event.status?.includes("compress")
+          ? Status.COMPRESSING
+          : Status.THINKING;
         break;
 
       case "text":
@@ -284,6 +299,7 @@ export function useStreaming({
       }
 
       case "done":
+        finalizeText(s);
         s.usage = {
           prompt: s.usage.prompt + event.usage.prompt,
           completion: s.usage.completion + event.usage.completion,
@@ -294,14 +310,21 @@ export function useStreaming({
         };
         s.pendingApproval = null;
         s.status = Status.IDLE;
+        s.isStreaming = false;
         s.toolChain = s.toolChain.map((item) =>
           item.status === "running" ? { ...item, status: "done" as const } : item
         );
+        if (targetId !== viewedIdRef.current && !s.notification) {
+          s.notification = "done";
+          updateSessionStates();
+        }
         break;
 
       case "error":
+        finalizeText(s);
         addMessageToSession(s, { role: "error", content: event.message });
         s.status = Status.IDLE;
+        s.isStreaming = false;
         if (targetId !== viewedIdRef.current) {
           s.notification = "error";
           updateSessionStates();
@@ -323,11 +346,17 @@ export function useStreaming({
         s.pendingApproval = null;
         s.status = Status.IDLE;
         s.isStreaming = false;
+        s.pendingText = "";
         break;
       }
 
       case "question":
         s.pendingText = event.question;
+        break;
+
+      case "background_task":
+        if (event.status === "started") s.backgroundTaskCount++;
+        else s.backgroundTaskCount = Math.max(0, s.backgroundTaskCount - 1);
         break;
 
       default: {
@@ -336,66 +365,72 @@ export function useStreaming({
       }
     }
 
-    // text/question: only pendingText (not visible), session_info: only runId — skip re-render
-    // thinking: only status — set directly to avoid full sync
     if (event.type === "thinking") {
       if (targetId === viewedIdRef.current) setView(prev => prev.status === s.status ? prev : { ...prev, status: s.status });
     } else if (event.type !== "text" && event.type !== "question" && event.type !== "session_info") {
       syncView(targetId);
     }
-  }, [addMessageToSession, syncView, updateSessionStates]);
+  }, [addMessageToSession, finalizeText, syncView, updateSessionStates]);
+
+  // Persistent SSE connection — one per viewed session
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const targetId = sessionId;
+    const s = getSession(targetId);
+
+    const disconnect = connectEvents(
+      targetId,
+      configRef.current,
+      (event) => handleEventForSession(targetId, s, event),
+    );
+
+    disconnectRef.current = disconnect;
+
+    return () => {
+      disconnect();
+      disconnectRef.current = null;
+    };
+  }, [sessionId, getSession, handleEventForSession]);
 
   const sendMessage = useCallback(async (message: string) => {
     const targetId = viewedIdRef.current;
     if (!targetId) return;
     const s = getSession(targetId);
-    if (s.isStreaming) return;
 
     addMessageToSession(s, { role: "user", content: message });
+
+    if (s.isStreaming) {
+      // Inject into running agent — just POST, server queues into context
+      syncView(targetId);
+      try {
+        await sendChatMessage(message, targetId, configRef.current, skipApprovalsRef.current);
+      } catch (error) {
+        addMessageToSession(s, { role: "error", content: `Inject failed: ${error}` });
+        syncView(targetId);
+      }
+      return;
+    }
+
     s.isStreaming = true;
     s.pendingText = "";
     s.status = Status.THINKING;
     s.toolChain = [];
     s.toolDesc.clear();
     s.toolSeq = 0;
-    s.abortController = new AbortController();
     syncView(targetId);
     updateSessionStates();
 
     try {
-      let lastYield = Date.now();
-      for await (const event of streamChat(message, targetId, configRef.current, skipApprovalsRef.current, s.abortController.signal)) {
-        await handleEventForSession(targetId, s, event);
-        const now = Date.now();
-        if (now - lastYield > 16) {
-          await new Promise(resolve => setTimeout(resolve, 0));
-          lastYield = Date.now();
-        }
-      }
+      const res = await sendChatMessage(message, targetId, configRef.current, skipApprovalsRef.current);
+      s.runId = res.run_id;
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        s.pendingText = "";
-      } else {
-        addMessageToSession(s, { role: "error", content: `${error}` });
-      }
+      addMessageToSession(s, { role: "error", content: `${error}` });
+      s.isStreaming = false;
+      s.status = Status.IDLE;
+      syncView(targetId);
     }
-
-    s.currentDepth = 0;
-    const finalContent = truncateText(s.pendingText, MAX_ASSISTANT_CHARS, 'end');
-    s.pendingText = "";
-    if (finalContent) addMessageToSession(s, { role: "assistant", content: finalContent });
-
-    s.isStreaming = false;
-    s.status = Status.IDLE;
-    s.abortController = null;
-
-    if (targetId !== viewedIdRef.current) {
-      if (!s.notification) s.notification = "done";
-    }
-
-    syncView(targetId);
-    updateSessionStates();
-  }, [getSession, addMessageToSession, handleEventForSession, syncView, updateSessionStates]);
+  }, [getSession, addMessageToSession, syncView, updateSessionStates]);
 
   const handleApproval = useCallback(async (
     result: "once" | "always" | "reject",
@@ -434,8 +469,6 @@ export function useStreaming({
     try {
       await cancelRun(s.runId, configRef.current);
     } catch {}
-
-    s.abortController?.abort();
   }, []);
 
   const switchToSession = useCallback((targetId: string, history?: Message[]) => {
@@ -449,6 +482,7 @@ export function useStreaming({
 
     viewedIdRef.current = targetId;
     lastSyncRef.current = null;
+    prevBgCountRef.current = target.backgroundTaskCount;
     syncView(targetId);
     updateSessionStates();
   }, [getSession, syncView, updateSessionStates]);
@@ -472,7 +506,6 @@ export function useStreaming({
     try {
       const result = await revertSession(configRef.current, id);
 
-      // Remove messages from last user message onwards in local state
       let lastUserIdx = -1;
       for (let i = s.messages.length - 1; i >= 0; i--) {
         if (s.messages[i].role === "user") {
@@ -493,7 +526,6 @@ export function useStreaming({
   const deleteSessionState = useCallback((targetId: string) => {
     const s = sessionsRef.current.get(targetId);
     if (s) {
-      s.abortController?.abort();
       sessionsRef.current.delete(targetId);
       updateSessionStates();
     }
@@ -513,12 +545,21 @@ export function useStreaming({
     syncView(sessionId);
   }, [sessionId, initialMessages, getSession, syncView, updateSessionStates]);
 
+  // Auto-process background task results when they complete and agent is idle
+  // Declared earlier so switchToSession can reset it
+
+  useEffect(() => {
+    const prev = prevBgCountRef.current;
+    prevBgCountRef.current = view.backgroundTaskCount;
+    if (view.backgroundTaskCount < prev && !view.isStreaming) {
+      sendMessage("[background task completed, process the results]");
+    }
+  }, [view.backgroundTaskCount, view.isStreaming, sendMessage]);
+
   useEffect(() => {
     return () => {
       mountedRef.current = false;
-      for (const s of sessionsRef.current.values()) {
-        s.abortController?.abort();
-      }
+      disconnectRef.current?.();
     };
   }, []);
 
@@ -529,6 +570,7 @@ export function useStreaming({
     toolChain: view.toolChain,
     pendingApproval: view.pendingApproval,
     usage: view.usage,
+    backgroundTaskCount: view.backgroundTaskCount,
     sessionStates,
     addMessage,
     clearMessages,

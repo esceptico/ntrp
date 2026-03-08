@@ -123,6 +123,7 @@ function AppContent({
     setStatus,
     switchToSession,
     deleteSessionState,
+    backgroundTaskCount,
   } = streaming;
 
   const { messageQueue, enqueue, clearQueue } = useMessageQueue(isStreaming, pendingApproval, sendMessage);
@@ -229,14 +230,14 @@ function AppContent({
         return;
       }
 
-      if (isStreaming || pendingApproval) {
+      if (pendingApproval) {
         enqueue(trimmed);
         return;
       }
 
       sendMessage(trimmed);
     },
-    [isStreaming, pendingApproval, sendMessage, handleCommand, addMessage, skills, enqueue]
+    [pendingApproval, sendMessage, handleCommand, addMessage, skills, enqueue]
   );
 
   const closeView = useCallback(() => setViewMode("chat"), []);
@@ -410,6 +411,7 @@ function AppContent({
             sessionName={sessionName}
             indexStatus={indexStatus}
             copiedFlash={copiedFlash}
+            backgroundTaskCount={backgroundTaskCount}
           />
         </box>
       </DimensionsProvider>

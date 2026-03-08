@@ -1,82 +1,91 @@
 import type { ServerEvent, Config } from "../types.js";
 import { api, getApiKey } from "./fetch.js";
 
-export async function* streamChat(
-  message: string,
-  sessionId: string | null,
+const SSE_RECONNECT_BASE_MS = 1000;
+const SSE_RECONNECT_MAX_MS = 10000;
+
+export function connectEvents(
+  sessionId: string,
   config: Config,
-  skipApprovals: boolean = false,
-  signal?: AbortSignal,
-): AsyncGenerator<ServerEvent, void, unknown> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const apiKey = getApiKey();
-  if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+  onEvent: (event: ServerEvent) => void | Promise<void>,
+  onError?: (error: Error) => void,
+): () => void {
+  const controller = new AbortController();
 
-  const response = await fetch(`${config.serverUrl}/chat/stream`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ message, session_id: sessionId, skip_approvals: skipApprovals }),
-    signal,
-  });
+  (async () => {
+    let retries = 0;
 
-  if (!response.ok) {
-    throw new Error(`Server error: ${response.status}`);
-  }
+    while (!controller.signal.aborted) {
+      const headers: Record<string, string> = {};
+      const apiKey = getApiKey();
+      if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error("No response body");
-  }
+      try {
+        const response = await fetch(`${config.serverUrl}/chat/events/${sessionId}`, {
+          headers,
+          signal: controller.signal,
+        });
 
-  const decoder = new TextDecoder();
-  let buffer = "";
+        if (!response.ok) throw new Error(`SSE connect failed: ${response.status}`);
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No response body");
 
-      buffer += decoder.decode(value, { stream: true });
+        retries = 0; // Connected successfully
+        const decoder = new TextDecoder();
+        let buffer = "";
 
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          try {
-            const parsed = JSON.parse(line.slice(6));
-            if (parsed && typeof parsed.type === "string") {
-              yield parsed as ServerEvent;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const parsed = JSON.parse(line.slice(6));
+                if (parsed && typeof parsed.type === "string") {
+                  await onEvent(parsed as ServerEvent);
+                }
+              } catch {
+                // Ignore parse errors (keepalive comments, etc.)
+              }
             }
-          } catch {
-            // Ignore parse errors (e.g., ping messages)
           }
         }
+        // Stream ended normally — reconnect
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        onError?.(error as Error);
       }
-    }
 
-    // Flush remaining decoder bytes and process any trailing event
-    buffer += decoder.decode();
-    const remaining = buffer.trim();
-    if (remaining.startsWith("data: ")) {
-      try {
-        const parsed = JSON.parse(remaining.slice(6));
-        if (parsed && typeof parsed.type === "string") {
-          yield parsed as ServerEvent;
-        }
-      } catch {}
+      // Reconnect with exponential backoff, respecting abort
+      const delay = Math.min(SSE_RECONNECT_BASE_MS * 2 ** retries, SSE_RECONNECT_MAX_MS);
+      retries++;
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(resolve, delay);
+        controller.signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+      });
     }
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      return;
-    }
-    if (error instanceof TypeError && (error.message === "terminated" || error.message.includes("terminated"))) {
-      const errorEvent: ServerEvent = { type: "error", message: "Connection to server was terminated unexpectedly", recoverable: false };
-      yield errorEvent;
-      return;
-    }
-    throw error;
-  }
+  })();
+
+  return () => controller.abort();
+}
+
+export async function sendChatMessage(
+  message: string,
+  sessionId: string,
+  config: Config,
+  skipApprovals: boolean = false,
+): Promise<{ run_id: string; session_id: string }> {
+  return api.post(`${config.serverUrl}/chat/message`, {
+    message,
+    session_id: sessionId,
+    skip_approvals: skipApprovals,
+  }) as Promise<{ run_id: string; session_id: string }>;
 }
 
 export async function cancelRun(runId: string, config: Config): Promise<void> {

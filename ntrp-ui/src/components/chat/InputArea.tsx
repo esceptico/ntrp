@@ -28,6 +28,7 @@ interface InputAreaProps {
   sessionName?: string | null;
   indexStatus?: { indexing: boolean; progress: { total: number; done: number }; reembedding?: boolean; reembed_progress?: { total: number; done: number } | null } | null;
   copiedFlash?: boolean;
+  backgroundTaskCount?: number;
 }
 
 export const InputArea = memo(function InputArea({
@@ -43,6 +44,7 @@ export const InputArea = memo(function InputArea({
   sessionName,
   indexStatus = null,
   copiedFlash = false,
+  backgroundTaskCount = 0,
 }: InputAreaProps) {
   const { accentValue } = useAccentColor();
 
@@ -214,6 +216,7 @@ export const InputArea = memo(function InputArea({
           accentValue={accentValue}
           escHint={escHint}
           copiedFlash={copiedFlash}
+          backgroundTaskCount={backgroundTaskCount}
           indexStatus={indexStatus}
         />
       </box>
