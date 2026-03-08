@@ -2,7 +2,13 @@ import asyncio
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from ntrp.constants import AGENT_MAX_ITERATIONS, COMPRESSION_KEEP_RATIO, COMPRESSION_THRESHOLD, MAX_MESSAGES, SUMMARY_MAX_TOKENS
+from ntrp.constants import (
+    AGENT_MAX_ITERATIONS,
+    COMPRESSION_KEEP_RATIO,
+    COMPRESSION_THRESHOLD,
+    MAX_MESSAGES,
+    SUMMARY_MAX_TOKENS,
+)
 from ntrp.context.compression import compress_context_async, find_compressible_range, should_compress
 from ntrp.core.parsing import normalize_assistant_message, parse_tool_calls
 from ntrp.core.state import AgentState, StateCallback
@@ -94,8 +100,11 @@ class Agent:
 
     async def _maybe_compact(self) -> AsyncGenerator[SSEEvent]:
         if not should_compress(
-            self.messages, self.model, self._last_input_tokens,
-            threshold=self.compression_threshold, max_messages=self.max_messages,
+            self.messages,
+            self.model,
+            self._last_input_tokens,
+            threshold=self.compression_threshold,
+            max_messages=self.max_messages,
         ):
             return
 
@@ -108,8 +117,11 @@ class Agent:
 
         discarded = tuple(self.messages[start:end])
         self.messages, _ = await compress_context_async(
-            self.messages, self.model, force=True,
-            keep_ratio=self.compression_keep_ratio, summary_max_tokens=self.summary_max_tokens,
+            self.messages,
+            self.model,
+            force=True,
+            keep_ratio=self.compression_keep_ratio,
+            summary_max_tokens=self.summary_max_tokens,
         )
 
         if self.current_depth == 0:
