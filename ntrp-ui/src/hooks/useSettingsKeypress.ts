@@ -38,6 +38,7 @@ export function useSettingsKeypress({
     notifiers: state.notifiers,
     mcp: state.mcp,
     limits: state.limits,
+    sidebar: state.sidebarSettings,
   }), [state]);
 
   const handleKeypress = useCallback((key: Key) => {

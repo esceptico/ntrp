@@ -11,6 +11,7 @@ import { useDirectives, type UseDirectivesResult } from "./settings/useDirective
 import { useConnections, type UseConnectionsResult } from "./settings/useConnections.js";
 import { useMCPServers, type UseMCPServersResult } from "./settings/useMCPServers.js";
 import { useLimits, type UseLimitsResult } from "./settings/useLimits.js";
+import { useSidebarSettings, type UseSidebarSettingsResult } from "./settings/useSidebarSettings.js";
 
 export interface UseSettingsStateOptions {
   config: Config;
@@ -31,6 +32,7 @@ export interface UseSettingsStateResult {
   skills: UseSkillsResult;
   mcp: UseMCPServersResult;
   limits: UseLimitsResult;
+  sidebarSettings: UseSidebarSettingsResult;
 }
 
 export function useSettingsState({
@@ -48,6 +50,7 @@ export function useSettingsState({
   const connections = useConnections(config, serverConfig, onServerConfigChange);
   const mcp = useMCPServers(config);
   const limits = useLimits(settings, onUpdate);
+  const sidebarSettings = useSidebarSettings(settings, onUpdate);
   const notifiers = useNotifiers(config);
   const skills = useSkills(config);
 
@@ -68,5 +71,6 @@ export function useSettingsState({
     skills,
     mcp,
     limits,
+    sidebarSettings,
   };
 }

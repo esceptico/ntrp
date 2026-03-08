@@ -3,6 +3,7 @@ import { truncateText } from "../../lib/utils.js";
 import { useAccentColor, type SessionNotification } from "../../hooks/index.js";
 import type { ServerConfig } from "../../api/client.js";
 import type { SidebarData } from "../../hooks/useSidebar.js";
+import type { SidebarSettings } from "../../hooks/useSettings.js";
 import { D, type UsageData } from "./shared.js";
 import { ModelsSection } from "./ModelsSection.js";
 import { ContextSection } from "./ContextSection.js";
@@ -10,6 +11,7 @@ import { UsageSection } from "./UsageSection.js";
 import { SourcesSection } from "./SourcesSection.js";
 import { AutomationsSection } from "./AutomationsSection.js";
 import { SessionsList } from "./SessionsList.js";
+import { MemorySection } from "./MemorySection.js";
 
 interface SidebarProps {
   serverConfig: ServerConfig | null;
@@ -22,9 +24,10 @@ interface SidebarProps {
   currentSessionId: string | null;
   currentSessionName: string | null;
   sessionStates?: Map<string, SessionNotification>;
+  sections: SidebarSettings;
 }
 
-export const Sidebar = React.memo(function Sidebar({ serverConfig, serverVersion, serverUrl, data, usage, width, height, currentSessionId, currentSessionName, sessionStates }: SidebarProps) {
+export const Sidebar = React.memo(function Sidebar({ serverConfig, serverVersion, serverUrl, data, usage, width, height, currentSessionId, currentSessionName, sessionStates, sections }: SidebarProps) {
   const { accentValue } = useAccentColor();
   const contentWidth = width - 2;
 
@@ -43,13 +46,14 @@ export const Sidebar = React.memo(function Sidebar({ serverConfig, serverVersion
           <text><span fg={D}>{truncateText(serverUrl, contentWidth)}</span></text>
         </box>
 
-        {serverConfig && <ModelsSection cfg={serverConfig} width={contentWidth} />}
-        {data.context && <ContextSection context={data.context} width={contentWidth} />}
-        <UsageSection usage={usage} />
-        {serverConfig && <SourcesSection cfg={serverConfig} />}
-        {data.nextAutomations.length > 0 && <AutomationsSection automations={data.nextAutomations} width={contentWidth} />}
+        {sections.models && serverConfig && <ModelsSection cfg={serverConfig} width={contentWidth} />}
+        {sections.context && data.context && <ContextSection context={data.context} width={contentWidth} />}
+        {sections.usage && <UsageSection usage={usage} />}
+        {sections.sources && serverConfig && <SourcesSection cfg={serverConfig} />}
+        {sections.automations && data.nextAutomations.length > 0 && <AutomationsSection automations={data.nextAutomations} width={contentWidth} />}
+        {sections.memory_stats && data.memoryStats && <MemorySection stats={data.memoryStats} />}
 
-        {data.sessions.length > 0 && (
+        {sections.sessions && data.sessions.length > 0 && (
           <SessionsList
             sessions={data.sessions}
             currentSessionId={currentSessionId}

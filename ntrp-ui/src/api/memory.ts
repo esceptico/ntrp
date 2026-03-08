@@ -29,6 +29,7 @@ export interface FactDetails {
 export interface Stats {
   fact_count: number;
   observation_count: number;
+  dream_count: number;
 }
 
 export interface Observation {

@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { Config } from "../types.js";
 import { getContextUsage, getAutomations, listSessions, type Automation, type SessionListItem } from "../api/client.js";
+import { getStats, type Stats } from "../api/memory.js";
+import type { SidebarSettings } from "./useSettings.js";
 
 const POLL_INTERVAL = 60_000;
 
@@ -14,11 +16,12 @@ export interface SidebarData {
   } | null;
   nextAutomations: Automation[];
   sessions: SessionListItem[];
+  memoryStats: Stats | null;
 }
 
-const EMPTY: SidebarData = { context: null, nextAutomations: [], sessions: [] };
+const EMPTY: SidebarData = { context: null, nextAutomations: [], sessions: [], memoryStats: null };
 
-export function useSidebar(config: Config, active: boolean, messageCount: number, sessionId: string | null) {
+export function useSidebar(config: Config, active: boolean, messageCount: number, sessionId: string | null, sidebarSettings?: SidebarSettings) {
   const [data, setData] = useState<SidebarData>(EMPTY);
   const activeRef = useRef(true);
   const sessionIdRef = useRef(sessionId);
@@ -37,15 +40,21 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
     }
   }, [config]);
 
-  // Full refresh including global data (automations + sessions)
+  const sidebarSettingsRef = useRef(sidebarSettings);
+  sidebarSettingsRef.current = sidebarSettings;
+
+  // Full refresh including global data (automations + sessions + memory stats)
   const refresh = useCallback(async () => {
     if (!activeRef.current) return;
     try {
       const sid = sessionIdRef.current ?? undefined;
-      const [context, automationsResult, sessionsResult] = await Promise.all([
+      const ss = sidebarSettingsRef.current;
+      const wantMemory = ss?.memory_stats ?? false;
+      const [context, automationsResult, sessionsResult, memoryStats] = await Promise.all([
         getContextUsage(config, sid),
         getAutomations(config),
         listSessions(config).catch(() => ({ sessions: [] })),
+        wantMemory ? getStats(config).catch(() => null) : null,
       ]);
       if (!activeRef.current) return;
 
@@ -54,17 +63,27 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
         .sort((a, b) => new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime())
         .slice(0, 3);
 
-      setData({ context, nextAutomations, sessions: sessionsResult.sessions });
+      setData({ context, nextAutomations, sessions: sessionsResult.sessions, memoryStats });
     } catch {
       // ignore
     }
   }, [config]);
 
-  // Eagerly load sessions on mount so cycleSession always has data
+  // Eagerly load sessions + automations on mount
   useEffect(() => {
-    listSessions(config).then(r => {
-      setData(prev => ({ ...prev, sessions: r.sessions }));
-    }).catch(() => {});
+    const ss = sidebarSettingsRef.current;
+    const wantMemory = ss?.memory_stats ?? false;
+    Promise.all([
+      listSessions(config).catch(() => ({ sessions: [] as SessionListItem[] })),
+      getAutomations(config).catch(() => ({ automations: [] as Automation[] })),
+      wantMemory ? getStats(config).catch(() => null) : null,
+    ]).then(([sessionsResult, automationsResult, memoryStats]) => {
+      const nextAutomations = automationsResult.automations
+        .filter(s => s.enabled && s.next_run_at)
+        .sort((a, b) => new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime())
+        .slice(0, 3);
+      setData(prev => ({ ...prev, sessions: sessionsResult.sessions, nextAutomations, memoryStats }));
+    });
   }, [config]);
 
   // Refresh session-specific data on tab switch or message changes
@@ -75,6 +94,13 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
     refreshTimerRef.current = setTimeout(refreshSession, 150);
     return () => { if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current); };
   }, [active, sessionId, messageCount, refreshSession]);
+
+  // Fetch memory stats when toggled on
+  const wantMemory = sidebarSettings?.memory_stats ?? false;
+  useEffect(() => {
+    if (!active || !wantMemory) return;
+    getStats(config).then(stats => setData(prev => ({ ...prev, memoryStats: stats }))).catch(() => {});
+  }, [wantMemory, active, config]);
 
   // Fallback poll for all data including global
   useEffect(() => {
