@@ -238,7 +238,7 @@ export function SelectList<T = string>({
           verticalScrollbarOptions={{
             visible: true,
             trackOptions: {
-              backgroundColor: colors.background.element,
+              backgroundColor: colors.background.element ?? colors.background.menu,
               foregroundColor: colors.border,
             },
           }}

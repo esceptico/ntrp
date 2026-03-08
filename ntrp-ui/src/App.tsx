@@ -176,6 +176,7 @@ function AppContent({
     updateSetting,
     theme: settings.ui.theme,
     accentColor: settings.ui.accentColor,
+    transparentBg: settings.ui.transparentBg,
   });
 
   const { handleCommand } = useCommands({
@@ -433,7 +434,7 @@ function AppWithAccent({ config, logout, onServerChange }: { config: Config; log
   const { settings, updateSetting, closeSettings, toggleSettings, showSettings } = useSettings(config);
 
   // Sync colors before children render — setTheme mutates colors/currentAccent in place
-  setTheme(settings.ui.theme, settings.ui.accentColor);
+  setTheme(settings.ui.theme, settings.ui.accentColor, settings.ui.transparentBg);
 
   const setThemeByName = useCallback((name: string) => {
     if (themeNames.includes(name as Theme)) {

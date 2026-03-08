@@ -23,12 +23,12 @@ export function Dialog({ title, size = "medium", closable = true, footer, childr
   const contentMaxH = size === "full" ? H - 10 : Math.floor(H / 2) - 6;
 
   return (
-    <box position="absolute" top={0} left={0} width={W} height={H} backgroundColor={OVERLAY_BG}>
+    <box position="absolute" top={0} left={0} width={W} height={H} backgroundColor={colors.background.base != null ? OVERLAY_BG : undefined}>
       <box alignItems="center" paddingTop={size === "full" ? 2 : Math.floor(H / 4)}>
         <box
           width={dialogW}
           maxWidth={W - 2}
-          backgroundColor={colors.background.element}
+          backgroundColor={colors.background.element ?? colors.background.menu}
           border
           borderStyle="rounded"
           borderColor={colors.border}

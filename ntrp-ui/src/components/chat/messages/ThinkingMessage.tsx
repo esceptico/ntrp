@@ -15,7 +15,7 @@ export const ThinkingMessage = memo(function ThinkingMessage({ content }: Thinki
       flexDirection="column"
       overflow="hidden"
       border={SplitBorder.border}
-      borderColor={colors.background.element}
+      borderColor={colors.background.element ?? colors.border}
       customBorderChars={SplitBorder.customBorderChars}
       paddingLeft={2}
     >

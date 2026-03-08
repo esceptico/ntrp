@@ -6,16 +6,26 @@ import { useKeypress, type Key } from "../../hooks/index.js";
 interface ThemePickerProps {
   currentTheme: Theme;
   currentAccent: AccentColor;
-  onSelect: (theme: Theme, accent: AccentColor) => void;
+  transparentBg: boolean;
+  onSelect: (theme: Theme, accent: AccentColor, transparentBg: boolean) => void;
   onClose: () => void;
 }
 
-export function ThemePicker({ currentTheme, currentAccent, onSelect, onClose }: ThemePickerProps) {
+export function ThemePicker({ currentTheme, currentAccent, transparentBg, onSelect, onClose }: ThemePickerProps) {
   const themeBeforeRef = useRef(currentTheme);
   const accentBeforeRef = useRef(currentAccent);
+  const transparentBeforeRef = useRef(transparentBg);
   const [previewAccent, setPreviewAccent] = useState<AccentColor>(currentAccent);
+  const [transparent, setTransparent] = useState(transparentBg);
   const previewAccentRef = useRef(currentAccent);
+  const transparentRef = useRef(transparentBg);
   const focusedThemeRef = useRef(currentTheme);
+
+  const toggleTransparent = useCallback(() => {
+    transparentRef.current = !transparentRef.current;
+    setTransparent(transparentRef.current);
+    setTheme(focusedThemeRef.current as Theme, previewAccentRef.current, transparentRef.current);
+  }, []);
 
   const handleKeypress = useCallback((key: Key) => {
     if (key.name === "left" || key.name === "right") {
@@ -25,7 +35,7 @@ export function ThemePicker({ currentTheme, currentAccent, onSelect, onClose }: 
       const next = accentNames[(idx + delta + accentNames.length) % accentNames.length]!;
       previewAccentRef.current = next;
       setPreviewAccent(next);
-      setTheme(focusedThemeRef.current as Theme, next);
+      setTheme(focusedThemeRef.current as Theme, next, transparentRef.current);
     }
   }, []);
 
@@ -40,15 +50,18 @@ export function ThemePicker({ currentTheme, currentAccent, onSelect, onClose }: 
         indicator: t === currentTheme ? "\u25CF" : undefined,
       }))}
       initialIndex={Math.max(0, themeNames.indexOf(currentTheme))}
+      keybinds={[
+        { key: "t", label: `transparent ${transparent ? "on" : "off"}`, action: toggleTransparent },
+      ]}
       onMove={(opt) => {
         focusedThemeRef.current = opt.value;
-        setTheme(opt.value as Theme, previewAccentRef.current);
+        setTheme(opt.value as Theme, previewAccentRef.current, transparentRef.current);
       }}
       onSelect={(opt) => {
-        onSelect(opt.value as Theme, previewAccentRef.current);
+        onSelect(opt.value as Theme, previewAccentRef.current, transparentRef.current);
       }}
       onClose={() => {
-        setTheme(themeBeforeRef.current, accentBeforeRef.current);
+        setTheme(themeBeforeRef.current, accentBeforeRef.current, transparentBeforeRef.current);
         onClose();
       }}
       renderItem={(opt, ctx) => {

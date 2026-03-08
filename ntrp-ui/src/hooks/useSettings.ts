@@ -9,6 +9,7 @@ import * as os from "os";
 export interface UiSettings {
   accentColor: AccentColor;
   theme: Theme;
+  transparentBg: boolean;
 }
 
 export interface AgentSettings {
@@ -34,6 +35,7 @@ const defaultSettings: Settings = {
   ui: {
     accentColor: "blue",
     theme: "dark",
+    transparentBg: false,
   },
   agent: {
     maxDepth: 8,

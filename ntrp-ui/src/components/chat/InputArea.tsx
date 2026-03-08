@@ -203,12 +203,14 @@ export const InputArea = memo(function InputArea({
           borderColor={accentValue}
           customBorderChars={{ ...EmptyBorder, vertical: "\u2579" }}
         >
-          <box
-            height={1}
-            border={["bottom"]}
-            borderColor={colors.background.element}
-            customBorderChars={{ ...EmptyBorder, horizontal: "\u2580" }}
-          />
+          {colors.background.element != null && (
+            <box
+              height={1}
+              border={["bottom"]}
+              borderColor={colors.background.element}
+              customBorderChars={{ ...EmptyBorder, horizontal: "\u2580" }}
+            />
+          )}
         </box>
         <InputFooter
           isStreaming={isStreaming}
