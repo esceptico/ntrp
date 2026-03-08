@@ -4,7 +4,6 @@ import type { ServerConfig, GoogleAccount } from "../../../api/client.js";
 import { CONNECTION_LABELS, type ConnectionItem } from "./config.js";
 import type { UseConnectionsResult } from "../../../hooks/settings/useConnections.js";
 
-const GOOGLE_SOURCES: ConnectionItem[] = ["gmail", "calendar"];
 
 interface ConnectionsSectionProps {
   connections: UseConnectionsResult;
@@ -16,8 +15,8 @@ interface ConnectionsSectionProps {
 export function ConnectionsSection({ connections: c, serverConfig, accent, width }: ConnectionsSectionProps) {
   const valueWidth = Math.max(0, width - 20);
   const sources = serverConfig?.sources;
-  const isGoogleSource = GOOGLE_SOURCES.includes(c.connectionItem);
-  const sourceEnabled = isGoogleSource && sources?.[c.connectionItem]?.enabled;
+  const isGoogleSource = c.connectionItem === "google";
+  const sourceEnabled = isGoogleSource && sources?.google?.enabled;
 
   return (
     <box flexDirection="column">
@@ -51,17 +50,10 @@ export function ConnectionsSection({ connections: c, serverConfig, accent, width
         </box>
       )}
 
-      {/* Gmail */}
-      <GoogleRow item="gmail" selectedItem={c.connectionItem} sources={sources} accounts={c.googleAccounts} accent={accent} />
+      {/* Google */}
+      <GoogleRow item="google" selectedItem={c.connectionItem} sources={sources} accounts={c.googleAccounts} accent={accent} />
 
-      {c.connectionItem === "gmail" && sourceEnabled && c.googleAccounts.length > 0 && (
-        <AccountList accounts={c.googleAccounts} selectedIndex={c.selectedGoogleIndex} accent={accent} valueWidth={valueWidth} />
-      )}
-
-      {/* Calendar */}
-      <GoogleRow item="calendar" selectedItem={c.connectionItem} sources={sources} accounts={c.googleAccounts} accent={accent} />
-
-      {c.connectionItem === "calendar" && sourceEnabled && c.googleAccounts.length > 0 && (
+      {isGoogleSource && sourceEnabled && c.googleAccounts.length > 0 && (
         <AccountList accounts={c.googleAccounts} selectedIndex={c.selectedGoogleIndex} accent={accent} valueWidth={valueWidth} />
       )}
 
@@ -115,8 +107,7 @@ function HintRow({ item, editingVault, sourceEnabled }: { item: ConnectionItem; 
       return editingVault
         ? <Hints items={[["enter", "save"], ["esc", "cancel"]]} />
         : <Hints items={[["enter", "edit path"]]} />;
-    case "gmail":
-    case "calendar":
+    case "google":
       if (sourceEnabled) {
         return <Hints items={[["enter", "toggle"], ["a", "add account"], ["d", "remove account"]]} />;
       }

@@ -11,6 +11,7 @@ from googleapiclient.discovery import build
 
 from ntrp.constants import CONTENT_READ_LIMIT
 from ntrp.core.prompts import env
+from ntrp.logging import get_logger
 from ntrp.sources.base import EmailSource, SourceItem
 from ntrp.sources.google.auth import (
     NTRP_DIR,
@@ -485,6 +486,9 @@ class GmailSource:
         return items
 
 
+_logger = get_logger(__name__)
+
+
 class MultiGmailSource(EmailSource):
     """Wrapper for multiple Gmail accounts."""
 
@@ -497,6 +501,7 @@ class MultiGmailSource(EmailSource):
         for token_path in token_paths:
             try:
                 src = GmailSource(token_path=token_path, days_back=days_back)
+                src._get_credentials()
                 self.sources.append(src)
             except Exception as e:
                 self._errors[token_path.name] = str(e)
@@ -541,12 +546,19 @@ class MultiGmailSource(EmailSource):
                 return result
         return None
 
+    def _handle_source_error(self, src: GmailSource, e: Exception) -> None:
+        key = src.get_email_address() or src.token_path.name
+        _logger.warning("Gmail failed for %s: %s", key, e)
+        self._errors[key] = str(e)
+
     def search(self, query: str, limit: int = 50) -> list[RawItem]:
-        items = []
+        items: list[RawItem] = []
         per_account = max(limit // len(self.sources), 10) if self.sources else limit
         for src in self.sources:
-            items.extend(src.search(query, limit=per_account))
-        # Sort by date descending
+            try:
+                items.extend(src.search(query, limit=per_account))
+            except Exception as e:
+                self._handle_source_error(src, e)
         items.sort(key=lambda x: x.updated_at, reverse=True)
         return items[:limit]
 
@@ -554,6 +566,9 @@ class MultiGmailSource(EmailSource):
         items: list[SourceItem] = []
         per_account = max(limit // len(self.sources), 5) if self.sources else limit
         for src in self.sources:
-            items.extend(src.list_recent(days=days, limit=per_account))
-        items.sort(key=lambda x: x.timestamp or datetime.min, reverse=True)
+            try:
+                items.extend(src.list_recent(days=days, limit=per_account))
+            except Exception as e:
+                self._handle_source_error(src, e)
+        items.sort(key=lambda x: x.timestamp or datetime.min.replace(tzinfo=UTC), reverse=True)
         return items[:limit]

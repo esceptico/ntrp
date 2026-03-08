@@ -9,8 +9,7 @@ function getSourceEntries(cfg: ServerConfig): SourceEntry[] {
   const sources = cfg.sources;
   return [
     { key: "vault", label: "notes", on: !!cfg.has_notes },
-    { key: "gmail", label: "gmail", on: !!sources?.gmail?.enabled && !!sources?.gmail?.connected, error: !!sources?.gmail?.error },
-    { key: "calendar", label: "cal", on: !!sources?.calendar?.enabled && !!sources?.calendar?.connected, error: !!sources?.calendar?.error },
+    { key: "google", label: "google", on: !!sources?.google?.enabled && !!sources?.google?.connected, error: !!sources?.google?.error },
     { key: "browser", label: "browser", on: !!cfg.has_browser },
     { key: "memory", label: "memory", on: !!sources?.memory?.enabled },
     { key: "web", label: "web", on: !!sources?.web?.connected },

@@ -21,7 +21,7 @@ export interface ServerConfig {
   web_search_provider: "exa" | "ddgs" | "none" | "unknown";
   vault_path: string;
   browser: string | null;
-  gmail_enabled: boolean;
+  google_enabled: boolean;
   has_browser: boolean;
   has_notes: boolean;
   max_depth: number;

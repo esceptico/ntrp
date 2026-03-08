@@ -15,7 +15,7 @@ def _create_notes(config: Config) -> object | None:
 
 
 def _create_gmail(config: Config) -> object | None:
-    if not config.gmail:
+    if not config.google:
         return None
     token_paths = discover_gmail_tokens()
     if not token_paths:
@@ -25,7 +25,7 @@ def _create_gmail(config: Config) -> object | None:
 
 
 def _create_calendar(config: Config) -> object | None:
-    if not config.calendar:
+    if not config.google:
         return None
     token_paths = discover_calendar_tokens()
     if not token_paths:

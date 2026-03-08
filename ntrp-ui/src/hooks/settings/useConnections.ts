@@ -155,8 +155,8 @@ export function useConnections(
     }
 
     const connIdx = CONNECTION_ITEMS.indexOf(connectionItem);
-    const isGoogleSource = connectionItem === "gmail" || connectionItem === "calendar";
-    const sourceEnabled = isGoogleSource && serverConfig?.sources?.[connectionItem]?.enabled;
+    const isGoogleSource = connectionItem === "google";
+    const sourceEnabled = isGoogleSource && serverConfig?.sources?.google?.enabled;
     const hasAccountList = sourceEnabled && googleAccounts.length > 0;
 
     if (key.name === "up" || key.name === "k") {

@@ -49,8 +49,7 @@ class ClearSessionRequest(BaseModel):
 
 
 class SourceToggles(BaseModel):
-    gmail: bool | None = None
-    calendar: bool | None = None
+    google: bool | None = None
     memory: bool | None = None
 
 

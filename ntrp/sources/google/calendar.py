@@ -1,9 +1,12 @@
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import build
 
+from ntrp.logging import get_logger
 from ntrp.sources.base import CalendarSource
 from ntrp.sources.google.auth import (
     NTRP_DIR,
@@ -365,6 +368,9 @@ class GoogleCalendar:
         return [self._parse_event(e) for e in events]
 
 
+_logger = get_logger(__name__)
+
+
 class MultiCalendarSource(CalendarSource):
     name = "calendar"
 
@@ -405,21 +411,28 @@ class MultiCalendarSource(CalendarSource):
                 accounts.append(email)
         return accounts
 
-    def get_upcoming(self, days: int = 7, limit: int = 20) -> list[RawItem]:
-        items = []
-        per_account = max(limit // len(self.sources), 5) if self.sources else limit
+    def _collect(self, fn: Callable[[GoogleCalendar], list[RawItem]], limit: int) -> list[RawItem]:
+        items: list[RawItem] = []
         for src in self.sources:
-            items.extend(src.get_upcoming(days=days, limit=per_account))
+            try:
+                items.extend(fn(src))
+            except RefreshError as e:
+                key = src.get_email_address() or src.token_path.name
+                _logger.warning("Calendar auth failed for %s: %s", key, e)
+                src.auth_error = str(e)
+            except Exception as e:
+                key = src.get_email_address() or src.token_path.name
+                _logger.warning("Calendar failed for %s: %s", key, e)
         items.sort(key=lambda x: x.metadata.get("start", ""))
         return items[:limit]
 
+    def get_upcoming(self, days: int = 7, limit: int = 20) -> list[RawItem]:
+        per = max(limit // len(self.sources), 5) if self.sources else limit
+        return self._collect(lambda s: s.get_upcoming(days=days, limit=per), limit)
+
     def get_past(self, days: int = 7, limit: int = 20) -> list[RawItem]:
-        items = []
-        per_account = max(limit // len(self.sources), 5) if self.sources else limit
-        for src in self.sources:
-            items.extend(src.get_past(days=days, limit=per_account))
-        items.sort(key=lambda x: x.metadata.get("start", ""))
-        return items[:limit]
+        per = max(limit // len(self.sources), 5) if self.sources else limit
+        return self._collect(lambda s: s.get_past(days=days, limit=per), limit)
 
     def create_event(
         self,
@@ -499,9 +512,5 @@ class MultiCalendarSource(CalendarSource):
         return f"Error: event not found: {event_id}"
 
     def search(self, query: str, limit: int = 20) -> list[RawItem]:
-        items = []
-        per_account = max(limit // len(self.sources), 5) if self.sources else limit
-        for src in self.sources:
-            items.extend(src.search(query, limit=per_account))
-        items.sort(key=lambda x: x.metadata.get("start", ""))
-        return items[:limit]
+        per = max(limit // len(self.sources), 5) if self.sources else limit
+        return self._collect(lambda s: s.search(query, limit=per), limit)

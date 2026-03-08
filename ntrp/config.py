@@ -142,12 +142,9 @@ class Config(BaseSettings):
     # Memory (graph-based knowledge store)
     memory: bool = True
 
-    # Gmail (optional)
-    gmail: bool = False
+    # Google (Gmail + Calendar)
+    google: bool = False
     gmail_days: int = 30
-
-    # Calendar (optional)
-    calendar: bool = False
 
     # Exa.ai for web search (optional) - no prefix, standard env var
     exa_api_key: str | None = Field(default=None, alias="EXA_API_KEY")
@@ -289,9 +286,8 @@ PERSIST_KEYS = frozenset(
         "browser_days",
         "vault_path",
         "memory",
-        "gmail",
+        "google",
         "gmail_days",
-        "calendar",
         "max_depth",
         "mcp_servers",
         "web_search",
@@ -305,9 +301,13 @@ def get_config() -> Config:
 
     # Flatten legacy sources nesting
     if "sources" in settings:
-        for key in ("gmail", "calendar", "memory"):
+        for key in ("gmail", "calendar", "google", "memory"):
             if key in settings["sources"]:
                 settings.setdefault(key, settings["sources"][key])
+
+    # Migrate legacy gmail/calendar → google
+    if "gmail" in settings or "calendar" in settings:
+        settings.setdefault("google", settings.pop("gmail", False) or settings.pop("calendar", False))
 
     # Build config: init args (settings.json) > env vars > defaults
     overrides = {k: settings[k] for k in PERSIST_KEYS if k in settings}

@@ -25,19 +25,18 @@ export const LIMIT_ITEMS: NumberItem[] = [
   { key: "maxDepth", label: "Subagent depth", description: "Maximum nesting level", min: 1, max: 16 },
 ];
 
-export const CONNECTION_ITEMS = ["vault", "gmail", "calendar", "browser", "memory", "web"] as const;
+export const CONNECTION_ITEMS = ["vault", "google", "browser", "memory", "web"] as const;
 export type ConnectionItem = (typeof CONNECTION_ITEMS)[number];
 
 export const CONNECTION_LABELS = {
   vault: "Notes",
-  gmail: "Gmail",
-  calendar: "Calendar",
+  google: "Google",
   browser: "Browser",
   memory: "Memory",
   web: "Web Search",
 } satisfies Record<ConnectionItem, string>;
 
-export const TOGGLEABLE_SOURCES: ConnectionItem[] = ["gmail", "calendar", "memory"];
+export const TOGGLEABLE_SOURCES: ConnectionItem[] = ["google", "memory"];
 
 export const NOTIFIER_TYPE_ORDER = ["email", "telegram", "bash"] as const;
 export const NOTIFIER_TYPE_LABELS: Record<string, string> = {

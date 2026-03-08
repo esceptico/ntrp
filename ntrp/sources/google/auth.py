@@ -74,8 +74,7 @@ def get_google_credentials(
                 refreshed = True
             except RefreshError:
                 raise PermissionError(
-                    f"Google token expired and refresh failed: {token_path.name}\n"
-                    "Delete the token file and re-add the account."
+                    f"Token expired or revoked for {token_path.name}. Re-add the account in settings."
                 )
         if not refreshed:
             if not CREDENTIALS_PATH.exists():
@@ -93,8 +92,7 @@ def get_google_credentials(
         for scope in require_scopes:
             if scope not in creds.scopes:
                 raise PermissionError(
-                    f"Token at {token_path} lacks required scope: {scope}\n"
-                    "Run 'ntrp gmail add' to re-authenticate with required scopes."
+                    f"Missing permission '{scope}' for {token_path.name}. Re-add the account in settings."
                 )
 
     return creds

@@ -59,6 +59,14 @@ def _require_config_service(runtime: Runtime = Depends(get_runtime)) -> ConfigSe
     return runtime.config_service
 
 
+def _google_errors(rt: Runtime) -> dict[str, str]:
+    errors = []
+    for key in ("gmail", "calendar"):
+        if key in rt.source_mgr.errors:
+            errors.append(rt.source_mgr.errors[key])
+    return {"error": "; ".join(errors)} if errors else {}
+
+
 def _config_response(rt: Runtime) -> dict:
     config = rt.config
     has_google = rt.source_mgr.has_google_auth()
@@ -75,21 +83,16 @@ def _config_response(rt: Runtime) -> dict:
         "web_search_provider": web_provider,
         "vault_path": config.vault_path,
         "browser": config.browser,
-        "gmail_enabled": config.gmail,
+        "google_enabled": config.google,
         "has_browser": config.browser is not None,
         "has_notes": config.vault_path is not None and rt.source_mgr.sources.get("notes") is not None,
         "max_depth": config.max_depth,
         "memory_enabled": memory_connected,
         "sources": {
-            "gmail": {
-                "enabled": config.gmail,
+            "google": {
+                "enabled": config.google,
                 "connected": has_google,
-                **({"error": rt.source_mgr.errors["gmail"]} if "gmail" in rt.source_mgr.errors else {}),
-            },
-            "calendar": {
-                "enabled": config.calendar,
-                "connected": has_google,
-                **({"error": rt.source_mgr.errors["calendar"]} if "calendar" in rt.source_mgr.errors else {}),
+                **(_google_errors(rt) or {}),
             },
             "memory": {"enabled": config.memory, "connected": memory_connected},
             "web": {
