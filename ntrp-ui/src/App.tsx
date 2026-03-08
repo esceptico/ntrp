@@ -16,6 +16,7 @@ import {
   AccentColorProvider,
   type Key,
 } from "./hooks/index.js";
+import { convertHistoryToMessages } from "./lib/history.js";
 import { DimensionsProvider, useDimensions, DialogProvider, useDialog } from "./contexts/index.js";
 import {
   InputArea,
@@ -82,14 +83,7 @@ function AppContent({
     createNewSession,
   } = session;
 
-  const initialMessages = useMemo(() =>
-    history.map((msg, i): Message => ({
-      id: `h-${i}`,
-      role: msg.role,
-      content: msg.content,
-    })),
-    [history]
-  );
+  const initialMessages = useMemo(() => convertHistoryToMessages(history), [history]);
 
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const [sidebarVisible, setSidebarVisible] = useState(true);
@@ -267,9 +261,7 @@ function AppContent({
     switchSession(target.session_id).then((result) => {
       if (cycleIdRef.current !== target.session_id) return;
       if (result) {
-        switchToSession(target.session_id, result.history.map((msg, i) => ({
-          id: `h-${i}`, role: msg.role, content: msg.content,
-        })));
+        switchToSession(target.session_id, convertHistoryToMessages(result.history));
       }
     });
   }, [sessionId, sidebarData.sessions, switchSession, switchToSession, clearQueue]);

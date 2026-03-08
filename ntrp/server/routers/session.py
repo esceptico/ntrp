@@ -129,14 +129,25 @@ async def get_session_history(svc: SessionService = Depends(_require_session_ser
     history = []
     for msg in data.messages:
         role = msg["role"]
-        if role not in ("user", "assistant"):
+        if role == "system":
             continue
 
-        content = msg["content"]
-        if not content or not isinstance(content, str) or not content.strip():
-            continue
+        entry: dict = {"role": role, "content": msg.get("content", "") or ""}
 
-        history.append({"role": role, "content": content})
+        if role == "assistant" and "tool_calls" in msg:
+            entry["tool_calls"] = [
+                {
+                    "id": tc["id"],
+                    "name": tc["function"]["name"],
+                    "arguments": tc["function"].get("arguments", "{}"),
+                }
+                for tc in msg["tool_calls"]
+            ]
+
+        if role == "tool" and "tool_call_id" in msg:
+            entry["tool_call_id"] = msg["tool_call_id"]
+
+        history.append(entry)
 
     return {"messages": history[-HISTORY_MESSAGE_LIMIT:]}
 

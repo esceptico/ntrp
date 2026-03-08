@@ -12,9 +12,17 @@ export async function getSession(config: Config, sessionId?: string): Promise<{
   return api.get(`${config.serverUrl}/session${params}`);
 }
 
+export interface HistoryToolCall {
+  id: string;
+  name: string;
+  arguments?: string;
+}
+
 export interface HistoryMessage {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "tool";
   content: string;
+  tool_calls?: HistoryToolCall[];
+  tool_call_id?: string;
 }
 
 export async function getHistory(config: Config, sessionId?: string): Promise<{ messages: HistoryMessage[] }> {

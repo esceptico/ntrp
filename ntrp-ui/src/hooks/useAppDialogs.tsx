@@ -4,6 +4,7 @@ import type { ServerConfig, HistoryMessage } from "../api/client.js";
 import type { AccentColor, Theme } from "../components/ui/index.js";
 import type { Settings } from "./useSettings.js";
 import { deleteSession, listSessions, restoreSession, permanentlyDeleteSession } from "../api/client.js";
+import { convertHistoryToMessages } from "../lib/history.js";
 import {
   SessionPicker,
   ModelPicker,
@@ -63,10 +64,7 @@ export function useAppDialogs({
             onSwitch={async (targetId) => {
               const result = await switchSession(targetId);
               if (result) {
-                const historyMessages: Message[] = result.history.map((msg, i) => ({
-                  id: `h-${i}`, role: msg.role, content: msg.content,
-                }));
-                switchToSession(targetId, historyMessages);
+                switchToSession(targetId, convertHistoryToMessages(result.history));
                 refreshSidebar();
               } else {
                 addMessage({ role: "error", content: "Failed to switch session" } as Message);
@@ -82,9 +80,7 @@ export function useAppDialogs({
                   if (next) {
                     const result = await switchSession(next.session_id);
                     if (result) {
-                      switchToSession(next.session_id, result.history.map((msg, i) => ({
-                        id: `h-${i}`, role: msg.role, content: msg.content,
-                      })));
+                      switchToSession(next.session_id, convertHistoryToMessages(result.history));
                     } else {
                       await startNewSession();
                     }
