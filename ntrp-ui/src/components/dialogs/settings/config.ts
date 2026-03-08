@@ -19,10 +19,15 @@ export interface NumberItem {
   description: string;
   min: number;
   max: number;
+  step?: number;
 }
 
 export const LIMIT_ITEMS: NumberItem[] = [
   { key: "maxDepth", label: "Subagent depth", description: "Maximum nesting level", min: 1, max: 16 },
+  { key: "compressionThreshold", label: "Compact trigger", description: "% of context to trigger", min: 50, max: 100 },
+  { key: "maxMessages", label: "Max messages", description: "Message ceiling for compaction", min: 20, max: 500, step: 10 },
+  { key: "compressionKeepRatio", label: "Keep ratio", description: "% of recent messages to keep", min: 10, max: 80 },
+  { key: "summaryMaxTokens", label: "Summary tokens", description: "Max tokens for summary", min: 500, max: 4000, step: 100 },
 ];
 
 export const CONNECTION_ITEMS = ["vault", "google", "browser", "memory", "web"] as const;

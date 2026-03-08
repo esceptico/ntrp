@@ -122,6 +122,10 @@ async def _run_headless(prompt: str):
             model=runtime.config.chat_model,
             explore_model=runtime.config.explore_model,
             max_depth=runtime.config.max_depth,
+            compression_threshold=runtime.config.compression_threshold,
+            max_messages=runtime.config.max_messages,
+            compression_keep_ratio=runtime.config.compression_keep_ratio,
+            summary_max_tokens=runtime.config.summary_max_tokens,
         )
 
         agent = create_agent(

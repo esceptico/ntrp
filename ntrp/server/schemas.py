@@ -58,6 +58,10 @@ class UpdateConfigRequest(BaseModel):
     explore_model: str | None = None
     memory_model: str | None = None
     max_depth: int | None = None
+    compression_threshold: float | None = None
+    max_messages: int | None = None
+    compression_keep_ratio: float | None = None
+    summary_max_tokens: int | None = None
     vault_path: str | None = None
     browser: str | None = None
     browser_days: int | None = None

@@ -25,6 +25,10 @@ export interface ServerConfig {
   has_browser: boolean;
   has_notes: boolean;
   max_depth: number;
+  compression_threshold: number;
+  max_messages: number;
+  compression_keep_ratio: number;
+  summary_max_tokens: number;
   memory_enabled: boolean;
   sources?: Record<string, SourceInfo>;
 }
@@ -40,7 +44,7 @@ export async function getServerConfig(config: Config): Promise<ServerConfig> {
 
 export async function updateConfig(
   config: Config,
-  patch: Partial<Pick<ServerConfig, "chat_model" | "explore_model" | "memory_model" | "max_depth" | "web_search">> & {
+  patch: Partial<Pick<ServerConfig, "chat_model" | "explore_model" | "memory_model" | "max_depth" | "web_search" | "compression_threshold" | "max_messages" | "compression_keep_ratio" | "summary_max_tokens">> & {
     sources?: Record<string, boolean>;
   }
 ): Promise<Record<string, unknown>> {

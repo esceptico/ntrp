@@ -30,11 +30,13 @@ interface RowProps {
 interface NumberRowProps extends RowProps {
   item: NumberItem;
   value: number;
+  valueWidth?: number;
   sliderWidth?: number;
 }
 
-export function NumberRow({ item, value, selected, accent, sliderWidth = 16 }: NumberRowProps) {
+export function NumberRow({ item, value, selected, accent, valueWidth, sliderWidth = 16 }: NumberRowProps) {
   const label = item.label.padEnd(LABEL_WIDTH + 4);
+  const vw = valueWidth ?? String(item.max).length;
   const range = item.max - item.min;
   const position = Math.round(((value - item.min) / range) * (sliderWidth - 1));
 
@@ -46,7 +48,7 @@ export function NumberRow({ item, value, selected, accent, sliderWidth = 16 }: N
     <text>
       <SelectionIndicator selected={selected} accent={accent} />
       <span fg={selected ? colors.text.primary : colors.text.secondary}>{label}</span>
-      <span fg={selected ? accent : colors.text.primary}><strong>{String(value).padStart(2)}</strong></span>
+      <span fg={selected ? accent : colors.text.primary}><strong>{String(value).padStart(vw)}</strong></span>
       <span fg={colors.text.muted}>  [</span>
       <span fg={colors.text.disabled}>{before}</span>
       <span fg={selected ? accent : colors.text.primary}>{knob}</span>

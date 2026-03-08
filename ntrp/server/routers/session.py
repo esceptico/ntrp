@@ -87,6 +87,10 @@ def _config_response(rt: Runtime) -> dict:
         "has_browser": config.browser is not None,
         "has_notes": config.vault_path is not None and rt.source_mgr.sources.get("notes") is not None,
         "max_depth": config.max_depth,
+        "compression_threshold": config.compression_threshold,
+        "max_messages": config.max_messages,
+        "compression_keep_ratio": config.compression_keep_ratio,
+        "summary_max_tokens": config.summary_max_tokens,
         "memory_enabled": memory_connected,
         "sources": {
             "google": {

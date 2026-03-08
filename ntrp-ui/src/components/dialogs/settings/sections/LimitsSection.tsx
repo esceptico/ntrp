@@ -8,6 +8,8 @@ interface LimitsSectionProps {
   accent: string;
 }
 
+const VALUE_WIDTH = Math.max(...LIMIT_ITEMS.map(i => String(i.max).length));
+
 export function LimitsSection({
   settings,
   selectedIndex,
@@ -20,6 +22,7 @@ export function LimitsSection({
           key={item.key}
           item={item}
           value={settings[item.key as keyof AgentSettings] as number}
+          valueWidth={VALUE_WIDTH}
           selected={idx === selectedIndex}
           accent={accent}
         />
