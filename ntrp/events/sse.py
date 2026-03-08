@@ -11,6 +11,7 @@ class EventType(StrEnum):
     APPROVAL_NEEDED = "approval_needed"
     QUESTION = "question"
     SESSION_INFO = "session_info"
+    BACKGROUND_TASK = "background_task"
     DONE = "done"
     ERROR = "error"
     CANCELLED = "cancelled"
@@ -107,6 +108,14 @@ class SessionInfoEvent(SSEEvent):
     source_errors: dict[str, str] = field(default_factory=dict)
     skip_approvals: bool = False
     session_name: str = ""
+
+
+@dataclass(frozen=True)
+class BackgroundTaskEvent(SSEEvent):
+    type: EventType = field(default=EventType.BACKGROUND_TASK, init=False)
+    task_id: str
+    command: str
+    status: str  # "started", "completed", "failed"
 
 
 @dataclass(frozen=True)
