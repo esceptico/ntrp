@@ -51,6 +51,7 @@ class ClearSessionRequest(BaseModel):
 class SourceToggles(BaseModel):
     google: bool | None = None
     memory: bool | None = None
+    dreams: bool | None = None
 
 
 class UpdateConfigRequest(BaseModel):

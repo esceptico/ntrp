@@ -31,7 +31,7 @@ export const LIMIT_ITEMS: NumberItem[] = [
   { key: "summaryMaxTokens", label: "Summary tokens", description: "Max tokens for summary", min: 500, max: 4000, step: 100 },
 ];
 
-export const CONNECTION_ITEMS = ["vault", "google", "browser", "memory", "web"] as const;
+export const CONNECTION_ITEMS = ["vault", "google", "browser", "memory", "dreams", "web"] as const;
 export type ConnectionItem = (typeof CONNECTION_ITEMS)[number];
 
 export const CONNECTION_LABELS = {
@@ -39,10 +39,11 @@ export const CONNECTION_LABELS = {
   google: "Google",
   browser: "Browser",
   memory: "Memory",
+  dreams: "  Dreams",
   web: "Web Search",
 } satisfies Record<ConnectionItem, string>;
 
-export const TOGGLEABLE_SOURCES: ConnectionItem[] = ["google", "memory"];
+export const TOGGLEABLE_SOURCES: ConnectionItem[] = ["google", "memory", "dreams"];
 
 export const NOTIFIER_TYPE_ORDER = ["email", "telegram", "bash"] as const;
 export const NOTIFIER_TYPE_LABELS: Record<string, string> = {

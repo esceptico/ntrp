@@ -143,6 +143,7 @@ class Config(BaseSettings):
 
     # Memory (graph-based knowledge store)
     memory: bool = True
+    dreams: bool = False
 
     # Google (Gmail + Calendar)
     google: bool = False
@@ -296,6 +297,7 @@ PERSIST_KEYS = frozenset(
         "browser_days",
         "vault_path",
         "memory",
+        "dreams",
         "google",
         "gmail_days",
         "max_depth",

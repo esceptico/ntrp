@@ -91,7 +91,9 @@ export function useConnections(
 
   const handleToggleSource = useCallback(async (source: string) => {
     if (actionInProgress || !serverConfig?.sources) return;
-    const current = serverConfig.sources[source]?.enabled ?? false;
+    const current = source === "dreams"
+      ? serverConfig.sources.memory?.dreams ?? false
+      : serverConfig.sources[source]?.enabled ?? false;
     setActionInProgress("Updating...");
     try {
       await updateConfig(config, { sources: { [source]: !current } });

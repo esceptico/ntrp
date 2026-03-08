@@ -98,7 +98,7 @@ def _config_response(rt: Runtime) -> dict:
                 "connected": has_google,
                 **(_google_errors(rt) or {}),
             },
-            "memory": {"enabled": config.memory, "connected": memory_connected},
+            "memory": {"enabled": config.memory, "connected": memory_connected, "dreams": config.dreams},
             "web": {
                 "connected": web_source is not None,
                 "mode": config.web_search,

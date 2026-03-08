@@ -10,6 +10,7 @@ export interface SourceInfo {
   type?: string;
   mode?: "auto" | "exa" | "ddgs" | "none";
   provider?: "exa" | "ddgs" | "none" | "unknown";
+  dreams?: boolean;
 }
 
 export interface ServerConfig {

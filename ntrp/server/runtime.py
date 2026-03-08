@@ -134,10 +134,12 @@ class Runtime:
                 extraction_model=self.config.memory_model,
                 channel=self.channel,
             )
+            self.memory.dreams_enabled = self.config.dreams
             self.memory_service = MemoryService(self.memory, self.channel)
         elif self.config.memory and self.memory:
             if self.memory.extraction_model != self.config.memory_model:
                 self.memory.update_extraction_model(self.config.memory_model)
+            self.memory.dreams_enabled = self.config.dreams
         elif not self.config.memory and self.memory:
             if self.memory_service:
                 self.memory_service.close()
@@ -228,6 +230,7 @@ class Runtime:
                 extraction_model=self.config.memory_model,
                 channel=self.channel,
             )
+            self.memory.dreams_enabled = self.config.dreams
             self.memory_service = MemoryService(self.memory, self.channel)
             self.indexables["memory"] = MemoryIndexable(self.memory.db)
         elif self.config.memory:
