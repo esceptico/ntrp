@@ -1,5 +1,4 @@
 import asyncio
-from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -12,7 +11,6 @@ from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import INIT_INSTRUCTION, build_system_blocks
 from ntrp.events.internal import RunCompleted, RunStarted
 from ntrp.events.sse import (
-    AgentResult,
     DoneEvent,
     ErrorEvent,
     SessionInfoEvent,
@@ -31,6 +29,7 @@ from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
 
 if TYPE_CHECKING:
+    from ntrp.server.bus import SessionBus
     from ntrp.server.runtime import Runtime
 
 
@@ -148,7 +147,6 @@ async def prepare_chat(
 
     run = registry.create_run(session_state.session_id)
     run.messages = messages
-    run.status = RunStatus.RUNNING
 
     return ChatContext(
         run=run,
@@ -173,22 +171,23 @@ async def prepare_chat(
     )
 
 
-async def stream_chat(ctx: ChatContext) -> AsyncGenerator[str]:
+async def run_chat(ctx: ChatContext, bus: "SessionBus") -> None:
+    """Run agent loop, push all events to bus. Fire-and-forget."""
     run = ctx.run
     session_state = ctx.session_state
 
     run.approval_queue = asyncio.Queue()
 
-    yield SessionInfoEvent(
+    await bus.emit(SessionInfoEvent(
         session_id=session_state.session_id,
         run_id=run.run_id,
         sources=ctx.available_sources,
         source_errors=ctx.source_errors,
         skip_approvals=session_state.skip_approvals,
         session_name=session_state.name or "",
-    ).to_sse_string()
+    ))
 
-    yield ThinkingEvent(status="processing...").to_sse_string()
+    await bus.emit(ThinkingEvent(status="processing..."))
     ctx.channel.publish(RunStarted(run_id=run.run_id, session_id=session_state.session_id))
 
     agent: Agent | None = None
@@ -208,35 +207,52 @@ async def stream_chat(ctx: ChatContext) -> AsyncGenerator[str]:
             extra_auto_approve=INIT_AUTO_APPROVE if ctx.is_init else None,
         )
 
-        async for sse in run_agent_loop(ctx, agent):
-            if isinstance(sse, AgentResult):
-                result = sse.text
+        # Share inject_queue and mark running only after wiring is complete
+        run.inject_queue = agent.inject_queue
+        run.status = RunStatus.RUNNING
+        run_finished = False
+
+        async def _on_bg_result(messages: list[dict]) -> None:
+            if not run_finished:
+                agent.inject_queue.extend(messages)
             else:
-                yield sse
+                run.messages.extend(messages)
+                await ctx.session_service.save(session_state, run.messages)
+
+        agent.ctx.background_tasks.on_result = _on_bg_result
+
+        result = await run_agent_loop(ctx, agent, bus)
 
         if result is None:
-            return  # Cancelled — session saved in finally
+            return  # Cancelled
 
         if agent:
             run.usage = agent.usage
             run.messages = agent.messages
 
         if result:
-            yield TextEvent(content=result).to_sse_string()
+            await bus.emit(TextEvent(content=result))
 
-        yield DoneEvent(run_id=run.run_id, usage=run.usage.to_dict()).to_sse_string()
+        await bus.emit(DoneEvent(run_id=run.run_id, usage=run.usage.to_dict()))
         ctx.run_registry.complete_run(run.run_id)
 
     except Exception as e:
-        _logger.exception("Chat stream failed (run_id=%s, session_id=%s)", run.run_id, session_state.session_id)
-        yield ErrorEvent(message=str(e), recoverable=False).to_sse_string()
+        _logger.exception("Chat failed (run_id=%s, session_id=%s)", run.run_id, session_state.session_id)
+        await bus.emit(ErrorEvent(message=str(e), recoverable=False))
         run.status = RunStatus.ERROR
         ctx.run_registry.cleanup_old_runs()
 
     finally:
         if agent:
+            if run.status in (RunStatus.CANCELLED, RunStatus.ERROR) or run.cancelled:
+                agent.ctx.background_tasks.cancel_all()
+            # Drain any remaining queued messages before save
+            if agent.inject_queue:
+                agent.messages.extend(agent.inject_queue)
+                agent.inject_queue.clear()
             run.usage = agent.usage
             run.messages = agent.messages
+        run_finished = True
         last_tokens = getattr(agent, "_last_input_tokens", None) if agent else None
         metadata = {"last_input_tokens": last_tokens} if last_tokens is not None else None
         await ctx.session_service.save(session_state, run.messages, metadata=metadata)

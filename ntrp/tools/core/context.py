@@ -1,5 +1,7 @@
 import asyncio
+import secrets
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, TypedDict
 
@@ -51,6 +53,34 @@ class IOBridge:
 
 
 @dataclass
+class BackgroundTaskRegistry:
+    """Tracks background tasks and injects results into the agent loop."""
+
+    on_result: Callable[[list[dict]], Awaitable[None]] | None = None
+    _tasks: dict[str, asyncio.Task] = field(default_factory=dict)
+
+    def generate_id(self) -> str:
+        return secrets.token_hex(4)
+
+    def register(self, task_id: str, task: asyncio.Task) -> None:
+        self._tasks[task_id] = task
+
+    def cancel_all(self) -> None:
+        for task in self._tasks.values():
+            if not task.done():
+                task.cancel()
+        self._tasks.clear()
+
+    async def inject(self, messages: list[dict]) -> None:
+        if self.on_result:
+            await self.on_result(messages)
+
+    @property
+    def pending_count(self) -> int:
+        return sum(1 for t in self._tasks.values() if not t.done())
+
+
+@dataclass
 class ToolContext:
     """Shared context for tool execution."""
 
@@ -62,6 +92,7 @@ class ToolContext:
     channel: Channel = field(default_factory=Channel)
     ledger: ExplorationLedger | None = None
     spawn_fn: Callable[..., Awaitable[str]] | None = None
+    background_tasks: BackgroundTaskRegistry = field(default_factory=BackgroundTaskRegistry)
 
     @property
     def session_id(self) -> str:

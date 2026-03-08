@@ -58,6 +58,7 @@ class Agent:
 
         self._state = AgentState.IDLE
         self.messages: list[dict] = []
+        self.inject_queue: list[dict] = []
         self.usage = Usage()
         self._last_input_tokens: int | None = None  # For adaptive compression
 
@@ -72,14 +73,15 @@ class Agent:
                 await self.on_state_change(new_state)
 
     def _init_messages(self, task: str, history: list[dict] | None) -> None:
+        self.messages.clear()
         if history:
-            self.messages = list(history)
+            self.messages.extend(history)
             self.messages.append({"role": "user", "content": task})
         else:
-            self.messages = [
+            self.messages.extend([
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": task},
-            ]
+            ])
 
     async def _call_llm(self) -> Any:
         client = get_completion_client(self.model)
@@ -116,13 +118,15 @@ class Agent:
             return
 
         discarded = tuple(self.messages[start:end])
-        self.messages, _ = await compress_context_async(
+        new_messages, _ = await compress_context_async(
             self.messages,
             self.model,
             force=True,
             keep_ratio=self.compression_keep_ratio,
             summary_max_tokens=self.summary_max_tokens,
         )
+        self.messages.clear()
+        self.messages.extend(new_messages)
 
         if self.current_depth == 0:
             self.ctx.channel.publish(ContextCompressed(messages=discarded, session_id=self.ctx.session_id))
@@ -159,6 +163,11 @@ class Agent:
         iteration = 0
         try:
             while True:
+                # Drain injected messages at safe turn boundary
+                if self.inject_queue:
+                    self.messages.extend(self.inject_queue)
+                    self.inject_queue.clear()
+
                 if AGENT_MAX_ITERATIONS is not None and iteration >= AGENT_MAX_ITERATIONS:
                     await self._set_state(AgentState.IDLE)
                     yield f"Stopped: reached max iterations ({AGENT_MAX_ITERATIONS})."
@@ -203,6 +212,7 @@ class Agent:
 
                 iteration += 1
         except asyncio.CancelledError:
+            self.ctx.background_tasks.cancel_all()
             await self._set_state(AgentState.IDLE)
             yield "Cancelled."
 
