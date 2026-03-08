@@ -3,6 +3,7 @@ import type { Config } from "../types.js";
 import type { HistoryMessage } from "../api/client.js";
 import type { Message } from "../types.js";
 import { Status, type Status as StatusType } from "../lib/constants.js";
+import { convertHistoryToMessages } from "../lib/history.js";
 import {
   clearSession,
   purgeMemory,
@@ -195,9 +196,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
         if (next) {
           const result = await switchSession(next.session_id);
           if (result) {
-            switchToSession(next.session_id, result.history.map((msg, i) => ({
-              id: `h-${i}`, role: msg.role, content: msg.content,
-            })));
+            switchToSession(next.session_id, convertHistoryToMessages(result.history));
           } else {
             const newId = await createNewSession();
             if (newId) switchToSession(newId, []);
