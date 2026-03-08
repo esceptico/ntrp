@@ -18,7 +18,7 @@ type Palette = {
   tabs: { active: string; inactive: string; separator: string };
   list: { itemText: string; itemTextSelected: string; itemDetail: string; scrollArrow: string };
   keyValue: { label: string; value: string };
-  background: { base: string; panel: string; element: string; menu: string };
+  background: { base: string | undefined; panel: string | undefined; element: string | undefined; menu: string };
   border: string;
   divider: string;
   footer: string;
@@ -205,7 +205,7 @@ export function subscribeThemeVersion(cb: () => void) {
   return () => { _listeners.delete(cb); };
 }
 
-export function setTheme(theme: Theme, accent?: AccentColor) {
+export function setTheme(theme: Theme, accent?: AccentColor, transparentBg?: boolean) {
   const p = palettes[theme];
   if (!p) return;
 
@@ -217,6 +217,11 @@ export function setTheme(theme: Theme, accent?: AccentColor) {
   Object.assign(colors.list, p.list);
   Object.assign(colors.keyValue, p.keyValue);
   Object.assign(colors.background, p.background);
+  if (transparentBg) {
+    colors.background.base = undefined;
+    colors.background.panel = undefined;
+    colors.background.element = undefined;
+  }
   colors.border = p.border;
   colors.divider = p.divider;
   colors.footer = p.footer;

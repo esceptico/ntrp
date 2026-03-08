@@ -34,6 +34,7 @@ interface AppDialogsParams {
   updateSetting: (category: keyof Settings, key: string, value: unknown) => void;
   theme: Theme;
   accentColor: AccentColor;
+  transparentBg: boolean;
 }
 
 export function useAppDialogs({
@@ -53,6 +54,7 @@ export function useAppDialogs({
   updateSetting,
   theme,
   accentColor,
+  transparentBg,
 }: AppDialogsParams) {
   const openDialog = useCallback((id: string) => {
     switch (id) {
@@ -124,9 +126,11 @@ export function useAppDialogs({
           <ThemePicker
             currentTheme={theme}
             currentAccent={accentColor}
-            onSelect={(selectedTheme, selectedAccent) => {
+            transparentBg={transparentBg}
+            onSelect={(selectedTheme, selectedAccent, selectedTransparent) => {
               setThemeByName(selectedTheme);
               if (selectedAccent !== accentColor) updateSetting("ui", "accentColor", selectedAccent);
+              if (selectedTransparent !== transparentBg) updateSetting("ui", "transparentBg", selectedTransparent);
               dialog.close();
             }}
             onClose={() => dialog.close()}
