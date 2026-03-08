@@ -33,6 +33,16 @@ class ToolExecutor:
                     self.registry.register(tool)
                     _logger.info("Loaded MCP tool: %s", tool.name)
 
+        capabilities = frozenset(runtime.tool_services)
+        hidden = [t for t in self.registry.tools.values() if t.requires and not t.requires.issubset(capabilities)]
+        if hidden:
+            by_req = {}
+            for t in hidden:
+                key = ", ".join(sorted(t.requires))
+                by_req.setdefault(key, []).append(t.name)
+            for req, names in by_req.items():
+                _logger.info("Tools hidden (missing %s): %s", req, ", ".join(names))
+
     def with_registry(self, registry: ToolRegistry) -> "ToolExecutor":
         clone = ToolExecutor.__new__(ToolExecutor)
         clone.runtime = self.runtime
