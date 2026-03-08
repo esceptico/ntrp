@@ -1,7 +1,6 @@
 import asyncio
 import secrets
 from collections.abc import Awaitable, Callable
-from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, TypedDict
 

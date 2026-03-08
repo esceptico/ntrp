@@ -78,10 +78,12 @@ class Agent:
             self.messages.extend(history)
             self.messages.append({"role": "user", "content": task})
         else:
-            self.messages.extend([
-                {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": task},
-            ])
+            self.messages.extend(
+                [
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": task},
+                ]
+            )
 
     async def _call_llm(self) -> Any:
         client = get_completion_client(self.model)

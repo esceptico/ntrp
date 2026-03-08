@@ -178,14 +178,16 @@ async def run_chat(ctx: ChatContext, bus: "SessionBus") -> None:
 
     run.approval_queue = asyncio.Queue()
 
-    await bus.emit(SessionInfoEvent(
-        session_id=session_state.session_id,
-        run_id=run.run_id,
-        sources=ctx.available_sources,
-        source_errors=ctx.source_errors,
-        skip_approvals=session_state.skip_approvals,
-        session_name=session_state.name or "",
-    ))
+    await bus.emit(
+        SessionInfoEvent(
+            session_id=session_state.session_id,
+            run_id=run.run_id,
+            sources=ctx.available_sources,
+            source_errors=ctx.source_errors,
+            skip_approvals=session_state.skip_approvals,
+            session_name=session_state.name or "",
+        )
+    )
 
     await bus.emit(ThinkingEvent(status="processing..."))
     ctx.channel.publish(RunStarted(run_id=run.run_id, session_id=session_state.session_id))
