@@ -74,6 +74,7 @@ class FactMemory:
         self._last_dream_pass: datetime | None = None
         self._last_merge_pass: datetime | None = None
         self._last_fact_merge_pass: datetime | None = None
+        self.dreams_enabled: bool = False
 
     @asynccontextmanager
     async def transaction(self) -> AsyncGenerator[None]:
@@ -107,7 +108,14 @@ class FactMemory:
 
     def start_consolidation(self, interval: float = CONSOLIDATION_INTERVAL) -> None:
         if self._consolidation_task is None:
+            self._consolidation_interval = interval
             self._consolidation_task = asyncio.create_task(self._consolidation_loop(interval))
+
+    def restart_consolidation(self, interval: float) -> None:
+        if self._consolidation_task:
+            self._consolidation_task.cancel()
+            self._consolidation_task = None
+        self.start_consolidation(interval)
 
     async def _consolidation_loop(self, interval: float) -> None:
         backoff = interval
@@ -237,8 +245,10 @@ class FactMemory:
             _logger.warning("Fact merge pass failed: %s", e)
 
     async def _maybe_run_dream_pass(self) -> None:
+        if not self.dreams_enabled:
+            return
         now = datetime.now(UTC)
-        if self._last_dream_pass and (now - self._last_dream_pass) < timedelta(days=1):
+        if self._last_dream_pass and (now - self._last_dream_pass) < timedelta(weeks=1):
             return
 
         try:

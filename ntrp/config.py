@@ -143,6 +143,8 @@ class Config(BaseSettings):
 
     # Memory (graph-based knowledge store)
     memory: bool = True
+    dreams: bool = False
+    consolidation_interval: int = 30  # minutes between consolidation runs
 
     # Google (Gmail + Calendar)
     google: bool = False
@@ -296,6 +298,8 @@ PERSIST_KEYS = frozenset(
         "browser_days",
         "vault_path",
         "memory",
+        "dreams",
+        "consolidation_interval",
         "google",
         "gmail_days",
         "max_depth",

@@ -83,6 +83,18 @@ export function ConnectionsSection({ connections: c, serverConfig, accent, width
         </text>
       </Row>
 
+      {/* Dreams (only when memory is enabled) */}
+      {sources?.memory?.enabled && (
+        <Row item="dreams" selected={c.connectionItem === "dreams"} accent={accent}>
+          <Toggle enabled={sources?.memory?.dreams} accent={accent} />
+          <text>
+            <span fg={sources?.memory?.dreams ? colors.text.primary : colors.text.muted}>
+              {sources?.memory?.dreams ? "Active" : "Disabled"}
+            </span>
+          </text>
+        </Row>
+      )}
+
       {/* Web Search */}
       <Row item="web" selected={c.connectionItem === "web"} accent={accent}>
         <text>
@@ -113,6 +125,8 @@ function HintRow({ item, editingVault, sourceEnabled }: { item: ConnectionItem; 
       }
       return <Hints items={[["enter", "enable"]]} />;
     case "memory":
+      return <Hints items={[["enter", "toggle"]]} />;
+    case "dreams":
       return <Hints items={[["enter", "toggle"]]} />;
     case "browser":
       return <Hints items={[["enter", "change browser"]]} />;

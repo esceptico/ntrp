@@ -134,10 +134,15 @@ class Runtime:
                 extraction_model=self.config.memory_model,
                 channel=self.channel,
             )
+            self.memory.dreams_enabled = self.config.dreams
             self.memory_service = MemoryService(self.memory, self.channel)
         elif self.config.memory and self.memory:
             if self.memory.extraction_model != self.config.memory_model:
                 self.memory.update_extraction_model(self.config.memory_model)
+            self.memory.dreams_enabled = self.config.dreams
+            new_interval = self.config.consolidation_interval * 60
+            if getattr(self.memory, "_consolidation_interval", None) != new_interval:
+                self.memory.restart_consolidation(new_interval)
         elif not self.config.memory and self.memory:
             if self.memory_service:
                 self.memory_service.close()
@@ -228,6 +233,7 @@ class Runtime:
                 extraction_model=self.config.memory_model,
                 channel=self.channel,
             )
+            self.memory.dreams_enabled = self.config.dreams
             self.memory_service = MemoryService(self.memory, self.channel)
             self.indexables["memory"] = MemoryIndexable(self.memory.db)
         elif self.config.memory:
@@ -349,7 +355,7 @@ class Runtime:
 
     def start_consolidation(self) -> None:
         if self.memory:
-            self.memory.start_consolidation()
+            self.memory.start_consolidation(interval=self.config.consolidation_interval * 60)
 
     def start_indexing(self) -> None:
         if self.indexer:

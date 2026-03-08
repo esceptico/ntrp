@@ -91,6 +91,7 @@ def _config_response(rt: Runtime) -> dict:
         "max_messages": config.max_messages,
         "compression_keep_ratio": config.compression_keep_ratio,
         "summary_max_tokens": config.summary_max_tokens,
+        "consolidation_interval": config.consolidation_interval,
         "memory_enabled": memory_connected,
         "sources": {
             "google": {
@@ -98,7 +99,7 @@ def _config_response(rt: Runtime) -> dict:
                 "connected": has_google,
                 **(_google_errors(rt) or {}),
             },
-            "memory": {"enabled": config.memory, "connected": memory_connected},
+            "memory": {"enabled": config.memory, "connected": memory_connected, "dreams": config.dreams},
             "web": {
                 "connected": web_source is not None,
                 "mode": config.web_search,
