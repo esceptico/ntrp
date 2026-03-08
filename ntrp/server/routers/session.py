@@ -338,17 +338,16 @@ async def get_providers(runtime: Runtime = Depends(get_runtime)):
             }
         )
 
-    # Claude Pro/Max (OAuth) — separate provider
-    if oauth_configured():
-        anthropic_models = get_models_by_provider(Provider.ANTHROPIC)
-        providers.append(
-            {
-                "id": "claude_oauth",
-                "name": "Claude Pro/Max",
-                "connected": True,
-                "models": list(anthropic_models.keys()),
-            }
-        )
+    # Claude Pro/Max (OAuth) — always show so users can initiate the flow
+    anthropic_models = get_models_by_provider(Provider.ANTHROPIC)
+    providers.append(
+        {
+            "id": "claude_oauth",
+            "name": "Claude Pro/Max",
+            "connected": oauth_configured(),
+            "models": list(anthropic_models.keys()),
+        }
+    )
 
     # Custom models entry
     custom_models = get_models_by_provider(Provider.CUSTOM)
