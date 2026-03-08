@@ -141,7 +141,7 @@ class Runtime:
                 self.memory.update_extraction_model(self.config.memory_model)
             self.memory.dreams_enabled = self.config.dreams
             new_interval = self.config.consolidation_interval * 60
-            if getattr(self.memory, '_consolidation_interval', None) != new_interval:
+            if getattr(self.memory, "_consolidation_interval", None) != new_interval:
                 self.memory.restart_consolidation(new_interval)
         elif not self.config.memory and self.memory:
             if self.memory_service:
