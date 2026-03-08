@@ -119,7 +119,9 @@ async def _prepare_messages(
     return messages
 
 
-async def prepare_chat(runtime: "Runtime", message: str, skip_approvals: bool = False, session_id: str | None = None) -> ChatContext:
+async def prepare_chat(
+    runtime: "Runtime", message: str, skip_approvals: bool = False, session_id: str | None = None
+) -> ChatContext:
     registry = runtime.run_registry
 
     if session_id:
