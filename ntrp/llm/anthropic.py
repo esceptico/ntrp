@@ -74,7 +74,8 @@ class AnthropicClient(CompletionClient):
             **kwargs,
         )
 
-        response = await self._client.messages.create(**request)
+        async with self._client.messages.stream(**request) as stream:
+            response = await stream.get_final_message()
         return self._parse_response(response, model, response_format)
 
     async def close(self) -> None:

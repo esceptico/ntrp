@@ -19,6 +19,7 @@ class Provider(Enum):
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
     GOOGLE = "google"
+    OPENROUTER = "openrouter"
     CUSTOM = "custom"
 
 
@@ -35,40 +36,127 @@ class Model:
 
 # Prices are per million tokens.
 DEFAULTS = [
+    # --- Anthropic ---
     Model(
         "claude-opus-4-6",
         provider=Provider.ANTHROPIC,
         max_context_tokens=200_000,
-        max_output_tokens=16384,
+        max_output_tokens=128_000,
         pricing=Pricing(price_in=5, price_out=25, price_cache_read=0.50, price_cache_write=6.25),
     ),
     Model(
         "claude-sonnet-4-6",
         provider=Provider.ANTHROPIC,
         max_context_tokens=200_000,
-        max_output_tokens=8192,
+        max_output_tokens=64_000,
         pricing=Pricing(price_in=3, price_out=15, price_cache_read=0.30, price_cache_write=3.75),
+    ),
+    Model(
+        "claude-haiku-4-5-20251001",
+        provider=Provider.ANTHROPIC,
+        max_context_tokens=200_000,
+        max_output_tokens=64_000,
+        pricing=Pricing(price_in=1, price_out=5, price_cache_read=0.10, price_cache_write=1.25),
+    ),
+    # --- OpenAI ---
+    Model(
+        "gpt-5.4",
+        provider=Provider.OPENAI,
+        max_context_tokens=1_050_000,
+        max_output_tokens=128_000,
+        pricing=Pricing(price_in=2.50, price_out=15),
+    ),
+    Model(
+        "gpt-5.3-codex",
+        provider=Provider.OPENAI,
+        max_context_tokens=400_000,
+        max_output_tokens=128_000,
+        pricing=Pricing(price_in=1.75, price_out=14),
     ),
     Model(
         "gpt-5.2",
         provider=Provider.OPENAI,
         max_context_tokens=128_000,
         max_output_tokens=16384,
-        pricing=Pricing(price_in=2, price_out=8),
+        pricing=Pricing(price_in=1.75, price_out=14),
     ),
     Model(
-        "gemini-3-pro-preview",
+        "gpt-5-mini",
+        provider=Provider.OPENAI,
+        max_context_tokens=400_000,
+        max_output_tokens=128_000,
+        pricing=Pricing(price_in=0.25, price_out=2),
+    ),
+    Model(
+        "gpt-5-nano",
+        provider=Provider.OPENAI,
+        max_context_tokens=400_000,
+        max_output_tokens=128_000,
+        pricing=Pricing(price_in=0.05, price_out=0.40),
+    ),
+    # --- Google ---
+    Model(
+        "gemini-3.1-pro-preview",
         provider=Provider.GOOGLE,
-        max_context_tokens=128_000,
-        max_output_tokens=65536,
-        pricing=Pricing(price_in=1.25, price_out=10),
+        max_context_tokens=1_000_000,
+        max_output_tokens=65_536,
+        pricing=Pricing(price_in=2, price_out=12),
+    ),
+    Model(
+        "gemini-3.1-flash-lite-preview",
+        provider=Provider.GOOGLE,
+        max_context_tokens=1_000_000,
+        max_output_tokens=65_536,
+        pricing=Pricing(price_in=0.25, price_out=1.50),
     ),
     Model(
         "gemini-3-flash-preview",
         provider=Provider.GOOGLE,
-        max_context_tokens=128_000,
-        max_output_tokens=65536,
-        pricing=Pricing(price_in=0.15, price_out=0.60),
+        max_context_tokens=1_000_000,
+        max_output_tokens=65_536,
+        pricing=Pricing(price_in=0.50, price_out=3),
+    ),
+    # --- OpenRouter ---
+    Model(
+        "qwen/qwen3.5-35b-a3b",
+        provider=Provider.OPENROUTER,
+        max_context_tokens=262_144,
+        max_output_tokens=65_536,
+        pricing=Pricing(price_in=0.1625, price_out=1.30),
+    ),
+    Model(
+        "qwen/qwen3.5-27b",
+        provider=Provider.OPENROUTER,
+        max_context_tokens=262_144,
+        max_output_tokens=65_536,
+        pricing=Pricing(price_in=0.195, price_out=1.56),
+    ),
+    Model(
+        "qwen/qwen3.5-122b-a10b",
+        provider=Provider.OPENROUTER,
+        max_context_tokens=262_144,
+        max_output_tokens=65_536,
+        pricing=Pricing(price_in=0.26, price_out=2.08),
+    ),
+    Model(
+        "minimax/minimax-m2.5",
+        provider=Provider.OPENROUTER,
+        max_context_tokens=196_608,
+        max_output_tokens=196_608,
+        pricing=Pricing(price_in=0.295, price_out=1.20),
+    ),
+    Model(
+        "arcee-ai/trinity-large-preview:free",
+        provider=Provider.OPENROUTER,
+        max_context_tokens=131_000,
+        max_output_tokens=16_384,
+    ),
+    Model(
+        "x-ai/grok-4.1-fast",
+        provider=Provider.OPENROUTER,
+        max_context_tokens=2_000_000,
+        max_output_tokens=30_000,
+        pricing=Pricing(price_in=0.20, price_out=0.50),
     ),
 ]
 

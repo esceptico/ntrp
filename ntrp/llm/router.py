@@ -19,6 +19,7 @@ def init(config) -> None:
     _api_keys[Provider.ANTHROPIC] = config.anthropic_api_key
     _api_keys[Provider.OPENAI] = config.openai_api_key
     _api_keys[Provider.GOOGLE] = config.gemini_api_key
+    _api_keys[Provider.OPENROUTER] = config.openrouter_api_key
 
     from ntrp.config import load_user_settings
 
@@ -83,6 +84,8 @@ def get_completion_client(model_id: str) -> CompletionClient:
                 _completion_clients[cache_key] = OpenAIClient(api_key=key)
             case Provider.GOOGLE:
                 _completion_clients[cache_key] = GeminiClient(api_key=key)
+            case Provider.OPENROUTER:
+                _completion_clients[cache_key] = OpenAIClient(base_url="https://openrouter.ai/api/v1", api_key=key)
             case Provider.CUSTOM:
                 _completion_clients[cache_key] = OpenAIClient(base_url=model.base_url, api_key=_api_keys.get(model.id))
             case _:

@@ -19,6 +19,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   claude_oauth: "Claude Pro/Max",
   openai: "OpenAI",
   google: "Google",
+  openrouter: "OpenRouter",
   custom: "Custom",
 };
 
@@ -74,12 +75,13 @@ export function ModelPicker({ config, serverConfig, onModelChange, onServerConfi
 
   const [pendingEmbedding, setPendingEmbedding] = useState<string | null>(null);
   const [reindexing, setReindexing] = useState(false);
+  const [localOverrides, setLocalOverrides] = useState<Partial<Record<ModelType, string>>>({});
 
   const currentModels: Record<ModelType, string> = {
-    chat: serverConfig?.chat_model ?? "",
-    explore: serverConfig?.explore_model ?? "",
-    memory: serverConfig?.memory_model ?? "",
-    embedding: serverConfig?.embedding_model ?? "",
+    chat: localOverrides.chat ?? serverConfig?.chat_model ?? "",
+    explore: localOverrides.explore ?? serverConfig?.explore_model ?? "",
+    memory: localOverrides.memory ?? serverConfig?.memory_model ?? "",
+    embedding: localOverrides.embedding ?? serverConfig?.embedding_model ?? "",
   };
 
   useEffect(() => {
@@ -120,6 +122,7 @@ export function ModelPicker({ config, serverConfig, onModelChange, onServerConfi
     try {
       const key = `${selectedType}_model`;
       await updateConfig(config, { [key]: model } as Record<string, string>);
+      setLocalOverrides(prev => ({ ...prev, [selectedType]: model }));
       onModelChange(selectedType, model);
       setStep("type");
     } catch {

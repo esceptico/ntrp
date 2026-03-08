@@ -41,6 +41,7 @@ PROVIDER_KEY_FIELDS = {
     "anthropic": "anthropic_api_key",
     "openai": "openai_api_key",
     "google": "gemini_api_key",
+    "openrouter": "openrouter_api_key",
 }
 
 SERVICE_KEY_FIELDS = {
@@ -52,7 +53,7 @@ SERVICE_KEY_FIELDS = {
 MODEL_DEFAULTS = {
     "ANTHROPIC_API_KEY": ("claude-sonnet-4-6", "claude-sonnet-4-6", None),
     "OPENAI_API_KEY": ("gpt-5.2", "gpt-5.2", "text-embedding-3-small"),
-    "GEMINI_API_KEY": ("gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-embedding-001"),
+    "GEMINI_API_KEY": ("gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-embedding-001"),
 }
 
 
@@ -132,6 +133,7 @@ class Config(BaseSettings):
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
+    openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
 
     # Model IDs (must match entries in llm/models.py DEFAULTS or user config)
     chat_model: str | None = None
@@ -245,7 +247,7 @@ class Config(BaseSettings):
 
     @property
     def has_providers(self) -> bool:
-        return bool(self.anthropic_api_key or self.openai_api_key or self.gemini_api_key)
+        return bool(self.anthropic_api_key or self.openai_api_key or self.gemini_api_key or self.openrouter_api_key)
 
     @property
     def has_any_model(self) -> bool:
