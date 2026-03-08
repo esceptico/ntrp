@@ -108,7 +108,14 @@ class FactMemory:
 
     def start_consolidation(self, interval: float = CONSOLIDATION_INTERVAL) -> None:
         if self._consolidation_task is None:
+            self._consolidation_interval = interval
             self._consolidation_task = asyncio.create_task(self._consolidation_loop(interval))
+
+    def restart_consolidation(self, interval: float) -> None:
+        if self._consolidation_task:
+            self._consolidation_task.cancel()
+            self._consolidation_task = None
+        self.start_consolidation(interval)
 
     async def _consolidation_loop(self, interval: float) -> None:
         backoff = interval

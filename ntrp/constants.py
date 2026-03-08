@@ -42,7 +42,7 @@ CHANNEL_DISPATCH_WORKERS = 32
 # --- Session ---
 
 HISTORY_MESSAGE_LIMIT = 50  # max user/assistant messages returned for UI history
-CONSOLIDATION_INTERVAL = 30.0  # seconds between consolidation batches
+CONSOLIDATION_INTERVAL = 1800.0  # seconds between consolidation batches (30 min)
 
 
 # --- Context Compaction ---

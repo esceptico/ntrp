@@ -29,6 +29,7 @@ export const LIMIT_ITEMS: NumberItem[] = [
   { key: "maxMessages", label: "Max messages", description: "Message ceiling for compaction", min: 20, max: 500, step: 10 },
   { key: "compressionKeepRatio", label: "Keep ratio", description: "% of recent messages to keep", min: 10, max: 80 },
   { key: "summaryMaxTokens", label: "Summary tokens", description: "Max tokens for summary", min: 500, max: 4000, step: 100 },
+  { key: "consolidationInterval", label: "Consolidation", description: "Minutes between runs", min: 5, max: 120, step: 5 },
 ];
 
 export const CONNECTION_ITEMS = ["vault", "google", "browser", "memory", "dreams", "web"] as const;

@@ -18,6 +18,7 @@ export interface AgentSettings {
   maxMessages: number;
   compressionKeepRatio: number;
   summaryMaxTokens: number;
+  consolidationInterval: number;
 }
 
 export const SIDEBAR_SECTION_IDS = ["models", "context", "usage", "sources", "automations", "sessions", "memory_stats"] as const;
@@ -43,6 +44,7 @@ const defaultSettings: Settings = {
     maxMessages: 120,
     compressionKeepRatio: 20,
     summaryMaxTokens: 1500,
+    consolidationInterval: 30,
   },
   sidebar: {
     models: true,
@@ -130,6 +132,7 @@ export function useSettings(config: Config) {
       max_messages: settings.agent.maxMessages,
       compression_keep_ratio: settings.agent.compressionKeepRatio / 100,
       summary_max_tokens: settings.agent.summaryMaxTokens,
+      consolidation_interval: settings.agent.consolidationInterval,
     }).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -148,6 +151,7 @@ export function useSettings(config: Config) {
           if (key === "maxMessages") agentPatch.max_messages = value;
           if (key === "compressionKeepRatio") agentPatch.compression_keep_ratio = (value as number) / 100;
           if (key === "summaryMaxTokens") agentPatch.summary_max_tokens = value;
+          if (key === "consolidationInterval") agentPatch.consolidation_interval = value;
           updateConfig(config, agentPatch).catch(() => {});
         }
 

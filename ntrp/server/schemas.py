@@ -63,6 +63,7 @@ class UpdateConfigRequest(BaseModel):
     max_messages: int | None = None
     compression_keep_ratio: float | None = None
     summary_max_tokens: int | None = None
+    consolidation_interval: int | None = None
     vault_path: str | None = None
     browser: str | None = None
     browser_days: int | None = None
