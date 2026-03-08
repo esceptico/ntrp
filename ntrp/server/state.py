@@ -23,6 +23,8 @@ class RunState:
     messages: list[dict] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     approval_queue: asyncio.Queue | None = None
+    task: asyncio.Task | None = None
+    inject_queue: list[dict] = field(default_factory=list)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     cancelled: bool = False
@@ -45,6 +47,12 @@ class RunRegistry:
     def get_run(self, run_id: str) -> RunState | None:
         return self._runs.get(run_id)
 
+    def get_active_run(self, session_id: str) -> RunState | None:
+        for run in self._runs.values():
+            if run.session_id == session_id and run.status == RunStatus.RUNNING:
+                return run
+        return None
+
     def complete_run(self, run_id: str) -> None:
         run = self._runs.get(run_id)
         if run:
@@ -58,6 +66,8 @@ class RunRegistry:
             run.cancelled = True
             run.status = RunStatus.CANCELLED
             run.updated_at = datetime.now(UTC)
+            if run.task and not run.task.done():
+                run.task.cancel()
         self.cleanup_old_runs()
 
     def cleanup_old_runs(self, max_age_hours: int = 24) -> int:

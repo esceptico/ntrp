@@ -1,3 +1,6 @@
+import asyncio
+import time
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from importlib.metadata import version
 
@@ -6,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ntrp.config import verify_api_key
+from ntrp.server.bus import BusRegistry
 from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
@@ -14,7 +18,10 @@ from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import CancelRequest, ChatRequest, ToolResultRequest
-from ntrp.services.chat import prepare_chat, stream_chat
+from ntrp.services.chat import prepare_chat, run_chat
+
+SSE_KEEPALIVE = ":\n\n"
+KEEPALIVE_INTERVAL = 5
 
 
 @asynccontextmanager
@@ -26,6 +33,7 @@ async def lifespan(app: FastAPI):
     runtime.start_monitor()
     runtime.start_consolidation()
     app.state.runtime = runtime
+    app.state.bus_registry = BusRegistry()
     yield
     await runtime.close()
 
@@ -100,6 +108,10 @@ app.include_router(skills_router)
 app.include_router(mcp_router)
 
 
+def _get_bus_registry(request: Request) -> BusRegistry:
+    return request.app.state.bus_registry
+
+
 @app.get("/health")
 async def health(request: Request, runtime: Runtime = Depends(get_runtime)):
     result: dict = {
@@ -129,14 +141,30 @@ async def list_tools(runtime: Runtime = Depends(get_runtime)):
     return {"tools": runtime.executor.get_tool_metadata()}
 
 
-@app.post("/chat/stream")
-async def chat_stream(request: ChatRequest, runtime: Runtime = Depends(get_runtime)) -> StreamingResponse:
+# --- Persistent SSE event stream ---
+
+
+async def _event_stream(session_id: str, bus_registry: BusRegistry) -> AsyncGenerator[str]:
+    bus = bus_registry.get_or_create(session_id)
+    last_event_at = time.monotonic()
     try:
-        ctx = await prepare_chat(runtime, request.message, request.skip_approvals, session_id=request.session_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        while True:
+            event = await bus.get(timeout=0.5)
+            if event is None:
+                if time.monotonic() - last_event_at >= KEEPALIVE_INTERVAL:
+                    last_event_at = time.monotonic()
+                    yield SSE_KEEPALIVE
+                continue
+            last_event_at = time.monotonic()
+            yield event.to_sse_string()
+    except asyncio.CancelledError:
+        pass
+
+
+@app.get("/chat/events/{session_id}")
+async def chat_events(session_id: str, buses: BusRegistry = Depends(_get_bus_registry)):
     return StreamingResponse(
-        stream_chat(ctx),
+        _event_stream(session_id, buses),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -144,6 +172,40 @@ async def chat_stream(request: ChatRequest, runtime: Runtime = Depends(get_runti
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# --- Fire-and-forget message send ---
+
+
+@app.post("/chat/message")
+async def chat_message(
+    request: ChatRequest,
+    runtime: Runtime = Depends(get_runtime),
+    buses: BusRegistry = Depends(_get_bus_registry),
+):
+    session_id = request.session_id
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+
+    # If agent is already running, queue message for safe injection
+    active_run = runtime.run_registry.get_active_run(session_id)
+    if active_run:
+        active_run.inject_queue.append({"role": "user", "content": request.message})
+        return {"run_id": active_run.run_id, "session_id": session_id}
+
+    try:
+        ctx = await prepare_chat(runtime, request.message, request.skip_approvals, session_id=session_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    bus = buses.get_or_create(session_id)
+    task = asyncio.create_task(run_chat(ctx, bus))
+    ctx.run.task = task
+
+    return {"run_id": ctx.run.run_id, "session_id": ctx.session_state.session_id}
+
+
+# --- Existing endpoints ---
 
 
 @app.post("/tools/result")

@@ -1,85 +1,37 @@
 import asyncio
-import time
-from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from ntrp.events.sse import AgentResult, CancelledEvent, SSEEvent
+from ntrp.events.sse import CancelledEvent, SSEEvent
 
 if TYPE_CHECKING:
+    from ntrp.server.bus import SessionBus
     from ntrp.services.chat import ChatContext
 
-SSE_KEEPALIVE = ":\n\n"
-KEEPALIVE_INTERVAL = 5
 
-
-async def run_agent_loop(ctx: "ChatContext", agent):
-    """Run agent and yield SSE strings. Yields AgentResult at end.
-
-    Events from agent.stream() and tool/subagent emissions merge through a single queue.
-    None sentinel signals the agent task is done.
-    """
+async def run_agent_loop(ctx: "ChatContext", agent, bus: "SessionBus") -> str | None:
+    """Run agent loop, push events to bus. Returns final text or None if cancelled."""
     messages = ctx.run.messages
     user_message = messages[-1]["content"]
     history = messages[:-1] if len(messages) > 1 else None
 
-    queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
-    agent.ctx.io.emit = queue.put
+    agent.ctx.io.emit = bus.emit
+    # Share the same list so injected messages reach the agent
+    ctx.run.messages = agent.messages
 
-    async def _run() -> str:
-        result = ""
-        try:
-            async for item in agent.stream(user_message, history=history):
-                if isinstance(item, str):
-                    result = item
-                elif isinstance(item, SSEEvent):
-                    await queue.put(item)
-        except asyncio.CancelledError:
-            result = "Cancelled."
-        finally:
-            await queue.put(None)
-        return result
-
-    task = asyncio.create_task(_run())
-    last_event_at = time.monotonic()
-
+    result = ""
     try:
-        while True:
+        async for item in agent.stream(user_message, history=history):
             if ctx.run.cancelled:
-                task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await task
-                yield CancelledEvent(run_id=ctx.run.run_id).to_sse_string()
-                return
-
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=0.1)
-            except TimeoutError:
-                if task.done():
-                    break
-                if time.monotonic() - last_event_at >= KEEPALIVE_INTERVAL:
-                    last_event_at = time.monotonic()
-                    yield SSE_KEEPALIVE
-                continue
-
-            last_event_at = time.monotonic()
-
-            if event is None:
                 break
-            yield event.to_sse_string()
+            if isinstance(item, str):
+                result = item
+            elif isinstance(item, SSEEvent):
+                await bus.emit(item)
+    except asyncio.CancelledError:
+        result = ""
 
-        # Drain remaining events
-        while not queue.empty():
-            if (event := queue.get_nowait()) is not None:
-                yield event.to_sse_string()
+    if ctx.run.cancelled:
+        await bus.emit(CancelledEvent(run_id=ctx.run.run_id))
+        return None
 
-        # Re-raise agent errors
-        if task.done() and not task.cancelled() and task.exception():
-            raise task.exception()
-
-        yield AgentResult(text=task.result())
-
-    finally:
-        if not task.done():
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
+    return result
