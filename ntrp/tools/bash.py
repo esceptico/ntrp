@@ -160,7 +160,9 @@ def execute_bash(command: str, working_dir: str | None = None, timeout: int = BA
 class BashInput(BaseModel):
     command: str = Field(description="The shell command to execute")
     working_dir: str | None = Field(default=None, description="Working directory (optional, defaults to current)")
-    background: bool = Field(default=False, description="Run in background, return immediately. Results delivered automatically when done.")
+    background: bool = Field(
+        default=False, description="Run in background, return immediately. Results delivered automatically when done."
+    )
 
 
 class BashTool(Tool):
@@ -197,7 +199,6 @@ class BashTool(Tool):
 
         registry = execution.ctx.background_tasks
         task_id = registry.generate_id()
-        tool_call_id = execution.tool_id
 
         async def _run_background():
             start = time.monotonic()
@@ -235,21 +236,25 @@ class BashTool(Tool):
 
             emit = execution.ctx.io.emit
             if emit:
-                await emit(ToolCallEvent(
-                    tool_id=synthetic_call_id,
-                    name="bash",
-                    args={"command": command},
-                    display_name="Bash",
-                ))
+                await emit(
+                    ToolCallEvent(
+                        tool_id=synthetic_call_id,
+                        name="bash",
+                        args={"command": command},
+                        display_name="Bash",
+                    )
+                )
                 lines = output.count("\n") + 1
-                await emit(ToolResultEvent(
-                    tool_id=synthetic_call_id,
-                    name="bash",
-                    result=output,
-                    preview=f"{lines} lines" if status == "completed" else "failed",
-                    duration_ms=duration_ms,
-                    display_name="Bash",
-                ))
+                await emit(
+                    ToolResultEvent(
+                        tool_id=synthetic_call_id,
+                        name="bash",
+                        result=output,
+                        preview=f"{lines} lines" if status == "completed" else "failed",
+                        duration_ms=duration_ms,
+                        display_name="Bash",
+                    )
+                )
                 await emit(BackgroundTaskEvent(task_id=task_id, command=command, status=status))
 
             await registry.inject(messages)
