@@ -169,6 +169,12 @@ class Config(BaseSettings):
     # Agent depth limit
     max_depth: int = 8
 
+    # Context compaction
+    compression_threshold: float = 0.8
+    max_messages: int = 120
+    compression_keep_ratio: float = 0.2
+    summary_max_tokens: int = 1500
+
     # Server
     host: str = "127.0.0.1"
     port: int = 6877
@@ -293,6 +299,10 @@ PERSIST_KEYS = frozenset(
         "google",
         "gmail_days",
         "max_depth",
+        "compression_threshold",
+        "max_messages",
+        "compression_keep_ratio",
+        "summary_max_tokens",
         "mcp_servers",
         "web_search",
     }

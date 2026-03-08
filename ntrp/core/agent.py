@@ -2,7 +2,13 @@ import asyncio
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from ntrp.constants import AGENT_MAX_ITERATIONS
+from ntrp.constants import (
+    AGENT_MAX_ITERATIONS,
+    COMPRESSION_KEEP_RATIO,
+    COMPRESSION_THRESHOLD,
+    MAX_MESSAGES,
+    SUMMARY_MAX_TOKENS,
+)
 from ntrp.context.compression import compress_context_async, find_compressible_range, should_compress
 from ntrp.core.parsing import normalize_assistant_message, parse_tool_calls
 from ntrp.core.state import AgentState, StateCallback
@@ -31,6 +37,10 @@ class Agent:
         current_depth: int = 0,
         parent_id: str | None = None,
         on_state_change: StateCallback | None = None,
+        compression_threshold: float = COMPRESSION_THRESHOLD,
+        max_messages: int = MAX_MESSAGES,
+        compression_keep_ratio: float = COMPRESSION_KEEP_RATIO,
+        summary_max_tokens: int = SUMMARY_MAX_TOKENS,
     ):
         self.tools = tools
         self.executor = tool_executor
@@ -41,6 +51,10 @@ class Agent:
         self.parent_id = parent_id
         self.on_state_change = on_state_change
         self.ctx = ctx
+        self.compression_threshold = compression_threshold
+        self.max_messages = max_messages
+        self.compression_keep_ratio = compression_keep_ratio
+        self.summary_max_tokens = summary_max_tokens
 
         self._state = AgentState.IDLE
         self.messages: list[dict] = []
@@ -85,18 +99,30 @@ class Agent:
         self._last_input_tokens = step.prompt_tokens + step.cache_read_tokens + step.cache_write_tokens
 
     async def _maybe_compact(self) -> AsyncGenerator[SSEEvent]:
-        if not should_compress(self.messages, self.model, self._last_input_tokens):
+        if not should_compress(
+            self.messages,
+            self.model,
+            self._last_input_tokens,
+            threshold=self.compression_threshold,
+            max_messages=self.max_messages,
+        ):
             return
 
         if self.current_depth == 0:
             yield ThinkingEvent(status="compressing context...")
 
-        start, end = find_compressible_range(self.messages)
+        start, end = find_compressible_range(self.messages, keep_ratio=self.compression_keep_ratio)
         if start == 0 and end == 0:
             return
 
         discarded = tuple(self.messages[start:end])
-        self.messages, _ = await compress_context_async(self.messages, self.model, force=True)
+        self.messages, _ = await compress_context_async(
+            self.messages,
+            self.model,
+            force=True,
+            keep_ratio=self.compression_keep_ratio,
+            summary_max_tokens=self.summary_max_tokens,
+        )
 
         if self.current_depth == 0:
             self.ctx.channel.publish(ContextCompressed(messages=discarded, session_id=self.ctx.session_id))

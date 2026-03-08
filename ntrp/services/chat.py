@@ -160,6 +160,10 @@ async def prepare_chat(
             model=runtime.config.chat_model,
             explore_model=runtime.config.explore_model,
             max_depth=runtime.config.max_depth,
+            compression_threshold=runtime.config.compression_threshold,
+            max_messages=runtime.config.max_messages,
+            compression_keep_ratio=runtime.config.compression_keep_ratio,
+            summary_max_tokens=runtime.config.summary_max_tokens,
         ),
         channel=runtime.channel,
         available_sources=runtime.get_available_sources(),
@@ -259,7 +263,10 @@ async def compact_session(runtime: "Runtime", session_id: str | None = None) -> 
     before_count = len(messages)
     before_tokens = data.last_input_tokens
 
-    start, end = find_compressible_range(messages)
+    keep_ratio = runtime.config.compression_keep_ratio
+    summary_max_tokens = runtime.config.summary_max_tokens
+
+    start, end = find_compressible_range(messages, keep_ratio=keep_ratio)
     if start == 0 and end == 0:
         return {
             "status": "nothing_to_compact",
@@ -272,6 +279,8 @@ async def compact_session(runtime: "Runtime", session_id: str | None = None) -> 
         messages=messages,
         model=model,
         force=True,
+        keep_ratio=keep_ratio,
+        summary_max_tokens=summary_max_tokens,
     )
 
     if was_compressed:

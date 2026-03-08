@@ -23,11 +23,13 @@ export function useLimits(
     } else if (key.name === "left" || key.name === "h") {
       const item = LIMIT_ITEMS[limitsIndex];
       const val = settings.agent[item.key as keyof typeof settings.agent] as number;
-      if (val > item.min) onUpdate("agent", item.key, val - 1);
+      const step = item.step ?? 1;
+      if (val > item.min) onUpdate("agent", item.key, Math.max(item.min, val - step));
     } else if (key.name === "right" || key.name === "l") {
       const item = LIMIT_ITEMS[limitsIndex];
       const val = settings.agent[item.key as keyof typeof settings.agent] as number;
-      if (val < item.max) onUpdate("agent", item.key, val + 1);
+      const step = item.step ?? 1;
+      if (val < item.max) onUpdate("agent", item.key, Math.min(item.max, val + step));
     }
   }, [limitsIndex, settings, onUpdate]);
 

@@ -13,13 +13,16 @@ def should_compress(
     messages: list[dict],
     model: str,
     actual_input_tokens: int | None = None,
+    *,
+    threshold: float = COMPRESSION_THRESHOLD,
+    max_messages: int = MAX_MESSAGES,
 ) -> bool:
-    if len(messages) > MAX_MESSAGES:
+    if len(messages) > max_messages:
         return True
 
     if actual_input_tokens is not None:
         limit = get_model(model).max_context_tokens
-        return actual_input_tokens > int(limit * COMPRESSION_THRESHOLD)
+        return actual_input_tokens > int(limit * threshold)
 
     return False
 
@@ -67,8 +70,8 @@ def _build_conversation_text(messages: list, start: int, end: int) -> str:
     return "\n\n".join(text_parts)
 
 
-def _build_summarize_request(conversation_text: str, model: str) -> dict:
-    word_budget = int(SUMMARY_MAX_TOKENS * 0.75)
+def _build_summarize_request(conversation_text: str, model: str, summary_max_tokens: int = SUMMARY_MAX_TOKENS) -> dict:
+    word_budget = int(summary_max_tokens * 0.75)
     prompt = SUMMARIZE_PROMPT_TEMPLATE.render(budget=word_budget)
     return {
         "model": model,
@@ -77,7 +80,7 @@ def _build_summarize_request(conversation_text: str, model: str) -> dict:
             {"role": "user", "content": conversation_text},
         ],
         "temperature": 0.3,
-        "max_tokens": SUMMARY_MAX_TOKENS,
+        "max_tokens": summary_max_tokens,
     }
 
 
@@ -86,10 +89,11 @@ async def summarize_messages_async(
     start: int,
     end: int,
     model: str,
+    summary_max_tokens: int = SUMMARY_MAX_TOKENS,
 ) -> str:
     conversation_text = _build_conversation_text(messages, start, end)
     client = get_completion_client(model)
-    response = await client.completion(**_build_summarize_request(conversation_text, model))
+    response = await client.completion(**_build_summarize_request(conversation_text, model, summary_max_tokens))
     content = response.choices[0].message.content
     if not content:
         return "Unable to summarize."
@@ -109,16 +113,18 @@ async def compress_context_async(
     model: str,
     on_compress=None,
     force: bool = False,
+    keep_ratio: float = COMPRESSION_KEEP_RATIO,
+    summary_max_tokens: int = SUMMARY_MAX_TOKENS,
 ) -> tuple[list[dict], bool]:
     if not force and not should_compress(messages, model):
         return messages, False
 
-    start, end = find_compressible_range(messages)
+    start, end = find_compressible_range(messages, keep_ratio=keep_ratio)
     if start == 0 and end == 0:
         return messages, False
 
     if on_compress:
         await on_compress(f"compressing context ({end - start} messages)...")
 
-    summary = await summarize_messages_async(messages, start, end, model)
+    summary = await summarize_messages_async(messages, start, end, model, summary_max_tokens)
     return _build_compressed_messages(messages, end, summary), True

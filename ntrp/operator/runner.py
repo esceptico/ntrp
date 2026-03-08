@@ -80,6 +80,10 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
             model=request.model,
             explore_model=deps.config.explore_model,
             max_depth=deps.config.max_depth,
+            compression_threshold=deps.config.compression_threshold,
+            max_messages=deps.config.max_messages,
+            compression_keep_ratio=deps.config.compression_keep_ratio,
+            summary_max_tokens=deps.config.summary_max_tokens,
         )
 
     agent = create_agent(

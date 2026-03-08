@@ -13,6 +13,10 @@ export interface UiSettings {
 
 export interface AgentSettings {
   maxDepth: number;
+  compressionThreshold: number;
+  maxMessages: number;
+  compressionKeepRatio: number;
+  summaryMaxTokens: number;
 }
 
 export interface Settings {
@@ -27,6 +31,10 @@ const defaultSettings: Settings = {
   },
   agent: {
     maxDepth: 8,
+    compressionThreshold: 80,
+    maxMessages: 120,
+    compressionKeepRatio: 20,
+    summaryMaxTokens: 1500,
   },
 };
 
@@ -99,6 +107,10 @@ export function useSettings(config: Config) {
   useEffect(() => {
     updateConfig(config, {
       max_depth: settings.agent.maxDepth,
+      compression_threshold: settings.agent.compressionThreshold / 100,
+      max_messages: settings.agent.maxMessages,
+      compression_keep_ratio: settings.agent.compressionKeepRatio / 100,
+      summary_max_tokens: settings.agent.summaryMaxTokens,
     }).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -113,7 +125,11 @@ export function useSettings(config: Config) {
         if (category === "agent") {
           const agentPatch: Record<string, unknown> = {};
           if (key === "maxDepth") agentPatch.max_depth = value;
-          updateConfig(config, agentPatch as { max_depth?: number }).catch(() => {});
+          if (key === "compressionThreshold") agentPatch.compression_threshold = (value as number) / 100;
+          if (key === "maxMessages") agentPatch.max_messages = value;
+          if (key === "compressionKeepRatio") agentPatch.compression_keep_ratio = (value as number) / 100;
+          if (key === "summaryMaxTokens") agentPatch.summary_max_tokens = value;
+          updateConfig(config, agentPatch).catch(() => {});
         }
 
         return updated;
