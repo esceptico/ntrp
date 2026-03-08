@@ -1,6 +1,6 @@
 [project]
 name = "ntrp"
-version = "0.9.0"
+version = "0.10.0"
 description = "Personal AI assistant with persistent memory and multi-source knowledge integration"
 readme = "README.md"
 license = {text = "MIT"}
