@@ -202,7 +202,8 @@ class Config(BaseSettings):
         raw = strip_oauth_prefix(v)
         models = get_models()
         if raw not in models:
-            raise ValueError(f"Unknown model: {v}. Available: {', '.join(models)}")
+            _logger.warning("Unknown model '%s' in settings, falling back to default", v)
+            return None
         return v
 
     @field_validator("embedding_model")
@@ -212,7 +213,8 @@ class Config(BaseSettings):
             return v
         models = get_embedding_models()
         if v not in models:
-            raise ValueError(f"Unknown embedding model: {v}. Available: {', '.join(models)}")
+            _logger.warning("Unknown embedding model '%s' in settings, falling back to default", v)
+            return None
         return v
 
     @field_validator("browser", mode="before")
