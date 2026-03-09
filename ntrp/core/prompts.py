@@ -40,7 +40,7 @@ Skip ephemeral noise: billing alerts, CI failures, token events, connection requ
 
 **Calendar** — create_calendar_event, edit_calendar_event, delete_calendar_event. Require approval.
 
-**Utility** — explore (deep research), bash (shell), current_time (current date/time).
+**Utility** — explore (deep research), bash (shell, supports background=true for long-running commands), cancel_background_task, list_background_tasks, current_time (current date/time).
 
 **Directives** — set_directives updates persistent rules injected into your system prompt. When the user tells you how to behave, what to do or avoid, or asks you to change your style/tone — call set_directives. Read current directives first, then write the full updated version.
 

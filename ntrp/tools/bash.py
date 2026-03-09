@@ -85,7 +85,7 @@ BASH_DESCRIPTION = f"""Execute a bash command in the user's shell.
 
 Each command runs in a fresh subprocess — no state (env vars, shell functions, cwd) persists between calls. Commands run in the server's working directory by default. Use the working_dir parameter to run in a different directory instead of 'cd'.
 
-Set background=true for commands that may take more than a few seconds (installs, builds, test suites, downloads). The command runs asynchronously and results are delivered automatically when it finishes.
+Set background=true for commands that may take more than a few seconds (installs, builds, test suites, downloads). The command runs asynchronously and results are delivered automatically when it finishes. Use list_background_tasks to check running tasks and cancel_background_task to stop one.
 
 PREFER OTHER TOOLS:
 - For searching files: use search() instead of grep/find
