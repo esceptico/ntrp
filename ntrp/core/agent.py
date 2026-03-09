@@ -210,6 +210,7 @@ class Agent:
                             results[event.tool_id] = event.result
                         yield event
                 except asyncio.CancelledError:
+                    self._append_tool_results(message.tool_calls, results)
                     raise
                 else:
                     self._append_tool_results(message.tool_calls, results)
