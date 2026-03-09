@@ -35,6 +35,8 @@ async def lifespan(app: FastAPI):
     app.state.runtime = runtime
     app.state.bus_registry = BusRegistry()
     yield
+    app.state.bus_registry.shutdown_event.set()
+    await app.state.bus_registry.wait_streams_done()
     await runtime.close()
 
 
@@ -146,9 +148,10 @@ async def list_tools(runtime: Runtime = Depends(get_runtime)):
 
 async def _event_stream(session_id: str, bus_registry: BusRegistry) -> AsyncGenerator[str]:
     bus = bus_registry.get_or_create(session_id)
+    bus_registry.stream_started()
     last_event_at = time.monotonic()
     try:
-        while True:
+        while not bus_registry.shutdown_event.is_set():
             event = await bus.get(timeout=0.5)
             if event is None:
                 if time.monotonic() - last_event_at >= KEEPALIVE_INTERVAL:
@@ -159,6 +162,8 @@ async def _event_stream(session_id: str, bus_registry: BusRegistry) -> AsyncGene
             yield event.to_sse_string()
     except asyncio.CancelledError:
         pass
+    finally:
+        bus_registry.stream_stopped()
 
 
 @app.get("/chat/events/{session_id}")
