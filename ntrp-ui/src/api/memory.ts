@@ -65,8 +65,8 @@ export async function getFacts(config: Config, limit = 50): Promise<{
   return api.get<{ facts: Fact[]; total: number }>(`${config.serverUrl}/facts?limit=${limit}`);
 }
 
-export async function getFactDetails(config: Config, factId: number): Promise<FactDetails> {
-  return api.get<FactDetails>(`${config.serverUrl}/facts/${factId}`);
+export async function getFactDetails(config: Config, factId: number, signal?: AbortSignal): Promise<FactDetails> {
+  return api.get<FactDetails>(`${config.serverUrl}/facts/${factId}`, { signal });
 }
 
 export async function updateFact(
@@ -108,8 +108,8 @@ export async function getObservations(config: Config, limit = 50): Promise<{
   return api.get<{ observations: Observation[] }>(`${config.serverUrl}/observations?limit=${limit}`);
 }
 
-export async function getObservationDetails(config: Config, observationId: number): Promise<ObservationDetails> {
-  return api.get<ObservationDetails>(`${config.serverUrl}/observations/${observationId}`);
+export async function getObservationDetails(config: Config, observationId: number, signal?: AbortSignal): Promise<ObservationDetails> {
+  return api.get<ObservationDetails>(`${config.serverUrl}/observations/${observationId}`, { signal });
 }
 
 export async function updateObservation(
@@ -140,8 +140,8 @@ export async function getDreams(config: Config, limit = 50): Promise<{
   return api.get<{ dreams: Dream[] }>(`${config.serverUrl}/dreams?limit=${limit}`);
 }
 
-export async function getDreamDetails(config: Config, dreamId: number): Promise<DreamDetails> {
-  return api.get<DreamDetails>(`${config.serverUrl}/dreams/${dreamId}`);
+export async function getDreamDetails(config: Config, dreamId: number, signal?: AbortSignal): Promise<DreamDetails> {
+  return api.get<DreamDetails>(`${config.serverUrl}/dreams/${dreamId}`, { signal });
 }
 
 export async function deleteDream(config: Config, dreamId: number): Promise<{ status: string }> {

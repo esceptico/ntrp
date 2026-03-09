@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import type { Automation } from "../../../api/client.js";
 import { colors } from "../../ui/index.js";
-import { formatRelativeTime } from "../../../lib/format.js";
+import { formatRelativeTime, triggerLabel } from "../../../lib/format.js";
 
 interface ResultViewerProps {
   automation: Automation;
@@ -10,17 +10,6 @@ interface ResultViewerProps {
   setScroll: React.Dispatch<React.SetStateAction<number>>;
   width: number;
   height: number;
-}
-
-function triggerLabel(trigger: Automation["trigger"]): string {
-  switch (trigger.type) {
-    case "time": {
-      let base = trigger.every ? `every ${trigger.every}` : trigger.at ?? "";
-      if (trigger.start && trigger.end) base += ` (${trigger.start}\u2013${trigger.end})`;
-      return trigger.days ? `${base}  ${trigger.days}` : base;
-    }
-    case "event": return `on:${trigger.event_type}`;
-  }
 }
 
 export function ResultViewer({ automation, scroll, setScroll, width, height }: ResultViewerProps) {

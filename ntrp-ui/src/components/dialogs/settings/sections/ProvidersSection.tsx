@@ -1,116 +1,67 @@
 import { colors, Hints } from "../../../ui/index.js";
+import type { ProviderInfo } from "../../../../api/client.js";
 import type { UseProvidersResult } from "../../../../hooks/settings/useProviders.js";
-import { MaskedKeyInput } from "./shared.js";
+import { CredentialSection } from "./CredentialSection.js";
 
 interface ProvidersSectionProps {
   providers: UseProvidersResult;
   accent: string;
 }
 
-export function ProvidersSection({ providers: s, accent }: ProvidersSectionProps) {
-  if (s.items.length === 0) {
+function renderStatus(provider: ProviderInfo, _selected: boolean) {
+  if (provider.id === "custom") {
     return (
-      <box flexDirection="column">
-        <text><span fg={colors.text.muted}>  Loading...</span></text>
-      </box>
+      <text>
+        <span fg={provider.connected ? colors.status.success : colors.text.disabled}>
+          {provider.model_count ? `${provider.model_count} model${provider.model_count !== 1 ? "s" : ""}` : "none"}
+        </span>
+      </text>
     );
   }
+  if (provider.connected) {
+    return (
+      <text>
+        <span fg={colors.status.success}>{"\u2713 "}</span>
+        <span fg={colors.text.disabled}>{provider.key_hint ?? (provider.id === "claude_oauth" ? "oauth" : "")}</span>
+        {provider.from_env && <span fg={colors.text.muted}>{" (env)"}</span>}
+      </text>
+    );
+  }
+  return <text><span fg={colors.text.disabled}>not connected</span></text>;
+}
 
-  const current = s.items[s.selectedIndex];
-  const isOAuth = current?.id === "claude_oauth";
-  const isCustom = current?.id === "custom";
+function renderHints(item: ProviderInfo) {
+  if (item?.id === "custom") {
+    return <text><span fg={colors.text.disabled}>use /connect to manage custom models</span></text>;
+  }
+  if (item?.id === "claude_oauth") {
+    return item.connected
+      ? <Hints items={[["d", "disconnect"]]} />
+      : <Hints items={[["enter", "connect via browser"]]} />;
+  }
+  if (item?.connected && !item.from_env) {
+    return null;
+  }
+  if (item?.from_env) {
+    return <text><span fg={colors.text.disabled}>set via environment variable</span></text>;
+  }
+  return null;
+}
 
+export function ProvidersSection({ providers, accent }: ProvidersSectionProps) {
   return (
     <box flexDirection="column">
-      {s.items.map((provider, i) => {
-        const selected = i === s.selectedIndex;
-        const providerIsCustom = provider.id === "custom";
-        const providerIsOAuth = provider.id === "claude_oauth";
-        const isEditing = selected && s.editing && !providerIsCustom && !providerIsOAuth;
-
-        return (
-          <box key={provider.id} flexDirection="column">
-            <box flexDirection="row">
-              <text>
-                <span fg={selected ? accent : colors.text.disabled}>{selected ? "\u25B8 " : "  "}</span>
-                <span fg={selected ? colors.text.primary : colors.text.secondary}>{provider.name.padEnd(28)}</span>
-              </text>
-              {providerIsCustom ? (
-                <text>
-                  <span fg={provider.connected ? colors.status.success : colors.text.disabled}>
-                    {provider.model_count ? `${provider.model_count} model${provider.model_count !== 1 ? "s" : ""}` : "none"}
-                  </span>
-                </text>
-              ) : (
-                <text>
-                  {provider.connected ? (
-                    <>
-                      <span fg={colors.status.success}>{"\u2713 "}</span>
-                      <span fg={colors.text.disabled}>{provider.key_hint ?? (providerIsOAuth ? "oauth" : "")}</span>
-                      {provider.from_env && <span fg={colors.text.muted}>{" (env)"}</span>}
-                    </>
-                  ) : (
-                    <span fg={colors.text.disabled}>not connected</span>
-                  )}
-                </text>
-              )}
-            </box>
-            {isEditing && (
-              <box marginLeft={2}>
-                <box flexDirection="row">
-                  <text><span fg={colors.text.primary}>{"  API Key".padEnd(14)}</span></text>
-                  <MaskedKeyInput value={s.keyValue} cursor={s.keyCursor} />
-                </box>
-              </box>
-            )}
-            {selected && s.confirmDisconnect && (
-              <box marginLeft={2}>
-                <text><span fg={colors.status.warning}>  Disconnect {provider.name}? (y/n)</span></text>
-              </box>
-            )}
-          </box>
-        );
-      })}
-
-      {s.error && (
-        <box marginTop={1}>
-          <text><span fg={colors.status.error}>  {s.error}</span></text>
-        </box>
-      )}
-
-      {s.saving && (
-        <box marginTop={1}>
-          <text><span fg={colors.text.muted}>  Saving...</span></text>
-        </box>
-      )}
-
-      {s.oauthConnecting && (
+      <CredentialSection
+        state={providers}
+        accent={accent}
+        labelWidth={28}
+        renderStatus={renderStatus}
+        renderHints={renderHints}
+        isEditable={(p) => p.id !== "custom" && p.id !== "claude_oauth"}
+      />
+      {providers.oauthConnecting && (
         <box marginTop={1}>
           <text><span fg={colors.text.muted}>  Waiting for browser login...</span></text>
-        </box>
-      )}
-
-      {!s.editing && !s.confirmDisconnect && !s.saving && !s.oauthConnecting && (
-        <box marginTop={1} marginLeft={2}>
-          {isCustom ? (
-            <text><span fg={colors.text.disabled}>use /connect to manage custom models</span></text>
-          ) : isOAuth && current.connected ? (
-            <Hints items={[["d", "disconnect"]]} />
-          ) : isOAuth && !current.connected ? (
-            <Hints items={[["enter", "connect via browser"]]} />
-          ) : current && current.connected && !current.from_env ? (
-            <Hints items={[["enter", "edit"], ["d", "disconnect"]]} />
-          ) : current?.from_env ? (
-            <text><span fg={colors.text.disabled}>set via environment variable</span></text>
-          ) : (
-            <Hints items={[["enter", "add key"]]} />
-          )}
-        </box>
-      )}
-
-      {s.editing && (
-        <box marginTop={1} marginLeft={2}>
-          <Hints items={[["enter", "save"], ["esc", "cancel"]]} />
         </box>
       )}
     </box>

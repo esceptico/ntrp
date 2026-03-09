@@ -1,62 +1,19 @@
-import type { Observation, ObservationDetails } from "../../../api/client.js";
+import type { Observation } from "../../../api/client.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
-import { formatTimeAgo } from "../../../lib/format.js";
-import { ObservationDetailsView, type ObsDetailSection } from "./ObservationDetailsView.js";
+import { shortTime } from "../../../lib/format.js";
+import type { ObservationsTabState } from "../../../hooks/useObservationsTab.js";
+import { ObservationDetailsView } from "./ObservationDetailsView.js";
 import { ListDetailSection } from "./ListDetailSection.js";
 
 interface ObservationsSectionProps {
-  observations: Observation[];
-  selectedIndex: number;
-  obsDetails: ObservationDetails | null;
-  detailsLoading: boolean;
-  searchQuery: string;
-  searchMode: boolean;
-  focusPane: "list" | "details";
+  tab: ObservationsTabState;
   height: number;
   width: number;
-  detailSection: ObsDetailSection;
-  textExpanded: boolean;
-  textScrollOffset: number;
-  factsIndex: number;
-  editMode: boolean;
-  editText: string;
-  cursorPos: number;
-  setEditText: (text: string | ((prev: string) => string)) => void;
-  setCursorPos: (pos: number | ((prev: number) => number)) => void;
-  confirmDelete: boolean;
   saving: boolean;
-  onItemClick?: (index: number) => void;
 }
 
-function shortTime(iso: string): string {
-  const full = formatTimeAgo(iso);
-  return full.replace(" ago", "");
-}
-
-export function ObservationsSection({
-  observations,
-  selectedIndex,
-  obsDetails,
-  detailsLoading,
-  searchQuery,
-  searchMode,
-  focusPane,
-  height,
-  width,
-  detailSection,
-  textExpanded,
-  textScrollOffset,
-  factsIndex,
-  editMode,
-  editText,
-  cursorPos,
-  setEditText,
-  setCursorPos,
-  confirmDelete,
-  saving,
-  onItemClick,
-}: ObservationsSectionProps) {
+export function ObservationsSection({ tab, height, width, saving }: ObservationsSectionProps) {
   const { accentValue } = useAccentColor();
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
   const detailWidth = Math.max(0, width - listWidth - 1);
@@ -80,35 +37,35 @@ export function ObservationsSection({
 
   return (
     <ListDetailSection
-      items={observations}
-      selectedIndex={selectedIndex}
+      items={tab.filteredObservations}
+      selectedIndex={tab.selectedIndex}
       renderItem={renderItem}
       getKey={(o) => o.id}
       emptyMessage="No observations synthesized yet"
-      searchQuery={searchQuery}
-      searchMode={searchMode}
-      focusPane={focusPane}
+      searchQuery={tab.searchQuery}
+      searchMode={tab.searchMode}
+      focusPane={tab.focusPane}
       height={height}
       width={width}
       itemHeight={3}
-      onItemClick={onItemClick}
+      onItemClick={tab.setSelectedIndex}
       details={
         <ObservationDetailsView
-          details={obsDetails}
-          loading={detailsLoading}
+          details={tab.obsDetails}
+          loading={tab.detailsLoading}
           width={detailWidth}
           height={height}
-          isFocused={focusPane === "details"}
-          focusedSection={detailSection}
-          textExpanded={textExpanded}
-          textScrollOffset={textScrollOffset}
-          factsIndex={factsIndex}
-          editMode={editMode}
-          editText={editText}
-          cursorPos={cursorPos}
-          setEditText={setEditText}
-          setCursorPos={setCursorPos}
-          confirmDelete={confirmDelete}
+          isFocused={tab.focusPane === "details"}
+          focusedSection={tab.detailSection}
+          textExpanded={tab.textExpanded}
+          textScrollOffset={tab.textScrollOffset}
+          factsIndex={tab.factsIndex}
+          editMode={tab.editMode}
+          editText={tab.editText}
+          cursorPos={tab.cursorPos}
+          setEditText={tab.setEditText}
+          setCursorPos={tab.setCursorPos}
+          confirmDelete={tab.confirmDelete}
           saving={saving}
         />
       }

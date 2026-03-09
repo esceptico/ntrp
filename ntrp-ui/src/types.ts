@@ -135,6 +135,17 @@ export interface PendingApproval {
 
 export type ApprovalResult = "once" | "always" | "reject";
 
+export interface TokenUsage {
+  prompt: number;
+  completion: number;
+  cache_read: number;
+  cache_write: number;
+  cost: number;
+  lastCost: number;
+}
+
+export const ZERO_USAGE: Readonly<TokenUsage> = Object.freeze({ prompt: 0, completion: 0, cache_read: 0, cache_write: 0, cost: 0, lastCost: 0 });
+
 export interface Config {
   serverUrl: string;
   apiKey: string;

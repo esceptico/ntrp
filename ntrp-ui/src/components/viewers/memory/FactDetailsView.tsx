@@ -2,6 +2,7 @@ import type { FactDetails } from "../../../api/client.js";
 import { colors, truncateText, ExpandableText, ScrollableList, TextEditArea } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import { formatTimeAgo } from "../../../lib/format.js";
+import { DeleteConfirmation } from "./DeleteConfirmation.js";
 
 // Section indices for keyboard navigation
 export const FACT_SECTIONS = {
@@ -53,6 +54,8 @@ export function FactDetailsView({
   confirmDelete,
   saving,
 }: FactDetailsViewProps) {
+  const { accentValue } = useAccentColor();
+
   if (loading) {
     return <text><span fg={colors.text.muted}>Loading...</span></text>;
   }
@@ -64,8 +67,6 @@ export function FactDetailsView({
       </box>
     );
   }
-
-  const { accentValue } = useAccentColor();
   const { fact, entities, linked_facts } = details;
   const textColor = isFocused ? colors.text.primary : colors.text.secondary;
   const labelColor = colors.text.muted;
@@ -77,18 +78,7 @@ export function FactDetailsView({
   const textWidth = width - 2;
 
   if (confirmDelete) {
-    return (
-      <box flexDirection="column" width={width} paddingLeft={1}>
-        <text>
-          <span fg={colors.status.warning}>
-            Delete this fact? This will remove {details.entities.length} entities, {details.linked_facts.length} links.
-          </span>
-        </text>
-        <box marginTop={1}>
-          <text><span fg={colors.text.muted}>Press y to confirm, any other key to cancel</span></text>
-        </box>
-      </box>
-    );
+    return <DeleteConfirmation width={width} message={`Delete this fact? This will remove ${details.entities.length} entities, ${details.linked_facts.length} links.`} />;
   }
 
   if (editMode) {

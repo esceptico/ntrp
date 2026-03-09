@@ -1,19 +1,14 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { Config } from "../types.js";
 import type { Key } from "./useKeypress.js";
-import {
-  getFactDetails,
-  type Fact,
-  type FactDetails,
-} from "../api/client.js";
-import { getTextMaxScroll } from "../components/ui/index.js";
-import {
-  FACT_SECTIONS,
-  type FactDetailSection,
-  getFactSectionMaxIndex,
-} from "../components/viewers/memory/FactDetailsView.js";
+import { getFactDetails, type Fact, type FactDetails } from "../api/client.js";
+import { FACT_SECTIONS, type FactDetailSection, getFactSectionMaxIndex } from "../components/viewers/memory/FactDetailsView.js";
+import { useListDetail, type SortOrder, type ListKeyHelpers } from "./useListDetail.js";
 
-export type SortOrder = "recent" | "oldest";
+export type { SortOrder };
+
+const filterFact = (f: Fact, q: string) => f.text.toLowerCase().includes(q);
 
 export interface FactsTabState {
   filteredFacts: Fact[];
@@ -51,247 +46,78 @@ export function useFactsTab(
   facts: Fact[],
   contentWidth: number
 ): FactsTabState {
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [factDetails, setFactDetails] = useState<FactDetails | null>(null);
-  const [detailsLoading, setDetailsLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchMode, setSearchMode] = useState(false);
-  const [focusPane, setFocusPane] = useState<"list" | "details">("list");
   const [sourceFilter, setSourceFilter] = useState("all");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("recent");
-
-  const [detailSection, setDetailSection] = useState<FactDetailSection>(FACT_SECTIONS.TEXT);
-  const [textExpanded, setTextExpanded] = useState(false);
-  const [textScrollOffset, setTextScrollOffset] = useState(0);
-  const [entitiesIndex, setEntitiesIndex] = useState(0);
-  const [linkedIndex, setLinkedIndex] = useState(0);
-  const [editMode, setEditMode] = useState(false);
-  const [editText, setEditText] = useState("");
-  const [cursorPos, setCursorPos] = useState(0);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const detailsRef = useRef<FactDetails | null>(null);
 
   const availableSources = useMemo(() => {
     const sources = new Set(facts.map((f) => f.source_type));
     return ["all", ...Array.from(sources).sort()];
   }, [facts]);
 
-  const filteredFacts = useMemo(() => {
-    let result = facts;
-    if (sourceFilter !== "all") {
-      result = result.filter((f) => f.source_type === sourceFilter);
-    }
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((f) => f.text.toLowerCase().includes(q));
-    }
-    if (sortOrder === "oldest") {
-      result = [...result].reverse();
-    }
-    return result;
-  }, [facts, searchQuery, sourceFilter, sortOrder]);
+  const sourceFiltered = useMemo(() => {
+    if (sourceFilter === "all") return facts;
+    return facts.filter((f) => f.source_type === sourceFilter);
+  }, [facts, sourceFilter]);
 
-  const selectedFactId = filteredFacts[selectedIndex]?.id;
-
-  const resetDetailState = useCallback(() => {
-    setDetailSection(FACT_SECTIONS.TEXT);
-    setTextExpanded(false);
-    setTextScrollOffset(0);
-    setEntitiesIndex(0);
-    setLinkedIndex(0);
-    setEditMode(false);
-    setEditText("");
-    setCursorPos(0);
-    setConfirmDelete(false);
-  }, []);
-
-  useEffect(() => {
-    if (!selectedFactId) {
-      setFactDetails(null);
-      return;
+  const onListKey = useCallback((key: Key, { setSelectedIndex }: ListKeyHelpers) => {
+    if (key.name === "s") {
+      setSourceFilter((current) => {
+        const idx = availableSources.indexOf(current);
+        return availableSources[(idx + 1) % availableSources.length];
+      });
+      setSelectedIndex(0);
+      return true;
     }
-    setDetailsLoading(true);
-    resetDetailState();
-    getFactDetails(config, selectedFactId)
-      .then(setFactDetails)
-      .catch(() => setFactDetails(null))
-      .finally(() => setDetailsLoading(false));
-  }, [selectedFactId, config, resetDetailState]);
+    return false;
+  }, [availableSources]);
 
-  const handleKeys = useCallback(
-    (key: Key) => {
-      if (key.name === "tab") {
-        setFocusPane((p) => (p === "list" ? "details" : "list"));
-        if (focusPane === "list") {
-          resetDetailState();
-        }
-        return;
-      }
-      if (focusPane === "details") {
-        if (key.name === "return" && detailSection === FACT_SECTIONS.TEXT) {
-          setTextExpanded((e) => !e);
-          setTextScrollOffset(0);
-          return;
-        }
-        if (key.name === "up" || key.name === "k") {
-          if (detailSection === FACT_SECTIONS.TEXT) {
-            if (textExpanded && textScrollOffset > 0) {
-              setTextScrollOffset((s) => s - 1);
-            }
-            return;
-          }
-          if (detailSection === FACT_SECTIONS.ENTITIES) {
-            if (entitiesIndex > 0) {
-              setEntitiesIndex((i) => i - 1);
-            } else {
-              setDetailSection(FACT_SECTIONS.TEXT);
-            }
-            return;
-          }
-          if (detailSection === FACT_SECTIONS.LINKED) {
-            if (linkedIndex > 0) {
-              setLinkedIndex((i) => i - 1);
-            } else {
-              setDetailSection(FACT_SECTIONS.ENTITIES);
-              const maxEntities = getFactSectionMaxIndex(factDetails, FACT_SECTIONS.ENTITIES);
-              setEntitiesIndex(maxEntities);
-            }
-            return;
-          }
-        }
-        if (key.name === "down" || key.name === "j") {
-          if (detailSection === FACT_SECTIONS.TEXT) {
-            if (textExpanded && factDetails) {
-              const listWidth = Math.min(45, Math.max(30, Math.floor(contentWidth * 0.4)));
-              const detailWidth = Math.max(0, contentWidth - listWidth - 1) - 2;
-              const maxScroll = getTextMaxScroll(factDetails.fact.text, detailWidth, 10);
-              if (textScrollOffset < maxScroll) {
-                setTextScrollOffset((s) => s + 1);
-                return;
-              }
-            }
-            setDetailSection(FACT_SECTIONS.ENTITIES);
-            setEntitiesIndex(0);
-            return;
-          }
-          if (detailSection === FACT_SECTIONS.ENTITIES) {
-            const maxIndex = getFactSectionMaxIndex(factDetails, FACT_SECTIONS.ENTITIES);
-            if (entitiesIndex < maxIndex) {
-              setEntitiesIndex((i) => i + 1);
-            } else {
-              setDetailSection(FACT_SECTIONS.LINKED);
-              setLinkedIndex(0);
-            }
-            return;
-          }
-          if (detailSection === FACT_SECTIONS.LINKED) {
-            const maxIndex = getFactSectionMaxIndex(factDetails, FACT_SECTIONS.LINKED);
-            if (linkedIndex < maxIndex) {
-              setLinkedIndex((i) => i + 1);
-            }
-            return;
-          }
-        }
-        return;
-      }
-      // List pane focused — search mode
-      if (searchMode) {
-        if (key.name === "escape") {
-          if (searchQuery) {
-            setSearchQuery("");
-            setSelectedIndex(0);
-          } else {
-            setSearchMode(false);
-          }
-          return;
-        }
-        if (key.name === "backspace") {
-          setSearchQuery((q) => q.slice(0, -1));
-          setSelectedIndex(0);
-          return;
-        }
-        if (key.name === "return") {
-          setSearchMode(false);
-          return;
-        }
-        if (key.insertable && !key.ctrl && !key.meta && key.sequence) {
-          const char = key.name === "space" ? " " : key.sequence;
-          setSearchQuery((q) => q + char);
-          setSelectedIndex(0);
-        }
-        return;
-      }
-      // List pane focused — normal mode
-      if (key.sequence === "/") {
-        setSearchMode(true);
-        return;
-      }
-      if (key.name === "s") {
-        setSourceFilter((current) => {
-          const idx = availableSources.indexOf(current);
-          return availableSources[(idx + 1) % availableSources.length];
-        });
-        setSelectedIndex(0);
-        return;
-      }
-      if (key.name === "o") {
-        setSortOrder((current) => (current === "recent" ? "oldest" : "recent"));
-        setSelectedIndex(0);
-        return;
-      }
-      if (key.name === "up" || key.name === "k") {
-        setSelectedIndex((i) => Math.max(0, i - 1));
-        return;
-      }
-      if (key.name === "down" || key.name === "j") {
-        setSelectedIndex((i) => Math.min(filteredFacts.length - 1, i + 1));
-        return;
-      }
-    },
-    [
-      focusPane,
-      detailSection,
-      textExpanded,
-      textScrollOffset,
-      entitiesIndex,
-      linkedIndex,
-      factDetails,
-      filteredFacts.length,
-      contentWidth,
-      resetDetailState,
-      availableSources,
-      searchMode,
-      searchQuery,
-    ]
-  );
+  const ld = useListDetail({
+    items: sourceFiltered,
+    filterFn: filterFact,
+    sectionCount: 3,
+    getSectionMaxIndex: (section: number) => getFactSectionMaxIndex(detailsRef.current, section as FactDetailSection),
+    getScrollText: (): string | undefined => detailsRef.current?.fact.text,
+    contentWidth,
+    onListKey,
+  });
+
+  const currentId = ld.filtered[ld.selectedIndex]?.id;
+
+  const { data: factDetails = null, isLoading: detailsLoading } = useQuery({
+    queryKey: ["factDetails", currentId],
+    queryFn: ({ signal }) => getFactDetails(config, currentId!, signal),
+    enabled: !!currentId,
+  });
+  detailsRef.current = factDetails;
 
   return {
-    filteredFacts,
-    selectedIndex,
+    filteredFacts: ld.filtered,
+    selectedIndex: ld.selectedIndex,
     factDetails,
     detailsLoading,
-    searchQuery,
-    searchMode,
-    focusPane,
-    detailSection,
-    textExpanded,
-    textScrollOffset,
-    entitiesIndex,
-    linkedIndex,
-    editMode,
-    editText,
-    cursorPos,
-    confirmDelete,
+    searchQuery: ld.searchQuery,
+    searchMode: ld.searchMode,
+    focusPane: ld.focusPane,
+    detailSection: ld.detailSection as FactDetailSection,
+    textExpanded: ld.textExpanded,
+    textScrollOffset: ld.textScrollOffset,
+    entitiesIndex: ld.sectionIndices[FACT_SECTIONS.ENTITIES],
+    linkedIndex: ld.sectionIndices[FACT_SECTIONS.LINKED],
+    editMode: ld.editMode,
+    editText: ld.editText,
+    cursorPos: ld.cursorPos,
+    confirmDelete: ld.confirmDelete,
     sourceFilter,
-    sortOrder,
+    sortOrder: ld.sortOrder,
     availableSources,
-    handleKeys,
-    setSearchQuery,
-    setSelectedIndex,
-    setFocusPane,
-    resetDetailState,
-    setEditMode,
-    setEditText,
-    setCursorPos,
-    setConfirmDelete,
+    handleKeys: ld.handleKeys,
+    setSearchQuery: ld.setSearchQuery,
+    setSelectedIndex: ld.setSelectedIndex,
+    setFocusPane: ld.setFocusPane,
+    resetDetailState: ld.resetDetailState,
+    setEditMode: ld.setEditMode,
+    setEditText: ld.setEditText,
+    setCursorPos: ld.setCursorPos,
+    setConfirmDelete: ld.setConfirmDelete,
   };
 }

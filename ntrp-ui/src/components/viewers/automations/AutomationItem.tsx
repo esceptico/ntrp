@@ -1,25 +1,11 @@
 import type { Automation } from "../../../api/client.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
-import { formatRelativeTime } from "../../../lib/format.js";
+import { formatRelativeTime, triggerLabel } from "../../../lib/format.js";
 
 interface AutomationItemProps {
   item: Automation;
   context: RenderItemContext;
   textWidth: number;
-}
-
-function triggerLabel(trigger: Automation["trigger"]): string {
-  switch (trigger.type) {
-    case "time": {
-      let base = trigger.every ? `every ${trigger.every}` : trigger.at ?? "";
-      if (trigger.start && trigger.end) base += ` (${trigger.start}\u2013${trigger.end})`;
-      return trigger.days ? `${base}  ${trigger.days}` : base;
-    }
-    case "event":
-      return trigger.event_type === "event_approaching" && trigger.lead_minutes
-        ? `on:${trigger.event_type} (${trigger.lead_minutes}m)`
-        : `on:${trigger.event_type}`;
-  }
 }
 
 // Fixed 3-line layout: status+meta, description, timing

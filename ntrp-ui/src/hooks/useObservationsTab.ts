@@ -1,19 +1,14 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { Config } from "../types.js";
 import type { Key } from "./useKeypress.js";
-import {
-  getObservationDetails,
-  type Observation,
-  type ObservationDetails,
-} from "../api/client.js";
-import { getTextMaxScroll } from "../components/ui/index.js";
-import {
-  OBS_SECTIONS,
-  type ObsDetailSection,
-  getObsSectionMaxIndex,
-} from "../components/viewers/memory/ObservationDetailsView.js";
+import { getObservationDetails, type Observation, type ObservationDetails } from "../api/client.js";
+import { OBS_SECTIONS, type ObsDetailSection, getObsSectionMaxIndex } from "../components/viewers/memory/ObservationDetailsView.js";
+import { useListDetail, type SortOrder } from "./useListDetail.js";
 
-export type SortOrder = "recent" | "oldest";
+export type { SortOrder };
+
+const filterObs = (o: Observation, q: string) => o.summary.toLowerCase().includes(q);
 
 export interface ObservationsTabState {
   filteredObservations: Observation[];
@@ -48,203 +43,51 @@ export function useObservationsTab(
   observations: Observation[],
   contentWidth: number
 ): ObservationsTabState {
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [obsDetails, setObsDetails] = useState<ObservationDetails | null>(null);
-  const [detailsLoading, setDetailsLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchMode, setSearchMode] = useState(false);
-  const [focusPane, setFocusPane] = useState<"list" | "details">("list");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("recent");
+  const detailsRef = useRef<ObservationDetails | null>(null);
 
-  const [detailSection, setDetailSection] = useState<ObsDetailSection>(OBS_SECTIONS.TEXT);
-  const [textExpanded, setTextExpanded] = useState(false);
-  const [textScrollOffset, setTextScrollOffset] = useState(0);
-  const [factsIndex, setFactsIndex] = useState(0);
-  const [editMode, setEditMode] = useState(false);
-  const [editText, setEditText] = useState("");
-  const [cursorPos, setCursorPos] = useState(0);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const ld = useListDetail({
+    items: observations,
+    filterFn: filterObs,
+    sectionCount: 2,
+    getSectionMaxIndex: (section: number) => getObsSectionMaxIndex(detailsRef.current, section as ObsDetailSection),
+    getScrollText: (): string | undefined => detailsRef.current?.observation.summary,
+    contentWidth,
+  });
 
-  const filteredObservations = useMemo(() => {
-    let result = observations;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((o) => o.summary.toLowerCase().includes(q));
-    }
-    if (sortOrder === "oldest") {
-      result = [...result].reverse();
-    }
-    return result;
-  }, [observations, searchQuery, sortOrder]);
+  const currentId = ld.filtered[ld.selectedIndex]?.id;
 
-  const selectedObsId = filteredObservations[selectedIndex]?.id;
-
-  const resetDetailState = useCallback(() => {
-    setDetailSection(OBS_SECTIONS.TEXT);
-    setTextExpanded(false);
-    setTextScrollOffset(0);
-    setFactsIndex(0);
-    setEditMode(false);
-    setEditText("");
-    setCursorPos(0);
-    setConfirmDelete(false);
-  }, []);
-
-  useEffect(() => {
-    if (!selectedObsId) {
-      setObsDetails(null);
-      return;
-    }
-    setDetailsLoading(true);
-    resetDetailState();
-    getObservationDetails(config, selectedObsId)
-      .then(setObsDetails)
-      .catch(() => setObsDetails(null))
-      .finally(() => setDetailsLoading(false));
-  }, [selectedObsId, config, resetDetailState]);
-
-  const handleKeys = useCallback(
-    (key: Key) => {
-      if (key.name === "tab") {
-        setFocusPane((p) => (p === "list" ? "details" : "list"));
-        if (focusPane === "list") {
-          resetDetailState();
-        }
-        return;
-      }
-      if (focusPane === "details") {
-        if (key.name === "return" && detailSection === OBS_SECTIONS.TEXT) {
-          setTextExpanded((e) => !e);
-          setTextScrollOffset(0);
-          return;
-        }
-        if (key.name === "up" || key.name === "k") {
-          if (detailSection === OBS_SECTIONS.TEXT) {
-            if (textExpanded && textScrollOffset > 0) {
-              setTextScrollOffset((s) => s - 1);
-            }
-            return;
-          }
-          if (detailSection === OBS_SECTIONS.FACTS) {
-            if (factsIndex > 0) {
-              setFactsIndex((i) => i - 1);
-            } else {
-              setDetailSection(OBS_SECTIONS.TEXT);
-            }
-            return;
-          }
-        }
-        if (key.name === "down" || key.name === "j") {
-          if (detailSection === OBS_SECTIONS.TEXT) {
-            if (textExpanded && obsDetails) {
-              const listWidth = Math.min(45, Math.max(30, Math.floor(contentWidth * 0.4)));
-              const detailWidth = Math.max(0, contentWidth - listWidth - 1) - 2;
-              const maxScroll = getTextMaxScroll(obsDetails.observation.summary, detailWidth, 10);
-              if (textScrollOffset < maxScroll) {
-                setTextScrollOffset((s) => s + 1);
-                return;
-              }
-            }
-            setDetailSection(OBS_SECTIONS.FACTS);
-            setFactsIndex(0);
-            return;
-          }
-          if (detailSection === OBS_SECTIONS.FACTS) {
-            const maxIndex = getObsSectionMaxIndex(obsDetails, OBS_SECTIONS.FACTS);
-            if (factsIndex < maxIndex) {
-              setFactsIndex((i) => i + 1);
-            }
-            return;
-          }
-        }
-        return;
-      }
-      // List pane focused — search mode
-      if (searchMode) {
-        if (key.name === "escape") {
-          if (searchQuery) {
-            setSearchQuery("");
-            setSelectedIndex(0);
-          } else {
-            setSearchMode(false);
-          }
-          return;
-        }
-        if (key.name === "backspace") {
-          setSearchQuery((q) => q.slice(0, -1));
-          setSelectedIndex(0);
-          return;
-        }
-        if (key.name === "return") {
-          setSearchMode(false);
-          return;
-        }
-        if (key.insertable && !key.ctrl && !key.meta && key.sequence) {
-          const char = key.name === "space" ? " " : key.sequence;
-          setSearchQuery((q) => q + char);
-          setSelectedIndex(0);
-        }
-        return;
-      }
-      // List pane focused — normal mode
-      if (key.sequence === "/") {
-        setSearchMode(true);
-        return;
-      }
-      if (key.name === "o") {
-        setSortOrder((current) => (current === "recent" ? "oldest" : "recent"));
-        setSelectedIndex(0);
-        return;
-      }
-      if (key.name === "up" || key.name === "k") {
-        setSelectedIndex((i) => Math.max(0, i - 1));
-        return;
-      }
-      if (key.name === "down" || key.name === "j") {
-        setSelectedIndex((i) => Math.min(filteredObservations.length - 1, i + 1));
-        return;
-      }
-    },
-    [
-      focusPane,
-      detailSection,
-      textExpanded,
-      textScrollOffset,
-      factsIndex,
-      obsDetails,
-      filteredObservations.length,
-      contentWidth,
-      resetDetailState,
-      searchMode,
-      searchQuery,
-    ]
-  );
+  const { data: obsDetails = null, isLoading: detailsLoading } = useQuery({
+    queryKey: ["obsDetails", currentId],
+    queryFn: ({ signal }) => getObservationDetails(config, currentId!, signal),
+    enabled: !!currentId,
+  });
+  detailsRef.current = obsDetails;
 
   return {
-    filteredObservations,
-    selectedIndex,
+    filteredObservations: ld.filtered,
+    selectedIndex: ld.selectedIndex,
     obsDetails,
     detailsLoading,
-    searchQuery,
-    searchMode,
-    focusPane,
-    detailSection,
-    textExpanded,
-    textScrollOffset,
-    factsIndex,
-    editMode,
-    editText,
-    cursorPos,
-    confirmDelete,
-    sortOrder,
-    handleKeys,
-    setSearchQuery,
-    setSelectedIndex,
-    setFocusPane,
-    resetDetailState,
-    setEditMode,
-    setEditText,
-    setCursorPos,
-    setConfirmDelete,
+    searchQuery: ld.searchQuery,
+    searchMode: ld.searchMode,
+    focusPane: ld.focusPane,
+    detailSection: ld.detailSection as ObsDetailSection,
+    textExpanded: ld.textExpanded,
+    textScrollOffset: ld.textScrollOffset,
+    factsIndex: ld.sectionIndices[OBS_SECTIONS.FACTS],
+    editMode: ld.editMode,
+    editText: ld.editText,
+    cursorPos: ld.cursorPos,
+    confirmDelete: ld.confirmDelete,
+    sortOrder: ld.sortOrder,
+    handleKeys: ld.handleKeys,
+    setSearchQuery: ld.setSearchQuery,
+    setSelectedIndex: ld.setSelectedIndex,
+    setFocusPane: ld.setFocusPane,
+    resetDetailState: ld.resetDetailState,
+    setEditMode: ld.setEditMode,
+    setEditText: ld.setEditText,
+    setCursorPos: ld.setCursorPos,
+    setConfirmDelete: ld.setConfirmDelete,
   };
 }

@@ -31,3 +31,28 @@ export function formatRelativeTime(iso: string | null): string {
 
   return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
 }
+
+export function shortTime(iso: string): string {
+  return formatTimeAgo(iso).replace(" ago", "");
+}
+
+export function formatCountdown(iso: string): string {
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff < 0) return "now";
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+export function triggerLabel(trigger: { type: string; every?: string; at?: string; start?: string; end?: string; days?: string; event_type?: string; lead_minutes?: number }, compact?: boolean): string {
+  if (trigger.type === "time") {
+    let base = trigger.every ? `every ${trigger.every}` : trigger.at ?? "";
+    if (trigger.start && trigger.end) base += ` (${trigger.start}\u2013${trigger.end})`;
+    return !compact && trigger.days ? `${base}  ${trigger.days}` : base;
+  }
+  return trigger.event_type === "event_approaching" && trigger.lead_minutes
+    ? `on:${trigger.event_type} (${trigger.lead_minutes}m)`
+    : `on:${trigger.event_type}`;
+}

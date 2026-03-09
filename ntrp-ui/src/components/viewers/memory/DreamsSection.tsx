@@ -1,50 +1,18 @@
-import type { Dream, DreamDetails } from "../../../api/client.js";
+import type { Dream } from "../../../api/client.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
-import { formatTimeAgo } from "../../../lib/format.js";
-import { DreamDetailsView, type DreamDetailSection } from "./DreamDetailsView.js";
+import { shortTime } from "../../../lib/format.js";
+import type { DreamsTabState } from "../../../hooks/useDreamsTab.js";
+import { DreamDetailsView } from "./DreamDetailsView.js";
 import { ListDetailSection } from "./ListDetailSection.js";
 
 interface DreamsSectionProps {
-  dreams: Dream[];
-  selectedIndex: number;
-  dreamDetails: DreamDetails | null;
-  detailsLoading: boolean;
-  searchQuery: string;
-  searchMode: boolean;
-  focusPane: "list" | "details";
+  tab: DreamsTabState;
   height: number;
   width: number;
-  detailSection: DreamDetailSection;
-  textExpanded: boolean;
-  textScrollOffset: number;
-  factsIndex: number;
-  confirmDelete: boolean;
-  onItemClick?: (index: number) => void;
 }
 
-function shortTime(iso: string): string {
-  const full = formatTimeAgo(iso);
-  return full.replace(" ago", "");
-}
-
-export function DreamsSection({
-  dreams,
-  selectedIndex,
-  dreamDetails,
-  detailsLoading,
-  searchQuery,
-  searchMode,
-  focusPane,
-  height,
-  width,
-  detailSection,
-  textExpanded,
-  textScrollOffset,
-  factsIndex,
-  confirmDelete,
-  onItemClick,
-}: DreamsSectionProps) {
+export function DreamsSection({ tab, height, width }: DreamsSectionProps) {
   const { accentValue } = useAccentColor();
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
   const detailWidth = Math.max(0, width - listWidth - 1);
@@ -68,30 +36,30 @@ export function DreamsSection({
 
   return (
     <ListDetailSection
-      items={dreams}
-      selectedIndex={selectedIndex}
+      items={tab.filteredDreams}
+      selectedIndex={tab.selectedIndex}
       renderItem={renderItem}
       getKey={(d) => d.id}
       emptyMessage="No dreams generated yet"
-      searchQuery={searchQuery}
-      searchMode={searchMode}
-      focusPane={focusPane}
+      searchQuery={tab.searchQuery}
+      searchMode={tab.searchMode}
+      focusPane={tab.focusPane}
       height={height}
       width={width}
       itemHeight={3}
-      onItemClick={onItemClick}
+      onItemClick={tab.setSelectedIndex}
       details={
         <DreamDetailsView
-          details={dreamDetails}
-          loading={detailsLoading}
+          details={tab.dreamDetails}
+          loading={tab.detailsLoading}
           width={detailWidth}
           height={height}
-          isFocused={focusPane === "details"}
-          focusedSection={detailSection}
-          textExpanded={textExpanded}
-          textScrollOffset={textScrollOffset}
-          factsIndex={factsIndex}
-          confirmDelete={confirmDelete}
+          isFocused={tab.focusPane === "details"}
+          focusedSection={tab.detailSection}
+          textExpanded={tab.textExpanded}
+          textScrollOffset={tab.textScrollOffset}
+          factsIndex={tab.factsIndex}
+          confirmDelete={tab.confirmDelete}
         />
       }
     />

@@ -1,64 +1,18 @@
-import type { Fact, FactDetails } from "../../../api/client.js";
+import type { Fact } from "../../../api/client.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
-
-import { formatTimeAgo } from "../../../lib/format.js";
-import { FactDetailsView, type FactDetailSection } from "./FactDetailsView.js";
+import { shortTime } from "../../../lib/format.js";
+import type { FactsTabState } from "../../../hooks/useFactsTab.js";
+import { FactDetailsView } from "./FactDetailsView.js";
 import { ListDetailSection } from "./ListDetailSection.js";
 
 interface FactsSectionProps {
-  facts: Fact[];
-  selectedIndex: number;
-  factDetails: FactDetails | null;
-  detailsLoading: boolean;
-  searchQuery: string;
-  searchMode: boolean;
-  focusPane: "list" | "details";
+  tab: FactsTabState;
   height: number;
   width: number;
-  detailSection: FactDetailSection;
-  textExpanded: boolean;
-  textScrollOffset: number;
-  entitiesIndex: number;
-  linkedIndex: number;
-  editMode: boolean;
-  editText: string;
-  cursorPos: number;
-  setEditText: (text: string | ((prev: string) => string)) => void;
-  setCursorPos: (pos: number | ((prev: number) => number)) => void;
-  confirmDelete: boolean;
   saving: boolean;
-  onItemClick?: (index: number) => void;
 }
 
-function shortTime(iso: string): string {
-  const full = formatTimeAgo(iso);
-  return full.replace(" ago", "");
-}
-
-export function FactsSection({
-  facts,
-  selectedIndex,
-  factDetails,
-  detailsLoading,
-  searchQuery,
-  searchMode,
-  focusPane,
-  height,
-  width,
-  detailSection,
-  textExpanded,
-  textScrollOffset,
-  entitiesIndex,
-  linkedIndex,
-  editMode,
-  editText,
-  cursorPos,
-  setEditText,
-  setCursorPos,
-  confirmDelete,
-  saving,
-  onItemClick,
-}: FactsSectionProps) {
+export function FactsSection({ tab, height, width, saving }: FactsSectionProps) {
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
   const detailWidth = Math.max(0, width - listWidth - 1);
 
@@ -80,36 +34,36 @@ export function FactsSection({
 
   return (
     <ListDetailSection
-      items={facts}
-      selectedIndex={selectedIndex}
+      items={tab.filteredFacts}
+      selectedIndex={tab.selectedIndex}
       renderItem={renderItem}
       getKey={(f) => f.id}
       emptyMessage="No facts stored yet"
-      searchQuery={searchQuery}
-      searchMode={searchMode}
-      focusPane={focusPane}
+      searchQuery={tab.searchQuery}
+      searchMode={tab.searchMode}
+      focusPane={tab.focusPane}
       height={height}
       width={width}
       itemHeight={3}
-      onItemClick={onItemClick}
+      onItemClick={tab.setSelectedIndex}
       details={
         <FactDetailsView
-          details={factDetails}
-          loading={detailsLoading}
+          details={tab.factDetails}
+          loading={tab.detailsLoading}
           width={detailWidth}
           height={height}
-          isFocused={focusPane === "details"}
-          focusedSection={detailSection}
-          textExpanded={textExpanded}
-          textScrollOffset={textScrollOffset}
-          entitiesIndex={entitiesIndex}
-          linkedIndex={linkedIndex}
-          editMode={editMode}
-          editText={editText}
-          cursorPos={cursorPos}
-          setEditText={setEditText}
-          setCursorPos={setCursorPos}
-          confirmDelete={confirmDelete}
+          isFocused={tab.focusPane === "details"}
+          focusedSection={tab.detailSection}
+          textExpanded={tab.textExpanded}
+          textScrollOffset={tab.textScrollOffset}
+          entitiesIndex={tab.entitiesIndex}
+          linkedIndex={tab.linkedIndex}
+          editMode={tab.editMode}
+          editText={tab.editText}
+          cursorPos={tab.cursorPos}
+          setEditText={tab.setEditText}
+          setCursorPos={tab.setCursorPos}
+          confirmDelete={tab.confirmDelete}
           saving={saving}
         />
       }

@@ -92,76 +92,15 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
             </box>
 
             {activeTab === "facts" && (
-              <FactsSection
-                facts={factsTab.filteredFacts}
-                selectedIndex={factsTab.selectedIndex}
-                factDetails={factsTab.factDetails}
-                detailsLoading={factsTab.detailsLoading}
-                searchQuery={factsTab.searchQuery}
-                searchMode={factsTab.searchMode}
-                focusPane={factsTab.focusPane}
-                height={sectionHeight}
-                width={width}
-                detailSection={factsTab.detailSection}
-                textExpanded={factsTab.textExpanded}
-                textScrollOffset={factsTab.textScrollOffset}
-                entitiesIndex={factsTab.entitiesIndex}
-                linkedIndex={factsTab.linkedIndex}
-                editMode={factsTab.editMode}
-                editText={factsTab.editText}
-                cursorPos={factsTab.cursorPos}
-                setEditText={factsTab.setEditText}
-                setCursorPos={factsTab.setCursorPos}
-                confirmDelete={factsTab.confirmDelete}
-                saving={saving}
-                onItemClick={factsTab.setSelectedIndex}
-              />
+              <FactsSection tab={factsTab} height={sectionHeight} width={width} saving={saving} />
             )}
 
             {activeTab === "observations" && (
-              <ObservationsSection
-                observations={obsTab.filteredObservations}
-                selectedIndex={obsTab.selectedIndex}
-                obsDetails={obsTab.obsDetails}
-                detailsLoading={obsTab.detailsLoading}
-                searchQuery={obsTab.searchQuery}
-                searchMode={obsTab.searchMode}
-                focusPane={obsTab.focusPane}
-                height={sectionHeight}
-                width={width}
-                detailSection={obsTab.detailSection}
-                textExpanded={obsTab.textExpanded}
-                textScrollOffset={obsTab.textScrollOffset}
-                factsIndex={obsTab.factsIndex}
-                editMode={obsTab.editMode}
-                editText={obsTab.editText}
-                cursorPos={obsTab.cursorPos}
-                setEditText={obsTab.setEditText}
-                setCursorPos={obsTab.setCursorPos}
-                confirmDelete={obsTab.confirmDelete}
-                saving={saving}
-                onItemClick={obsTab.setSelectedIndex}
-              />
+              <ObservationsSection tab={obsTab} height={sectionHeight} width={width} saving={saving} />
             )}
 
             {activeTab === "dreams" && (
-              <DreamsSection
-                dreams={dreamsTab.filteredDreams}
-                selectedIndex={dreamsTab.selectedIndex}
-                dreamDetails={dreamsTab.dreamDetails}
-                detailsLoading={dreamsTab.detailsLoading}
-                searchQuery={dreamsTab.searchQuery}
-                searchMode={dreamsTab.searchMode}
-                focusPane={dreamsTab.focusPane}
-                height={sectionHeight}
-                width={width}
-                detailSection={dreamsTab.detailSection}
-                textExpanded={dreamsTab.textExpanded}
-                textScrollOffset={dreamsTab.textScrollOffset}
-                factsIndex={dreamsTab.factsIndex}
-                confirmDelete={dreamsTab.confirmDelete}
-                onItemClick={dreamsTab.setSelectedIndex}
-              />
+              <DreamsSection tab={dreamsTab} height={sectionHeight} width={width} />
             )}
 
           </>
