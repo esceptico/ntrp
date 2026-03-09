@@ -47,6 +47,7 @@ interface CommandContext {
   switchToSession: (sessionId: string, history?: Message[]) => void;
   deleteSessionState: (sessionId: string) => void;
   revert: () => Promise<string | null>;
+  setInputText: (text: string) => void;
   refreshSidebar: () => void;
   logout: () => void;
 }
@@ -108,13 +109,13 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  undo: async ({ addMessage, revert }) => {
+  undo: async ({ addMessage, revert, setInputText }) => {
     const userMessage = await revert();
     if (!userMessage) {
       addMessage({ role: "error", content: "Nothing to undo" });
       return true;
     }
-    addMessage({ role: "status", content: `Reverted: ${userMessage.length > 100 ? userMessage.slice(0, 100) + "…" : userMessage}` });
+    setInputText(userMessage);
     return true;
   },
 

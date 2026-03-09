@@ -29,6 +29,8 @@ interface InputAreaProps {
   indexStatus?: { indexing: boolean; progress: { total: number; done: number }; reembedding?: boolean; reembed_progress?: { total: number; done: number } | null } | null;
   copiedFlash?: boolean;
   backgroundTaskCount?: number;
+  prefill?: string | null;
+  onPrefillConsumed?: () => void;
 }
 
 export const InputArea = memo(function InputArea({
@@ -45,6 +47,8 @@ export const InputArea = memo(function InputArea({
   indexStatus = null,
   copiedFlash = false,
   backgroundTaskCount = 0,
+  prefill = null,
+  onPrefillConsumed,
 }: InputAreaProps) {
   const { accentValue } = useAccentColor();
 
@@ -60,6 +64,15 @@ export const InputArea = memo(function InputArea({
       if (escTimeoutRef.current) clearTimeout(escTimeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (prefill != null && inputRef.current) {
+      inputRef.current.setText(prefill);
+      inputRef.current.editBuffer.setCursorByOffset(prefill.length);
+      setValue(prefill);
+      onPrefillConsumed?.();
+    }
+  }, [prefill, onPrefillConsumed]);
 
   const {
     filteredCommands,

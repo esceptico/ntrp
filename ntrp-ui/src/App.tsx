@@ -122,6 +122,8 @@ function AppContent({
 
   const { messageQueue, enqueue, clearQueue } = useMessageQueue(isStreaming, pendingApproval, sendMessage);
 
+  const [prefill, setPrefill] = useState<string | null>(null);
+
   const [copiedFlash, setCopiedFlash] = useState(false);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -197,6 +199,7 @@ function AppContent({
     switchSession,
     switchToSession,
     revert,
+    setInputText: setPrefill,
     deleteSessionState,
     refreshSidebar,
     logout,
@@ -405,6 +408,8 @@ function AppContent({
             indexStatus={indexStatus}
             copiedFlash={copiedFlash}
             backgroundTaskCount={backgroundTaskCount}
+            prefill={prefill}
+            onPrefillConsumed={() => setPrefill(null)}
           />
         </box>
       </DimensionsProvider>
