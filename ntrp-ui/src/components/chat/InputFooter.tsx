@@ -35,7 +35,7 @@ export function InputFooter({ isStreaming, status, accentValue, escHint, copiedF
             <CyclingStatus status={status} isStreaming={isStreaming} />
           )}
           {backgroundTaskCount != null && backgroundTaskCount > 0 && (
-            <text><span fg={colors.text.disabled}>{` · ${backgroundTaskCount} bg`}</span></text>
+            <text><span fg={colors.text.disabled}>{` · ${backgroundTaskCount} background tasks`}</span></text>
           )}
         </box>
         {isStreaming && (
