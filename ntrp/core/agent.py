@@ -14,7 +14,7 @@ from ntrp.core.parsing import normalize_assistant_message, parse_tool_calls
 from ntrp.core.state import AgentState, StateCallback
 from ntrp.core.tool_runner import ToolRunner
 from ntrp.events.internal import ContextCompressed
-from ntrp.events.sse import SSEEvent, TextEvent, ThinkingEvent, ToolResultEvent
+from ntrp.events.sse import BackgroundTaskEvent, SSEEvent, TextEvent, ThinkingEvent, ToolResultEvent
 from ntrp.llm.models import get_model
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
@@ -209,12 +209,17 @@ class Agent:
                         if isinstance(event, ToolResultEvent):
                             results[event.tool_id] = event.result
                         yield event
-                finally:
+                except asyncio.CancelledError:
+                    raise
+                else:
                     self._append_tool_results(message.tool_calls, results)
 
                 iteration += 1
         except asyncio.CancelledError:
-            self.ctx.background_tasks.cancel_all()
+            cancelled_tasks = self.ctx.background_tasks.cancel_all()
+            if self.ctx.io.emit and cancelled_tasks:
+                for task_id, command in cancelled_tasks:
+                    await self.ctx.io.emit(BackgroundTaskEvent(task_id=task_id, command=command, status="cancelled"))
             await self._set_state(AgentState.IDLE)
             yield "Cancelled."
 

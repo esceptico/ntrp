@@ -57,18 +57,40 @@ class BackgroundTaskRegistry:
 
     on_result: Callable[[list[dict]], Awaitable[None]] | None = None
     _tasks: dict[str, asyncio.Task] = field(default_factory=dict)
+    _commands: dict[str, str] = field(default_factory=dict)
 
     def generate_id(self) -> str:
         return secrets.token_hex(4)
 
-    def register(self, task_id: str, task: asyncio.Task) -> None:
-        self._tasks[task_id] = task
+    def _remove(self, task_id: str) -> None:
+        self._tasks.pop(task_id, None)
+        self._commands.pop(task_id, None)
 
-    def cancel_all(self) -> None:
-        for task in self._tasks.values():
+    def register(self, task_id: str, task: asyncio.Task, command: str) -> None:
+        self._tasks[task_id] = task
+        self._commands[task_id] = command
+        task.add_done_callback(lambda _: self._remove(task_id))
+
+    def cancel_all(self) -> list[tuple[str, str]]:
+        """Cancel all pending tasks. Returns list of (task_id, command) for cancelled tasks."""
+        cancelled: list[tuple[str, str]] = []
+        for task_id, task in list(self._tasks.items()):
             if not task.done():
+                command = self._commands[task_id]
                 task.cancel()
-        self._tasks.clear()
+                cancelled.append((task_id, command))
+        return cancelled
+
+    def cancel(self, task_id: str) -> str | None:
+        """Cancel a single task. Returns the command if cancelled, None if not found or already done."""
+        task = self._tasks.get(task_id)
+        if task is None or task.done():
+            return None
+        task.cancel()
+        return self._commands[task_id]
+
+    def list_pending(self) -> list[tuple[str, str]]:
+        return [(tid, self._commands[tid]) for tid, t in self._tasks.items() if not t.done()]
 
     async def inject(self, messages: list[dict]) -> None:
         if self.on_result:

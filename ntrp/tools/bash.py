@@ -205,6 +205,8 @@ class BashTool(Tool):
             try:
                 output = await asyncio.to_thread(execute_bash, command, working_dir, self.timeout)
                 status = "completed"
+            except asyncio.CancelledError:
+                return
             except Exception as e:
                 output = f"Error: {e}"
                 status = "failed"
@@ -260,7 +262,7 @@ class BashTool(Tool):
             await registry.inject(messages)
 
         task = asyncio.create_task(_run_background())
-        registry.register(task_id, task)
+        registry.register(task_id, task, command=command)
 
         if execution.ctx.io.emit:
             await execution.ctx.io.emit(BackgroundTaskEvent(task_id=task_id, command=command, status="started"))
@@ -269,3 +271,42 @@ class BashTool(Tool):
             content=f"Background task {task_id} started: {command}",
             preview=f"Background · {task_id}",
         )
+
+
+class CancelBackgroundTaskInput(BaseModel):
+    task_id: str = Field(description="The ID of the background task to cancel")
+
+
+class CancelBackgroundTaskTool(Tool):
+    name = "cancel_background_task"
+    display_name = "Cancel Background Task"
+    description = "Cancel a running background task by its ID."
+    input_model = CancelBackgroundTaskInput
+    mutates = True
+
+    async def execute(self, execution: ToolExecution, task_id: str, **kwargs: Any) -> ToolResult:
+        registry = execution.ctx.background_tasks
+        command = registry.cancel(task_id)
+        if command is None:
+            return ToolResult(content=f"No running task with ID {task_id}", preview="Not found", is_error=True)
+
+        emit = execution.ctx.io.emit
+        if emit:
+            await emit(BackgroundTaskEvent(task_id=task_id, command=command, status="cancelled"))
+
+        return ToolResult(content=f"Cancelled task {task_id}: {command}", preview=f"Cancelled · {task_id}")
+
+
+class ListBackgroundTasksTool(Tool):
+    name = "list_background_tasks"
+    display_name = "List Background Tasks"
+    description = "List all running background tasks."
+
+    async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult:
+        pending = execution.ctx.background_tasks.list_pending()
+        if not pending:
+            return ToolResult(content="No background tasks running.", preview="0 tasks")
+
+        lines = [f"- {tid}: {cmd}" for tid, cmd in pending]
+        content = f"{len(pending)} running:\n" + "\n".join(lines)
+        return ToolResult(content=content, preview=f"{len(pending)} tasks")
