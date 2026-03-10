@@ -60,6 +60,7 @@ def _store_tokens(token_data: dict) -> dict:
     }
     settings = load_user_settings()
     settings[SETTINGS_KEY] = oauth_data
+    settings.pop("claude_oauth_disconnected", None)
     save_user_settings(settings)
     _cached_tokens = oauth_data
     return oauth_data
@@ -75,8 +76,8 @@ def _load_tokens() -> dict | None:
         _cached_tokens = data
         return data
 
-    # Fallback: read from Claude Code credentials
-    if CLAUDE_CREDENTIALS_PATH.exists():
+    # Fallback: read from Claude Code credentials (skip if explicitly disconnected)
+    if not settings.get("claude_oauth_disconnected") and CLAUDE_CREDENTIALS_PATH.exists():
         try:
             creds = json.loads(CLAUDE_CREDENTIALS_PATH.read_text())
             oauth = creds.get("claudeAiOauth", {})
@@ -223,9 +224,18 @@ def is_configured() -> bool:
     return _load_tokens() is not None
 
 
-def clear() -> None:
+def clear_settings(settings: dict) -> None:
+    settings.pop(SETTINGS_KEY, None)
+    settings["claude_oauth_disconnected"] = True
+
+
+def clear_cache() -> None:
     global _cached_tokens
     _cached_tokens = None
+
+
+def clear() -> None:
+    clear_cache()
     settings = load_user_settings()
-    settings.pop(SETTINGS_KEY, None)
+    clear_settings(settings)
     save_user_settings(settings)

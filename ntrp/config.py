@@ -204,12 +204,15 @@ class Config(BaseSettings):
                 if not self.memory_model:
                     self.memory_model = f"{OAUTH_PREFIX}{memory}"
         # When OAuth is active without an Anthropic API key, prefix bare Anthropic models
-        if not self.anthropic_api_key and self.chat_model and is_oauth_model(self.chat_model):
-            anthropic_models = get_models_by_provider(Provider.ANTHROPIC)
-            for field in ("memory_model", "explore_model"):
-                val = getattr(self, field, None)
-                if val and not is_oauth_model(val) and val in anthropic_models:
-                    setattr(self, field, f"{OAUTH_PREFIX}{val}")
+        if not self.anthropic_api_key and self.chat_model:
+            from ntrp.llm.claude_oauth import is_configured as _oauth_check
+
+            if _oauth_check():
+                anthropic_models = get_models_by_provider(Provider.ANTHROPIC)
+                for field in ("chat_model", "memory_model", "explore_model"):
+                    val = getattr(self, field, None)
+                    if val and not is_oauth_model(val) and val in anthropic_models:
+                        setattr(self, field, f"{OAUTH_PREFIX}{val}")
         if not self.memory_model and self.chat_model:
             self.memory_model = self.chat_model
         if not self.explore_model and self.chat_model:

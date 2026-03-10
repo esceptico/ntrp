@@ -13,6 +13,7 @@ from ntrp.core.factory import AgentConfig
 from ntrp.events.triggers import TRIGGER_EVENT_TYPES, TriggerEvent
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import init as llm_init
+from ntrp.llm.router import reset as llm_reset
 from ntrp.logging import get_logger
 from ntrp.mcp.manager import MCPManager
 from ntrp.memory.facts import FactMemory
@@ -106,7 +107,7 @@ class Runtime:
             return
         async with self._config_lock:
             self.config = get_config()
-            await llm_close()
+            await llm_reset()
             llm_init(self.config)
             self.source_mgr.sync(self.config)
             await self._sync_embedding()
@@ -127,7 +128,7 @@ class Runtime:
             self.executor = ToolExecutor(runtime=self)
 
     async def _sync_memory(self) -> None:
-        if self.config.memory and not self.memory and self.embedding:
+        if self.config.memory and not self.memory and self.embedding and self.config.memory_model:
             self.memory = await FactMemory.create(
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
@@ -143,10 +144,10 @@ class Runtime:
                 await self.memory.close()
                 self.memory = None
                 self.memory_service = None
-                _logger.warning(
-                    "Memory enabled but no embedding model configured — skipping. "
-                    "Add an OpenAI or Google API key to enable embeddings"
-                )
+                if not self.embedding:
+                    _logger.warning("Memory disabled — no embedding model configured")
+                else:
+                    _logger.warning("Memory disabled — no memory model configured")
                 return
             if self.memory.extraction_model != self.config.memory_model:
                 self.memory.update_extraction_model(self.config.memory_model)
@@ -237,7 +238,7 @@ class Runtime:
                 self.indexables[name] = source
 
     async def _init_memory(self) -> None:
-        if self.config.memory and self.embedding:
+        if self.config.memory and self.embedding and self.config.memory_model:
             self.memory = await FactMemory.create(
                 db_path=self.config.memory_db_path,
                 embedding=self.embedding,
@@ -248,10 +249,7 @@ class Runtime:
             self.memory_service = MemoryService(self.memory, self.channel)
             self.indexables["memory"] = MemoryIndexable(self.memory.db)
         elif self.config.memory:
-            _logger.warning(
-                "Memory enabled but no embedding model configured — skipping. "
-                "Add an OpenAI or Google API key to enable embeddings"
-            )
+            _logger.warning("Memory enabled but no embedding model configured — skipping")
 
     def _init_skills(self) -> None:
         self.skill_registry = SkillRegistry()
