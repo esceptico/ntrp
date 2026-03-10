@@ -34,9 +34,9 @@ async def lifespan(app: FastAPI):
     runtime.start_consolidation()
     app.state.runtime = runtime
     app.state.bus_registry = BusRegistry()
+
     yield
-    app.state.bus_registry.shutdown_event.set()
-    await app.state.bus_registry.wait_streams_done()
+
     await runtime.close()
 
 
@@ -146,29 +146,51 @@ async def list_tools(runtime: Runtime = Depends(get_runtime)):
 # --- Persistent SSE event stream ---
 
 
+class SSEStreamingResponse(StreamingResponse):
+    """StreamingResponse that skips listen_for_disconnect task group.
+
+    Starlette's default __call__ spawns a parallel listen_for_disconnect
+    task when ASGI spec < 2.4 (uvicorn HTTP reports 2.3). On shutdown,
+    cancelling that task produces noisy CancelledError tracebacks and
+    blocks uvicorn's graceful exit. We skip it — our generator handles
+    its own lifecycle via CancelledError.
+    """
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await self.stream_response(send)
+        except OSError:
+            pass
+        if self.background is not None:
+            await self.background()
+
+
 async def _event_stream(session_id: str, bus_registry: BusRegistry) -> AsyncGenerator[str]:
     bus = bus_registry.get_or_create(session_id)
-    bus_registry.stream_started()
+    queue = bus.subscribe()
     last_event_at = time.monotonic()
     try:
-        while not bus_registry.shutdown_event.is_set():
-            event = await bus.get(timeout=0.5)
-            if event is None:
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=0.5)
+            except TimeoutError:
                 if time.monotonic() - last_event_at >= KEEPALIVE_INTERVAL:
                     last_event_at = time.monotonic()
                     yield SSE_KEEPALIVE
                 continue
+            if event is None:
+                break
             last_event_at = time.monotonic()
             yield event.to_sse_string()
     except asyncio.CancelledError:
         pass
     finally:
-        bus_registry.stream_stopped()
+        bus.unsubscribe(queue)
 
 
 @app.get("/chat/events/{session_id}")
 async def chat_events(session_id: str, buses: BusRegistry = Depends(_get_bus_registry)):
-    return StreamingResponse(
+    return SSEStreamingResponse(
         _event_stream(session_id, buses),
         media_type="text/event-stream",
         headers={

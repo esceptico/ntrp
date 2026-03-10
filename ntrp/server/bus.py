@@ -7,40 +7,27 @@ from ntrp.events.sse import SSEEvent
 @dataclass
 class SessionBus:
     session_id: str
-    _queue: asyncio.Queue[SSEEvent | None] = field(default_factory=asyncio.Queue)
+    _subscribers: list[asyncio.Queue[SSEEvent | None]] = field(default_factory=list)
 
     async def emit(self, event: SSEEvent) -> None:
-        await self._queue.put(event)
+        for queue in self._subscribers:
+            await queue.put(event)
 
-    async def get(self, timeout: float = 0.5) -> SSEEvent | None:
+    def subscribe(self) -> asyncio.Queue[SSEEvent | None]:
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+        self._subscribers.append(queue)
+        return queue
+
+    def unsubscribe(self, queue: asyncio.Queue[SSEEvent | None]) -> None:
         try:
-            return await asyncio.wait_for(self._queue.get(), timeout=timeout)
-        except TimeoutError:
-            return None
+            self._subscribers.remove(queue)
+        except ValueError:
+            pass
 
 
 class BusRegistry:
     def __init__(self):
         self._buses: dict[str, SessionBus] = {}
-        self.shutdown_event: asyncio.Event = asyncio.Event()
-        self._active_streams: int = 0
-        self._all_streams_done: asyncio.Event = asyncio.Event()
-        self._all_streams_done.set()
-
-    def stream_started(self) -> None:
-        self._active_streams += 1
-        self._all_streams_done.clear()
-
-    def stream_stopped(self) -> None:
-        self._active_streams -= 1
-        if self._active_streams == 0:
-            self._all_streams_done.set()
-
-    async def wait_streams_done(self, timeout: float = 2.0) -> None:
-        try:
-            await asyncio.wait_for(self._all_streams_done.wait(), timeout)
-        except TimeoutError:
-            pass
 
     def get_or_create(self, session_id: str) -> SessionBus:
         if session_id not in self._buses:
