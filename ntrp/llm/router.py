@@ -110,6 +110,19 @@ def get_embedding_client(model_id: str) -> EmbeddingClient:
     return _embedding_clients[cache_key]
 
 
+async def reset() -> None:
+    """Drain previous stale clients, then move active clients to stale list."""
+    global _last_oauth_fingerprint
+    for client in _stale_clients:
+        await client.close()
+    _stale_clients.clear()
+    _stale_clients.extend(_completion_clients.values())
+    _stale_clients.extend(_embedding_clients.values())
+    _completion_clients.clear()
+    _embedding_clients.clear()
+    _last_oauth_fingerprint = None
+
+
 async def close() -> None:
     for client in _stale_clients:
         await client.close()

@@ -99,7 +99,16 @@ def _config_response(rt: Runtime) -> dict:
                 "connected": has_google,
                 **(_google_errors(rt) or {}),
             },
-            "memory": {"enabled": config.memory, "connected": memory_connected, "dreams": config.dreams},
+            "memory": {
+                "enabled": config.memory,
+                "connected": memory_connected,
+                "dreams": config.dreams,
+                **(
+                    {"error": "Embedding model required — configure an OpenAI or Google embedding model"}
+                    if config.memory and not memory_connected
+                    else {}
+                ),
+            },
             "web": {
                 "connected": web_source is not None,
                 "mode": config.web_search,
@@ -357,7 +366,10 @@ async def get_providers(runtime: Runtime = Depends(get_runtime)):
             "id": "claude_oauth",
             "name": "Claude Pro/Max",
             "connected": oauth_configured(),
+            "key_hint": None,
+            "from_env": False,
             "models": list(anthropic_models.keys()),
+            "embedding_models": [],
         }
     )
 
@@ -368,11 +380,14 @@ async def get_providers(runtime: Runtime = Depends(get_runtime)):
             "id": "custom",
             "name": "Custom (OpenAI-compatible)",
             "connected": bool(custom_models),
+            "key_hint": None,
+            "from_env": False,
             "model_count": len(custom_models),
             "models": [
                 {"id": mid, "base_url": m.base_url, "context_window": m.max_context_tokens}
                 for mid, m in custom_models.items()
             ],
+            "embedding_models": list(get_embedding_models_by_provider(Provider.CUSTOM).keys()),
         }
     )
 

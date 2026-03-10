@@ -11,11 +11,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ntrp.embedder import EmbeddingConfig
 from ntrp.llm.models import (
+    OAUTH_PREFIX,
     Provider,
     get_embedding_model,
     get_embedding_models,
     get_models,
     get_models_by_provider,
+    is_oauth_model,
     load_custom_models,
 )
 from ntrp.logging import get_logger
@@ -193,6 +195,26 @@ class Config(BaseSettings):
                     if not self.memory_model:
                         self.memory_model = memory
                     break
+        if not self.chat_model:
+            from ntrp.llm.claude_oauth import is_configured as oauth_configured
+
+            if oauth_configured():
+                chat, memory, _ = MODEL_DEFAULTS["ANTHROPIC_API_KEY"]
+                self.chat_model = f"{OAUTH_PREFIX}{chat}"
+                if not self.memory_model:
+                    self.memory_model = f"{OAUTH_PREFIX}{memory}"
+        # When OAuth is active without an Anthropic API key, prefix bare Anthropic models
+        if not self.anthropic_api_key and self.chat_model:
+            from ntrp.llm.claude_oauth import is_configured as _oauth_check
+
+            if _oauth_check():
+                anthropic_models = get_models_by_provider(Provider.ANTHROPIC)
+                for field in ("chat_model", "memory_model", "explore_model"):
+                    val = getattr(self, field, None)
+                    if val and not is_oauth_model(val) and val in anthropic_models:
+                        setattr(self, field, f"{OAUTH_PREFIX}{val}")
+        if not self.memory_model and self.chat_model:
+            self.memory_model = self.chat_model
         if not self.explore_model and self.chat_model:
             self.explore_model = self.chat_model
         if not self.embedding_model:
@@ -255,7 +277,11 @@ class Config(BaseSettings):
 
     @property
     def has_providers(self) -> bool:
-        return bool(self.anthropic_api_key or self.openai_api_key or self.gemini_api_key or self.openrouter_api_key)
+        if self.anthropic_api_key or self.openai_api_key or self.gemini_api_key or self.openrouter_api_key:
+            return True
+        from ntrp.llm.claude_oauth import is_configured as oauth_configured
+
+        return oauth_configured()
 
     @property
     def has_any_model(self) -> bool:

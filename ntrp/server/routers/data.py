@@ -9,7 +9,11 @@ router = APIRouter(tags=["data"])
 
 def _require_memory(runtime: Runtime = Depends(get_runtime)) -> MemoryService:
     if not runtime.memory_service:
-        raise HTTPException(status_code=503, detail="Memory is disabled")
+        if runtime.config.memory:
+            detail = "Memory is unavailable — configure an embedding model from OpenAI or Google"
+        else:
+            detail = "Memory is disabled"
+        raise HTTPException(status_code=503, detail=detail)
     return runtime.memory_service
 
 
