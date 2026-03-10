@@ -137,6 +137,17 @@ class Runtime:
             self.memory.dreams_enabled = self.config.dreams
             self.memory_service = MemoryService(self.memory, self.channel)
         elif self.config.memory and self.memory:
+            if not self.config.memory_model or not self.embedding:
+                if self.memory_service:
+                    self.memory_service.close()
+                await self.memory.close()
+                self.memory = None
+                self.memory_service = None
+                _logger.warning(
+                    "Memory enabled but no embedding model configured — skipping. "
+                    "Add an OpenAI or Google API key to enable embeddings"
+                )
+                return
             if self.memory.extraction_model != self.config.memory_model:
                 self.memory.update_extraction_model(self.config.memory_model)
             self.memory.dreams_enabled = self.config.dreams
@@ -237,7 +248,10 @@ class Runtime:
             self.memory_service = MemoryService(self.memory, self.channel)
             self.indexables["memory"] = MemoryIndexable(self.memory.db)
         elif self.config.memory:
-            _logger.warning("Memory enabled but no embedding model configured — skipping")
+            _logger.warning(
+                "Memory enabled but no embedding model configured — skipping. "
+                "Add an OpenAI or Google API key to enable embeddings"
+            )
 
     def _init_skills(self) -> None:
         self.skill_registry = SkillRegistry()

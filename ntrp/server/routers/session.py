@@ -99,7 +99,16 @@ def _config_response(rt: Runtime) -> dict:
                 "connected": has_google,
                 **(_google_errors(rt) or {}),
             },
-            "memory": {"enabled": config.memory, "connected": memory_connected, "dreams": config.dreams},
+            "memory": {
+                "enabled": config.memory,
+                "connected": memory_connected,
+                "dreams": config.dreams,
+                **(
+                    {"error": "Embedding model required — add an OpenAI or Google API key"}
+                    if config.memory and not memory_connected
+                    else {}
+                ),
+            },
             "web": {
                 "connected": web_source is not None,
                 "mode": config.web_search,
@@ -358,6 +367,7 @@ async def get_providers(runtime: Runtime = Depends(get_runtime)):
             "name": "Claude Pro/Max",
             "connected": oauth_configured(),
             "models": list(anthropic_models.keys()),
+            "embedding_models": [],
         }
     )
 

@@ -82,13 +82,14 @@ class ConfigService:
         await self._with_rollback(mutate)
 
     async def _disconnect_oauth(self) -> None:
+        clear_oauth()
+
         def mutate(settings: dict) -> None:
             for key in ("chat_model", "explore_model", "memory_model"):
                 if is_oauth_model(settings.get(key, "")):
                     settings.pop(key)
 
         await self._with_rollback(mutate)
-        clear_oauth()
 
     async def connect_service(self, service_id: str, api_key: str) -> None:
         if service_id not in SERVICE_KEY_FIELDS:
