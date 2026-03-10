@@ -92,6 +92,7 @@ def serve(host: str | None, port: int | None, reload: bool, reset_key: bool, dat
         port=port,
         reload=reload,
         log_config=UVICORN_LOG_CONFIG,
+        timeout_graceful_shutdown=3,
     )
 
 
