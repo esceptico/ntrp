@@ -92,6 +92,10 @@ export async function cancelRun(runId: string, config: Config): Promise<void> {
   await api.post(`${config.serverUrl}/cancel`, { run_id: runId });
 }
 
+export async function backgroundRun(runId: string, config: Config): Promise<void> {
+  await api.post(`${config.serverUrl}/chat/background`, { run_id: runId });
+}
+
 export async function submitToolResult(
   runId: string,
   toolId: string,

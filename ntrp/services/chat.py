@@ -11,6 +11,7 @@ from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import INIT_INSTRUCTION, build_system_blocks
 from ntrp.events.internal import RunCompleted, RunStarted
 from ntrp.events.sse import (
+    BackgroundedEvent,
     DoneEvent,
     ErrorEvent,
     SessionInfoEvent,
@@ -171,6 +172,32 @@ async def prepare_chat(
     )
 
 
+async def _drain_backgrounded(
+    gen,
+    agent: Agent,
+    ctx: ChatContext,
+) -> None:
+    """Continue draining an agent stream silently after the run was backgrounded."""
+    agent.ctx.session_state.skip_approvals = True
+    agent.ctx.io.emit = None
+    try:
+        async for _ in gen:
+            pass
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        _logger.exception("Backgrounded drain failed (run_id=%s)", ctx.run.run_id)
+    finally:
+        if agent.inject_queue:
+            agent.messages.extend(agent.inject_queue)
+            agent.inject_queue.clear()
+        ctx.run.messages = agent.messages
+        ctx.run.usage = agent.usage
+        last_tokens = getattr(agent, "_last_input_tokens", None)
+        metadata = {"last_input_tokens": last_tokens} if last_tokens is not None else None
+        await ctx.session_service.save(ctx.session_state, agent.messages, metadata=metadata)
+
+
 async def run_chat(ctx: ChatContext, bus: "SessionBus") -> None:
     """Run agent loop, push all events to bus. Fire-and-forget."""
     run = ctx.run
@@ -223,7 +250,15 @@ async def run_chat(ctx: ChatContext, bus: "SessionBus") -> None:
 
         agent.ctx.background_tasks.on_result = _on_bg_result
 
-        result = await run_agent_loop(ctx, agent, bus)
+        result, bg_gen = await run_agent_loop(ctx, agent, bus)
+
+        if bg_gen is not None:
+            # Backgrounded: unlock UI, drain agent silently
+            await bus.emit(BackgroundedEvent(run_id=run.run_id))
+            ctx.run_registry.complete_run(run.run_id)
+            run_finished = True
+            asyncio.create_task(_drain_backgrounded(bg_gen, agent, ctx))
+            return
 
         if result is None:
             return  # Cancelled
@@ -245,28 +280,28 @@ async def run_chat(ctx: ChatContext, bus: "SessionBus") -> None:
         ctx.run_registry.cleanup_old_runs()
 
     finally:
-        if agent:
-            if run.status in (RunStatus.CANCELLED, RunStatus.ERROR) or run.cancelled:
-                agent.ctx.background_tasks.cancel_all()
-            # Drain any remaining queued messages before save
-            if agent.inject_queue:
-                agent.messages.extend(agent.inject_queue)
-                agent.inject_queue.clear()
-            run.usage = agent.usage
-            run.messages = agent.messages
-        run_finished = True
-        last_tokens = getattr(agent, "_last_input_tokens", None) if agent else None
-        metadata = {"last_input_tokens": last_tokens} if last_tokens is not None else None
-        await ctx.session_service.save(session_state, run.messages, metadata=metadata)
-        ctx.channel.publish(
-            RunCompleted(
-                run_id=run.run_id,
-                session_id=session_state.session_id,
-                messages=tuple(run.messages),
-                usage=run.usage,
-                result=result,
+        if not run.backgrounded:
+            if agent:
+                if run.status in (RunStatus.CANCELLED, RunStatus.ERROR) or run.cancelled:
+                    agent.ctx.background_tasks.cancel_all()
+                if agent.inject_queue:
+                    agent.messages.extend(agent.inject_queue)
+                    agent.inject_queue.clear()
+                run.usage = agent.usage
+                run.messages = agent.messages
+            run_finished = True
+            last_tokens = getattr(agent, "_last_input_tokens", None) if agent else None
+            metadata = {"last_input_tokens": last_tokens} if last_tokens is not None else None
+            await ctx.session_service.save(session_state, run.messages, metadata=metadata)
+            ctx.channel.publish(
+                RunCompleted(
+                    run_id=run.run_id,
+                    session_id=session_state.session_id,
+                    messages=tuple(run.messages),
+                    usage=run.usage,
+                    result=result,
+                )
             )
-        )
 
 
 async def compact_session(runtime: "Runtime", session_id: str | None = None) -> dict:

@@ -87,6 +87,11 @@ export interface CancelledEvent {
   run_id: string;
 }
 
+export interface BackgroundedEvent {
+  type: "backgrounded";
+  run_id: string;
+}
+
 export interface QuestionEvent {
   type: "question";
   question: string;
@@ -104,7 +109,8 @@ export type ServerEvent =
   | SessionInfoEvent
   | DoneEvent
   | ErrorEvent
-  | CancelledEvent;
+  | CancelledEvent
+  | BackgroundedEvent;
 
 export interface Message {
   id?: string;

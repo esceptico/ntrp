@@ -113,6 +113,7 @@ function AppContent({
     sendMessage,
     handleApproval,
     cancel,
+    background,
     revert,
     setStatus,
     switchToSession,
@@ -292,6 +293,11 @@ function AppContent({
       }
       if (key.name === "escape" && isStreaming && !dialog.isOpen) {
         cancel();
+        return;
+      }
+      if (key.ctrl && key.name === "o" && isStreaming && !dialog.isOpen) {
+        background();
+        return;
       }
       if (key.shift && key.name === "tab" && !showSettings && viewMode === "chat" && !dialog.isOpen && !pendingApproval) {
         cycleSession();
@@ -312,7 +318,7 @@ function AppContent({
         return;
       }
     },
-    [renderer, isStreaming, pendingApproval, cancel, showSettings, viewMode, dialog.isOpen, toggleSkipApprovals, toggleSettings, cycleSession, startNewSession]
+    [renderer, isStreaming, pendingApproval, cancel, background, showSettings, viewMode, dialog.isOpen, toggleSkipApprovals, toggleSettings, cycleSession, startNewSession]
   );
 
   useKeypress(handleGlobalKeypress, { isActive: true });

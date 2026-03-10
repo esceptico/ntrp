@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { Message, ServerEvent, Config, PendingApproval } from "../types.js";
 import type { ToolChainItem } from "../components/toolchain/types.js";
-import { connectEvents, sendChatMessage, submitToolResult, cancelRun, revertSession } from "../api/client.js";
+import { connectEvents, sendChatMessage, submitToolResult, cancelRun, backgroundRun, revertSession } from "../api/client.js";
 import {
   MAX_MESSAGES,
   MAX_TOOL_MESSAGE_CHARS,
@@ -354,6 +354,20 @@ export function useStreaming({
         s.pendingText = event.question;
         break;
 
+      case "backgrounded":
+        finalizeText(s);
+        s.pendingApproval = null;
+        s.status = Status.IDLE;
+        s.isStreaming = false;
+        s.toolChain = s.toolChain.map((item) =>
+          item.status === "running" ? { ...item, status: "done" as const } : item
+        );
+        if (targetId !== viewedIdRef.current && !s.notification) {
+          s.notification = "done";
+          updateSessionStates();
+        }
+        break;
+
       case "background_task":
         if (event.status === "started") s.backgroundTaskCount++;
         else s.backgroundTaskCount = Math.max(0, s.backgroundTaskCount - 1);
@@ -471,6 +485,17 @@ export function useStreaming({
     } catch {}
   }, []);
 
+  const background = useCallback(async () => {
+    const id = viewedIdRef.current;
+    if (!id) return;
+    const s = sessionsRef.current.get(id);
+    if (!s?.isStreaming || !s.runId) return;
+
+    try {
+      await backgroundRun(s.runId, configRef.current);
+    } catch {}
+  }, []);
+
   const switchToSession = useCallback((targetId: string, history?: Message[]) => {
     const target = getSession(targetId);
     target.notification = null;
@@ -578,6 +603,7 @@ export function useStreaming({
     setStatus: setStatusPublic,
     handleApproval,
     cancel,
+    background,
     revert,
     switchToSession,
     deleteSessionState,

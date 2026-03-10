@@ -39,10 +39,16 @@ export function InputFooter({ isStreaming, status, accentValue, escHint, copiedF
           )}
         </box>
         {isStreaming && (
-          <text>
-            <span fg={colors.footer}>esc</span>
-            <span fg={colors.text.disabled}> interrupt</span>
-          </text>
+          <box flexDirection="row" gap={2}>
+            <text>
+              <span fg={colors.footer}>ctrl+o</span>
+              <span fg={colors.text.disabled}> background</span>
+            </text>
+            <text>
+              <span fg={colors.footer}>esc</span>
+              <span fg={colors.text.disabled}> interrupt</span>
+            </text>
+          </box>
         )}
       </box>
     );

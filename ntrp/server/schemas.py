@@ -22,6 +22,10 @@ class CancelRequest(BaseModel):
     run_id: str
 
 
+class BackgroundRequest(BaseModel):
+    run_id: str
+
+
 # --- Session / config ---
 
 

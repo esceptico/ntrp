@@ -15,6 +15,7 @@ class EventType(StrEnum):
     DONE = "done"
     ERROR = "error"
     CANCELLED = "cancelled"
+    BACKGROUNDED = "backgrounded"
 
 
 @dataclass(frozen=True)
@@ -135,6 +136,12 @@ class ErrorEvent(SSEEvent):
 @dataclass(frozen=True)
 class CancelledEvent(SSEEvent):
     type: EventType = field(default=EventType.CANCELLED, init=False)
+    run_id: str
+
+
+@dataclass(frozen=True)
+class BackgroundedEvent(SSEEvent):
+    type: EventType = field(default=EventType.BACKGROUNDED, init=False)
     run_id: str
 
 

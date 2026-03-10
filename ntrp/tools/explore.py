@@ -1,12 +1,18 @@
-from typing import Literal
+import asyncio
+import json
+import time
 
 from pydantic import BaseModel, Field
 
 from ntrp.constants import EXPLORE_TIMEOUT, USER_ENTITY_NAME
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.prompts import EXPLORE_PROMPTS, current_date_formatted, env
+from ntrp.events.sse import BackgroundTaskEvent, ToolCallEvent, ToolResultEvent
+from ntrp.logging import get_logger
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
+
+_logger = get_logger(__name__)
 
 EXPLORE_SYSTEM_PROMPT = env.from_string("""{{ base_prompt }}
 
@@ -33,7 +39,8 @@ USER CONTEXT:
 EXPLORE_DESCRIPTION = (
     "Spawn an exploration agent for information gathering. "
     "Can run in parallel (call multiple in one turn) and nest recursively. "
-    "Use depth='deep' for thorough research, 'quick' for fast lookups."
+    "Use depth='deep' for thorough research, 'quick' for fast lookups. "
+    "Set background=true to run without blocking — results are delivered automatically."
 )
 
 DEPTH_TIMEOUTS = {
@@ -45,9 +52,13 @@ DEPTH_TIMEOUTS = {
 
 class ExploreInput(BaseModel):
     task: str = Field(description="What to explore or research.")
-    depth: Literal["quick", "normal", "deep"] = Field(
+    depth: str = Field(
         default="normal",
         description="How thorough: 'quick' (fast scan), 'normal' (balanced), 'deep' (exhaustive).",
+    )
+    background: bool = Field(
+        default=False,
+        description="Run in background, return immediately. Results delivered automatically when done.",
     )
 
 
@@ -75,7 +86,9 @@ class ExploreTool(Tool):
             user_facts=user_facts,
         )
 
-    async def execute(self, execution: ToolExecution, task: str, depth: str = "normal", **kwargs) -> ToolResult:
+    async def execute(
+        self, execution: ToolExecution, task: str, depth: str = "normal", background: bool = False, **kwargs
+    ) -> ToolResult:
         ctx = execution.ctx
 
         if not ctx.spawn_fn:
@@ -93,19 +106,107 @@ class ExploreTool(Tool):
         prompt = await self._build_prompt(ctx, depth, remaining, execution.tool_id)
         timeout = DEPTH_TIMEOUTS[depth]
 
-        try:
-            result = await ctx.spawn_fn(
-                ctx,
-                task=task,
-                system_prompt=prompt,
-                tools=tools,
-                timeout=timeout,
-                model_override=ctx.run.explore_model,
-                parent_id=execution.tool_id,
-                isolation=IsolationLevel.FULL,
-            )
-        finally:
-            if ctx.ledger:
-                await ctx.ledger.complete(execution.tool_id)
+        if not background:
+            try:
+                result = await ctx.spawn_fn(
+                    ctx,
+                    task=task,
+                    system_prompt=prompt,
+                    tools=tools,
+                    timeout=timeout,
+                    model_override=ctx.run.explore_model,
+                    parent_id=execution.tool_id,
+                    isolation=IsolationLevel.FULL,
+                )
+            finally:
+                if ctx.ledger:
+                    await ctx.ledger.complete(execution.tool_id)
 
-        return ToolResult(content=result, preview=f"Explored ({depth})")
+            return ToolResult(content=result, preview=f"Explored ({depth})")
+
+        registry = ctx.background_tasks
+        bg_task_id = registry.generate_id()
+        label = f"explore({depth}): {task}"
+
+        async def _run_background():
+            start = time.monotonic()
+            try:
+                result = await ctx.spawn_fn(
+                    ctx,
+                    task=task,
+                    system_prompt=prompt,
+                    tools=tools,
+                    timeout=timeout,
+                    model_override=ctx.run.explore_model,
+                    parent_id=execution.tool_id,
+                    isolation=IsolationLevel.FULL,
+                )
+                status = "completed"
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                result = f"Error: {e}"
+                status = "failed"
+                _logger.warning("Background explore %s failed: %s", bg_task_id, e)
+            finally:
+                if ctx.ledger:
+                    await ctx.ledger.complete(execution.tool_id)
+            duration_ms = int((time.monotonic() - start) * 1000)
+
+            synthetic_call_id = f"bg_{bg_task_id}"
+            messages = [
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": synthetic_call_id,
+                            "type": "function",
+                            "function": {
+                                "name": "background_result",
+                                "arguments": json.dumps({"task_id": bg_task_id, "task": task}),
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": synthetic_call_id,
+                    "content": result,
+                },
+            ]
+
+            emit = ctx.io.emit
+            if emit:
+                await emit(
+                    ToolCallEvent(
+                        tool_id=synthetic_call_id,
+                        name="explore",
+                        args={"task": task, "depth": depth},
+                        display_name="Explore",
+                    )
+                )
+                await emit(
+                    ToolResultEvent(
+                        tool_id=synthetic_call_id,
+                        name="explore",
+                        result=result,
+                        preview=f"Explored ({depth})" if status == "completed" else "failed",
+                        duration_ms=duration_ms,
+                        display_name="Explore",
+                    )
+                )
+                await emit(BackgroundTaskEvent(task_id=bg_task_id, command=label, status=status))
+
+            await registry.inject(messages)
+
+        async_task = asyncio.create_task(_run_background())
+        registry.register(bg_task_id, async_task, command=label)
+
+        if ctx.io.emit:
+            await ctx.io.emit(BackgroundTaskEvent(task_id=bg_task_id, command=label, status="started"))
+
+        return ToolResult(
+            content=f"Background exploration {bg_task_id} started: {task}",
+            preview=f"Background · {bg_task_id}",
+        )

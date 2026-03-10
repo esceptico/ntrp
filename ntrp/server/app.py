@@ -17,7 +17,8 @@ from ntrp.server.routers.mcp import router as mcp_router
 from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.runtime import Runtime, get_runtime
-from ntrp.server.schemas import CancelRequest, ChatRequest, ToolResultRequest
+from ntrp.server.schemas import BackgroundRequest, CancelRequest, ChatRequest, ToolResultRequest
+from ntrp.server.state import RunStatus
 from ntrp.services.chat import prepare_chat, run_chat
 
 SSE_KEEPALIVE = ":\n\n"
@@ -261,3 +262,14 @@ async def submit_tool_result(request: ToolResultRequest, runtime: Runtime = Depe
 async def cancel_run(request: CancelRequest, runtime: Runtime = Depends(get_runtime)):
     runtime.run_registry.cancel_run(request.run_id)
     return {"status": "cancelled"}
+
+
+@app.post("/chat/background")
+async def background_run(request: BackgroundRequest, runtime: Runtime = Depends(get_runtime)):
+    run = runtime.run_registry.get_run(request.run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.status != RunStatus.RUNNING:
+        raise HTTPException(status_code=400, detail="Run is not active")
+    run.backgrounded = True
+    return {"status": "backgrounding"}
