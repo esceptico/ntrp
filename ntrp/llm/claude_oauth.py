@@ -20,7 +20,7 @@ _logger = get_logger(__name__)
 
 CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 AUTH_URL = "https://claude.ai/oauth/authorize"
-TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
+TOKEN_URL = "https://console.anthropic.com/v1/oauth/token"
 SCOPES = "user:profile user:inference"
 
 REFRESH_BUFFER = 300  # refresh 5min before expiry
@@ -39,13 +39,20 @@ def _generate_pkce() -> tuple[str, str]:
     return verifier, challenge
 
 
+_TOKEN_HEADERS = {
+    "Content-Type": "application/json",
+    "Origin": "https://claude.ai",
+    "Referer": "https://claude.ai/",
+}
+
+
 def _refresh_token(refresh_token: str) -> dict:
     data = {
         "grant_type": "refresh_token",
         "client_id": CLIENT_ID,
         "refresh_token": refresh_token,
     }
-    resp = httpx.post(TOKEN_URL, json=data)
+    resp = httpx.post(TOKEN_URL, json=data, headers=_TOKEN_HEADERS, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
@@ -131,7 +138,7 @@ def login() -> dict:
         def log_message(self, format, *args):
             pass  # suppress HTTP logs
 
-    server = HTTPServer(("127.0.0.1", 0), CallbackHandler)
+    server = HTTPServer(("localhost", 0), CallbackHandler)
     port = server.server_address[1]
     redirect_uri = f"http://localhost:{port}/callback"
 
@@ -175,7 +182,7 @@ def login() -> dict:
         "redirect_uri": redirect_uri,
         "state": state,
     }
-    resp = httpx.post(TOKEN_URL, json=data)
+    resp = httpx.post(TOKEN_URL, json=data, headers=_TOKEN_HEADERS, timeout=30)
     if resp.status_code != 200:
         _logger.error("Token exchange failed (%d): %s", resp.status_code, resp.text)
         try:
@@ -216,7 +223,8 @@ def get_access_token() -> str | None:
             stored = _store_tokens(token_data)
             return stored["access_token"]
         except (httpx.HTTPStatusError, KeyError, ValueError) as e:
-            _logger.warning("OAuth token refresh failed: %s", e)
+            _logger.warning("OAuth token refresh failed: %s — clearing stale cache", e)
+            clear_cache()
             return None
 
 

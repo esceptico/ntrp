@@ -1,10 +1,9 @@
 import { colors, Hints } from "../../../ui/index.js";
-import type { ProviderInfo } from "../../../../api/client.js";
-import type { UseCredentialSectionResult } from "../../../../hooks/settings/useCredentialSection.js";
+import type { UseProvidersResult } from "../../../../hooks/settings/useProviders.js";
 import { MaskedKeyInput } from "./shared.js";
 
 interface ProvidersSectionProps {
-  providers: UseCredentialSectionResult<ProviderInfo>;
+  providers: UseProvidersResult;
   accent: string;
 }
 
@@ -18,13 +17,16 @@ export function ProvidersSection({ providers: s, accent }: ProvidersSectionProps
   }
 
   const current = s.items[s.selectedIndex];
+  const isOAuth = current?.id === "claude_oauth";
+  const isCustom = current?.id === "custom";
 
   return (
     <box flexDirection="column">
       {s.items.map((provider, i) => {
         const selected = i === s.selectedIndex;
-        const isCustom = provider.id === "custom";
-        const isEditing = selected && s.editing && !isCustom;
+        const providerIsCustom = provider.id === "custom";
+        const providerIsOAuth = provider.id === "claude_oauth";
+        const isEditing = selected && s.editing && !providerIsCustom && !providerIsOAuth;
 
         return (
           <box key={provider.id} flexDirection="column">
@@ -33,7 +35,7 @@ export function ProvidersSection({ providers: s, accent }: ProvidersSectionProps
                 <span fg={selected ? accent : colors.text.disabled}>{selected ? "\u25B8 " : "  "}</span>
                 <span fg={selected ? colors.text.primary : colors.text.secondary}>{provider.name.padEnd(28)}</span>
               </text>
-              {isCustom ? (
+              {providerIsCustom ? (
                 <text>
                   <span fg={provider.connected ? colors.status.success : colors.text.disabled}>
                     {provider.model_count ? `${provider.model_count} model${provider.model_count !== 1 ? "s" : ""}` : "none"}
@@ -44,7 +46,7 @@ export function ProvidersSection({ providers: s, accent }: ProvidersSectionProps
                   {provider.connected ? (
                     <>
                       <span fg={colors.status.success}>{"\u2713 "}</span>
-                      <span fg={colors.text.disabled}>{provider.key_hint ?? ""}</span>
+                      <span fg={colors.text.disabled}>{provider.key_hint ?? (providerIsOAuth ? "oauth" : "")}</span>
                       {provider.from_env && <span fg={colors.text.muted}>{" (env)"}</span>}
                     </>
                   ) : (
@@ -82,14 +84,24 @@ export function ProvidersSection({ providers: s, accent }: ProvidersSectionProps
         </box>
       )}
 
-      {!s.editing && !s.confirmDisconnect && !s.saving && (
+      {s.oauthConnecting && (
+        <box marginTop={1}>
+          <text><span fg={colors.text.muted}>  Waiting for browser login...</span></text>
+        </box>
+      )}
+
+      {!s.editing && !s.confirmDisconnect && !s.saving && !s.oauthConnecting && (
         <box marginTop={1} marginLeft={2}>
-          {current && current.id !== "custom" && current.connected && !current.from_env ? (
+          {isCustom ? (
+            <text><span fg={colors.text.disabled}>use /connect to manage custom models</span></text>
+          ) : isOAuth && current.connected ? (
+            <Hints items={[["d", "disconnect"]]} />
+          ) : isOAuth && !current.connected ? (
+            <Hints items={[["enter", "connect via browser"]]} />
+          ) : current && current.connected && !current.from_env ? (
             <Hints items={[["enter", "edit"], ["d", "disconnect"]]} />
           ) : current?.from_env ? (
             <text><span fg={colors.text.disabled}>set via environment variable</span></text>
-          ) : current?.id === "custom" ? (
-            <text><span fg={colors.text.disabled}>use /connect to manage custom models</span></text>
           ) : (
             <Hints items={[["enter", "add key"]]} />
           )}

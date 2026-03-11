@@ -30,6 +30,7 @@ interface Options<T extends CredentialItem> {
   disconnect: (id: string) => Promise<unknown>;
   canEdit?: (item: T) => boolean;
   canDisconnect?: (item: T) => boolean;
+  onEnter?: (item: T) => boolean;
 }
 
 export function useCredentialSection<T extends CredentialItem>({
@@ -38,6 +39,7 @@ export function useCredentialSection<T extends CredentialItem>({
   disconnect,
   canEdit = (item) => !item.from_env,
   canDisconnect = (item) => item.connected && !item.from_env,
+  onEnter,
 }: Options<T>): UseCredentialSectionResult<T> {
   const [items, setItems] = useState<T[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -122,7 +124,9 @@ export function useCredentialSection<T extends CredentialItem>({
       // handled
     } else if (key.name === "return" || key.name === "space") {
       const item = items[selectedIndex];
-      if (item && canEdit(item)) {
+      if (item && onEnter?.(item)) {
+        // handled by custom onEnter
+      } else if (item && canEdit(item)) {
         setKeyValue("");
         setKeyCursor(0);
         setError(null);
@@ -136,7 +140,7 @@ export function useCredentialSection<T extends CredentialItem>({
     }
   }, [
     confirmDisconnect, editing, items, selectedIndex,
-    handleDisconnect, handleSave, handleKeyInput, canEdit, canDisconnect,
+    handleDisconnect, handleSave, handleKeyInput, canEdit, canDisconnect, onEnter,
   ]);
 
   return {

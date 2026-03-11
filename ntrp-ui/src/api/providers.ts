@@ -39,7 +39,7 @@ export async function connectProviderOAuth(
   config: Config,
   providerId: string,
 ): Promise<{ status: string; provider: string }> {
-  return api.post(`${config.serverUrl}/providers/${providerId}/oauth`, {});
+  return api.post(`${config.serverUrl}/providers/${providerId}/oauth`, {}, { timeout: 150_000 });
 }
 
 export async function disconnectProviderOAuth(
