@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { colors } from "../ui/colors.js";
 import { truncateText, formatAge } from "../../lib/utils.js";
 import { useAccentColor, type SessionNotification } from "../../hooks/index.js";
@@ -53,11 +53,12 @@ function SessionRow({ session, isCurrent, glowColor, width }: { session: Session
   );
 }
 
-export function SessionsList({ sessions, currentSessionId, sessionStates, width }: {
+export function SessionsList({ sessions, currentSessionId, sessionStates, width, onSessionClick }: {
   sessions: SessionInfo[];
   currentSessionId: string | null;
   sessionStates?: Map<string, SessionNotification>;
   width: number;
+  onSessionClick?: (sessionId: string) => void;
 }) {
   const { accentValue } = useAccentColor();
 
@@ -79,13 +80,14 @@ export function SessionsList({ sessions, currentSessionId, sessionStates, width 
     <box flexDirection="column">
       <SectionHeader label="SESSIONS" />
       {sessions.map((s) => (
-        <SessionRow
-          key={s.session_id}
-          session={s}
-          isCurrent={s.session_id === currentSessionId}
-          glowColor={getGlowColor(sessionStates?.get(s.session_id), streamingColor)}
-          width={width}
-        />
+        <box key={s.session_id} onMouseDown={onSessionClick ? () => onSessionClick(s.session_id) : undefined}>
+          <SessionRow
+            session={s}
+            isCurrent={s.session_id === currentSessionId}
+            glowColor={getGlowColor(sessionStates?.get(s.session_id), streamingColor)}
+            width={width}
+          />
+        </box>
       ))}
     </box>
   );

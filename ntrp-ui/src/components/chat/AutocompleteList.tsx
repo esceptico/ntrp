@@ -7,11 +7,12 @@ interface AutocompleteListProps {
   commands: readonly SlashCommand[];
   selectedIndex: number;
   accentValue: string;
+  onItemClick?: (index: number) => void;
 }
 
 const MAX_VISIBLE = 10;
 
-export function AutocompleteList({ commands, selectedIndex, accentValue }: AutocompleteListProps) {
+export function AutocompleteList({ commands, selectedIndex, accentValue, onItemClick }: AutocompleteListProps) {
   const contentWidth = useContentWidth();
   const maxName = commands.length > 0 ? Math.max(...commands.map((c) => c.name.length)) : 0;
 
@@ -27,6 +28,7 @@ export function AutocompleteList({ commands, selectedIndex, accentValue }: Autoc
         visibleLines={Math.min(MAX_VISIBLE, commands.length || MAX_VISIBLE)}
         showIndicator={false}
         width={contentWidth - 1}
+        onItemClick={onItemClick ? (index) => onItemClick(index) : undefined}
         renderItem={(cmd, ctx) => {
           const display = `/${cmd.name}`.padEnd(maxName + 3);
           return (

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { useScrollOffset } from "../../../hooks/useScrollOffset.js";
 import { useContentWidth } from "../../../contexts/index.js";
 import { colors } from "../colors.js";
@@ -26,6 +26,7 @@ interface BaseSelectionListProps<T> {
   getKey?: (item: T, index: number) => string | number;
   width?: number;
   indicator?: string;
+  onItemClick?: (index: number, item: T) => void;
 }
 
 export function BaseSelectionList<T>({
@@ -41,6 +42,7 @@ export function BaseSelectionList<T>({
   getKey,
   width,
   indicator,
+  onItemClick,
 }: BaseSelectionListProps<T>) {
   const contentWidth = useContentWidth();
   const effectiveWidth = width ?? contentWidth;
@@ -88,7 +90,7 @@ export function BaseSelectionList<T>({
         };
 
         return (
-          <box flexDirection="row" key={key}>
+          <box flexDirection="row" key={key} onMouseDown={onItemClick ? () => onItemClick(actualIndex, item) : undefined}>
             {showIndicator && (
               <box width={2} flexShrink={0}>
                 <text><span fg={indicatorColor}>{indicatorText}</span></text>

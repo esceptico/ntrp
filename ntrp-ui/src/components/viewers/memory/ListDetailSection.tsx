@@ -1,4 +1,4 @@
-import React, { type ReactNode } from "react";
+import { type ReactNode } from "react";
 import {
   SplitView,
   BaseSelectionList,
@@ -19,6 +19,7 @@ interface ListDetailSectionProps<T> {
   details: ReactNode;
   focusPane?: "list" | "details";
   itemHeight?: number;
+  onItemClick?: (index: number) => void;
 }
 
 export function ListDetailSection<T>({
@@ -34,6 +35,7 @@ export function ListDetailSection<T>({
   details,
   focusPane = "list",
   itemHeight = 1,
+  onItemClick,
 }: ListDetailSectionProps<T>) {
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
   const availableLines = Math.max(1, height - 4);
@@ -65,6 +67,7 @@ export function ListDetailSection<T>({
         showScrollArrows
         width={listWidth}
         indicator={"\u25B6"}
+        onItemClick={onItemClick ? (index) => onItemClick(index) : undefined}
       />
       {items.length > 0 && (
         <box marginTop={1}>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import type { Config } from "../../../types.js";
 import { useFactsTab } from "../../../hooks/useFactsTab.js";
 import { useObservationsTab } from "../../../hooks/useObservationsTab.js";
@@ -114,6 +114,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 setCursorPos={factsTab.setCursorPos}
                 confirmDelete={factsTab.confirmDelete}
                 saving={saving}
+                onItemClick={factsTab.setSelectedIndex}
               />
             )}
 
@@ -139,6 +140,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 setCursorPos={obsTab.setCursorPos}
                 confirmDelete={obsTab.confirmDelete}
                 saving={saving}
+                onItemClick={obsTab.setSelectedIndex}
               />
             )}
 
@@ -158,6 +160,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 textScrollOffset={dreamsTab.textScrollOffset}
                 factsIndex={dreamsTab.factsIndex}
                 confirmDelete={dreamsTab.confirmDelete}
+                onItemClick={dreamsTab.setSelectedIndex}
               />
             )}
 

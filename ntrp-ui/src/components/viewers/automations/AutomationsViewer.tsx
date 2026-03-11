@@ -241,6 +241,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
               indicator="▶"
               showScrollArrows
               showCount
+              onItemClick={(index) => setSelectedIndex(index)}
             />
 
             {confirmDelete && automations[selectedIndex] && (

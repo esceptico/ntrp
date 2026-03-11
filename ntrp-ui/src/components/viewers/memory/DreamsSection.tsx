@@ -20,6 +20,7 @@ interface DreamsSectionProps {
   textScrollOffset: number;
   factsIndex: number;
   confirmDelete: boolean;
+  onItemClick?: (index: number) => void;
 }
 
 function shortTime(iso: string): string {
@@ -42,6 +43,7 @@ export function DreamsSection({
   textScrollOffset,
   factsIndex,
   confirmDelete,
+  onItemClick,
 }: DreamsSectionProps) {
   const { accentValue } = useAccentColor();
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
@@ -77,6 +79,7 @@ export function DreamsSection({
       height={height}
       width={width}
       itemHeight={3}
+      onItemClick={onItemClick}
       details={
         <DreamDetailsView
           details={dreamDetails}

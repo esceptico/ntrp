@@ -38,6 +38,21 @@ export function useAutocomplete({ value, commands, inputRef, setValue }: UseAuto
     return filteredCommandsRef.current[selectedIndexRef.current];
   }, []);
 
+  const selectByIndex = useCallback((index: number) => {
+    const cmd = filteredCommandsRef.current[index];
+    if (!cmd) return;
+    const newText = `/${cmd.name} `;
+    const input = inputRef.current;
+    if (input) {
+      const cursor = input.logicalCursor;
+      input.deleteRange(0, 0, cursor.row, cursor.col);
+      input.insertText(newText);
+      input.cursorOffset = newText.length;
+    }
+    setValue(newText);
+    setSelectedIndex(0);
+  }, [inputRef, setValue]);
+
   const handleAutocompleteKey = useCallback((e: KeyEvent): boolean => {
     if (!showAutocompleteRef.current) return false;
 
@@ -76,5 +91,6 @@ export function useAutocomplete({ value, commands, inputRef, setValue }: UseAuto
     resetIndex,
     getSelectedCommand,
     handleAutocompleteKey,
+    selectByIndex,
   };
 }

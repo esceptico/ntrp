@@ -81,6 +81,7 @@ export const InputArea = memo(function InputArea({
     resetIndex,
     getSelectedCommand,
     handleAutocompleteKey,
+    selectByIndex,
   } = useAutocomplete({ value, commands, inputRef, setValue });
 
   const resetInput = useCallback(() => {
@@ -160,6 +161,7 @@ export const InputArea = memo(function InputArea({
           commands={filteredCommands}
           selectedIndex={selectedIndex}
           accentValue={accentValue}
+          onItemClick={selectByIndex}
         />
       )}
 

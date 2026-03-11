@@ -9,6 +9,7 @@ interface ScrollableListProps<T> {
   emptyMessage?: string;
   showCount?: boolean;
   width?: number;
+  onItemClick?: (index: number, item: T) => void;
 }
 
 export function ScrollableList<T>({

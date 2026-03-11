@@ -271,6 +271,17 @@ function AppContent({
     });
   }, [sessionId, sidebarData.sessions, switchSession, switchToSession, clearQueue]);
 
+  const handleSessionClick = useCallback((targetId: string) => {
+    if (targetId === sessionId) return;
+    clearQueue();
+    switchToSession(targetId);
+    switchSession(targetId).then((result) => {
+      if (result) {
+        switchToSession(targetId, convertHistoryToMessages(result.history));
+      }
+    });
+  }, [sessionId, switchSession, switchToSession, clearQueue]);
+
   const tabPendingRef = useRef(false);
   const tabTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -348,6 +359,7 @@ function AppContent({
             currentSessionName={sessionName}
             sessionStates={sessionStates}
             sections={settings.sidebar}
+            onSessionClick={handleSessionClick}
           />
           <box width={1} height={contentHeight} flexShrink={0} flexDirection="column">
             {Array.from({ length: contentHeight }).map((_, i) => (

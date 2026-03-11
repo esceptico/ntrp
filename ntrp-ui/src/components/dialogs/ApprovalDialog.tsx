@@ -131,6 +131,11 @@ export function ApprovalDialog({ approval, onResult, isActive = true }: Approval
           selectedIndex={selectedIndex}
           visibleLines={3}
           showIndicator={false}
+          onItemClick={(index, item) => {
+            setSelectedIndex(index);
+            if (item.id === "once") onResult("once");
+            else if (item.id === "always") onResult("always");
+          }}
           renderItem={(item, ctx) => (
             <text>
               <SelectionIndicator selected={ctx.isSelected} accent={accentValue} />

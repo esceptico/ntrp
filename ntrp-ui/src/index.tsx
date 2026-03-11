@@ -62,6 +62,7 @@ if (apiKey) setApiKey(apiKey);
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
+  useMouse: true,
 });
 
 createRoot(renderer).render(<App config={config} />);

@@ -25,9 +25,10 @@ interface SidebarProps {
   currentSessionName: string | null;
   sessionStates?: Map<string, SessionNotification>;
   sections: SidebarSettings;
+  onSessionClick?: (sessionId: string) => void;
 }
 
-export const Sidebar = React.memo(function Sidebar({ serverConfig, serverVersion, serverUrl, data, usage, width, height, currentSessionId, currentSessionName, sessionStates, sections }: SidebarProps) {
+export const Sidebar = React.memo(function Sidebar({ serverConfig, serverVersion, serverUrl, data, usage, width, height, currentSessionId, currentSessionName, sessionStates, sections, onSessionClick }: SidebarProps) {
   const { accentValue } = useAccentColor();
   const contentWidth = width - 2;
 
@@ -59,6 +60,7 @@ export const Sidebar = React.memo(function Sidebar({ serverConfig, serverVersion
             currentSessionId={currentSessionId}
             sessionStates={sessionStates}
             width={contentWidth}
+            onSessionClick={onSessionClick}
           />
         )}
       </box>

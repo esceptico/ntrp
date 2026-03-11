@@ -27,6 +27,7 @@ interface FactsSectionProps {
   setCursorPos: (pos: number | ((prev: number) => number)) => void;
   confirmDelete: boolean;
   saving: boolean;
+  onItemClick?: (index: number) => void;
 }
 
 function shortTime(iso: string): string {
@@ -56,6 +57,7 @@ export function FactsSection({
   setCursorPos,
   confirmDelete,
   saving,
+  onItemClick,
 }: FactsSectionProps) {
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
   const detailWidth = Math.max(0, width - listWidth - 1);
@@ -89,6 +91,7 @@ export function FactsSection({
       height={height}
       width={width}
       itemHeight={3}
+      onItemClick={onItemClick}
       details={
         <FactDetailsView
           details={factDetails}

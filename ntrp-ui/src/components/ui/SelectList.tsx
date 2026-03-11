@@ -258,17 +258,23 @@ export function SelectList<T = string>({
             const isSelected = actualIdx === selectedEntryIdx;
             const { option } = entry;
 
+            const selectableIdx = selectableIndices.indexOf(actualIdx);
+            const handleClick = () => {
+              setSelectedIdx(selectableIdx);
+              onSelect(option);
+            };
+
             if (renderItem) {
               const ctx: RenderItemContext = {
                 isSelected,
-                index: selectableIndices.indexOf(actualIdx),
+                index: selectableIdx,
                 colors: {
                   text: isSelected ? colors.selection.active : colors.text.primary,
                   indicator: isSelected ? colors.selection.active : colors.text.disabled,
                 },
               };
               return (
-                <box key={String(option.value)} id={`entry-${actualIdx}`} flexDirection="row">
+                <box key={String(option.value)} id={`entry-${actualIdx}`} flexDirection="row" onMouseDown={handleClick}>
                   <box width={2} flexShrink={0}>
                     <text>
                       <span fg={isSelected ? colors.selection.active : colors.text.disabled}>
@@ -287,6 +293,7 @@ export function SelectList<T = string>({
                 id={`entry-${actualIdx}`}
                 flexDirection="row"
                 backgroundColor={isSelected ? accentValue : undefined}
+                onMouseDown={handleClick}
               >
                 <text>
                   {option.indicator ? (
