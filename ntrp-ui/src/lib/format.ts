@@ -33,13 +33,19 @@ export function formatRelativeTime(iso: string | null): string {
 }
 
 export function shortTime(iso: string): string {
-  return formatTimeAgo(iso).replace(" ago", "");
+  const ago = formatTimeAgo(iso);
+  if (ago === "just now") return "now";
+  if (ago === "yesterday") return "1d";
+  const short = ago.replace(" ago", "").replace(/\s*weeks?/, "w");
+  if (short === ago) return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+  return short;
 }
 
 export function formatCountdown(iso: string): string {
   const diff = new Date(iso).getTime() - Date.now();
   if (diff < 0) return "now";
   const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "now";
   if (mins < 60) return `${mins}m`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h`;

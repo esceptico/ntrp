@@ -154,7 +154,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
 
   if (loading) {
     return (
-      <Dialog title="AUTOMATIONS" size="large" onClose={onClose}>
+      <Dialog title="AUTOMATIONS" size="full" onClose={onClose}>
         {() => <Loading message="Loading automations..." />}
       </Dialog>
     );
@@ -162,7 +162,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
 
   if (error) {
     return (
-      <Dialog title="AUTOMATIONS" size="large" onClose={onClose}>
+      <Dialog title="AUTOMATIONS" size="full" onClose={onClose}>
         {() => <text><span fg={colors.status.error}>{error}</span></text>}
       </Dialog>
     );
@@ -171,7 +171,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
   return (
     <Dialog
       title="AUTOMATIONS"
-      size="large"
+      size="full"
       onClose={onClose}
       footer={getFooter()}
     >

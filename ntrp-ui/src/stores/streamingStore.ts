@@ -97,7 +97,12 @@ export function createStreamingStore() {
 
     function replaceSession(id: string, s: SessionStreamState) {
       const sessions = new Map(get().sessions);
-      sessions.set(id, { ...s });
+      sessions.set(id, {
+        ...s,
+        tools: { ...s.tools, descriptions: new Map(s.tools.descriptions), startTimes: new Map(s.tools.startTimes) },
+        alwaysAllowedTools: new Set(s.alwaysAllowedTools),
+        autoApprovedIds: new Set(s.autoApprovedIds),
+      });
       set({ sessions });
     }
 

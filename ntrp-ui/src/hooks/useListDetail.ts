@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, type Dispatch, type SetStateAction } from "react";
 import type { Key } from "./useKeypress.js";
 import { getTextMaxScroll } from "../components/ui/index.js";
 
@@ -16,8 +16,8 @@ export interface UseListDetailOptions<T> {
 }
 
 export interface ListKeyHelpers {
-  setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
-  setSortOrder: React.Dispatch<React.SetStateAction<SortOrder>>;
+  setSelectedIndex: Dispatch<SetStateAction<number>>;
+  setSortOrder: Dispatch<SetStateAction<SortOrder>>;
 }
 
 export interface ListDetailState<T> {
@@ -37,13 +37,13 @@ export interface ListDetailState<T> {
   confirmDelete: boolean;
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
-  setSelectedIndex: (i: number) => void;
+  setSelectedIndex: Dispatch<SetStateAction<number>>;
   setFocusPane: (p: "list" | "details") => void;
   resetDetailState: () => void;
-  setEditMode: React.Dispatch<React.SetStateAction<boolean>>;
-  setEditText: React.Dispatch<React.SetStateAction<string>>;
-  setCursorPos: React.Dispatch<React.SetStateAction<number>>;
-  setConfirmDelete: React.Dispatch<React.SetStateAction<boolean>>;
+  setEditMode: Dispatch<SetStateAction<boolean>>;
+  setEditText: Dispatch<SetStateAction<string>>;
+  setCursorPos: Dispatch<SetStateAction<number>>;
+  setConfirmDelete: Dispatch<SetStateAction<boolean>>;
 }
 
 export function useListDetail<T>({

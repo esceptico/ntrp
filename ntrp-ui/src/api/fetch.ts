@@ -1,6 +1,6 @@
-type ApiErrorKind = "http" | "network" | "timeout";
+export type ApiErrorKind = "http" | "network" | "timeout";
 
-interface ApiError extends Error {
+export interface ApiError extends Error {
   kind: ApiErrorKind;
   status?: number;
   statusText?: string;
@@ -91,8 +91,10 @@ async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> 
 
     if (error instanceof Error) {
       if (error.name === "AbortError") {
-        if (signal?.aborted) throw error; // External abort — propagate as-is
-        throw createApiError(`Request timed out after ${timeout}ms`, { kind: "timeout" });
+        if (controller.signal.aborted) {
+          throw createApiError(`Request timed out after ${timeout}ms`, { kind: "timeout" });
+        }
+        throw error; // External abort — propagate as-is
       }
 
       if (error.name === "TypeError" && error.message.includes("fetch")) {

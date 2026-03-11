@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useCallback, type Dispatch, type SetStateAction } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Config } from "../types.js";
 import type { Key } from "./useKeypress.js";
@@ -27,10 +27,10 @@ export interface DreamsTabState {
   sortOrder: SortOrder;
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
-  setSelectedIndex: (i: number) => void;
+  setSelectedIndex: Dispatch<SetStateAction<number>>;
   setFocusPane: (p: "list" | "details") => void;
   resetDetailState: () => void;
-  setConfirmDelete: React.Dispatch<React.SetStateAction<boolean>>;
+  setConfirmDelete: Dispatch<SetStateAction<boolean>>;
 }
 
 export function useDreamsTab(
@@ -40,12 +40,21 @@ export function useDreamsTab(
 ): DreamsTabState {
   const detailsRef = useRef<DreamDetails | null>(null);
 
+  const getSectionMaxIndex = useCallback(
+    (section: number) => getDreamSectionMaxIndex(detailsRef.current, section as DreamDetailSection),
+    [],
+  );
+  const getScrollText = useCallback(
+    (): string | undefined => detailsRef.current?.dream.insight,
+    [],
+  );
+
   const ld = useListDetail({
     items: dreams,
     filterFn: filterDream,
     sectionCount: 2,
-    getSectionMaxIndex: (section: number) => getDreamSectionMaxIndex(detailsRef.current, section as DreamDetailSection),
-    getScrollText: (): string | undefined => detailsRef.current?.dream.insight,
+    getSectionMaxIndex,
+    getScrollText,
     contentWidth,
     hasEdit: false,
   });
@@ -56,6 +65,7 @@ export function useDreamsTab(
     queryKey: ["dreamDetails", currentId],
     queryFn: ({ signal }) => getDreamDetails(config, currentId!, signal),
     enabled: !!currentId,
+    staleTime: 60_000,
   });
   detailsRef.current = dreamDetails;
 

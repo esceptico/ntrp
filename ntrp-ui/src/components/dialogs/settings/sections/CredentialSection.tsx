@@ -17,6 +17,7 @@ interface CredentialSectionProps<T extends CredentialItem> {
   renderStatus?: (item: T, selected: boolean) => React.ReactNode;
   renderHints?: (item: T) => React.ReactNode;
   isEditable?: (item: T) => boolean;
+  suppressHints?: boolean;
 }
 
 function DefaultStatus({ item }: { item: CredentialItem }) {
@@ -39,6 +40,7 @@ export function CredentialSection<T extends CredentialItem>({
   renderStatus,
   renderHints,
   isEditable,
+  suppressHints,
 }: CredentialSectionProps<T>) {
   if (s.items.length === 0) {
     return (
@@ -95,7 +97,7 @@ export function CredentialSection<T extends CredentialItem>({
         </box>
       )}
 
-      {!s.editing && !s.confirmDisconnect && !s.saving && (
+      {!s.editing && !s.confirmDisconnect && !s.saving && !suppressHints && (
         <box marginTop={1} marginLeft={2}>
           {renderHints?.(current) ?? (
             current?.connected && !current.from_env ? (

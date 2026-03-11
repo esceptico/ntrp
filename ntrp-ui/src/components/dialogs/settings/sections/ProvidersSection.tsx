@@ -58,6 +58,7 @@ export function ProvidersSection({ providers, accent }: ProvidersSectionProps) {
         renderStatus={renderStatus}
         renderHints={renderHints}
         isEditable={(p) => p.id !== "custom" && p.id !== "claude_oauth"}
+        suppressHints={providers.oauthConnecting}
       />
       {providers.oauthConnecting && (
         <box marginTop={1}>

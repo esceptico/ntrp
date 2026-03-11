@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Config } from "../types.js";
 import type { Key } from "./useKeypress.js";
@@ -32,13 +32,13 @@ export interface FactsTabState {
   availableSources: string[];
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
-  setSelectedIndex: (i: number) => void;
+  setSelectedIndex: Dispatch<SetStateAction<number>>;
   setFocusPane: (p: "list" | "details") => void;
   resetDetailState: () => void;
-  setEditMode: React.Dispatch<React.SetStateAction<boolean>>;
-  setEditText: React.Dispatch<React.SetStateAction<string>>;
-  setCursorPos: React.Dispatch<React.SetStateAction<number>>;
-  setConfirmDelete: React.Dispatch<React.SetStateAction<boolean>>;
+  setEditMode: Dispatch<SetStateAction<boolean>>;
+  setEditText: Dispatch<SetStateAction<string>>;
+  setCursorPos: Dispatch<SetStateAction<number>>;
+  setConfirmDelete: Dispatch<SetStateAction<boolean>>;
 }
 
 export function useFactsTab(
@@ -71,12 +71,21 @@ export function useFactsTab(
     return false;
   }, [availableSources]);
 
+  const getSectionMaxIndex = useCallback(
+    (section: number) => getFactSectionMaxIndex(detailsRef.current, section as FactDetailSection),
+    [],
+  );
+  const getScrollText = useCallback(
+    (): string | undefined => detailsRef.current?.fact.text,
+    [],
+  );
+
   const ld = useListDetail({
     items: sourceFiltered,
     filterFn: filterFact,
     sectionCount: 3,
-    getSectionMaxIndex: (section: number) => getFactSectionMaxIndex(detailsRef.current, section as FactDetailSection),
-    getScrollText: (): string | undefined => detailsRef.current?.fact.text,
+    getSectionMaxIndex,
+    getScrollText,
     contentWidth,
     onListKey,
   });
@@ -87,6 +96,7 @@ export function useFactsTab(
     queryKey: ["factDetails", currentId],
     queryFn: ({ signal }) => getFactDetails(config, currentId!, signal),
     enabled: !!currentId,
+    staleTime: 60_000,
   });
   detailsRef.current = factDetails;
 

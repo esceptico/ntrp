@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useCallback, type Dispatch, type SetStateAction } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Config } from "../types.js";
 import type { Key } from "./useKeypress.js";
@@ -29,13 +29,13 @@ export interface ObservationsTabState {
   sortOrder: SortOrder;
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
-  setSelectedIndex: (i: number) => void;
+  setSelectedIndex: Dispatch<SetStateAction<number>>;
   setFocusPane: (p: "list" | "details") => void;
   resetDetailState: () => void;
-  setEditMode: React.Dispatch<React.SetStateAction<boolean>>;
-  setEditText: React.Dispatch<React.SetStateAction<string>>;
-  setCursorPos: React.Dispatch<React.SetStateAction<number>>;
-  setConfirmDelete: React.Dispatch<React.SetStateAction<boolean>>;
+  setEditMode: Dispatch<SetStateAction<boolean>>;
+  setEditText: Dispatch<SetStateAction<string>>;
+  setCursorPos: Dispatch<SetStateAction<number>>;
+  setConfirmDelete: Dispatch<SetStateAction<boolean>>;
 }
 
 export function useObservationsTab(
@@ -45,12 +45,21 @@ export function useObservationsTab(
 ): ObservationsTabState {
   const detailsRef = useRef<ObservationDetails | null>(null);
 
+  const getSectionMaxIndex = useCallback(
+    (section: number) => getObsSectionMaxIndex(detailsRef.current, section as ObsDetailSection),
+    [],
+  );
+  const getScrollText = useCallback(
+    (): string | undefined => detailsRef.current?.observation.summary,
+    [],
+  );
+
   const ld = useListDetail({
     items: observations,
     filterFn: filterObs,
     sectionCount: 2,
-    getSectionMaxIndex: (section: number) => getObsSectionMaxIndex(detailsRef.current, section as ObsDetailSection),
-    getScrollText: (): string | undefined => detailsRef.current?.observation.summary,
+    getSectionMaxIndex,
+    getScrollText,
     contentWidth,
   });
 
@@ -60,6 +69,7 @@ export function useObservationsTab(
     queryKey: ["obsDetails", currentId],
     queryFn: ({ signal }) => getObservationDetails(config, currentId!, signal),
     enabled: !!currentId,
+    staleTime: 60_000,
   });
   detailsRef.current = obsDetails;
 

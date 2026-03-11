@@ -158,10 +158,10 @@ export function useStreaming({
           break;
         }
 
-        case "approval_needed":
-          if (s.alwaysAllowedTools.has(event.name) && s.runId) {
+        case "approval_needed": {
+          const session = getSession(targetId);
+          if (session.alwaysAllowedTools.has(event.name) && session.runId) {
             s.autoApprovedIds.add(event.tool_id);
-            submitToolResult(s.runId, event.tool_id, "Approved", true, configRef.current);
             s.status = Status.THINKING;
             break;
           }
@@ -177,6 +177,7 @@ export function useStreaming({
             s.notification = "approval";
           }
           break;
+        }
 
         case "done":
           finalizeText(s);
@@ -252,6 +253,16 @@ export function useStreaming({
         }
       }
     });
+
+    // Auto-approval: fire submitToolResult outside mutateSession so it can be async
+    if (event.type === "approval_needed") {
+      const session = getSession(targetId);
+      if (session.alwaysAllowedTools.has(event.name) && session.runId) {
+        submitToolResult(session.runId, event.tool_id, "Approved", true, configRef.current).catch(() => {
+          mutateSession(targetId, (s) => addMessageToSession(s, { role: "error", content: "Auto-approval failed" }));
+        });
+      }
+    }
   };
 
   // Persistent SSE connection — stable deps, handler accessed via ref
