@@ -11,7 +11,6 @@ from ntrp.constants import (
     SCHEDULER_EVENT_RETRY_BASE_SECONDS,
     SCHEDULER_EVENT_RETRY_MAX_SECONDS,
     SCHEDULER_POLL_INTERVAL,
-    SCHEDULER_STOP_TIMEOUT,
 )
 from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, TriggerEvent
 from ntrp.logging import get_logger
@@ -47,11 +46,9 @@ class Scheduler:
             self._task = None
 
         if self._running:
-            _, pending = await asyncio.wait(self._running, timeout=SCHEDULER_STOP_TIMEOUT)
-            if pending:
-                for task in pending:
-                    task.cancel()
-                await asyncio.gather(*pending, return_exceptions=True)
+            for task in self._running:
+                task.cancel()
+            await asyncio.gather(*self._running, return_exceptions=True)
             self._running.clear()
 
         _logger.info("Scheduler stopped")
