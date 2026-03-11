@@ -1,9 +1,10 @@
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from ntrp.channel import Channel
+from ntrp.constants import CONVERSATION_GAP_THRESHOLD
 from ntrp.context.compression import compress_context_async, find_compressible_range
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.agent import Agent
@@ -81,6 +82,20 @@ async def _resolve_session(runtime: "Runtime") -> SessionData:
     return SessionData(runtime.session_service.create(), [])
 
 
+def _time_gap_note(last_activity: datetime) -> str:
+    gap = (datetime.now(UTC) - last_activity).total_seconds()
+    if gap < CONVERSATION_GAP_THRESHOLD:
+        return ""
+    hours = gap / 3600
+    if hours < 1:
+        elapsed = f"{int(gap / 60)} minutes"
+    elif hours < 24:
+        elapsed = f"{hours:.1f} hours"
+    else:
+        elapsed = f"{hours / 24:.1f} days"
+    return f"<time_since_last_message>{elapsed}</time_since_last_message>"
+
+
 async def _prepare_messages(
     runtime: "Runtime",
     messages: list[dict],
@@ -99,7 +114,6 @@ async def _prepare_messages(
 
     system_blocks = build_system_blocks(
         source_details=runtime.source_mgr.get_details(),
-        last_activity=last_activity,
         memory_context=memory_context,
         skills_context=skills_context,
         directives=directives,
@@ -113,6 +127,11 @@ async def _prepare_messages(
         messages[0]["content"] = system_blocks
     else:
         messages.insert(0, {"role": "system", "content": system_blocks})
+
+    if last_activity:
+        gap_note = _time_gap_note(last_activity)
+        if gap_note:
+            user_message = f"{user_message}\n\n{gap_note}"
 
     messages.append({"role": "user", "content": user_message})
 

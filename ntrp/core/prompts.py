@@ -1,8 +1,8 @@
-from datetime import UTC, datetime
+from datetime import datetime
 
 from jinja2 import Environment
 
-from ntrp.constants import AGENT_MAX_DEPTH, CONVERSATION_GAP_THRESHOLD
+from ntrp.constants import AGENT_MAX_DEPTH
 
 env = Environment(trim_blocks=True, lstrip_blocks=True)
 
@@ -17,6 +17,7 @@ BASE_SYSTEM_PROMPT = f"""You are ntrp, a personal assistant with deep access to 
 - For actions (create, edit, send): check existing state first, then act
 - DO NOT ask "Want me to search/read?" — JUST DO IT
 - Do not mix final responses with tool calls. If you call tools, your text is a progress update, not the answer. Finish all tool calls first, then respond.
+- `<time_since_last_message>` in user messages indicates idle time since the previous interaction. Adjust tone accordingly — greet after long gaps, continue naturally after short ones.
 
 ## EXPLORATION
 
@@ -142,11 +143,7 @@ If a skill has already been loaded in this conversation (you see a `<skill>` tag
 {% endif %}""")
 
 DYNAMIC_BLOCK = env.from_string("""## CONTEXT
-Today is {{ date }} at {{ time }} (user's local time).
-{% if time_gap %}
-
-{{ time_gap }}
-{% endif %}""")
+Today is {{ date }} at {{ time }} (user's local time).""")
 
 TEMPORAL_REMINDER = env.from_string("Remember: today is {{ date }}.")
 
@@ -220,21 +217,8 @@ def current_date_formatted() -> str:
     return datetime.now().strftime("%A, %B %d, %Y")
 
 
-def _time_gap(last_activity: datetime | None) -> str:
-    if not last_activity:
-        return ""
-    gap = (datetime.now(UTC) - last_activity).total_seconds()
-    if gap < CONVERSATION_GAP_THRESHOLD:
-        return ""
-    hours = gap / 3600
-    if hours < 1:
-        return f"Note: Last interaction was {int(gap / 60)} minutes ago."
-    return f"Note: Last interaction was {hours:.1f} hours ago."
-
-
 def build_system_blocks(
     source_details: dict[str, dict],
-    last_activity: datetime | None = None,
     memory_context: str | None = None,
     skills_context: str | None = None,
     directives: str | None = None,
@@ -265,7 +249,6 @@ def build_system_blocks(
     dynamic = DYNAMIC_BLOCK.render(
         date=date,
         time=now.strftime("%H:00"),
-        time_gap=_time_gap(last_activity),
     )
     blocks.append({"type": "text", "text": dynamic})
 
@@ -285,7 +268,6 @@ def build_system_blocks(
 
 def build_system_prompt(
     source_details: dict[str, dict],
-    last_activity: datetime | None = None,
     memory_context: str | None = None,
     skills_context: str | None = None,
     directives: str | None = None,
@@ -294,7 +276,6 @@ def build_system_prompt(
     """Build system prompt as a single string (for non-chat callers like scheduler/CLI)."""
     blocks = build_system_blocks(
         source_details,
-        last_activity=last_activity,
         memory_context=memory_context,
         skills_context=skills_context,
         directives=directives,

@@ -112,7 +112,6 @@ async def _run_headless(prompt: str):
     try:
         system_prompt = build_system_prompt(
             source_details=runtime.source_mgr.get_details(),
-            last_activity=None,
             memory_context=None,
         )
 
