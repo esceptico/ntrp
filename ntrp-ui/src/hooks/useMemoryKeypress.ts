@@ -251,8 +251,9 @@ export function useMemoryKeypress({
         }
       }
 
-      if (activeTab === "dreams" && dreamsTab.focusPane === "list" && dreamsTab.filteredDreams.length > 0) {
-        if (key.name === "d" || key.name === "delete") {
+      if (activeTab === "dreams" && dreamsTab.focusPane === "list") {
+        const selectedDream = dreamsTab.filteredDreams[dreamsTab.selectedIndex];
+        if (selectedDream && (key.name === "d" || key.name === "delete")) {
           dreamsTab.setFocusPane("details");
           dreamsTab.setConfirmDelete(true);
           return;

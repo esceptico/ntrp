@@ -1,8 +1,9 @@
-interface ApiError extends Error {
+export type ApiErrorKind = "http" | "network" | "timeout";
+
+export interface ApiError extends Error {
+  kind: ApiErrorKind;
   status?: number;
   statusText?: string;
-  isNetworkError: boolean;
-  isTimeout: boolean;
 }
 
 interface FetchOptions {
@@ -26,14 +27,13 @@ export function getApiKey(): string {
 
 function createApiError(
   message: string,
-  options: { status?: number; statusText?: string; isNetworkError?: boolean; isTimeout?: boolean } = {}
+  options: { kind?: ApiErrorKind; status?: number; statusText?: string } = {}
 ): ApiError {
   const error = new Error(message) as ApiError;
   error.name = "ApiError";
+  error.kind = options.kind ?? "http";
   error.status = options.status;
   error.statusText = options.statusText;
-  error.isNetworkError = options.isNetworkError ?? false;
-  error.isTimeout = options.isTimeout ?? false;
   return error;
 }
 
@@ -91,19 +91,22 @@ async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> 
 
     if (error instanceof Error) {
       if (error.name === "AbortError") {
-        throw createApiError(`Request timed out after ${timeout}ms`, { isTimeout: true });
+        if (controller.signal.aborted) {
+          throw createApiError(`Request timed out after ${timeout}ms`, { kind: "timeout" });
+        }
+        throw error; // External abort — propagate as-is
       }
 
       if (error.name === "TypeError" && error.message.includes("fetch")) {
-        throw createApiError("Network error: Unable to reach server", { isNetworkError: true });
+        throw createApiError("Network error: Unable to reach server", { kind: "network" });
       }
 
-      if ((error as ApiError).isNetworkError !== undefined) {
+      if ((error as ApiError).kind !== undefined) {
         throw error;
       }
     }
 
-    throw createApiError(`Unexpected error: ${error}`, { isNetworkError: true });
+    throw createApiError(`Unexpected error: ${error}`, { kind: "network" });
   }
 }
 

@@ -1,66 +1,18 @@
-import { useState, useCallback, useRef, useEffect } from "react";
-import type { Message, ServerEvent, Config, PendingApproval } from "../types.js";
+import { useCallback, useRef, useEffect, useMemo } from "react";
+import { useStore } from "zustand";
+import type { Message, ServerEvent, Config, PendingApproval, TokenUsage } from "../types.js";
+import { ZERO_USAGE } from "../types.js";
 import type { ToolChainItem } from "../components/toolchain/types.js";
 import { connectEvents, sendChatMessage, submitToolResult, cancelRun, backgroundRun, revertSession } from "../api/client.js";
 import {
-  MAX_MESSAGES,
-  MAX_TOOL_MESSAGE_CHARS,
   MAX_TOOL_DESCRIPTION_CHARS,
-  MAX_ASSISTANT_CHARS,
   Status,
   type Status as StatusType,
 } from "../lib/constants.js";
 import { truncateText } from "../lib/utils.js";
+import { createStreamingStore, type SessionNotification, type SessionStreamState, type MessageInput } from "../stores/streamingStore.js";
 
-type MessageInput = Omit<Message, "id"> & { id?: string };
-
-export type SessionNotification = "streaming" | "done" | "approval" | "error";
-
-interface SessionStreamState {
-  messages: Message[];
-  toolChain: ToolChainItem[];
-  pendingApproval: PendingApproval | null;
-  status: StatusType;
-  usage: { prompt: number; completion: number; cache_read: number; cache_write: number; cost: number; lastCost: number };
-  isStreaming: boolean;
-  historyLoaded: boolean;
-  runId: string | null;
-  pendingText: string;
-  currentDepth: number;
-  toolDesc: Map<string, string>;
-  toolStart: Map<string, number>;
-  toolSeq: number;
-  alwaysAllowedTools: Set<string>;
-  autoApprovedIds: Set<string>;
-  messageIdCounter: number;
-  notification: SessionNotification | null;
-  backgroundTaskCount: number;
-}
-
-const ZERO_USAGE = { prompt: 0, completion: 0, cache_read: 0, cache_write: 0, cost: 0, lastCost: 0 };
-
-function createSessionState(): SessionStreamState {
-  return {
-    messages: [],
-    toolChain: [],
-    pendingApproval: null,
-    status: Status.IDLE,
-    usage: { ...ZERO_USAGE },
-    isStreaming: false,
-    historyLoaded: false,
-    runId: null,
-    pendingText: "",
-    currentDepth: 0,
-    toolDesc: new Map(),
-    toolStart: new Map(),
-    toolSeq: 0,
-    alwaysAllowedTools: new Set(),
-    autoApprovedIds: new Set(),
-    messageIdCounter: 0,
-    notification: null,
-    backgroundTaskCount: 0,
-  };
-}
+export type { SessionNotification };
 
 interface UseStreamingOptions {
   config: Config;
@@ -77,9 +29,9 @@ export function useStreaming({
   onSessionInfo,
   initialMessages,
 }: UseStreamingOptions) {
-  const sessionsRef = useRef(new Map<string, SessionStreamState>());
-  const viewedIdRef = useRef<string | null>(sessionId);
-  const mountedRef = useRef(true);
+  const storeRef = useRef(createStreamingStore());
+  const store = storeRef.current;
+
   const skipApprovalsRef = useRef(skipApprovals);
   skipApprovalsRef.current = skipApprovals;
   const onSessionInfoRef = useRef(onSessionInfo);
@@ -89,314 +41,241 @@ export function useStreaming({
   const disconnectRef = useRef<(() => void) | null>(null);
   const prevBgCountRef = useRef(0);
 
-  interface ViewState {
-    messages: Message[];
-    isStreaming: boolean;
-    status: StatusType;
-    toolChain: ToolChainItem[];
-    pendingApproval: PendingApproval | null;
-    usage: SessionStreamState["usage"];
-    backgroundTaskCount: number;
-  }
+  const { getSession, mutateSession, addMessageToSession, finalizeText, setViewedId, deleteSession } =
+    store.getState();
 
-  const [view, setView] = useState<ViewState>({
-    messages: [],
-    isStreaming: false,
-    status: Status.IDLE,
-    toolChain: [],
-    pendingApproval: null,
-    usage: { ...ZERO_USAGE },
-    backgroundTaskCount: 0,
+  const viewed = useStore(store, (state) => {
+    const id = state.viewedId;
+    if (!id) return null;
+    return state.sessions.get(id) ?? null;
   });
-  const [sessionStates, setSessionStates] = useState<Map<string, SessionNotification>>(new Map());
 
-  const getSession = useCallback((id: string): SessionStreamState => {
-    let s = sessionsRef.current.get(id);
-    if (!s) {
-      s = createSessionState();
-      sessionsRef.current.set(id, s);
-    }
-    return s;
-  }, []);
+  const messages = viewed?.messages ?? [];
+  const isStreaming = viewed?.isStreaming ?? false;
+  const status = viewed?.status ?? Status.IDLE;
+  const toolChain = viewed?.toolChain ?? [];
+  const pendingApproval = viewed?.pendingApproval ?? null;
+  const usage = viewed?.usage ?? ZERO_USAGE;
+  const backgroundTaskCount = viewed?.backgroundTaskCount ?? 0;
 
-  const lastSyncRef = useRef<ViewState | null>(null);
-
-  const syncView = useCallback((targetId: string) => {
-    if (!mountedRef.current || targetId !== viewedIdRef.current) return;
-    const s = sessionsRef.current.get(targetId);
-    if (!s) return;
-    const last = lastSyncRef.current;
-    if (last
-      && last.messages === s.messages
-      && last.isStreaming === s.isStreaming
-      && last.status === s.status
-      && last.toolChain === s.toolChain
-      && last.pendingApproval === s.pendingApproval
-      && last.usage === s.usage
-      && last.backgroundTaskCount === s.backgroundTaskCount
-    ) return;
-    const next: ViewState = {
-      messages: s.messages, isStreaming: s.isStreaming, status: s.status,
-      toolChain: s.toolChain, pendingApproval: s.pendingApproval, usage: s.usage,
-      backgroundTaskCount: s.backgroundTaskCount,
-    };
-    lastSyncRef.current = next;
-    setView(next);
-  }, []);
-
-  const updateSessionStates = useCallback(() => {
-    if (!mountedRef.current) return;
+  const sessions = useStore(store, (state) => state.sessions);
+  const viewedId = useStore(store, (state) => state.viewedId);
+  const sessionStates = useMemo(() => {
     const states = new Map<string, SessionNotification>();
-    for (const [id, s] of sessionsRef.current) {
-      if (id === viewedIdRef.current) continue;
+    for (const [id, s] of sessions) {
+      if (id === viewedId) continue;
       if (s.notification) states.set(id, s.notification);
       else if (s.isStreaming) states.set(id, "streaming");
     }
-    setSessionStates(prev => {
-      if (prev.size === states.size && [...prev].every(([k, v]) => states.get(k) === v)) return prev;
-      return states;
-    });
-  }, []);
+    return states;
+  }, [sessions, viewedId]);
 
-  const generateId = useCallback((s: SessionStreamState) => {
-    return `m-${Date.now()}-${s.messageIdCounter++}`;
-  }, []);
+  // Ref-based handler so the SSE effect doesn't need to re-subscribe on changes
+  const handleEventRef = useRef<(targetId: string, event: ServerEvent) => Promise<void>>(null);
+  handleEventRef.current = async (targetId: string, event: ServerEvent) => {
+    const viewedId = store.getState().viewedId;
 
-  const addMessageToSession = useCallback((s: SessionStreamState, msg: MessageInput) => {
-    const content = msg.role === "tool"
-      ? truncateText(msg.content, MAX_TOOL_MESSAGE_CHARS, 'end')
-      : msg.content;
-    const withId: Message = { ...msg, content, id: msg.id ?? generateId(s) } as Message;
-    const updated = [...s.messages, withId];
-    s.messages = updated.length > MAX_MESSAGES ? updated.slice(-MAX_MESSAGES) : updated;
-  }, [generateId]);
+    // These events update pendingText without triggering re-render
+    if (event.type === "text") {
+      getSession(targetId).pendingText = event.content;
+      return;
+    }
+    if (event.type === "question") {
+      getSession(targetId).pendingText = event.question;
+      return;
+    }
 
-  const addMessage = useCallback((msg: MessageInput) => {
-    const id = viewedIdRef.current;
-    if (!id) return;
-    const s = getSession(id);
-    addMessageToSession(s, msg);
-    syncView(id);
-  }, [getSession, addMessageToSession, syncView]);
+    mutateSession(targetId, (s) => {
+      switch (event.type) {
+        case "session_info":
+          s.runId = event.run_id;
+          if (targetId === viewedId) {
+            onSessionInfoRef.current?.({
+              session_id: event.session_id,
+              sources: event.sources,
+              session_name: event.session_name,
+            });
+          }
+          break;
 
-  const clearMessages = useCallback(() => {
-    const id = viewedIdRef.current;
-    if (!id) return;
-    const s = getSession(id);
-    s.messages = [];
-    s.historyLoaded = true;
-    syncView(id);
-  }, [getSession, syncView]);
+        case "thinking":
+          s.status = event.status?.includes("compress")
+            ? Status.COMPRESSING
+            : Status.THINKING;
+          break;
 
-  const finalizeText = useCallback((s: SessionStreamState) => {
-    s.currentDepth = 0;
-    const finalContent = truncateText(s.pendingText, MAX_ASSISTANT_CHARS, 'end');
-    s.pendingText = "";
-    if (finalContent) addMessageToSession(s, { role: "assistant", content: finalContent });
-  }, [addMessageToSession]);
-
-  const handleEventForSession = useCallback(async (
-    targetId: string,
-    s: SessionStreamState,
-    event: ServerEvent,
-  ) => {
-    switch (event.type) {
-      case "session_info":
-        s.runId = event.run_id;
-        if (targetId === viewedIdRef.current) {
-          onSessionInfoRef.current?.({
-            session_id: event.session_id,
-            sources: event.sources,
-            session_name: event.session_name,
-          });
+        case "tool_call": {
+          const text = s.pendingText.trim();
+          if (text && s.currentDepth === 0) {
+            addMessageToSession(s, { role: "assistant", content: text });
+            s.pendingText = "";
+          }
+          s.currentDepth = event.depth;
+          s.status = Status.TOOL;
+          const description = truncateText(event.description, MAX_TOOL_DESCRIPTION_CHARS, 'end');
+          s.tools.descriptions.set(event.tool_id, description);
+          s.tools.startTimes.set(event.tool_id, Date.now());
+          const seq = s.tools.sequence++;
+          s.toolChain = [...s.toolChain, {
+            id: event.tool_id,
+            type: "tool" as const,
+            depth: event.depth,
+            name: event.name,
+            description,
+            status: "running" as const,
+            seq,
+            parentId: event.parent_id || undefined,
+          }];
+          break;
         }
-        break;
 
-      case "thinking":
-        s.status = event.status?.includes("compress")
-          ? Status.COMPRESSING
-          : Status.THINKING;
-        break;
+        case "tool_result": {
+          const toolDescription = s.tools.descriptions.get(event.tool_id);
+          const startTime = s.tools.startTimes.get(event.tool_id);
+          const duration = startTime ? Math.round((Date.now() - startTime) / 1000) : undefined;
+          s.tools.startTimes.delete(event.tool_id);
+          s.tools.descriptions.delete(event.tool_id);
+          const autoApproved = s.autoApprovedIds.delete(event.tool_id);
+          const childCount = s.toolChain.filter((item) => item.parentId === event.tool_id).length;
 
-      case "text":
-        s.pendingText = event.content;
-        break;
-
-      case "tool_call": {
-        const text = s.pendingText.trim();
-        if (text && s.currentDepth === 0) {
-          addMessageToSession(s, { role: "assistant", content: text });
-          s.pendingText = "";
-        }
-        s.currentDepth = event.depth;
-        s.status = Status.TOOL;
-        const description = truncateText(event.description, MAX_TOOL_DESCRIPTION_CHARS, 'end');
-        s.toolDesc.set(event.tool_id, description);
-        s.toolStart.set(event.tool_id, Date.now());
-        const seq = s.toolSeq++;
-        s.toolChain = [...s.toolChain, {
-          id: event.tool_id,
-          type: "tool" as const,
-          depth: event.depth,
-          name: event.name,
-          description,
-          status: "running" as const,
-          seq,
-          parentId: event.parent_id || undefined,
-        }];
-        break;
-      }
-
-      case "tool_result": {
-        const toolDescription = s.toolDesc.get(event.tool_id);
-        const startTime = s.toolStart.get(event.tool_id);
-        const duration = startTime ? Math.round((Date.now() - startTime) / 1000) : undefined;
-        s.toolStart.delete(event.tool_id);
-        s.toolDesc.delete(event.tool_id);
-        const autoApproved = s.autoApprovedIds.delete(event.tool_id);
-        const childCount = s.toolChain.filter((item) => item.parentId === event.tool_id).length;
-
-        if (childCount > 0) {
-          addMessageToSession(s, {
-            role: "tool", content: event.result, toolName: event.name,
-            toolDescription, toolCount: childCount, duration, autoApproved,
-          });
-          s.toolChain = s.toolChain.filter((item) => item.id !== event.tool_id && item.parentId !== event.tool_id);
-        } else if (event.depth > 0) {
-          s.toolChain = s.toolChain.map((item) =>
-            item.id === event.tool_id
-              ? { ...item, status: "done" as const, result: event.result, preview: event.preview, data: event.data }
-              : item
-          );
-        } else {
-          addMessageToSession(s, { role: "tool", content: event.result, toolName: event.name, toolDescription, autoApproved });
-          s.toolChain = s.toolChain.filter((item) => item.id !== event.tool_id);
-        }
-        s.status = Status.THINKING;
-        break;
-      }
-
-      case "approval_needed": {
-        if (s.alwaysAllowedTools.has(event.name) && s.runId) {
-          s.autoApprovedIds.add(event.tool_id);
-          await submitToolResult(s.runId, event.tool_id, "Approved", true, configRef.current);
+          if (childCount > 0) {
+            addMessageToSession(s, {
+              role: "tool", content: event.result, toolName: event.name,
+              toolDescription, toolCount: childCount, duration, autoApproved,
+            });
+            s.toolChain = s.toolChain.filter((item) => item.id !== event.tool_id && item.parentId !== event.tool_id);
+          } else if (event.depth > 0) {
+            s.toolChain = s.toolChain.map((item) =>
+              item.id === event.tool_id
+                ? { ...item, status: "done" as const, result: event.result, preview: event.preview, data: event.data }
+                : item
+            );
+          } else {
+            addMessageToSession(s, { role: "tool", content: event.result, toolName: event.name, toolDescription, duration, autoApproved });
+            s.toolChain = s.toolChain.filter((item) => item.id !== event.tool_id);
+          }
           s.status = Status.THINKING;
           break;
         }
-        s.pendingApproval = {
-          toolId: event.tool_id,
-          name: event.name,
-          path: event.path,
-          diff: event.diff,
-          preview: event.content_preview || "",
-        };
-        s.status = Status.AWAITING_APPROVAL;
-        if (targetId !== viewedIdRef.current) {
-          s.notification = "approval";
-          updateSessionStates();
+
+        case "approval_needed": {
+          const session = getSession(targetId);
+          if (session.alwaysAllowedTools.has(event.name) && session.runId) {
+            s.autoApprovedIds.add(event.tool_id);
+            s.status = Status.THINKING;
+            break;
+          }
+          s.pendingApproval = {
+            toolId: event.tool_id,
+            name: event.name,
+            path: event.path,
+            diff: event.diff,
+            preview: event.content_preview || "",
+          };
+          s.status = Status.AWAITING_APPROVAL;
+          if (targetId !== viewedId) {
+            s.notification = "approval";
+          }
+          break;
         }
-        break;
+
+        case "done":
+          finalizeText(s);
+          s.usage = {
+            prompt: s.usage.prompt + event.usage.prompt,
+            completion: s.usage.completion + event.usage.completion,
+            cache_read: s.usage.cache_read + (event.usage.cache_read || 0),
+            cache_write: s.usage.cache_write + (event.usage.cache_write || 0),
+            cost: s.usage.cost + (event.usage.cost || 0),
+            lastCost: event.usage.cost || 0,
+          };
+          s.pendingApproval = null;
+          s.status = Status.IDLE;
+          s.isStreaming = false;
+          s.toolChain = s.toolChain.map((item) =>
+            item.status === "running" ? { ...item, status: "done" as const } : item
+          );
+          if (targetId !== viewedId && !s.notification) {
+            s.notification = "done";
+          }
+          break;
+
+        case "error":
+          finalizeText(s);
+          addMessageToSession(s, { role: "error", content: event.message });
+          s.status = Status.IDLE;
+          s.isStreaming = false;
+          if (targetId !== viewedId) {
+            s.notification = "error";
+          }
+          break;
+
+        case "cancelled": {
+          const containers = s.toolChain.filter(
+            (item) => (item.name === "explore" || item.name === "delegate") && s.toolChain.some((c) => c.parentId === item.id)
+          );
+          for (const container of containers) {
+            const cCount = s.toolChain.filter((c) => c.parentId === container.id).length;
+            addMessageToSession(s, {
+              role: "tool", content: "Cancelled",
+              toolName: container.name, toolDescription: container.description, toolCount: cCount,
+            });
+          }
+          s.toolChain = [];
+          s.pendingApproval = null;
+          s.status = Status.IDLE;
+          s.isStreaming = false;
+          s.pendingText = "";
+          break;
+        }
+
+        case "backgrounded":
+          finalizeText(s);
+          s.pendingApproval = null;
+          s.status = Status.IDLE;
+          s.isStreaming = false;
+          s.toolChain = s.toolChain.map((item) =>
+            item.status === "running" ? { ...item, status: "done" as const } : item
+          );
+          if (targetId !== viewedId && !s.notification) {
+            s.notification = "done";
+          }
+          break;
+
+        case "background_task":
+          if (event.status === "started") s.backgroundTaskCount++;
+          else s.backgroundTaskCount = Math.max(0, s.backgroundTaskCount - 1);
+          break;
+
+        default: {
+          const _exhaustive: never = event;
+          return _exhaustive;
+        }
       }
+    });
 
-      case "done":
-        finalizeText(s);
-        s.usage = {
-          prompt: s.usage.prompt + event.usage.prompt,
-          completion: s.usage.completion + event.usage.completion,
-          cache_read: s.usage.cache_read + (event.usage.cache_read || 0),
-          cache_write: s.usage.cache_write + (event.usage.cache_write || 0),
-          cost: s.usage.cost + (event.usage.cost || 0),
-          lastCost: event.usage.cost || 0,
-        };
-        s.pendingApproval = null;
-        s.status = Status.IDLE;
-        s.isStreaming = false;
-        s.toolChain = s.toolChain.map((item) =>
-          item.status === "running" ? { ...item, status: "done" as const } : item
-        );
-        if (targetId !== viewedIdRef.current && !s.notification) {
-          s.notification = "done";
-          updateSessionStates();
-        }
-        break;
-
-      case "error":
-        finalizeText(s);
-        addMessageToSession(s, { role: "error", content: event.message });
-        s.status = Status.IDLE;
-        s.isStreaming = false;
-        if (targetId !== viewedIdRef.current) {
-          s.notification = "error";
-          updateSessionStates();
-        }
-        break;
-
-      case "cancelled": {
-        const containers = s.toolChain.filter(
-          (item) => (item.name === "explore" || item.name === "delegate") && s.toolChain.some((c) => c.parentId === item.id)
-        );
-        for (const container of containers) {
-          const cCount = s.toolChain.filter((c) => c.parentId === container.id).length;
-          addMessageToSession(s, {
-            role: "tool", content: "Cancelled",
-            toolName: container.name, toolDescription: container.description, toolCount: cCount,
-          });
-        }
-        s.toolChain = [];
-        s.pendingApproval = null;
-        s.status = Status.IDLE;
-        s.isStreaming = false;
-        s.pendingText = "";
-        break;
-      }
-
-      case "question":
-        s.pendingText = event.question;
-        break;
-
-      case "backgrounded":
-        finalizeText(s);
-        s.pendingApproval = null;
-        s.status = Status.IDLE;
-        s.isStreaming = false;
-        s.toolChain = s.toolChain.map((item) =>
-          item.status === "running" ? { ...item, status: "done" as const } : item
-        );
-        if (targetId !== viewedIdRef.current && !s.notification) {
-          s.notification = "done";
-          updateSessionStates();
-        }
-        break;
-
-      case "background_task":
-        if (event.status === "started") s.backgroundTaskCount++;
-        else s.backgroundTaskCount = Math.max(0, s.backgroundTaskCount - 1);
-        break;
-
-      default: {
-        const _exhaustive: never = event;
-        return _exhaustive;
+    // Auto-approval: fire submitToolResult outside mutateSession so it can be async
+    if (event.type === "approval_needed") {
+      const session = getSession(targetId);
+      if (session.alwaysAllowedTools.has(event.name) && session.runId) {
+        submitToolResult(session.runId, event.tool_id, "Approved", true, configRef.current).catch(() => {
+          mutateSession(targetId, (s) => addMessageToSession(s, { role: "error", content: "Auto-approval failed" }));
+        });
       }
     }
+  };
 
-    if (event.type === "thinking") {
-      if (targetId === viewedIdRef.current) setView(prev => prev.status === s.status ? prev : { ...prev, status: s.status });
-    } else if (event.type !== "text" && event.type !== "question" && event.type !== "session_info") {
-      syncView(targetId);
-    }
-  }, [addMessageToSession, finalizeText, syncView, updateSessionStates]);
-
-  // Persistent SSE connection — one per viewed session
+  // Persistent SSE connection — stable deps, handler accessed via ref
   useEffect(() => {
     if (!sessionId) return;
 
     const targetId = sessionId;
-    const s = getSession(targetId);
+    getSession(targetId); // ensure session exists
 
     const disconnect = connectEvents(
       targetId,
       configRef.current,
-      (event) => handleEventForSession(targetId, s, event),
+      (event) => handleEventRef.current!(targetId, event),
     );
 
     disconnectRef.current = disconnect;
@@ -405,197 +284,196 @@ export function useStreaming({
       disconnect();
       disconnectRef.current = null;
     };
-  }, [sessionId, getSession, handleEventForSession]);
+  }, [sessionId, getSession]);
+
+  const addMessage = useCallback((msg: MessageInput) => {
+    const id = store.getState().viewedId;
+    if (!id) return;
+    mutateSession(id, (s) => addMessageToSession(s, msg));
+  }, [store, mutateSession, addMessageToSession]);
+
+  const clearMessages = useCallback(() => {
+    const id = store.getState().viewedId;
+    if (!id) return;
+    mutateSession(id, (s) => {
+      s.messages = [];
+      s.historyLoaded = true;
+    });
+  }, [store, mutateSession]);
 
   const sendMessage = useCallback(async (message: string) => {
-    const targetId = viewedIdRef.current;
-    if (!targetId) return;
-    const s = getSession(targetId);
+    const id = store.getState().viewedId;
+    if (!id) return;
 
-    addMessageToSession(s, { role: "user", content: message });
-
+    const s = getSession(id);
     if (s.isStreaming) {
-      // Inject into running agent — just POST, server queues into context
-      syncView(targetId);
+      mutateSession(id, (s) => addMessageToSession(s, { role: "user", content: message }));
       try {
-        await sendChatMessage(message, targetId, configRef.current, skipApprovalsRef.current);
+        await sendChatMessage(message, id, configRef.current, skipApprovalsRef.current);
       } catch (error) {
-        addMessageToSession(s, { role: "error", content: `Inject failed: ${error}` });
-        syncView(targetId);
+        mutateSession(id, (s) => addMessageToSession(s, { role: "error", content: `Inject failed: ${error}` }));
       }
       return;
     }
 
-    s.isStreaming = true;
-    s.pendingText = "";
-    s.status = Status.THINKING;
-    s.toolChain = [];
-    s.toolDesc.clear();
-    s.toolSeq = 0;
-    syncView(targetId);
-    updateSessionStates();
+    mutateSession(id, (s) => {
+      addMessageToSession(s, { role: "user", content: message });
+      s.isStreaming = true;
+      s.pendingText = "";
+      s.status = Status.THINKING;
+      s.toolChain = [];
+      s.tools.descriptions.clear();
+      s.tools.startTimes.clear();
+      s.tools.sequence = 0;
+    });
 
     try {
-      const res = await sendChatMessage(message, targetId, configRef.current, skipApprovalsRef.current);
-      s.runId = res.run_id;
+      const res = await sendChatMessage(message, id, configRef.current, skipApprovalsRef.current);
+      mutateSession(id, (s) => { s.runId = res.run_id; });
     } catch (error) {
-      addMessageToSession(s, { role: "error", content: `${error}` });
-      s.isStreaming = false;
-      s.status = Status.IDLE;
-      syncView(targetId);
+      mutateSession(id, (s) => {
+        addMessageToSession(s, { role: "error", content: `${error}` });
+        s.isStreaming = false;
+        s.status = Status.IDLE;
+      });
     }
-  }, [getSession, addMessageToSession, syncView, updateSessionStates]);
+  }, [store, getSession, addMessageToSession, mutateSession]);
 
   const handleApproval = useCallback(async (
     result: "once" | "always" | "reject",
     feedback?: string
   ) => {
-    const id = viewedIdRef.current;
+    const id = store.getState().viewedId;
     if (!id) return;
-    const s = sessionsRef.current.get(id);
+    const s = store.getState().sessions.get(id);
     if (!s?.pendingApproval || !s.runId) return;
 
     const approved = result !== "reject";
+    const toolName = s.pendingApproval.name;
+    const toolId = s.pendingApproval.toolId;
+    const runId = s.runId;
+
     if (result === "always") {
-      s.alwaysAllowedTools.add(s.pendingApproval.name);
+      mutateSession(id, (s) => { s.alwaysAllowedTools.add(toolName); });
     }
 
     const resultText = approved ? "Approved" : feedback || "";
     try {
-      await submitToolResult(s.runId, s.pendingApproval.toolId, resultText, approved, configRef.current);
+      await submitToolResult(runId, toolId, resultText, approved, configRef.current);
     } catch (err) {
-      addMessageToSession(s, { role: "error", content: `Approval failed: ${err}` });
-      syncView(id);
+      mutateSession(id, (s) => addMessageToSession(s, { role: "error", content: `Approval failed: ${err}` }));
       return;
     }
 
-    s.pendingApproval = null;
-    s.status = Status.THINKING;
-    syncView(id);
-  }, [addMessageToSession, syncView]);
+    mutateSession(id, (s) => {
+      s.pendingApproval = null;
+      s.status = Status.THINKING;
+    });
+  }, [store, addMessageToSession, mutateSession]);
 
   const cancel = useCallback(async () => {
-    const id = viewedIdRef.current;
+    const id = store.getState().viewedId;
     if (!id) return;
-    const s = sessionsRef.current.get(id);
+    const s = store.getState().sessions.get(id);
     if (!s?.isStreaming || !s.runId) return;
-
     try {
       await cancelRun(s.runId, configRef.current);
     } catch {}
-  }, []);
+  }, [store]);
 
   const background = useCallback(async () => {
-    const id = viewedIdRef.current;
+    const id = store.getState().viewedId;
     if (!id) return;
-    const s = sessionsRef.current.get(id);
+    const s = store.getState().sessions.get(id);
     if (!s?.isStreaming || !s.runId) return;
-
     try {
       await backgroundRun(s.runId, configRef.current);
     } catch {}
-  }, []);
+  }, [store]);
 
   const switchToSession = useCallback((targetId: string, history?: Message[]) => {
-    const target = getSession(targetId);
-    target.notification = null;
-
-    if (history && !target.isStreaming) {
-      target.messages = history;
-      target.historyLoaded = true;
-    }
-
-    viewedIdRef.current = targetId;
-    lastSyncRef.current = null;
-    prevBgCountRef.current = target.backgroundTaskCount;
-    syncView(targetId);
-    updateSessionStates();
-  }, [getSession, syncView, updateSessionStates]);
+    mutateSession(targetId, (s) => {
+      s.notification = null;
+      if (history && !s.isStreaming) {
+        s.messages = history;
+        s.historyLoaded = true;
+      }
+    });
+    prevBgCountRef.current = getSession(targetId).backgroundTaskCount;
+    setViewedId(targetId);
+  }, [getSession, mutateSession, setViewedId]);
 
   const setStatusPublic = useCallback((newStatus: StatusType) => {
-    const id = viewedIdRef.current;
+    const id = store.getState().viewedId;
     if (!id) return;
-    const s = sessionsRef.current.get(id);
-    if (s) {
-      s.status = newStatus;
-      syncView(id);
-    }
-  }, [syncView]);
+    mutateSession(id, (s) => { s.status = newStatus; });
+  }, [store, mutateSession]);
 
   const revert = useCallback(async (): Promise<string | null> => {
-    const id = viewedIdRef.current;
+    const id = store.getState().viewedId;
     if (!id) return null;
-    const s = sessionsRef.current.get(id);
+    const s = store.getState().sessions.get(id);
     if (!s || s.isStreaming) return null;
 
     try {
       const result = await revertSession(configRef.current, id);
-
-      let lastUserIdx = -1;
-      for (let i = s.messages.length - 1; i >= 0; i--) {
-        if (s.messages[i].role === "user") {
-          lastUserIdx = i;
-          break;
+      mutateSession(id, (s) => {
+        let lastUserIdx = -1;
+        for (let i = s.messages.length - 1; i >= 0; i--) {
+          if (s.messages[i].role === "user") {
+            lastUserIdx = i;
+            break;
+          }
         }
-      }
-      if (lastUserIdx >= 0) {
-        s.messages = s.messages.slice(0, lastUserIdx);
-      }
-      syncView(id);
+        if (lastUserIdx >= 0) {
+          s.messages = s.messages.slice(0, lastUserIdx);
+        }
+      });
       return result.user_message;
     } catch {
       return null;
     }
-  }, [syncView]);
+  }, [store, mutateSession]);
 
   const deleteSessionState = useCallback((targetId: string) => {
-    const s = sessionsRef.current.get(targetId);
-    if (s) {
-      sessionsRef.current.delete(targetId);
-      updateSessionStates();
-    }
-  }, [updateSessionStates]);
+    deleteSession(targetId);
+  }, [deleteSession]);
 
+  // Sync sessionId and initial messages
   useEffect(() => {
     if (!sessionId) return;
     const s = getSession(sessionId);
-    if (sessionId !== viewedIdRef.current) {
-      viewedIdRef.current = sessionId;
-      updateSessionStates();
-    }
     if (!s.historyLoaded && initialMessages && initialMessages.length > 0) {
-      s.messages = initialMessages;
-      s.historyLoaded = true;
+      mutateSession(sessionId, (s) => {
+        s.messages = initialMessages!;
+        s.historyLoaded = true;
+      });
     }
-    syncView(sessionId);
-  }, [sessionId, initialMessages, getSession, syncView, updateSessionStates]);
+    setViewedId(sessionId);
+  }, [sessionId, initialMessages, getSession, mutateSession, setViewedId]);
 
-  // Auto-process background task results when they complete and agent is idle
-  // Declared earlier so switchToSession can reset it
-
+  // Auto-process background task results
   useEffect(() => {
     const prev = prevBgCountRef.current;
-    prevBgCountRef.current = view.backgroundTaskCount;
-    if (view.backgroundTaskCount < prev && !view.isStreaming) {
+    prevBgCountRef.current = backgroundTaskCount;
+    if (backgroundTaskCount < prev && !isStreaming) {
       sendMessage("[background task completed, process the results]");
     }
-  }, [view.backgroundTaskCount, view.isStreaming, sendMessage]);
+  }, [backgroundTaskCount, isStreaming, sendMessage]);
 
+  // Cleanup
   useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-      disconnectRef.current?.();
-    };
+    return () => { disconnectRef.current?.(); };
   }, []);
 
   return {
-    messages: view.messages,
-    isStreaming: view.isStreaming,
-    status: view.status,
-    toolChain: view.toolChain,
-    pendingApproval: view.pendingApproval,
-    usage: view.usage,
-    backgroundTaskCount: view.backgroundTaskCount,
+    messages,
+    isStreaming,
+    status,
+    toolChain,
+    pendingApproval,
+    usage,
+    backgroundTaskCount,
     sessionStates,
     addMessage,
     clearMessages,

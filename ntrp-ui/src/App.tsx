@@ -1,9 +1,11 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRenderer } from "@opentui/react";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import type { Selection, ScrollBoxRenderable } from "@opentui/core";
 import type { Message, Config } from "./types.js";
 import { colors, setTheme, useThemeVersion, themeNames, type Theme } from "./components/ui/index.js";
 import { BULLET } from "./lib/constants.js";
+import { queryClient } from "./lib/queryClient.js";
 import {
   useSettings,
   useKeypress,
@@ -89,10 +91,12 @@ function AppContent({
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const dialog = useDialog();
 
-  const [skills, setSkills] = useState<Skill[]>([]);
-  useEffect(() => {
-    getSkills(config).then(r => setSkills(r.skills)).catch(() => {});
-  }, [config]);
+  const { data: skillsData } = useQuery({
+    queryKey: ["skills", config.serverUrl],
+    queryFn: () => getSkills(config),
+    enabled: serverConnected,
+  });
+  const skills = skillsData?.skills ?? [];
 
   const streaming = useStreaming({
     config,
@@ -497,32 +501,24 @@ export default function App({ config: initialConfig }: { config: Config }) {
     setConfig((c) => ({ ...c, apiKey: "", needsSetup: true }));
   }, []);
 
-  if (config.needsSetup) {
-    return (
-      <DimensionsProvider>
-        <Setup
-          initialServerUrl={config.serverUrl}
-          onConnect={handleConnect}
-        />
-      </DimensionsProvider>
-    );
-  }
-
-  if (config.needsProvider) {
-    return (
-      <DimensionsProvider>
-        <ProviderOnboarding
-          config={config}
-          onClose={() => {}}
-          onDone={() => setConfig(c => ({ ...c, needsProvider: false }))}
-        />
-      </DimensionsProvider>
-    );
-  }
-
   return (
-    <DimensionsProvider>
-      <AppWithAccent config={config} logout={handleLogout} onServerChange={handleConnect} />
-    </DimensionsProvider>
+    <QueryClientProvider client={queryClient}>
+      <DimensionsProvider>
+        {config.needsSetup ? (
+          <Setup
+            initialServerUrl={config.serverUrl}
+            onConnect={handleConnect}
+          />
+        ) : config.needsProvider ? (
+          <ProviderOnboarding
+            config={config}
+            onClose={() => {}}
+            onDone={() => setConfig(c => ({ ...c, needsProvider: false }))}
+          />
+        ) : (
+          <AppWithAccent config={config} logout={handleLogout} onServerChange={handleConnect} />
+        )}
+      </DimensionsProvider>
+    </QueryClientProvider>
   );
 }

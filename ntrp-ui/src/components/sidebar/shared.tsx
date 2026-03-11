@@ -1,5 +1,8 @@
 import React from "react";
 import { colors } from "../ui/colors.js";
+import type { TokenUsage } from "../../types.js";
+
+export type UsageData = TokenUsage;
 
 export const H = colors.text.secondary;
 export const D = colors.text.disabled;
@@ -24,13 +27,4 @@ export function formatTokens(total: number | null, pad?: number): string {
 
 export function formatCost(cost: number): string {
   return `$${cost.toFixed(2)}`;
-}
-
-export interface UsageData {
-  prompt: number;
-  completion: number;
-  cache_read: number;
-  cache_write: number;
-  cost: number;
-  lastCost: number;
 }

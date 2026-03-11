@@ -2,6 +2,7 @@ import type { DreamDetails } from "../../../api/client.js";
 import { colors, truncateText, ExpandableText, ScrollableList } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import { formatTimeAgo } from "../../../lib/format.js";
+import { DeleteConfirmation } from "./DeleteConfirmation.js";
 
 export const DREAM_SECTIONS = {
   TEXT: 0,
@@ -37,6 +38,8 @@ export function DreamDetailsView({
   factsIndex,
   confirmDelete,
 }: DreamDetailsViewProps) {
+  const { accentValue } = useAccentColor();
+
   if (loading) {
     return <text><span fg={colors.text.muted}>Loading...</span></text>;
   }
@@ -48,8 +51,6 @@ export function DreamDetailsView({
       </box>
     );
   }
-
-  const { accentValue } = useAccentColor();
   const { dream, source_facts } = details;
   const textColor = isFocused ? colors.text.primary : colors.text.secondary;
   const labelColor = colors.text.muted;
@@ -58,18 +59,7 @@ export function DreamDetailsView({
   const textWidth = width - 2;
 
   if (confirmDelete) {
-    return (
-      <box flexDirection="column" width={width} paddingLeft={1}>
-        <text>
-          <span fg={colors.status.warning}>
-            Delete this dream? This cannot be undone.
-          </span>
-        </text>
-        <box marginTop={1}>
-          <text><span fg={colors.text.muted}>Press y to confirm, any other key to cancel</span></text>
-        </box>
-      </box>
-    );
+    return <DeleteConfirmation width={width} message="Delete this dream? This cannot be undone." />;
   }
 
   return (

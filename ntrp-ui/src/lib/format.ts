@@ -31,3 +31,34 @@ export function formatRelativeTime(iso: string | null): string {
 
   return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
 }
+
+export function shortTime(iso: string): string {
+  const ago = formatTimeAgo(iso);
+  if (ago === "just now") return "now";
+  if (ago === "yesterday") return "1d";
+  const short = ago.replace(" ago", "").replace(/\s*weeks?/, "w");
+  if (short === ago) return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+  return short;
+}
+
+export function formatCountdown(iso: string): string {
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff < 0) return "now";
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+export function triggerLabel(trigger: { type: string; every?: string; at?: string; start?: string; end?: string; days?: string; event_type?: string; lead_minutes?: number }, compact?: boolean): string {
+  if (trigger.type === "time") {
+    let base = trigger.every ? `every ${trigger.every}` : trigger.at ?? "";
+    if (trigger.start && trigger.end) base += ` (${trigger.start}\u2013${trigger.end})`;
+    return !compact && trigger.days ? `${base}  ${trigger.days}` : base;
+  }
+  return trigger.event_type === "event_approaching" && trigger.lead_minutes
+    ? `on:${trigger.event_type} (${trigger.lead_minutes}m)`
+    : `on:${trigger.event_type}`;
+}
