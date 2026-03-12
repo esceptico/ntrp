@@ -39,3 +39,12 @@ class BusRegistry:
 
     def remove(self, session_id: str) -> None:
         self._buses.pop(session_id, None)
+
+    def close_all_sync(self) -> None:
+        for bus in self._buses.values():
+            for queue in bus._subscribers:
+                queue.put_nowait(None)
+
+    async def close_all(self) -> None:
+        self.close_all_sync()
+        self._buses.clear()
