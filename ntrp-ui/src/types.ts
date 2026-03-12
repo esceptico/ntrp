@@ -10,6 +10,11 @@ export interface TextEvent {
   content: string;
 }
 
+export interface TextDeltaEvent {
+  type: "text_delta";
+  content: string;
+}
+
 export interface SlashCommand {
   name: string;
   description: string;
@@ -101,6 +106,7 @@ export interface QuestionEvent {
 export type ServerEvent =
   | ThinkingEvent
   | TextEvent
+  | TextDeltaEvent
   | ToolCallEvent
   | ToolResultEvent
   | ApprovalNeededEvent

@@ -18,6 +18,7 @@ interface UseStreamingOptions {
   config: Config;
   sessionId: string | null;
   skipApprovals: boolean;
+  streaming?: boolean;
   onSessionInfo?: (info: { session_id: string; sources: string[]; session_name?: string }) => void;
   initialMessages?: Message[];
 }
@@ -26,6 +27,7 @@ export function useStreaming({
   config,
   sessionId,
   skipApprovals,
+  streaming = true,
   onSessionInfo,
   initialMessages,
 }: UseStreamingOptions) {
@@ -57,6 +59,7 @@ export function useStreaming({
   const pendingApproval = viewed?.pendingApproval ?? null;
   const usage = viewed?.usage ?? ZERO_USAGE;
   const backgroundTaskCount = viewed?.backgroundTaskCount ?? 0;
+  const pendingText = viewed?.pendingText ?? "";
 
   const sessions = useStore(store, (state) => state.sessions);
   const viewedId = useStore(store, (state) => state.viewedId);
@@ -78,6 +81,12 @@ export function useStreaming({
     // These events update pendingText without triggering re-render
     if (event.type === "text") {
       getSession(targetId).pendingText = event.content;
+      return;
+    }
+    if (event.type === "text_delta") {
+      mutateSession(targetId, (s) => {
+        s.pendingText += event.content;
+      });
       return;
     }
     if (event.type === "question") {
@@ -266,6 +275,9 @@ export function useStreaming({
   };
 
   // Persistent SSE connection — stable deps, handler accessed via ref
+  const streamingRef = useRef(streaming);
+  streamingRef.current = streaming;
+
   useEffect(() => {
     if (!sessionId) return;
 
@@ -276,6 +288,7 @@ export function useStreaming({
       targetId,
       configRef.current,
       (event) => handleEventRef.current!(targetId, event),
+      { stream: streaming },
     );
 
     disconnectRef.current = disconnect;
@@ -284,7 +297,7 @@ export function useStreaming({
       disconnect();
       disconnectRef.current = null;
     };
-  }, [sessionId, getSession]);
+  }, [sessionId, streaming, getSession]);
 
   const addMessage = useCallback((msg: MessageInput) => {
     const id = store.getState().viewedId;
@@ -474,6 +487,7 @@ export function useStreaming({
     pendingApproval,
     usage,
     backgroundTaskCount,
+    pendingText,
     sessionStates,
     addMessage,
     clearMessages,

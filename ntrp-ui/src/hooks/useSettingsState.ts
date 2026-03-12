@@ -45,7 +45,12 @@ export function useSettingsState({
 }: UseSettingsStateOptions): UseSettingsStateResult {
   const providers = useProviders(config);
   const services = useServices(config);
-  const server = useServerConnection(config, onServerCredentialsChange);
+  const server = useServerConnection(
+    config,
+    onServerCredentialsChange,
+    settings.ui.streaming,
+    () => onUpdate("ui", "streaming", !settings.ui.streaming),
+  );
   const directives = useDirectives(config);
   const connections = useConnections(config, serverConfig, onServerConfigChange);
   const mcp = useMCPServers(config);

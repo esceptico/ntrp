@@ -6,6 +6,7 @@ from enum import StrEnum
 class EventType(StrEnum):
     THINKING = "thinking"
     TEXT = "text"
+    TEXT_DELTA = "text_delta"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
     APPROVAL_NEEDED = "approval_needed"
@@ -41,6 +42,12 @@ class ThinkingEvent(SSEEvent):
 @dataclass(frozen=True)
 class TextEvent(SSEEvent):
     type: EventType = field(default=EventType.TEXT, init=False)
+    content: str
+
+
+@dataclass(frozen=True)
+class TextDeltaEvent(SSEEvent):
+    type: EventType = field(default=EventType.TEXT_DELTA, init=False)
     content: str
 
 

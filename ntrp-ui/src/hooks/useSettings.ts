@@ -10,6 +10,7 @@ export interface UiSettings {
   accentColor: AccentColor;
   theme: Theme;
   transparentBg: boolean;
+  streaming: boolean;
 }
 
 export interface AgentSettings {
@@ -37,6 +38,7 @@ const defaultSettings: Settings = {
     accentColor: "blue",
     theme: "dark",
     transparentBg: false,
+    streaming: true,
   },
   agent: {
     maxDepth: 8,

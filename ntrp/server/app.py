@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ntrp.config import verify_api_key
+from ntrp.events.sse import TextDeltaEvent
 from ntrp.server.bus import BusRegistry
 from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.data import router as data_router
@@ -188,7 +189,7 @@ class SSEStreamingResponse(StreamingResponse):
             await self.background()
 
 
-async def _event_stream(session_id: str, bus_registry: BusRegistry) -> AsyncGenerator[str]:
+async def _event_stream(session_id: str, bus_registry: BusRegistry, stream: bool = False) -> AsyncGenerator[str]:
     bus = bus_registry.get_or_create(session_id)
     queue = bus.subscribe()
     last_event_at = time.monotonic()
@@ -203,8 +204,13 @@ async def _event_stream(session_id: str, bus_registry: BusRegistry) -> AsyncGene
                 continue
             if event is None:
                 break
+            if not stream and isinstance(event, TextDeltaEvent):
+                continue
             last_event_at = time.monotonic()
             yield event.to_sse_string()
+            # Yield to event loop so the transport flushes each event
+            # individually instead of batching them in the TCP buffer.
+            await asyncio.sleep(0)
     except asyncio.CancelledError:
         pass
     finally:
@@ -212,9 +218,9 @@ async def _event_stream(session_id: str, bus_registry: BusRegistry) -> AsyncGene
 
 
 @app.get("/chat/events/{session_id}")
-async def chat_events(session_id: str, buses: BusRegistry = Depends(_get_bus_registry)):
+async def chat_events(session_id: str, stream: bool = False, buses: BusRegistry = Depends(_get_bus_registry)):
     return SSEStreamingResponse(
-        _event_stream(session_id, buses),
+        _event_stream(session_id, buses, stream=stream),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

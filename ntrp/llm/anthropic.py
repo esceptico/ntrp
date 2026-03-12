@@ -1,4 +1,5 @@
 import json
+from collections.abc import AsyncGenerator
 
 import anthropic
 from pydantic import BaseModel
@@ -33,17 +34,17 @@ class AnthropicClient(CompletionClient):
             kwargs["api_key"] = api_key
         self._client = anthropic.AsyncAnthropic(**kwargs)
 
-    async def _completion(
+    def _prepare(
         self,
         messages: list[dict],
         model: str,
-        tools: list[dict] | None = None,
-        tool_choice: str | None = None,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        response_format: type[BaseModel] | None = None,
+        tools: list[dict] | None,
+        tool_choice: str | None,
+        temperature: float | None,
+        max_tokens: int | None,
+        response_format: type[BaseModel] | None,
         **kwargs,
-    ) -> CompletionResponse:
+    ) -> tuple[str, dict]:
         model = strip_oauth_prefix(model)
         if max_tokens is None:
             max_tokens = get_model(model).max_output_tokens
@@ -53,12 +54,10 @@ class AnthropicClient(CompletionClient):
         api_tools = self._convert_tools(tools) if tools else None
         api_tool_choice = self._resolve_tool_choice(api_tools, tool_choice, response_format)
 
-        # Structured output via tool-use trick
         if response_format is not None:
             api_tools = api_tools or []
             api_tools.append(self._make_schema_tool(response_format))
 
-        # Inject cache_control on last tool and last user message
         if api_tools:
             api_tools[-1]["cache_control"] = {"type": "ephemeral"}
         self._inject_cache_control_last_message(api_messages)
@@ -73,10 +72,45 @@ class AnthropicClient(CompletionClient):
             max_tokens=max_tokens,
             **kwargs,
         )
+        return model, request
 
+    async def _completion(
+        self,
+        messages: list[dict],
+        model: str,
+        tools: list[dict] | None = None,
+        tool_choice: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        response_format: type[BaseModel] | None = None,
+        **kwargs,
+    ) -> CompletionResponse:
+        model, request = self._prepare(
+            messages, model, tools, tool_choice, temperature, max_tokens, response_format, **kwargs,
+        )
         async with self._client.messages.stream(**request) as stream:
             response = await stream.get_final_message()
         return self._parse_response(response, model, response_format)
+
+    async def _stream_completion(
+        self,
+        messages: list[dict],
+        model: str,
+        tools: list[dict] | None = None,
+        tool_choice: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        response_format: type[BaseModel] | None = None,
+        **kwargs,
+    ) -> AsyncGenerator[str | CompletionResponse]:
+        model, request = self._prepare(
+            messages, model, tools, tool_choice, temperature, max_tokens, response_format, **kwargs,
+        )
+        async with self._client.messages.stream(**request) as stream:
+            async for text in stream.text_stream:
+                yield text
+            response = await stream.get_final_message()
+        yield self._parse_response(response, model, response_format)
 
     async def close(self) -> None:
         await self._client.close()

@@ -8,9 +8,11 @@ export function connectEvents(
   sessionId: string,
   config: Config,
   onEvent: (event: ServerEvent) => void | Promise<void>,
+  options?: { stream?: boolean },
   onError?: (error: Error) => void,
 ): () => void {
   const controller = new AbortController();
+  const streamParam = options?.stream ? "?stream=true" : "";
 
   (async () => {
     let retries = 0;
@@ -21,7 +23,7 @@ export function connectEvents(
       if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
       try {
-        const response = await fetch(`${config.serverUrl}/chat/events/${sessionId}`, {
+        const response = await fetch(`${config.serverUrl}/chat/events/${sessionId}${streamParam}`, {
           headers,
           signal: controller.signal,
         });

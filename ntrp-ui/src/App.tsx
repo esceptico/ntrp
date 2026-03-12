@@ -102,6 +102,7 @@ function AppContent({
     config,
     sessionId,
     skipApprovals,
+    streaming: settings.ui.streaming,
     onSessionInfo: updateSessionInfo,
     initialMessages,
   });
@@ -123,6 +124,7 @@ function AppContent({
     switchToSession,
     deleteSessionState,
     backgroundTaskCount,
+    pendingText,
   } = streaming;
 
   const { messageQueue, enqueue, clearQueue } = useMessageQueue(isStreaming, pendingApproval, sendMessage);
@@ -391,6 +393,12 @@ function AppContent({
               </box>
             );
           })}
+
+          {pendingText.trimStart() && (
+            <box marginTop={1} paddingLeft={3}>
+              <text>{pendingText.trimStart()}</text>
+            </box>
+          )}
 
           {toolChain.length > 0 && (
             <box marginTop={messages[messages.length - 1]?.role === "user" ? 1 : 0}>

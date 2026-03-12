@@ -42,6 +42,16 @@ export function ServerSection({ server: s, accent }: ServerSectionProps) {
         );
       })}
 
+      <box flexDirection="row">
+        <text>
+          <span fg={s.serverIndex === 2 ? accent : colors.text.disabled}>{s.serverIndex === 2 ? "▸ " : "  "}</span>
+          <span fg={s.streaming ? (s.serverIndex === 2 ? accent : colors.text.primary) : colors.text.muted}>
+            {s.streaming ? "\u25CF" : "\u25CB"}
+          </span>
+          <span fg={s.serverIndex === 2 ? colors.text.primary : colors.text.secondary}> Streaming</span>
+        </text>
+      </box>
+
       {s.serverSaving && (
         <box marginTop={1}>
           <text><span fg={colors.text.muted}>  Saving...</span></text>

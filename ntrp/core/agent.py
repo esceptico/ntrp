@@ -14,7 +14,7 @@ from ntrp.core.parsing import normalize_assistant_message, parse_tool_calls
 from ntrp.core.state import AgentState, StateCallback
 from ntrp.core.tool_runner import ToolRunner
 from ntrp.events.internal import ContextCompressed
-from ntrp.events.sse import BackgroundTaskEvent, SSEEvent, TextEvent, ThinkingEvent, ToolResultEvent
+from ntrp.events.sse import BackgroundTaskEvent, SSEEvent, TextDeltaEvent, TextEvent, ThinkingEvent, ToolResultEvent
 from ntrp.llm.models import get_model
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
@@ -93,6 +93,22 @@ class Agent:
             tools=self.tools,
             tool_choice="auto",
         )
+
+    async def _stream_llm(self) -> AsyncGenerator[TextDeltaEvent | Any]:
+        """Yield TextDeltaEvents for each token, then the final CompletionResponse."""
+        from ntrp.llm.types import CompletionResponse
+
+        client = get_completion_client(self.model)
+        async for item in client.stream_completion(
+            model=self.model,
+            messages=self.messages,
+            tools=self.tools,
+            tool_choice="auto",
+        ):
+            if isinstance(item, str):
+                yield TextDeltaEvent(content=item)
+            elif isinstance(item, CompletionResponse):
+                yield item
 
     def _track_usage(self, response: Any) -> None:
         if not response.usage:
@@ -180,7 +196,12 @@ class Agent:
                     yield event
 
                 try:
-                    response = await self._call_llm()
+                    response = None
+                    async for item in self._stream_llm():
+                        if isinstance(item, TextDeltaEvent):
+                            yield item
+                        else:
+                            response = item
                 except Exception:
                     _logger.exception("LLM call failed (model=%s)", self.model)
                     await self._set_state(AgentState.IDLE)
@@ -230,7 +251,7 @@ class Agent:
             match item:
                 case str():
                     result = item
-                case TextEvent():
+                case TextEvent() | TextDeltaEvent():
                     pass
                 case event if self.ctx.io.emit:
                     await self.ctx.io.emit(event)
