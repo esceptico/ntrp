@@ -36,6 +36,7 @@ class ReadFileTool(Tool):
     async def execute(
         self, execution: Any, path: str, offset: int = _DEFAULT_OFFSET, limit: int = _DEFAULT_LINE_LIMIT, **kwargs: Any
     ) -> ToolResult:
+        path = os.path.expanduser(path)
         if not os.path.isabs(path):
             full_path = os.path.join(os.getcwd(), path)
         else:
