@@ -40,9 +40,14 @@ class CompletionClient(ABC):
         Default: non-streaming fallback.
         """
         response = await self._completion(
-            messages=messages, model=model, tools=tools,
-            tool_choice=tool_choice, temperature=temperature,
-            max_tokens=max_tokens, response_format=response_format, **kwargs,
+            messages=messages,
+            model=model,
+            tools=tools,
+            tool_choice=tool_choice,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            **kwargs,
         )
         text = response.choices[0].message.content if response.choices else None
         if text:

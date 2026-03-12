@@ -69,7 +69,14 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         **kwargs,
     ) -> CompletionResponse:
         request = self._prepare(
-            messages, model, tools, tool_choice, temperature, max_tokens, response_format, **kwargs,
+            messages,
+            model,
+            tools,
+            tool_choice,
+            temperature,
+            max_tokens,
+            response_format,
+            **kwargs,
         )
         response = await self._client.chat.completions.create(**request)
         return self._parse_response(response, model)
@@ -86,7 +93,14 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         **kwargs,
     ) -> AsyncGenerator[str | CompletionResponse]:
         request = self._prepare(
-            messages, model, tools, tool_choice, temperature, max_tokens, response_format, **kwargs,
+            messages,
+            model,
+            tools,
+            tool_choice,
+            temperature,
+            max_tokens,
+            response_format,
+            **kwargs,
         )
         request["stream"] = True
         request["stream_options"] = {"include_usage": True}

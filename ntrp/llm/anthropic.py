@@ -86,7 +86,14 @@ class AnthropicClient(CompletionClient):
         **kwargs,
     ) -> CompletionResponse:
         model, request = self._prepare(
-            messages, model, tools, tool_choice, temperature, max_tokens, response_format, **kwargs,
+            messages,
+            model,
+            tools,
+            tool_choice,
+            temperature,
+            max_tokens,
+            response_format,
+            **kwargs,
         )
         async with self._client.messages.stream(**request) as stream:
             response = await stream.get_final_message()
@@ -104,7 +111,14 @@ class AnthropicClient(CompletionClient):
         **kwargs,
     ) -> AsyncGenerator[str | CompletionResponse]:
         model, request = self._prepare(
-            messages, model, tools, tool_choice, temperature, max_tokens, response_format, **kwargs,
+            messages,
+            model,
+            tools,
+            tool_choice,
+            temperature,
+            max_tokens,
+            response_format,
+            **kwargs,
         )
         async with self._client.messages.stream(**request) as stream:
             async for text in stream.text_stream:
