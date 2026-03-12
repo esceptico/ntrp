@@ -1,4 +1,5 @@
 import asyncio
+import signal
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -25,6 +26,26 @@ SSE_KEEPALIVE = ":\n\n"
 KEEPALIVE_INTERVAL = 5
 
 
+def _install_shutdown_handlers(runtime: Runtime, bus_registry: BusRegistry) -> None:
+    """Intercept SIGINT/SIGTERM to close SSE streams before uvicorn's timeout.
+
+    Uvicorn waits for HTTP connections to close before running lifespan
+    teardown, but SSE streams never finish on their own.  We wrap the
+    existing signal handlers to push a sentinel into every SSE queue and
+    cancel active runs first, so connections close promptly.
+    Pattern from sse-starlette (AppStatus).
+    """
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        original = signal.getsignal(sig)
+
+        def _handler(signum: int, frame, _orig=original) -> None:
+            bus_registry.close_all_sync()
+            if callable(_orig):
+                _orig(signum, frame)
+
+        signal.signal(sig, _handler)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     runtime = Runtime()
@@ -35,6 +56,7 @@ async def lifespan(app: FastAPI):
     runtime.start_consolidation()
     app.state.runtime = runtime
     app.state.bus_registry = BusRegistry()
+    _install_shutdown_handlers(runtime, app.state.bus_registry)
 
     yield
 

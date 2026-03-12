@@ -75,6 +75,7 @@ def serve(host: str | None, port: int | None, reload: bool, reset_key: bool, dat
     port = port or config.port
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind((host, port))
         except OSError:

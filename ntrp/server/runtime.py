@@ -283,10 +283,21 @@ class Runtime:
 
     async def close(self) -> None:
         self._closing = True
+
+        # Phase 1: stop accepting new work
+        cancelled = await self.run_registry.cancel_all()
+        if cancelled:
+            _logger.info("Cancelled %d active run(s)", cancelled)
+
+        # Phase 2: stop background services
         if self.monitor:
             await self.monitor.stop()
         if self.scheduler:
             await self.scheduler.stop()
+        if self.indexer:
+            await self.indexer.stop()
+
+        # Phase 3: close resources
         if self.mcp_manager:
             await self.mcp_manager.close()
         if self.memory:
@@ -294,7 +305,6 @@ class Runtime:
         if self._sessions_conn:
             await self._sessions_conn.close()
         if self.indexer:
-            await self.indexer.stop()
             await self.indexer.close()
         await llm_close()
         await self.channel.stop()

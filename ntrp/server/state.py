@@ -71,6 +71,18 @@ class RunRegistry:
                 run.task.cancel()
         self.cleanup_old_runs()
 
+    async def cancel_all(self, timeout: float = 5.0) -> int:
+        tasks = []
+        for run in self._runs.values():
+            if run.status == RunStatus.RUNNING and run.task and not run.task.done():
+                run.cancelled = True
+                run.status = RunStatus.CANCELLED
+                run.task.cancel()
+                tasks.append(run.task)
+        if tasks:
+            await asyncio.wait(tasks, timeout=timeout)
+        return len(tasks)
+
     def cleanup_old_runs(self, max_age_hours: int = 24) -> int:
         now = datetime.now(UTC)
         to_remove = []
