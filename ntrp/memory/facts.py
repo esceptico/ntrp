@@ -488,7 +488,6 @@ class FactMemory:
         return await self.facts.count()
 
     async def get_context(self, user_limit: int = 10) -> tuple[list[Observation], list[Fact]]:
-        # Get User-linked observations, scored by decay
         user_entity = await self.facts.get_entity_by_name(USER_ENTITY_NAME)
         if user_entity:
             raw_obs = await self.observations.get_for_entity(user_entity.id, limit=20)
@@ -501,12 +500,10 @@ class FactMemory:
         else:
             observations = []
 
-        # Exclusion set: all source fact IDs from selected observations
         exclude_ids: set[int] = set()
         for obs in observations:
             exclude_ids.update(obs.source_fact_ids)
 
-        # User facts, minus those already covered by observations
         all_user_facts = await self.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=user_limit + len(exclude_ids))
         user_facts = [f for f in all_user_facts if f.id not in exclude_ids][:user_limit]
 

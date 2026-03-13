@@ -10,13 +10,14 @@ from ntrp.tools.core.context import ToolExecution
 RECALL_DESCRIPTION = """Recall stored facts from memory about a topic or entity.
 
 WHEN TO USE:
-- Retrieving previously learned information
-- Checking what you know about a person/topic
-- Before asking questions that may have been answered
+- Before answering questions about the user, their preferences, people they know, or past conversations
+- When the user references something you should know ("remember when...", "what did I say about...")
+- Before asking the user something they may have already told you
+- When a topic comes up that might have stored context (projects, people, plans, opinions)
 
-NOTE: Your system prompt already contains relevant memory context. Only call recall() when you need facts beyond what's in MEMORY CONTEXT.
+Your system prompt has a small memory snapshot — recall() searches the FULL memory store which is much richer.
 
-PREFER recall() FOR: Known facts, user preferences, stored knowledge
+PREFER recall() FOR: Known facts, user preferences, stored knowledge, past context
 PREFER search() FOR: Finding new info in notes/emails/web pages"""
 
 FORGET_DESCRIPTION = "Delete facts from memory by semantic search."
