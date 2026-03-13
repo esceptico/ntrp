@@ -99,9 +99,26 @@ Source protocols: `ntrp/sources/base.py`. Use `execution.ctx.get_source(Protocol
 2. Tell the user to restart the server (`ntrp serve`) for discovery
 3. Name conflicts with built-ins are skipped with a warning; import errors are logged and skipped
 
+## External dependencies (PEP 723)
+
+If the tool needs packages not in ntrp's environment (e.g. `slack-sdk`, `stripe`), add a PEP 723 inline script metadata block at the top. Dependencies are auto-installed to a cached directory on first load — no manual `pip install` needed.
+
+```python
+# /// script
+# dependencies = ["slack-sdk>=2.0"]
+# ///
+
+from slack_sdk import WebClient
+from ntrp.tools.core.base import Tool, ToolResult
+# ... same Tool subclass as usual ...
+```
+
+The tool code is identical to a regular tool — same base class, same `execute()` signature, same access to `execution.ctx`. The only addition is the `# /// script` block.
+
 ## Notes
 
 - User tools have the same API as built-in tools
 - User tools can use existing sources/services but cannot define new ones
-- External packages must be installed in the environment (`uv pip install ...`)
+- External deps declared in `# /// script` are auto-installed to `~/.cache/ntrp/tool-deps/` via uv
 - Multiple Tool classes in one file are all registered
+- Use env vars for secrets (e.g. `os.environ["SLACK_TOKEN"]`) rather than hardcoding

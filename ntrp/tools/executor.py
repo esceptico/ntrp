@@ -19,12 +19,12 @@ class ToolExecutor:
         self.registry = ToolRegistry()
         for cls in ALL_TOOLS:
             self.registry.register(cls())
-        for cls in discover_user_tools():
-            if cls.name in self.registry:
-                _logger.warning("User tool %r skipped — conflicts with built-in", cls.name)
+        for tool in discover_user_tools():
+            if tool.name in self.registry:
+                _logger.warning("User tool %r skipped — conflicts with built-in", tool.name)
             else:
-                self.registry.register(cls())
-                _logger.info("Loaded user tool: %s", cls.name)
+                self.registry.register(tool)
+                _logger.info("Loaded user tool: %s", tool.name)
         if runtime.mcp_manager:
             for tool in runtime.mcp_manager.tools:
                 if tool.name in self.registry:
