@@ -79,7 +79,7 @@ async def entity_expand(
     return expansion_scores
 
 
-def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     dot = np.dot(a, b)
     norm = np.linalg.norm(a) * np.linalg.norm(b)
     return float(dot / norm) if norm > 0 else 0.0
@@ -100,7 +100,7 @@ async def _temporal_vector_expand(
     scored = []
     for fact in candidates:
         if fact.embedding is not None:
-            sim = _cosine_similarity(query_embedding, fact.embedding)
+            sim = cosine_similarity(query_embedding, fact.embedding)
             scored.append((fact.id, sim * TEMPORAL_EXPANSION_BASE_SCORE))
 
     top = heapq.nlargest(limit, scored, key=lambda x: x[1])
@@ -180,7 +180,7 @@ async def retrieve_facts(
         for fid, idf_w in expansion.items():
             if fid not in base_scores and fid in facts_by_id:
                 fact = facts_by_id[fid]
-                sim = _cosine_similarity(query_embedding, fact.embedding) if fact.embedding is not None else 0.0
+                sim = cosine_similarity(query_embedding, fact.embedding) if fact.embedding is not None else 0.0
                 base_scores[fid] = idf_w * 0.5 * max(sim, 0.0)
         for fid, base in temporal_ids.items():
             if fid not in base_scores:

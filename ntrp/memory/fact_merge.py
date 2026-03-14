@@ -18,6 +18,7 @@ from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact
 from ntrp.memory.prompts import FACT_MERGE_PROMPT
+from ntrp.memory.retrieval import cosine_similarity
 from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
@@ -32,13 +33,6 @@ class FactMergeAction(BaseModel):
     action: Literal["same", "different"]
     text: str | None = None
     reason: str | None = None
-
-
-def _cosine(a: np.ndarray, b: np.ndarray) -> float:
-    dot = np.dot(a, b)
-    na = np.linalg.norm(a)
-    nb = np.linalg.norm(b)
-    return float(dot / (na * nb)) if na and nb else 0.0
 
 
 def _find_top_pair(
@@ -56,7 +50,7 @@ def _find_top_pair(
             pair_key = (min(facts[i].id, facts[j].id), max(facts[i].id, facts[j].id))
             if pair_key in skipped:
                 continue
-            sim = _cosine(facts[i].embedding, facts[j].embedding)
+            sim = cosine_similarity(facts[i].embedding, facts[j].embedding)
             if sim >= threshold and (best is None or sim > best[2]):
                 best = (i, j, sim)
     return best

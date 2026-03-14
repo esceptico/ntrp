@@ -19,6 +19,7 @@ from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Observation
 from ntrp.memory.prompts import OBSERVATION_MERGE_PROMPT
+from ntrp.memory.retrieval import cosine_similarity
 from ntrp.memory.store.observations import ObservationRepository
 
 _logger = get_logger(__name__)
@@ -31,13 +32,6 @@ class MergeAction(BaseModel):
     action: Literal["merge", "skip"]
     text: str | None = None
     reason: str | None = None
-
-
-def _cosine(a: np.ndarray, b: np.ndarray) -> float:
-    dot = np.dot(a, b)
-    na = np.linalg.norm(a)
-    nb = np.linalg.norm(b)
-    return float(dot / (na * nb)) if na and nb else 0.0
 
 
 def _find_top_pair(
@@ -58,7 +52,7 @@ def _find_top_pair(
             )
             if pair_key in skipped:
                 continue
-            sim = _cosine(observations[i].embedding, observations[j].embedding)
+            sim = cosine_similarity(observations[i].embedding, observations[j].embedding)
             if sim >= threshold and (best is None or sim > best[2]):
                 best = (i, j, sim)
     return best

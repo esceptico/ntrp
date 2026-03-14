@@ -9,10 +9,10 @@ import pytest
 import pytest_asyncio
 
 from ntrp.memory.observation_merge import (
-    _cosine,
     _find_top_pair,
     observation_merge_pass,
 )
+from ntrp.memory.retrieval import cosine_similarity
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.observations import ObservationRepository
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
@@ -58,12 +58,12 @@ async def obs_repo(db: GraphDatabase) -> ObservationRepository:
 class TestCosine:
     def test_identical_vectors(self):
         v = np.array([1.0, 0.0, 0.0])
-        assert _cosine(v, v) == pytest.approx(1.0)
+        assert cosine_similarity(v, v) == pytest.approx(1.0)
 
     def test_orthogonal_vectors(self):
         a = np.array([1.0, 0.0, 0.0])
         b = np.array([0.0, 1.0, 0.0])
-        assert _cosine(a, b) == pytest.approx(0.0)
+        assert cosine_similarity(a, b) == pytest.approx(0.0)
 
 
 class TestFindTopPair:

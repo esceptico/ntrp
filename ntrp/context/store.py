@@ -36,10 +36,13 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at
 """
 
 SQL_SAVE_SESSION = """
-INSERT OR REPLACE INTO sessions (
-    session_id, started_at, last_activity,
-    messages, metadata, name, archived_at
-) VALUES (?, ?, ?, ?, ?, ?, NULL)
+INSERT INTO sessions (session_id, started_at, last_activity, messages, metadata, name)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT(session_id) DO UPDATE SET
+    last_activity = excluded.last_activity,
+    messages = excluded.messages,
+    metadata = excluded.metadata,
+    name = excluded.name
 """
 
 SQL_GET_LATEST = """
