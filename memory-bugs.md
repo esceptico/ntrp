@@ -39,7 +39,7 @@ FK enforcement is off, and manual cleanup only happens in `FactRepository.delete
 ## 10. Source provenance is too thin
 `source_type` ("chat"/"explicit") + `source_ref` (session ID) can't trace back to a specific message or source.
 **Status:** FIXED — collapsed "explicit"/"source" into "chat", source_ref now includes message range (session_id:start-end)
-- Remaining: recall() provenance flag + UI toggle (Task 1.6, future)
+- Remaining: recall() integration to surface original conversation context (Task 1.6, future)
 
 ## 11. No persistent chat history
 Sessions are ephemeral — raw messages lost after session rotation. Can't trace facts to original messages.
@@ -49,3 +49,27 @@ Sessions are ephemeral — raw messages lost after session rotation. Can't trace
 ## 12. No memory archival
 Facts/observations accumulate forever. sqlite-vec does linear scans — more embeddings = slower recall().
 **Status:** FIXED — archived_at column (migration v3), excluded from search, archive/unarchive methods, archival pass in consolidation loop, stats in API
+
+## 13. API delete doesn't clean observation source_fact_ids
+`FactService.delete()` doesn't call `remove_source_facts()` — only `forget()` does. Facts deleted via API leave dangling IDs in observation `source_fact_ids`.
+**Status:** FIXED — added remove_source_facts + cleanup_orphaned_entities to FactService.delete()
+
+## 14. N+1 queries in entity_expand
+`entity_expand()` in retrieval.py runs 2 queries per entity (count + fetch). 100 entities = 200 queries.
+**Status:** FIXED — batch count query (count_entity_facts_batch), halves the query count
+
+## 15. `obs_entity_refs` missing ON DELETE for entity_id
+No cascade when entity is deleted — orphaned `obs_entity_refs` rows remain.
+**Status:** FIXED — migration v4 recreates table with ON DELETE CASCADE
+
+## 16. Sessions SCHEMA missing `archived_at`
+`archived_at` not in CREATE TABLE — relies on ALTER in init_schema. Works but fragile.
+**Status:** FIXED — added to SCHEMA CREATE TABLE
+
+## 17. Missing index on `sessions.archived_at`
+Multiple queries filter on `archived_at` but no index exists.
+**Status:** FIXED — added to SCHEMA
+
+## 18. VACUUM not followed by explicit commit
+After migrations, `VACUUM` is not committed explicitly.
+**Status:** FIXED — added commit after VACUUM

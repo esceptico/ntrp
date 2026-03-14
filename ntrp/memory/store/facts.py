@@ -115,6 +115,12 @@ _SQL_GET_FACTS_FOR_ENTITY_BY_ID = """
 
 _SQL_COUNT_ENTITY_FACTS_BY_ID = "SELECT COUNT(*) FROM entity_refs WHERE entity_id = ?"
 
+_SQL_COUNT_ENTITY_FACTS_BATCH = """
+    SELECT entity_id, COUNT(*) as cnt FROM entity_refs
+    WHERE entity_id IN ({placeholders})
+    GROUP BY entity_id
+"""
+
 _SQL_GET_ENTITY_IDS_FOR_FACTS = """
     SELECT DISTINCT er.entity_id
     FROM entity_refs er
@@ -387,6 +393,16 @@ class FactRepository:
     async def count_entity_facts(self, entity_name: str) -> int:
         rows = await self.conn.execute_fetchall(_SQL_COUNT_ENTITY_FACTS, (entity_name, entity_name))
         return rows[0][0] if rows else 0
+
+    async def count_entity_facts_batch(self, entity_ids: list[int]) -> dict[int, int]:
+        if not entity_ids:
+            return {}
+        placeholders = ",".join("?" * len(entity_ids))
+        rows = await self.conn.execute_fetchall(
+            _SQL_COUNT_ENTITY_FACTS_BATCH.format(placeholders=placeholders),
+            entity_ids,
+        )
+        return {r[0]: r[1] for r in rows}
 
     async def merge_entities(self, keep_id: int, merge_ids: list[int]) -> int:
         if not merge_ids:

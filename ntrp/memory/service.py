@@ -61,6 +61,8 @@ class FactService:
 
             entity_refs_count = await repo.count_entity_refs(fact_id)
             await repo.delete(fact_id)
+            await self._memory.observations.remove_source_facts([fact_id])
+            await repo.cleanup_orphaned_entities()
 
         self._channel.publish(FactDeleted(fact_id=fact_id))
         return {"entity_refs": entity_refs_count}

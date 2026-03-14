@@ -6,7 +6,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 3
+CURRENT_VERSION = 4
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -110,10 +110,28 @@ async def _migrate_v3(conn: aiosqlite.Connection) -> None:
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_observations_archived ON observations(archived_at)")
 
 
+async def _migrate_v4(conn: aiosqlite.Connection) -> None:
+    """Add ON DELETE CASCADE to obs_entity_refs for entity_id."""
+    _logger.info("Migration v4: adding ON DELETE CASCADE to obs_entity_refs")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS obs_entity_refs_new (
+            observation_id INTEGER REFERENCES observations(id) ON DELETE CASCADE,
+            entity_id INTEGER REFERENCES entities(id) ON DELETE CASCADE,
+            PRIMARY KEY (observation_id, entity_id)
+        )
+    """)
+    await conn.execute("INSERT OR IGNORE INTO obs_entity_refs_new SELECT * FROM obs_entity_refs")
+    await conn.execute("DROP TABLE obs_entity_refs")
+    await conn.execute("ALTER TABLE obs_entity_refs_new RENAME TO obs_entity_refs")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_entity_refs_entity ON obs_entity_refs(entity_id)")
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
     (3, _migrate_v3),
+    (4, _migrate_v4),
 ]
 
 
@@ -132,4 +150,5 @@ async def run_migrations(conn: aiosqlite.Connection) -> None:
 
     _logger.info("Vacuuming database after migrations")
     await conn.execute("VACUUM")
+    await conn.commit()
     _logger.info("Memory schema up to date (v%d)", CURRENT_VERSION)

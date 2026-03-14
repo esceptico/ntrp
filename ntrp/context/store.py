@@ -14,10 +14,12 @@ CREATE TABLE IF NOT EXISTS sessions (
     last_activity TEXT NOT NULL,
     messages TEXT,
     metadata TEXT,
-    name TEXT
+    name TEXT,
+    archived_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
+CREATE INDEX IF NOT EXISTS idx_sessions_archived ON sessions(archived_at);
 
 CREATE TABLE IF NOT EXISTS chat_messages (
     id INTEGER PRIMARY KEY,

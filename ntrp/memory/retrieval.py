@@ -53,11 +53,14 @@ async def entity_expand(
     if not entity_ids:
         return {}
 
+    # Batch count to avoid N+1
+    freq_map = await repo.count_entity_facts_batch(entity_ids)
+
     expansion_scores: dict[int, float] = {}
     seed_set = set(seed_fact_ids)
 
     for entity_id in entity_ids:
-        freq = await repo.count_entity_facts_by_id(entity_id)
+        freq = freq_map.get(entity_id, 0)
         idf_weight = 1.0 / math.log2(freq + 1) if freq > 0 else 1.0
 
         # Skip high-frequency entities — they connect too many unrelated facts

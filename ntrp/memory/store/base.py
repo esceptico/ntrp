@@ -77,7 +77,7 @@ CREATE INDEX IF NOT EXISTS idx_entity_refs_entity ON entity_refs(entity_id);
 
 CREATE TABLE IF NOT EXISTS obs_entity_refs (
     observation_id INTEGER REFERENCES observations(id) ON DELETE CASCADE,
-    entity_id INTEGER REFERENCES entities(id),
+    entity_id INTEGER REFERENCES entities(id) ON DELETE CASCADE,
     PRIMARY KEY (observation_id, entity_id)
 );
 
