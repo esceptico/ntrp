@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 
 import aiosqlite
 
-from ntrp.database import serialize_embedding
 from ntrp.constants import OBSERVATION_HISTORY_LIMIT
+from ntrp.database import serialize_embedding
 from ntrp.memory.fts import build_fts_query
 from ntrp.memory.models import Embedding, HistoryEntry, Observation
 

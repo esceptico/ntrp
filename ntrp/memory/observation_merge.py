@@ -8,7 +8,6 @@ from collections.abc import Callable, Coroutine
 from contextlib import AbstractAsyncContextManager, nullcontext
 from typing import Literal
 
-import numpy as np
 from pydantic import BaseModel
 
 from ntrp.constants import (

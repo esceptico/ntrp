@@ -124,7 +124,7 @@ class FactMemory:
         while True:
             await asyncio.sleep(backoff)
             try:
-                count = await self._consolidate_pending()
+                await self._consolidate_pending()
                 await self._maybe_run_temporal_pass()
                 await self._maybe_run_observation_merge()
                 await self._maybe_run_fact_merge()
