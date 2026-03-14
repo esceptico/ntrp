@@ -265,7 +265,10 @@ async def retrieve_with_observations(
     bundled_sources: dict[int, list[Fact]] = {}
     for obs in observations:
         if obs.id in display_ids_per_obs:
-            source_facts = [display_facts[fid] for fid in display_ids_per_obs[obs.id] if fid in display_facts]
+            source_facts = [
+                display_facts[fid] for fid in display_ids_per_obs[obs.id]
+                if fid in display_facts and display_facts[fid].archived_at is None
+            ]
             if source_facts:
                 bundled_sources[obs.id] = source_facts
 

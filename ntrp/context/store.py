@@ -79,7 +79,7 @@ SQL_GET_CHAT_SLICE = """
 """
 
 SQL_BACKFILL_CANDIDATES = """
-    SELECT s.session_id, s.messages FROM sessions s
+    SELECT s.session_id, s.messages, s.last_activity FROM sessions s
     WHERE s.messages IS NOT NULL AND s.messages != '[]'
     AND NOT EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.session_id = s.session_id)
 """
@@ -264,15 +264,15 @@ class SessionStore:
             return 0
 
         count = 0
-        now = datetime.now(UTC)
         for row in rows:
+            session_time = row["last_activity"] or datetime.now(UTC).isoformat()
             messages = json.loads(row["messages"])
             for idx, msg in enumerate(messages):
                 role = msg.get("role", "")
                 content = msg.get("content") if role in ("user", "assistant") else None
                 await self.conn.execute(
                     SQL_INSERT_CHAT_MESSAGE,
-                    (row["session_id"], role, content, now.isoformat(), idx),
+                    (row["session_id"], role, content, session_time, idx),
                 )
                 count += 1
         await self.conn.commit()

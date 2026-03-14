@@ -10,7 +10,7 @@ from ntrp.memory.fts import build_fts_query
 from ntrp.memory.models import Embedding, HistoryEntry, Observation
 
 _SQL_GET_OBSERVATION = "SELECT * FROM observations WHERE id = ?"
-_SQL_LIST_ALL_WITH_EMBEDDINGS = "SELECT * FROM observations WHERE embedding IS NOT NULL"
+_SQL_LIST_ALL_WITH_EMBEDDINGS = "SELECT * FROM observations WHERE embedding IS NOT NULL AND archived_at IS NULL"
 _SQL_COUNT_OBSERVATIONS = "SELECT COUNT(*) FROM observations"
 _SQL_LIST_RECENT_OBSERVATIONS = "SELECT * FROM observations ORDER BY updated_at DESC LIMIT ?"
 _SQL_GET_OBSERVATIONS_BY_IDS = "SELECT * FROM observations WHERE id IN ({placeholders})"

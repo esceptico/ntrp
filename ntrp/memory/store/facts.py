@@ -458,7 +458,7 @@ class FactRepository:
 
     async def list_all_with_embeddings(self) -> list[Fact]:
         rows = await self.conn.execute_fetchall(
-            "SELECT * FROM facts WHERE embedding IS NOT NULL ORDER BY created_at DESC"
+            "SELECT * FROM facts WHERE embedding IS NOT NULL AND archived_at IS NULL ORDER BY created_at DESC"
         )
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
