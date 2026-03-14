@@ -56,8 +56,6 @@ CREATE TABLE IF NOT EXISTS facts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_facts_created ON facts(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_facts_archived ON facts(archived_at);
-CREATE INDEX IF NOT EXISTS idx_observations_archived ON observations(archived_at);
 
 CREATE TABLE IF NOT EXISTS entities (
     id INTEGER PRIMARY KEY,
