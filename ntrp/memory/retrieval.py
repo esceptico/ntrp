@@ -237,6 +237,7 @@ async def retrieve_with_observations(
     obs_rrf = await _observation_hybrid_search(obs_repo, query_text, query_embedding, RECALL_OBSERVATION_LIMIT)
 
     obs_by_id = await obs_repo.get_batch(list(obs_rrf.keys()))
+    obs_by_id = {oid: o for oid, o in obs_by_id.items() if o.archived_at is None}
 
     obs_scores: dict[int, float] = {}
     for oid, base in obs_rrf.items():

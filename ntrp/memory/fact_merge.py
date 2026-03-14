@@ -115,12 +115,17 @@ async def _merge_facts(
     await fact_repo.update_text(keeper.id, merged_text, embedding)
 
     # Transfer entity refs from removed to keeper (skip duplicates)
-    keeper_entity_ids = set(await fact_repo.get_entity_ids_for_facts([keeper.id]))
+    keeper_refs = await fact_repo.get_entity_refs(keeper.id)
+    keeper_entity_ids = {r.entity_id for r in keeper_refs if r.entity_id}
+    keeper_names = {r.name.lower() for r in keeper_refs}
     removed_refs = await fact_repo.get_entity_refs(removed.id)
     for ref in removed_refs:
         if ref.entity_id and ref.entity_id not in keeper_entity_ids:
             await fact_repo.add_entity_ref(keeper.id, ref.name, ref.entity_id)
             keeper_entity_ids.add(ref.entity_id)
+        elif not ref.entity_id and ref.name.lower() not in keeper_names:
+            await fact_repo.add_entity_ref(keeper.id, ref.name, None)
+            keeper_names.add(ref.name.lower())
 
     # Transfer access count (additive) — direct SQL, not reinforce() which deduplicates
     if removed.access_count > 0:
