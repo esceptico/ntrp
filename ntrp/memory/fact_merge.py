@@ -18,6 +18,7 @@ from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact
 from ntrp.memory.prompts import FACT_MERGE_PROMPT
+from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
 
@@ -108,6 +109,7 @@ async def _merge_facts(
     embedding: Embedding,
     fact_repo: FactRepository,
     obs_repo: ObservationRepository,
+    dream_repo: DreamRepository | None = None,
 ) -> None:
     # Update keeper text + embedding
     await fact_repo.update_text(keeper.id, merged_text, embedding)
@@ -145,6 +147,24 @@ async def _merge_facts(
             (json.dumps(deduped), row["id"]),
         )
 
+    # Update dream source_fact_ids: same replacement pattern
+    if dream_repo:
+        dream_rows = await dream_repo.conn.execute_fetchall(
+            "SELECT id, source_fact_ids FROM dreams WHERE source_fact_ids LIKE ?",
+            (f"%{removed.id}%",),
+        )
+        for row in dream_rows:
+            raw_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []
+            if removed.id not in raw_ids:
+                continue
+            new_ids = [keeper.id if fid == removed.id else fid for fid in raw_ids]
+            seen = set()
+            deduped = [fid for fid in new_ids if not (fid in seen or seen.add(fid))]
+            await dream_repo.conn.execute(
+                "UPDATE dreams SET source_fact_ids = ? WHERE id = ?",
+                (json.dumps(deduped), row["id"]),
+            )
+
     # Delete the removed fact
     await fact_repo.delete(removed.id)
 
@@ -156,6 +176,7 @@ async def fact_merge_pass(
     embed_fn: EmbedFn,
     atomic: AtomicFn | None = None,
     threshold: float = FACT_MERGE_SIMILARITY_THRESHOLD,
+    dream_repo: DreamRepository | None = None,
 ) -> int:
     facts = await fact_repo.list_all_with_embeddings()
     if len(facts) < 2:
@@ -193,7 +214,7 @@ async def fact_merge_pass(
 
         # DB writes inside atomic
         async with atomic() if atomic else nullcontext():
-            await _merge_facts(keeper, removed, merged_text, embedding, fact_repo, obs_repo)
+            await _merge_facts(keeper, removed, merged_text, embedding, fact_repo, obs_repo, dream_repo)
 
         _logger.info(
             "Merged fact %d + %d → %d (sim=%.3f): %s",

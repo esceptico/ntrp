@@ -9,6 +9,7 @@ from ntrp.memory.models import Embedding, Entity, EntityRef, Fact
 
 _SQL_GET_FACT = "SELECT * FROM facts WHERE id = ?"
 _SQL_COUNT_FACTS = "SELECT COUNT(*) FROM facts"
+_SQL_COUNT_ACTIVE_FACTS = "SELECT COUNT(*) FROM facts WHERE archived_at IS NULL"
 _SQL_COUNT_UNCONSOLIDATED = "SELECT COUNT(*) FROM facts WHERE consolidated_at IS NULL"
 _SQL_LIST_RECENT = "SELECT * FROM facts WHERE archived_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?"
 _SQL_DELETE_FACT = "DELETE FROM facts WHERE id = ?"
@@ -270,6 +271,10 @@ class FactRepository:
         rows = await self.conn.execute_fetchall(_SQL_COUNT_FACTS)
         return rows[0][0]
 
+    async def count_active(self) -> int:
+        rows = await self.conn.execute_fetchall(_SQL_COUNT_ACTIVE_FACTS)
+        return rows[0][0]
+
     async def count_unconsolidated(self) -> int:
         rows = await self.conn.execute_fetchall(_SQL_COUNT_UNCONSOLIDATED)
         return rows[0][0] if rows else 0
@@ -296,6 +301,11 @@ class FactRepository:
         await self.conn.execute(_SQL_DELETE_FACT, (fact_id,))
 
     async def cleanup_orphaned_entities(self) -> int:
+        await self.conn.execute("""
+            DELETE FROM temporal_checkpoints WHERE entity_id NOT IN (
+                SELECT DISTINCT entity_id FROM entity_refs WHERE entity_id IS NOT NULL
+            )
+        """)
         cursor = await self.conn.execute("""
             DELETE FROM entities WHERE id NOT IN (
                 SELECT DISTINCT entity_id FROM entity_refs WHERE entity_id IS NOT NULL

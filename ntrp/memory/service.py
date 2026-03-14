@@ -15,7 +15,7 @@ class FactService:
         self._channel = channel
 
     async def list_recent(self, limit: int = 100, offset: int = 0) -> tuple[list[Fact], int]:
-        total = await self._memory.facts.count()
+        total = await self._memory.facts.count_active()
         facts = await self._memory.facts.list_recent(limit=limit, offset=offset)
         return facts, total
 
@@ -62,6 +62,7 @@ class FactService:
             entity_refs_count = await repo.count_entity_refs(fact_id)
             await repo.delete(fact_id)
             await self._memory.observations.remove_source_facts([fact_id])
+            await self._memory.dreams.remove_source_facts([fact_id])
             await repo.cleanup_orphaned_entities()
 
         self._channel.publish(FactDeleted(fact_id=fact_id))

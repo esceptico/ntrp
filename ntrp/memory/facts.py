@@ -238,6 +238,7 @@ class FactMemory:
                 self.extraction_model,
                 self.embedder.embed_one,
                 atomic=self._atomic,
+                dream_repo=self.dreams,
             )
             if merged > 0:
                 _logger.info("Fact merge pass: %d merges", merged)
@@ -489,6 +490,7 @@ class FactMemory:
                     self.channel.publish(FactDeleted(fact_id=fact.id))
             if count > 0:
                 await self.observations.remove_source_facts(deleted_ids)
+                await self.dreams.remove_source_facts(deleted_ids)
                 await self.facts.cleanup_orphaned_entities()
             return count
 
