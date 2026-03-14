@@ -156,7 +156,10 @@ async def retrieve_facts(
 
     # Fetch all candidate facts in one query, exclude already-consolidated
     facts_by_id = await repo.get_batch(list(candidate_ids))
-    facts_by_id = {fid: f for fid, f in facts_by_id.items() if f.consolidated_at is None}
+    facts_by_id = {
+        fid: f for fid, f in facts_by_id.items()
+        if f.consolidated_at is None and f.archived_at is None
+    }
 
     if not facts_by_id:
         return FactContext(facts=[])

@@ -5,6 +5,7 @@ from ntrp.constants import (
     ARCHIVE_DECAY_THRESHOLD,
     ARCHIVE_FACT_MIN_AGE_DAYS,
     ARCHIVE_OBSERVATION_MIN_AGE_DAYS,
+    ARCHIVE_OBSERVATION_STALENESS_DAYS,
     MEMORY_DECAY_RATE,
     RECENCY_SIGMA_HOURS,
 )
@@ -64,6 +65,6 @@ def should_archive_observation(
     if age < timedelta(days=ARCHIVE_OBSERVATION_MIN_AGE_DAYS):
         return False
     staleness = now - updated_at
-    if staleness < timedelta(days=ARCHIVE_OBSERVATION_MIN_AGE_DAYS):
+    if staleness < timedelta(days=ARCHIVE_OBSERVATION_STALENESS_DAYS):
         return False
     return decay_score(last_accessed_at, access_count) < ARCHIVE_DECAY_THRESHOLD

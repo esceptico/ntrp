@@ -119,6 +119,7 @@ RECENCY_SIGMA_HOURS = 72  # Exponential boost: recency = exp(-hours_since_event 
 ARCHIVE_DECAY_THRESHOLD = 0.1  # decay_score below this = eligible for archival
 ARCHIVE_FACT_MIN_AGE_DAYS = 30  # minimum age before a fact can be archived
 ARCHIVE_OBSERVATION_MIN_AGE_DAYS = 90  # observations need longer before archival
+ARCHIVE_OBSERVATION_STALENESS_DAYS = 30  # no updates within this period = stale
 
 
 # --- Search & Retrieval ---

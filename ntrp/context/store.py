@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     role TEXT NOT NULL,
     content TEXT,
     created_at TIMESTAMP NOT NULL,
-    message_index INTEGER NOT NULL
+    message_index INTEGER NOT NULL,
+    UNIQUE(session_id, message_index)
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, message_index);
@@ -127,6 +128,14 @@ class SessionStore:
     async def _sync_chat_messages(self, session_id: str, messages: list[dict]) -> None:
         rows = await self.conn.execute_fetchall(SQL_CHAT_MAX_INDEX, (session_id,))
         max_existing = rows[0][0] if rows and rows[0][0] is not None else -1
+
+        # Handle revert: if messages list is shorter than what's stored, trim stale rows
+        if max_existing >= len(messages):
+            await self.conn.execute(
+                "DELETE FROM chat_messages WHERE session_id = ? AND message_index >= ?",
+                (session_id, len(messages)),
+            )
+            max_existing = len(messages) - 1
 
         now = datetime.now(UTC)
         for idx, msg in enumerate(messages):

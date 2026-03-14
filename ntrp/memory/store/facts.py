@@ -10,7 +10,7 @@ from ntrp.memory.models import Embedding, Entity, EntityRef, Fact
 _SQL_GET_FACT = "SELECT * FROM facts WHERE id = ?"
 _SQL_COUNT_FACTS = "SELECT COUNT(*) FROM facts"
 _SQL_COUNT_UNCONSOLIDATED = "SELECT COUNT(*) FROM facts WHERE consolidated_at IS NULL"
-_SQL_LIST_RECENT = "SELECT * FROM facts ORDER BY created_at DESC LIMIT ? OFFSET ?"
+_SQL_LIST_RECENT = "SELECT * FROM facts WHERE archived_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?"
 _SQL_DELETE_FACT = "DELETE FROM facts WHERE id = ?"
 
 _SQL_INSERT_FACT = """
@@ -24,6 +24,7 @@ _SQL_INSERT_FACT = """
 _SQL_LIST_TIME_WINDOW = """
     SELECT * FROM facts
     WHERE created_at BETWEEN ? AND ?
+      AND archived_at IS NULL
     ORDER BY created_at DESC
 """
 

@@ -125,13 +125,12 @@ class FactMemory:
             await asyncio.sleep(backoff)
             try:
                 count = await self._consolidate_pending()
-                if count > 0:
-                    backoff = interval
                 await self._maybe_run_temporal_pass()
                 await self._maybe_run_observation_merge()
                 await self._maybe_run_fact_merge()
                 await self._maybe_run_dream_pass()
                 await self._maybe_run_archival_pass()
+                backoff = interval
             except asyncio.CancelledError:
                 raise
             except Exception as e:
