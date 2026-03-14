@@ -53,11 +53,14 @@ async def entity_expand(
     if not entity_ids:
         return {}
 
+    # Batch count to avoid N+1
+    freq_map = await repo.count_entity_facts_batch(entity_ids)
+
     expansion_scores: dict[int, float] = {}
     seed_set = set(seed_fact_ids)
 
     for entity_id in entity_ids:
-        freq = await repo.count_entity_facts_by_id(entity_id)
+        freq = freq_map.get(entity_id, 0)
         idf_weight = 1.0 / math.log2(freq + 1) if freq > 0 else 1.0
 
         # Skip high-frequency entities — they connect too many unrelated facts
@@ -76,7 +79,7 @@ async def entity_expand(
     return expansion_scores
 
 
-def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     dot = np.dot(a, b)
     norm = np.linalg.norm(a) * np.linalg.norm(b)
     return float(dot / norm) if norm > 0 else 0.0
@@ -97,7 +100,7 @@ async def _temporal_vector_expand(
     scored = []
     for fact in candidates:
         if fact.embedding is not None:
-            sim = _cosine_similarity(query_embedding, fact.embedding)
+            sim = cosine_similarity(query_embedding, fact.embedding)
             scored.append((fact.id, sim * TEMPORAL_EXPANSION_BASE_SCORE))
 
     top = heapq.nlargest(limit, scored, key=lambda x: x[1])
@@ -151,8 +154,9 @@ async def retrieve_facts(
     candidate_ids.update(expansion.keys())
     candidate_ids.update(temporal_ids.keys())
 
-    # Fetch all candidate facts in one query
+    # Fetch all candidate facts in one query, exclude already-consolidated
     facts_by_id = await repo.get_batch(list(candidate_ids))
+    facts_by_id = {fid: f for fid, f in facts_by_id.items() if f.consolidated_at is None and f.archived_at is None}
 
     if not facts_by_id:
         return FactContext(facts=[])
@@ -173,7 +177,7 @@ async def retrieve_facts(
         for fid, idf_w in expansion.items():
             if fid not in base_scores and fid in facts_by_id:
                 fact = facts_by_id[fid]
-                sim = _cosine_similarity(query_embedding, fact.embedding) if fact.embedding is not None else 0.0
+                sim = cosine_similarity(query_embedding, fact.embedding) if fact.embedding is not None else 0.0
                 base_scores[fid] = idf_w * 0.5 * max(sim, 0.0)
         for fid, base in temporal_ids.items():
             if fid not in base_scores:
@@ -230,6 +234,7 @@ async def retrieve_with_observations(
     obs_rrf = await _observation_hybrid_search(obs_repo, query_text, query_embedding, RECALL_OBSERVATION_LIMIT)
 
     obs_by_id = await obs_repo.get_batch(list(obs_rrf.keys()))
+    obs_by_id = {oid: o for oid, o in obs_by_id.items() if o.archived_at is None}
 
     obs_scores: dict[int, float] = {}
     for oid, base in obs_rrf.items():
@@ -261,7 +266,11 @@ async def retrieve_with_observations(
     bundled_sources: dict[int, list[Fact]] = {}
     for obs in observations:
         if obs.id in display_ids_per_obs:
-            source_facts = [display_facts[fid] for fid in display_ids_per_obs[obs.id] if fid in display_facts]
+            source_facts = [
+                display_facts[fid]
+                for fid in display_ids_per_obs[obs.id]
+                if fid in display_facts and display_facts[fid].archived_at is None
+            ]
             if source_facts:
                 bundled_sources[obs.id] = source_facts
 

@@ -9,8 +9,9 @@ from ntrp.memory.models import Embedding, Entity, EntityRef, Fact
 
 _SQL_GET_FACT = "SELECT * FROM facts WHERE id = ?"
 _SQL_COUNT_FACTS = "SELECT COUNT(*) FROM facts"
+_SQL_COUNT_ACTIVE_FACTS = "SELECT COUNT(*) FROM facts WHERE archived_at IS NULL"
 _SQL_COUNT_UNCONSOLIDATED = "SELECT COUNT(*) FROM facts WHERE consolidated_at IS NULL"
-_SQL_LIST_RECENT = "SELECT * FROM facts ORDER BY created_at DESC LIMIT ? OFFSET ?"
+_SQL_LIST_RECENT = "SELECT * FROM facts WHERE archived_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?"
 _SQL_DELETE_FACT = "DELETE FROM facts WHERE id = ?"
 
 _SQL_INSERT_FACT = """
@@ -24,19 +25,20 @@ _SQL_INSERT_FACT = """
 _SQL_LIST_TIME_WINDOW = """
     SELECT * FROM facts
     WHERE created_at BETWEEN ? AND ?
+      AND archived_at IS NULL
     ORDER BY created_at DESC
 """
 
 _SQL_SEARCH_FACTS_TEMPORAL = """
     SELECT * FROM facts
-    WHERE happened_at IS NOT NULL
+    WHERE happened_at IS NOT NULL AND archived_at IS NULL
     ORDER BY ABS(julianday(happened_at) - julianday(?))
     LIMIT ?
 """
 
 _SQL_LIST_UNCONSOLIDATED = """
     SELECT * FROM facts
-    WHERE consolidated_at IS NULL
+    WHERE consolidated_at IS NULL AND archived_at IS NULL
     ORDER BY created_at ASC
     LIMIT ?
 """
@@ -65,7 +67,7 @@ _SQL_SEARCH_FACTS_FTS = """
     SELECT f.*
     FROM facts f
     JOIN facts_fts fts ON f.id = fts.rowid
-    WHERE facts_fts MATCH ?
+    WHERE facts_fts MATCH ? AND f.archived_at IS NULL
     ORDER BY bm25(facts_fts)
     LIMIT ?
 """
@@ -76,10 +78,12 @@ _SQL_GET_ENTITY_REFS_BATCH = "SELECT * FROM entity_refs WHERE fact_id IN ({place
 _SQL_DELETE_ENTITY_REFS = "DELETE FROM entity_refs WHERE fact_id = ?"
 
 _SQL_GET_FACTS_FOR_ENTITY = """
-    SELECT f.*
+    SELECT DISTINCT f.*
     FROM facts f
     JOIN entity_refs er ON f.id = er.fact_id
-    WHERE er.name = ?
+    WHERE f.archived_at IS NULL
+      AND (er.entity_id = (SELECT id FROM entities WHERE name = ? COLLATE NOCASE)
+           OR (er.entity_id IS NULL AND er.name = ? COLLATE NOCASE))
     ORDER BY f.access_count DESC, f.created_at DESC
     LIMIT ?
 """
@@ -94,7 +98,11 @@ _SQL_INSERT_ENTITY = """
     VALUES (?, ?, ?)
 """
 
-_SQL_COUNT_ENTITY_FACTS = "SELECT COUNT(*) FROM entity_refs WHERE name = ?"
+_SQL_COUNT_ENTITY_FACTS = """
+    SELECT COUNT(*) FROM entity_refs
+    WHERE entity_id = (SELECT id FROM entities WHERE name = ? COLLATE NOCASE)
+       OR (entity_id IS NULL AND name = ? COLLATE NOCASE)
+"""
 
 _SQL_LIST_ALL_ENTITIES = "SELECT * FROM entities ORDER BY updated_at DESC LIMIT ?"
 
@@ -102,12 +110,18 @@ _SQL_GET_FACTS_FOR_ENTITY_BY_ID = """
     SELECT f.*
     FROM facts f
     JOIN entity_refs er ON f.id = er.fact_id
-    WHERE er.entity_id = ?
+    WHERE er.entity_id = ? AND f.archived_at IS NULL
     ORDER BY f.created_at DESC
     LIMIT ?
 """
 
 _SQL_COUNT_ENTITY_FACTS_BY_ID = "SELECT COUNT(*) FROM entity_refs WHERE entity_id = ?"
+
+_SQL_COUNT_ENTITY_FACTS_BATCH = """
+    SELECT entity_id, COUNT(*) as cnt FROM entity_refs
+    WHERE entity_id IN ({placeholders})
+    GROUP BY entity_id
+"""
 
 _SQL_GET_ENTITY_IDS_FOR_FACTS = """
     SELECT DISTINCT er.entity_id
@@ -121,6 +135,7 @@ _SQL_GET_FACTS_FOR_ENTITY_TEMPORAL = """
     FROM facts f
     JOIN entity_refs er ON f.id = er.fact_id
     WHERE er.entity_id = ?
+      AND f.archived_at IS NULL
       AND COALESCE(f.happened_at, f.created_at) >= datetime('now', '-' || ? || ' days')
       AND COALESCE(f.happened_at, f.created_at) <= datetime('now')
     ORDER BY COALESCE(f.happened_at, f.created_at) ASC
@@ -145,10 +160,23 @@ _SQL_GET_ENTITIES_WITH_FACT_COUNT = """
     WHERE COALESCE(f.happened_at, f.created_at) >= datetime('now', '-' || ? || ' days')
       AND COALESCE(f.happened_at, f.created_at) <= datetime('now')
       AND er.entity_id IS NOT NULL
+      AND f.archived_at IS NULL
     GROUP BY er.entity_id
     HAVING COUNT(*) >= ?
     ORDER BY fact_count DESC
 """
+
+_SQL_ARCHIVE_BATCH = "UPDATE facts SET archived_at = ? WHERE id IN ({placeholders})"
+_SQL_UNARCHIVE = "UPDATE facts SET archived_at = NULL WHERE id = ?"
+
+_SQL_LIST_ARCHIVAL_CANDIDATES = """
+    SELECT * FROM facts
+    WHERE consolidated_at IS NOT NULL AND archived_at IS NULL
+    ORDER BY last_accessed_at ASC
+    LIMIT ?
+"""
+
+_SQL_COUNT_ARCHIVED = "SELECT COUNT(*) FROM facts WHERE archived_at IS NOT NULL"
 
 
 def _row_dict(row: aiosqlite.Row) -> dict:
@@ -243,6 +271,10 @@ class FactRepository:
         rows = await self.conn.execute_fetchall(_SQL_COUNT_FACTS)
         return rows[0][0]
 
+    async def count_active(self) -> int:
+        rows = await self.conn.execute_fetchall(_SQL_COUNT_ACTIVE_FACTS)
+        return rows[0][0]
+
     async def count_unconsolidated(self) -> int:
         rows = await self.conn.execute_fetchall(_SQL_COUNT_UNCONSOLIDATED)
         return rows[0][0] if rows else 0
@@ -269,6 +301,11 @@ class FactRepository:
         await self.conn.execute(_SQL_DELETE_FACT, (fact_id,))
 
     async def cleanup_orphaned_entities(self) -> int:
+        await self.conn.execute("""
+            DELETE FROM temporal_checkpoints WHERE entity_id NOT IN (
+                SELECT DISTINCT entity_id FROM entity_refs WHERE entity_id IS NOT NULL
+            )
+        """)
         cursor = await self.conn.execute("""
             DELETE FROM entities WHERE id NOT IN (
                 SELECT DISTINCT entity_id FROM entity_refs WHERE entity_id IS NOT NULL
@@ -308,7 +345,7 @@ class FactRepository:
         return result
 
     async def get_facts_for_entity(self, name: str, limit: int = 100) -> list[Fact]:
-        rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_FOR_ENTITY, (name, limit))
+        rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_FOR_ENTITY, (name, name, limit))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def search_facts_vector(self, query_embedding: Embedding, limit: int = 10) -> list[tuple[Fact, float]]:
@@ -324,7 +361,11 @@ class FactRepository:
         fact_rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_BY_IDS.format(placeholders=placeholders), fact_ids)
         facts_by_id = {r["id"]: Fact.model_validate(_row_dict(r)) for r in fact_rows}
 
-        return [(facts_by_id[fid], 1 - distances[fid]) for fid in fact_ids if fid in facts_by_id]
+        return [
+            (facts_by_id[fid], 1 - distances[fid])
+            for fid in fact_ids
+            if fid in facts_by_id and facts_by_id[fid].archived_at is None
+        ]
 
     async def search_facts_fts(self, query: str, limit: int = 10) -> list[Fact]:
         fts_query = build_fts_query(query)
@@ -362,8 +403,18 @@ class FactRepository:
         return Entity(id=entity_id, name=name, created_at=now, updated_at=now)
 
     async def count_entity_facts(self, entity_name: str) -> int:
-        rows = await self.conn.execute_fetchall(_SQL_COUNT_ENTITY_FACTS, (entity_name,))
+        rows = await self.conn.execute_fetchall(_SQL_COUNT_ENTITY_FACTS, (entity_name, entity_name))
         return rows[0][0] if rows else 0
+
+    async def count_entity_facts_batch(self, entity_ids: list[int]) -> dict[int, int]:
+        if not entity_ids:
+            return {}
+        placeholders = ",".join("?" * len(entity_ids))
+        rows = await self.conn.execute_fetchall(
+            _SQL_COUNT_ENTITY_FACTS_BATCH.format(placeholders=placeholders),
+            entity_ids,
+        )
+        return {r[0]: r[1] for r in rows}
 
     async def merge_entities(self, keep_id: int, merge_ids: list[int]) -> int:
         if not merge_ids:
@@ -419,9 +470,38 @@ class FactRepository:
 
     async def list_all_with_embeddings(self) -> list[Fact]:
         rows = await self.conn.execute_fetchall(
-            "SELECT * FROM facts WHERE embedding IS NOT NULL ORDER BY created_at DESC"
+            "SELECT * FROM facts WHERE embedding IS NOT NULL AND archived_at IS NULL ORDER BY created_at DESC"
         )
         return [Fact.model_validate(_row_dict(r)) for r in rows]
+
+    async def archive_batch(self, fact_ids: list[int]) -> int:
+        if not fact_ids:
+            return 0
+        now = datetime.now(UTC)
+        placeholders = ",".join("?" * len(fact_ids))
+        await self.conn.execute(
+            _SQL_ARCHIVE_BATCH.format(placeholders=placeholders),
+            (now.isoformat(), *fact_ids),
+        )
+        for fid in fact_ids:
+            await self.conn.execute(_SQL_DELETE_FACT_VEC, (fid,))
+        return len(fact_ids)
+
+    async def unarchive(self, fact_id: int) -> None:
+        fact = await self.get(fact_id)
+        if not fact:
+            return
+        await self.conn.execute(_SQL_UNARCHIVE, (fact_id,))
+        if fact.embedding is not None:
+            await self.conn.execute(_SQL_INSERT_FACT_VEC, (fact_id, serialize_embedding(fact.embedding)))
+
+    async def list_archival_candidates(self, limit: int = 100) -> list[Fact]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_ARCHIVAL_CANDIDATES, (limit,))
+        return [Fact.model_validate(_row_dict(r)) for r in rows]
+
+    async def count_archived(self) -> int:
+        rows = await self.conn.execute_fetchall(_SQL_COUNT_ARCHIVED)
+        return rows[0][0] if rows else 0
 
     async def update_embedding(self, fact_id: int, embedding: Embedding) -> None:
         embedding_bytes = serialize_embedding(embedding)

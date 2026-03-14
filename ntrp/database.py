@@ -9,15 +9,17 @@ def serialize_embedding(embedding: np.ndarray | list[float] | None) -> bytes | N
     if embedding is None:
         return None
     arr = embedding if isinstance(embedding, np.ndarray) else np.array(embedding)
-    return arr.astype(np.float32).tobytes()
+    arr = arr.astype(np.float32)
+    norm = np.linalg.norm(arr)
+    if norm > 0:
+        arr = arr / norm
+    return arr.tobytes()
 
 
 def deserialize_embedding(data: bytes | None) -> np.ndarray | None:
     if data is None:
         return None
-    arr = np.frombuffer(data, dtype=np.float32).copy()
-    norm = np.linalg.norm(arr)
-    return arr / norm if norm > 0 else arr
+    return np.frombuffer(data, dtype=np.float32).copy()
 
 
 async def connect(db_path: Path, *, vec: bool = False) -> aiosqlite.Connection:
@@ -26,6 +28,7 @@ async def connect(db_path: Path, *, vec: bool = False) -> aiosqlite.Connection:
     await conn.execute("PRAGMA journal_mode=WAL;")
     await conn.execute("PRAGMA synchronous=NORMAL;")
     await conn.execute("PRAGMA busy_timeout=30000;")
+    await conn.execute("PRAGMA foreign_keys=ON;")
     if vec:
         await conn.enable_load_extension(True)
         await conn.load_extension(sqlite_vec.loadable_path())

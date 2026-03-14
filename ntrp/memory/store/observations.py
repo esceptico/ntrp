@@ -4,28 +4,29 @@ from datetime import UTC, datetime
 
 import aiosqlite
 
+from ntrp.constants import OBSERVATION_HISTORY_LIMIT
 from ntrp.database import serialize_embedding
 from ntrp.memory.fts import build_fts_query
 from ntrp.memory.models import Embedding, HistoryEntry, Observation
 
 _SQL_GET_OBSERVATION = "SELECT * FROM observations WHERE id = ?"
-_SQL_LIST_ALL_WITH_EMBEDDINGS = "SELECT * FROM observations WHERE embedding IS NOT NULL"
+_SQL_LIST_ALL_WITH_EMBEDDINGS = "SELECT * FROM observations WHERE embedding IS NOT NULL AND archived_at IS NULL"
 _SQL_COUNT_OBSERVATIONS = "SELECT COUNT(*) FROM observations"
-_SQL_LIST_RECENT_OBSERVATIONS = "SELECT * FROM observations ORDER BY updated_at DESC LIMIT ?"
+_SQL_LIST_RECENT_OBSERVATIONS = "SELECT * FROM observations WHERE archived_at IS NULL ORDER BY updated_at DESC LIMIT ?"
 _SQL_GET_OBSERVATIONS_BY_IDS = "SELECT * FROM observations WHERE id IN ({placeholders})"
 
 _SQL_SEARCH_OBSERVATIONS_FTS = """
     SELECT o.*
     FROM observations o
     JOIN observations_fts fts ON o.id = fts.rowid
-    WHERE observations_fts MATCH ?
+    WHERE observations_fts MATCH ? AND o.archived_at IS NULL
     ORDER BY bm25(observations_fts)
     LIMIT ?
 """
 
 _SQL_SEARCH_OBSERVATIONS_TEMPORAL = """
     SELECT * FROM observations
-    WHERE updated_at IS NOT NULL
+    WHERE updated_at IS NOT NULL AND archived_at IS NULL
     ORDER BY ABS(julianday(updated_at) - julianday(?))
     LIMIT ?
 """
@@ -34,7 +35,7 @@ _SQL_GET_OBSERVATIONS_FOR_ENTITY = """
     SELECT DISTINCT o.*
     FROM observations o
     JOIN obs_entity_refs oer ON o.id = oer.observation_id
-    WHERE oer.entity_id = ?
+    WHERE oer.entity_id = ? AND o.archived_at IS NULL
     ORDER BY o.updated_at DESC
     LIMIT ?
 """
@@ -55,15 +56,15 @@ _SQL_DELETE_OBS_ENTITY_REFS = "DELETE FROM obs_entity_refs WHERE observation_id 
 
 _SQL_INSERT_OBSERVATION = """
     INSERT INTO observations (
-        summary, embedding, evidence_count, source_fact_ids, history,
+        summary, embedding, source_fact_ids, history,
         created_at, updated_at, last_accessed_at, access_count
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SQL_UPDATE_OBSERVATION = """
     UPDATE observations
-    SET summary = ?, embedding = ?, evidence_count = ?, source_fact_ids = ?, history = ?, updated_at = ?
+    SET summary = ?, embedding = ?, source_fact_ids = ?, history = ?, updated_at = ?
     WHERE id = ?
 """
 
@@ -82,6 +83,23 @@ _SQL_SEARCH_OBSERVATIONS_VEC = """
     WHERE v.embedding MATCH ? AND k = ?
     ORDER BY v.distance
 """
+
+_SQL_GET_NONEMPTY_SOURCE_FACTS = "SELECT id, source_fact_ids FROM observations WHERE source_fact_ids != '[]'"
+_SQL_UPDATE_SOURCE_FACT_IDS = "UPDATE observations SET source_fact_ids = ? WHERE id = ?"
+_SQL_ADD_SOURCE_FACTS = "UPDATE observations SET source_fact_ids = ? WHERE id = ?"
+_SQL_GET_SOURCE_FACT_IDS = "SELECT source_fact_ids FROM observations WHERE id = ?"
+
+_SQL_ARCHIVE_OBSERVATIONS_BATCH = "UPDATE observations SET archived_at = ? WHERE id IN ({placeholders})"
+_SQL_UNARCHIVE_OBSERVATION = "UPDATE observations SET archived_at = NULL WHERE id = ?"
+
+_SQL_LIST_ARCHIVAL_CANDIDATES_OBS = """
+    SELECT * FROM observations
+    WHERE archived_at IS NULL
+    ORDER BY last_accessed_at ASC
+    LIMIT ?
+"""
+
+_SQL_COUNT_ARCHIVED_OBS = "SELECT COUNT(*) FROM observations WHERE archived_at IS NOT NULL"
 
 
 def _row_dict(row: aiosqlite.Row) -> dict:
@@ -103,7 +121,6 @@ class ObservationRepository:
     ) -> Observation:
         now = datetime.now(UTC)
         source_fact_ids = [source_fact_id] if source_fact_id else []
-        evidence_count = len(source_fact_ids)
         embedding_bytes = serialize_embedding(embedding)
 
         cursor = await self.conn.execute(
@@ -111,7 +128,6 @@ class ObservationRepository:
             (
                 summary,
                 embedding_bytes,
-                evidence_count,
                 json.dumps(source_fact_ids),
                 json.dumps([]),
                 now.isoformat(),
@@ -129,7 +145,6 @@ class ObservationRepository:
             id=obs_id,
             summary=summary,
             embedding=embedding,
-            evidence_count=evidence_count,
             source_fact_ids=source_fact_ids,
             history=[],
             created_at=now,
@@ -179,15 +194,13 @@ class ObservationRepository:
                     source_fact_id=new_fact_id,
                 )
             )
-
-        evidence_count = len(source_fact_ids)
+            history = history[-OBSERVATION_HISTORY_LIMIT:]
 
         await self.conn.execute(
             _SQL_UPDATE_OBSERVATION,
             (
                 summary,
                 serialize_embedding(embedding),
-                evidence_count,
                 json.dumps(source_fact_ids),
                 json.dumps([_history_to_dict(h) for h in history]),
                 now.isoformat(),
@@ -204,7 +217,6 @@ class ObservationRepository:
             id=observation_id,
             summary=summary,
             embedding=embedding,
-            evidence_count=evidence_count,
             source_fact_ids=source_fact_ids,
             history=history,
             created_at=obs.created_at,
@@ -227,35 +239,23 @@ class ObservationRepository:
         """Remove deleted fact IDs from all observations' source_fact_ids."""
         if not fact_ids:
             return
-        for fact_id in fact_ids:
-            rows = await self.conn.execute_fetchall(
-                "SELECT id, source_fact_ids FROM observations WHERE source_fact_ids LIKE ?",
-                (f"%{fact_id}%",),
-            )
-            for row in rows:
-                raw_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []
-                if fact_id not in raw_ids:
-                    continue  # LIKE matched a substring (e.g., id=5 matching id=15)
-                new_ids = [fid for fid in raw_ids if fid != fact_id]
-                await self.conn.execute(
-                    "UPDATE observations SET source_fact_ids = ?, evidence_count = ? WHERE id = ?",
-                    (json.dumps(new_ids), len(new_ids), row["id"]),
-                )
+        fact_id_set = set(fact_ids)
+        rows = await self.conn.execute_fetchall(_SQL_GET_NONEMPTY_SOURCE_FACTS)
+        for row in rows:
+            raw_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []
+            new_ids = [fid for fid in raw_ids if fid not in fact_id_set]
+            if len(new_ids) != len(raw_ids):
+                await self.conn.execute(_SQL_UPDATE_SOURCE_FACT_IDS, (json.dumps(new_ids), row["id"]))
 
     async def add_source_facts(self, observation_id: int, fact_ids: list[int]) -> None:
         if not fact_ids:
             return
         existing = await self.get_fact_ids(observation_id)
         merged = existing + [fid for fid in fact_ids if fid not in existing]
-        await self.conn.execute(
-            "UPDATE observations SET source_fact_ids = ?, evidence_count = ? WHERE id = ?",
-            (json.dumps(merged), len(merged), observation_id),
-        )
+        await self.conn.execute(_SQL_ADD_SOURCE_FACTS, (json.dumps(merged), observation_id))
 
     async def get_fact_ids(self, observation_id: int) -> list[int]:
-        rows = await self.conn.execute_fetchall(
-            "SELECT source_fact_ids FROM observations WHERE id = ?", (observation_id,)
-        )
+        rows = await self.conn.execute_fetchall(_SQL_GET_SOURCE_FACT_IDS, (observation_id,))
         if not rows:
             return []
         raw = rows[0]["source_fact_ids"]
@@ -313,8 +313,8 @@ class ObservationRepository:
                 absorbed_text=removed.summary,
             )
         )
+        history = history[-OBSERVATION_HISTORY_LIMIT:]
 
-        evidence_count = len(merged_fids)
         embedding_bytes = serialize_embedding(embedding)
 
         await self.conn.execute(
@@ -322,7 +322,6 @@ class ObservationRepository:
             (
                 merged_text,
                 embedding_bytes,
-                evidence_count,
                 json.dumps(merged_fids),
                 json.dumps([_history_to_dict(h) for h in history]),
                 now.isoformat(),
@@ -347,7 +346,6 @@ class ObservationRepository:
             id=keeper_id,
             summary=merged_text,
             embedding=embedding,
-            evidence_count=evidence_count,
             source_fact_ids=merged_fids,
             history=history,
             created_at=keeper.created_at,
@@ -441,7 +439,41 @@ class ObservationRepository:
         )
         obs_by_id = {r["id"]: Observation.model_validate(_row_dict(r)) for r in obs_rows}
 
-        return [(obs_by_id[oid], 1 - distances[oid]) for oid in obs_ids if oid in obs_by_id]
+        return [
+            (obs_by_id[oid], 1 - distances[oid])
+            for oid in obs_ids
+            if oid in obs_by_id and obs_by_id[oid].archived_at is None
+        ]
+
+    async def archive_batch(self, observation_ids: list[int]) -> int:
+        if not observation_ids:
+            return 0
+        now = datetime.now(UTC)
+        placeholders = ",".join("?" * len(observation_ids))
+        await self.conn.execute(
+            _SQL_ARCHIVE_OBSERVATIONS_BATCH.format(placeholders=placeholders),
+            (now.isoformat(), *observation_ids),
+        )
+        for oid in observation_ids:
+            await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (oid,))
+        return len(observation_ids)
+
+    async def unarchive(self, observation_id: int) -> None:
+        obs = await self.get(observation_id)
+        if not obs:
+            return
+        await self.conn.execute(_SQL_UNARCHIVE_OBSERVATION, (observation_id,))
+        if obs.embedding is not None:
+            embedding_bytes = serialize_embedding(obs.embedding)
+            await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (observation_id, embedding_bytes))
+
+    async def list_archival_candidates(self, limit: int = 100) -> list[Observation]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_ARCHIVAL_CANDIDATES_OBS, (limit,))
+        return [Observation.model_validate(_row_dict(r)) for r in rows]
+
+    async def count_archived(self) -> int:
+        rows = await self.conn.execute_fetchall(_SQL_COUNT_ARCHIVED_OBS)
+        return rows[0][0] if rows else 0
 
 
 def _history_to_dict(h: HistoryEntry) -> dict:

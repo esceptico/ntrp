@@ -22,6 +22,9 @@ _SQL_RECENT_EMBEDDINGS = """
     ORDER BY created_at DESC LIMIT ?
 """
 
+_SQL_GET_NONEMPTY_DREAM_SOURCES = "SELECT id, source_fact_ids FROM dreams WHERE source_fact_ids != '[]'"
+_SQL_UPDATE_DREAM_SOURCES = "UPDATE dreams SET source_fact_ids = ? WHERE id = ?"
+
 
 def _row_dict(row: aiosqlite.Row) -> dict:
     d = dict(row)
@@ -74,6 +77,17 @@ class DreamRepository:
             dt = datetime.fromisoformat(raw)
             return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
         return raw
+
+    async def remove_source_facts(self, fact_ids: list[int]) -> None:
+        if not fact_ids:
+            return
+        fact_id_set = set(fact_ids)
+        rows = await self.conn.execute_fetchall(_SQL_GET_NONEMPTY_DREAM_SOURCES)
+        for row in rows:
+            raw_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []
+            new_ids = [fid for fid in raw_ids if fid not in fact_id_set]
+            if len(new_ids) != len(raw_ids):
+                await self.conn.execute(_SQL_UPDATE_DREAM_SOURCES, (json.dumps(new_ids), row["id"]))
 
     async def recent_embeddings(self, limit: int = 100) -> list[np.ndarray]:
         rows = await self.conn.execute_fetchall(_SQL_RECENT_EMBEDDINGS, (limit,))

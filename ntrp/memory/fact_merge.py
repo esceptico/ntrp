@@ -10,7 +10,6 @@ from collections.abc import Callable, Coroutine
 from contextlib import AbstractAsyncContextManager, nullcontext
 from typing import Literal
 
-import numpy as np
 from pydantic import BaseModel
 
 from ntrp.constants import FACT_MERGE_SIMILARITY_THRESHOLD, FACT_MERGE_TEMPERATURE
@@ -18,6 +17,8 @@ from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact
 from ntrp.memory.prompts import FACT_MERGE_PROMPT
+from ntrp.memory.retrieval import cosine_similarity
+from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
 
@@ -31,13 +32,6 @@ class FactMergeAction(BaseModel):
     action: Literal["same", "different"]
     text: str | None = None
     reason: str | None = None
-
-
-def _cosine(a: np.ndarray, b: np.ndarray) -> float:
-    dot = np.dot(a, b)
-    na = np.linalg.norm(a)
-    nb = np.linalg.norm(b)
-    return float(dot / (na * nb)) if na and nb else 0.0
 
 
 def _find_top_pair(
@@ -55,7 +49,7 @@ def _find_top_pair(
             pair_key = (min(facts[i].id, facts[j].id), max(facts[i].id, facts[j].id))
             if pair_key in skipped:
                 continue
-            sim = _cosine(facts[i].embedding, facts[j].embedding)
+            sim = cosine_similarity(facts[i].embedding, facts[j].embedding)
             if sim >= threshold and (best is None or sim > best[2]):
                 best = (i, j, sim)
     return best
@@ -108,17 +102,23 @@ async def _merge_facts(
     embedding: Embedding,
     fact_repo: FactRepository,
     obs_repo: ObservationRepository,
+    dream_repo: DreamRepository | None = None,
 ) -> None:
     # Update keeper text + embedding
     await fact_repo.update_text(keeper.id, merged_text, embedding)
 
     # Transfer entity refs from removed to keeper (skip duplicates)
-    keeper_entity_ids = set(await fact_repo.get_entity_ids_for_facts([keeper.id]))
+    keeper_refs = await fact_repo.get_entity_refs(keeper.id)
+    keeper_entity_ids = {r.entity_id for r in keeper_refs if r.entity_id}
+    keeper_names = {r.name.lower() for r in keeper_refs}
     removed_refs = await fact_repo.get_entity_refs(removed.id)
     for ref in removed_refs:
         if ref.entity_id and ref.entity_id not in keeper_entity_ids:
             await fact_repo.add_entity_ref(keeper.id, ref.name, ref.entity_id)
             keeper_entity_ids.add(ref.entity_id)
+        elif not ref.entity_id and ref.name.lower() not in keeper_names:
+            await fact_repo.add_entity_ref(keeper.id, ref.name, None)
+            keeper_names.add(ref.name.lower())
 
     # Transfer access count (additive) — direct SQL, not reinforce() which deduplicates
     if removed.access_count > 0:
@@ -141,9 +141,27 @@ async def _merge_facts(
         seen = set()
         deduped = [fid for fid in new_ids if not (fid in seen or seen.add(fid))]
         await obs_repo.conn.execute(
-            "UPDATE observations SET source_fact_ids = ?, evidence_count = ? WHERE id = ?",
-            (json.dumps(deduped), len(deduped), row["id"]),
+            "UPDATE observations SET source_fact_ids = ? WHERE id = ?",
+            (json.dumps(deduped), row["id"]),
         )
+
+    # Update dream source_fact_ids: same replacement pattern
+    if dream_repo:
+        dream_rows = await dream_repo.conn.execute_fetchall(
+            "SELECT id, source_fact_ids FROM dreams WHERE source_fact_ids LIKE ?",
+            (f"%{removed.id}%",),
+        )
+        for row in dream_rows:
+            raw_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []
+            if removed.id not in raw_ids:
+                continue
+            new_ids = [keeper.id if fid == removed.id else fid for fid in raw_ids]
+            seen = set()
+            deduped = [fid for fid in new_ids if not (fid in seen or seen.add(fid))]
+            await dream_repo.conn.execute(
+                "UPDATE dreams SET source_fact_ids = ? WHERE id = ?",
+                (json.dumps(deduped), row["id"]),
+            )
 
     # Delete the removed fact
     await fact_repo.delete(removed.id)
@@ -156,6 +174,7 @@ async def fact_merge_pass(
     embed_fn: EmbedFn,
     atomic: AtomicFn | None = None,
     threshold: float = FACT_MERGE_SIMILARITY_THRESHOLD,
+    dream_repo: DreamRepository | None = None,
 ) -> int:
     facts = await fact_repo.list_all_with_embeddings()
     if len(facts) < 2:
@@ -193,7 +212,7 @@ async def fact_merge_pass(
 
         # DB writes inside atomic
         async with atomic() if atomic else nullcontext():
-            await _merge_facts(keeper, removed, merged_text, embedding, fact_repo, obs_repo)
+            await _merge_facts(keeper, removed, merged_text, embedding, fact_repo, obs_repo, dream_repo)
 
         _logger.info(
             "Merged fact %d + %d → %d (sim=%.3f): %s",

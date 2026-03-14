@@ -26,6 +26,7 @@ from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact
 from ntrp.memory.prompts import DREAM_EVALUATOR_PROMPT, DREAM_PROMPT
+from ntrp.memory.retrieval import cosine_similarity
 from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
 
@@ -63,13 +64,6 @@ class _DreamCandidate:
 # --- Clustering ---
 
 
-def _cosine(a: np.ndarray, b: np.ndarray) -> float:
-    dot = np.dot(a, b)
-    na = np.linalg.norm(a)
-    nb = np.linalg.norm(b)
-    return float(dot / (na * nb)) if na and nb else 0.0
-
-
 def _kmeans(
     facts: dict[int, tuple[str, np.ndarray]],
     k: int,
@@ -88,7 +82,7 @@ def _kmeans(
         dists = []
         for fid in fids:
             emb = facts[fid][1]
-            min_d = min(1.0 - _cosine(emb, c) for c in centroids)
+            min_d = min(1.0 - cosine_similarity(emb, c) for c in centroids)
             dists.append(min_d**2)
         total = sum(dists)
         r = rng.random() * total
@@ -104,7 +98,7 @@ def _kmeans(
         clusters = defaultdict(list)
         for fid in fids:
             emb = facts[fid][1]
-            best = max(range(k), key=lambda ki: _cosine(emb, centroids[ki]))
+            best = max(range(k), key=lambda ki: cosine_similarity(emb, centroids[ki]))
             clusters[best].append(fid)
         for ki in range(k):
             if not clusters[ki]:
@@ -123,7 +117,7 @@ def _centroid_nearest(facts: dict[int, tuple[str, np.ndarray]], cluster_fids: li
     for fid in cluster_fids:
         centroid += facts[fid][1]
     centroid /= len(cluster_fids)
-    return max(cluster_fids, key=lambda fid: _cosine(facts[fid][1], centroid))
+    return max(cluster_fids, key=lambda fid: cosine_similarity(facts[fid][1], centroid))
 
 
 def _get_supporters(
@@ -137,7 +131,7 @@ def _get_supporters(
     for fid in cluster_fids:
         if fid == seed_fid:
             continue
-        sim = _cosine(seed_emb, facts[fid][1])
+        sim = cosine_similarity(seed_emb, facts[fid][1])
         scored.append((fid, sim))
     scored.sort(key=lambda x: -x[1])
     return [fid for fid, _ in scored[:n]]
@@ -218,7 +212,7 @@ async def _evaluate_batch(
 
 
 def _is_duplicate(embedding: np.ndarray, existing: list[np.ndarray], threshold: float) -> bool:
-    return any(_cosine(embedding, e) >= threshold for e in existing)
+    return any(cosine_similarity(embedding, e) >= threshold for e in existing)
 
 
 # --- Pipeline ---

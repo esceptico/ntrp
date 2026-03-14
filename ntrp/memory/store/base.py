@@ -1,6 +1,7 @@
 import aiosqlite
 
 from ntrp.logging import get_logger
+from ntrp.memory.store.migrations import run_migrations
 
 _logger = get_logger(__name__)
 
@@ -10,13 +11,13 @@ CREATE TABLE IF NOT EXISTS observations (
     id INTEGER PRIMARY KEY,
     summary TEXT NOT NULL,
     embedding BLOB,
-    evidence_count INTEGER DEFAULT 0,
     source_fact_ids TEXT DEFAULT '[]',  -- JSON array of fact IDs
     history TEXT DEFAULT '[]',          -- JSON array of changes
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    access_count INTEGER DEFAULT 0
+    access_count INTEGER DEFAULT 0,
+    archived_at TIMESTAMP
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
@@ -50,7 +51,8 @@ CREATE TABLE IF NOT EXISTS facts (
     happened_at TIMESTAMP,
     last_accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     access_count INTEGER DEFAULT 0,
-    consolidated_at TIMESTAMP  -- NULL = not yet consolidated
+    consolidated_at TIMESTAMP,  -- NULL = not yet consolidated
+    archived_at TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_facts_created ON facts(created_at DESC);
@@ -64,9 +66,9 @@ CREATE TABLE IF NOT EXISTS entities (
 
 CREATE TABLE IF NOT EXISTS entity_refs (
     id INTEGER PRIMARY KEY,
-    fact_id INTEGER REFERENCES facts(id),
+    fact_id INTEGER REFERENCES facts(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    entity_id INTEGER REFERENCES entities(id)
+    entity_id INTEGER REFERENCES entities(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_entity_refs_fact ON entity_refs(fact_id);
@@ -75,7 +77,7 @@ CREATE INDEX IF NOT EXISTS idx_entity_refs_entity ON entity_refs(entity_id);
 
 CREATE TABLE IF NOT EXISTS obs_entity_refs (
     observation_id INTEGER REFERENCES observations(id) ON DELETE CASCADE,
-    entity_id INTEGER REFERENCES entities(id),
+    entity_id INTEGER REFERENCES entities(id) ON DELETE CASCADE,
     PRIMARY KEY (observation_id, entity_id)
 );
 
@@ -129,6 +131,7 @@ class GraphDatabase:
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
         await self.conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
+        await run_migrations(self.conn)
 
         stored_dim = await self._get_meta("embedding_dim")
         if stored_dim is None or int(stored_dim) != self.embedding_dim:

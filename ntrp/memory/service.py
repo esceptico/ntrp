@@ -15,7 +15,7 @@ class FactService:
         self._channel = channel
 
     async def list_recent(self, limit: int = 100, offset: int = 0) -> tuple[list[Fact], int]:
-        total = await self._memory.facts.count()
+        total = await self._memory.facts.count_active()
         facts = await self._memory.facts.list_recent(limit=limit, offset=offset)
         return facts, total
 
@@ -61,6 +61,9 @@ class FactService:
 
             entity_refs_count = await repo.count_entity_refs(fact_id)
             await repo.delete(fact_id)
+            await self._memory.observations.remove_source_facts([fact_id])
+            await self._memory.dreams.remove_source_facts([fact_id])
+            await repo.cleanup_orphaned_entities()
 
         self._channel.publish(FactDeleted(fact_id=fact_id))
         return {"entity_refs": entity_refs_count}
@@ -154,16 +157,18 @@ class MemoryService:
             return
 
         facts = await extract_from_chat(tuple(window), self.memory.extraction_model)
-        self._cursors[sid] = len(event.messages)
+        new_cursor = len(event.messages)
+        self._cursors[sid] = new_cursor
 
         if not facts:
             return
         _logger.info("Extracted %d facts from chat", len(facts))
+        source_ref = f"{sid}:{context_start}-{new_cursor}"
         for fact_text in facts:
             await self.memory.remember(
                 text=fact_text,
                 source_type="chat",
-                source_ref=sid,
+                source_ref=source_ref,
             )
 
     def close(self) -> None:
@@ -178,6 +183,8 @@ class MemoryService:
             "fact_count": await self.memory.facts.count(),
             "observation_count": await self.memory.observations.count(),
             "dream_count": await self.memory.dreams.count(),
+            "archived_fact_count": await self.memory.facts.count_archived(),
+            "archived_observation_count": await self.memory.observations.count_archived(),
         }
 
     async def count_unconsolidated(self) -> int:

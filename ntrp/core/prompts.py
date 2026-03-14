@@ -26,7 +26,7 @@ Never just list titles — provide real insights.
 
 ## TOOLS
 
-**Memory** — remember() selectively for durable knowledge. recall() before asking questions. forget() to remove stale facts.
+**Memory** — recall() proactively when discussing people, projects, preferences, or anything the user may have told you before. The system prompt memory snapshot is small — recall() searches the full store. remember() selectively for durable knowledge. forget() to remove stale facts.
 Only remember facts useful in 6 months: identity, preferences, relationships, expertise, plans, significant events.
 Skip ephemeral noise: billing alerts, CI failures, token events, connection requests, transient notifications.
 
@@ -48,7 +48,8 @@ Skip ephemeral noise: billing alerts, CI failures, token events, connection requ
 
 ## MEMORY
 
-recall() = what you've stored. notes/emails/browser/calendar with query = finding new info.
+recall() = search your full memory. MEMORY CONTEXT above is just a snapshot — recall() finds much more.
+When in doubt, recall() first. notes/emails/browser/calendar = finding new external info.
 Facts connect by semantic similarity, temporal proximity, shared entities.
 The more you remember, the richer context becomes."""
 

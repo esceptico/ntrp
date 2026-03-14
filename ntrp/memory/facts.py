@@ -26,7 +26,7 @@ from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.events.internal import ConsolidationCompleted, FactCreated, FactDeleted
 from ntrp.logging import get_logger
 from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decisions
-from ntrp.memory.decay import decay_score
+from ntrp.memory.decay import decay_score, should_archive_fact, should_archive_observation
 from ntrp.memory.dreams import run_dream_pass
 from ntrp.memory.extraction import Extractor
 from ntrp.memory.fact_merge import fact_merge_pass
@@ -74,6 +74,7 @@ class FactMemory:
         self._last_dream_pass: datetime | None = None
         self._last_merge_pass: datetime | None = None
         self._last_fact_merge_pass: datetime | None = None
+        self._last_archival_pass: datetime | None = None
         self.dreams_enabled: bool = False
 
     @asynccontextmanager
@@ -123,13 +124,13 @@ class FactMemory:
         while True:
             await asyncio.sleep(backoff)
             try:
-                count = await self._consolidate_pending()
-                if count > 0:
-                    backoff = interval
+                await self._consolidate_pending()
                 await self._maybe_run_temporal_pass()
                 await self._maybe_run_observation_merge()
                 await self._maybe_run_fact_merge()
                 await self._maybe_run_dream_pass()
+                await self._maybe_run_archival_pass()
+                backoff = interval
             except asyncio.CancelledError:
                 raise
             except Exception as e:
@@ -237,6 +238,7 @@ class FactMemory:
                 self.extraction_model,
                 self.embedder.embed_one,
                 atomic=self._atomic,
+                dream_repo=self.dreams,
             )
             if merged > 0:
                 _logger.info("Fact merge pass: %d merges", merged)
@@ -264,6 +266,40 @@ class FactMemory:
             self._last_dream_pass = now
         except Exception as e:
             _logger.warning("Dream pass failed: %s", e)
+
+    async def _maybe_run_archival_pass(self) -> None:
+        now = datetime.now(UTC)
+        if self._last_archival_pass and (now - self._last_archival_pass) < timedelta(days=1):
+            return
+
+        try:
+            archived_facts = 0
+            candidates = await self.facts.list_archival_candidates(limit=100)
+            archive_ids = [
+                f.id
+                for f in candidates
+                if should_archive_fact(f.consolidated_at, f.created_at, f.last_accessed_at, f.access_count, now)
+            ]
+            if archive_ids:
+                async with self.transaction():
+                    archived_facts = await self.facts.archive_batch(archive_ids)
+
+            archived_obs = 0
+            obs_candidates = await self.observations.list_archival_candidates(limit=100)
+            obs_archive_ids = [
+                o.id
+                for o in obs_candidates
+                if should_archive_observation(o.created_at, o.updated_at, o.last_accessed_at, o.access_count, now)
+            ]
+            if obs_archive_ids:
+                async with self.transaction():
+                    archived_obs = await self.observations.archive_batch(obs_archive_ids)
+
+            if archived_facts or archived_obs:
+                _logger.info("Archival pass: %d facts, %d observations archived", archived_facts, archived_obs)
+            self._last_archival_pass = now
+        except Exception as e:
+            _logger.warning("Archival pass failed: %s", e)
 
     @property
     def reembed_running(self) -> bool:
@@ -344,10 +380,12 @@ class FactMemory:
     ) -> RememberFactResult | None:
         if not text or not text.strip():
             return None
-        embedding = await self.embedder.embed_one(text)
 
-        # Extract entities outside lock (LLM call)
-        extraction = await self.extractor.extract(text)
+        # Embed + extract entities in parallel (both are network calls)
+        embedding, extraction = await asyncio.gather(
+            self.embedder.embed_one(text),
+            self.extractor.extract(text),
+        )
 
         async with self.transaction():
             # Dedup inside lock to prevent TOCTOU race
@@ -456,6 +494,7 @@ class FactMemory:
                     self.channel.publish(FactDeleted(fact_id=fact.id))
             if count > 0:
                 await self.observations.remove_source_facts(deleted_ids)
+                await self.dreams.remove_source_facts(deleted_ids)
                 await self.facts.cleanup_orphaned_entities()
             return count
 
@@ -488,7 +527,6 @@ class FactMemory:
         return await self.facts.count()
 
     async def get_context(self, user_limit: int = 10) -> tuple[list[Observation], list[Fact]]:
-        # Get User-linked observations, scored by decay
         user_entity = await self.facts.get_entity_by_name(USER_ENTITY_NAME)
         if user_entity:
             raw_obs = await self.observations.get_for_entity(user_entity.id, limit=20)
@@ -501,12 +539,10 @@ class FactMemory:
         else:
             observations = []
 
-        # Exclusion set: all source fact IDs from selected observations
         exclude_ids: set[int] = set()
         for obs in observations:
             exclude_ids.update(obs.source_fact_ids)
 
-        # User facts, minus those already covered by observations
         all_user_facts = await self.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=user_limit + len(exclude_ids))
         user_facts = [f for f in all_user_facts if f.id not in exclude_ids][:user_limit]
 
