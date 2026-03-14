@@ -26,7 +26,7 @@ from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.events.internal import ConsolidationCompleted, FactCreated, FactDeleted
 from ntrp.logging import get_logger
 from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decisions
-from ntrp.memory.decay import decay_score
+from ntrp.memory.decay import decay_score, should_archive_fact, should_archive_observation
 from ntrp.memory.dreams import run_dream_pass
 from ntrp.memory.extraction import Extractor
 from ntrp.memory.fact_merge import fact_merge_pass
@@ -272,8 +272,6 @@ class FactMemory:
             return
 
         try:
-            from ntrp.memory.decay import should_archive_fact, should_archive_observation
-
             archived_facts = 0
             candidates = await self.facts.list_archival_candidates(limit=100)
             archive_ids = [

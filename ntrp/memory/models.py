@@ -93,13 +93,6 @@ class Observation(_MemoryModel):
     def evidence_count(self) -> int:
         return len(self.source_fact_ids)
 
-    @model_validator(mode="before")
-    @classmethod
-    def _drop_evidence_count(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            data.pop("evidence_count", None)
-        return data
-
     @field_validator("created_at", "updated_at", "last_accessed_at", "archived_at", mode="before")
     @classmethod
     def _parse_dt(cls, v: Any) -> datetime | None:
