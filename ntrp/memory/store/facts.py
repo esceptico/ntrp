@@ -79,8 +79,9 @@ _SQL_GET_FACTS_FOR_ENTITY = """
     SELECT DISTINCT f.*
     FROM facts f
     JOIN entity_refs er ON f.id = er.fact_id
-    WHERE er.entity_id = (SELECT id FROM entities WHERE name = ? COLLATE NOCASE)
-       OR (er.entity_id IS NULL AND er.name = ? COLLATE NOCASE)
+    WHERE f.archived_at IS NULL
+      AND (er.entity_id = (SELECT id FROM entities WHERE name = ? COLLATE NOCASE)
+           OR (er.entity_id IS NULL AND er.name = ? COLLATE NOCASE))
     ORDER BY f.access_count DESC, f.created_at DESC
     LIMIT ?
 """
@@ -107,7 +108,7 @@ _SQL_GET_FACTS_FOR_ENTITY_BY_ID = """
     SELECT f.*
     FROM facts f
     JOIN entity_refs er ON f.id = er.fact_id
-    WHERE er.entity_id = ?
+    WHERE er.entity_id = ? AND f.archived_at IS NULL
     ORDER BY f.created_at DESC
     LIMIT ?
 """
@@ -126,6 +127,7 @@ _SQL_GET_FACTS_FOR_ENTITY_TEMPORAL = """
     FROM facts f
     JOIN entity_refs er ON f.id = er.fact_id
     WHERE er.entity_id = ?
+      AND f.archived_at IS NULL
       AND COALESCE(f.happened_at, f.created_at) >= datetime('now', '-' || ? || ' days')
       AND COALESCE(f.happened_at, f.created_at) <= datetime('now')
     ORDER BY COALESCE(f.happened_at, f.created_at) ASC

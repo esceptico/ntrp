@@ -130,4 +130,6 @@ async def run_migrations(conn: aiosqlite.Connection) -> None:
         await _set_version(conn, version)
         await conn.commit()
 
+    _logger.info("Vacuuming database after migrations")
+    await conn.execute("VACUUM")
     _logger.info("Memory schema up to date (v%d)", CURRENT_VERSION)
