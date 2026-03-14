@@ -158,6 +158,7 @@ _SQL_GET_ENTITIES_WITH_FACT_COUNT = """
     WHERE COALESCE(f.happened_at, f.created_at) >= datetime('now', '-' || ? || ' days')
       AND COALESCE(f.happened_at, f.created_at) <= datetime('now')
       AND er.entity_id IS NOT NULL
+      AND f.archived_at IS NULL
     GROUP BY er.entity_id
     HAVING COUNT(*) >= ?
     ORDER BY fact_count DESC

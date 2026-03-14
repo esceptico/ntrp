@@ -104,7 +104,7 @@ async def _migrate_v3(conn: aiosqlite.Connection) -> None:
     for table in ("facts", "observations"):
         try:
             await conn.execute(f"ALTER TABLE {table} ADD COLUMN archived_at TIMESTAMP")
-        except Exception:
+        except aiosqlite.OperationalError:
             pass  # Column already exists (fresh install)
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_archived ON facts(archived_at)")
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_observations_archived ON observations(archived_at)")
