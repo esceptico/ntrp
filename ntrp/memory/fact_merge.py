@@ -141,8 +141,8 @@ async def _merge_facts(
         seen = set()
         deduped = [fid for fid in new_ids if not (fid in seen or seen.add(fid))]
         await obs_repo.conn.execute(
-            "UPDATE observations SET source_fact_ids = ?, evidence_count = ? WHERE id = ?",
-            (json.dumps(deduped), len(deduped), row["id"]),
+            "UPDATE observations SET source_fact_ids = ? WHERE id = ?",
+            (json.dumps(deduped), row["id"]),
         )
 
     # Delete the removed fact

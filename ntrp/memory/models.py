@@ -81,13 +81,23 @@ class Observation(_MemoryModel):
     id: int
     summary: str
     embedding: Embedding | None
-    evidence_count: int
     source_fact_ids: list[int]
     history: list[HistoryEntry]
     created_at: datetime
     updated_at: datetime
     last_accessed_at: datetime
     access_count: int
+
+    @property
+    def evidence_count(self) -> int:
+        return len(self.source_fact_ids)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_evidence_count(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            data.pop("evidence_count", None)
+        return data
 
     @field_validator("created_at", "updated_at", "last_accessed_at", mode="before")
     @classmethod

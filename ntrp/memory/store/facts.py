@@ -76,10 +76,11 @@ _SQL_GET_ENTITY_REFS_BATCH = "SELECT * FROM entity_refs WHERE fact_id IN ({place
 _SQL_DELETE_ENTITY_REFS = "DELETE FROM entity_refs WHERE fact_id = ?"
 
 _SQL_GET_FACTS_FOR_ENTITY = """
-    SELECT f.*
+    SELECT DISTINCT f.*
     FROM facts f
     JOIN entity_refs er ON f.id = er.fact_id
-    WHERE er.name = ?
+    WHERE er.entity_id = (SELECT id FROM entities WHERE name = ? COLLATE NOCASE)
+       OR (er.entity_id IS NULL AND er.name = ? COLLATE NOCASE)
     ORDER BY f.access_count DESC, f.created_at DESC
     LIMIT ?
 """
@@ -94,7 +95,11 @@ _SQL_INSERT_ENTITY = """
     VALUES (?, ?, ?)
 """
 
-_SQL_COUNT_ENTITY_FACTS = "SELECT COUNT(*) FROM entity_refs WHERE name = ?"
+_SQL_COUNT_ENTITY_FACTS = """
+    SELECT COUNT(*) FROM entity_refs
+    WHERE entity_id = (SELECT id FROM entities WHERE name = ? COLLATE NOCASE)
+       OR (entity_id IS NULL AND name = ? COLLATE NOCASE)
+"""
 
 _SQL_LIST_ALL_ENTITIES = "SELECT * FROM entities ORDER BY updated_at DESC LIMIT ?"
 
@@ -308,7 +313,7 @@ class FactRepository:
         return result
 
     async def get_facts_for_entity(self, name: str, limit: int = 100) -> list[Fact]:
-        rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_FOR_ENTITY, (name, limit))
+        rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_FOR_ENTITY, (name, name, limit))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def search_facts_vector(self, query_embedding: Embedding, limit: int = 10) -> list[tuple[Fact, float]]:
@@ -362,7 +367,7 @@ class FactRepository:
         return Entity(id=entity_id, name=name, created_at=now, updated_at=now)
 
     async def count_entity_facts(self, entity_name: str) -> int:
-        rows = await self.conn.execute_fetchall(_SQL_COUNT_ENTITY_FACTS, (entity_name,))
+        rows = await self.conn.execute_fetchall(_SQL_COUNT_ENTITY_FACTS, (entity_name, entity_name))
         return rows[0][0] if rows else 0
 
     async def merge_entities(self, keep_id: int, merge_ids: list[int]) -> int:

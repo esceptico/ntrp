@@ -151,8 +151,9 @@ async def retrieve_facts(
     candidate_ids.update(expansion.keys())
     candidate_ids.update(temporal_ids.keys())
 
-    # Fetch all candidate facts in one query
+    # Fetch all candidate facts in one query, exclude already-consolidated
     facts_by_id = await repo.get_batch(list(candidate_ids))
+    facts_by_id = {fid: f for fid, f in facts_by_id.items() if f.consolidated_at is None}
 
     if not facts_by_id:
         return FactContext(facts=[])

@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import aiosqlite
 
 from ntrp.database import serialize_embedding
+from ntrp.constants import OBSERVATION_HISTORY_LIMIT
 from ntrp.memory.fts import build_fts_query
 from ntrp.memory.models import Embedding, HistoryEntry, Observation
 
@@ -55,15 +56,15 @@ _SQL_DELETE_OBS_ENTITY_REFS = "DELETE FROM obs_entity_refs WHERE observation_id 
 
 _SQL_INSERT_OBSERVATION = """
     INSERT INTO observations (
-        summary, embedding, evidence_count, source_fact_ids, history,
+        summary, embedding, source_fact_ids, history,
         created_at, updated_at, last_accessed_at, access_count
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SQL_UPDATE_OBSERVATION = """
     UPDATE observations
-    SET summary = ?, embedding = ?, evidence_count = ?, source_fact_ids = ?, history = ?, updated_at = ?
+    SET summary = ?, embedding = ?, source_fact_ids = ?, history = ?, updated_at = ?
     WHERE id = ?
 """
 
@@ -103,7 +104,6 @@ class ObservationRepository:
     ) -> Observation:
         now = datetime.now(UTC)
         source_fact_ids = [source_fact_id] if source_fact_id else []
-        evidence_count = len(source_fact_ids)
         embedding_bytes = serialize_embedding(embedding)
 
         cursor = await self.conn.execute(
@@ -111,7 +111,6 @@ class ObservationRepository:
             (
                 summary,
                 embedding_bytes,
-                evidence_count,
                 json.dumps(source_fact_ids),
                 json.dumps([]),
                 now.isoformat(),
@@ -129,7 +128,6 @@ class ObservationRepository:
             id=obs_id,
             summary=summary,
             embedding=embedding,
-            evidence_count=evidence_count,
             source_fact_ids=source_fact_ids,
             history=[],
             created_at=now,
@@ -179,15 +177,13 @@ class ObservationRepository:
                     source_fact_id=new_fact_id,
                 )
             )
-
-        evidence_count = len(source_fact_ids)
+            history = history[-OBSERVATION_HISTORY_LIMIT:]
 
         await self.conn.execute(
             _SQL_UPDATE_OBSERVATION,
             (
                 summary,
                 serialize_embedding(embedding),
-                evidence_count,
                 json.dumps(source_fact_ids),
                 json.dumps([_history_to_dict(h) for h in history]),
                 now.isoformat(),
@@ -204,7 +200,6 @@ class ObservationRepository:
             id=observation_id,
             summary=summary,
             embedding=embedding,
-            evidence_count=evidence_count,
             source_fact_ids=source_fact_ids,
             history=history,
             created_at=obs.created_at,
@@ -227,19 +222,17 @@ class ObservationRepository:
         """Remove deleted fact IDs from all observations' source_fact_ids."""
         if not fact_ids:
             return
-        for fact_id in fact_ids:
-            rows = await self.conn.execute_fetchall(
-                "SELECT id, source_fact_ids FROM observations WHERE source_fact_ids LIKE ?",
-                (f"%{fact_id}%",),
-            )
-            for row in rows:
-                raw_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []
-                if fact_id not in raw_ids:
-                    continue  # LIKE matched a substring (e.g., id=5 matching id=15)
-                new_ids = [fid for fid in raw_ids if fid != fact_id]
+        fact_id_set = set(fact_ids)
+        rows = await self.conn.execute_fetchall(
+            "SELECT id, source_fact_ids FROM observations WHERE source_fact_ids != '[]'"
+        )
+        for row in rows:
+            raw_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []
+            new_ids = [fid for fid in raw_ids if fid not in fact_id_set]
+            if len(new_ids) != len(raw_ids):
                 await self.conn.execute(
-                    "UPDATE observations SET source_fact_ids = ?, evidence_count = ? WHERE id = ?",
-                    (json.dumps(new_ids), len(new_ids), row["id"]),
+                    "UPDATE observations SET source_fact_ids = ? WHERE id = ?",
+                    (json.dumps(new_ids), row["id"]),
                 )
 
     async def add_source_facts(self, observation_id: int, fact_ids: list[int]) -> None:
@@ -248,8 +241,8 @@ class ObservationRepository:
         existing = await self.get_fact_ids(observation_id)
         merged = existing + [fid for fid in fact_ids if fid not in existing]
         await self.conn.execute(
-            "UPDATE observations SET source_fact_ids = ?, evidence_count = ? WHERE id = ?",
-            (json.dumps(merged), len(merged), observation_id),
+            "UPDATE observations SET source_fact_ids = ? WHERE id = ?",
+            (json.dumps(merged), observation_id),
         )
 
     async def get_fact_ids(self, observation_id: int) -> list[int]:
@@ -313,8 +306,8 @@ class ObservationRepository:
                 absorbed_text=removed.summary,
             )
         )
+        history = history[-OBSERVATION_HISTORY_LIMIT:]
 
-        evidence_count = len(merged_fids)
         embedding_bytes = serialize_embedding(embedding)
 
         await self.conn.execute(
@@ -322,7 +315,6 @@ class ObservationRepository:
             (
                 merged_text,
                 embedding_bytes,
-                evidence_count,
                 json.dumps(merged_fids),
                 json.dumps([_history_to_dict(h) for h in history]),
                 now.isoformat(),
@@ -347,7 +339,6 @@ class ObservationRepository:
             id=keeper_id,
             summary=merged_text,
             embedding=embedding,
-            evidence_count=evidence_count,
             source_fact_ids=merged_fids,
             history=history,
             created_at=keeper.created_at,
