@@ -378,10 +378,12 @@ class FactMemory:
     ) -> RememberFactResult | None:
         if not text or not text.strip():
             return None
-        embedding = await self.embedder.embed_one(text)
 
-        # Extract entities outside lock (LLM call)
-        extraction = await self.extractor.extract(text)
+        # Embed + extract entities in parallel (both are network calls)
+        embedding, extraction = await asyncio.gather(
+            self.embedder.embed_one(text),
+            self.extractor.extract(text),
+        )
 
         async with self.transaction():
             # Dedup inside lock to prevent TOCTOU race
