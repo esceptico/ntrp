@@ -3,15 +3,22 @@ from ntrp.memory.models import Fact, Observation
 MEMORY_CONTEXT_CHAR_BUDGET = 3000
 
 
+def _source_label(fact: Fact) -> str:
+    date = fact.happened_at or fact.created_at
+    date_str = date.strftime("%b %d") if date else ""
+    if fact.source_type == "chat":
+        return f" (conversation, {date_str})" if date_str else " (conversation)"
+    if fact.source_type and date_str:
+        return f" ({fact.source_type}, {date_str})"
+    if date_str:
+        return f" ({date_str})"
+    return ""
+
+
 def _format_bundled_observation(obs: Observation, source_facts: list[Fact]) -> str:
     lines = [f"- {obs.summary} ({obs.evidence_count} sources)"]
     for fact in source_facts[:5]:
-        date = ""
-        if fact.happened_at:
-            date = f" ({fact.happened_at.strftime('%b %d')})"
-        elif fact.created_at:
-            date = f" ({fact.created_at.strftime('%b %d')})"
-        lines.append(f"  - {fact.text}{date}")
+        lines.append(f"  - {fact.text}{_source_label(fact)}")
     return "\n".join(lines)
 
 
@@ -90,6 +97,6 @@ def format_memory_context(
         sections.append(("**Patterns**", obs_items))
 
     if query_facts:
-        sections.append(("**Relevant**", [f"- {f.text}" for f in query_facts]))
+        sections.append(("**Relevant**", [f"- {f.text}{_source_label(f)}" for f in query_facts]))
 
     return _format_sections(sections)
