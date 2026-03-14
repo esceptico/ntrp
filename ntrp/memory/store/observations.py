@@ -245,18 +245,14 @@ class ObservationRepository:
             raw_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []
             new_ids = [fid for fid in raw_ids if fid not in fact_id_set]
             if len(new_ids) != len(raw_ids):
-                await self.conn.execute(
-                    _SQL_UPDATE_SOURCE_FACT_IDS, (json.dumps(new_ids), row["id"])
-                )
+                await self.conn.execute(_SQL_UPDATE_SOURCE_FACT_IDS, (json.dumps(new_ids), row["id"]))
 
     async def add_source_facts(self, observation_id: int, fact_ids: list[int]) -> None:
         if not fact_ids:
             return
         existing = await self.get_fact_ids(observation_id)
         merged = existing + [fid for fid in fact_ids if fid not in existing]
-        await self.conn.execute(
-            _SQL_ADD_SOURCE_FACTS, (json.dumps(merged), observation_id)
-        )
+        await self.conn.execute(_SQL_ADD_SOURCE_FACTS, (json.dumps(merged), observation_id))
 
     async def get_fact_ids(self, observation_id: int) -> list[int]:
         rows = await self.conn.execute_fetchall(_SQL_GET_SOURCE_FACT_IDS, (observation_id,))

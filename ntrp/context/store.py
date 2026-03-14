@@ -104,6 +104,7 @@ class SessionStore:
         backfilled = await self.backfill_chat_messages()
         if backfilled:
             from ntrp.logging import get_logger
+
             get_logger(__name__).info("Backfilled %d chat messages from existing sessions", backfilled)
 
     async def save_session(self, state: SessionState, messages: list[dict | Any], metadata: dict | None = None) -> None:
@@ -251,12 +252,8 @@ class SessionStore:
         await self.conn.commit()
         return cursor.rowcount > 0
 
-    async def get_chat_slice(
-        self, session_id: str, start_index: int, end_index: int
-    ) -> list[ChatMessage]:
-        rows = await self.conn.execute_fetchall(
-            SQL_GET_CHAT_SLICE, (session_id, start_index, end_index)
-        )
+    async def get_chat_slice(self, session_id: str, start_index: int, end_index: int) -> list[ChatMessage]:
+        rows = await self.conn.execute_fetchall(SQL_GET_CHAT_SLICE, (session_id, start_index, end_index))
         return [
             ChatMessage(
                 id=r["id"],

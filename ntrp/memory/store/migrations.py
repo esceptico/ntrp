@@ -1,4 +1,3 @@
-
 import aiosqlite
 
 from ntrp.logging import get_logger

@@ -276,7 +276,8 @@ class FactMemory:
             archived_facts = 0
             candidates = await self.facts.list_archival_candidates(limit=100)
             archive_ids = [
-                f.id for f in candidates
+                f.id
+                for f in candidates
                 if should_archive_fact(f.consolidated_at, f.created_at, f.last_accessed_at, f.access_count, now)
             ]
             if archive_ids:
@@ -286,7 +287,8 @@ class FactMemory:
             archived_obs = 0
             obs_candidates = await self.observations.list_archival_candidates(limit=100)
             obs_archive_ids = [
-                o.id for o in obs_candidates
+                o.id
+                for o in obs_candidates
                 if should_archive_observation(o.created_at, o.updated_at, o.last_accessed_at, o.access_count, now)
             ]
             if obs_archive_ids:

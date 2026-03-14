@@ -156,10 +156,7 @@ async def retrieve_facts(
 
     # Fetch all candidate facts in one query, exclude already-consolidated
     facts_by_id = await repo.get_batch(list(candidate_ids))
-    facts_by_id = {
-        fid: f for fid, f in facts_by_id.items()
-        if f.consolidated_at is None and f.archived_at is None
-    }
+    facts_by_id = {fid: f for fid, f in facts_by_id.items() if f.consolidated_at is None and f.archived_at is None}
 
     if not facts_by_id:
         return FactContext(facts=[])
@@ -270,7 +267,8 @@ async def retrieve_with_observations(
     for obs in observations:
         if obs.id in display_ids_per_obs:
             source_facts = [
-                display_facts[fid] for fid in display_ids_per_obs[obs.id]
+                display_facts[fid]
+                for fid in display_ids_per_obs[obs.id]
                 if fid in display_facts and display_facts[fid].archived_at is None
             ]
             if source_facts:

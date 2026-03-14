@@ -493,9 +493,7 @@ class FactRepository:
             return
         await self.conn.execute(_SQL_UNARCHIVE, (fact_id,))
         if fact.embedding is not None:
-            await self.conn.execute(
-                _SQL_INSERT_FACT_VEC, (fact_id, serialize_embedding(fact.embedding))
-            )
+            await self.conn.execute(_SQL_INSERT_FACT_VEC, (fact_id, serialize_embedding(fact.embedding)))
 
     async def list_archival_candidates(self, limit: int = 100) -> list[Fact]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_ARCHIVAL_CANDIDATES, (limit,))
