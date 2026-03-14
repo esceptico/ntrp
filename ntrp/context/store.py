@@ -63,6 +63,25 @@ ORDER BY archived_at DESC
 LIMIT ?
 """
 
+SQL_CHAT_MAX_INDEX = "SELECT MAX(message_index) FROM chat_messages WHERE session_id = ?"
+
+SQL_INSERT_CHAT_MESSAGE = """
+    INSERT INTO chat_messages (session_id, role, content, created_at, message_index)
+    VALUES (?, ?, ?, ?, ?)
+"""
+
+SQL_GET_CHAT_SLICE = """
+    SELECT * FROM chat_messages
+    WHERE session_id = ? AND message_index >= ? AND message_index < ?
+    ORDER BY message_index
+"""
+
+SQL_BACKFILL_CANDIDATES = """
+    SELECT s.session_id, s.messages FROM sessions s
+    WHERE s.messages IS NOT NULL AND s.messages != '[]'
+    AND NOT EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.session_id = s.session_id)
+"""
+
 
 class SessionStore:
     def __init__(self, conn: aiosqlite.Connection):
@@ -104,10 +123,7 @@ class SessionStore:
         await self.conn.commit()
 
     async def _sync_chat_messages(self, session_id: str, messages: list[dict]) -> None:
-        rows = await self.conn.execute_fetchall(
-            "SELECT MAX(message_index) FROM chat_messages WHERE session_id = ?",
-            (session_id,),
-        )
+        rows = await self.conn.execute_fetchall(SQL_CHAT_MAX_INDEX, (session_id,))
         max_existing = rows[0][0] if rows and rows[0][0] is not None else -1
 
         now = datetime.now(UTC)
@@ -117,7 +133,7 @@ class SessionStore:
             role = msg.get("role", "")
             content = msg.get("content") if role in ("user", "assistant") else None
             await self.conn.execute(
-                "INSERT INTO chat_messages (session_id, role, content, created_at, message_index) VALUES (?, ?, ?, ?, ?)",
+                SQL_INSERT_CHAT_MESSAGE,
                 (session_id, role, content, now.isoformat(), idx),
             )
 
@@ -225,10 +241,7 @@ class SessionStore:
         self, session_id: str, start_index: int, end_index: int
     ) -> list[ChatMessage]:
         rows = await self.conn.execute_fetchall(
-            """SELECT * FROM chat_messages
-               WHERE session_id = ? AND message_index >= ? AND message_index < ?
-               ORDER BY message_index""",
-            (session_id, start_index, end_index),
+            SQL_GET_CHAT_SLICE, (session_id, start_index, end_index)
         )
         return [
             ChatMessage(
@@ -244,11 +257,7 @@ class SessionStore:
 
     async def backfill_chat_messages(self) -> int:
         """Populate chat_messages from existing session JSON blobs. Runs once."""
-        rows = await self.conn.execute_fetchall(
-            """SELECT s.session_id, s.messages FROM sessions s
-               WHERE s.messages IS NOT NULL AND s.messages != '[]'
-               AND NOT EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.session_id = s.session_id)"""
-        )
+        rows = await self.conn.execute_fetchall(SQL_BACKFILL_CANDIDATES)
         if not rows:
             return 0
 
@@ -260,7 +269,7 @@ class SessionStore:
                 role = msg.get("role", "")
                 content = msg.get("content") if role in ("user", "assistant") else None
                 await self.conn.execute(
-                    "INSERT INTO chat_messages (session_id, role, content, created_at, message_index) VALUES (?, ?, ?, ?, ?)",
+                    SQL_INSERT_CHAT_MESSAGE,
                     (row["session_id"], role, content, now.isoformat(), idx),
                 )
                 count += 1

@@ -155,6 +155,18 @@ _SQL_GET_ENTITIES_WITH_FACT_COUNT = """
     ORDER BY fact_count DESC
 """
 
+_SQL_ARCHIVE_BATCH = "UPDATE facts SET archived_at = ? WHERE id IN ({placeholders})"
+_SQL_UNARCHIVE = "UPDATE facts SET archived_at = NULL WHERE id = ?"
+
+_SQL_LIST_ARCHIVAL_CANDIDATES = """
+    SELECT * FROM facts
+    WHERE consolidated_at IS NOT NULL AND archived_at IS NULL
+    ORDER BY last_accessed_at ASC
+    LIMIT ?
+"""
+
+_SQL_COUNT_ARCHIVED = "SELECT COUNT(*) FROM facts WHERE archived_at IS NOT NULL"
+
 
 def _row_dict(row: aiosqlite.Row) -> dict:
     return dict(row)
@@ -438,7 +450,7 @@ class FactRepository:
         now = datetime.now(UTC)
         placeholders = ",".join("?" * len(fact_ids))
         await self.conn.execute(
-            f"UPDATE facts SET archived_at = ? WHERE id IN ({placeholders})",
+            _SQL_ARCHIVE_BATCH.format(placeholders=placeholders),
             (now.isoformat(), *fact_ids),
         )
         for fid in fact_ids:
@@ -449,28 +461,18 @@ class FactRepository:
         fact = await self.get(fact_id)
         if not fact:
             return
-        await self.conn.execute(
-            "UPDATE facts SET archived_at = NULL WHERE id = ?", (fact_id,)
-        )
+        await self.conn.execute(_SQL_UNARCHIVE, (fact_id,))
         if fact.embedding is not None:
             await self.conn.execute(
                 _SQL_INSERT_FACT_VEC, (fact_id, serialize_embedding(fact.embedding))
             )
 
     async def list_archival_candidates(self, limit: int = 100) -> list[Fact]:
-        rows = await self.conn.execute_fetchall(
-            """SELECT * FROM facts
-               WHERE consolidated_at IS NOT NULL AND archived_at IS NULL
-               ORDER BY last_accessed_at ASC
-               LIMIT ?""",
-            (limit,),
-        )
+        rows = await self.conn.execute_fetchall(_SQL_LIST_ARCHIVAL_CANDIDATES, (limit,))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def count_archived(self) -> int:
-        rows = await self.conn.execute_fetchall(
-            "SELECT COUNT(*) FROM facts WHERE archived_at IS NOT NULL"
-        )
+        rows = await self.conn.execute_fetchall(_SQL_COUNT_ARCHIVED)
         return rows[0][0] if rows else 0
 
     async def update_embedding(self, fact_id: int, embedding: Embedding) -> None:
