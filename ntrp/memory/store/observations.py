@@ -35,7 +35,7 @@ _SQL_GET_OBSERVATIONS_FOR_ENTITY = """
     SELECT DISTINCT o.*
     FROM observations o
     JOIN obs_entity_refs oer ON o.id = oer.observation_id
-    WHERE oer.entity_id = ?
+    WHERE oer.entity_id = ? AND o.archived_at IS NULL
     ORDER BY o.updated_at DESC
     LIMIT ?
 """
