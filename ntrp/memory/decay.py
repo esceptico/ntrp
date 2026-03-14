@@ -1,7 +1,13 @@
 import math
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from ntrp.constants import MEMORY_DECAY_RATE, RECENCY_SIGMA_HOURS
+from ntrp.constants import (
+    ARCHIVE_DECAY_THRESHOLD,
+    ARCHIVE_FACT_MIN_AGE_DAYS,
+    ARCHIVE_OBSERVATION_MIN_AGE_DAYS,
+    MEMORY_DECAY_RATE,
+    RECENCY_SIGMA_HOURS,
+)
 
 _SECONDS_PER_HOUR = 3600
 
@@ -28,3 +34,36 @@ def recency_boost(
     if hours < 0:
         hours = 0
     return math.exp(-hours / sigma_hours)
+
+
+def should_archive_fact(
+    consolidated_at: datetime | None,
+    created_at: datetime,
+    last_accessed_at: datetime,
+    access_count: int,
+    now: datetime | None = None,
+) -> bool:
+    now = now or datetime.now(UTC)
+    if consolidated_at is None:
+        return False
+    age = now - created_at
+    if age < timedelta(days=ARCHIVE_FACT_MIN_AGE_DAYS):
+        return False
+    return decay_score(last_accessed_at, access_count) < ARCHIVE_DECAY_THRESHOLD
+
+
+def should_archive_observation(
+    created_at: datetime,
+    updated_at: datetime,
+    last_accessed_at: datetime,
+    access_count: int,
+    now: datetime | None = None,
+) -> bool:
+    now = now or datetime.now(UTC)
+    age = now - created_at
+    if age < timedelta(days=ARCHIVE_OBSERVATION_MIN_AGE_DAYS):
+        return False
+    staleness = now - updated_at
+    if staleness < timedelta(days=ARCHIVE_OBSERVATION_MIN_AGE_DAYS):
+        return False
+    return decay_score(last_accessed_at, access_count) < ARCHIVE_DECAY_THRESHOLD

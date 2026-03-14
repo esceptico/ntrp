@@ -87,6 +87,7 @@ class Observation(_MemoryModel):
     updated_at: datetime
     last_accessed_at: datetime
     access_count: int
+    archived_at: datetime | None = None
 
     @property
     def evidence_count(self) -> int:
@@ -99,7 +100,7 @@ class Observation(_MemoryModel):
             data.pop("evidence_count", None)
         return data
 
-    @field_validator("created_at", "updated_at", "last_accessed_at", mode="before")
+    @field_validator("created_at", "updated_at", "last_accessed_at", "archived_at", mode="before")
     @classmethod
     def _parse_dt(cls, v: Any) -> datetime | None:
         return _parse_datetime(v)
@@ -116,9 +117,10 @@ class Fact(_MemoryModel):
     last_accessed_at: datetime
     access_count: int
     consolidated_at: datetime | None = None
+    archived_at: datetime | None = None
     entity_refs: list["EntityRef"] = []
 
-    @field_validator("created_at", "happened_at", "last_accessed_at", "consolidated_at", mode="before")
+    @field_validator("created_at", "happened_at", "last_accessed_at", "consolidated_at", "archived_at", mode="before")
     @classmethod
     def _parse_dt(cls, v: Any) -> datetime | None:
         return _parse_datetime(v)

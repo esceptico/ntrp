@@ -6,7 +6,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 2
+CURRENT_VERSION = 3
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -97,9 +97,23 @@ async def _migrate_v2(conn: aiosqlite.Connection) -> None:
     """)
 
 
+async def _migrate_v3(conn: aiosqlite.Connection) -> None:
+    """Add archived_at column to facts and observations for memory archival."""
+    _logger.info("Migration v3: adding archived_at to facts and observations")
+
+    for table in ("facts", "observations"):
+        try:
+            await conn.execute(f"ALTER TABLE {table} ADD COLUMN archived_at TIMESTAMP")
+        except Exception:
+            pass  # Column already exists (fresh install)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_archived ON facts(archived_at)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_observations_archived ON observations(archived_at)")
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
+    (3, _migrate_v3),
 ]
 
 

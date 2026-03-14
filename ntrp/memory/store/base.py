@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS observations (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    access_count INTEGER DEFAULT 0
+    access_count INTEGER DEFAULT 0,
+    archived_at TIMESTAMP
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
@@ -50,10 +51,13 @@ CREATE TABLE IF NOT EXISTS facts (
     happened_at TIMESTAMP,
     last_accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     access_count INTEGER DEFAULT 0,
-    consolidated_at TIMESTAMP  -- NULL = not yet consolidated
+    consolidated_at TIMESTAMP,  -- NULL = not yet consolidated
+    archived_at TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_facts_created ON facts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_facts_archived ON facts(archived_at);
+CREATE INDEX IF NOT EXISTS idx_observations_archived ON observations(archived_at);
 
 CREATE TABLE IF NOT EXISTS entities (
     id INTEGER PRIMARY KEY,

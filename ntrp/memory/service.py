@@ -154,16 +154,18 @@ class MemoryService:
             return
 
         facts = await extract_from_chat(tuple(window), self.memory.extraction_model)
-        self._cursors[sid] = len(event.messages)
+        new_cursor = len(event.messages)
+        self._cursors[sid] = new_cursor
 
         if not facts:
             return
         _logger.info("Extracted %d facts from chat", len(facts))
+        source_ref = f"{sid}:{context_start}-{new_cursor}"
         for fact_text in facts:
             await self.memory.remember(
                 text=fact_text,
                 source_type="chat",
-                source_ref=sid,
+                source_ref=source_ref,
             )
 
     def close(self) -> None:
@@ -178,6 +180,8 @@ class MemoryService:
             "fact_count": await self.memory.facts.count(),
             "observation_count": await self.memory.observations.count(),
             "dream_count": await self.memory.dreams.count(),
+            "archived_fact_count": await self.memory.facts.count_archived(),
+            "archived_observation_count": await self.memory.observations.count_archived(),
         }
 
     async def count_unconsolidated(self) -> int:

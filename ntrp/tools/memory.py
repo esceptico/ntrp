@@ -65,7 +65,7 @@ class RememberTool(Tool):
 
         result = await memory.remember(
             text=fact,
-            source_type="source" if source else "explicit",
+            source_type="chat",
             source_ref=source,
             happened_at=event_time,
         )

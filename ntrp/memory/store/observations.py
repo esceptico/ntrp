@@ -19,14 +19,14 @@ _SQL_SEARCH_OBSERVATIONS_FTS = """
     SELECT o.*
     FROM observations o
     JOIN observations_fts fts ON o.id = fts.rowid
-    WHERE observations_fts MATCH ?
+    WHERE observations_fts MATCH ? AND o.archived_at IS NULL
     ORDER BY bm25(observations_fts)
     LIMIT ?
 """
 
 _SQL_SEARCH_OBSERVATIONS_TEMPORAL = """
     SELECT * FROM observations
-    WHERE updated_at IS NOT NULL
+    WHERE updated_at IS NOT NULL AND archived_at IS NULL
     ORDER BY ABS(julianday(updated_at) - julianday(?))
     LIMIT ?
 """
@@ -432,7 +432,51 @@ class ObservationRepository:
         )
         obs_by_id = {r["id"]: Observation.model_validate(_row_dict(r)) for r in obs_rows}
 
-        return [(obs_by_id[oid], 1 - distances[oid]) for oid in obs_ids if oid in obs_by_id]
+        return [
+            (obs_by_id[oid], 1 - distances[oid])
+            for oid in obs_ids
+            if oid in obs_by_id and obs_by_id[oid].archived_at is None
+        ]
+
+    async def archive_batch(self, observation_ids: list[int]) -> int:
+        if not observation_ids:
+            return 0
+        now = datetime.now(UTC)
+        placeholders = ",".join("?" * len(observation_ids))
+        await self.conn.execute(
+            f"UPDATE observations SET archived_at = ? WHERE id IN ({placeholders})",
+            (now.isoformat(), *observation_ids),
+        )
+        for oid in observation_ids:
+            await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (oid,))
+        return len(observation_ids)
+
+    async def unarchive(self, observation_id: int) -> None:
+        obs = await self.get(observation_id)
+        if not obs:
+            return
+        await self.conn.execute(
+            "UPDATE observations SET archived_at = NULL WHERE id = ?", (observation_id,)
+        )
+        if obs.embedding is not None:
+            embedding_bytes = serialize_embedding(obs.embedding)
+            await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (observation_id, embedding_bytes))
+
+    async def list_archival_candidates(self, limit: int = 100) -> list[Observation]:
+        rows = await self.conn.execute_fetchall(
+            """SELECT * FROM observations
+               WHERE archived_at IS NULL
+               ORDER BY last_accessed_at ASC
+               LIMIT ?""",
+            (limit,),
+        )
+        return [Observation.model_validate(_row_dict(r)) for r in rows]
+
+    async def count_archived(self) -> int:
+        rows = await self.conn.execute_fetchall(
+            "SELECT COUNT(*) FROM observations WHERE archived_at IS NOT NULL"
+        )
+        return rows[0][0] if rows else 0
 
 
 def _history_to_dict(h: HistoryEntry) -> dict:

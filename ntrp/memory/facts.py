@@ -74,6 +74,7 @@ class FactMemory:
         self._last_dream_pass: datetime | None = None
         self._last_merge_pass: datetime | None = None
         self._last_fact_merge_pass: datetime | None = None
+        self._last_archival_pass: datetime | None = None
         self.dreams_enabled: bool = False
 
     @asynccontextmanager
@@ -130,6 +131,7 @@ class FactMemory:
                 await self._maybe_run_observation_merge()
                 await self._maybe_run_fact_merge()
                 await self._maybe_run_dream_pass()
+                await self._maybe_run_archival_pass()
             except asyncio.CancelledError:
                 raise
             except Exception as e:
@@ -264,6 +266,40 @@ class FactMemory:
             self._last_dream_pass = now
         except Exception as e:
             _logger.warning("Dream pass failed: %s", e)
+
+    async def _maybe_run_archival_pass(self) -> None:
+        now = datetime.now(UTC)
+        if self._last_archival_pass and (now - self._last_archival_pass) < timedelta(days=1):
+            return
+
+        try:
+            from ntrp.memory.decay import should_archive_fact, should_archive_observation
+
+            archived_facts = 0
+            candidates = await self.facts.list_archival_candidates(limit=100)
+            archive_ids = [
+                f.id for f in candidates
+                if should_archive_fact(f.consolidated_at, f.created_at, f.last_accessed_at, f.access_count, now)
+            ]
+            if archive_ids:
+                async with self.transaction():
+                    archived_facts = await self.facts.archive_batch(archive_ids)
+
+            archived_obs = 0
+            obs_candidates = await self.observations.list_archival_candidates(limit=100)
+            obs_archive_ids = [
+                o.id for o in obs_candidates
+                if should_archive_observation(o.created_at, o.updated_at, o.last_accessed_at, o.access_count, now)
+            ]
+            if obs_archive_ids:
+                async with self.transaction():
+                    archived_obs = await self.observations.archive_batch(obs_archive_ids)
+
+            if archived_facts or archived_obs:
+                _logger.info("Archival pass: %d facts, %d observations archived", archived_facts, archived_obs)
+            self._last_archival_pass = now
+        except Exception as e:
+            _logger.warning("Archival pass failed: %s", e)
 
     @property
     def reembed_running(self) -> bool:

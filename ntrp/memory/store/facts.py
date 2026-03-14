@@ -29,14 +29,14 @@ _SQL_LIST_TIME_WINDOW = """
 
 _SQL_SEARCH_FACTS_TEMPORAL = """
     SELECT * FROM facts
-    WHERE happened_at IS NOT NULL
+    WHERE happened_at IS NOT NULL AND archived_at IS NULL
     ORDER BY ABS(julianday(happened_at) - julianday(?))
     LIMIT ?
 """
 
 _SQL_LIST_UNCONSOLIDATED = """
     SELECT * FROM facts
-    WHERE consolidated_at IS NULL
+    WHERE consolidated_at IS NULL AND archived_at IS NULL
     ORDER BY created_at ASC
     LIMIT ?
 """
@@ -65,7 +65,7 @@ _SQL_SEARCH_FACTS_FTS = """
     SELECT f.*
     FROM facts f
     JOIN facts_fts fts ON f.id = fts.rowid
-    WHERE facts_fts MATCH ?
+    WHERE facts_fts MATCH ? AND f.archived_at IS NULL
     ORDER BY bm25(facts_fts)
     LIMIT ?
 """
@@ -329,7 +329,11 @@ class FactRepository:
         fact_rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_BY_IDS.format(placeholders=placeholders), fact_ids)
         facts_by_id = {r["id"]: Fact.model_validate(_row_dict(r)) for r in fact_rows}
 
-        return [(facts_by_id[fid], 1 - distances[fid]) for fid in fact_ids if fid in facts_by_id]
+        return [
+            (facts_by_id[fid], 1 - distances[fid])
+            for fid in fact_ids
+            if fid in facts_by_id and facts_by_id[fid].archived_at is None
+        ]
 
     async def search_facts_fts(self, query: str, limit: int = 10) -> list[Fact]:
         fts_query = build_fts_query(query)
@@ -427,6 +431,47 @@ class FactRepository:
             "SELECT * FROM facts WHERE embedding IS NOT NULL ORDER BY created_at DESC"
         )
         return [Fact.model_validate(_row_dict(r)) for r in rows]
+
+    async def archive_batch(self, fact_ids: list[int]) -> int:
+        if not fact_ids:
+            return 0
+        now = datetime.now(UTC)
+        placeholders = ",".join("?" * len(fact_ids))
+        await self.conn.execute(
+            f"UPDATE facts SET archived_at = ? WHERE id IN ({placeholders})",
+            (now.isoformat(), *fact_ids),
+        )
+        for fid in fact_ids:
+            await self.conn.execute(_SQL_DELETE_FACT_VEC, (fid,))
+        return len(fact_ids)
+
+    async def unarchive(self, fact_id: int) -> None:
+        fact = await self.get(fact_id)
+        if not fact:
+            return
+        await self.conn.execute(
+            "UPDATE facts SET archived_at = NULL WHERE id = ?", (fact_id,)
+        )
+        if fact.embedding is not None:
+            await self.conn.execute(
+                _SQL_INSERT_FACT_VEC, (fact_id, serialize_embedding(fact.embedding))
+            )
+
+    async def list_archival_candidates(self, limit: int = 100) -> list[Fact]:
+        rows = await self.conn.execute_fetchall(
+            """SELECT * FROM facts
+               WHERE consolidated_at IS NOT NULL AND archived_at IS NULL
+               ORDER BY last_accessed_at ASC
+               LIMIT ?""",
+            (limit,),
+        )
+        return [Fact.model_validate(_row_dict(r)) for r in rows]
+
+    async def count_archived(self) -> int:
+        rows = await self.conn.execute_fetchall(
+            "SELECT COUNT(*) FROM facts WHERE archived_at IS NOT NULL"
+        )
+        return rows[0][0] if rows else 0
 
     async def update_embedding(self, fact_id: int, embedding: Embedding) -> None:
         embedding_bytes = serialize_embedding(embedding)

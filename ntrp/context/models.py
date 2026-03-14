@@ -17,3 +17,13 @@ class SessionData:
     state: SessionState
     messages: list[dict]
     last_input_tokens: int | None = None
+
+
+@dataclass
+class ChatMessage:
+    id: int
+    session_id: str
+    role: str
+    content: str | None
+    created_at: datetime
+    message_index: int

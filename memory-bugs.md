@@ -38,28 +38,14 @@ FK enforcement is off, and manual cleanup only happens in `FactRepository.delete
 
 ## 10. Source provenance is too thin
 `source_type` ("chat"/"explicit") + `source_ref` (session ID) can't trace back to a specific message or source.
-**Status:** TODO — design agreed:
-- Collapse "explicit"/"source" into "chat" (both come from conversation)
-- `source_ref` becomes a meaningful locator (not opaque session UUID)
-- `recall()` gets `provenance: bool` flag — includes source data when on
-- Don't pre-format provenance — pass raw source to LLM, let it decide presentation
-- UI toggle in settings to enable/disable provenance in recall results
-- Touches: extraction, remember tool, recall tool, formatting, settings, UI
+**Status:** FIXED — collapsed "explicit"/"source" into "chat", source_ref now includes message range (session_id:start-end)
+- Remaining: recall() provenance flag + UI toggle (Task 1.6, future)
 
 ## 11. No persistent chat history
-Sessions are ephemeral — raw messages lost after session rotation. Can't search past conversations or trace facts to original messages.
-**Status:** TODO — design:
-- `chat_messages` table: id, session_id, role, content, timestamp
-- FTS index on content (no vector — too expensive per message)
-- `session_search()` tool for raw conversation search ("what did we discuss about X?")
-- Facts link to message IDs for provenance (solves #10 naturally)
-- Retention limits needed for hosted scenario
+Sessions are ephemeral — raw messages lost after session rotation. Can't trace facts to original messages.
+**Status:** FIXED — chat_messages table in sessions.db, incremental sync on save, backfill existing sessions, slice lookup for provenance
+- Remaining: recall() integration to surface original conversation context (Task 1.6, future)
 
 ## 12. No memory archival
 Facts/observations accumulate forever. sqlite-vec does linear scans — more embeddings = slower recall().
-**Status:** TODO — design:
-- Archive consolidated facts from vec index (knowledge already in observations)
-- Archive stale observations (low access, not touched in months)
-- `archived_at` timestamp on facts/observations — keep rows, remove from vec/FTS
-- Run as final step of consolidation loop
-- Provenance links stay intact since base rows are preserved
+**Status:** FIXED — archived_at column (migration v3), excluded from search, archive/unarchive methods, archival pass in consolidation loop, stats in API

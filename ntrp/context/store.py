@@ -5,7 +5,7 @@ from typing import Any
 import aiosqlite
 from pydantic import BaseModel
 
-from ntrp.context.models import SessionData, SessionState
+from ntrp.context.models import ChatMessage, SessionData, SessionState
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -18,6 +18,18 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    content TEXT,
+    created_at TIMESTAMP NOT NULL,
+    message_index INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, message_index);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at DESC);
 """
 
 SQL_SAVE_SESSION = """
@@ -64,6 +76,10 @@ class SessionStore:
                 await self.conn.commit()
             except Exception:
                 pass
+        backfilled = await self.backfill_chat_messages()
+        if backfilled:
+            from ntrp.logging import get_logger
+            get_logger(__name__).info("Backfilled %d chat messages from existing sessions", backfilled)
 
     async def save_session(self, state: SessionState, messages: list[dict | Any], metadata: dict | None = None) -> None:
         serializable_messages = []
@@ -84,7 +100,26 @@ class SessionStore:
                 state.name,
             ),
         )
+        await self._sync_chat_messages(state.session_id, serializable_messages)
         await self.conn.commit()
+
+    async def _sync_chat_messages(self, session_id: str, messages: list[dict]) -> None:
+        rows = await self.conn.execute_fetchall(
+            "SELECT MAX(message_index) FROM chat_messages WHERE session_id = ?",
+            (session_id,),
+        )
+        max_existing = rows[0][0] if rows and rows[0][0] is not None else -1
+
+        now = datetime.now(UTC)
+        for idx, msg in enumerate(messages):
+            if idx <= max_existing:
+                continue
+            role = msg.get("role", "")
+            content = msg.get("content") if role in ("user", "assistant") else None
+            await self.conn.execute(
+                "INSERT INTO chat_messages (session_id, role, content, created_at, message_index) VALUES (?, ?, ?, ?, ?)",
+                (session_id, role, content, now.isoformat(), idx),
+            )
 
     async def load_session(self, session_id: str) -> SessionData | None:
         rows = await self.conn.execute_fetchall("SELECT * FROM sessions WHERE session_id = ?", (session_id,))
@@ -185,3 +220,49 @@ class SessionStore:
         )
         await self.conn.commit()
         return cursor.rowcount > 0
+
+    async def get_chat_slice(
+        self, session_id: str, start_index: int, end_index: int
+    ) -> list[ChatMessage]:
+        rows = await self.conn.execute_fetchall(
+            """SELECT * FROM chat_messages
+               WHERE session_id = ? AND message_index >= ? AND message_index < ?
+               ORDER BY message_index""",
+            (session_id, start_index, end_index),
+        )
+        return [
+            ChatMessage(
+                id=r["id"],
+                session_id=r["session_id"],
+                role=r["role"],
+                content=r["content"],
+                created_at=datetime.fromisoformat(r["created_at"]),
+                message_index=r["message_index"],
+            )
+            for r in rows
+        ]
+
+    async def backfill_chat_messages(self) -> int:
+        """Populate chat_messages from existing session JSON blobs. Runs once."""
+        rows = await self.conn.execute_fetchall(
+            """SELECT s.session_id, s.messages FROM sessions s
+               WHERE s.messages IS NOT NULL AND s.messages != '[]'
+               AND NOT EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.session_id = s.session_id)"""
+        )
+        if not rows:
+            return 0
+
+        count = 0
+        now = datetime.now(UTC)
+        for row in rows:
+            messages = json.loads(row["messages"])
+            for idx, msg in enumerate(messages):
+                role = msg.get("role", "")
+                content = msg.get("content") if role in ("user", "assistant") else None
+                await self.conn.execute(
+                    "INSERT INTO chat_messages (session_id, role, content, created_at, message_index) VALUES (?, ?, ?, ?, ?)",
+                    (row["session_id"], role, content, now.isoformat(), idx),
+                )
+                count += 1
+        await self.conn.commit()
+        return count
