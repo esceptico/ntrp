@@ -8,11 +8,25 @@ from ntrp.usage import Pricing
 
 _logger = get_logger(__name__)
 
+_models_dir: Path | None = None
+
 
 def _models_path() -> Path:
-    from ntrp.config import NTRP_DIR
+    if _models_dir is None:
+        raise RuntimeError("load_custom_models() must be called before accessing models path")
+    return _models_dir / "models.json"
 
-    return NTRP_DIR / "models.json"
+
+def _read_models_json() -> dict | None:
+    path = _models_path()
+    if not path.exists():
+        return None
+    try:
+        raw = json.loads(path.read_text())
+        return raw if isinstance(raw, dict) else None
+    except (json.JSONDecodeError, OSError):
+        _logger.warning("Failed to read %s", path, exc_info=True)
+        return None
 
 
 class Provider(Enum):
@@ -183,23 +197,14 @@ _embedding_models: dict[str, EmbeddingModel] = {m.id: m for m in EMBEDDING_DEFAU
 _custom_loaded = False
 
 
-def load_custom_models() -> None:
-    global _custom_loaded
+def load_custom_models(base_dir: Path) -> None:
+    global _custom_loaded, _models_dir
+    _models_dir = base_dir
     if _custom_loaded:
         return
     _custom_loaded = True
 
-    if not _models_path().exists():
-        return
-
-    try:
-        raw = json.loads(_models_path().read_text())
-    except (json.JSONDecodeError, OSError):
-        _logger.warning("Failed to read %s", _models_path(), exc_info=True)
-        return
-
-    if not isinstance(raw, dict):
-        _logger.warning("%s: expected a JSON object, got %s", _models_path(), type(raw).__name__)
+    if (raw := _read_models_json()) is None:
         return
 
     embedding_raw = {}
@@ -311,12 +316,7 @@ def add_custom_model(
     max_output_tokens: int = 8192,
     api_key_env: str | None = None,
 ) -> Model:
-    raw = {}
-    if _models_path().exists():
-        try:
-            raw = json.loads(_models_path().read_text())
-        except (json.JSONDecodeError, OSError):
-            raw = {}
+    raw = _read_models_json() or {}
 
     entry: dict = {"base_url": base_url, "context_window": context_window}
     if max_output_tokens != 8192:
@@ -346,10 +346,7 @@ def remove_custom_model(model_id: str) -> None:
 
     del _models[model_id]
 
-    if _models_path().exists():
-        try:
-            raw = json.loads(_models_path().read_text())
-        except (json.JSONDecodeError, OSError):
-            return
+    raw = _read_models_json()
+    if raw is not None:
         raw.pop(model_id, None)
         _models_path().write_text(json.dumps(raw, indent=2))

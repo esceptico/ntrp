@@ -1,16 +1,18 @@
 from pathlib import Path
 
-from ntrp.config import NTRP_DIR
+from ntrp.settings import NTRP_DIR
 from ntrp.skills.installer import install_from_github
 from ntrp.skills.registry import SkillMeta, SkillRegistry
 
 BUILTIN_SKILLS_DIR = Path(__file__).resolve().parent.parent.parent / "skills"
 
-SKILLS_DIRS: list[tuple[Path, str]] = [
-    (BUILTIN_SKILLS_DIR, "builtin"),
-    (Path.cwd() / ".skills", "project"),
-    (NTRP_DIR / "skills", "global"),
-]
+
+def get_skills_dirs() -> list[tuple[Path, str]]:
+    return [
+        (BUILTIN_SKILLS_DIR, "builtin"),
+        (Path.cwd() / ".skills", "project"),
+        (NTRP_DIR / "skills", "global"),
+    ]
 
 
 class SkillService:
@@ -26,7 +28,7 @@ class SkillService:
     async def install(self, source: str) -> SkillMeta | None:
         target_dir = NTRP_DIR / "skills"
         name = await install_from_github(source, target_dir)
-        self._registry.reload(SKILLS_DIRS)
+        self._registry.reload(get_skills_dirs())
         return self._registry.get(name)
 
     def remove(self, name: str) -> bool:

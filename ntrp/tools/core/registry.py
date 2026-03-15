@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Self
 
 from pydantic import ValidationError
 
@@ -13,7 +13,7 @@ class ToolRegistry:
     def register(self, tool: Tool) -> None:
         self._tools[tool.name] = tool
 
-    def copy_with(self, *extra_tools: Tool) -> "ToolRegistry":
+    def copy_with(self, *extra_tools: Tool) -> Self:
         registry = ToolRegistry()
         registry._tools = dict(self._tools)
         for tool in extra_tools:

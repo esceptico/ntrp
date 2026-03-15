@@ -1,10 +1,13 @@
 import hashlib
+from itertools import chain
 
 from ntrp.llm.anthropic import AnthropicClient
 from ntrp.llm.base import CompletionClient, EmbeddingClient
+from ntrp.llm.claude_oauth import get_access_token
 from ntrp.llm.gemini import GeminiClient
 from ntrp.llm.models import Provider, get_embedding_model, get_embedding_models, get_model, get_models, is_oauth_model
 from ntrp.llm.openai import OpenAIClient
+from ntrp.settings import load_user_settings
 
 _completion_clients: dict[str, CompletionClient] = {}
 _embedding_clients: dict[str, EmbeddingClient] = {}
@@ -21,18 +24,13 @@ def init(config) -> None:
     _api_keys[Provider.GOOGLE] = config.gemini_api_key
     _api_keys[Provider.OPENROUTER] = config.openrouter_api_key
 
-    from ntrp.config import load_user_settings
-
     settings = load_user_settings()
     custom_keys = settings.get("custom_model_keys", {})
     for model_id, key in custom_keys.items():
         _api_keys[model_id] = key
 
     # Fallback: env var lookup via api_key_env (legacy / power-user)
-    for model in get_models().values():
-        if model.provider == Provider.CUSTOM and model.api_key_env and model.id not in _api_keys:
-            _api_keys[model.id] = config.model_extra.get(model.api_key_env.lower())
-    for model in get_embedding_models().values():
+    for model in chain(get_models().values(), get_embedding_models().values()):
         if model.provider == Provider.CUSTOM and model.api_key_env and model.id not in _api_keys:
             _api_keys[model.id] = config.model_extra.get(model.api_key_env.lower())
 
@@ -43,9 +41,6 @@ def _token_fingerprint(token: str) -> str:
 
 def _get_anthropic_oauth_client() -> AnthropicClient:
     global _last_oauth_fingerprint
-
-    from ntrp.llm.claude_oauth import get_access_token
-
     token = get_access_token()
     if not token:
         raise ValueError("Claude OAuth not configured — connect via Claude Pro/Max provider")

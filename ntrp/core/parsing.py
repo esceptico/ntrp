@@ -1,8 +1,8 @@
 import base64
 import json
-from typing import Any
 
 from ntrp.core.models import PendingToolCall
+from ntrp.llm.types import Message, ToolCall
 from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
@@ -18,16 +18,15 @@ def parse_tool_arguments(arguments: str | None) -> dict:
         return {}
 
 
-def normalize_assistant_message(message: Any) -> dict:
-    """Normalize LLM response into a serializable message dict."""
-    sanitized: dict[str, Any] = {
+def normalize_assistant_message(message: Message) -> dict:
+    sanitized: dict = {
         "role": "assistant",
         "content": message.content or "",
     }
     if message.tool_calls:
         tool_calls = []
         for tc in message.tool_calls:
-            tc_dict = {
+            tc_dict: dict = {
                 "id": tc.id,
                 "type": "function",
                 "function": {
@@ -44,7 +43,7 @@ def normalize_assistant_message(message: Any) -> dict:
     return sanitized
 
 
-def parse_tool_calls(tool_calls: list[Any]) -> list[PendingToolCall]:
+def parse_tool_calls(tool_calls: list[ToolCall]) -> list[PendingToolCall]:
     return [
         PendingToolCall(
             tool_call=tc,

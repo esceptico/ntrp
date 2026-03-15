@@ -7,9 +7,9 @@ from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import build
 
 from ntrp.logging import get_logger
+from ntrp.settings import NTRP_DIR
 from ntrp.sources.base import CalendarSource
 from ntrp.sources.google.auth import (
-    NTRP_DIR,
     SCOPES_CALENDAR,
     get_google_credentials,
     has_scope,

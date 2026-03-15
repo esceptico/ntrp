@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from ntrp.context.compression import compress_context_async, find_compressible_range
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
 from ntrp.logging import get_logger
@@ -57,8 +58,7 @@ class SessionService:
         return await self.store.list_archived_sessions(limit=limit)
 
     async def revert(self, session_id: str | None = None) -> dict | None:
-        data = await self.load(session_id)
-        if not data or not data.messages:
+        if not (data := await self.load(session_id)) or not data.messages:
             return None
 
         last_user_idx = None
@@ -79,3 +79,57 @@ class SessionService:
 
     async def permanently_delete(self, session_id: str) -> bool:
         return await self.store.permanently_delete_session(session_id)
+
+
+async def compact_session(
+    svc: SessionService,
+    model: str,
+    session_id: str | None = None,
+    keep_ratio: float = 0.2,
+    summary_max_tokens: int = 1500,
+) -> dict:
+    if not (data := await svc.load(session_id)):
+        return {"status": "no_session", "message": "No active session to compact"}
+
+    session_state = data.state
+    messages = data.messages
+    before_count = len(messages)
+    before_tokens = data.last_input_tokens
+
+    if (compressible := find_compressible_range(messages, keep_ratio=keep_ratio)) is None:
+        return {
+            "status": "nothing_to_compact",
+            "message": f"Nothing to compact ({before_count} messages)",
+            "message_count": before_count,
+        }
+    start, end = compressible
+
+    msg_count = end - start
+    new_messages, was_compressed = await compress_context_async(
+        messages=messages,
+        model=model,
+        force=True,
+        keep_ratio=keep_ratio,
+        summary_max_tokens=summary_max_tokens,
+    )
+
+    if was_compressed:
+        await svc.save(
+            session_state,
+            new_messages,
+            metadata={"last_input_tokens": None},
+        )
+        return {
+            "status": "compacted",
+            "message": f"Compacted {before_count} → {len(new_messages)} messages ({msg_count} summarized)",
+            "before_tokens": before_tokens,
+            "before_messages": before_count,
+            "after_messages": len(new_messages),
+            "messages_compressed": msg_count,
+        }
+
+    return {
+        "status": "already_optimal",
+        "message": f"Context already optimal ({before_count} messages)",
+        "message_count": before_count,
+    }

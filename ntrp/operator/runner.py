@@ -1,6 +1,6 @@
 import secrets
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
@@ -76,15 +76,7 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
 
     agent_config = deps.config
     if request.model:
-        agent_config = AgentConfig(
-            model=request.model,
-            explore_model=deps.config.explore_model,
-            max_depth=deps.config.max_depth,
-            compression_threshold=deps.config.compression_threshold,
-            max_messages=deps.config.max_messages,
-            compression_keep_ratio=deps.config.compression_keep_ratio,
-            summary_max_tokens=deps.config.summary_max_tokens,
-        )
+        agent_config = replace(deps.config, model=request.model)
 
     agent = create_agent(
         executor=executor,

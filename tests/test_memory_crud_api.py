@@ -8,9 +8,10 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from ntrp.config import Config, hash_api_key
+from ntrp.config import Config
 from ntrp.server.app import app
 from ntrp.server.runtime import Runtime
+from ntrp.settings import hash_api_key
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
 
 
@@ -23,13 +24,16 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
     """Create isolated runtime with memory enabled for testing"""
     import ntrp.config
     import ntrp.llm.models as llm_models
+    import ntrp.settings
     from ntrp.llm.models import EmbeddingModel, Provider
 
+    monkeypatch.setattr(ntrp.settings, "NTRP_DIR", tmp_path / "db")
     monkeypatch.setattr(ntrp.config, "NTRP_DIR", tmp_path / "db")
     test_emb = EmbeddingModel("test-embedding", Provider.OPENAI, TEST_EMBEDDING_DIM)
     monkeypatch.setitem(llm_models._embedding_models, "test-embedding", test_emb)
 
     test_config = Config(
+        ntrp_dir=tmp_path / "db",
         vault_path=tmp_path / "vault",
         openai_api_key="test-key",
         api_key_hash=hash_api_key("test-api-key"),
@@ -295,10 +299,13 @@ class TestMemoryDisabled:
     async def test_endpoints_fail_when_memory_disabled(self, tmp_path: Path, monkeypatch):
         """All CRUD endpoints should return 503 when memory is disabled"""
         import ntrp.config
+        import ntrp.settings
 
+        monkeypatch.setattr(ntrp.settings, "NTRP_DIR", tmp_path / "db")
         monkeypatch.setattr(ntrp.config, "NTRP_DIR", tmp_path / "db")
 
         test_config = Config(
+            ntrp_dir=tmp_path / "db",
             vault_path=tmp_path / "vault",
             openai_api_key="test-key",
             api_key_hash=hash_api_key("test-api-key"),

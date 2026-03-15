@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from ntrp.constants import SUBAGENT_DEFAULT_TIMEOUT
 from ntrp.context.models import SessionState
+from ntrp.core.agent import Agent
 from ntrp.core.isolation import IsolationLevel
 from ntrp.tools.core.context import RunContext, ToolContext
 from ntrp.tools.executor import ToolExecutor
@@ -39,8 +40,6 @@ def create_spawn_fn(
         parent_id: str | None = None,
         isolation: IsolationLevel = IsolationLevel.FULL,
     ) -> str:
-        from ntrp.core.agent import Agent
-
         filtered_tools = tools or executor.get_tools()
         child_state = _create_session_state(calling_ctx, isolation)
 

@@ -1,6 +1,7 @@
 import asyncio
 import html
 import json
+import time
 import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -114,7 +115,6 @@ def run_mcp_oauth(server_name: str, server_url: str) -> None:
 
     async def callback_handler() -> tuple[str, str | None]:
         server.timeout = 5
-        import time
 
         deadline = time.time() + LOGIN_TIMEOUT
         while not done.is_set():

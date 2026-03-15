@@ -1,15 +1,13 @@
 import secrets
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ntrp.automation.models import Automation, Trigger, build_trigger
+from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.store import AutomationStore
 from ntrp.llm.models import get_models
-
-if TYPE_CHECKING:
-    from ntrp.automation.scheduler import Scheduler
 
 
 def _normalize_and_validate_model(model: str | None) -> str | None:
@@ -37,42 +35,20 @@ class TriggerPatch:
 
     @property
     def has_changes(self) -> bool:
-        return any(
-            value is not None
-            for value in (
-                self.trigger_type,
-                self.at,
-                self.days,
-                self.every,
-                self.event_type,
-                self.lead_minutes,
-                self.start,
-                self.end,
-            )
-        )
+        return any(v is not None for v in asdict(self).values())
 
     @property
     def overrides(self) -> dict[str, str | int]:
-        return {
-            key: value
-            for key, value in {
-                "at": self.at,
-                "days": self.days,
-                "every": self.every,
-                "event_type": self.event_type,
-                "lead_minutes": self.lead_minutes,
-                "start": self.start,
-                "end": self.end,
-            }.items()
-            if value is not None
-        }
+        d = asdict(self)
+        d.pop("trigger_type", None)
+        return {k: v for k, v in d.items() if v is not None}
 
 
 class AutomationService:
     def __init__(
         self,
         store: AutomationStore,
-        scheduler: "Scheduler",
+        scheduler: Scheduler,
         get_notifiers: Callable[[], dict[str, Any]],
     ):
         self.store = store
@@ -87,8 +63,7 @@ class AutomationService:
         return await self.store.list_all()
 
     async def get(self, task_id: str) -> Automation:
-        task = await self.store.get(task_id)
-        if not task:
+        if not (task := await self.store.get(task_id)):
             raise KeyError(f"Automation {task_id} not found")
         return task
 

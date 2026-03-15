@@ -7,21 +7,22 @@ from importlib.metadata import version
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
 
-from ntrp.config import verify_api_key
 from ntrp.events.sse import TextDeltaEvent
 from ntrp.server.bus import BusRegistry
+from ntrp.server.middleware import AuthMiddleware, SSEStreamingResponse, _extract_bearer_token
 from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
 from ntrp.server.routers.mcp import router as mcp_router
 from ntrp.server.routers.session import router as session_router
+from ntrp.server.routers.settings import router as settings_router
 from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import BackgroundRequest, CancelRequest, ChatRequest, ToolResultRequest
-from ntrp.server.state import RunStatus
+from ntrp.server.state import RunRegistry, RunStatus
 from ntrp.services.chat import prepare_chat, run_chat
+from ntrp.settings import verify_api_key
 
 SSE_KEEPALIVE = ":\n\n"
 KEEPALIVE_INTERVAL = 5
@@ -80,49 +81,6 @@ app.add_middleware(
 )
 
 
-def _extract_bearer_token(request: Request) -> str:
-    auth = request.headers.get("authorization", "")
-    if auth.startswith("Bearer "):
-        return auth.removeprefix("Bearer ").strip()
-    return ""
-
-
-class AuthMiddleware:
-    """Pure ASGI middleware — doesn't buffer streaming responses."""
-
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-
-        request = Request(scope, receive)
-        runtime: Runtime | None = getattr(request.app.state, "runtime", None)
-        if not runtime:
-            await self.app(scope, receive, send)
-            return
-
-        public_paths = {"/health"}
-        if request.url.path not in public_paths:
-            token = _extract_bearer_token(request)
-            if not token:
-                detail = "Missing API key. Include Authorization: Bearer <key> header."
-            elif not runtime.config.api_key_hash:
-                detail = "No API key configured. Restart server to generate one."
-            elif not verify_api_key(token, runtime.config.api_key_hash):
-                detail = "Invalid API key. Run 'ntrp serve --reset-key' to generate a new one."
-            else:
-                detail = None
-            if detail:
-                response = JSONResponse(status_code=401, content={"detail": detail})
-                await response(scope, receive, send)
-                return
-
-        await self.app(scope, receive, send)
-
-
 app.add_middleware(AuthMiddleware)
 
 
@@ -130,6 +88,7 @@ app.include_router(data_router)
 app.include_router(gmail_router)
 app.include_router(automation_router)
 app.include_router(session_router)
+app.include_router(settings_router)
 app.include_router(skills_router)
 app.include_router(mcp_router)
 
@@ -167,29 +126,9 @@ async def list_tools(runtime: Runtime = Depends(get_runtime)):
     return {"tools": runtime.executor.get_tool_metadata()}
 
 
-# --- Persistent SSE event stream ---
-
-
-class SSEStreamingResponse(StreamingResponse):
-    """StreamingResponse that skips listen_for_disconnect task group.
-
-    Starlette's default __call__ spawns a parallel listen_for_disconnect
-    task when ASGI spec < 2.4 (uvicorn HTTP reports 2.3). On shutdown,
-    cancelling that task produces noisy CancelledError tracebacks and
-    blocks uvicorn's graceful exit. We skip it — our generator handles
-    its own lifecycle via CancelledError.
-    """
-
-    async def __call__(self, scope, receive, send):
-        try:
-            await self.stream_response(send)
-        except OSError:
-            pass
-        if self.background is not None:
-            await self.background()
-
-
-async def _event_stream(session_id: str, bus_registry: BusRegistry, stream: bool = False) -> AsyncGenerator[str]:
+async def _event_stream(
+    session_id: str, bus_registry: BusRegistry, run_registry: RunRegistry, stream: bool = False
+) -> AsyncGenerator[str]:
     bus = bus_registry.get_or_create(session_id)
     queue = bus.subscribe()
     last_event_at = time.monotonic()
@@ -215,12 +154,19 @@ async def _event_stream(session_id: str, bus_registry: BusRegistry, stream: bool
         pass
     finally:
         bus.unsubscribe(queue)
+        if not bus._subscribers and not run_registry.get_active_run(session_id):
+            bus_registry.remove(session_id)
 
 
 @app.get("/chat/events/{session_id}")
-async def chat_events(session_id: str, stream: bool = False, buses: BusRegistry = Depends(_get_bus_registry)):
+async def chat_events(
+    session_id: str,
+    stream: bool = False,
+    buses: BusRegistry = Depends(_get_bus_registry),
+    runtime: Runtime = Depends(get_runtime),
+):
     return SSEStreamingResponse(
-        _event_stream(session_id, buses, stream=stream),
+        _event_stream(session_id, buses, runtime.run_registry, stream=stream),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

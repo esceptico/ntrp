@@ -1,23 +1,23 @@
 import asyncio
-from typing import Any
+from typing import Self
 
-from ntrp.notifiers.base import Notifier
+from ntrp.notifiers.base import Notifier, NotifierContext
 
 
 class EmailNotifier(Notifier):
     channel = "email"
 
     @classmethod
-    def from_config(cls, config: dict, runtime: Any) -> "EmailNotifier":
-        return cls(runtime=runtime, from_account=config["from_account"], to_address=config["to_address"])
+    def from_config(cls, config: dict, ctx: NotifierContext) -> Self:
+        return cls(ctx=ctx, from_account=config["from_account"], to_address=config["to_address"])
 
-    def __init__(self, runtime: Any, from_account: str, to_address: str):
-        self._runtime = runtime
+    def __init__(self, ctx: NotifierContext, from_account: str, to_address: str):
+        self._ctx = ctx
         self._from_account = from_account
         self._to_address = to_address
 
     async def send(self, subject: str, body: str) -> None:
-        gmail = self._runtime.source_mgr.sources.get("gmail")
+        gmail = self._ctx.get_source("gmail")
         if not gmail:
             raise RuntimeError("Gmail source not available")
 

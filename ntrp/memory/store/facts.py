@@ -177,6 +177,13 @@ _SQL_LIST_ARCHIVAL_CANDIDATES = """
 """
 
 _SQL_COUNT_ARCHIVED = "SELECT COUNT(*) FROM facts WHERE archived_at IS NOT NULL"
+_SQL_UPDATE_TEXT = "UPDATE facts SET text = ?, embedding = ?, consolidated_at = NULL WHERE id = ?"
+_SQL_COUNT_ENTITY_REFS_FOR_FACT = "SELECT COUNT(*) FROM entity_refs WHERE fact_id = ?"
+_SQL_RESET_CONSOLIDATED = "UPDATE facts SET consolidated_at = NULL WHERE consolidated_at IS NOT NULL"
+_SQL_LIST_ALL_WITH_EMBEDDINGS = (
+    "SELECT * FROM facts WHERE embedding IS NOT NULL AND archived_at IS NULL ORDER BY created_at DESC"
+)
+_SQL_UPDATE_EMBEDDING = "UPDATE facts SET embedding = ? WHERE id = ?"
 
 
 def _row_dict(row: aiosqlite.Row) -> dict:
@@ -282,7 +289,7 @@ class FactRepository:
     async def update_text(self, fact_id: int, text: str, embedding: Embedding) -> None:
         embedding_bytes = serialize_embedding(embedding)
         await self.conn.execute(
-            "UPDATE facts SET text = ?, embedding = ?, consolidated_at = NULL WHERE id = ?",
+            _SQL_UPDATE_TEXT,
             (text, embedding_bytes, fact_id),
         )
         await self.conn.execute(_SQL_DELETE_FACT_VEC, (fact_id,))
@@ -292,7 +299,7 @@ class FactRepository:
         await self.conn.execute(_SQL_DELETE_ENTITY_REFS, (fact_id,))
 
     async def count_entity_refs(self, fact_id: int) -> int:
-        rows = await self.conn.execute_fetchall("SELECT COUNT(*) FROM entity_refs WHERE fact_id = ?", (fact_id,))
+        rows = await self.conn.execute_fetchall(_SQL_COUNT_ENTITY_REFS_FOR_FACT, (fact_id,))
         return rows[0][0] if rows else 0
 
     async def delete(self, fact_id: int) -> None:
@@ -322,7 +329,7 @@ class FactRepository:
         await self.conn.execute(_SQL_MARK_CONSOLIDATED, (now.isoformat(), fact_id))
 
     async def reset_consolidated(self) -> int:
-        cursor = await self.conn.execute("UPDATE facts SET consolidated_at = NULL WHERE consolidated_at IS NOT NULL")
+        cursor = await self.conn.execute(_SQL_RESET_CONSOLIDATED)
         return cursor.rowcount
 
     async def add_entity_ref(self, fact_id: int, name: str, entity_id: int | None = None) -> EntityRef:
@@ -469,9 +476,7 @@ class FactRepository:
         await self.conn.execute(_SQL_INSERT_TEMPORAL_CHECKPOINT, (entity_id, window_end, now.isoformat()))
 
     async def list_all_with_embeddings(self) -> list[Fact]:
-        rows = await self.conn.execute_fetchall(
-            "SELECT * FROM facts WHERE embedding IS NOT NULL AND archived_at IS NULL ORDER BY created_at DESC"
-        )
+        rows = await self.conn.execute_fetchall(_SQL_LIST_ALL_WITH_EMBEDDINGS)
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def archive_batch(self, fact_ids: list[int]) -> int:
@@ -505,6 +510,6 @@ class FactRepository:
 
     async def update_embedding(self, fact_id: int, embedding: Embedding) -> None:
         embedding_bytes = serialize_embedding(embedding)
-        await self.conn.execute("UPDATE facts SET embedding = ? WHERE id = ?", (embedding_bytes, fact_id))
+        await self.conn.execute(_SQL_UPDATE_EMBEDDING, (embedding_bytes, fact_id))
         await self.conn.execute(_SQL_DELETE_FACT_VEC, (fact_id,))
         await self.conn.execute(_SQL_INSERT_FACT_VEC, (fact_id, embedding_bytes))

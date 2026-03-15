@@ -88,10 +88,22 @@ SQL_BACKFILL_CANDIDATES = """
     AND NOT EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.session_id = s.session_id)
 """
 
+SQL_LOAD_SESSION = "SELECT * FROM sessions WHERE session_id = ?"
+SQL_DELETE_STALE_MESSAGES = "DELETE FROM chat_messages WHERE session_id = ? AND message_index >= ?"
+SQL_UPDATE_NAME = "UPDATE sessions SET name = ? WHERE session_id = ?"
+SQL_ARCHIVE = "UPDATE sessions SET archived_at = ? WHERE session_id = ? AND archived_at IS NULL"
+SQL_RESTORE = "UPDATE sessions SET archived_at = NULL WHERE session_id = ? AND archived_at IS NOT NULL"
+SQL_DELETE_ARCHIVED = "DELETE FROM sessions WHERE session_id = ? AND archived_at IS NOT NULL"
+
 
 class SessionStore:
     def __init__(self, conn: aiosqlite.Connection):
         self.conn = conn
+
+    async def _update(self, sql: str, params: tuple) -> bool:
+        cursor = await self.conn.execute(sql, params)
+        await self.conn.commit()
+        return cursor.rowcount > 0
 
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
@@ -135,10 +147,7 @@ class SessionStore:
 
         # Handle revert: if messages list is shorter than what's stored, trim stale rows
         if max_existing >= len(messages):
-            await self.conn.execute(
-                "DELETE FROM chat_messages WHERE session_id = ? AND message_index >= ?",
-                (session_id, len(messages)),
-            )
+            await self.conn.execute(SQL_DELETE_STALE_MESSAGES, (session_id, len(messages)))
             max_existing = len(messages) - 1
 
         now = datetime.now(UTC)
@@ -153,7 +162,7 @@ class SessionStore:
             )
 
     async def load_session(self, session_id: str) -> SessionData | None:
-        rows = await self.conn.execute_fetchall("SELECT * FROM sessions WHERE session_id = ?", (session_id,))
+        rows = await self.conn.execute_fetchall(SQL_LOAD_SESSION, (session_id,))
         if not rows:
             return None
 
@@ -188,8 +197,7 @@ class SessionStore:
         return rows[0]["session_id"] if rows else None
 
     async def get_latest_session(self) -> SessionData | None:
-        session_id = await self.get_latest_id()
-        if not session_id:
+        if not (session_id := await self.get_latest_id()):
             return None
         return await self.load_session(session_id)
 
@@ -207,28 +215,13 @@ class SessionStore:
         ]
 
     async def update_session_name(self, session_id: str, name: str) -> bool:
-        cursor = await self.conn.execute(
-            "UPDATE sessions SET name = ? WHERE session_id = ?",
-            (name, session_id),
-        )
-        await self.conn.commit()
-        return cursor.rowcount > 0
+        return await self._update(SQL_UPDATE_NAME, (name, session_id))
 
     async def archive_session(self, session_id: str) -> bool:
-        cursor = await self.conn.execute(
-            "UPDATE sessions SET archived_at = ? WHERE session_id = ? AND archived_at IS NULL",
-            (datetime.now(UTC).isoformat(), session_id),
-        )
-        await self.conn.commit()
-        return cursor.rowcount > 0
+        return await self._update(SQL_ARCHIVE, (datetime.now(UTC).isoformat(), session_id))
 
     async def restore_session(self, session_id: str) -> bool:
-        cursor = await self.conn.execute(
-            "UPDATE sessions SET archived_at = NULL WHERE session_id = ? AND archived_at IS NOT NULL",
-            (session_id,),
-        )
-        await self.conn.commit()
-        return cursor.rowcount > 0
+        return await self._update(SQL_RESTORE, (session_id,))
 
     async def list_archived_sessions(self, limit: int = 20) -> list[dict]:
         rows = await self.conn.execute_fetchall(SQL_LIST_ARCHIVED, (limit,))
@@ -245,12 +238,7 @@ class SessionStore:
         ]
 
     async def permanently_delete_session(self, session_id: str) -> bool:
-        cursor = await self.conn.execute(
-            "DELETE FROM sessions WHERE session_id = ? AND archived_at IS NOT NULL",
-            (session_id,),
-        )
-        await self.conn.commit()
-        return cursor.rowcount > 0
+        return await self._update(SQL_DELETE_ARCHIVED, (session_id,))
 
     async def get_chat_slice(self, session_id: str, start_index: int, end_index: int) -> list[ChatMessage]:
         rows = await self.conn.execute_fetchall(SQL_GET_CHAT_SLICE, (session_id, start_index, end_index))

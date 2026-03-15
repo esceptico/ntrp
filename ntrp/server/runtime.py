@@ -2,14 +2,12 @@ import asyncio
 
 from fastapi import HTTPException, Request
 
-import ntrp.database as database
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
-from ntrp.automation.store import AutomationStore
 from ntrp.channel import Channel
 from ntrp.config import Config, get_config
-from ntrp.context.store import SessionStore
 from ntrp.core.factory import AgentConfig
+from ntrp.events.internal import FactCreated, FactDeleted, FactUpdated, MemoryCleared, SourceChanged
 from ntrp.events.triggers import TRIGGER_EVENT_TYPES, TriggerEvent
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import init as llm_init
@@ -21,19 +19,17 @@ from ntrp.memory.indexable import MemoryIndexable
 from ntrp.memory.service import MemoryService
 from ntrp.monitor.calendar import CalendarMonitor
 from ntrp.monitor.service import Monitor
-from ntrp.monitor.store import MonitorStateStore
-from ntrp.notifiers.log_store import NotificationLogStore
+from ntrp.notifiers.base import NotifierContext
 from ntrp.notifiers.service import NotifierService
-from ntrp.notifiers.store import NotifierStore
 from ntrp.operator.runner import OperatorDeps
 from ntrp.server.indexer import Indexer
 from ntrp.server.sources import SourceManager
 from ntrp.server.state import RunRegistry
+from ntrp.server.stores import Stores
 from ntrp.services.config import ConfigService
-from ntrp.services.lifecycle import wire_events
 from ntrp.services.session import SessionService
 from ntrp.skills.registry import SkillRegistry
-from ntrp.skills.service import SKILLS_DIRS, SkillService
+from ntrp.skills.service import SkillService, get_skills_dirs
 from ntrp.sources.base import CalendarSource, Indexable
 from ntrp.tools.executor import ToolExecutor
 
@@ -44,8 +40,8 @@ class Runtime:
     def __init__(self, config: Config | None = None):
         self.config = config or get_config()
         self.channel = Channel()
-
         self.source_mgr = SourceManager(self.config, self.channel)
+        self.run_registry = RunRegistry()
 
         self.embedding = self.config.embedding
         self.indexer = (
@@ -54,29 +50,21 @@ class Runtime:
             else None
         )
 
-        self.session_service: SessionService | None = None
-        self._sessions_conn = None
-
+        self.stores: Stores | None = None
         self.memory: FactMemory | None = None
         self.memory_service: MemoryService | None = None
         self.search_index = None
         self.indexables: dict[str, Indexable] = {}
         self.mcp_manager: MCPManager | None = None
         self.executor: ToolExecutor | None = None
-
         self.automation_service: AutomationService | None = None
-        self.automation_store: AutomationStore | None = None
-        self.notifier_store: NotifierStore | None = None
         self.scheduler: Scheduler | None = None
-        self.run_registry = RunRegistry()
-
         self.skill_registry: SkillRegistry | None = None
         self.skill_service: SkillService | None = None
         self.notifier_service: NotifierService | None = None
-        self.notification_log: NotificationLogStore | None = None
         self.monitor: Monitor | None = None
-        self.monitor_store: MonitorStateStore | None = None
         self.config_service: ConfigService | None = None
+
         self._connected = False
         self._closing = False
         self._config_lock = asyncio.Lock()
@@ -84,6 +72,10 @@ class Runtime:
     @property
     def connected(self) -> bool:
         return self._connected
+
+    @property
+    def session_service(self) -> SessionService | None:
+        return self.stores.sessions if self.stores else None
 
     @property
     def tool_services(self) -> dict[str, object]:
@@ -100,6 +92,13 @@ class Runtime:
             services["mcp"] = self.mcp_manager
         return services
 
+    def _create_executor(self) -> ToolExecutor:
+        mcp_tools = list(self.mcp_manager.tools) if self.mcp_manager else None
+        return ToolExecutor(
+            mcp_tools=mcp_tools,
+            get_services=lambda: self.tool_services,
+        )
+
     # --- Subsystem lifecycle ---
 
     async def reload_config(self) -> None:
@@ -113,9 +112,9 @@ class Runtime:
             await self._sync_embedding()
             await self._sync_memory()
             self._sync_indexables()
-            await self._sync_mcp()
+            await self.sync_mcp()
 
-    async def _sync_mcp(self) -> None:
+    async def sync_mcp(self) -> None:
         if self.mcp_manager:
             await self.mcp_manager.close()
             self.mcp_manager = None
@@ -125,42 +124,49 @@ class Runtime:
             await self.mcp_manager.connect(self.config.mcp_servers)
 
         if self.executor:
-            self.executor = ToolExecutor(runtime=self)
+            self.executor = self._create_executor()
+
+    @property
+    def _memory_ready(self) -> bool:
+        return bool(self.config.memory and self.embedding and self.config.memory_model)
+
+    async def _create_memory(self) -> None:
+        self.memory = await FactMemory.create(
+            db_path=self.config.memory_db_path,
+            embedding=self.embedding,
+            model=self.config.memory_model,
+            channel=self.channel,
+        )
+        self.memory.dreams_enabled = self.config.dreams
+        self.memory_service = MemoryService(self.memory, self.channel)
+
+    async def _close_memory(self) -> None:
+        if self.memory_service:
+            self.memory_service.close()
+        if self.memory:
+            await self.memory.close()
+        self.memory = None
+        self.memory_service = None
 
     async def _sync_memory(self) -> None:
-        if self.config.memory and not self.memory and self.embedding and self.config.memory_model:
-            self.memory = await FactMemory.create(
-                db_path=self.config.memory_db_path,
-                embedding=self.embedding,
-                extraction_model=self.config.memory_model,
-                channel=self.channel,
-            )
-            self.memory.dreams_enabled = self.config.dreams
-            self.memory_service = MemoryService(self.memory, self.channel)
+        if self._memory_ready and not self.memory:
+            await self._create_memory()
         elif self.config.memory and self.memory:
-            if not self.config.memory_model or not self.embedding:
-                if self.memory_service:
-                    self.memory_service.close()
-                await self.memory.close()
-                self.memory = None
-                self.memory_service = None
+            if not self._memory_ready:
+                await self._close_memory()
                 if not self.embedding:
                     _logger.warning("Memory disabled — no embedding model configured")
                 else:
                     _logger.warning("Memory disabled — no memory model configured")
                 return
-            if self.memory.extraction_model != self.config.memory_model:
-                self.memory.update_extraction_model(self.config.memory_model)
+            if self.memory.model != self.config.memory_model:
+                self.memory.update_model(self.config.memory_model)
             self.memory.dreams_enabled = self.config.dreams
             new_interval = self.config.consolidation_interval * 60
-            if getattr(self.memory, "_consolidation_interval", None) != new_interval:
+            if self.memory._consolidation_interval != new_interval:
                 self.memory.restart_consolidation(new_interval)
         elif not self.config.memory and self.memory:
-            if self.memory_service:
-                self.memory_service.close()
-            await self.memory.close()
-            self.memory = None
-            self.memory_service = None
+            await self._close_memory()
 
     async def _sync_embedding(self) -> None:
         new_embedding = self.config.embedding
@@ -189,9 +195,9 @@ class Runtime:
             return
 
         llm_init(self.config)
-        await self._init_db()
+        self.stores = await Stores.connect(self.config)
         await self._init_search()
-        wire_events(self)
+        self._wire_events()
         self._init_indexables()
         await self._init_memory()
         self._init_skills()
@@ -207,26 +213,6 @@ class Runtime:
             tools=len(self.executor.registry),
         )
 
-    async def _init_db(self) -> None:
-        self.config.db_dir.mkdir(exist_ok=True)
-        self._sessions_conn = await database.connect(self.config.sessions_db_path)
-
-        session_store = SessionStore(self._sessions_conn)
-        await session_store.init_schema()
-        self.session_service = SessionService(session_store)
-
-        self.automation_store = AutomationStore(self._sessions_conn)
-        await self.automation_store.init_schema()
-
-        self.notifier_store = NotifierStore(self._sessions_conn)
-        await self.notifier_store.init_schema()
-
-        self.notification_log = NotificationLogStore(self._sessions_conn)
-        await self.notification_log.init_schema()
-
-        self.monitor_store = MonitorStateStore(self._sessions_conn)
-        await self.monitor_store.init_schema()
-
     async def _init_search(self) -> None:
         if self.indexer:
             await self.indexer.connect()
@@ -238,36 +224,32 @@ class Runtime:
                 self.indexables[name] = source
 
     async def _init_memory(self) -> None:
-        if self.config.memory and self.embedding and self.config.memory_model:
-            self.memory = await FactMemory.create(
-                db_path=self.config.memory_db_path,
-                embedding=self.embedding,
-                extraction_model=self.config.memory_model,
-                channel=self.channel,
-            )
-            self.memory.dreams_enabled = self.config.dreams
-            self.memory_service = MemoryService(self.memory, self.channel)
+        if self._memory_ready:
+            await self._create_memory()
             self.indexables["memory"] = MemoryIndexable(self.memory.db)
         elif self.config.memory:
             _logger.warning("Memory enabled but no embedding model configured — skipping")
 
     def _init_skills(self) -> None:
         self.skill_registry = SkillRegistry()
-        self.skill_registry.load(SKILLS_DIRS)
+        self.skill_registry.load(get_skills_dirs())
         self.skill_service = SkillService(self.skill_registry)
 
     async def _init_notifiers(self) -> None:
         self.notifier_service = NotifierService(
-            store=self.notifier_store,
-            runtime=self,
+            store=self.stores.notifiers,
+            ctx=NotifierContext(
+                get_source=lambda name: self.source_mgr.sources.get(name),
+                get_config_value=lambda key: getattr(self.config, key, None),
+            ),
         )
         await self.notifier_service.seed_defaults()
         await self.notifier_service.rebuild()
 
     def _init_automation(self) -> None:
-        self.scheduler = Scheduler(store=self.automation_store, build_deps=self.build_operator_deps)
+        self.scheduler = Scheduler(store=self.stores.automations, build_deps=self.build_operator_deps)
         self.automation_service = AutomationService(
-            store=self.automation_store,
+            store=self.stores.automations,
             scheduler=self.scheduler,
             get_notifiers=lambda: self.notifier_service.notifiers if self.notifier_service else {},
         )
@@ -278,8 +260,8 @@ class Runtime:
             await self.mcp_manager.connect(self.config.mcp_servers)
 
     def _init_tools(self) -> None:
-        self.executor = ToolExecutor(runtime=self)
-        self.config_service = ConfigService(runtime=self)
+        self.executor = self._create_executor()
+        self.config_service = ConfigService(on_config_change=self.reload_config)
 
     async def close(self) -> None:
         self._closing = True
@@ -300,10 +282,9 @@ class Runtime:
         # Phase 3: close resources
         if self.mcp_manager:
             await self.mcp_manager.close()
-        if self.memory:
-            await self.memory.close()
-        if self._sessions_conn:
-            await self._sessions_conn.close()
+        await self._close_memory()
+        if self.stores:
+            await self.stores.close()
         if self.indexer:
             await self.indexer.close()
         await llm_close()
@@ -329,25 +310,51 @@ class Runtime:
         return OperatorDeps(
             executor=self.executor,
             memory=self.memory,
-            config=AgentConfig(
-                model=self.config.chat_model,
-                explore_model=self.config.explore_model,
-                max_depth=self.config.max_depth,
-                compression_threshold=self.config.compression_threshold,
-                max_messages=self.config.max_messages,
-                compression_keep_ratio=self.config.compression_keep_ratio,
-                summary_max_tokens=self.config.summary_max_tokens,
-            ),
+            config=AgentConfig.from_config(self.config),
             channel=self.channel,
             source_details=self.source_mgr.get_details(),
-            create_session=self.session_service.create,
+            create_session=self.stores.sessions.create,
             notifiers=self.notifier_service.notifiers if self.notifier_service else {},
-            notification_log=self.notification_log,
+            notification_log=self.stores.notifications,
         )
 
     def start_scheduler(self) -> None:
         self.scheduler.start()
         self._wire_event_triggers()
+
+    def _wire_events(self) -> None:
+        if not self.indexer:
+            return
+
+        async def on_fact_upserted(event: FactCreated | FactUpdated) -> None:
+            await self.indexer.index.upsert(
+                source="memory",
+                source_id=f"fact:{event.fact_id}",
+                title=event.text[:50],
+                content=event.text,
+            )
+
+        async def on_fact_deleted(event: FactDeleted) -> None:
+            await self.indexer.index.delete("memory", f"fact:{event.fact_id}")
+
+        async def on_memory_cleared(_event: MemoryCleared) -> None:
+            await self.indexer.index.clear_source("memory")
+
+        async def on_source_changed(event: SourceChanged) -> None:
+            name = event.source_name
+            source = self.source_mgr.sources.get(name)
+            if source and isinstance(source, Indexable):
+                self.indexables[name] = source
+                self.start_indexing()
+            elif source is None:
+                self.indexables.pop(name, None)
+                await self.indexer.index.clear_source(name)
+
+        self.channel.subscribe(FactCreated, on_fact_upserted)
+        self.channel.subscribe(FactUpdated, on_fact_upserted)
+        self.channel.subscribe(FactDeleted, on_fact_deleted)
+        self.channel.subscribe(MemoryCleared, on_memory_cleared)
+        self.channel.subscribe(SourceChanged, on_source_changed)
 
     def _wire_event_triggers(self) -> None:
         async def on_trigger(event: TriggerEvent) -> None:
@@ -358,18 +365,23 @@ class Runtime:
             self.channel.subscribe(event_cls, on_trigger)
 
     def start_monitor(self) -> None:
-        if self.monitor_store is None:
+        if self.stores.monitor is None:
             raise RuntimeError("Monitor state store is not initialized")
 
         self.monitor = Monitor(self.channel)
         calendar_source = self.source_mgr.sources.get("calendar")
         if calendar_source and isinstance(calendar_source, CalendarSource):
-            self.monitor.register(CalendarMonitor(calendar_source, state_store=self.monitor_store))
+            self.monitor.register(CalendarMonitor(calendar_source, state_store=self.stores.monitor))
 
         self.monitor.start()
 
+    async def sync_google_sources(self) -> None:
+        await self.source_mgr.reinit("gmail", self.config)
+        await self.source_mgr.reinit("calendar", self.config)
+        await self.restart_monitor()
+
     async def restart_monitor(self) -> None:
-        if self.monitor_store is None:
+        if self.stores.monitor is None:
             return
         if self.monitor:
             await self.monitor.stop()

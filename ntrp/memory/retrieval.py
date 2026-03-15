@@ -85,6 +85,31 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return float(dot / norm) if norm > 0 else 0.0
 
 
+def find_top_pair(
+    items: list,
+    skipped: set[tuple[int, int]],
+    threshold: float,
+) -> tuple[int, int, float] | None:
+    """Find the highest-similarity pair of items above threshold, skipping known pairs.
+
+    Items must have `.id` (int) and `.embedding` (ndarray | None) attributes.
+    """
+    best = None
+    for i in range(len(items)):
+        if items[i].embedding is None:
+            continue
+        for j in range(i + 1, len(items)):
+            if items[j].embedding is None:
+                continue
+            pair_key = (min(items[i].id, items[j].id), max(items[i].id, items[j].id))
+            if pair_key in skipped:
+                continue
+            sim = cosine_similarity(items[i].embedding, items[j].embedding)
+            if sim >= threshold and (best is None or sim > best[2]):
+                best = (i, j, sim)
+    return best
+
+
 async def _temporal_vector_expand(
     repo: FactRepository,
     query_embedding: Embedding,

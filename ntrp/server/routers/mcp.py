@@ -3,16 +3,13 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from ntrp.mcp.models import parse_server_config
+from ntrp.mcp.oauth import clear_tokens, run_mcp_oauth
+from ntrp.server.deps import require_config_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.services.config import ConfigService
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
-
-
-def _require_config_service(runtime: Runtime = Depends(get_runtime)) -> ConfigService:
-    if not runtime.config_service:
-        raise HTTPException(status_code=503, detail="Config service not available")
-    return runtime.config_service
 
 
 @router.get("/servers")
@@ -62,13 +59,11 @@ class AddMCPServerRequest(BaseModel):
 async def add_mcp_server(
     req: AddMCPServerRequest,
     runtime: Runtime = Depends(get_runtime),
-    cfg_svc: ConfigService = Depends(_require_config_service),
+    cfg_svc: ConfigService = Depends(require_config_service),
 ):
     existing = runtime.config.mcp_servers or {}
     if req.name in existing:
         raise HTTPException(status_code=409, detail=f"MCP server {req.name!r} already exists")
-
-    from ntrp.mcp.models import parse_server_config
 
     try:
         parse_server_config(req.name, req.config)
@@ -101,7 +96,7 @@ async def update_mcp_tools(
     name: str,
     req: UpdateToolsRequest,
     runtime: Runtime = Depends(get_runtime),
-    cfg_svc: ConfigService = Depends(_require_config_service),
+    cfg_svc: ConfigService = Depends(require_config_service),
 ):
     existing = runtime.config.mcp_servers or {}
     if name not in existing:
@@ -130,7 +125,7 @@ async def toggle_mcp_server(
     name: str,
     req: ToggleEnabledRequest,
     runtime: Runtime = Depends(get_runtime),
-    cfg_svc: ConfigService = Depends(_require_config_service),
+    cfg_svc: ConfigService = Depends(require_config_service),
 ):
     existing = runtime.config.mcp_servers or {}
     if name not in existing:
@@ -161,15 +156,13 @@ async def mcp_oauth(
     if not url:
         raise HTTPException(status_code=400, detail="Server has no URL configured")
 
-    from ntrp.mcp.oauth import run_mcp_oauth
-
     try:
         await asyncio.to_thread(run_mcp_oauth, name, url)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     # Reconnect MCP servers to pick up the new tokens
-    await runtime._sync_mcp()
+    await runtime.sync_mcp()
 
     manager = runtime.mcp_manager
     session = manager.sessions.get(name) if manager else None
@@ -187,7 +180,7 @@ async def mcp_oauth(
 async def remove_mcp_server(
     name: str,
     runtime: Runtime = Depends(get_runtime),
-    cfg_svc: ConfigService = Depends(_require_config_service),
+    cfg_svc: ConfigService = Depends(require_config_service),
 ):
     existing = runtime.config.mcp_servers or {}
     if name not in existing:
@@ -199,8 +192,6 @@ async def remove_mcp_server(
         raise HTTPException(status_code=500, detail=str(e))
 
     # Clean up OAuth tokens if any
-    from ntrp.mcp.oauth import clear_tokens
-
     clear_tokens(name)
 
     return {"status": "removed", "name": name}

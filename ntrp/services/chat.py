@@ -1,10 +1,8 @@
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 from ntrp.channel import Channel
-from ntrp.context.compression import compress_context_async, find_compressible_range
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.agent import Agent
 from ntrp.core.factory import AgentConfig, create_agent
@@ -21,6 +19,8 @@ from ntrp.events.sse import (
 from ntrp.llm.models import Provider, get_model
 from ntrp.logging import get_logger
 from ntrp.memory.formatting import format_session_memory
+from ntrp.server.bus import SessionBus
+from ntrp.server.runtime import Runtime
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 from ntrp.server.stream import run_agent_loop
 from ntrp.services.session import SessionService
@@ -28,11 +28,6 @@ from ntrp.skills.registry import SkillRegistry
 from ntrp.tools.core.context import IOBridge
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
-
-if TYPE_CHECKING:
-    from ntrp.server.bus import SessionBus
-    from ntrp.server.runtime import Runtime
-
 
 _logger = get_logger(__name__)
 
@@ -74,7 +69,7 @@ def _is_anthropic(model: str) -> bool:
     return get_model(model).provider == Provider.ANTHROPIC
 
 
-async def _resolve_session(runtime: "Runtime") -> SessionData:
+async def _resolve_session(runtime: Runtime) -> SessionData:
     data = await runtime.session_service.load()
     if data and data.messages and len(data.messages) >= 2:
         return data
@@ -82,7 +77,7 @@ async def _resolve_session(runtime: "Runtime") -> SessionData:
 
 
 async def _prepare_messages(
-    runtime: "Runtime",
+    runtime: Runtime,
     messages: list[dict],
     user_message: str,
     last_activity: datetime | None = None,
@@ -120,7 +115,7 @@ async def _prepare_messages(
 
 
 async def prepare_chat(
-    runtime: "Runtime", message: str, skip_approvals: bool = False, session_id: str | None = None
+    runtime: Runtime, message: str, skip_approvals: bool = False, session_id: str | None = None
 ) -> ChatContext:
     registry = runtime.run_registry
 
@@ -155,15 +150,7 @@ async def prepare_chat(
         is_init=is_init,
         executor=runtime.executor,
         tools=runtime.executor.get_tools(),
-        config=AgentConfig(
-            model=runtime.config.chat_model,
-            explore_model=runtime.config.explore_model,
-            max_depth=runtime.config.max_depth,
-            compression_threshold=runtime.config.compression_threshold,
-            max_messages=runtime.config.max_messages,
-            compression_keep_ratio=runtime.config.compression_keep_ratio,
-            summary_max_tokens=runtime.config.summary_max_tokens,
-        ),
+        config=AgentConfig.from_config(runtime.config),
         channel=runtime.channel,
         available_sources=runtime.get_available_sources(),
         source_errors=runtime.get_source_errors(),
@@ -198,7 +185,7 @@ async def _drain_backgrounded(
         await ctx.session_service.save(ctx.session_state, agent.messages, metadata=metadata)
 
 
-async def run_chat(ctx: ChatContext, bus: "SessionBus") -> None:
+async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
     """Run agent loop, push all events to bus. Fire-and-forget."""
     run = ctx.run
     session_state = ctx.session_state
@@ -302,57 +289,3 @@ async def run_chat(ctx: ChatContext, bus: "SessionBus") -> None:
                     result=result,
                 )
             )
-
-
-async def compact_session(runtime: "Runtime", session_id: str | None = None) -> dict:
-    model = runtime.config.chat_model
-
-    data = await runtime.session_service.load(session_id)
-    if not data:
-        return {"status": "no_session", "message": "No active session to compact"}
-
-    session_state = data.state
-    messages = data.messages
-    before_count = len(messages)
-    before_tokens = data.last_input_tokens
-
-    keep_ratio = runtime.config.compression_keep_ratio
-    summary_max_tokens = runtime.config.summary_max_tokens
-
-    start, end = find_compressible_range(messages, keep_ratio=keep_ratio)
-    if start == 0 and end == 0:
-        return {
-            "status": "nothing_to_compact",
-            "message": f"Nothing to compact ({before_count} messages)",
-            "message_count": before_count,
-        }
-
-    msg_count = end - start
-    new_messages, was_compressed = await compress_context_async(
-        messages=messages,
-        model=model,
-        force=True,
-        keep_ratio=keep_ratio,
-        summary_max_tokens=summary_max_tokens,
-    )
-
-    if was_compressed:
-        await runtime.session_service.save(
-            session_state,
-            new_messages,
-            metadata={"last_input_tokens": None},
-        )
-        return {
-            "status": "compacted",
-            "message": f"Compacted {before_count} → {len(new_messages)} messages ({msg_count} summarized)",
-            "before_tokens": before_tokens,
-            "before_messages": before_count,
-            "after_messages": len(new_messages),
-            "messages_compressed": msg_count,
-        }
-
-    return {
-        "status": "already_optimal",
-        "message": f"Context already optimal ({before_count} messages)",
-        "message_count": before_count,
-    }

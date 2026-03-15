@@ -22,7 +22,7 @@ class RunState:
     status: RunStatus = RunStatus.PENDING
     messages: list[dict] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
-    approval_queue: asyncio.Queue | None = None
+    approval_queue: asyncio.Queue[dict] | None = None
     task: asyncio.Task | None = None
     inject_queue: list[dict] = field(default_factory=list)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))

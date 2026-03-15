@@ -13,8 +13,8 @@ from threading import Event
 
 import httpx
 
-from ntrp.config import load_user_settings, save_user_settings
 from ntrp.logging import get_logger
+from ntrp.settings import load_user_settings, save_user_settings
 
 _logger = get_logger(__name__)
 

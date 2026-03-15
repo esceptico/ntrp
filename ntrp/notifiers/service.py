@@ -1,18 +1,14 @@
 import re
 import sys
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 
 from ntrp.logging import get_logger
-from ntrp.notifiers.base import Notifier
+from ntrp.notifiers.base import Notifier, NotifierContext
 from ntrp.notifiers.bash import BashNotifier
 from ntrp.notifiers.email import EmailNotifier
 from ntrp.notifiers.models import NotifierConfig
 from ntrp.notifiers.store import NotifierStore
 from ntrp.notifiers.telegram import TelegramNotifier
-
-if TYPE_CHECKING:
-    from ntrp.server.runtime import Runtime
 
 _logger = get_logger(__name__)
 NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
@@ -29,9 +25,9 @@ NOTIFIER_FIELDS: dict[str, list[str]] = {
 
 
 class NotifierService:
-    def __init__(self, store: NotifierStore, runtime: "Runtime"):
+    def __init__(self, store: NotifierStore, ctx: NotifierContext):
         self.store = store
-        self.runtime = runtime
+        self._ctx = ctx
         self._notifiers: dict[str, Notifier] = {}
 
     @property
@@ -46,7 +42,7 @@ class NotifierService:
                 if not cls:
                     _logger.warning("Unknown notifier type %r for %r", cfg.type, cfg.name)
                     continue
-                new_notifiers[cfg.name] = cls.from_config(cfg.config, self.runtime)
+                new_notifiers[cfg.name] = cls.from_config(cfg.config, self._ctx)
             except Exception:
                 _logger.exception("Failed to create notifier %r", cfg.name)
         self._notifiers = new_notifiers
@@ -74,7 +70,7 @@ class NotifierService:
         return [{"name": name, "type": n.channel} for name, n in self._notifiers.items()]
 
     def get_types(self) -> dict:
-        gmail = self.runtime.source_mgr.sources.get("gmail")
+        gmail = self._ctx.get_source("gmail")
         types = {name: {"fields": fields} for name, fields in NOTIFIER_FIELDS.items()}
         types["email"]["accounts"] = gmail.list_accounts() if gmail else []
         return types
@@ -83,14 +79,13 @@ class NotifierService:
         return await self.store.list_all()
 
     def validate_config(self, notifier_type: str, config: dict) -> None:
-        fields = NOTIFIER_FIELDS.get(notifier_type)
-        if fields is None:
+        if (fields := NOTIFIER_FIELDS.get(notifier_type)) is None:
             raise ValueError(f"Invalid notifier type: {notifier_type}")
         for field in fields:
             if not config.get(field):
                 raise ValueError(f"{field} is required")
         if notifier_type == "email":
-            gmail = self.runtime.source_mgr.sources.get("gmail")
+            gmail = self._ctx.get_source("gmail")
             if gmail and config["from_account"] not in gmail.list_accounts():
                 raise ValueError(f"Unknown Gmail account: {config['from_account']}")
 

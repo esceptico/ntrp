@@ -100,6 +100,12 @@ _SQL_LIST_ARCHIVAL_CANDIDATES_OBS = """
 """
 
 _SQL_COUNT_ARCHIVED_OBS = "SELECT COUNT(*) FROM observations WHERE archived_at IS NOT NULL"
+_SQL_UPDATE_SUMMARY = "UPDATE observations SET summary = ?, embedding = ?, updated_at = ? WHERE id = ?"
+_SQL_DELETE_OBSERVATION = "DELETE FROM observations WHERE id = ?"
+_SQL_CLEAR_OBS_ENTITY_REFS = "DELETE FROM obs_entity_refs"
+_SQL_CLEAR_OBS_VEC = "DELETE FROM observations_vec"
+_SQL_CLEAR_OBSERVATIONS = "DELETE FROM observations"
+_SQL_UPDATE_OBS_EMBEDDING = "UPDATE observations SET embedding = ? WHERE id = ?"
 
 
 def _row_dict(row: aiosqlite.Row) -> dict:
@@ -269,7 +275,7 @@ class ObservationRepository:
         now = datetime.now(UTC)
         embedding_bytes = serialize_embedding(embedding)
         await self.conn.execute(
-            "UPDATE observations SET summary = ?, embedding = ?, updated_at = ? WHERE id = ?",
+            _SQL_UPDATE_SUMMARY,
             (summary, embedding_bytes, now.isoformat(), observation_id),
         )
         await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (observation_id,))
@@ -279,7 +285,7 @@ class ObservationRepository:
     async def delete(self, observation_id: int) -> None:
         await self.conn.execute(_SQL_DELETE_OBS_ENTITY_REFS, (observation_id,))
         await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (observation_id,))
-        await self.conn.execute("DELETE FROM observations WHERE id = ?", (observation_id,))
+        await self.conn.execute(_SQL_DELETE_OBSERVATION, (observation_id,))
 
     async def merge(
         self,
@@ -363,14 +369,14 @@ class ObservationRepository:
         return rows[0][0]
 
     async def clear_all(self) -> int:
-        await self.conn.execute("DELETE FROM obs_entity_refs")
-        await self.conn.execute("DELETE FROM observations_vec")
-        cursor = await self.conn.execute("DELETE FROM observations")
+        await self.conn.execute(_SQL_CLEAR_OBS_ENTITY_REFS)
+        await self.conn.execute(_SQL_CLEAR_OBS_VEC)
+        cursor = await self.conn.execute(_SQL_CLEAR_OBSERVATIONS)
         return cursor.rowcount
 
     async def update_embedding(self, observation_id: int, embedding: Embedding) -> None:
         embedding_bytes = serialize_embedding(embedding)
-        await self.conn.execute("UPDATE observations SET embedding = ? WHERE id = ?", (embedding_bytes, observation_id))
+        await self.conn.execute(_SQL_UPDATE_OBS_EMBEDDING, (embedding_bytes, observation_id))
         await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (observation_id,))
         await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (observation_id, embedding_bytes))
 

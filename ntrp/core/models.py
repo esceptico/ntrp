@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from typing import Any
+
+from ntrp.llm.types import ToolCall
 
 
 @dataclass(frozen=True)
 class PendingToolCall:
-    tool_call: Any
+    tool_call: ToolCall
     name: str
     args: dict
 

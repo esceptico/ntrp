@@ -17,7 +17,7 @@ from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact
 from ntrp.memory.prompts import FACT_MERGE_PROMPT
-from ntrp.memory.retrieval import cosine_similarity
+from ntrp.memory.retrieval import find_top_pair
 from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
@@ -32,27 +32,6 @@ class FactMergeAction(BaseModel):
     action: Literal["same", "different"]
     text: str | None = None
     reason: str | None = None
-
-
-def _find_top_pair(
-    facts: list[Fact],
-    skipped: set[tuple[int, int]],
-    threshold: float,
-) -> tuple[int, int, float] | None:
-    best = None
-    for i in range(len(facts)):
-        if facts[i].embedding is None:
-            continue
-        for j in range(i + 1, len(facts)):
-            if facts[j].embedding is None:
-                continue
-            pair_key = (min(facts[i].id, facts[j].id), max(facts[i].id, facts[j].id))
-            if pair_key in skipped:
-                continue
-            sim = cosine_similarity(facts[i].embedding, facts[j].embedding)
-            if sim >= threshold and (best is None or sim > best[2]):
-                best = (i, j, sim)
-    return best
 
 
 async def _llm_merge_decision(
@@ -95,6 +74,27 @@ def _pick_keeper(a: Fact, b: Fact) -> tuple[Fact, Fact]:
     return (a, b) if a.created_at >= b.created_at else (b, a)
 
 
+async def _replace_source_fact_id(
+    conn, table: Literal["observations", "dreams"], removed_id: int, keeper_id: int
+) -> None:
+    """Replace removed_id with keeper_id in source_fact_ids column, deduplicating."""
+    rows = await conn.execute_fetchall(
+        f"SELECT id, source_fact_ids FROM {table} WHERE source_fact_ids LIKE ?",
+        (f"%{removed_id}%",),
+    )
+    for row in rows:
+        raw_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []
+        if removed_id not in raw_ids:
+            continue  # LIKE matched a substring (e.g., id=5 matching id=15)
+        new_ids = [keeper_id if fid == removed_id else fid for fid in raw_ids]
+        seen = set()
+        deduped = [fid for fid in new_ids if not (fid in seen or seen.add(fid))]
+        await conn.execute(
+            f"UPDATE {table} SET source_fact_ids = ? WHERE id = ?",
+            (json.dumps(deduped), row["id"]),
+        )
+
+
 async def _merge_facts(
     keeper: Fact,
     removed: Fact,
@@ -127,41 +127,10 @@ async def _merge_facts(
             (removed.access_count, keeper.id),
         )
 
-    # Update observation source_fact_ids: replace removed.id with keeper.id
-    # Use SQL LIKE to find only affected observations instead of scanning all
-    rows = await obs_repo.conn.execute_fetchall(
-        "SELECT id, source_fact_ids FROM observations WHERE source_fact_ids LIKE ?",
-        (f"%{removed.id}%",),
-    )
-    for row in rows:
-        raw_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []
-        if removed.id not in raw_ids:
-            continue  # LIKE matched a substring (e.g., id=5 matching id=15)
-        new_ids = [keeper.id if fid == removed.id else fid for fid in raw_ids]
-        seen = set()
-        deduped = [fid for fid in new_ids if not (fid in seen or seen.add(fid))]
-        await obs_repo.conn.execute(
-            "UPDATE observations SET source_fact_ids = ? WHERE id = ?",
-            (json.dumps(deduped), row["id"]),
-        )
-
-    # Update dream source_fact_ids: same replacement pattern
+    # Update source_fact_ids in observations and dreams: replace removed.id with keeper.id
+    await _replace_source_fact_id(obs_repo.conn, "observations", removed.id, keeper.id)
     if dream_repo:
-        dream_rows = await dream_repo.conn.execute_fetchall(
-            "SELECT id, source_fact_ids FROM dreams WHERE source_fact_ids LIKE ?",
-            (f"%{removed.id}%",),
-        )
-        for row in dream_rows:
-            raw_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []
-            if removed.id not in raw_ids:
-                continue
-            new_ids = [keeper.id if fid == removed.id else fid for fid in raw_ids]
-            seen = set()
-            deduped = [fid for fid in new_ids if not (fid in seen or seen.add(fid))]
-            await dream_repo.conn.execute(
-                "UPDATE dreams SET source_fact_ids = ? WHERE id = ?",
-                (json.dumps(deduped), row["id"]),
-            )
+        await _replace_source_fact_id(dream_repo.conn, "dreams", removed.id, keeper.id)
 
     # Delete the removed fact
     await fact_repo.delete(removed.id)
@@ -184,7 +153,7 @@ async def fact_merge_pass(
     merges = 0
 
     while True:
-        pair = _find_top_pair(facts, skipped_pairs, threshold)
+        pair = find_top_pair(facts, skipped_pairs, threshold)
         if pair is None:
             break
 

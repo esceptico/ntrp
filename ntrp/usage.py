@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Self
 
 
 @dataclass(frozen=True)
@@ -17,7 +18,7 @@ class Usage:
     cache_write_tokens: int = 0
     cost: float = 0.0
 
-    def with_cost(self, pricing: Pricing) -> "Usage":
+    def with_cost(self, pricing: Pricing) -> Self:
         return Usage(
             prompt_tokens=self.prompt_tokens,
             completion_tokens=self.completion_tokens,
@@ -32,7 +33,7 @@ class Usage:
             / 1_000_000,
         )
 
-    def __add__(self, other: "Usage") -> "Usage":
+    def __add__(self, other: "Usage") -> Self:
         return Usage(
             prompt_tokens=self.prompt_tokens + other.prompt_tokens,
             completion_tokens=self.completion_tokens + other.completion_tokens,
@@ -41,7 +42,7 @@ class Usage:
             cost=self.cost + other.cost,
         )
 
-    def __iadd__(self, other: "Usage") -> "Usage":
+    def __iadd__(self, other: "Usage") -> Self:
         self.prompt_tokens += other.prompt_tokens
         self.completion_tokens += other.completion_tokens
         self.cache_read_tokens += other.cache_read_tokens

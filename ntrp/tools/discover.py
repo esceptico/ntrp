@@ -2,16 +2,16 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from ntrp.config import NTRP_DIR
 from ntrp.logging import get_logger
+from ntrp.settings import NTRP_DIR
 from ntrp.tools.core.base import Tool
 
 _logger = get_logger(__name__)
 
-USER_TOOLS_DIR = NTRP_DIR / "tools"
 
-
-def discover_user_tools(tools_dir: Path = USER_TOOLS_DIR) -> list[type[Tool]]:
+def discover_user_tools(tools_dir: Path | None = None) -> list[type[Tool]]:
+    if tools_dir is None:
+        tools_dir = NTRP_DIR / "tools"
     if not tools_dir.is_dir():
         return []
 

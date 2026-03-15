@@ -12,6 +12,7 @@ from ntrp.constants import (
     SNIPPET_TRUNCATE,
 )
 from ntrp.logging import get_logger
+from ntrp.search.index import SearchIndex
 from ntrp.sources.base import NotesSource
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
@@ -117,7 +118,9 @@ class NotesTool(Tool):
 
         return ToolResult(content=content, preview=f"{showing} notes")
 
-    async def _search(self, source: NotesSource, query: str, limit: int, search_index: Any | None = None) -> ToolResult:
+    async def _search(
+        self, source: NotesSource, query: str, limit: int, search_index: SearchIndex | None = None
+    ) -> ToolResult:
         query = simplify_query(query)
 
         if search_index:

@@ -1,6 +1,5 @@
 import asyncio
 from collections.abc import AsyncGenerator
-from typing import Any
 
 from ntrp.constants import (
     AGENT_MAX_ITERATIONS,
@@ -17,6 +16,7 @@ from ntrp.events.internal import ContextCompressed
 from ntrp.events.sse import BackgroundTaskEvent, SSEEvent, TextDeltaEvent, TextEvent, ThinkingEvent, ToolResultEvent
 from ntrp.llm.models import get_model
 from ntrp.llm.router import get_completion_client
+from ntrp.llm.types import CompletionResponse, ToolCall
 from ntrp.logging import get_logger
 from ntrp.tools.core.context import ToolContext
 from ntrp.tools.executor import ToolExecutor
@@ -85,7 +85,7 @@ class Agent:
                 ]
             )
 
-    async def _call_llm(self) -> Any:
+    async def _call_llm(self) -> CompletionResponse:
         client = get_completion_client(self.model)
         return await client.completion(
             model=self.model,
@@ -94,10 +94,7 @@ class Agent:
             tool_choice="auto",
         )
 
-    async def _stream_llm(self) -> AsyncGenerator[TextDeltaEvent | Any]:
-        """Yield TextDeltaEvents for each token, then the final CompletionResponse."""
-        from ntrp.llm.types import CompletionResponse
-
+    async def _stream_llm(self) -> AsyncGenerator[TextDeltaEvent | CompletionResponse]:
         client = get_completion_client(self.model)
         async for item in client.stream_completion(
             model=self.model,
@@ -110,7 +107,7 @@ class Agent:
             elif isinstance(item, CompletionResponse):
                 yield item
 
-    def _track_usage(self, response: Any) -> None:
+    def _track_usage(self, response: CompletionResponse) -> None:
         if not response.usage:
             return
         model = get_model(response.model)
@@ -131,9 +128,10 @@ class Agent:
         if self.current_depth == 0:
             yield ThinkingEvent(status="compressing context...")
 
-        start, end = find_compressible_range(self.messages, keep_ratio=self.compression_keep_ratio)
-        if start == 0 and end == 0:
+        compressible = find_compressible_range(self.messages, keep_ratio=self.compression_keep_ratio)
+        if compressible is None:
             return
+        start, end = compressible
 
         discarded = tuple(self.messages[start:end])
         new_messages, _ = await compress_context_async(
@@ -149,7 +147,7 @@ class Agent:
         if self.current_depth == 0:
             self.ctx.channel.publish(ContextCompressed(messages=discarded, session_id=self.ctx.session_id))
 
-    def _append_tool_results(self, tool_calls: list[Any], results: dict[str, str]) -> None:
+    def _append_tool_results(self, tool_calls: list[ToolCall], results: dict[str, str]) -> None:
         for tc in tool_calls:
             if (result := results.get(tc.id)) is None:
                 _logger.error("Missing result for tool call %s", tc.id)

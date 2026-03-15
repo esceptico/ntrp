@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 
-import ntrp.config
 import ntrp.llm.models as llm_models
 from ntrp.channel import Channel
 from ntrp.config import Config
@@ -16,6 +15,7 @@ from ntrp.events.internal import RunCompleted
 from ntrp.llm.models import EmbeddingModel, Provider
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.service import MemoryService
+from ntrp.settings import hash_api_key
 from ntrp.usage import Usage
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
 
@@ -44,15 +44,19 @@ def _make_event(session_id: str, messages: tuple[dict, ...], result: str = "done
 
 @pytest_asyncio.fixture
 async def memory(tmp_path: Path, monkeypatch) -> AsyncGenerator[FactMemory]:
+    import ntrp.settings
+
+    monkeypatch.setattr(ntrp.settings, "NTRP_DIR", tmp_path / "db")
     monkeypatch.setattr(ntrp.config, "NTRP_DIR", tmp_path / "db")
 
     test_emb = EmbeddingModel("test-embedding", Provider.OPENAI, TEST_EMBEDDING_DIM)
     monkeypatch.setitem(llm_models._embedding_models, "test-embedding", test_emb)
 
     config = Config(
+        ntrp_dir=tmp_path / "db",
         vault_path=tmp_path / "vault",
         openai_api_key="test-key",
-        api_key="test-api-key",
+        api_key_hash=hash_api_key("test-api-key"),
         memory=True,
         embedding_model="test-embedding",
         memory_model="gemini-3-flash-preview",
@@ -65,7 +69,7 @@ async def memory(tmp_path: Path, monkeypatch) -> AsyncGenerator[FactMemory]:
     mem = await FactMemory.create(
         db_path=config.memory_db_path,
         embedding=config.embedding,
-        extraction_model=config.memory_model,
+        model=config.memory_model,
         channel=Channel(),
     )
     mem.embedder.embed_one = _mock_embed_one
