@@ -8,10 +8,9 @@ from importlib.metadata import version
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from ntrp.settings import verify_api_key
 from ntrp.events.sse import TextDeltaEvent
-from ntrp.server.middleware import AuthMiddleware, SSEStreamingResponse, _extract_bearer_token
 from ntrp.server.bus import BusRegistry
+from ntrp.server.middleware import AuthMiddleware, SSEStreamingResponse, _extract_bearer_token
 from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
@@ -23,6 +22,7 @@ from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import BackgroundRequest, CancelRequest, ChatRequest, ToolResultRequest
 from ntrp.server.state import RunRegistry, RunStatus
 from ntrp.services.chat import prepare_chat, run_chat
+from ntrp.settings import verify_api_key
 
 SSE_KEEPALIVE = ":\n\n"
 KEEPALIVE_INTERVAL = 5
@@ -124,7 +124,6 @@ async def start_indexing(runtime: Runtime = Depends(get_runtime)):
 @app.get("/tools")
 async def list_tools(runtime: Runtime = Depends(get_runtime)):
     return {"tools": runtime.executor.get_tool_metadata()}
-
 
 
 async def _event_stream(

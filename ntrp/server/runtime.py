@@ -7,6 +7,7 @@ from ntrp.automation.service import AutomationService
 from ntrp.channel import Channel
 from ntrp.config import Config, get_config
 from ntrp.core.factory import AgentConfig
+from ntrp.events.internal import FactCreated, FactDeleted, FactUpdated, MemoryCleared, SourceChanged
 from ntrp.events.triggers import TRIGGER_EVENT_TYPES, TriggerEvent
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import init as llm_init
@@ -25,7 +26,6 @@ from ntrp.server.indexer import Indexer
 from ntrp.server.sources import SourceManager
 from ntrp.server.state import RunRegistry
 from ntrp.server.stores import Stores
-from ntrp.events.internal import FactCreated, FactDeleted, FactUpdated, MemoryCleared, SourceChanged
 from ntrp.services.config import ConfigService
 from ntrp.services.session import SessionService
 from ntrp.skills.registry import SkillRegistry
@@ -328,8 +328,10 @@ class Runtime:
 
         async def on_fact_upserted(event: FactCreated | FactUpdated) -> None:
             await self.indexer.index.upsert(
-                source="memory", source_id=f"fact:{event.fact_id}",
-                title=event.text[:50], content=event.text,
+                source="memory",
+                source_id=f"fact:{event.fact_id}",
+                title=event.text[:50],
+                content=event.text,
             )
 
         async def on_fact_deleted(event: FactDeleted) -> None:

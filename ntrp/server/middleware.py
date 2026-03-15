@@ -1,8 +1,8 @@
 from fastapi import Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from ntrp.settings import verify_api_key
 from ntrp.server.runtime import Runtime
+from ntrp.settings import verify_api_key
 
 
 def _extract_bearer_token(request: Request) -> str:
@@ -63,5 +63,6 @@ class SSEStreamingResponse(StreamingResponse):
             await self.stream_response(send)
         except OSError:
             pass
-        if self.background is not None:
-            await self.background()
+        finally:
+            if self.background is not None:
+                await self.background()
