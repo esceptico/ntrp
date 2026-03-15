@@ -9,9 +9,9 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from ntrp.config import Config
-from ntrp.settings import hash_api_key
 from ntrp.server.app import app
 from ntrp.server.runtime import Runtime
+from ntrp.settings import hash_api_key
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
 
 

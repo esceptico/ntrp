@@ -9,8 +9,7 @@ import pytest
 import pytest_asyncio
 
 from ntrp.memory.observation_merge import observation_merge_pass
-from ntrp.memory.retrieval import find_top_pair
-from ntrp.memory.retrieval import cosine_similarity
+from ntrp.memory.retrieval import cosine_similarity, find_top_pair
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.observations import ObservationRepository
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding

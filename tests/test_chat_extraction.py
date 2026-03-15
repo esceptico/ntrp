@@ -7,16 +7,15 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 
-import ntrp.config
 import ntrp.llm.models as llm_models
 from ntrp.channel import Channel
 from ntrp.config import Config
-from ntrp.settings import hash_api_key
 from ntrp.constants import EXTRACTION_EVERY_N_TURNS
 from ntrp.events.internal import RunCompleted
 from ntrp.llm.models import EmbeddingModel, Provider
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.service import MemoryService
+from ntrp.settings import hash_api_key
 from ntrp.usage import Usage
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
 
