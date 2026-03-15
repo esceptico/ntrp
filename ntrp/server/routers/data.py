@@ -1,27 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.memory.service import MemoryService
-from ntrp.server.runtime import Runtime, get_runtime
+from ntrp.server.deps import require_memory
 from ntrp.server.schemas import UpdateFactRequest, UpdateObservationRequest
 
 router = APIRouter(tags=["data"])
-
-
-def _require_memory(runtime: Runtime = Depends(get_runtime)) -> MemoryService:
-    if not runtime.memory_service:
-        if runtime.config.memory:
-            detail = "Memory is unavailable — configure an embedding model from OpenAI or Google"
-        else:
-            detail = "Memory is disabled"
-        raise HTTPException(status_code=503, detail=detail)
-    return runtime.memory_service
 
 
 @router.get("/facts")
 async def get_facts(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    svc: MemoryService = Depends(_require_memory),
+    svc: MemoryService = Depends(require_memory),
 ):
     facts, total = await svc.facts.list_recent(limit=limit, offset=offset)
     return {
@@ -39,7 +29,7 @@ async def get_facts(
 
 
 @router.get("/facts/{fact_id}")
-async def get_fact_details(fact_id: int, svc: MemoryService = Depends(_require_memory)):
+async def get_fact_details(fact_id: int, svc: MemoryService = Depends(require_memory)):
     try:
         fact, entity_refs = await svc.facts.get(fact_id)
     except KeyError:
@@ -60,7 +50,7 @@ async def get_fact_details(fact_id: int, svc: MemoryService = Depends(_require_m
 
 
 @router.patch("/facts/{fact_id}")
-async def update_fact(fact_id: int, request: UpdateFactRequest, svc: MemoryService = Depends(_require_memory)):
+async def update_fact(fact_id: int, request: UpdateFactRequest, svc: MemoryService = Depends(require_memory)):
     try:
         fact, entity_refs = await svc.facts.update(fact_id, request.text)
     except KeyError:
@@ -80,7 +70,7 @@ async def update_fact(fact_id: int, request: UpdateFactRequest, svc: MemoryServi
 
 
 @router.delete("/facts/{fact_id}")
-async def delete_fact(fact_id: int, svc: MemoryService = Depends(_require_memory)):
+async def delete_fact(fact_id: int, svc: MemoryService = Depends(require_memory)):
     try:
         cascaded = await svc.facts.delete(fact_id)
     except KeyError:
@@ -96,7 +86,7 @@ async def delete_fact(fact_id: int, svc: MemoryService = Depends(_require_memory
 @router.get("/observations")
 async def get_observations(
     limit: int = Query(default=50, ge=1, le=500),
-    svc: MemoryService = Depends(_require_memory),
+    svc: MemoryService = Depends(require_memory),
 ):
     observations = await svc.observations.list_recent(limit=limit)
     return {
@@ -115,7 +105,7 @@ async def get_observations(
 
 
 @router.get("/observations/{observation_id}")
-async def get_observation_details(observation_id: int, svc: MemoryService = Depends(_require_memory)):
+async def get_observation_details(observation_id: int, svc: MemoryService = Depends(require_memory)):
     try:
         obs, facts = await svc.observations.get(observation_id)
     except KeyError:
@@ -136,7 +126,7 @@ async def get_observation_details(observation_id: int, svc: MemoryService = Depe
 
 @router.patch("/observations/{observation_id}")
 async def update_observation(
-    observation_id: int, request: UpdateObservationRequest, svc: MemoryService = Depends(_require_memory)
+    observation_id: int, request: UpdateObservationRequest, svc: MemoryService = Depends(require_memory)
 ):
     try:
         obs = await svc.observations.update(observation_id, request.summary)
@@ -156,7 +146,7 @@ async def update_observation(
 
 
 @router.delete("/observations/{observation_id}")
-async def delete_observation(observation_id: int, svc: MemoryService = Depends(_require_memory)):
+async def delete_observation(observation_id: int, svc: MemoryService = Depends(require_memory)):
     try:
         await svc.observations.delete(observation_id)
     except KeyError:
@@ -171,7 +161,7 @@ async def delete_observation(observation_id: int, svc: MemoryService = Depends(_
 @router.get("/dreams")
 async def get_dreams(
     limit: int = Query(default=50, ge=1, le=500),
-    svc: MemoryService = Depends(_require_memory),
+    svc: MemoryService = Depends(require_memory),
 ):
     dreams = await svc.dreams.list_recent(limit=limit)
     return {
@@ -188,7 +178,7 @@ async def get_dreams(
 
 
 @router.get("/dreams/{dream_id}")
-async def get_dream_details(dream_id: int, svc: MemoryService = Depends(_require_memory)):
+async def get_dream_details(dream_id: int, svc: MemoryService = Depends(require_memory)):
     try:
         dream, source_facts = await svc.dreams.get(dream_id)
     except KeyError:
@@ -206,7 +196,7 @@ async def get_dream_details(dream_id: int, svc: MemoryService = Depends(_require
 
 
 @router.delete("/dreams/{dream_id}")
-async def delete_dream(dream_id: int, svc: MemoryService = Depends(_require_memory)):
+async def delete_dream(dream_id: int, svc: MemoryService = Depends(require_memory)):
     try:
         await svc.dreams.delete(dream_id)
     except KeyError:
@@ -216,17 +206,17 @@ async def delete_dream(dream_id: int, svc: MemoryService = Depends(_require_memo
 
 
 @router.get("/stats")
-async def get_stats(svc: MemoryService = Depends(_require_memory)):
+async def get_stats(svc: MemoryService = Depends(require_memory)):
     return await svc.stats()
 
 
 @router.post("/memory/clear")
-async def clear_memory(svc: MemoryService = Depends(_require_memory)):
+async def clear_memory(svc: MemoryService = Depends(require_memory)):
     deleted = await svc.clear()
     return {"status": "cleared", "deleted": deleted}
 
 
 @router.post("/memory/observations/clear")
-async def clear_observations(svc: MemoryService = Depends(_require_memory)):
+async def clear_observations(svc: MemoryService = Depends(require_memory)):
     result = await svc.clear_observations()
     return {"status": "cleared", **result}

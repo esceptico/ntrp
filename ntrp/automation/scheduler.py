@@ -201,8 +201,7 @@ class Scheduler:
         self._track(execution)
 
     async def _manual_run(self, task_id: str) -> None:
-        automation = await self.store.get(task_id)
-        if not automation:
+        if not (automation := await self.store.get(task_id)):
             _logger.warning("Automation %s not found for manual run", task_id)
             return
         if automation.running_since:

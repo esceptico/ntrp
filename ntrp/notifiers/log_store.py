@@ -15,6 +15,11 @@ CREATE TABLE IF NOT EXISTS notification_log (
 );
 """
 
+_COLUMNS = "task_id, subject, body, notifiers, sent_at"
+SQL_SAVE = f"INSERT INTO notification_log ({_COLUMNS}) VALUES (?, ?, ?, ?, ?)"
+SQL_RECENT = f"SELECT {_COLUMNS} FROM notification_log ORDER BY sent_at DESC LIMIT ?"
+SQL_RECENT_BY_TASK = f"SELECT {_COLUMNS} FROM notification_log WHERE task_id = ? ORDER BY sent_at DESC LIMIT ?"
+
 
 @dataclass
 class NotificationLogEntry:
@@ -34,24 +39,14 @@ class NotificationLogStore:
         await self.conn.commit()
 
     async def save(self, task_id: str, subject: str, body: str, notifier_names: list[str]) -> None:
-        await self.conn.execute(
-            "INSERT INTO notification_log (task_id, subject, body, notifiers, sent_at) VALUES (?, ?, ?, ?, ?)",
-            (task_id, subject, body, json.dumps(notifier_names), datetime.now(UTC).isoformat()),
-        )
+        await self.conn.execute(SQL_SAVE, (task_id, subject, body, json.dumps(notifier_names), datetime.now(UTC).isoformat()))
         await self.conn.commit()
 
     async def recent(self, limit: int = 20, task_id: str | None = None) -> list[NotificationLogEntry]:
         if task_id:
-            rows = await self.conn.execute_fetchall(
-                "SELECT task_id, subject, body, notifiers, sent_at FROM notification_log "
-                "WHERE task_id = ? ORDER BY sent_at DESC LIMIT ?",
-                (task_id, limit),
-            )
+            rows = await self.conn.execute_fetchall(SQL_RECENT_BY_TASK, (task_id, limit))
         else:
-            rows = await self.conn.execute_fetchall(
-                "SELECT task_id, subject, body, notifiers, sent_at FROM notification_log ORDER BY sent_at DESC LIMIT ?",
-                (limit,),
-            )
+            rows = await self.conn.execute_fetchall(SQL_RECENT, (limit,))
         return [
             NotificationLogEntry(
                 task_id=row["task_id"],

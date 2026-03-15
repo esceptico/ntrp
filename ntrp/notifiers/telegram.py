@@ -1,9 +1,9 @@
-from typing import Any
+from typing import Self
 
 import aiohttp
 from telegramify_markdown import TextInterpreter, telegramify
 
-from ntrp.notifiers.base import Notifier
+from ntrp.notifiers.base import Notifier, NotifierContext
 
 _API_URL = "https://api.telegram.org/bot{token}/sendMessage"
 _MAX_WORD_COUNT = 3900
@@ -27,15 +27,15 @@ class TelegramNotifier(Notifier):
     channel = "telegram"
 
     @classmethod
-    def from_config(cls, config: dict, runtime: Any) -> "TelegramNotifier":
-        return cls(runtime=runtime, user_id=config["user_id"])
+    def from_config(cls, config: dict, ctx: NotifierContext) -> Self:
+        return cls(ctx=ctx, user_id=config["user_id"])
 
-    def __init__(self, runtime: Any, user_id: str):
-        self._runtime = runtime
+    def __init__(self, ctx: NotifierContext, user_id: str):
+        self._ctx = ctx
         self._user_id = user_id
 
     async def send(self, subject: str, body: str) -> None:
-        token = self._runtime.config.telegram_bot_token
+        token = self._ctx.get_config_value("telegram_bot_token")
         if not token:
             raise RuntimeError("TELEGRAM_BOT_TOKEN not set in config")
 

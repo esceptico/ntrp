@@ -30,16 +30,15 @@ def should_compress(
 def find_compressible_range(
     messages: list[dict],
     keep_ratio: float = COMPRESSION_KEEP_RATIO,
-) -> tuple[int, int]:
-    """Find (start, end) range of messages to summarize.
+) -> tuple[int, int] | None:
+    """Find (start, end) range of messages to summarize, or None if nothing to compress.
 
     Keeps the most recent `keep_ratio` fraction of messages (excluding system),
     snapping the boundary forward past tool messages to avoid splitting a turn.
-    Returns (0, 0) if there's nothing worth compressing.
     """
     n = len(messages)
     if n <= 4:
-        return (0, 0)
+        return None
 
     # messages[0] is system — compressible range starts at 1
     compressible = n - 1  # messages after system
@@ -51,7 +50,7 @@ def find_compressible_range(
         tail_start += 1
 
     if tail_start <= 1:
-        return (0, 0)
+        return None
 
     return (1, tail_start)
 
@@ -119,9 +118,10 @@ async def compress_context_async(
     if not force and not should_compress(messages, model):
         return messages, False
 
-    start, end = find_compressible_range(messages, keep_ratio=keep_ratio)
-    if start == 0 and end == 0:
+    compressible = find_compressible_range(messages, keep_ratio=keep_ratio)
+    if compressible is None:
         return messages, False
+    start, end = compressible
 
     if on_compress:
         await on_compress(f"compressing context ({end - start} messages)...")

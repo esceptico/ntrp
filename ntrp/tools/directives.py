@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ntrp.config import NTRP_DIR
+from ntrp.settings import NTRP_DIR
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 

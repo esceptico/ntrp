@@ -8,9 +8,9 @@ from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.core.ledger import ExplorationLedger
 from ntrp.events.sse import ApprovalNeededEvent
+from ntrp.tools.core.types import ToolResult
 
 if TYPE_CHECKING:
-    from ntrp.tools.core.base import ToolResult
     from ntrp.tools.core.registry import ToolRegistry
 
 
@@ -23,9 +23,7 @@ class ApprovalResponse(TypedDict):
 class Rejection:
     feedback: str | None
 
-    def to_result(self) -> "ToolResult":
-        from ntrp.tools.core.base import ToolResult
-
+    def to_result(self) -> ToolResult:
         content = (
             f"User rejected this action and said: {self.feedback}" if self.feedback else "User rejected this action"
         )

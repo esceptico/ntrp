@@ -8,10 +8,8 @@ import numpy as np
 import pytest
 import pytest_asyncio
 
-from ntrp.memory.observation_merge import (
-    _find_top_pair,
-    observation_merge_pass,
-)
+from ntrp.memory.observation_merge import observation_merge_pass
+from ntrp.memory.retrieval import find_top_pair
 from ntrp.memory.retrieval import cosine_similarity
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.observations import ObservationRepository
@@ -115,7 +113,7 @@ class TestFindTopPair:
             ),
         ]
 
-        result = _find_top_pair(obs_list, set(), threshold=0.80)
+        result = find_top_pair(obs_list, set(), threshold=0.80)
         assert result is not None
         i, j, sim = result
         assert {obs_list[i].id, obs_list[j].id} == {1, 2}
@@ -156,7 +154,7 @@ class TestFindTopPair:
             ),
         ]
 
-        result = _find_top_pair(obs_list, {(1, 2)}, threshold=0.80)
+        result = find_top_pair(obs_list, {(1, 2)}, threshold=0.80)
         assert result is None
 
     def test_no_pairs_above_threshold(self):
@@ -183,7 +181,7 @@ class TestFindTopPair:
             for i in range(3)
         ]
 
-        result = _find_top_pair(obs_list, set(), threshold=0.90)
+        result = find_top_pair(obs_list, set(), threshold=0.90)
         assert result is None
 
 

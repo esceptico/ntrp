@@ -3,9 +3,9 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 
 from ntrp.server.runtime import Runtime, get_runtime
+from ntrp.settings import NTRP_DIR
 from ntrp.sources.google.auth import (
     CREDENTIALS_PATH,
-    NTRP_DIR,
     add_gmail_account,
     discover_gmail_tokens,
 )
@@ -56,9 +56,7 @@ async def gmail_add(runtime: Runtime = Depends(get_runtime)):
 
     try:
         email = await asyncio.to_thread(add_gmail_account)
-        await runtime.source_mgr.reinit("gmail", runtime.config)
-        await runtime.source_mgr.reinit("calendar", runtime.config)
-        await runtime.restart_monitor()
+        await runtime.sync_google_sources()
 
         return {"email": email, "status": "connected"}
     except Exception as e:
@@ -86,9 +84,7 @@ async def gmail_remove(token_file: str, runtime: Runtime = Depends(get_runtime))
             pass
 
         token_path.unlink()
-        await runtime.source_mgr.reinit("gmail", runtime.config)
-        await runtime.source_mgr.reinit("calendar", runtime.config)
-        await runtime.restart_monitor()
+        await runtime.sync_google_sources()
 
         return {"email": email, "status": "removed"}
     except Exception as e:

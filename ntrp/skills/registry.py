@@ -1,4 +1,5 @@
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -115,8 +116,6 @@ class SkillRegistry:
         if meta.location == "builtin":
             _logger.warning("Cannot remove builtin skill '%s'", name)
             return False
-        import shutil
-
         shutil.rmtree(meta.path, ignore_errors=True)
         del self._skills[name]
         _logger.info("Removed skill '%s'", name)

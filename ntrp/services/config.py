@@ -1,19 +1,16 @@
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from ntrp.config import PERSIST_KEYS, PROVIDER_KEY_FIELDS, SERVICE_KEY_FIELDS, load_user_settings, save_user_settings
+from ntrp.config import PERSIST_KEYS, PROVIDER_KEY_FIELDS, SERVICE_KEY_FIELDS
 from ntrp.llm.claude_oauth import clear_cache as clear_oauth_cache
 from ntrp.llm.claude_oauth import clear_settings as clear_oauth_settings
 from ntrp.llm.models import Provider, get_models_by_provider, is_oauth_model, strip_oauth_prefix
-
-if TYPE_CHECKING:
-    from ntrp.server.runtime import Runtime
+from ntrp.settings import load_user_settings, save_user_settings
 
 
 class ConfigService:
-    def __init__(self, runtime: "Runtime"):
-        self.runtime = runtime
+    def __init__(self, on_config_change: Callable[[], Awaitable[None]]):
+        self._on_config_change = on_config_change
 
     async def _with_rollback(self, mutate: Callable[[dict], None]) -> None:
         settings = load_user_settings()
@@ -21,7 +18,7 @@ class ConfigService:
         mutate(settings)
         save_user_settings(settings)
         try:
-            await self.runtime.reload_config()
+            await self._on_config_change()
         except Exception:
             save_user_settings(backup)
             raise
@@ -77,8 +74,7 @@ class ConfigService:
                 settings["provider_keys"] = provider_keys
 
             for key in ("chat_model", "explore_model", "memory_model"):
-                val = settings.get(key)
-                if val and strip_oauth_prefix(val) in provider_models:
+                if (val := settings.get(key)) and strip_oauth_prefix(val) in provider_models:
                     settings.pop(key)
 
         await self._with_rollback(mutate)

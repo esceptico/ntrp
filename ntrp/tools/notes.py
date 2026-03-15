@@ -2,6 +2,8 @@ import difflib
 import re
 from typing import Any
 
+from ntrp.search.index import SearchIndex
+
 from pydantic import BaseModel, Field
 
 from ntrp.constants import (
@@ -117,7 +119,7 @@ class NotesTool(Tool):
 
         return ToolResult(content=content, preview=f"{showing} notes")
 
-    async def _search(self, source: NotesSource, query: str, limit: int, search_index: Any | None = None) -> ToolResult:
+    async def _search(self, source: NotesSource, query: str, limit: int, search_index: SearchIndex | None = None) -> ToolResult:
         query = simplify_query(query)
 
         if search_index:

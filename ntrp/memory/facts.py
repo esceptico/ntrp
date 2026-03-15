@@ -1,10 +1,10 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Self
+from typing import Self, TypedDict
 
 import aiosqlite
 from pydantic import BaseModel, ConfigDict
@@ -12,8 +12,6 @@ from pydantic import BaseModel, ConfigDict
 import ntrp.database as database
 from ntrp.channel import Channel
 from ntrp.constants import (
-    CONSOLIDATION_INTERVAL,
-    CONSOLIDATION_MAX_BACKOFF_MULTIPLIER,
     FACT_DEDUP_EMBEDDING_SIMILARITY,
     FACT_DEDUP_TEXT_RATIO,
     FORGET_SEARCH_LIMIT,
@@ -23,21 +21,17 @@ from ntrp.constants import (
     USER_ENTITY_NAME,
 )
 from ntrp.embedder import Embedder, EmbeddingConfig
-from ntrp.events.internal import ConsolidationCompleted, FactCreated, FactDeleted
+from ntrp.events.internal import FactCreated, FactDeleted
 from ntrp.logging import get_logger
-from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decisions
-from ntrp.memory.decay import decay_score, should_archive_fact, should_archive_observation
-from ntrp.memory.dreams import run_dream_pass
+from ntrp.memory.consolidation_runner import ConsolidationRunner
+from ntrp.memory.decay import decay_score
 from ntrp.memory.extraction import Extractor
-from ntrp.memory.fact_merge import fact_merge_pass
 from ntrp.memory.models import ExtractionResult, Fact, FactContext, Observation
-from ntrp.memory.observation_merge import observation_merge_pass
 from ntrp.memory.retrieval import retrieve_with_observations
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
-from ntrp.memory.temporal import temporal_consolidation_pass
 
 _logger = get_logger(__name__)
 
@@ -49,12 +43,17 @@ class RememberFactResult(BaseModel):
     entities_extracted: list[str]
 
 
+class ReembedProgress(TypedDict):
+    total: int
+    done: int
+
+
 class FactMemory:
     def __init__(
         self,
         conn: aiosqlite.Connection,
         embedding: EmbeddingConfig,
-        extraction_model: str,
+        model: str,
         channel: Channel,
         embedder: Embedder | None = None,
         extractor: Extractor | None = None,
@@ -64,18 +63,23 @@ class FactMemory:
         self.observations = ObservationRepository(conn)
         self.dreams = DreamRepository(conn)
         self.embedder = embedder or Embedder(embedding)
-        self.extractor = extractor or Extractor(extraction_model)
+        self.extractor = extractor or Extractor(model)
         self.channel = channel
-        self._consolidation_task: asyncio.Task | None = None
-        self._reembed_task: asyncio.Task | None = None
-        self._reembed_progress: dict | None = None
         self._db_lock = asyncio.Lock()
-        self._last_temporal_pass: datetime | None = None
-        self._last_dream_pass: datetime | None = None
-        self._last_merge_pass: datetime | None = None
-        self._last_fact_merge_pass: datetime | None = None
-        self._last_archival_pass: datetime | None = None
-        self.dreams_enabled: bool = False
+        self._reembed_task: asyncio.Task | None = None
+        self._reembed_progress: ReembedProgress | None = None
+
+        self._consolidation = ConsolidationRunner(
+            facts=self.facts,
+            observations=self.observations,
+            dreams=self.dreams,
+            embedder=self.embedder,
+            model_fn=lambda: self.model,
+            publish=self.channel.publish,
+            transaction=self.transaction,
+            db_lock=self._db_lock,
+            db_conn=conn,
+        )
 
     @asynccontextmanager
     async def transaction(self) -> AsyncGenerator[None]:
@@ -89,231 +93,59 @@ class FactMemory:
 
     @property
     def is_consolidating(self) -> bool:
-        return self._consolidation_task is not None and not self._consolidation_task.done()
+        return self._consolidation.running
 
     @classmethod
     async def create(
         cls,
         db_path: Path,
         embedding: EmbeddingConfig,
-        extraction_model: str,
+        model: str,
         channel: Channel,
     ) -> Self:
         conn = await database.connect(db_path, vec=True)
-        instance = cls(conn, embedding, extraction_model, channel=channel)
+        instance = cls(conn, embedding, model, channel=channel)
         await instance.db.init_schema()
         if instance.db.dim_changed:
             _logger.info("Embedding dimension changed — starting background re-embed")
             instance.start_reembed(embedding)
         return instance
 
-    def start_consolidation(self, interval: float = CONSOLIDATION_INTERVAL) -> None:
-        if self._consolidation_task is None:
-            self._consolidation_interval = interval
-            self._consolidation_task = asyncio.create_task(self._consolidation_loop(interval))
+    # --- Consolidation delegation ---
+
+    @property
+    def _consolidation_interval(self) -> float | None:
+        return self._consolidation.interval
+
+    @property
+    def dreams_enabled(self) -> bool:
+        return self._consolidation.dreams_enabled
+
+    @dreams_enabled.setter
+    def dreams_enabled(self, value: bool) -> None:
+        self._consolidation.dreams_enabled = value
+
+    def start_consolidation(self, interval: float) -> None:
+        self._consolidation.start(interval)
 
     def restart_consolidation(self, interval: float) -> None:
-        if self._consolidation_task:
-            self._consolidation_task.cancel()
-            self._consolidation_task = None
-        self.start_consolidation(interval)
+        self._consolidation.restart(interval)
 
-    async def _consolidation_loop(self, interval: float) -> None:
-        backoff = interval
-        max_backoff = interval * CONSOLIDATION_MAX_BACKOFF_MULTIPLIER
-        while True:
-            await asyncio.sleep(backoff)
-            try:
-                await self._consolidate_pending()
-                await self._maybe_run_temporal_pass()
-                await self._maybe_run_observation_merge()
-                await self._maybe_run_fact_merge()
-                await self._maybe_run_dream_pass()
-                await self._maybe_run_archival_pass()
-                backoff = interval
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                _logger.warning("Consolidation batch failed: %s", e)
-                backoff = min(backoff * 2, max_backoff)
-
-    async def _consolidate_pending(self, batch_size: int = 10) -> int:
-        async with self._db_lock:
-            facts = await self.facts.list_unconsolidated(limit=batch_size)
-            if not facts:
-                return 0
-            facts = [
-                fact.model_copy(update={"entity_refs": await self.facts.get_entity_refs(fact.id)}) for fact in facts
-            ]
-
-        # LLM decisions + embeddings outside lock
-        decisions = []
-        for fact in facts:
-            actions = await get_consolidation_decisions(fact, self.observations, self.facts, self.extraction_model)
-            # Pre-compute embeddings for actions that need them
-            precomputed = []
-            for action in actions:
-                embedding = None
-                if action.action in ("update", "create") and action.text:
-                    embedding = await self.embedder.embed_one(action.text)
-                precomputed.append((action, embedding))
-            decisions.append((fact, precomputed))
-
-        # Apply under lock — DB writes only, no network I/O
-        async with self.transaction():
-            count = 0
-            obs_created = 0
-            for fact, precomputed in decisions:
-                # Verify fact still exists (could be deleted by concurrent forget())
-                if not await self.facts.get(fact.id):
-                    continue
-                for action, embedding in precomputed:
-                    result = await apply_consolidation(fact, action, self.facts, self.observations, embedding)
-                    if result.action == "created":
-                        obs_created += 1
-                await self.facts.mark_consolidated(fact.id)
-                count += 1
-
-        _logger.info("Consolidated %d facts", count)
-        self.channel.publish(ConsolidationCompleted(facts_processed=count, observations_created=obs_created))
-        return count
-
-    @asynccontextmanager
-    async def _atomic(self) -> AsyncGenerator[None]:
-        """Lock + commit for background passes. Wraps a logical write unit."""
-        async with self._db_lock:
-            try:
-                yield
-                await self.db.conn.commit()
-            except Exception:
-                await self.db.conn.rollback()
-                raise
-
-    async def _maybe_run_temporal_pass(self) -> None:
-        now = datetime.now(UTC)
-        if self._last_temporal_pass and (now - self._last_temporal_pass) < timedelta(days=1):
-            return
-
-        try:
-            created = await temporal_consolidation_pass(
-                self.facts,
-                self.observations,
-                self.extraction_model,
-                self.embedder.embed_one,
-                atomic=self._atomic,
-            )
-            if created > 0:
-                _logger.info("Temporal pass created %d observations", created)
-            self._last_temporal_pass = now
-        except Exception as e:
-            _logger.warning("Temporal consolidation pass failed: %s", e)
-
-    async def _maybe_run_observation_merge(self) -> None:
-        now = datetime.now(UTC)
-        if self._last_merge_pass and (now - self._last_merge_pass) < timedelta(days=1):
-            return
-
-        try:
-            merged = await observation_merge_pass(
-                self.observations,
-                self.extraction_model,
-                self.embedder.embed_one,
-                atomic=self._atomic,
-            )
-            if merged > 0:
-                _logger.info("Observation merge pass: %d merges", merged)
-            self._last_merge_pass = now
-        except Exception as e:
-            _logger.warning("Observation merge pass failed: %s", e)
-
-    async def _maybe_run_fact_merge(self) -> None:
-        now = datetime.now(UTC)
-        if self._last_fact_merge_pass and (now - self._last_fact_merge_pass) < timedelta(days=1):
-            return
-
-        try:
-            merged = await fact_merge_pass(
-                self.facts,
-                self.observations,
-                self.extraction_model,
-                self.embedder.embed_one,
-                atomic=self._atomic,
-                dream_repo=self.dreams,
-            )
-            if merged > 0:
-                _logger.info("Fact merge pass: %d merges", merged)
-            self._last_fact_merge_pass = now
-        except Exception as e:
-            _logger.warning("Fact merge pass failed: %s", e)
-
-    async def _maybe_run_dream_pass(self) -> None:
-        if not self.dreams_enabled:
-            return
-        now = datetime.now(UTC)
-        if self._last_dream_pass and (now - self._last_dream_pass) < timedelta(weeks=1):
-            return
-
-        try:
-            created = await run_dream_pass(
-                self.facts,
-                self.dreams,
-                self.extraction_model,
-                self.embedder.embed_one,
-                atomic=self._atomic,
-            )
-            if created > 0:
-                _logger.info("Dream pass created %d dreams", created)
-            self._last_dream_pass = now
-        except Exception as e:
-            _logger.warning("Dream pass failed: %s", e)
-
-    async def _maybe_run_archival_pass(self) -> None:
-        now = datetime.now(UTC)
-        if self._last_archival_pass and (now - self._last_archival_pass) < timedelta(days=1):
-            return
-
-        try:
-            archived_facts = 0
-            candidates = await self.facts.list_archival_candidates(limit=100)
-            archive_ids = [
-                f.id
-                for f in candidates
-                if should_archive_fact(f.consolidated_at, f.created_at, f.last_accessed_at, f.access_count, now)
-            ]
-            if archive_ids:
-                async with self.transaction():
-                    archived_facts = await self.facts.archive_batch(archive_ids)
-
-            archived_obs = 0
-            obs_candidates = await self.observations.list_archival_candidates(limit=100)
-            obs_archive_ids = [
-                o.id
-                for o in obs_candidates
-                if should_archive_observation(o.created_at, o.updated_at, o.last_accessed_at, o.access_count, now)
-            ]
-            if obs_archive_ids:
-                async with self.transaction():
-                    archived_obs = await self.observations.archive_batch(obs_archive_ids)
-
-            if archived_facts or archived_obs:
-                _logger.info("Archival pass: %d facts, %d observations archived", archived_facts, archived_obs)
-            self._last_archival_pass = now
-        except Exception as e:
-            _logger.warning("Archival pass failed: %s", e)
+    # --- Re-embedding ---
 
     @property
     def reembed_running(self) -> bool:
         return self._reembed_task is not None and not self._reembed_task.done()
 
     @property
-    def reembed_progress(self) -> dict | None:
+    def reembed_progress(self) -> ReembedProgress | None:
         return self._reembed_progress
 
     @property
-    def extraction_model(self) -> str:
+    def model(self) -> str:
         return self.extractor.model
 
-    def update_extraction_model(self, model: str) -> None:
+    def update_model(self, model: str) -> None:
         self.extractor.model = model
 
     def start_reembed(self, embedding: EmbeddingConfig, *, rebuild: bool = False) -> None:
@@ -359,17 +191,20 @@ class FactMemory:
         finally:
             self._reembed_progress = None
 
+    # --- Lifecycle ---
+
     async def close(self) -> None:
-        for task in (self._consolidation_task, self._reembed_task):
-            if task:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
-        self._consolidation_task = None
-        self._reembed_task = None
+        await self._consolidation.stop()
+        if self._reembed_task:
+            self._reembed_task.cancel()
+            try:
+                await self._reembed_task
+            except asyncio.CancelledError:
+                pass
+            self._reembed_task = None
         await self.db.conn.close()
+
+    # --- Core API ---
 
     async def remember(
         self,
@@ -381,71 +216,47 @@ class FactMemory:
         if not text or not text.strip():
             return None
 
-        # Embed + extract entities in parallel (both are network calls)
         embedding, extraction = await asyncio.gather(
             self.embedder.embed_one(text),
             self.extractor.extract(text),
         )
 
         async with self.transaction():
-            # Dedup inside lock to prevent TOCTOU race
-            similar = await self.facts.search_facts_vector(embedding, limit=1)
-            if similar:
+            if similar := await self.facts.search_facts_vector(embedding, limit=1):
                 existing_fact, similarity = similar[0]
                 text_ratio = SequenceMatcher(None, text.lower(), existing_fact.text.lower()).ratio()
                 is_dup = text_ratio >= FACT_DEDUP_TEXT_RATIO or similarity >= FACT_DEDUP_EMBEDDING_SIMILARITY
                 _logger.info(
                     "Dedup check: fact %d text_ratio=%.3f sim=%.3f dup=%s — %r",
-                    existing_fact.id,
-                    text_ratio,
-                    similarity,
-                    is_dup,
-                    existing_fact.text[:80],
+                    existing_fact.id, text_ratio, similarity, is_dup, existing_fact.text[:80],
                 )
                 if is_dup:
                     await self.facts.reinforce([existing_fact.id])
                     return None
 
             fact = await self.facts.create(
-                text=text,
-                source_type=source_type,
-                source_ref=source_ref,
-                embedding=embedding,
-                happened_at=happened_at,
+                text=text, source_type=source_type, source_ref=source_ref,
+                embedding=embedding, happened_at=happened_at,
             )
             entities_extracted = await self._process_extraction(fact.id, extraction)
 
         self.channel.publish(FactCreated(fact_id=fact.id, text=text))
-
         return RememberFactResult(fact=fact, entities_extracted=entities_extracted)
 
-    async def _process_extraction(
-        self,
-        fact_id: int,
-        extraction: ExtractionResult,
-    ) -> list[str]:
+    async def _process_extraction(self, fact_id: int, extraction: ExtractionResult) -> list[str]:
         seen: set[str] = set()
-
         for entity in extraction.entities:
             name = entity.name.strip()
             if not name or name.lower() in seen:
                 continue
             seen.add(name.lower())
-
             entity_id = await self._resolve_entity(name)
             await self.facts.add_entity_ref(fact_id, name, entity_id)
-
         return list(seen)
 
     async def _resolve_entity(self, name: str) -> int | None:
-        # Exact match (COLLATE NOCASE handles case-insensitivity)
-        existing = await self.facts.get_entity_by_name(name)
-        if existing:
+        if existing := await self.facts.get_entity_by_name(name):
             return existing.id
-
-        # Create new entity — no fuzzy matching.
-        # SequenceMatcher can't distinguish similar-but-different entities
-        # ("Avatar 2" vs "Avatar", "Australia" vs "Austria").
         entity = await self.facts.create_entity(name=name)
         return entity.id
 
@@ -458,21 +269,15 @@ class FactMemory:
         query_embedding = await self.embedder.embed_one(query)
 
         context = await retrieve_with_observations(
-            self.facts,
-            self.observations,
-            query,
-            query_embedding,
-            seed_limit=limit,
-            query_time=query_time,
+            self.facts, self.observations, query, query_embedding,
+            seed_limit=limit, query_time=query_time,
         )
 
         async with self.transaction():
             if context.facts:
                 await self.facts.reinforce([f.id for f in context.facts])
-
             if context.observations:
                 await self.observations.reinforce([o.id for o in context.observations])
-                # Reinforce only the displayed source facts (bundled_sources), not all
                 displayed_fact_ids = [f.id for facts in context.bundled_sources.values() for f in facts]
                 if displayed_fact_ids:
                     await self.facts.reinforce(displayed_fact_ids)
@@ -505,8 +310,7 @@ class FactMemory:
         async with self.transaction():
             entities = []
             for name in names:
-                entity = await self.facts.get_entity_by_name(name)
-                if entity:
+                if entity := await self.facts.get_entity_by_name(name):
                     entities.append(entity)
 
             if len(entities) < 2:
@@ -527,8 +331,7 @@ class FactMemory:
         return await self.facts.count()
 
     async def get_context(self, user_limit: int = 10) -> tuple[list[Observation], list[Fact]]:
-        user_entity = await self.facts.get_entity_by_name(USER_ENTITY_NAME)
-        if user_entity:
+        if user_entity := await self.facts.get_entity_by_name(USER_ENTITY_NAME):
             raw_obs = await self.observations.get_for_entity(user_entity.id, limit=20)
             scored_obs = sorted(
                 raw_obs,

@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from pydantic import BaseModel
 
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ApprovalInfo, ToolResult
 
 
 def _inline_refs(schema: dict) -> dict:
@@ -17,7 +17,6 @@ def _inline_refs(schema: dict) -> dict:
         if isinstance(node, dict):
             if "$ref" in node:
                 ref_path = node["$ref"]
-                # "#/$defs/ModelName" -> "ModelName"
                 ref_name = ref_path.rsplit("/", 1)[-1]
                 if ref_name in defs:
                     return _resolve(defs[ref_name])
@@ -30,19 +29,8 @@ def _inline_refs(schema: dict) -> dict:
     return _resolve(schema)
 
 
-@dataclass(frozen=True)
-class ToolResult:
-    content: str
-    preview: str
-    is_error: bool = False
-    data: dict | None = None
-
-
-@dataclass(frozen=True)
-class ApprovalInfo:
-    description: str
-    preview: str | None
-    diff: str | None
+# Re-export for backwards compat
+__all__ = ["Tool", "ToolResult", "ApprovalInfo"]
 
 
 class Tool(ABC):

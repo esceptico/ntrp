@@ -2,19 +2,23 @@ import base64
 import re
 from datetime import UTC, datetime
 from email.header import decode_header as decode_rfc2047
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from email.utils import parsedate_to_datetime
 from html import unescape
 from pathlib import Path
 from typing import Any
+
+import markdown
 
 from googleapiclient.discovery import build
 
 from ntrp.constants import CONTENT_READ_LIMIT
 from ntrp.core.prompts import env
 from ntrp.logging import get_logger
+from ntrp.settings import NTRP_DIR
 from ntrp.sources.base import EmailSource, SourceItem
 from ntrp.sources.google.auth import (
-    NTRP_DIR,
     SCOPES_ALL,
     SCOPES_GMAIL_SEND,
     get_google_credentials,
@@ -253,9 +257,6 @@ class GmailSource:
             return ""  # API error fetching profile - return empty email
 
     def send(self, to: str, subject: str, body: str, from_email: str | None = None, html: bool = False) -> str:
-        from email.mime.multipart import MIMEMultipart
-        from email.mime.text import MIMEText
-
         if not to:
             return "Error: recipient is required"
 
@@ -306,9 +307,6 @@ class GmailSource:
             return f"Error sending email: {e}"
 
     def _markdown_to_html(self, markdown_text: str) -> str:
-        """Convert markdown to HTML for email using the markdown library."""
-        import markdown
-
         # Convert markdown to HTML with common extensions
         md = markdown.Markdown(
             extensions=[

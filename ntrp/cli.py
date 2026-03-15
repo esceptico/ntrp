@@ -6,12 +6,13 @@ import click
 import uvicorn
 from rich.console import Console
 
-from ntrp.config import generate_api_key, get_config, load_user_settings, save_user_settings, set_ntrp_dir
+from ntrp.config import get_config
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted, RunStarted
 from ntrp.logging import UVICORN_LOG_CONFIG
 from ntrp.server.runtime import Runtime
+from ntrp.settings import generate_api_key, load_user_settings, save_user_settings
 from ntrp.tools.core.context import IOBridge
 
 console = Console()
@@ -53,11 +54,8 @@ def status():
 @click.option("--port", default=None, type=int, help="Port to bind to (or NTRP_PORT)")
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")
 @click.option("--reset-key", is_flag=True, help="Generate a new API key")
-@click.option("--dir", "data_dir", default=None, type=click.Path(), help="Data directory (default: ~/.ntrp)")
-def serve(host: str | None, port: int | None, reload: bool, reset_key: bool, data_dir: str | None):
+def serve(host: str | None, port: int | None, reload: bool, reset_key: bool):
     """Start the ntrp API server."""
-    if data_dir:
-        set_ntrp_dir(data_dir)
     config = get_config()
 
     if reset_key or not config.api_key_hash:
@@ -120,15 +118,7 @@ async def _run_headless(prompt: str):
         run_id = secrets.token_hex(4)
         session_state = runtime.session_service.create()
 
-        config = AgentConfig(
-            model=runtime.config.chat_model,
-            explore_model=runtime.config.explore_model,
-            max_depth=runtime.config.max_depth,
-            compression_threshold=runtime.config.compression_threshold,
-            max_messages=runtime.config.max_messages,
-            compression_keep_ratio=runtime.config.compression_keep_ratio,
-            summary_max_tokens=runtime.config.summary_max_tokens,
-        )
+        config = AgentConfig.from_config(runtime.config)
 
         agent = create_agent(
             executor=runtime.executor,

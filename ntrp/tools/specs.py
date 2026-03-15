@@ -7,7 +7,8 @@ from ntrp.tools.automation import (
     RunAutomationTool,
     UpdateAutomationTool,
 )
-from ntrp.tools.bash import BashTool, CancelBackgroundTaskTool, ListBackgroundTasksTool
+from ntrp.tools.background import CancelBackgroundTaskTool, ListBackgroundTasksTool
+from ntrp.tools.bash import BashTool
 from ntrp.tools.browser import BrowserTool
 from ntrp.tools.calendar import (
     CalendarTool,

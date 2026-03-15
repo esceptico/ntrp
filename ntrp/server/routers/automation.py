@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ntrp.automation.models import Automation
 from ntrp.automation.service import AutomationService
 from ntrp.notifiers.service import NotifierService
+from ntrp.server.deps import require_automation_service, require_notifier_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
     CreateAutomationRequest,
@@ -35,21 +36,9 @@ def _automation_to_dict(a: Automation) -> dict:
     }
 
 
-def _require_automation_service(runtime: Runtime = Depends(get_runtime)) -> AutomationService:
-    if not runtime.automation_service:
-        raise HTTPException(status_code=503, detail="Automations not available")
-    return runtime.automation_service
-
-
-def _require_notifier_service(runtime: Runtime = Depends(get_runtime)) -> NotifierService:
-    if not runtime.notifier_service:
-        raise HTTPException(status_code=503, detail="Notifier service not available")
-    return runtime.notifier_service
-
-
 @router.post("/automations")
 async def create_automation(
-    request: CreateAutomationRequest, svc: AutomationService = Depends(_require_automation_service)
+    request: CreateAutomationRequest, svc: AutomationService = Depends(require_automation_service)
 ):
     try:
         automation = await svc.create(
@@ -73,13 +62,13 @@ async def create_automation(
 
 
 @router.get("/automations")
-async def list_automations(svc: AutomationService = Depends(_require_automation_service)):
+async def list_automations(svc: AutomationService = Depends(require_automation_service)):
     automations = await svc.list_all()
     return {"automations": [_automation_to_dict(a) for a in automations]}
 
 
 @router.get("/automations/{task_id}")
-async def get_automation(task_id: str, svc: AutomationService = Depends(_require_automation_service)):
+async def get_automation(task_id: str, svc: AutomationService = Depends(require_automation_service)):
     try:
         automation = await svc.get(task_id)
     except KeyError:
@@ -89,7 +78,7 @@ async def get_automation(task_id: str, svc: AutomationService = Depends(_require
 
 
 @router.post("/automations/{task_id}/toggle")
-async def toggle_automation(task_id: str, svc: AutomationService = Depends(_require_automation_service)):
+async def toggle_automation(task_id: str, svc: AutomationService = Depends(require_automation_service)):
     try:
         new_enabled = await svc.toggle_enabled(task_id)
     except KeyError:
@@ -98,7 +87,7 @@ async def toggle_automation(task_id: str, svc: AutomationService = Depends(_requ
 
 
 @router.post("/automations/{task_id}/writable")
-async def toggle_writable(task_id: str, svc: AutomationService = Depends(_require_automation_service)):
+async def toggle_writable(task_id: str, svc: AutomationService = Depends(require_automation_service)):
     try:
         new_writable = await svc.toggle_writable(task_id)
     except KeyError:
@@ -107,7 +96,7 @@ async def toggle_writable(task_id: str, svc: AutomationService = Depends(_requir
 
 
 @router.post("/automations/{task_id}/run")
-async def run_automation(task_id: str, svc: AutomationService = Depends(_require_automation_service)):
+async def run_automation(task_id: str, svc: AutomationService = Depends(require_automation_service)):
     try:
         await svc.run_now(task_id)
     except KeyError:
@@ -119,7 +108,7 @@ async def run_automation(task_id: str, svc: AutomationService = Depends(_require
 
 @router.patch("/automations/{task_id}")
 async def update_automation(
-    task_id: str, request: UpdateAutomationRequest, svc: AutomationService = Depends(_require_automation_service)
+    task_id: str, request: UpdateAutomationRequest, svc: AutomationService = Depends(require_automation_service)
 ):
     try:
         automation = await svc.update(
@@ -155,7 +144,7 @@ async def list_notifiers(runtime: Runtime = Depends(get_runtime)):
 
 @router.put("/automations/{task_id}/notifiers")
 async def set_notifiers(
-    task_id: str, request: SetNotifiersRequest, svc: AutomationService = Depends(_require_automation_service)
+    task_id: str, request: SetNotifiersRequest, svc: AutomationService = Depends(require_automation_service)
 ):
     try:
         await svc.set_notifiers(task_id, request.notifiers)
@@ -167,7 +156,7 @@ async def set_notifiers(
 
 
 @router.delete("/automations/{task_id}")
-async def delete_automation(task_id: str, svc: AutomationService = Depends(_require_automation_service)):
+async def delete_automation(task_id: str, svc: AutomationService = Depends(require_automation_service)):
     try:
         await svc.delete(task_id)
     except KeyError:
@@ -179,7 +168,7 @@ async def delete_automation(task_id: str, svc: AutomationService = Depends(_requ
 
 
 @router.get("/notifiers/configs")
-async def list_notifier_configs(svc: NotifierService = Depends(_require_notifier_service)):
+async def list_notifier_configs(svc: NotifierService = Depends(require_notifier_service)):
     configs = await svc.list_configs()
     return {
         "configs": [
@@ -195,13 +184,13 @@ async def list_notifier_configs(svc: NotifierService = Depends(_require_notifier
 
 
 @router.get("/notifiers/types")
-async def list_notifier_types(svc: NotifierService = Depends(_require_notifier_service)):
+async def list_notifier_types(svc: NotifierService = Depends(require_notifier_service)):
     return {"types": svc.get_types()}
 
 
 @router.post("/notifiers/configs")
 async def create_notifier_config(
-    request: CreateNotifierRequest, svc: NotifierService = Depends(_require_notifier_service)
+    request: CreateNotifierRequest, svc: NotifierService = Depends(require_notifier_service)
 ):
     try:
         cfg = await svc.create(request.name, request.type, request.config)
@@ -213,7 +202,7 @@ async def create_notifier_config(
 
 @router.put("/notifiers/configs/{name}")
 async def update_notifier_config(
-    name: str, request: UpdateNotifierRequest, svc: NotifierService = Depends(_require_notifier_service)
+    name: str, request: UpdateNotifierRequest, svc: NotifierService = Depends(require_notifier_service)
 ):
     try:
         cfg = await svc.update(name, request.config, new_name=request.name)
@@ -226,7 +215,7 @@ async def update_notifier_config(
 
 
 @router.delete("/notifiers/configs/{name}")
-async def delete_notifier_config(name: str, svc: NotifierService = Depends(_require_notifier_service)):
+async def delete_notifier_config(name: str, svc: NotifierService = Depends(require_notifier_service)):
     try:
         await svc.delete(name)
     except KeyError:
@@ -236,7 +225,7 @@ async def delete_notifier_config(name: str, svc: NotifierService = Depends(_requ
 
 
 @router.post("/notifiers/configs/{name}/test")
-async def test_notifier(name: str, svc: NotifierService = Depends(_require_notifier_service)):
+async def test_notifier(name: str, svc: NotifierService = Depends(require_notifier_service)):
     try:
         await svc.test(name)
     except KeyError:

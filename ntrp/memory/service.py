@@ -20,8 +20,7 @@ class FactService:
         return facts, total
 
     async def get(self, fact_id: int) -> tuple[Fact, list[EntityRef]]:
-        fact = await self._memory.facts.get(fact_id)
-        if not fact:
+        if not (fact := await self._memory.facts.get(fact_id)):
             raise KeyError(f"Fact {fact_id} not found")
         entity_refs = await self._memory.facts.get_entity_refs(fact_id)
         return fact, entity_refs
@@ -30,8 +29,7 @@ class FactService:
         async with self._memory.transaction():
             repo = self._memory.facts
 
-            fact = await repo.get(fact_id)
-            if not fact:
+            if not (await repo.get(fact_id)):
                 raise KeyError(f"Fact {fact_id} not found")
 
             new_embedding = await self._memory.embedder.embed_one(new_text)
@@ -55,8 +53,7 @@ class FactService:
         async with self._memory.transaction():
             repo = self._memory.facts
 
-            fact = await repo.get(fact_id)
-            if not fact:
+            if not (await repo.get(fact_id)):
                 raise KeyError(f"Fact {fact_id} not found")
 
             entity_refs_count = await repo.count_entity_refs(fact_id)
@@ -77,8 +74,7 @@ class ObservationService:
         return await self._memory.observations.list_recent(limit=limit)
 
     async def get(self, observation_id: int) -> tuple[Observation, list[Fact]]:
-        obs = await self._memory.observations.get(observation_id)
-        if not obs:
+        if not (obs := await self._memory.observations.get(observation_id)):
             raise KeyError(f"Observation {observation_id} not found")
         fact_ids = await self._memory.observations.get_fact_ids(observation_id)
         facts_by_id = await self._memory.facts.get_batch(fact_ids)
@@ -88,8 +84,7 @@ class ObservationService:
         async with self._memory.transaction():
             obs_repo = self._memory.observations
 
-            obs = await obs_repo.get(observation_id)
-            if not obs:
+            if not (await obs_repo.get(observation_id)):
                 raise KeyError(f"Observation {observation_id} not found")
 
             new_embedding = await self._memory.embedder.embed_one(new_summary)
@@ -101,8 +96,7 @@ class ObservationService:
         async with self._memory.transaction():
             obs_repo = self._memory.observations
 
-            obs = await obs_repo.get(observation_id)
-            if not obs:
+            if not (await obs_repo.get(observation_id)):
                 raise KeyError(f"Observation {observation_id} not found")
 
             await obs_repo.delete(observation_id)
@@ -116,15 +110,13 @@ class DreamService:
         return await self._memory.dreams.list_recent(limit=limit)
 
     async def get(self, dream_id: int) -> tuple[Dream, list[Fact]]:
-        dream = await self._memory.dreams.get(dream_id)
-        if not dream:
+        if not (dream := await self._memory.dreams.get(dream_id)):
             raise KeyError(f"Dream {dream_id} not found")
         facts_by_id = await self._memory.facts.get_batch(dream.source_fact_ids)
         return dream, list(facts_by_id.values())
 
     async def delete(self, dream_id: int) -> None:
-        dream = await self._memory.dreams.get(dream_id)
-        if not dream:
+        if not (await self._memory.dreams.get(dream_id)):
             raise KeyError(f"Dream {dream_id} not found")
         async with self._memory.transaction():
             await self._memory.dreams.delete(dream_id)
@@ -156,7 +148,7 @@ class MemoryService:
         if not window:
             return
 
-        facts = await extract_from_chat(tuple(window), self.memory.extraction_model)
+        facts = await extract_from_chat(tuple(window), self.memory.model)
         new_cursor = len(event.messages)
         self._cursors[sid] = new_cursor
 

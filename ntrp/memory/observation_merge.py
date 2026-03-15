@@ -18,7 +18,7 @@ from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Observation
 from ntrp.memory.prompts import OBSERVATION_MERGE_PROMPT
-from ntrp.memory.retrieval import cosine_similarity
+from ntrp.memory.retrieval import find_top_pair
 from ntrp.memory.store.observations import ObservationRepository
 
 _logger = get_logger(__name__)
@@ -31,30 +31,6 @@ class MergeAction(BaseModel):
     action: Literal["merge", "skip"]
     text: str | None = None
     reason: str | None = None
-
-
-def _find_top_pair(
-    observations: list[Observation],
-    skipped: set[tuple[int, int]],
-    threshold: float,
-) -> tuple[int, int, float] | None:
-    best = None
-    for i in range(len(observations)):
-        if observations[i].embedding is None:
-            continue
-        for j in range(i + 1, len(observations)):
-            if observations[j].embedding is None:
-                continue
-            pair_key = (
-                min(observations[i].id, observations[j].id),
-                max(observations[i].id, observations[j].id),
-            )
-            if pair_key in skipped:
-                continue
-            sim = cosine_similarity(observations[i].embedding, observations[j].embedding)
-            if sim >= threshold and (best is None or sim > best[2]):
-                best = (i, j, sim)
-    return best
 
 
 async def _llm_merge_decision(
@@ -105,7 +81,7 @@ async def observation_merge_pass(
     merges = 0
 
     while True:
-        pair = _find_top_pair(observations, skipped_pairs, threshold)
+        pair = find_top_pair(observations, skipped_pairs, threshold)
         if pair is None:
             break
 

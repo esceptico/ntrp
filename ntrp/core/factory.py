@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Self
 
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
@@ -18,6 +19,18 @@ class AgentConfig:
     max_messages: int = 120
     compression_keep_ratio: float = 0.2
     summary_max_tokens: int = 1500
+
+    @classmethod
+    def from_config(cls, config, *, model: str | None = None) -> Self:
+        return cls(
+            model=model or config.chat_model,
+            explore_model=config.explore_model,
+            max_depth=config.max_depth,
+            compression_threshold=config.compression_threshold,
+            max_messages=config.max_messages,
+            compression_keep_ratio=config.compression_keep_ratio,
+            summary_max_tokens=config.summary_max_tokens,
+        )
 
 
 def create_agent(
@@ -44,7 +57,7 @@ def create_agent(
         registry=executor.registry,
         run=run_ctx,
         io=io or IOBridge(),
-        services=executor.runtime.tool_services,
+        services=executor.tool_services,
         channel=channel,
         ledger=ExplorationLedger(),
     )

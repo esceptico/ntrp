@@ -1,15 +1,15 @@
 import asyncio
 import os
-from typing import Any
+from typing import Self
 
-from ntrp.notifiers.base import Notifier
+from ntrp.notifiers.base import Notifier, NotifierContext
 
 
 class BashNotifier(Notifier):
     channel = "bash"
 
     @classmethod
-    def from_config(cls, config: dict, runtime: Any) -> "BashNotifier":
+    def from_config(cls, config: dict, ctx: NotifierContext) -> Self:
         return cls(command=config["command"])
 
     def __init__(self, command: str):
