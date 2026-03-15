@@ -29,7 +29,6 @@ from ntrp.tools.core.context import IOBridge
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
 
-
 _logger = get_logger(__name__)
 
 INIT_AUTO_APPROVE = {"remember", "forget"}

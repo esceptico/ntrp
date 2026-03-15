@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any
 
 import markdown
-
 from googleapiclient.discovery import build
 
 from ntrp.constants import CONTENT_READ_LIMIT

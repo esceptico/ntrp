@@ -3,7 +3,6 @@ from datetime import datetime
 
 from ntrp.automation.triggers import Trigger, build_trigger, parse_trigger
 
-# Re-export for backwards compat with existing importers
 __all__ = ["Automation", "Trigger", "build_trigger", "parse_trigger"]
 
 

@@ -106,13 +106,18 @@ async def compact_session(
 
     msg_count = end - start
     new_messages, was_compressed = await compress_context_async(
-        messages=messages, model=model, force=True,
-        keep_ratio=keep_ratio, summary_max_tokens=summary_max_tokens,
+        messages=messages,
+        model=model,
+        force=True,
+        keep_ratio=keep_ratio,
+        summary_max_tokens=summary_max_tokens,
     )
 
     if was_compressed:
         await svc.save(
-            session_state, new_messages, metadata={"last_input_tokens": None},
+            session_state,
+            new_messages,
+            metadata={"last_input_tokens": None},
         )
         return {
             "status": "compacted",

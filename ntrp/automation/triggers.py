@@ -13,7 +13,13 @@ from ntrp.constants import (
 from ntrp.events.triggers import EVENT_APPROACHING
 
 DAY_NAMES: dict[str, int] = {
-    "mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6,
+    "mon": 0,
+    "tue": 1,
+    "wed": 2,
+    "thu": 3,
+    "fri": 4,
+    "sat": 5,
+    "sun": 6,
 }
 WEEKDAY_SET = frozenset(range(5))
 ALL_DAYS = frozenset(range(7))
@@ -126,7 +132,8 @@ def compute_next_interval(
         candidate = (candidate + timedelta(days=1)).replace(
             hour=window_start.hour if window_start else 0,
             minute=window_start.minute if window_start else 0,
-            second=0, microsecond=0,
+            second=0,
+            microsecond=0,
         ) + timedelta(days=1)
 
     if days:
@@ -242,16 +249,28 @@ BuildHandler = Callable[..., tuple[Trigger, datetime | None]]
 
 
 def _build_time_trigger(
-    *, at: str | None, days: str | None, every: str | None,
-    event_type: str | None, lead_minutes: int | str | None, start: str | None, end: str | None,
+    *,
+    at: str | None,
+    days: str | None,
+    every: str | None,
+    event_type: str | None,
+    lead_minutes: int | str | None,
+    start: str | None,
+    end: str | None,
 ) -> tuple[Trigger, datetime | None]:
     trigger = TimeTrigger(at=at, days=days, every=every, start=start, end=end)
     return trigger, _next_run_for_time(trigger, datetime.now(UTC))
 
 
 def _build_event_trigger(
-    *, at: str | None, days: str | None, every: str | None,
-    event_type: str | None, lead_minutes: int | str | None, start: str | None, end: str | None,
+    *,
+    at: str | None,
+    days: str | None,
+    every: str | None,
+    event_type: str | None,
+    lead_minutes: int | str | None,
+    start: str | None,
+    end: str | None,
 ) -> tuple[Trigger, datetime | None]:
     if not event_type:
         raise ValueError("'event_type' is required for event trigger")
@@ -266,13 +285,19 @@ BUILD_DISPATCH: dict[str, BuildHandler] = {
 
 def build_trigger(
     trigger_type: str,
-    at: str | None = None, days: str | None = None, every: str | None = None,
-    event_type: str | None = None, lead_minutes: int | str | None = None,
-    start: str | None = None, end: str | None = None,
+    at: str | None = None,
+    days: str | None = None,
+    every: str | None = None,
+    event_type: str | None = None,
+    lead_minutes: int | str | None = None,
+    start: str | None = None,
+    end: str | None = None,
 ) -> tuple[Trigger, datetime | None]:
     if (handler := BUILD_DISPATCH.get(trigger_type)) is None:
         raise ValueError(f"Invalid trigger_type '{trigger_type}'. Use: time, event")
-    return handler(at=at, days=days, every=every, event_type=event_type, lead_minutes=lead_minutes, start=start, end=end)
+    return handler(
+        at=at, days=days, every=every, event_type=event_type, lead_minutes=lead_minutes, start=start, end=end
+    )
 
 
 ParseHandler = Callable[[dict], Trigger]
@@ -281,8 +306,11 @@ ParseHandler = Callable[[dict], Trigger]
 def _parse_time_trigger(payload: dict) -> Trigger:
     if "at" in payload or "every" in payload:
         return TimeTrigger(
-            at=payload.get("at"), days=payload.get("days"), every=payload.get("every"),
-            start=payload.get("start"), end=payload.get("end"),
+            at=payload.get("at"),
+            days=payload.get("days"),
+            every=payload.get("every"),
+            start=payload.get("start"),
+            end=payload.get("end"),
         )
     # Legacy format
     time_of_day = payload["time_of_day"]
