@@ -1,7 +1,8 @@
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from ntrp.constants import CONSOLIDATION_INTERVAL, CONSOLIDATION_MAX_BACKOFF_MULTIPLIER
 from ntrp.embedder import Embedder
@@ -29,11 +30,11 @@ class ConsolidationRunner:
         observations: ObservationRepository,
         dreams: DreamRepository,
         embedder: Embedder,
-        model_fn: callable,
-        publish: callable,
-        transaction: callable,
+        model_fn: Callable[[], str],
+        publish: Callable[[Any], None],
+        transaction: Callable[..., Any],
         db_lock: asyncio.Lock,
-        db_conn,
+        db_conn: Any,
     ):
         self.facts = facts
         self.observations = observations
@@ -155,7 +156,11 @@ class ConsolidationRunner:
             return
         try:
             created = await temporal_consolidation_pass(
-                self.facts, self.observations, self.model, self.embedder.embed_one, atomic=self._atomic,
+                self.facts,
+                self.observations,
+                self.model,
+                self.embedder.embed_one,
+                atomic=self._atomic,
             )
             if created > 0:
                 _logger.info("Temporal pass created %d observations", created)
@@ -169,7 +174,10 @@ class ConsolidationRunner:
             return
         try:
             merged = await observation_merge_pass(
-                self.observations, self.model, self.embedder.embed_one, atomic=self._atomic,
+                self.observations,
+                self.model,
+                self.embedder.embed_one,
+                atomic=self._atomic,
             )
             if merged > 0:
                 _logger.info("Observation merge pass: %d merges", merged)
@@ -183,8 +191,12 @@ class ConsolidationRunner:
             return
         try:
             merged = await fact_merge_pass(
-                self.facts, self.observations, self.model, self.embedder.embed_one,
-                atomic=self._atomic, dream_repo=self.dreams,
+                self.facts,
+                self.observations,
+                self.model,
+                self.embedder.embed_one,
+                atomic=self._atomic,
+                dream_repo=self.dreams,
             )
             if merged > 0:
                 _logger.info("Fact merge pass: %d merges", merged)
@@ -200,7 +212,11 @@ class ConsolidationRunner:
             return
         try:
             created = await run_dream_pass(
-                self.facts, self.dreams, self.model, self.embedder.embed_one, atomic=self._atomic,
+                self.facts,
+                self.dreams,
+                self.model,
+                self.embedder.embed_one,
+                atomic=self._atomic,
             )
             if created > 0:
                 _logger.info("Dream pass created %d dreams", created)
@@ -216,7 +232,8 @@ class ConsolidationRunner:
             archived_facts = 0
             candidates = await self.facts.list_archival_candidates(limit=100)
             archive_ids = [
-                f.id for f in candidates
+                f.id
+                for f in candidates
                 if should_archive_fact(f.consolidated_at, f.created_at, f.last_accessed_at, f.access_count, now)
             ]
             if archive_ids:
@@ -226,7 +243,8 @@ class ConsolidationRunner:
             archived_obs = 0
             obs_candidates = await self.observations.list_archival_candidates(limit=100)
             obs_archive_ids = [
-                o.id for o in obs_candidates
+                o.id
+                for o in obs_candidates
                 if should_archive_observation(o.created_at, o.updated_at, o.last_accessed_at, o.access_count, now)
             ]
             if obs_archive_ids:

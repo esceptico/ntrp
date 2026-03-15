@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Self, TypedDict
@@ -228,15 +228,22 @@ class FactMemory:
                 is_dup = text_ratio >= FACT_DEDUP_TEXT_RATIO or similarity >= FACT_DEDUP_EMBEDDING_SIMILARITY
                 _logger.info(
                     "Dedup check: fact %d text_ratio=%.3f sim=%.3f dup=%s — %r",
-                    existing_fact.id, text_ratio, similarity, is_dup, existing_fact.text[:80],
+                    existing_fact.id,
+                    text_ratio,
+                    similarity,
+                    is_dup,
+                    existing_fact.text[:80],
                 )
                 if is_dup:
                     await self.facts.reinforce([existing_fact.id])
                     return None
 
             fact = await self.facts.create(
-                text=text, source_type=source_type, source_ref=source_ref,
-                embedding=embedding, happened_at=happened_at,
+                text=text,
+                source_type=source_type,
+                source_ref=source_ref,
+                embedding=embedding,
+                happened_at=happened_at,
             )
             entities_extracted = await self._process_extraction(fact.id, extraction)
 
@@ -269,8 +276,12 @@ class FactMemory:
         query_embedding = await self.embedder.embed_one(query)
 
         context = await retrieve_with_observations(
-            self.facts, self.observations, query, query_embedding,
-            seed_limit=limit, query_time=query_time,
+            self.facts,
+            self.observations,
+            query,
+            query_embedding,
+            seed_limit=limit,
+            query_time=query_time,
         )
 
         async with self.transaction():

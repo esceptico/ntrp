@@ -180,7 +180,9 @@ _SQL_COUNT_ARCHIVED = "SELECT COUNT(*) FROM facts WHERE archived_at IS NOT NULL"
 _SQL_UPDATE_TEXT = "UPDATE facts SET text = ?, embedding = ?, consolidated_at = NULL WHERE id = ?"
 _SQL_COUNT_ENTITY_REFS_FOR_FACT = "SELECT COUNT(*) FROM entity_refs WHERE fact_id = ?"
 _SQL_RESET_CONSOLIDATED = "UPDATE facts SET consolidated_at = NULL WHERE consolidated_at IS NOT NULL"
-_SQL_LIST_ALL_WITH_EMBEDDINGS = "SELECT * FROM facts WHERE embedding IS NOT NULL AND archived_at IS NULL ORDER BY created_at DESC"
+_SQL_LIST_ALL_WITH_EMBEDDINGS = (
+    "SELECT * FROM facts WHERE embedding IS NOT NULL AND archived_at IS NULL ORDER BY created_at DESC"
+)
 _SQL_UPDATE_EMBEDDING = "UPDATE facts SET embedding = ? WHERE id = ?"
 
 
@@ -474,9 +476,7 @@ class FactRepository:
         await self.conn.execute(_SQL_INSERT_TEMPORAL_CHECKPOINT, (entity_id, window_end, now.isoformat()))
 
     async def list_all_with_embeddings(self) -> list[Fact]:
-        rows = await self.conn.execute_fetchall(
-            _SQL_LIST_ALL_WITH_EMBEDDINGS
-        )
+        rows = await self.conn.execute_fetchall(_SQL_LIST_ALL_WITH_EMBEDDINGS)
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def archive_batch(self, fact_ids: list[int]) -> int:
