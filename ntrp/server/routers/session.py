@@ -62,9 +62,7 @@ async def get_session(
 
 
 @router.post("/session/clear")
-async def clear_session(
-    svc: SessionService = Depends(require_session_service), req: ClearSessionRequest | None = None
-):
+async def clear_session(svc: SessionService = Depends(require_session_service), req: ClearSessionRequest | None = None):
     target_id = req.session_id if req else None
 
     data = await svc.load(target_id)

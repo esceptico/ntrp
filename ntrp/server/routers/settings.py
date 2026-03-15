@@ -5,8 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
 
 from ntrp.config import PROVIDER_KEY_FIELDS, SERVICE_KEY_FIELDS
-from ntrp.settings import mask_api_key
-from ntrp.settings import load_user_settings, save_user_settings
 from ntrp.llm.claude_oauth import is_configured as oauth_configured
 from ntrp.llm.claude_oauth import login as oauth_login
 from ntrp.llm.models import (
@@ -37,9 +35,9 @@ from ntrp.server.schemas import (
     UpdateDirectivesRequest,
     UpdateEmbeddingRequest,
 )
-from ntrp.services.session import compact_session
 from ntrp.services.config import ConfigService
-from ntrp.services.session import SessionService
+from ntrp.services.session import SessionService, compact_session
+from ntrp.settings import load_user_settings, mask_api_key, save_user_settings
 from ntrp.tools.directives import load_directives, save_directives
 
 router = APIRouter(tags=["settings"])

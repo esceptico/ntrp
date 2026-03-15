@@ -271,5 +271,3 @@ class BashTool(Tool):
             content=f"Background task {task_id} started: {command}",
             preview=f"Background · {task_id}",
         )
-
-
