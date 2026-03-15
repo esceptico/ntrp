@@ -39,7 +39,9 @@ class NotificationLogStore:
         await self.conn.commit()
 
     async def save(self, task_id: str, subject: str, body: str, notifier_names: list[str]) -> None:
-        await self.conn.execute(SQL_SAVE, (task_id, subject, body, json.dumps(notifier_names), datetime.now(UTC).isoformat()))
+        await self.conn.execute(
+            SQL_SAVE, (task_id, subject, body, json.dumps(notifier_names), datetime.now(UTC).isoformat())
+        )
         await self.conn.commit()
 
     async def recent(self, limit: int = 20, task_id: str | None = None) -> list[NotificationLogEntry]:

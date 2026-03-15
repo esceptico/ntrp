@@ -29,7 +29,6 @@ def _inline_refs(schema: dict) -> dict:
     return _resolve(schema)
 
 
-# Re-export for backwards compat
 __all__ = ["Tool", "ToolResult", "ApprovalInfo"]
 
 
