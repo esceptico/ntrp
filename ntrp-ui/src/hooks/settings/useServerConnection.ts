@@ -16,7 +16,6 @@ export interface UseServerConnectionResult {
   serverApiKeyCursor: number;
   serverSaving: boolean;
   serverError: string | null;
-  streaming: boolean;
   handleKeypress: (key: Key) => void;
   isEditing: boolean;
   cancelEdit: () => void;
@@ -25,8 +24,6 @@ export interface UseServerConnectionResult {
 export function useServerConnection(
   config: Config,
   onServerCredentialsChange: (config: Config) => void,
-  streaming: boolean = true,
-  onToggleStreaming?: () => void,
 ): UseServerConnectionResult {
   const [serverIndex, setServerIndex] = useState(0);
   const [editingServer, setEditingServer] = useState(false);
@@ -102,16 +99,12 @@ export function useServerConnection(
         handleServerApiKeyKey(key);
       }
     } else {
-      if (handleListNav(key, 3, setServerIndex)) {
+      if (handleListNav(key, 2, setServerIndex)) {
         // handled
       } else if (key.name === "return" || key.name === "space") {
-        if (serverIndex === 2) {
-          onToggleStreaming?.();
-        } else {
-          setServerUrlCursor(serverUrl.length);
-          setServerApiKeyCursor(serverApiKey.length);
-          setEditingServer(true);
-        }
+        setServerUrlCursor(serverUrl.length);
+        setServerApiKeyCursor(serverApiKey.length);
+        setEditingServer(true);
       }
     }
   }, [editingServer, serverIndex, serverUrl, serverApiKey, handleSaveServer, handleServerUrlKey, handleServerApiKeyKey]);
@@ -125,7 +118,6 @@ export function useServerConnection(
     serverApiKeyCursor,
     serverSaving,
     serverError,
-    streaming,
     handleKeypress,
     isEditing,
     cancelEdit: handleCancelServerEdit,

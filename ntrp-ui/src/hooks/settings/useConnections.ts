@@ -9,13 +9,13 @@ import {
   updateBrowser,
   getServerConfig,
 } from "../../api/client.js";
-import type { ConnectionItem } from "../../components/dialogs/settings/config.js";
-import { CONNECTION_ITEMS, TOGGLEABLE_SOURCES } from "../../components/dialogs/settings/config.js";
+import type { SourceItem } from "../../components/dialogs/settings/config.js";
+import { SOURCE_ITEMS, TOGGLEABLE_SOURCES } from "../../components/dialogs/settings/config.js";
 import { useVaultPath, type UseVaultPathResult } from "./useVaultPath.js";
 import type { Key } from "../useKeypress.js";
 
 export interface UseConnectionsResult {
-  connectionItem: ConnectionItem;
+  sourceItem: SourceItem;
   googleAccounts: GoogleAccount[];
   selectedGoogleIndex: number;
   actionInProgress: string | null;
@@ -40,7 +40,7 @@ export function useConnections(
 ): UseConnectionsResult {
   const vault = useVaultPath(config, serverConfig, onServerConfigChange);
 
-  const [connectionItem, setConnectionItem] = useState<ConnectionItem>("vault");
+  const [sourceItem, setSourceItem] = useState<SourceItem>("vault");
   const [googleAccounts, setGoogleAccounts] = useState<GoogleAccount[]>([]);
   const [selectedGoogleIndex, setSelectedGoogleIndex] = useState(0);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
@@ -91,9 +91,7 @@ export function useConnections(
 
   const handleToggleSource = useCallback(async (source: string) => {
     if (actionInProgress || !serverConfig?.sources) return;
-    const current = source === "dreams"
-      ? serverConfig.sources.memory?.dreams ?? false
-      : serverConfig.sources[source]?.enabled ?? false;
+    const current = serverConfig.sources[source]?.enabled ?? false;
     setActionInProgress("Updating...");
     try {
       await updateConfig(config, { sources: { [source]: !current } });
@@ -156,8 +154,8 @@ export function useConnections(
       return;
     }
 
-    const connIdx = CONNECTION_ITEMS.indexOf(connectionItem);
-    const isGoogleSource = connectionItem === "google";
+    const connIdx = SOURCE_ITEMS.indexOf(sourceItem);
+    const isGoogleSource = sourceItem === "google";
     const sourceEnabled = isGoogleSource && serverConfig?.sources?.google?.enabled;
     const hasAccountList = sourceEnabled && googleAccounts.length > 0;
 
@@ -165,27 +163,27 @@ export function useConnections(
       if (hasAccountList && selectedGoogleIndex > 0) {
         setSelectedGoogleIndex(i => i - 1);
       } else if (connIdx > 0) {
-        setConnectionItem(CONNECTION_ITEMS[connIdx - 1]);
+        setSourceItem(SOURCE_ITEMS[connIdx - 1]);
         setSelectedGoogleIndex(0);
       }
     } else if (key.name === "down" || key.name === "j") {
       if (hasAccountList && selectedGoogleIndex < googleAccounts.length - 1) {
         setSelectedGoogleIndex(i => i + 1);
-      } else if (connIdx < CONNECTION_ITEMS.length - 1) {
-        setConnectionItem(CONNECTION_ITEMS[connIdx + 1]);
+      } else if (connIdx < SOURCE_ITEMS.length - 1) {
+        setSourceItem(SOURCE_ITEMS[connIdx + 1]);
         setSelectedGoogleIndex(0);
       }
     } else if (key.name === "return" || key.name === "space") {
-      if (connectionItem === "vault") {
+      if (sourceItem === "vault") {
         vault.handleStartVaultEdit();
-      } else if (connectionItem === "browser") {
+      } else if (sourceItem === "browser") {
         setShowingBrowserDropdown(true);
-      } else if (TOGGLEABLE_SOURCES.includes(connectionItem)) {
-        handleToggleSource(connectionItem);
+      } else if (TOGGLEABLE_SOURCES.includes(sourceItem)) {
+        handleToggleSource(sourceItem);
       }
-    } else if ((key.name === "right" || key.name === "l") && connectionItem === "web") {
+    } else if ((key.name === "right" || key.name === "l") && sourceItem === "web") {
       handleChangeWebSearch(1);
-    } else if ((key.name === "left" || key.name === "h") && connectionItem === "web") {
+    } else if ((key.name === "left" || key.name === "h") && sourceItem === "web") {
       handleChangeWebSearch(-1);
     } else if (key.sequence === "a" && isGoogleSource && sourceEnabled) {
       handleAddGoogle();
@@ -193,13 +191,13 @@ export function useConnections(
       handleRemoveGoogle();
     }
   }, [
-    connectionItem, serverConfig, googleAccounts, selectedGoogleIndex,
+    sourceItem, serverConfig, googleAccounts, selectedGoogleIndex,
     vault.editingVault, vault.handleCancelVaultEdit, vault.handleSaveVault, vault.handleVaultKey,
     vault.handleStartVaultEdit, handleToggleSource, handleChangeWebSearch, handleAddGoogle, handleRemoveGoogle,
   ]);
 
   return {
-    connectionItem,
+    sourceItem,
     googleAccounts,
     selectedGoogleIndex,
     actionInProgress,

@@ -1,14 +1,18 @@
-import { colors, Hints } from "../../../ui/index.js";
+import { colors } from "../../../ui/index.js";
 import type { ProviderInfo } from "../../../../api/client.js";
 import type { UseProvidersResult } from "../../../../hooks/settings/useProviders.js";
+import type { UseServicesResult } from "../../../../hooks/settings/useServices.js";
 import { CredentialSection } from "./CredentialSection.js";
+import { Header } from "../SettingsRows.js";
 
-interface ProvidersSectionProps {
+interface ApiKeysSectionProps {
   providers: UseProvidersResult;
+  services: UseServicesResult;
+  activeList: "providers" | "services";
   accent: string;
 }
 
-function renderStatus(provider: ProviderInfo, _selected: boolean) {
+function renderProviderStatus(provider: ProviderInfo, _selected: boolean) {
   if (provider.id === "custom") {
     return (
       <text>
@@ -30,41 +34,30 @@ function renderStatus(provider: ProviderInfo, _selected: boolean) {
   return <text><span fg={colors.text.disabled}>not connected</span></text>;
 }
 
-function renderHints(item: ProviderInfo) {
-  if (item?.id === "custom") {
-    return <text><span fg={colors.text.disabled}>use /connect to manage custom models</span></text>;
-  }
-  if (item?.id === "claude_oauth") {
-    return item.connected
-      ? <Hints items={[["d", "disconnect"]]} />
-      : <Hints items={[["enter", "connect via browser"]]} />;
-  }
-  if (item?.connected && !item.from_env) {
-    return null;
-  }
-  if (item?.from_env) {
-    return <text><span fg={colors.text.disabled}>set via environment variable</span></text>;
-  }
-  return null;
-}
+export function ApiKeysSection({ providers, services, activeList, accent }: ApiKeysSectionProps) {
+  const inactiveAccent = colors.text.disabled;
 
-export function ProvidersSection({ providers, accent }: ProvidersSectionProps) {
   return (
     <box flexDirection="column">
+      <Header first>Providers</Header>
       <CredentialSection
         state={providers}
-        accent={accent}
+        accent={activeList === "providers" ? accent : inactiveAccent}
         labelWidth={28}
-        renderStatus={renderStatus}
-        renderHints={renderHints}
+        renderStatus={renderProviderStatus}
         isEditable={(p) => p.id !== "custom" && p.id !== "claude_oauth"}
-        suppressHints={providers.oauthConnecting}
       />
       {providers.oauthConnecting && (
         <box marginTop={1}>
           <text><span fg={colors.text.muted}>  Waiting for browser login...</span></text>
         </box>
       )}
+
+      <Header>Services</Header>
+      <CredentialSection
+        state={services}
+        accent={activeList === "services" ? accent : inactiveAccent}
+      />
     </box>
   );
 }

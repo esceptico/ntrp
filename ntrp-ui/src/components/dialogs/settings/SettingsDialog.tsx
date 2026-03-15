@@ -6,10 +6,14 @@ import { useAccentColor } from "../../../hooks/index.js";
 import type { ServerConfig } from "../../../api/client.js";
 import { SectionId, SECTION_IDS, SECTION_LABELS } from "./config.js";
 import { DialogSelect, type SelectOption } from "../../ui/index.js";
-import { ConnectionsSection } from "./ConnectionsSection.js";
-import { DirectivesSection, LimitsSection, MCPSection, NotifiersSection, ProvidersSection, ServerSection, ServicesSection, SkillsSection, SidebarSection } from "./sections/index.js";
+import {
+  ConnectionSection, ApiKeysSection, SourcesSection, MemorySection,
+  DirectivesSection, ContextSection, AgentSection,
+  NotifiersSection, SkillsSection, MCPSection, InterfaceSection,
+} from "./sections/index.js";
 import { useSettingsState } from "../../../hooks/useSettingsState.js";
 import { useSettingsKeypress } from "../../../hooks/useSettingsKeypress.js";
+import { getSectionHints } from "./sectionHints.js";
 
 interface SettingsDialogProps {
   config: Config;
@@ -34,7 +38,7 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
   const { accentValue: accent } = useAccentColor();
 
-  const [activeSection, setActiveSection] = useState<SectionId>("server");
+  const [activeSection, setActiveSection] = useState<SectionId>("connection");
   const [drilled, setDrilled] = useState(false);
 
   const state = useSettingsState({
@@ -62,24 +66,21 @@ export function SettingsDialog({
     { value: null, title: "None (disable)", indicator: serverConfig?.browser == null ? "●" : undefined },
   ];
 
-  if (state.connections.showingBrowserDropdown) {
+  if (state.sources.showingBrowserDropdown) {
     return (
       <DialogSelect<string | null>
         title="Browser"
         options={browserOptions}
         initialIndex={Math.max(0, browserOptions.findIndex(o => o.value === (serverConfig?.browser || null)))}
-        onSelect={(opt) => state.connections.handleSelectBrowser(opt.value)}
-        onClose={() => state.connections.setShowingBrowserDropdown(false)}
+        onSelect={(opt) => state.sources.handleSelectBrowser(opt.value)}
+        onClose={() => state.sources.setShowingBrowserDropdown(false)}
       />
     );
   }
 
-  const inToolsMode = drilled && activeSection === "mcp" && state.mcp.mcpMode === "tools";
-  const footerHints = inToolsMode
-    ? [["↑↓", "navigate"], ["space", "toggle"], ["a", "all/none"], ["^s", "save"], ["esc", "back"]] as [string, string][]
-    : drilled
-      ? [["↑↓", "navigate"], ["enter", "select"], ["←→", "adjust"], ["esc", "back"]] as [string, string][]
-      : [["↑↓", "section"], ["enter", "open"], ["esc", "close"]] as [string, string][];
+  const footerHints = !drilled
+    ? [["↑↓", "section"], ["enter", "open"], ["esc", "close"]] as [string, string][]
+    : getSectionHints(activeSection, state, serverConfig);
 
   return (
     <Dialog
@@ -122,22 +123,23 @@ export function SettingsDialog({
 
               {/* Detail pane */}
               <box flexDirection="column" width={detailWidth} height={contentHeight} overflow="hidden">
-                {activeSection === "providers" && <ProvidersSection providers={state.providers} accent={accent} />}
-                {activeSection === "services" && <ServicesSection services={state.services} accent={accent} />}
-                {activeSection === "server" && <ServerSection server={state.server} accent={accent} />}
-                {activeSection === "directives" && <DirectivesSection directives={state.directives} accent={accent} height={contentHeight} />}
+                {activeSection === "connection" && <ConnectionSection server={state.server} accent={accent} />}
+                {activeSection === "apiKeys" && <ApiKeysSection providers={state.providers} services={state.services} activeList={state.apiKeys.activeList} accent={accent} />}
+                {activeSection === "sources" && <SourcesSection sources={state.sources} serverConfig={serverConfig} accent={accent} width={detailWidth} />}
+                {activeSection === "memory" && <MemorySection memory={state.memory} serverConfig={serverConfig} agentSettings={settings.agent} accent={accent} />}
+                {activeSection === "instructions" && <DirectivesSection directives={state.directives} accent={accent} height={contentHeight} />}
+                {activeSection === "context" && <ContextSection settings={settings.agent} selectedIndex={state.context.contextIndex} accent={accent} />}
+                {activeSection === "agent" && <AgentSection settings={settings.agent} selectedIndex={state.agent.agentIndex} accent={accent} />}
+                {activeSection === "notifications" && <NotifiersSection notifiers={state.notifiers} accent={accent} />}
                 {activeSection === "skills" && <SkillsSection skills={state.skills} accent={accent} width={detailWidth} height={contentHeight} />}
-                {activeSection === "connections" && <ConnectionsSection connections={state.connections} serverConfig={serverConfig} accent={accent} width={detailWidth} />}
-                {activeSection === "notifiers" && <NotifiersSection notifiers={state.notifiers} accent={accent} />}
                 {activeSection === "mcp" && <MCPSection mcp={state.mcp} accent={accent} width={detailWidth} height={contentHeight} />}
-                {activeSection === "limits" && <LimitsSection settings={settings.agent} selectedIndex={state.limits.limitsIndex} accent={accent} />}
-                {activeSection === "sidebar" && <SidebarSection sidebar={settings.sidebar} selectedIndex={state.sidebarSettings.sidebarIndex} accent={accent} />}
+                {activeSection === "interface" && <InterfaceSection ui={settings.ui} sidebar={settings.sidebar} selectedIndex={state.iface.interfaceIndex} accent={accent} height={contentHeight} />}
               </box>
             </box>
 
-            {state.connections.actionInProgress && (
+            {(state.sources.actionInProgress || state.memory.actionInProgress) && (
               <box marginTop={1}>
-                <text><span fg={colors.status.warning}>{state.connections.actionInProgress}</span></text>
+                <text><span fg={colors.status.warning}>{state.sources.actionInProgress || state.memory.actionInProgress}</span></text>
               </box>
             )}
           </>

@@ -1,4 +1,5 @@
-import { colors, Hints } from "../../../ui/index.js";
+import { colors } from "../../../ui/index.js";
+import { Row, StatusMessage, FormField } from "../SettingsRows.js";
 import type { UseCredentialSectionResult } from "../../../../hooks/settings/useCredentialSection.js";
 import { MaskedKeyInput } from "./shared.js";
 
@@ -15,9 +16,7 @@ interface CredentialSectionProps<T extends CredentialItem> {
   accent: string;
   labelWidth?: number;
   renderStatus?: (item: T, selected: boolean) => React.ReactNode;
-  renderHints?: (item: T) => React.ReactNode;
   isEditable?: (item: T) => boolean;
-  suppressHints?: boolean;
 }
 
 function DefaultStatus({ item }: { item: CredentialItem }) {
@@ -38,19 +37,11 @@ export function CredentialSection<T extends CredentialItem>({
   accent,
   labelWidth = 24,
   renderStatus,
-  renderHints,
   isEditable,
-  suppressHints,
 }: CredentialSectionProps<T>) {
   if (s.items.length === 0) {
-    return (
-      <box flexDirection="column">
-        <text><span fg={colors.text.muted}>  Loading...</span></text>
-      </box>
-    );
+    return <StatusMessage color={colors.text.muted}>Loading...</StatusMessage>;
   }
-
-  const current = s.items[s.selectedIndex];
 
   return (
     <box flexDirection="column">
@@ -61,61 +52,27 @@ export function CredentialSection<T extends CredentialItem>({
 
         return (
           <box key={item.id} flexDirection="column">
-            <box flexDirection="row">
-              <text>
-                <span fg={selected ? accent : colors.text.disabled}>{selected ? "\u25B8 " : "  "}</span>
-                <span fg={selected ? colors.text.primary : colors.text.secondary}>{item.name.padEnd(labelWidth)}</span>
-              </text>
+            <Row selected={selected} accent={accent} label={item.name} labelWidth={labelWidth}>
               {renderStatus ? renderStatus(item, selected) : <DefaultStatus item={item} />}
-            </box>
+            </Row>
             {isEditing && (
-              <box marginLeft={2}>
-                <box flexDirection="row">
-                  <text><span fg={colors.text.primary}>{"  API Key".padEnd(14)}</span></text>
+              <box marginLeft={4}>
+                <FormField label="API Key" active={true}>
                   <MaskedKeyInput value={s.keyValue} cursor={s.keyCursor} />
-                </box>
+                </FormField>
               </box>
             )}
             {selected && s.confirmDisconnect && (
-              <box marginLeft={2}>
-                <text><span fg={colors.status.warning}>  Disconnect {item.name}? (y/n)</span></text>
+              <box marginLeft={4}>
+                <text><span fg={colors.status.warning}>Disconnect {item.name}? (y/n)</span></text>
               </box>
             )}
           </box>
         );
       })}
 
-      {s.error && (
-        <box marginTop={1}>
-          <text><span fg={colors.status.error}>  {s.error}</span></text>
-        </box>
-      )}
-
-      {s.saving && (
-        <box marginTop={1}>
-          <text><span fg={colors.text.muted}>  Saving...</span></text>
-        </box>
-      )}
-
-      {!s.editing && !s.confirmDisconnect && !s.saving && !suppressHints && (
-        <box marginTop={1} marginLeft={2}>
-          {renderHints?.(current) ?? (
-            current?.connected && !current.from_env ? (
-              <Hints items={[["enter", "edit"], ["d", "disconnect"]]} />
-            ) : current?.from_env ? (
-              <text><span fg={colors.text.disabled}>set via environment variable</span></text>
-            ) : (
-              <Hints items={[["enter", "add key"]]} />
-            )
-          )}
-        </box>
-      )}
-
-      {s.editing && (
-        <box marginTop={1} marginLeft={2}>
-          <Hints items={[["enter", "save"], ["esc", "cancel"]]} />
-        </box>
-      )}
+      {s.error && <StatusMessage color={colors.status.error}>{s.error}</StatusMessage>}
+      {s.saving && <StatusMessage color={colors.text.muted}>Saving...</StatusMessage>}
     </box>
   );
 }

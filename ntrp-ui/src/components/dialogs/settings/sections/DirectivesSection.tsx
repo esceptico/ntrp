@@ -1,6 +1,5 @@
 import { colors } from "../../../ui/colors.js";
 import { TextEditArea } from "../../../ui/TextEditArea.js";
-import { Hints } from "../../../ui/index.js";
 import type { UseDirectivesResult } from "../../../../hooks/settings/useDirectives.js";
 
 interface DirectivesSectionProps {
@@ -22,7 +21,7 @@ export function DirectivesSection({ directives: d, accent, height }: DirectivesS
     return (
       <box flexDirection="column" height={height}>
         <box marginBottom={1}>
-          <text><span fg={accent}>Editing directives</span></text>
+          <text><span fg={accent}>Editing instructions</span></text>
         </box>
         <box flexGrow={1} overflow="hidden">
           <TextEditArea
@@ -33,9 +32,6 @@ export function DirectivesSection({ directives: d, accent, height }: DirectivesS
             placeholder="Enter directives..."
           />
         </box>
-        <box marginTop={1}>
-          <Hints items={[["^s", "save"], ["esc", "cancel"]]} />
-        </box>
       </box>
     );
   }
@@ -44,9 +40,6 @@ export function DirectivesSection({ directives: d, accent, height }: DirectivesS
     return (
       <box flexDirection="column">
         <text><span fg={colors.text.muted}>No directives set.</span></text>
-        <box marginTop={1}>
-          <Hints items={[["enter", "edit"]]} />
-        </box>
       </box>
     );
   }
@@ -58,9 +51,6 @@ export function DirectivesSection({ directives: d, accent, height }: DirectivesS
         {lines.map((line, i) => (
           <text key={i}><span fg={colors.text.secondary}>{line || " "}</span></text>
         ))}
-      </box>
-      <box marginTop={1}>
-        <Hints items={[["enter", "edit"]]} />
       </box>
     </box>
   );

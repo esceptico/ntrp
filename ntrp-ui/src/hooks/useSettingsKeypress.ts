@@ -29,20 +29,21 @@ export function useSettingsKeypress({
   onClose,
 }: UseSettingsKeypressOptions): void {
   const sectionHandlers: Record<SectionId, SectionHandler> = useMemo(() => ({
-    server: state.server,
-    providers: state.providers,
-    services: state.services,
-    directives: state.directives,
-    connections: state.connections,
+    connection: state.server,
+    apiKeys: state.apiKeys,
+    sources: state.sources,
+    memory: state.memory,
+    instructions: state.directives,
+    context: state.context,
+    agent: state.agent,
+    notifications: state.notifiers,
     skills: state.skills,
-    notifiers: state.notifiers,
     mcp: state.mcp,
-    limits: state.limits,
-    sidebar: state.sidebarSettings,
+    interface: state.iface,
   }), [state]);
 
   const handleKeypress = useCallback((key: Key) => {
-    if (state.connections.actionInProgress) return;
+    if (state.sources.actionInProgress || state.memory.actionInProgress) return;
 
     if (key.name === "escape" || key.name === "q") {
       if (drilled) {
@@ -73,11 +74,11 @@ export function useSettingsKeypress({
     sectionHandlers[activeSection].handleKeypress(key);
   }, [
     drilled, activeSection, sectionHandlers,
-    state.connections.actionInProgress,
+    state.sources.actionInProgress, state.memory.actionInProgress,
     onClose, setDrilled, setActiveSection,
   ]);
 
   useKeypress(handleKeypress, {
-    isActive: !state.connections.showingBrowserDropdown,
+    isActive: !state.sources.showingBrowserDropdown,
   });
 }

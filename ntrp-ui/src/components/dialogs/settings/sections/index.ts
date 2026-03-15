@@ -1,9 +1,11 @@
+export { ConnectionSection } from "./ConnectionSection.js";
+export { ApiKeysSection } from "./ApiKeysSection.js";
+export { SourcesSection } from "./SourcesSection.js";
+export { MemorySection } from "./MemorySection.js";
 export { DirectivesSection } from "./DirectivesSection.js";
-export { LimitsSection } from "./LimitsSection.js";
+export { ContextSection } from "./ContextSection.js";
+export { AgentSection } from "./AgentSection.js";
 export { NotifiersSection } from "./NotifiersSection.js";
-export { ProvidersSection } from "./ProvidersSection.js";
-export { ServerSection } from "./ServerSection.js";
-export { ServicesSection } from "./ServicesSection.js";
 export { SkillsSection } from "./SkillsSection.js";
 export { MCPSection } from "./MCPSection.js";
-export { SidebarSection } from "./SidebarSection.js";
+export { InterfaceSection } from "./InterfaceSection.js";

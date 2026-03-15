@@ -1,40 +1,40 @@
 import { useCallback, useState } from "react";
 import type { Settings } from "../useSettings.js";
 import type { Key } from "../useKeypress.js";
-import { LIMIT_ITEMS } from "../../components/dialogs/settings/config.js";
+import { AGENT_ITEMS } from "../../components/dialogs/settings/config.js";
 import { handleListNav } from "../keyUtils.js";
 
-export interface UseLimitsResult {
-  limitsIndex: number;
+export interface UseAgentSettingsResult {
+  agentIndex: number;
   handleKeypress: (key: Key) => void;
   isEditing: boolean;
   cancelEdit: () => void;
 }
 
-export function useLimits(
+export function useAgentSettings(
   settings: Settings,
   onUpdate: (category: keyof Settings, key: string, value: unknown) => void,
-): UseLimitsResult {
-  const [limitsIndex, setLimitsIndex] = useState(0);
+): UseAgentSettingsResult {
+  const [agentIndex, setAgentIndex] = useState(0);
 
   const handleKeypress = useCallback((key: Key) => {
-    if (handleListNav(key, LIMIT_ITEMS.length, setLimitsIndex)) {
+    if (handleListNav(key, AGENT_ITEMS.length, setAgentIndex)) {
       // handled
     } else if (key.name === "left" || key.name === "h") {
-      const item = LIMIT_ITEMS[limitsIndex];
+      const item = AGENT_ITEMS[agentIndex];
       const val = settings.agent[item.key as keyof typeof settings.agent] as number;
       const step = item.step ?? 1;
       if (val > item.min) onUpdate("agent", item.key, Math.max(item.min, val - step));
     } else if (key.name === "right" || key.name === "l") {
-      const item = LIMIT_ITEMS[limitsIndex];
+      const item = AGENT_ITEMS[agentIndex];
       const val = settings.agent[item.key as keyof typeof settings.agent] as number;
       const step = item.step ?? 1;
       if (val < item.max) onUpdate("agent", item.key, Math.min(item.max, val + step));
     }
-  }, [limitsIndex, settings, onUpdate]);
+  }, [agentIndex, settings, onUpdate]);
 
   return {
-    limitsIndex,
+    agentIndex,
     handleKeypress,
     isEditing: false,
     cancelEdit: () => {},

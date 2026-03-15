@@ -10,8 +10,11 @@ import { useServerConnection, type UseServerConnectionResult } from "./settings/
 import { useDirectives, type UseDirectivesResult } from "./settings/useDirectives.js";
 import { useConnections, type UseConnectionsResult } from "./settings/useConnections.js";
 import { useMCPServers, type UseMCPServersResult } from "./settings/useMCPServers.js";
-import { useLimits, type UseLimitsResult } from "./settings/useLimits.js";
-import { useSidebarSettings, type UseSidebarSettingsResult } from "./settings/useSidebarSettings.js";
+import { useApiKeys, type UseApiKeysResult } from "./settings/useApiKeys.js";
+import { useMemorySettings, type UseMemorySettingsResult } from "./settings/useMemorySettings.js";
+import { useContextSettings, type UseContextSettingsResult } from "./settings/useContextSettings.js";
+import { useAgentSettings, type UseAgentSettingsResult } from "./settings/useAgentSettings.js";
+import { useInterfaceSettings, type UseInterfaceSettingsResult } from "./settings/useInterfaceSettings.js";
 
 export interface UseSettingsStateOptions {
   config: Config;
@@ -27,12 +30,15 @@ export interface UseSettingsStateResult {
   services: UseServicesResult;
   server: UseServerConnectionResult;
   directives: UseDirectivesResult;
-  connections: UseConnectionsResult;
+  sources: UseConnectionsResult;
   notifiers: UseNotifiersResult;
   skills: UseSkillsResult;
   mcp: UseMCPServersResult;
-  limits: UseLimitsResult;
-  sidebarSettings: UseSidebarSettingsResult;
+  apiKeys: UseApiKeysResult;
+  memory: UseMemorySettingsResult;
+  context: UseContextSettingsResult;
+  agent: UseAgentSettingsResult;
+  iface: UseInterfaceSettingsResult;
 }
 
 export function useSettingsState({
@@ -45,19 +51,18 @@ export function useSettingsState({
 }: UseSettingsStateOptions): UseSettingsStateResult {
   const providers = useProviders(config);
   const services = useServices(config);
-  const server = useServerConnection(
-    config,
-    onServerCredentialsChange,
-    settings.ui.streaming,
-    () => onUpdate("ui", "streaming", !settings.ui.streaming),
-  );
+  const server = useServerConnection(config, onServerCredentialsChange);
   const directives = useDirectives(config);
-  const connections = useConnections(config, serverConfig, onServerConfigChange);
+  const sources = useConnections(config, serverConfig, onServerConfigChange);
   const mcp = useMCPServers(config);
-  const limits = useLimits(settings, onUpdate);
-  const sidebarSettings = useSidebarSettings(settings, onUpdate);
   const notifiers = useNotifiers(config);
   const skills = useSkills(config);
+
+  const apiKeys = useApiKeys(providers, services);
+  const memory = useMemorySettings(config, serverConfig, onServerConfigChange, settings, onUpdate);
+  const context = useContextSettings(settings, onUpdate);
+  const agent = useAgentSettings(settings, onUpdate);
+  const iface = useInterfaceSettings(settings, onUpdate);
 
   useEffect(() => {
     providers.refresh();
@@ -71,11 +76,14 @@ export function useSettingsState({
     services,
     server,
     directives,
-    connections,
+    sources,
     notifiers,
     skills,
     mcp,
-    limits,
-    sidebarSettings,
+    apiKeys,
+    memory,
+    context,
+    agent,
+    iface,
   };
 }

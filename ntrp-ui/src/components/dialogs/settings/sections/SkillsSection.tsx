@@ -1,4 +1,5 @@
-import { colors, truncateText, TextInputField, Hints } from "../../../ui/index.js";
+import { colors, truncateText, TextInputField } from "../../../ui/index.js";
+import { Row, StatusMessage } from "../SettingsRows.js";
 import type { UseSkillsResult } from "../../../../hooks/useSkills.js";
 
 interface SkillsSectionProps {
@@ -13,14 +14,10 @@ function ListMode({ skills: s, accent, width, height }: SkillsSectionProps) {
     return (
       <box flexDirection="column">
         <text><span fg={colors.text.muted}>No skills installed</span></text>
-        <box marginTop={1}>
-          <Hints items={[["a", "install from GitHub"]]} />
-        </box>
       </box>
     );
   }
 
-  // Each skill = 2 lines (name + desc). Reserve 2 lines for hints footer.
   const linesPerItem = 2;
   const reservedLines = 2;
   const visibleCount = Math.max(1, Math.floor((height - reservedLines) / linesPerItem));
@@ -28,7 +25,6 @@ function ListMode({ skills: s, accent, width, height }: SkillsSectionProps) {
   const scrollStart = Math.min(maxStart, Math.max(0, s.selectedIndex - visibleCount + 1));
   const visibleSkills = s.skills.slice(scrollStart, scrollStart + visibleCount);
 
-  // "  " prefix = 2, " " separator = 1, leave some room for location
   const nameMaxWidth = Math.max(10, width - 2);
   const descWidth = Math.max(10, width - 4);
 
@@ -37,31 +33,22 @@ function ListMode({ skills: s, accent, width, height }: SkillsSectionProps) {
       {visibleSkills.map((skill, vi) => {
         const idx = scrollStart + vi;
         const selected = idx === s.selectedIndex;
-        const arrow = selected ? "> " : "  ";
         const nameAndLoc = skill.name + " " + skill.location;
         const clipped = nameAndLoc.length > nameMaxWidth
           ? nameAndLoc.slice(0, nameMaxWidth - 1) + "\u2026"
           : nameAndLoc;
         return (
           <box key={skill.name} flexDirection="column">
-            <text>
-              <span fg={selected ? accent : colors.text.disabled}>{arrow}</span>
-              <span fg={selected ? accent : colors.text.primary}>{clipped}</span>
-            </text>
-            <text>
-              <span fg={colors.text.muted}>{"  "}{truncateText(skill.description, descWidth)}</span>
-            </text>
+            <Row selected={selected} accent={accent} arrow>
+              <text><span fg={selected ? accent : colors.text.primary}>{clipped}</span></text>
+            </Row>
+            <box marginLeft={2}>
+              <text><span fg={colors.text.muted}>{truncateText(skill.description, descWidth)}</span></text>
+            </box>
           </box>
         );
       })}
-      {s.error && (
-        <box marginTop={1}>
-          <text><span fg={colors.status.error}>{s.error}</span></text>
-        </box>
-      )}
-      <box marginTop={1}>
-        <Hints items={[["a", "install"], ["d", "remove"]]} />
-      </box>
+      {s.error && <StatusMessage color={colors.status.error}>{s.error}</StatusMessage>}
     </box>
   );
 }
@@ -84,19 +71,8 @@ function InstallMode({ skills: s, accent }: SkillsSectionProps) {
       <box marginTop={1}>
         <text><span fg={colors.text.muted}>e.g. anthropics/skills/skills/pdf</span></text>
       </box>
-      {s.installing && (
-        <box marginTop={1}>
-          <text><span fg={colors.status.warning}>Installing...</span></text>
-        </box>
-      )}
-      {s.error && (
-        <box marginTop={1}>
-          <text><span fg={colors.status.error}>{s.error}</span></text>
-        </box>
-      )}
-      <box marginTop={1}>
-        <Hints items={[["enter", "install"], ["esc", "cancel"]]} />
-      </box>
+      {s.installing && <StatusMessage color={colors.status.warning}>Installing...</StatusMessage>}
+      {s.error && <StatusMessage color={colors.status.error}>{s.error}</StatusMessage>}
     </box>
   );
 }
@@ -112,9 +88,6 @@ function ConfirmDeleteMode({ skills: s, accent }: SkillsSectionProps) {
         <span fg={accent}><strong>{skill.name}</strong></span>
         <span fg={colors.status.warning}>?</span>
       </text>
-      <box marginTop={1}>
-        <Hints items={[["y", "confirm"], ["n/esc", "cancel"]]} />
-      </box>
     </box>
   );
 }

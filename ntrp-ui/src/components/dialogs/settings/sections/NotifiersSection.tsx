@@ -1,5 +1,5 @@
 import type React from "react";
-import { colors, SelectionIndicator, TextInputField, Hints } from "../../../ui/index.js";
+import { colors, SelectionIndicator, TextInputField } from "../../../ui/index.js";
 import type { UseNotifiersResult } from "../../../../hooks/useNotifiers.js";
 import { NOTIFIER_TYPE_ORDER as TYPE_ORDER, NOTIFIER_TYPE_LABELS as TYPE_LABELS, NOTIFIER_TYPE_DESCRIPTIONS as TYPE_DESCRIPTIONS } from "../config.js";
 
@@ -17,9 +17,6 @@ function ListMode({ notifiers, accent }: NotifiersSectionProps) {
     return (
       <box flexDirection="column">
         <text><span fg={colors.text.muted}>No notifiers configured</span></text>
-        <box marginTop={1}>
-          <Hints items={[["a", "add"]]} />
-        </box>
       </box>
     );
   }
@@ -54,9 +51,6 @@ function ListMode({ notifiers, accent }: NotifiersSectionProps) {
           </text>
         </box>
       )}
-      <box marginTop={testing || testResult ? 0 : 1}>
-        <Hints items={[["a", "add"], ["e", "edit"], ["t", "test"], ["d", "delete"]]} />
-      </box>
     </box>
   );
 }
@@ -84,9 +78,6 @@ function AddTypeMode({ notifiers, accent }: NotifiersSectionProps) {
           </box>
         );
       })}
-      <box marginTop={1}>
-        <Hints items={[["enter", "select"], ["esc", "cancel"]]} />
-      </box>
     </box>
   );
 }
@@ -189,9 +180,6 @@ function FormMode({ notifiers, accent }: NotifiersSectionProps) {
           <text><span fg={colors.status.error}>{error}</span></text>
         </box>
       )}
-      <box marginTop={1}>
-        <Hints items={[["↑↓", "field"], ["enter", "next/save"], ["^s", "save"], ["esc", "cancel"]]} />
-      </box>
     </box>
   );
 }
@@ -207,9 +195,6 @@ function ConfirmDeleteMode({ notifiers, accent }: NotifiersSectionProps) {
         <span fg={accent}><strong>{cfg.name}</strong></span>
         <span fg={colors.status.warning}>?</span>
       </text>
-      <box marginTop={1}>
-        <Hints items={[["y", "confirm"], ["n/esc", "cancel"]]} />
-      </box>
     </box>
   );
 }

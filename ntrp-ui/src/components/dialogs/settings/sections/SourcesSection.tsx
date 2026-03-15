@@ -1,27 +1,27 @@
-import { colors, truncateText, SelectionIndicator, Hints } from "../../ui/index.js";
-import { TextInputField } from "../../ui/input/TextInputField.js";
-import type { ServerConfig, GoogleAccount } from "../../../api/client.js";
-import { CONNECTION_LABELS, type ConnectionItem } from "./config.js";
-import type { UseConnectionsResult } from "../../../hooks/settings/useConnections.js";
+import { colors, truncateText } from "../../../ui/index.js";
+import { TextInputField } from "../../../ui/input/TextInputField.js";
+import { SelectionIndicator } from "../../../ui/index.js";
+import type { ServerConfig, GoogleAccount } from "../../../../api/client.js";
+import { SOURCE_LABELS, type SourceItem } from "../config.js";
+import { Row as SettingsRow } from "../SettingsRows.js";
+import type { UseConnectionsResult } from "../../../../hooks/settings/useConnections.js";
 
-
-interface ConnectionsSectionProps {
-  connections: UseConnectionsResult;
+interface SourcesSectionProps {
+  sources: UseConnectionsResult;
   serverConfig: ServerConfig | null;
   accent: string;
   width: number;
 }
 
-export function ConnectionsSection({ connections: c, serverConfig, accent, width }: ConnectionsSectionProps) {
+export function SourcesSection({ sources: c, serverConfig, accent, width }: SourcesSectionProps) {
   const valueWidth = Math.max(0, width - 20);
   const sources = serverConfig?.sources;
-  const isGoogleSource = c.connectionItem === "google";
+  const isGoogleSource = c.sourceItem === "google";
   const sourceEnabled = isGoogleSource && sources?.google?.enabled;
 
   return (
     <box flexDirection="column">
-      {/* Vault / Notes */}
-      <Row item="vault" selected={c.connectionItem === "vault"} accent={accent}>
+      <Row item="vault" selected={c.sourceItem === "vault"} accent={accent}>
         {c.vault.editingVault ? (
           <box flexDirection="row">
             <text><span fg={colors.text.muted}>[</span></text>
@@ -50,15 +50,13 @@ export function ConnectionsSection({ connections: c, serverConfig, accent, width
         </box>
       )}
 
-      {/* Google */}
-      <GoogleRow item="google" selectedItem={c.connectionItem} sources={sources} accounts={c.googleAccounts} accent={accent} />
+      <GoogleRow item="google" selectedItem={c.sourceItem} sources={sources} accounts={c.googleAccounts} accent={accent} />
 
       {isGoogleSource && sourceEnabled && c.googleAccounts.length > 0 && (
         <AccountList accounts={c.googleAccounts} selectedIndex={c.selectedGoogleIndex} accent={accent} valueWidth={valueWidth} />
       )}
 
-      {/* Browser */}
-      <Row item="browser" selected={c.connectionItem === "browser"} accent={accent}>
+      <Row item="browser" selected={c.sourceItem === "browser"} accent={accent}>
         {c.updatingBrowser ? (
           <text><span fg={colors.status.warning}>Updating...</span></text>
         ) : serverConfig?.has_browser ? (
@@ -73,66 +71,18 @@ export function ConnectionsSection({ connections: c, serverConfig, accent, width
         </box>
       )}
 
-      {/* Memory */}
-      <Row item="memory" selected={c.connectionItem === "memory"} accent={accent}>
-        <Toggle enabled={sources?.memory?.enabled} accent={accent} />
+      <Row item="web" selected={c.sourceItem === "web"} accent={accent}>
         <text>
-          <span fg={sources?.memory?.enabled ? colors.text.primary : colors.text.muted}>
-            {sources?.memory?.enabled ? "Active" : "Disabled"}
-          </span>
-        </text>
-      </Row>
-
-      {/* Dreams (only when memory is enabled) */}
-      {sources?.memory?.enabled && (
-        <Row item="dreams" selected={c.connectionItem === "dreams"} accent={accent}>
-          <Toggle enabled={sources?.memory?.dreams} accent={accent} />
-          <text>
-            <span fg={sources?.memory?.dreams ? colors.text.primary : colors.text.muted}>
-              {sources?.memory?.dreams ? "Active" : "Disabled"}
-            </span>
-          </text>
-        </Row>
-      )}
-
-      {/* Web Search */}
-      <Row item="web" selected={c.connectionItem === "web"} accent={accent}>
-        <text>
-          {c.connectionItem === "web" && <span fg={colors.text.muted}>◂ </span>}
+          {c.sourceItem === "web" && <span fg={colors.text.muted}>◂ </span>}
           <span fg={sources?.web?.connected ? colors.text.primary : colors.text.muted}>
             {formatWebSearchStatus(serverConfig)}
           </span>
-          {c.connectionItem === "web" && <span fg={colors.text.muted}> ▸</span>}
+          {c.sourceItem === "web" && <span fg={colors.text.muted}> ▸</span>}
         </text>
       </Row>
-      {/* Hints — always visible */}
-      <box marginTop={1}>
-        <HintRow item={c.connectionItem} editingVault={c.vault.editingVault} sourceEnabled={sourceEnabled} />
-      </box>
+
     </box>
   );
-}
-
-function HintRow({ item, editingVault, sourceEnabled }: { item: ConnectionItem; editingVault: boolean; sourceEnabled?: boolean }) {
-  switch (item) {
-    case "vault":
-      return editingVault
-        ? <Hints items={[["enter", "save"], ["esc", "cancel"]]} />
-        : <Hints items={[["enter", "edit path"]]} />;
-    case "google":
-      if (sourceEnabled) {
-        return <Hints items={[["enter", "toggle"], ["a", "add account"], ["d", "remove account"]]} />;
-      }
-      return <Hints items={[["enter", "enable"]]} />;
-    case "memory":
-      return <Hints items={[["enter", "toggle"]]} />;
-    case "dreams":
-      return <Hints items={[["enter", "toggle"]]} />;
-    case "browser":
-      return <Hints items={[["enter", "change browser"]]} />;
-    case "web":
-      return <Hints items={[["←→", "change mode"]]} />;
-  }
 }
 
 function formatWebSearchStatus(serverConfig: ServerConfig | null): string {
@@ -148,8 +98,8 @@ function formatWebSearchStatus(serverConfig: ServerConfig | null): string {
 }
 
 function GoogleRow({ item, selectedItem, sources, accounts, accent }: {
-  item: ConnectionItem;
-  selectedItem: ConnectionItem;
+  item: SourceItem;
+  selectedItem: SourceItem;
   sources?: Record<string, { enabled?: boolean; connected?: boolean; error?: string }>;
   accounts: GoogleAccount[];
   accent: string;
@@ -166,11 +116,7 @@ function GoogleRow({ item, selectedItem, sources, accounts, accent }: {
         <text><span fg={colors.status.error}>Auth expired — remove & re-add account</span></text>
       ) : source?.enabled ? (
         hasTokens ? (
-          <text>
-            <span fg={colors.text.primary}>
-              {accounts.length} account{accounts.length !== 1 ? "s" : ""}
-            </span>
-          </text>
+          <text><span fg={colors.text.primary}>{accounts.length} account{accounts.length !== 1 ? "s" : ""}</span></text>
         ) : (
           <text><span fg={colors.status.warning}>No accounts</span></text>
         )
@@ -207,20 +153,15 @@ function AccountList({ accounts, selectedIndex, accent, valueWidth }: {
 }
 
 function Row({ item, selected, accent, children }: {
-  item: ConnectionItem;
+  item: SourceItem;
   selected: boolean;
   accent: string;
   children: React.ReactNode;
 }) {
-  const label = CONNECTION_LABELS[item].padEnd(14);
   return (
-    <box flexDirection="row">
-      <text>
-        <SelectionIndicator selected={selected} accent={accent} />
-        <span fg={selected ? colors.text.primary : colors.text.secondary}>{label}</span>
-      </text>
+    <SettingsRow selected={selected} accent={accent} label={SOURCE_LABELS[item]} labelWidth={14}>
       {children}
-    </box>
+    </SettingsRow>
   );
 }
 
