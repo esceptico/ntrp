@@ -42,6 +42,7 @@ export function useStreaming({
   configRef.current = config;
   const disconnectRef = useRef<(() => void) | null>(null);
   const prevBgCountRef = useRef(0);
+  const prevIsStreamingRef = useRef(false);
 
   const { getSession, mutateSession, addMessageToSession, finalizeText, setViewedId, deleteSession } =
     store.getState();
@@ -256,7 +257,9 @@ export function useStreaming({
             s.backgroundTaskCount++;
           } else {
             s.backgroundTaskCount = Math.max(0, s.backgroundTaskCount - 1);
-            s.completedBackgroundTasks.push(event.command);
+            if (event.status === "completed" || event.status === "failed") {
+              s.completedBackgroundTasks.push(event.command);
+            }
           }
           break;
 
@@ -474,18 +477,29 @@ export function useStreaming({
   // Auto-process background task results
   useEffect(() => {
     const prev = prevBgCountRef.current;
+    const wasStreaming = prevIsStreamingRef.current;
     prevBgCountRef.current = backgroundTaskCount;
-    if (backgroundTaskCount < prev && !isStreaming) {
-      const id = store.getState().viewedId;
-      if (!id) return;
-      const s = store.getState().sessions.get(id);
-      const completed = s?.completedBackgroundTasks ?? [];
-      const labels = completed.join("\n- ");
-      mutateSession(id, (s) => { s.completedBackgroundTasks = []; });
-      sendMessage(
-        `[background tasks completed, results are in the preceding messages — read and synthesize them]\n\nCompleted:\n- ${labels}`
-      );
-    }
+    prevIsStreamingRef.current = isStreaming;
+
+    const shouldTrigger =
+      // Task just completed while idle
+      (backgroundTaskCount < prev && !isStreaming) ||
+      // Streaming just ended — check for tasks that completed during the run
+      (wasStreaming && !isStreaming);
+
+    if (!shouldTrigger) return;
+
+    const id = store.getState().viewedId;
+    if (!id) return;
+    const s = store.getState().sessions.get(id);
+    const completed = s?.completedBackgroundTasks ?? [];
+    if (completed.length === 0) return;
+
+    const labels = completed.join("\n- ");
+    mutateSession(id, (s) => { s.completedBackgroundTasks = []; });
+    sendMessage(
+      `[background tasks completed, results are in the preceding messages — read and synthesize them]\n\nCompleted:\n- ${labels}`
+    );
   }, [backgroundTaskCount, isStreaming, sendMessage, store, mutateSession]);
 
   // Cleanup
