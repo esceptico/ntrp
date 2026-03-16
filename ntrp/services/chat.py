@@ -200,7 +200,20 @@ async def _drain_backgrounded(
         ctx.run.usage = agent.usage
         last_tokens = getattr(agent, "_last_input_tokens", None)
         metadata = {"last_input_tokens": last_tokens} if last_tokens is not None else None
-        await ctx.session_service.save(ctx.session_state, agent.messages, metadata=metadata)
+
+        # Swap on_result BEFORE the save so no messages are lost in the
+        # window between inject_queue.clear() and the save completing.
+        save_lock = asyncio.Lock()
+
+        async def _save_directly(messages: list[dict]) -> None:
+            async with save_lock:
+                agent.messages.extend(messages)
+                await ctx.session_service.save(ctx.session_state, agent.messages, metadata=metadata)
+
+        agent.ctx.background_tasks.on_result = _save_directly
+
+        async with save_lock:
+            await ctx.session_service.save(ctx.session_state, agent.messages, metadata=metadata)
 
 
 async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
@@ -261,7 +274,9 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             # Backgrounded: unlock UI, drain agent silently
             await bus.emit(BackgroundedEvent(run_id=run.run_id))
             ctx.run_registry.complete_run(run.run_id)
-            run_finished = True
+            # Don't set run_finished — agent is still draining, results
+            # should flow through inject_queue so the agent can process them.
+            # _drain_backgrounded swaps on_result to direct-save when done.
             asyncio.create_task(_drain_backgrounded(bg_gen, agent, ctx))
             return
 

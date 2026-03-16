@@ -1,13 +1,16 @@
 import asyncio
+import json
 import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from ntrp.channel import Channel
+from ntrp.constants import NTRP_TMP_BASE, OFFLOAD_PREVIEW_LINES
 from ntrp.context.models import SessionState
 from ntrp.core.ledger import ResearchLedger
-from ntrp.events.sse import ApprovalNeededEvent
+from ntrp.events.sse import ApprovalNeededEvent, BackgroundTaskEvent, ToolCallEvent, ToolResultEvent
 from ntrp.tools.core.types import ToolResult
 
 if TYPE_CHECKING:
@@ -49,10 +52,14 @@ class IOBridge:
     approval_queue: asyncio.Queue[ApprovalResponse] | None = None
 
 
+RESULT_BASE = Path(NTRP_TMP_BASE)
+
+
 @dataclass
 class BackgroundTaskRegistry:
     """Tracks background tasks and injects results into the agent loop."""
 
+    session_id: str = ""
     on_result: Callable[[list[dict]], Awaitable[None]] | None = None
     _tasks: dict[str, asyncio.Task] = field(default_factory=dict)
     _commands: dict[str, str] = field(default_factory=dict)
@@ -97,6 +104,83 @@ class BackgroundTaskRegistry:
     @property
     def pending_count(self) -> int:
         return sum(1 for t in self._tasks.values() if not t.done())
+
+    def _write_result_file(self, task_id: str, content: str) -> Path:
+        result_dir = RESULT_BASE / self.session_id / "bg_results"
+        result_dir.mkdir(parents=True, exist_ok=True)
+        path = result_dir / f"{task_id}.txt"
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    @staticmethod
+    def _build_result_pointer(content: str, path: Path | None, label: str) -> str:
+        lines = content.split("\n")
+        if len(lines) <= OFFLOAD_PREVIEW_LINES:
+            return f"Background task completed: {label}\n\n{content}"
+        preview = "\n".join(lines[:OFFLOAD_PREVIEW_LINES])
+        return (
+            f"Background task completed: {label}\n"
+            f"Full result ({len(lines)} lines): {path}\n\n"
+            f"{preview}\n..."
+        )
+
+    async def deliver_result(
+        self,
+        task_id: str,
+        result: str,
+        label: str,
+        status: str,
+        duration_ms: int,
+        tool_name: str,
+        tool_args: dict,
+        display_name: str,
+        emit: Callable[[Any], Awaitable[None]] | None,
+    ) -> None:
+        lines = result.split("\n")
+        path = self._write_result_file(task_id, result) if len(lines) > OFFLOAD_PREVIEW_LINES else None
+        pointer = self._build_result_pointer(result, path, label)
+
+        synthetic_call_id = f"bg_{task_id}"
+        messages = [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": synthetic_call_id,
+                        "type": "function",
+                        "function": {
+                            "name": "background_result",
+                            "arguments": json.dumps({"task_id": task_id, "label": label}),
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": synthetic_call_id,
+                "content": pointer,
+            },
+        ]
+
+        if emit:
+            await emit(ToolCallEvent(
+                tool_id=synthetic_call_id,
+                name=tool_name,
+                args=tool_args,
+                display_name=display_name,
+            ))
+            await emit(ToolResultEvent(
+                tool_id=synthetic_call_id,
+                name=tool_name,
+                result=pointer,
+                preview=f"{display_name} ({status})",
+                duration_ms=duration_ms,
+                display_name=display_name,
+            ))
+            await emit(BackgroundTaskEvent(task_id=task_id, command=label, status=status))
+
+        await self.inject(messages)
 
 
 @dataclass
