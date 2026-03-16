@@ -125,13 +125,16 @@ export const InputArea = memo(function InputArea({
     resetInput();
   }, [disabled, onSubmit, resetInput, getSelectedCommand]);
 
-  const handlePaste = useCallback((e: PasteEvent) => {
+  const attachClipboardImage = useCallback(() => {
     const img = getClipboardImage();
-    if (img) {
-      e.preventDefault();
-      setImages((prev) => [...prev, img]);
-    }
+    if (!img) return false;
+    setImages((prev) => [...prev, img]);
+    return true;
   }, []);
+
+  const handlePaste = useCallback((e: PasteEvent) => {
+    if (attachClipboardImage()) e.preventDefault();
+  }, [attachClipboardImage]);
 
   const handleKeyDown = useCallback((e: KeyEvent) => {
     if (disabled) {
@@ -140,13 +143,10 @@ export const InputArea = memo(function InputArea({
     }
 
     if (e.name === "v" && e.ctrl) {
-      const img = getClipboardImage();
-      if (img) {
+      if (attachClipboardImage()) {
         e.preventDefault();
-        setImages((prev) => [...prev, img]);
         return;
       }
-      // No image — don't preventDefault, let normal paste through
       return;
     }
 
@@ -188,7 +188,8 @@ export const InputArea = memo(function InputArea({
   const modelName = formatModel(chatModel);
   const imagePreview = useMemo(() => {
     if (images.length === 0) return null;
-    return getImagePixels(images[images.length - 1].data);
+    const last = images[images.length - 1];
+    return getImagePixels(last.data, last.media_type);
   }, [images]);
 
   return (

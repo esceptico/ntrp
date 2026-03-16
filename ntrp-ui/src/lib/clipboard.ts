@@ -18,27 +18,30 @@ const OSASCRIPT = [
 export function getClipboardImage(): ImageBlock | null {
   if (process.platform !== "darwin") return null;
 
-  const tmpPath = join(tmpdir(), `ntrp-clip-${Date.now()}.png`);
+  const ts = Date.now();
+  const tmpPng = join(tmpdir(), `ntrp-clip-${ts}.png`);
+  const tmpJpg = join(tmpdir(), `ntrp-clip-${ts}.jpg`);
   try {
-    const args = OSASCRIPT.map((a) => a.replace("__TMP__", tmpPath));
+    const args = OSASCRIPT.map((a) => a.replace("__TMP__", tmpPng));
     spawnSync(args[0], args.slice(1), { stdio: "pipe" });
+    if (!existsSync(tmpPng) || readFileSync(tmpPng).length === 0) return null;
 
-    if (!existsSync(tmpPath)) return null;
-
-    const buf = readFileSync(tmpPath);
-    if (buf.length === 0) return null;
-
-    // Resize if too large — keeps under API size limits and speeds up preview
     spawnSync("sips", [
       "--resampleHeightWidthMax", String(MAX_DIMENSION),
-      tmpPath,
+      "--setProperty", "formatOptions", "80",
+      "-s", "format", "jpeg",
+      tmpPng, "--out", tmpJpg,
     ], { stdio: "pipe" });
 
-    const resized = readFileSync(tmpPath);
-    return { media_type: "image/png", data: resized.toString("base64") };
+    if (!existsSync(tmpJpg)) return null;
+    const buf = readFileSync(tmpJpg);
+    if (buf.length === 0) return null;
+
+    return { media_type: "image/jpeg", data: buf.toString("base64") };
   } catch {
     return null;
   } finally {
-    try { unlinkSync(tmpPath); } catch {}
+    try { unlinkSync(tmpPng); } catch {}
+    try { unlinkSync(tmpJpg); } catch {}
   }
 }
