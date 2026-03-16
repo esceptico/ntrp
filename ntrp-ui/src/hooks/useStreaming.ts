@@ -252,8 +252,12 @@ export function useStreaming({
           break;
 
         case "background_task":
-          if (event.status === "started") s.backgroundTaskCount++;
-          else s.backgroundTaskCount = Math.max(0, s.backgroundTaskCount - 1);
+          if (event.status === "started") {
+            s.backgroundTaskCount++;
+          } else {
+            s.backgroundTaskCount = Math.max(0, s.backgroundTaskCount - 1);
+            s.completedBackgroundTasks.push(event.command);
+          }
           break;
 
         default: {
@@ -472,9 +476,17 @@ export function useStreaming({
     const prev = prevBgCountRef.current;
     prevBgCountRef.current = backgroundTaskCount;
     if (backgroundTaskCount < prev && !isStreaming) {
-      sendMessage("[background task completed, process the results]");
+      const id = store.getState().viewedId;
+      if (!id) return;
+      const s = store.getState().sessions.get(id);
+      const completed = s?.completedBackgroundTasks ?? [];
+      const labels = completed.join("\n- ");
+      mutateSession(id, (s) => { s.completedBackgroundTasks = []; });
+      sendMessage(
+        `[background tasks completed, results are in the preceding messages — read and synthesize them]\n\nCompleted:\n- ${labels}`
+      );
     }
-  }, [backgroundTaskCount, isStreaming, sendMessage]);
+  }, [backgroundTaskCount, isStreaming, sendMessage, store, mutateSession]);
 
   // Cleanup
   useEffect(() => {
