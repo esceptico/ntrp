@@ -1,8 +1,10 @@
 import { useState, useCallback } from "react";
 import { useInlineTextInput } from "./useInlineTextInput.js";
 
+export type TriggerType = "time" | "event" | "idle" | "count";
+
 export interface TriggerState {
-  createTriggerType: "time" | "event";
+  createTriggerType: TriggerType;
   createScheduleMode: "schedule" | "interval";
   createDaysOption: string;
   createEventType: string;
@@ -13,7 +15,10 @@ export interface TriggerState {
   startInput: ReturnType<typeof useInlineTextInput>;
   endInput: ReturnType<typeof useInlineTextInput>;
   eventLeadInput: ReturnType<typeof useInlineTextInput>;
-  setCreateTriggerType: React.Dispatch<React.SetStateAction<"time" | "event">>;
+  idleMinutesInput: ReturnType<typeof useInlineTextInput>;
+  everyNInput: ReturnType<typeof useInlineTextInput>;
+  cooldownInput: ReturnType<typeof useInlineTextInput>;
+  setCreateTriggerType: React.Dispatch<React.SetStateAction<TriggerType>>;
   setCreateScheduleMode: React.Dispatch<React.SetStateAction<"schedule" | "interval">>;
   setCreateDaysOption: React.Dispatch<React.SetStateAction<string>>;
   setCreateEventType: React.Dispatch<React.SetStateAction<string>>;
@@ -24,7 +29,7 @@ export interface TriggerState {
 }
 
 export function useAutomationTriggerState(): TriggerState {
-  const [createTriggerType, setCreateTriggerType] = useState<"time" | "event">("time");
+  const [createTriggerType, setCreateTriggerType] = useState<TriggerType>("time");
   const [createScheduleMode, setCreateScheduleMode] = useState<"schedule" | "interval">("schedule");
   const [createDaysOption, setCreateDaysOption] = useState("once");
   const [createEventType, setCreateEventType] = useState("event_approaching");
@@ -36,6 +41,9 @@ export function useAutomationTriggerState(): TriggerState {
   const startInput = useInlineTextInput();
   const endInput = useInlineTextInput();
   const eventLeadInput = useInlineTextInput();
+  const idleMinutesInput = useInlineTextInput();
+  const everyNInput = useInlineTextInput();
+  const cooldownInput = useInlineTextInput();
 
   const parseLeadToMinutes = useCallback((raw: string): number | null => {
     const normalized = raw.trim().toLowerCase();
@@ -62,7 +70,12 @@ export function useAutomationTriggerState(): TriggerState {
     endInput.reset();
     eventLeadInput.reset();
     eventLeadInput.setValue("60m");
-  }, [timeInput, intervalInput, startInput, endInput, eventLeadInput]);
+    idleMinutesInput.reset();
+    idleMinutesInput.setValue("5");
+    everyNInput.reset();
+    everyNInput.setValue("10");
+    cooldownInput.reset();
+  }, [timeInput, intervalInput, startInput, endInput, eventLeadInput, idleMinutesInput, everyNInput, cooldownInput]);
 
   return {
     createTriggerType,
@@ -76,6 +89,9 @@ export function useAutomationTriggerState(): TriggerState {
     startInput,
     endInput,
     eventLeadInput,
+    idleMinutesInput,
+    everyNInput,
+    cooldownInput,
     setCreateTriggerType,
     setCreateScheduleMode,
     setCreateDaysOption,

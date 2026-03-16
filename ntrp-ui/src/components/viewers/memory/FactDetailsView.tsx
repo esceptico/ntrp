@@ -78,12 +78,12 @@ export function FactDetailsView({
   const textWidth = width - 2;
 
   if (confirmDelete) {
-    return <DeleteConfirmation width={width} message={`Delete this fact? This will remove ${details.entities.length} entities, ${details.linked_facts.length} links.`} />;
+    return <DeleteConfirmation width={width} height={height} message={`Delete this fact? This will remove ${details.entities.length} entities, ${details.linked_facts.length} links.`} />;
   }
 
   if (editMode) {
     return (
-      <box flexDirection="column" width={width} paddingLeft={1}>
+      <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
         <text><span fg={colors.text.muted}>EDIT FACT</span></text>
         <box marginTop={1}>
           <TextEditArea

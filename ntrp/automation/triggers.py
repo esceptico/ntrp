@@ -3,7 +3,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 from ntrp.constants import (
     AUTOMATION_EVENT_APPROACHING_DEFAULT_LEAD_MINUTES,
@@ -134,7 +134,7 @@ def compute_next_interval(
             minute=window_start.minute if window_start else 0,
             second=0,
             microsecond=0,
-        ) + timedelta(days=1)
+        )
 
     if days:
         candidate = _advance_to_days(candidate, resolve_days(days))
@@ -188,6 +188,22 @@ class TimeTrigger:
             d["end"] = self.end
         return d
 
+    @property
+    def one_shot(self) -> bool:
+        return bool(self.at and not self.days)
+
+    @property
+    def label(self) -> str:
+        if self.every:
+            base = f"every {self.every}"
+            if self.start and self.end:
+                base += f" ({self.start}\u2013{self.end})"
+        else:
+            base = self.at or ""
+        if self.days:
+            base += f"  {self.days}"
+        return base
+
     def next_run(self, after: datetime) -> datetime:
         if self.every:
             return compute_next_interval(self.every, self.days, after, self.start, self.end)
@@ -220,14 +236,61 @@ class EventTrigger:
         return d
 
     @property
-    def is_one_shot(self) -> bool:
+    def one_shot(self) -> bool:
         return False
+
+    @property
+    def label(self) -> str:
+        label = f"on:{self.event_type}"
+        if self.lead_minutes is not None:
+            label += f" ({self.lead_minutes}m)"
+        return label
 
     def next_run(self, after: datetime) -> datetime | None:
         return None
 
 
-Trigger = TimeTrigger | EventTrigger
+@dataclass
+class IdleTrigger:
+    idle_minutes: int
+    type: Literal["idle"] = "idle"
+
+    def params(self) -> dict:
+        return {"idle_minutes": self.idle_minutes}
+
+    @property
+    def one_shot(self) -> bool:
+        return False
+
+    @property
+    def label(self) -> str:
+        return f"idle {self.idle_minutes}m"
+
+    def next_run(self, after: datetime) -> datetime | None:
+        return None
+
+
+@dataclass
+class CountTrigger:
+    every_n: int
+    type: Literal["count"] = "count"
+
+    def params(self) -> dict:
+        return {"every_n": self.every_n}
+
+    @property
+    def one_shot(self) -> bool:
+        return False
+
+    @property
+    def label(self) -> str:
+        return f"every {self.every_n} turns"
+
+    def next_run(self, after: datetime) -> datetime | None:
+        return None
+
+
+Trigger = TimeTrigger | EventTrigger | IdleTrigger | CountTrigger
 
 
 def _validate_time(value: str, label: str) -> str:
@@ -277,9 +340,31 @@ def _build_event_trigger(
     return EventTrigger(event_type=event_type, lead_minutes=lead_minutes), None
 
 
+def _build_idle_trigger(
+    *,
+    idle_minutes: int | None = None,
+    **_kwargs: Any,
+) -> tuple[Trigger, datetime | None]:
+    if idle_minutes is None:
+        raise ValueError("'idle_minutes' is required for idle trigger")
+    return IdleTrigger(idle_minutes=int(idle_minutes)), None
+
+
+def _build_count_trigger(
+    *,
+    every_n: int | None = None,
+    **_kwargs: Any,
+) -> tuple[Trigger, datetime | None]:
+    if every_n is None:
+        raise ValueError("'every_n' is required for count trigger")
+    return CountTrigger(every_n=int(every_n)), None
+
+
 BUILD_DISPATCH: dict[str, BuildHandler] = {
     "time": _build_time_trigger,
     "event": _build_event_trigger,
+    "idle": _build_idle_trigger,
+    "count": _build_count_trigger,
 }
 
 
@@ -292,11 +377,21 @@ def build_trigger(
     lead_minutes: int | str | None = None,
     start: str | None = None,
     end: str | None = None,
+    idle_minutes: int | None = None,
+    every_n: int | None = None,
 ) -> tuple[Trigger, datetime | None]:
     if (handler := BUILD_DISPATCH.get(trigger_type)) is None:
-        raise ValueError(f"Invalid trigger_type '{trigger_type}'. Use: time, event")
+        raise ValueError(f"Invalid trigger_type '{trigger_type}'. Use: time, event, idle, count")
     return handler(
-        at=at, days=days, every=every, event_type=event_type, lead_minutes=lead_minutes, start=start, end=end
+        at=at,
+        days=days,
+        every=every,
+        event_type=event_type,
+        lead_minutes=lead_minutes,
+        start=start,
+        end=end,
+        idle_minutes=idle_minutes,
+        every_n=every_n,
     )
 
 
@@ -324,14 +419,33 @@ def _parse_event_trigger(payload: dict) -> Trigger:
     return EventTrigger(event_type=payload["event_type"], lead_minutes=payload.get("lead_minutes"))
 
 
+def _parse_idle_trigger(payload: dict) -> Trigger:
+    return IdleTrigger(idle_minutes=payload["idle_minutes"])
+
+
+def _parse_count_trigger(payload: dict) -> Trigger:
+    return CountTrigger(every_n=payload["every_n"])
+
+
 PARSE_DISPATCH: dict[str, ParseHandler] = {
     "time": _parse_time_trigger,
     "event": _parse_event_trigger,
+    "idle": _parse_idle_trigger,
+    "count": _parse_count_trigger,
 }
+
+
+def parse_one(payload: dict) -> Trigger:
+    if (handler := PARSE_DISPATCH.get(payload["type"])) is None:
+        raise ValueError(f"Unknown trigger type: {payload['type']}")
+    return handler(payload)
 
 
 def parse_trigger(raw: str) -> Trigger:
     payload = json.loads(raw)
-    if (handler := PARSE_DISPATCH.get(payload["type"])) is None:
-        raise ValueError(f"Unknown trigger type: {payload['type']}")
-    return handler(payload)
+    return parse_one(payload)
+
+
+def parse_triggers(raw: str) -> list[Trigger]:
+    items = json.loads(raw)
+    return [parse_one(item) for item in items]

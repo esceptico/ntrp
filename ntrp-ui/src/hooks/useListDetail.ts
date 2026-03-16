@@ -97,7 +97,9 @@ export function useListDetail<T>({
   }, [sectionCount, hasEdit]);
 
   const selectedId = (filtered[selectedIndex] as { id?: number })?.id;
-  useEffect(() => { resetDetailState(); }, [selectedId, resetDetailState]);
+  useEffect(() => {
+    if (selectedId !== undefined) resetDetailState();
+  }, [selectedId, resetDetailState]);
 
   const handleKeys = useCallback(
     (key: Key) => {

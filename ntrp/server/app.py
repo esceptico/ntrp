@@ -53,9 +53,8 @@ async def lifespan(app: FastAPI):
     runtime = Runtime()
     await runtime.connect()
     runtime.start_indexing()
-    runtime.start_scheduler()
+    await runtime.start_scheduler()
     runtime.start_monitor()
-    runtime.start_consolidation()
     app.state.runtime = runtime
     app.state.bus_registry = BusRegistry()
     _install_shutdown_handlers(runtime, app.state.bus_registry)

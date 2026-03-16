@@ -16,14 +16,24 @@ export interface EventTrigger {
   lead_minutes?: number;
 }
 
-export type Trigger = TimeTrigger | EventTrigger;
+export interface IdleTrigger {
+  type: "idle";
+  idle_minutes: number;
+}
+
+export interface CountTrigger {
+  type: "count";
+  every_n: number;
+}
+
+export type Trigger = TimeTrigger | EventTrigger | IdleTrigger | CountTrigger;
 
 export interface Automation {
   task_id: string;
   name: string;
   description: string;
   model: string | null;
-  trigger: Trigger;
+  triggers: Trigger[];
   enabled: boolean;
   created_at: string;
   last_run_at: string | null;
@@ -32,13 +42,16 @@ export interface Automation {
   last_result: string | null;
   writable: boolean;
   running_since: string | null;
+  handler: string | null;
+  builtin: boolean;
+  cooldown_minutes: number | null;
 }
 
 export interface CreateAutomationData {
   name: string;
   description: string;
   model?: string;
-  trigger_type: "time" | "event";
+  trigger_type?: "time" | "event";
   at?: string;
   days?: string;
   every?: string;
@@ -48,6 +61,8 @@ export interface CreateAutomationData {
   lead_minutes?: number;
   notifiers: string[];
   writable: boolean;
+  triggers?: Trigger[];
+  cooldown_minutes?: number;
 }
 
 export interface UpdateAutomationData {
@@ -64,6 +79,8 @@ export interface UpdateAutomationData {
   lead_minutes?: number;
   notifiers?: string[];
   writable?: boolean;
+  triggers?: Trigger[];
+  cooldown_minutes?: number;
 }
 
 export async function createAutomation(config: Config, data: CreateAutomationData): Promise<Automation> {

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import type { Automation } from "../../../api/client.js";
 import { colors } from "../../ui/index.js";
-import { formatRelativeTime, triggerLabel } from "../../../lib/format.js";
+import { formatRelativeTime, triggersLabel } from "../../../lib/format.js";
 
 interface ResultViewerProps {
   automation: Automation;
@@ -52,7 +52,7 @@ export function ResultViewer({ automation, scroll, setScroll, width, height }: R
         <box marginTop={1} flexDirection="column">
           <text wrapMode="word">
             <span fg={colors.text.muted}>
-              {statusIcon} {statusLabel}  {triggerLabel(s.trigger)}{s.writable ? "  \u270E" : ""}
+              {statusIcon} {statusLabel}  {triggersLabel(s.triggers)}{s.writable ? "  \u270E" : ""}
             </span>
           </text>
           <text wrapMode="word">

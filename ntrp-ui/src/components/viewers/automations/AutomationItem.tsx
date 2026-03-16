@@ -1,6 +1,6 @@
 import type { Automation } from "../../../api/client.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
-import { formatRelativeTime, triggerLabel } from "../../../lib/format.js";
+import { formatRelativeTime, triggersLabel } from "../../../lib/format.js";
 
 interface AutomationItemProps {
   item: Automation;
@@ -25,14 +25,19 @@ export function AutomationItem({ item, context, textWidth }: AutomationItemProps
       : colors.text.disabled;
   const metaColor = context.isSelected ? colors.text.secondary : colors.text.muted;
 
-  const nextRun = enabled ? formatRelativeTime(item.next_run_at) : "disabled";
+  const nextRun = enabled
+    ? item.next_run_at
+      ? formatRelativeTime(item.next_run_at)
+      : triggersLabel(item.triggers, true)
+    : "disabled";
   const lastRun = formatRelativeTime(item.last_run_at);
+  const builtinBadge = item.builtin ? " [builtin]" : "";
 
   return (
     <box flexDirection="column" marginBottom={1}>
       <text>
         <span fg={statusColor}>{statusIcon}</span>
-        <span fg={metaColor}>{` ${triggerLabel(item.trigger)}${item.writable ? "  \u270E" : ""}${item.notifiers.length > 0 ? `  \u2192 ${item.notifiers.join(", ")}` : ""}`}</span>
+        <span fg={metaColor}>{` ${triggersLabel(item.triggers)}${builtinBadge}${item.writable ? "  \u270E" : ""}${item.notifiers.length > 0 ? `  \u2192 ${item.notifiers.join(", ")}` : ""}`}</span>
       </text>
       {item.name
         ? <text><strong><span fg={textColor}>{item.name}</span></strong> <span fg={metaColor}>{truncateText(item.description, textWidth - item.name.length - 1)}</span></text>

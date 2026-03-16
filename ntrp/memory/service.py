@@ -1,8 +1,6 @@
 from ntrp.channel import Channel
-from ntrp.constants import EXTRACTION_CONTEXT_MESSAGES, EXTRACTION_EVERY_N_TURNS
-from ntrp.events.internal import FactDeleted, FactUpdated, MemoryCleared, RunCompleted
+from ntrp.events.internal import FactDeleted, FactUpdated, MemoryCleared
 from ntrp.logging import get_logger
-from ntrp.memory.chat_extraction import extract_from_chat
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.models import Dream, EntityRef, Fact, Observation
 
@@ -129,42 +127,6 @@ class MemoryService:
         self.facts = FactService(memory, channel)
         self.observations = ObservationService(memory)
         self.dreams = DreamService(memory)
-        self._cursors: dict[str, int] = {}
-        self._turn_counts: dict[str, int] = {}
-        channel.subscribe(RunCompleted, self._on_run_completed)
-
-    async def _on_run_completed(self, event: RunCompleted) -> None:
-        if event.result is None or not event.messages:
-            return
-
-        sid = event.session_id
-        self._turn_counts[sid] = self._turn_counts.get(sid, 0) + 1
-        if self._turn_counts[sid] % EXTRACTION_EVERY_N_TURNS != 0:
-            return
-
-        cursor = self._cursors.get(sid, 0)
-        context_start = max(0, cursor - EXTRACTION_CONTEXT_MESSAGES)
-        window = event.messages[context_start:]
-        if not window:
-            return
-
-        facts = await extract_from_chat(tuple(window), self.memory.model)
-        new_cursor = len(event.messages)
-        self._cursors[sid] = new_cursor
-
-        if not facts:
-            return
-        _logger.info("Extracted %d facts from chat", len(facts))
-        source_ref = f"{sid}:{context_start}-{new_cursor}"
-        for fact_text in facts:
-            await self.memory.remember(
-                text=fact_text,
-                source_type="chat",
-                source_ref=source_ref,
-            )
-
-    def close(self) -> None:
-        self.channel.unsubscribe(RunCompleted, self._on_run_completed)
 
     @property
     def is_consolidating(self) -> bool:

@@ -3,11 +3,12 @@ import { colors } from "../../ui/index.js";
 interface DeleteConfirmationProps {
   message: string;
   width: number;
+  height?: number;
 }
 
-export function DeleteConfirmation({ message, width }: DeleteConfirmationProps) {
+export function DeleteConfirmation({ message, width, height }: DeleteConfirmationProps) {
   return (
-    <box flexDirection="column" width={width} paddingLeft={1}>
+    <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       <text>
         <span fg={colors.status.warning}>{message}</span>
       </text>

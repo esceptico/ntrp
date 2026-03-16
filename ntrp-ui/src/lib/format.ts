@@ -52,7 +52,9 @@ export function formatCountdown(iso: string): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
-export function triggerLabel(trigger: { type: string; every?: string; at?: string; start?: string; end?: string; days?: string; event_type?: string; lead_minutes?: number }, compact?: boolean): string {
+export function triggerLabel(trigger: { type: string; every?: string; at?: string; start?: string; end?: string; days?: string; event_type?: string; lead_minutes?: number; idle_minutes?: number; every_n?: number }, compact?: boolean): string {
+  if (trigger.type === "idle") return `idle ${trigger.idle_minutes}m`;
+  if (trigger.type === "count") return `every ${trigger.every_n} turns`;
   if (trigger.type === "time") {
     let base = trigger.every ? `every ${trigger.every}` : trigger.at ?? "";
     if (trigger.start && trigger.end) base += ` (${trigger.start}\u2013${trigger.end})`;
@@ -61,4 +63,8 @@ export function triggerLabel(trigger: { type: string; every?: string; at?: strin
   return trigger.event_type === "event_approaching" && trigger.lead_minutes
     ? `on:${trigger.event_type} (${trigger.lead_minutes}m)`
     : `on:${trigger.event_type}`;
+}
+
+export function triggersLabel(triggers: Array<{ type: string; [key: string]: any }>, compact?: boolean): string {
+  return triggers.map(t => triggerLabel(t, compact)).join(" | ");
 }

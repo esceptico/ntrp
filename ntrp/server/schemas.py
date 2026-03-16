@@ -101,7 +101,7 @@ class CreateAutomationRequest(BaseModel):
     name: str = Field(min_length=1)
     description: str = Field(min_length=1)
     model: str | None = None
-    trigger_type: str
+    trigger_type: str | None = None
     at: str | None = None
     days: str | None = None
     every: str | None = None
@@ -111,6 +111,8 @@ class CreateAutomationRequest(BaseModel):
     writable: bool = False
     start: str | None = None
     end: str | None = None
+    triggers: list[dict] | None = None
+    cooldown_minutes: int | None = None
 
 
 class UpdateAutomationRequest(BaseModel):
@@ -128,6 +130,8 @@ class UpdateAutomationRequest(BaseModel):
     notifiers: list[str] | None = None
     writable: bool | None = None
     enabled: bool | None = None
+    triggers: list[dict] | None = None
+    cooldown_minutes: int | None = None
 
 
 class SetNotifiersRequest(BaseModel):

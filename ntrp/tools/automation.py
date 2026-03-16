@@ -2,7 +2,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from ntrp.automation.models import Automation, build_trigger
+from ntrp.automation.models import Automation
+from ntrp.automation.triggers import build_trigger
 from ntrp.events.triggers import EVENT_APPROACHING
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
@@ -43,6 +44,10 @@ RUN_AUTOMATION_DESCRIPTION = (
 # --- Helpers ---
 
 
+def _triggers_label(triggers: list) -> str:
+    return " | ".join(t.label for t in triggers)
+
+
 def _format_automation_list(automations: list[Automation]) -> str:
     lines = []
     for a in automations:
@@ -50,10 +55,11 @@ def _format_automation_list(automations: list[Automation]) -> str:
         next_run = a.next_run_at.strftime("%Y-%m-%d %H:%M") if a.next_run_at else "—"
         last_run = a.last_run_at.strftime("%Y-%m-%d %H:%M") if a.last_run_at else "never"
         label = a.name or a.description[:60]
+        builtin_tag = " [builtin]" if a.builtin else ""
 
         lines.append(
-            f"[{a.task_id}] {label}\n"
-            f"  {a.trigger.label} · {status}\n"
+            f"[{a.task_id}] {label}{builtin_tag}\n"
+            f"  {_triggers_label(a.triggers)} · {status}\n"
             f"  next: {next_run} · last: {last_run}" + (f"\n  model: {a.model}" if a.model else "")
         )
     return "\n\n".join(lines)
@@ -184,7 +190,7 @@ class CreateAutomationTool(Tool):
         except ValueError:
             return None
 
-        preview = f"Trigger: {trigger.label}"
+        preview = f"Trigger: {_triggers_label([trigger])}"
         if next_run:
             preview += f"\nNext run: {next_run.strftime('%Y-%m-%d %H:%M')}"
         if notifiers:
@@ -236,7 +242,7 @@ class CreateAutomationTool(Tool):
         lines = [
             f"Created automation: {automation.description}",
             f"ID: {automation.task_id}",
-            f"Trigger: {automation.trigger.label}",
+            f"Trigger: {_triggers_label(automation.triggers)}",
         ]
         if automation.model:
             lines.append(f"Model: {automation.model}")
@@ -373,7 +379,7 @@ class UpdateAutomationTool(Tool):
         lines = [
             f"Updated automation: {label}",
             f"ID: {automation.task_id}",
-            f"Trigger: {automation.trigger.label}",
+            f"Trigger: {_triggers_label(automation.triggers)}",
             f"Enabled: {automation.enabled}",
         ]
         if automation.next_run_at:
@@ -403,6 +409,8 @@ class DeleteAutomationTool(Tool):
             await execution.ctx.services["automation"].delete(task_id)
         except KeyError:
             return ToolResult(content=f"Error: automation '{task_id}' not found", preview="Not found", is_error=True)
+        except ValueError as e:
+            return ToolResult(content=f"Error: {e}", preview="Cannot delete", is_error=True)
 
         return ToolResult(content=f"Deleted: {automation.description} ({task_id})", preview="Deleted")
 

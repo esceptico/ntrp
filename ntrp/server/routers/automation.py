@@ -24,7 +24,7 @@ def _automation_to_dict(a: Automation) -> dict:
         "name": a.name,
         "description": a.description,
         "model": a.model,
-        "trigger": asdict(a.trigger),
+        "triggers": [asdict(t) for t in a.triggers],
         "enabled": a.enabled,
         "created_at": a.created_at.isoformat(),
         "last_run_at": a.last_run_at.isoformat() if a.last_run_at else None,
@@ -33,6 +33,9 @@ def _automation_to_dict(a: Automation) -> dict:
         "last_result": a.last_result,
         "writable": a.writable,
         "running_since": a.running_since.isoformat() if a.running_since else None,
+        "handler": a.handler,
+        "builtin": a.builtin,
+        "cooldown_minutes": a.cooldown_minutes,
     }
 
 
@@ -55,6 +58,8 @@ async def create_automation(
             writable=request.writable,
             start=request.start,
             end=request.end,
+            triggers=request.triggers,
+            cooldown_minutes=request.cooldown_minutes,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -127,6 +132,8 @@ async def update_automation(
             notifiers=request.notifiers,
             writable=request.writable,
             enabled=request.enabled,
+            triggers=request.triggers,
+            cooldown_minutes=request.cooldown_minutes,
         )
     except KeyError:
         raise HTTPException(status_code=404, detail="Automation not found")
@@ -161,6 +168,8 @@ async def delete_automation(task_id: str, svc: AutomationService = Depends(requi
         await svc.delete(task_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Automation not found")
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     return {"status": "deleted"}
 
 

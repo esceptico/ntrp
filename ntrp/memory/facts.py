@@ -114,10 +114,6 @@ class FactMemory:
     # --- Consolidation delegation ---
 
     @property
-    def _consolidation_interval(self) -> float | None:
-        return self._consolidation.interval
-
-    @property
     def dreams_enabled(self) -> bool:
         return self._consolidation.dreams_enabled
 
@@ -125,11 +121,8 @@ class FactMemory:
     def dreams_enabled(self, value: bool) -> None:
         self._consolidation.dreams_enabled = value
 
-    def start_consolidation(self, interval: float) -> None:
-        self._consolidation.start(interval)
-
-    def restart_consolidation(self, interval: float) -> None:
-        self._consolidation.restart(interval)
+    async def run_consolidation(self) -> str:
+        return await self._consolidation.run_once()
 
     # --- Re-embedding ---
 
@@ -194,7 +187,6 @@ class FactMemory:
     # --- Lifecycle ---
 
     async def close(self) -> None:
-        await self._consolidation.stop()
         if self._reembed_task:
             self._reembed_task.cancel()
             try:

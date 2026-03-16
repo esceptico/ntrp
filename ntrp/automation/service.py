@@ -4,9 +4,10 @@ from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
-from ntrp.automation.models import Automation, Trigger, build_trigger
+from ntrp.automation.models import Automation
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.store import AutomationStore
+from ntrp.automation.triggers import TimeTrigger, Trigger, build_trigger, parse_one
 from ntrp.llm.models import get_models
 
 
@@ -100,6 +101,7 @@ class AutomationService:
         enabled: bool | None,
         model: str | None,
         notifiers: list[str] | None,
+        cooldown_minutes: int | None = None,
     ) -> dict[str, Any]:
         changes: dict[str, Any] = {}
         if name is not None:
@@ -115,6 +117,8 @@ class AutomationService:
         if notifiers is not None:
             self._validate_notifiers(notifiers)
             changes["notifiers"] = notifiers
+        if cooldown_minutes is not None:
+            changes["cooldown_minutes"] = cooldown_minutes
         return changes
 
     @staticmethod
@@ -159,6 +163,8 @@ class AutomationService:
         writable: bool | None = None,
         enabled: bool | None = None,
         model: str | None = None,
+        triggers: list[dict] | None = None,
+        cooldown_minutes: int | None = None,
     ) -> Automation:
         task = await self.get(task_id)
         changes = self._build_metadata_changes(
@@ -168,6 +174,7 @@ class AutomationService:
             enabled=enabled,
             model=model,
             notifiers=notifiers,
+            cooldown_minutes=cooldown_minutes,
         )
 
         trigger_patch = TriggerPatch(
@@ -180,9 +187,25 @@ class AutomationService:
             start=start,
             end=end,
         )
-        trigger_result = self._build_updated_trigger(task.trigger, trigger_patch)
-        if trigger_result:
-            changes["trigger"], changes["next_run_at"] = trigger_result
+
+        # Full triggers list replacement takes precedence over field-level patching
+        if triggers:
+            parsed_triggers = [parse_one(t) for t in triggers]
+            time_triggers = [t for t in parsed_triggers if isinstance(t, TimeTrigger)]
+            changes["triggers"] = parsed_triggers
+            changes["next_run_at"] = time_triggers[0].next_run(datetime.now(UTC)) if time_triggers else None
+        else:
+            # For single-trigger patching via field params
+            if task.triggers:
+                current_trigger = task.triggers[0]
+            else:
+                current_trigger = TimeTrigger(at="00:00")
+
+            trigger_result = self._build_updated_trigger(current_trigger, trigger_patch)
+            if trigger_result:
+                new_trigger, new_next_run = trigger_result
+                changes["triggers"] = [new_trigger]
+                changes["next_run_at"] = new_next_run
 
         updated = replace(task, **changes) if changes else task
         if changes:
@@ -193,7 +216,7 @@ class AutomationService:
         self,
         name: str,
         description: str,
-        trigger_type: str,
+        trigger_type: str | None = None,
         at: str | None = None,
         days: str | None = None,
         every: str | None = None,
@@ -204,17 +227,27 @@ class AutomationService:
         start: str | None = None,
         end: str | None = None,
         model: str | None = None,
+        triggers: list[dict] | None = None,
+        cooldown_minutes: int | None = None,
     ) -> Automation:
-        trigger, next_run = build_trigger(
-            trigger_type,
-            at=at,
-            days=days,
-            every=every,
-            event_type=event_type,
-            lead_minutes=lead_minutes,
-            start=start,
-            end=end,
-        )
+        if triggers:
+            parsed_triggers = [parse_one(t) for t in triggers]
+            time_triggers = [t for t in parsed_triggers if isinstance(t, TimeTrigger)]
+            next_run = time_triggers[0].next_run(datetime.now(UTC)) if time_triggers else None
+        elif trigger_type:
+            trigger, next_run = build_trigger(
+                trigger_type,
+                at=at,
+                days=days,
+                every=every,
+                event_type=event_type,
+                lead_minutes=lead_minutes,
+                start=start,
+                end=end,
+            )
+            parsed_triggers = [trigger]
+        else:
+            raise ValueError("Either 'triggers' list or 'trigger_type' is required")
 
         if notifiers:
             self._validate_notifiers(notifiers)
@@ -225,7 +258,7 @@ class AutomationService:
             name=name,
             description=description,
             model=_normalize_and_validate_model(model),
-            trigger=trigger,
+            triggers=parsed_triggers,
             enabled=True,
             created_at=now,
             next_run_at=next_run,
@@ -234,6 +267,7 @@ class AutomationService:
             last_result=None,
             running_since=None,
             writable=writable,
+            cooldown_minutes=cooldown_minutes,
         )
         await self.store.save(automation)
         return automation
@@ -244,6 +278,9 @@ class AutomationService:
         await self.store.set_notifiers(task_id, notifier_names)
 
     async def delete(self, task_id: str) -> None:
+        task = await self.get(task_id)
+        if task.builtin:
+            raise ValueError(f"Cannot delete builtin automation '{task.name}'")
         deleted = await self.store.delete(task_id)
         if not deleted:
             raise KeyError(f"Automation {task_id} not found")

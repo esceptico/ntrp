@@ -4,7 +4,11 @@ from datetime import datetime
 
 import aiosqlite
 
-from ntrp.automation.models import Automation, parse_trigger
+from ntrp.automation.models import Automation
+from ntrp.automation.triggers import parse_triggers
+from ntrp.logging import get_logger
+
+_logger = get_logger(__name__)
 
 
 def _parse_dt(raw: str | None) -> datetime | None:
@@ -17,7 +21,7 @@ def _row_to_automation(row: dict) -> Automation:
         name=row["name"],
         description=row["description"],
         model=row["model"],
-        trigger=parse_trigger(row["trigger"]),
+        triggers=parse_triggers(row["triggers"]),
         enabled=bool(row["enabled"]),
         created_at=datetime.fromisoformat(row["created_at"]),
         next_run_at=_parse_dt(row["next_run_at"]),
@@ -26,7 +30,14 @@ def _row_to_automation(row: dict) -> Automation:
         last_result=row["last_result"],
         running_since=_parse_dt(row["running_since"]),
         writable=bool(row["writable"]),
+        handler=row["handler"],
+        builtin=bool(row["builtin"]),
+        cooldown_minutes=int(row["cooldown_minutes"]) if row["cooldown_minutes"] is not None else None,
     )
+
+
+def _serialize_triggers(triggers: list) -> str:
+    return json.dumps([asdict(t) for t in triggers])
 
 
 _SCHEMA = """
@@ -35,7 +46,7 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
     name TEXT NOT NULL DEFAULT '',
     description TEXT NOT NULL,
     model TEXT,
-    trigger TEXT NOT NULL,
+    triggers TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     last_run_at TEXT,
@@ -43,7 +54,10 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
     notifiers TEXT,
     last_result TEXT,
     running_since TEXT,
-    writable INTEGER NOT NULL DEFAULT 0
+    writable INTEGER NOT NULL DEFAULT 0,
+    handler TEXT,
+    builtin INTEGER NOT NULL DEFAULT 0,
+    cooldown_minutes INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at);
@@ -73,16 +87,22 @@ CREATE TABLE IF NOT EXISTS automation_event_queue (
 
 CREATE INDEX IF NOT EXISTS idx_automation_event_queue_task_claimed_id
 ON automation_event_queue(task_id, claimed_at, id);
+
+CREATE TABLE IF NOT EXISTS automation_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
 
 _COLUMNS = (
-    "task_id, name, description, model, trigger, enabled, "
-    "created_at, last_run_at, next_run_at, notifiers, last_result, running_since, writable"
+    "task_id, name, description, model, triggers, enabled, "
+    "created_at, last_run_at, next_run_at, notifiers, last_result, running_since, "
+    "writable, handler, builtin, cooldown_minutes"
 )
 
 _SQL_SAVE = f"""
 INSERT OR REPLACE INTO scheduled_tasks ({_COLUMNS})
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SQL_GET_BY_ID = f"SELECT {_COLUMNS} FROM scheduled_tasks WHERE task_id = ?"
@@ -98,8 +118,21 @@ ORDER BY next_run_at
 _SQL_LIST_EVENT_TRIGGERED = f"""
 SELECT {_COLUMNS} FROM scheduled_tasks
 WHERE enabled = 1
-  AND json_extract(trigger, '$.type') = 'event'
-  AND json_extract(trigger, '$.event_type') = ?
+  AND EXISTS (
+    SELECT 1 FROM json_each(triggers)
+    WHERE json_extract(value, '$.type') = 'event'
+      AND json_extract(value, '$.event_type') = ?
+  )
+"""
+
+_SQL_LIST_BY_TRIGGER_TYPE = f"""
+SELECT {_COLUMNS} FROM scheduled_tasks
+WHERE enabled = 1
+  AND running_since IS NULL
+  AND EXISTS (
+    SELECT 1 FROM json_each(triggers)
+    WHERE json_extract(value, '$.type') = ?
+  )
 """
 
 _SQL_UPDATE_LAST_RUN = """
@@ -132,8 +165,9 @@ _SQL_SET_NOTIFIERS = "UPDATE scheduled_tasks SET notifiers = ? WHERE task_id = ?
 
 _SQL_UPDATE_METADATA = """
 UPDATE scheduled_tasks
-SET name = ?, description = ?, model = ?, trigger = ?,
-    enabled = ?, next_run_at = ?, notifiers = ?, writable = ?
+SET name = ?, description = ?, model = ?, triggers = ?,
+    enabled = ?, next_run_at = ?, notifiers = ?, writable = ?,
+    cooldown_minutes = ?
 WHERE task_id = ?
 """
 
@@ -195,12 +229,107 @@ _SQL_DELETE_QUEUE_BY_TASK = "DELETE FROM automation_event_queue WHERE task_id = 
 _SQL_RELEASE_ALL_CLAIMED_EVENTS = "UPDATE automation_event_queue SET claimed_at = NULL WHERE claimed_at IS NOT NULL"
 
 
+# --- Migration ---
+
+_MIGRATION_V1 = """
+CREATE TABLE IF NOT EXISTS automation_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE scheduled_tasks_new (
+    task_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL,
+    model TEXT,
+    triggers TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    last_run_at TEXT,
+    next_run_at TEXT,
+    notifiers TEXT,
+    last_result TEXT,
+    running_since TEXT,
+    writable INTEGER NOT NULL DEFAULT 0,
+    handler TEXT,
+    builtin INTEGER NOT NULL DEFAULT 0,
+    cooldown_minutes INTEGER
+);
+
+INSERT INTO scheduled_tasks_new (
+    task_id, name, description, model, triggers, enabled,
+    created_at, last_run_at, next_run_at, notifiers, last_result, running_since,
+    writable, handler, builtin, cooldown_minutes
+)
+SELECT
+    task_id, name, description, model, json_array(json(trigger)), enabled,
+    created_at, last_run_at, next_run_at, notifiers, last_result, running_since,
+    writable, NULL, 0, NULL
+FROM scheduled_tasks;
+
+DROP TABLE scheduled_tasks;
+ALTER TABLE scheduled_tasks_new RENAME TO scheduled_tasks;
+
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
+"""
+
+CURRENT_SCHEMA_VERSION = 1
+
+
+async def _get_schema_version(conn: aiosqlite.Connection) -> int:
+    try:
+        rows = await conn.execute_fetchall("SELECT value FROM automation_meta WHERE key = 'schema_version'")
+        if rows:
+            return int(rows[0]["value"])
+    except Exception:
+        pass
+    return 0
+
+
+async def _set_schema_version(conn: aiosqlite.Connection, version: int) -> None:
+    await conn.execute(
+        "INSERT OR REPLACE INTO automation_meta (key, value) VALUES ('schema_version', ?)",
+        (str(version),),
+    )
+
+
+async def _migrate(conn: aiosqlite.Connection) -> None:
+    version = await _get_schema_version(conn)
+
+    if version < 1:
+        # Check if old schema exists (has 'trigger' column instead of 'triggers')
+        try:
+            rows = await conn.execute_fetchall("PRAGMA table_info(scheduled_tasks)")
+            columns = {row["name"] for row in rows}
+            if "trigger" in columns and "triggers" not in columns:
+                _logger.info("Migrating automation store to v1 (trigger -> triggers)")
+                await conn.executescript(_MIGRATION_V1)
+                await _set_schema_version(conn, 1)
+                await conn.commit()
+            elif "triggers" in columns:
+                # Already on new schema, just ensure meta table and version
+                await conn.execute(
+                    "CREATE TABLE IF NOT EXISTS automation_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+                )
+                await _set_schema_version(conn, 1)
+                await conn.commit()
+            else:
+                # No scheduled_tasks table yet — fresh install, schema will be created
+                pass
+        except Exception:
+            # Table doesn't exist yet
+            pass
+
+
 class AutomationStore:
     def __init__(self, conn: aiosqlite.Connection):
         self.conn = conn
 
     async def init_schema(self) -> None:
+        await _migrate(self.conn)
         await self.conn.executescript(_SCHEMA)
+        await _set_schema_version(self.conn, CURRENT_SCHEMA_VERSION)
         await self.conn.commit()
 
     async def save(self, automation: Automation) -> None:
@@ -211,7 +340,7 @@ class AutomationStore:
                 automation.name,
                 automation.description,
                 automation.model,
-                json.dumps(asdict(automation.trigger)),
+                _serialize_triggers(automation.triggers),
                 int(automation.enabled),
                 automation.created_at.isoformat(),
                 automation.last_run_at.isoformat() if automation.last_run_at else None,
@@ -220,6 +349,9 @@ class AutomationStore:
                 automation.last_result,
                 automation.running_since.isoformat() if automation.running_since else None,
                 int(automation.writable),
+                automation.handler,
+                int(automation.builtin),
+                automation.cooldown_minutes,
             ),
         )
         await self.conn.commit()
@@ -240,6 +372,10 @@ class AutomationStore:
 
     async def list_event_triggered(self, event_type: str) -> list[Automation]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_EVENT_TRIGGERED, (event_type,))
+        return [_row_to_automation(row) for row in rows]
+
+    async def list_by_trigger_type(self, trigger_type: str) -> list[Automation]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_BY_TRIGGER_TYPE, (trigger_type,))
         return [_row_to_automation(row) for row in rows]
 
     async def try_mark_running(self, task_id: str, now: datetime) -> bool:
@@ -286,11 +422,12 @@ class AutomationStore:
                 automation.name,
                 automation.description,
                 automation.model,
-                json.dumps(asdict(automation.trigger)),
+                _serialize_triggers(automation.triggers),
                 int(automation.enabled),
                 automation.next_run_at.isoformat() if automation.next_run_at else None,
                 json.dumps(automation.notifiers),
                 int(automation.writable),
+                automation.cooldown_minutes,
                 automation.task_id,
             ),
         )
