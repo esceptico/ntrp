@@ -53,8 +53,8 @@ COMPRESSION_KEEP_RATIO = 0.2  # the most recent % of messages to keep uncompress
 
 # Tool result offloading: large results stored externally, compact reference in context
 # Manus pattern: full representation → file, compact representation → context
-OFFLOAD_THRESHOLD = 30000  # chars — results above this are offloaded to temp files (matches Claude Code)
-OFFLOAD_PREVIEW_CHARS = 300  # chars kept in compact reference
+OFFLOAD_THRESHOLD = 30000  # chars — results above this are offloaded to temp files
+OFFLOAD_PREVIEW_LINES = 30  # lines kept in compact reference (structural summary, not raw chars)
 
 
 # --- Display Truncation ---

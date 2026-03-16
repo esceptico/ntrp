@@ -15,6 +15,8 @@ READ_FILE_DESCRIPTION = (
 
 _DEFAULT_OFFSET = 1
 _DEFAULT_LINE_LIMIT = 500
+_OFFLOAD_DIR = "/tmp/ntrp/"
+_OFFLOAD_READ_LIMIT = 100
 
 
 class ReadFileInput(BaseModel):
@@ -43,6 +45,12 @@ class ReadFileTool(Tool):
             full_path = path
 
         full_path = os.path.normpath(full_path)
+
+        # Guard: offloaded files with default params get capped to prevent
+        # the agent from reading the entire offloaded result back into context
+        is_offloaded = full_path.startswith(_OFFLOAD_DIR)
+        if is_offloaded and offset == _DEFAULT_OFFSET and limit == _DEFAULT_LINE_LIMIT:
+            limit = _OFFLOAD_READ_LIMIT
 
         if not os.path.exists(full_path):
             return ToolResult(
