@@ -319,13 +319,10 @@ export function useStreaming({
     if (!id) return;
 
     const imageCount = images?.length || 0;
-    const displayContent = imageCount > 0
-      ? `[${imageCount} image${imageCount > 1 ? "s" : ""}]${message ? ` ${message}` : ""}`
-      : message;
 
     const s = getSession(id);
     if (s.isStreaming) {
-      mutateSession(id, (s) => addMessageToSession(s, { role: "user", content: displayContent, imageCount }));
+      mutateSession(id, (s) => addMessageToSession(s, { role: "user", content: message, imageCount, images }));
       try {
         await sendChatMessage(message, id, configRef.current, skipApprovalsRef.current, images);
       } catch (error) {
@@ -335,7 +332,7 @@ export function useStreaming({
     }
 
     mutateSession(id, (s) => {
-      addMessageToSession(s, { role: "user", content: displayContent, imageCount });
+      addMessageToSession(s, { role: "user", content: message, imageCount, images });
       s.isStreaming = true;
       s.pendingText = "";
       s.status = Status.THINKING;
