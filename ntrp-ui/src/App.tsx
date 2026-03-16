@@ -34,6 +34,7 @@ import {
 import { Setup } from "./components/Setup.js";
 import { ProviderOnboarding } from "./components/ProviderOnboarding.js";
 import { Sidebar } from "./components/sidebar/index.js";
+import { Markdown } from "./components/Markdown.js";
 import { COMMANDS } from "./lib/commands.js";
 import { setApiKey } from "./api/fetch.js";
 import { getSkills, type Skill } from "./api/client.js";
@@ -398,8 +399,10 @@ function AppContent({
           })}
 
           {pendingText.trimStart() && (
-            <box marginTop={1} paddingLeft={3}>
-              <text>{pendingText.trimStart()}</text>
+            <box marginTop={1} paddingLeft={3} overflow="hidden">
+              <box flexGrow={1} flexDirection="column" overflow="hidden">
+                <Markdown streaming>{pendingText.trimStart()}</Markdown>
+              </box>
             </box>
           )}
 
