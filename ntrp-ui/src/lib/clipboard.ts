@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { readFileSync, unlinkSync, existsSync } from "node:fs";
 import type { ImageBlock } from "../api/chat.js";
 
+const MAX_DIMENSION = 1568;
+
 const OSASCRIPT = [
   "osascript",
   "-e", 'set imageData to the clipboard as "PNGf"',
@@ -26,7 +28,14 @@ export function getClipboardImage(): ImageBlock | null {
     const buf = readFileSync(tmpPath);
     if (buf.length === 0) return null;
 
-    return { media_type: "image/png", data: buf.toString("base64") };
+    // Resize if too large — keeps under API size limits and speeds up preview
+    spawnSync("sips", [
+      "--resampleHeightWidthMax", String(MAX_DIMENSION),
+      tmpPath,
+    ], { stdio: "pipe" });
+
+    const resized = readFileSync(tmpPath);
+    return { media_type: "image/png", data: resized.toString("base64") };
   } catch {
     return null;
   } finally {
