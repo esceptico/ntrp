@@ -1,5 +1,4 @@
 import asyncio
-import json
 import time
 
 from pydantic import BaseModel, Field
@@ -7,7 +6,7 @@ from pydantic import BaseModel, Field
 from ntrp.constants import RESEARCH_TIMEOUT, USER_ENTITY_NAME
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.prompts import RESEARCH_PROMPTS, current_date_formatted, env
-from ntrp.events.sse import BackgroundTaskEvent, ToolCallEvent, ToolResultEvent
+from ntrp.events.sse import BackgroundTaskEvent
 from ntrp.logging import get_logger
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
@@ -143,62 +142,28 @@ class ResearchTool(Tool):
                 )
                 status = "completed"
             except asyncio.CancelledError:
+                if ctx.ledger:
+                    await ctx.ledger.complete(execution.tool_id)
                 return
             except Exception as e:
                 result = f"Error: {e}"
                 status = "failed"
                 _logger.warning("Background research %s failed: %s", bg_task_id, e)
-            finally:
-                if ctx.ledger:
-                    await ctx.ledger.complete(execution.tool_id)
             duration_ms = int((time.monotonic() - start) * 1000)
+            if ctx.ledger:
+                await ctx.ledger.complete(execution.tool_id)
 
-            synthetic_call_id = f"bg_{bg_task_id}"
-            messages = [
-                {
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "id": synthetic_call_id,
-                            "type": "function",
-                            "function": {
-                                "name": "background_result",
-                                "arguments": json.dumps({"task_id": bg_task_id, "task": task}),
-                            },
-                        }
-                    ],
-                },
-                {
-                    "role": "tool",
-                    "tool_call_id": synthetic_call_id,
-                    "content": result,
-                },
-            ]
-
-            emit = ctx.io.emit
-            if emit:
-                await emit(
-                    ToolCallEvent(
-                        tool_id=synthetic_call_id,
-                        name="research",
-                        args={"task": task, "depth": depth},
-                        display_name="Research",
-                    )
-                )
-                await emit(
-                    ToolResultEvent(
-                        tool_id=synthetic_call_id,
-                        name="research",
-                        result=result,
-                        preview=f"Researched ({depth})" if status == "completed" else "failed",
-                        duration_ms=duration_ms,
-                        display_name="Research",
-                    )
-                )
-                await emit(BackgroundTaskEvent(task_id=bg_task_id, command=label, status=status))
-
-            await registry.inject(messages)
+            await registry.deliver_result(
+                task_id=bg_task_id,
+                result=result,
+                label=label,
+                status=status,
+                duration_ms=duration_ms,
+                tool_name="research",
+                tool_args={"task": task, "depth": depth},
+                display_name="Research",
+                emit=ctx.io.emit,
+            )
 
         async_task = asyncio.create_task(_run_background())
         registry.register(bg_task_id, async_task, command=label)

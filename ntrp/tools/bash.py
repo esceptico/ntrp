@@ -1,5 +1,4 @@
 import asyncio
-import json
 import shlex
 import subprocess
 import time
@@ -8,7 +7,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ntrp.constants import BASH_OUTPUT_LIMIT, BASH_TIMEOUT
-from ntrp.events.sse import BackgroundTaskEvent, ToolCallEvent, ToolResultEvent
+from ntrp.events.sse import BackgroundTaskEvent
 from ntrp.logging import get_logger
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
@@ -213,53 +212,17 @@ class BashTool(Tool):
                 _logger.warning("Background task %s failed: %s", task_id, e)
             duration_ms = int((time.monotonic() - start) * 1000)
 
-            synthetic_call_id = f"bg_{task_id}"
-            messages = [
-                {
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "id": synthetic_call_id,
-                            "type": "function",
-                            "function": {
-                                "name": "background_result",
-                                "arguments": json.dumps({"task_id": task_id, "command": command}),
-                            },
-                        }
-                    ],
-                },
-                {
-                    "role": "tool",
-                    "tool_call_id": synthetic_call_id,
-                    "content": output,
-                },
-            ]
-
-            emit = execution.ctx.io.emit
-            if emit:
-                await emit(
-                    ToolCallEvent(
-                        tool_id=synthetic_call_id,
-                        name="bash",
-                        args={"command": command},
-                        display_name="Bash",
-                    )
-                )
-                lines = output.count("\n") + 1
-                await emit(
-                    ToolResultEvent(
-                        tool_id=synthetic_call_id,
-                        name="bash",
-                        result=output,
-                        preview=f"{lines} lines" if status == "completed" else "failed",
-                        duration_ms=duration_ms,
-                        display_name="Bash",
-                    )
-                )
-                await emit(BackgroundTaskEvent(task_id=task_id, command=command, status=status))
-
-            await registry.inject(messages)
+            await registry.deliver_result(
+                task_id=task_id,
+                result=output,
+                label=command,
+                status=status,
+                duration_ms=duration_ms,
+                tool_name="bash",
+                tool_args={"command": command},
+                display_name="Bash",
+                emit=execution.ctx.io.emit,
+            )
 
         task = asyncio.create_task(_run_background())
         registry.register(task_id, task, command=command)

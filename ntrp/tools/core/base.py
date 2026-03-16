@@ -37,6 +37,7 @@ class Tool(ABC):
     display_name: str
     description: str
     mutates: bool = False
+    volatile: bool = False
     requires: ClassVar[frozenset[str]] = frozenset()
     input_model: ClassVar[type[BaseModel] | None] = None
 

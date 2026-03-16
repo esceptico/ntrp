@@ -61,6 +61,7 @@ def create_agent(
         channel=channel,
         ledger=ResearchLedger(),
     )
+    tool_ctx.background_tasks.session_id = session_state.session_id
     tool_ctx.spawn_fn = create_spawn_fn(
         executor=executor,
         model=config.model,

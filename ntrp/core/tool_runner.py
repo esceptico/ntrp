@@ -4,7 +4,7 @@ import json
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
-from ntrp.constants import OFFLOAD_PREVIEW_LINES, OFFLOAD_THRESHOLD
+from ntrp.constants import NTRP_TMP_BASE, OFFLOAD_PREVIEW_LINES, OFFLOAD_THRESHOLD
 from ntrp.core.async_queue import AsyncQueue
 from ntrp.core.models import PendingToolCall, ToolExecutionResult
 from ntrp.events.internal import ToolExecuted
@@ -17,7 +17,7 @@ from ntrp.utils import ms_now
 
 _logger = get_logger(__name__)
 
-OFFLOAD_BASE = Path("/tmp/ntrp")
+OFFLOAD_BASE = Path(NTRP_TMP_BASE)
 
 
 class ToolRunner:
@@ -92,7 +92,7 @@ class ToolRunner:
         )
 
         tool = self.executor.registry.get(call.name)
-        if self.ctx.ledger and not result.is_error and tool and not tool.mutates:
+        if self.ctx.ledger and not result.is_error and tool and not tool.mutates and not tool.volatile:
             identity = f"{call.name}:{json.dumps(call.args, sort_keys=True)}"
             already_read = await self.ctx.ledger.mark_read(identity)
             if already_read:

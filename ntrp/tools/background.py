@@ -33,6 +33,7 @@ class ListBackgroundTasksTool(Tool):
     name = "list_background_tasks"
     display_name = "List Background Tasks"
     description = "List all running background tasks."
+    volatile = True
 
     async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult:
         pending = execution.ctx.background_tasks.list_pending()
