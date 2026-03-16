@@ -50,7 +50,13 @@ export function convertHistoryToMessages(raw: HistoryMessage[]): Message[] {
   for (const msg of raw) {
     switch (msg.role) {
       case "user":
-        messages.push({ id: `h-${idCounter++}`, role: "user", content: msg.content });
+        messages.push({
+          id: `h-${idCounter++}`,
+          role: "user",
+          content: msg.content,
+          images: msg.images,
+          imageCount: msg.images?.length,
+        });
         break;
 
       case "assistant":

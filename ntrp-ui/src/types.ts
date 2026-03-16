@@ -130,6 +130,7 @@ export interface Message {
   toolChain?: ToolChainItem[];
   autoApproved?: boolean;
   imageCount?: number;
+  images?: Array<{ media_type: string; data: string }>;
 }
 
 export interface PendingApproval {

@@ -23,6 +23,7 @@ export interface HistoryMessage {
   content: string;
   tool_calls?: HistoryToolCall[];
   tool_call_id?: string;
+  images?: Array<{ media_type: string; data: string }>;
 }
 
 export async function getHistory(config: Config, sessionId?: string): Promise<{ messages: HistoryMessage[] }> {

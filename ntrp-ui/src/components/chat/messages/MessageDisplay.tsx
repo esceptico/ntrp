@@ -17,7 +17,7 @@ export const MessageDisplay = memo(function MessageDisplay({
 }: MessageDisplayProps) {
   switch (msg.role) {
     case "user":
-      return <UserMessage content={msg.content} />;
+      return <UserMessage content={msg.content} images={msg.images} />;
     case "assistant":
       return <AssistantMessage content={msg.content} />;
     case "tool":
