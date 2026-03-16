@@ -247,8 +247,8 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     return true;
   },
 
-  image: async ({ addMessage, sendMessage }, args) => {
-    const img = await getClipboardImage();
+  image: ({ addMessage, sendMessage }, args) => {
+    const img = getClipboardImage();
     if (!img) {
       addMessage({ role: "error", content: "No image in clipboard" });
       return true;

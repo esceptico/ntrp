@@ -9,7 +9,6 @@ import { useAutocomplete } from "../../hooks/useAutocomplete.js";
 import { EmptyBorder } from "../ui/border.js";
 import { AutocompleteList } from "./AutocompleteList.js";
 import { InputFooter } from "./InputFooter.js";
-import { $ } from "bun";
 import { getClipboardImage } from "../../lib/clipboard.js";
 
 function formatModel(model?: string): string {
@@ -125,14 +124,12 @@ export const InputArea = memo(function InputArea({
     resetInput();
   }, [disabled, onSubmit, resetInput, getSelectedCommand]);
 
-  // Cmd+V path: terminal sends bracketed paste. Only intercept when text is
-  // empty (image-only clipboard). Non-empty text paste goes through untouched.
   const handlePaste = useCallback((e: PasteEvent) => {
-    if (e.text) return; // normal text paste — don't touch
-    e.preventDefault();
-    getClipboardImage().then((img) => {
-      if (img) setImages((prev) => [...prev, img]);
-    });
+    const img = getClipboardImage();
+    if (img) {
+      e.preventDefault();
+      setImages((prev) => [...prev, img]);
+    }
   }, []);
 
   const handleKeyDown = useCallback((e: KeyEvent) => {
@@ -141,17 +138,14 @@ export const InputArea = memo(function InputArea({
       return;
     }
 
-    // Ctrl+V with kitty protocol — arrives as key event, not paste
     if (e.name === "v" && e.ctrl) {
-      e.preventDefault();
-      getClipboardImage().then(async (img) => {
-        if (img) {
-          setImages((prev) => [...prev, img]);
-        } else if (process.platform === "darwin") {
-          const text = await $`pbpaste`.nothrow().text();
-          if (text) inputRef.current?.editBuffer.insertText(text);
-        }
-      });
+      const img = getClipboardImage();
+      if (img) {
+        e.preventDefault();
+        setImages((prev) => [...prev, img]);
+        return;
+      }
+      // No image — don't preventDefault, let normal paste through
       return;
     }
 
