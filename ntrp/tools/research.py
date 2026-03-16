@@ -154,17 +154,20 @@ class ResearchTool(Tool):
             if ctx.ledger:
                 await ctx.ledger.complete(execution.tool_id)
 
-            await registry.deliver_result(
-                task_id=bg_task_id,
-                result=result,
-                label=label,
-                status=status,
-                duration_ms=duration_ms,
-                tool_name="research",
-                tool_args={"task": task, "depth": depth},
-                display_name="Research",
-                emit=ctx.io.emit,
-            )
+            try:
+                await registry.deliver_result(
+                    task_id=bg_task_id,
+                    result=result,
+                    label=label,
+                    status=status,
+                    duration_ms=duration_ms,
+                    tool_name="research",
+                    tool_args={"task": task, "depth": depth},
+                    display_name="Research",
+                    emit=ctx.io.emit,
+                )
+            except Exception:
+                _logger.exception("Background research %s delivery failed", bg_task_id)
 
         async_task = asyncio.create_task(_run_background())
         registry.register(bg_task_id, async_task, command=label)

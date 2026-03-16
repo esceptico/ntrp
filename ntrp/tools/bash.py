@@ -212,17 +212,20 @@ class BashTool(Tool):
                 _logger.warning("Background task %s failed: %s", task_id, e)
             duration_ms = int((time.monotonic() - start) * 1000)
 
-            await registry.deliver_result(
-                task_id=task_id,
-                result=output,
-                label=command,
-                status=status,
-                duration_ms=duration_ms,
-                tool_name="bash",
-                tool_args={"command": command},
-                display_name="Bash",
-                emit=execution.ctx.io.emit,
-            )
+            try:
+                await registry.deliver_result(
+                    task_id=task_id,
+                    result=output,
+                    label=command,
+                    status=status,
+                    duration_ms=duration_ms,
+                    tool_name="bash",
+                    tool_args={"command": command},
+                    display_name="Bash",
+                    emit=execution.ctx.io.emit,
+                )
+            except Exception:
+                _logger.exception("Background task %s delivery failed", task_id)
 
         task = asyncio.create_task(_run_background())
         registry.register(task_id, task, command=command)

@@ -113,12 +113,15 @@ class BackgroundTaskRegistry:
         return path
 
     @staticmethod
-    def _build_result_pointer(content: str, path: Path | None, label: str) -> str:
+    def _build_result_pointer(content: str, path: Path, label: str) -> str:
         lines = content.split("\n")
-        if len(lines) <= OFFLOAD_PREVIEW_LINES:
-            return f"Background task completed: {label}\n\n{content}"
         preview = "\n".join(lines[:OFFLOAD_PREVIEW_LINES])
-        return f"Background task completed: {label}\nFull result ({len(lines)} lines): {path}\n\n{preview}\n..."
+        return (
+            f"Background task completed: {label}\n"
+            f"Full result ({len(lines)} lines): {path}\n\n"
+            f"{preview}\n...\n\n"
+            f"Use read_file(path='{path}', offset=N, limit=M) to read specific sections."
+        )
 
     async def deliver_result(
         self,
@@ -133,8 +136,11 @@ class BackgroundTaskRegistry:
         emit: Callable[[Any], Awaitable[None]] | None,
     ) -> None:
         lines = result.split("\n")
-        path = self._write_result_file(task_id, result) if len(lines) > OFFLOAD_PREVIEW_LINES else None
-        pointer = self._build_result_pointer(result, path, label)
+        if len(lines) > OFFLOAD_PREVIEW_LINES:
+            path = self._write_result_file(task_id, result)
+            pointer = self._build_result_pointer(result, path, label)
+        else:
+            pointer = f"Background task completed: {label}\n\n{result}"
 
         synthetic_call_id = f"bg_{task_id}"
         messages = [
