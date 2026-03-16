@@ -113,14 +113,14 @@ class BackgroundTaskRegistry:
         return path
 
     @staticmethod
-    def _build_result_pointer(content: str, path: Path, label: str) -> str:
+    def _build_result_pointer(content: str, task_id: str, label: str) -> str:
         lines = content.split("\n")
         preview = "\n".join(lines[:OFFLOAD_PREVIEW_LINES])
         return (
             f"Background task completed: {label}\n"
-            f"Full result ({len(lines)} lines): {path}\n\n"
+            f"Full result: {len(lines)} lines (task_id={task_id})\n\n"
             f"{preview}\n...\n\n"
-            f"Use read_file(path='{path}', offset=N, limit=M) to read specific sections."
+            f"Use get_background_result(task_id='{task_id}') to read the full output."
         )
 
     async def deliver_result(
@@ -135,10 +135,10 @@ class BackgroundTaskRegistry:
         display_name: str,
         emit: Callable[[Any], Awaitable[None]] | None,
     ) -> None:
+        self._write_result_file(task_id, result)
         lines = result.split("\n")
         if len(lines) > OFFLOAD_PREVIEW_LINES:
-            path = self._write_result_file(task_id, result)
-            pointer = self._build_result_pointer(result, path, label)
+            pointer = self._build_result_pointer(result, task_id, label)
         else:
             pointer = f"Background task completed: {label}\n\n{result}"
 
@@ -152,8 +152,8 @@ class BackgroundTaskRegistry:
                         "id": synthetic_call_id,
                         "type": "function",
                         "function": {
-                            "name": "background_result",
-                            "arguments": json.dumps({"task_id": task_id, "label": label}),
+                            "name": tool_name,
+                            "arguments": json.dumps(tool_args),
                         },
                     }
                 ],

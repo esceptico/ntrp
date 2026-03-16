@@ -2,7 +2,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from ntrp.events.sse import CancelledEvent, SSEEvent, TextDeltaEvent
+from ntrp.events.sse import CancelledEvent, SSEEvent
 
 if TYPE_CHECKING:
     from ntrp.core.agent import Agent
@@ -38,8 +38,7 @@ async def run_agent_loop(
                 result = item
             elif isinstance(item, SSEEvent):
                 await bus.emit(item)
-                if isinstance(item, TextDeltaEvent):
-                    await asyncio.sleep(0)
+                await asyncio.sleep(0)
     except asyncio.CancelledError:
         result = ""
 

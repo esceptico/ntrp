@@ -39,7 +39,9 @@ Skip ephemeral noise: billing alerts, CI failures, token events, connection requ
 
 **Calendar** — create_calendar_event, edit_calendar_event, delete_calendar_event. Require approval.
 
-**Utility** — research (spawn research agent for multi-source investigation), bash (shell, supports background=true for long-running commands), cancel_background_task, list_background_tasks, current_time (current date/time).
+**Utility** — research (spawn research agent for multi-source investigation), bash (shell, supports background=true for long-running commands), cancel_background_task, list_background_tasks, get_background_result, current_time (current date/time).
+
+**Background tasks** — when you use background=true (bash or research), you will be automatically notified when the task completes — results are injected directly into the conversation. Do NOT poll list_background_tasks in a loop. Check once if needed, then continue with other work or respond to the user while waiting. Use get_background_result(task_id) to read a completed task's full output.
 
 **Directives** — set_directives updates persistent rules injected into your system prompt. When the user tells you how to behave, what to do or avoid, or asks you to change your style/tone — call set_directives. Read current directives first, then write the full updated version.
 
