@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, memo, useEffect } from "react";
+import { useState, useCallback, useRef, useMemo, memo, useEffect } from "react";
 import type { TextareaRenderable, KeyEvent, PasteEvent } from "@opentui/core";
 import type { SlashCommand } from "../../types.js";
 import type { Status as StatusType } from "../../lib/constants.js";
@@ -10,6 +10,7 @@ import { EmptyBorder } from "../ui/border.js";
 import { AutocompleteList } from "./AutocompleteList.js";
 import { InputFooter } from "./InputFooter.js";
 import { getClipboardImage } from "../../lib/clipboard.js";
+import { renderImagePreview } from "../../lib/image-preview.js";
 
 function formatModel(model?: string): string {
   if (!model) return "";
@@ -185,6 +186,10 @@ export const InputArea = memo(function InputArea({
   }, [resetIndex]);
 
   const modelName = formatModel(chatModel);
+  const imagePreview = useMemo(() => {
+    if (images.length === 0) return null;
+    return renderImagePreview(images[images.length - 1].data);
+  }, [images]);
 
   return (
     <box flexDirection="column" flexShrink={0}>
@@ -215,6 +220,9 @@ export const InputArea = memo(function InputArea({
             backgroundColor={colors.background.element}
             flexGrow={1}
           >
+            {imagePreview && (
+              <text>{imagePreview}</text>
+            )}
             <textarea
               ref={inputRef as any}
               minHeight={1}
