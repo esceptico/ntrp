@@ -14,7 +14,7 @@ Tools are capabilities the agent can invoke during a conversation. Some tools re
 | `bash` | Execute shell commands (supports `background=true` for long-running tasks) | 🔒 Dangerous commands |
 | `read_file` | Read file contents (supports `~` expansion) | — |
 | `current_time` | Get current date and time | — |
-| `explore` | Spawn a sub-agent for research (`depth`: quick/normal/deep, `background`: true/false) | — |
+| `research` | Spawn a research agent with all read-only tools (`depth`: quick/normal/deep, `background`: true/false) | — |
 | `set_directives` | Set persistent behavioral directives injected into the system prompt | 🔒 |
 
 ## Notes (Obsidian)
@@ -87,7 +87,7 @@ Web search uses `WEB_SEARCH` mode (`auto`, `exa`, `ddgs`, `none`). `EXA_API_KEY`
 | `cancel_background_task` | Cancel a running background task by ID | 🔒 |
 | `list_background_tasks` | List all running background tasks | — |
 
-Background tasks are created by `bash` (with `background=true`) and `explore` (with `background=true`). Results are delivered automatically via SSE when complete.
+Background tasks are created by `bash` (with `background=true`) and `research` (with `background=true`). Results are delivered automatically via SSE when complete.
 
 ## Notifications
 

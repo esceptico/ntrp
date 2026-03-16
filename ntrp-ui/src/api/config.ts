@@ -15,7 +15,7 @@ export interface SourceInfo {
 
 export interface ServerConfig {
   chat_model: string;
-  explore_model: string;
+  research_model: string;
   memory_model: string;
   embedding_model: string;
   web_search: "auto" | "exa" | "ddgs" | "none";
@@ -46,7 +46,7 @@ export async function getServerConfig(config: Config): Promise<ServerConfig> {
 
 export async function updateConfig(
   config: Config,
-  patch: Partial<Pick<ServerConfig, "chat_model" | "explore_model" | "memory_model" | "max_depth" | "web_search" | "compression_threshold" | "max_messages" | "compression_keep_ratio" | "summary_max_tokens" | "consolidation_interval">> & {
+  patch: Partial<Pick<ServerConfig, "chat_model" | "research_model" | "memory_model" | "max_depth" | "web_search" | "compression_threshold" | "max_messages" | "compression_keep_ratio" | "summary_max_tokens" | "consolidation_interval">> & {
     sources?: Record<string, boolean>;
   }
 ): Promise<Record<string, unknown>> {
@@ -57,7 +57,7 @@ export async function getSupportedModels(config: Config): Promise<{
   models: string[];
   groups: ModelGroup[];
   chat_model: string;
-  explore_model: string;
+  research_model: string;
   memory_model: string;
 }> {
   return api.get(`${config.serverUrl}/models`);

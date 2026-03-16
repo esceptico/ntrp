@@ -3,21 +3,21 @@ from dataclasses import dataclass
 
 
 @dataclass
-class ExploreEntry:
+class ResearchEntry:
     task: str
     depth: str
     status: str  # "active" | "done"
 
 
-class ExplorationLedger:
+class ResearchLedger:
     def __init__(self):
-        self._tasks: dict[str, ExploreEntry] = {}
+        self._tasks: dict[str, ResearchEntry] = {}
         self._reads: set[str] = set()
         self._lock = asyncio.Lock()
 
     async def register(self, tool_id: str, task: str, depth: str) -> None:
         async with self._lock:
-            self._tasks[tool_id] = ExploreEntry(task=task, depth=depth, status="active")
+            self._tasks[tool_id] = ResearchEntry(task=task, depth=depth, status="active")
 
     async def complete(self, tool_id: str) -> None:
         async with self._lock:
@@ -48,12 +48,12 @@ class ExplorationLedger:
         if not active and not done and not read_count:
             return ""
 
-        parts = ["EXPLORATION CONTEXT (shared across all agents in this run):"]
+        parts = ["RESEARCH CONTEXT (shared across all agents in this run):"]
         if active:
             parts.append("Active:\n" + "\n".join(active))
         if done:
             parts.append("Done:\n" + "\n".join(done))
         if read_count:
             parts.append(f"Documents already read: {read_count}")
-        parts.append("Do not re-explore topics already covered. Focus on your specific scope.")
+        parts.append("Do not re-research topics already covered. Focus on your specific scope.")
         return "\n".join(parts)

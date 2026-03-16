@@ -19,7 +19,7 @@ from ntrp.tools.calendar import (
 from ntrp.tools.core.base import Tool
 from ntrp.tools.directives import SetDirectivesTool
 from ntrp.tools.email import EmailsTool, ReadEmailTool, SendEmailTool
-from ntrp.tools.explore import ExploreTool
+from ntrp.tools.research import ResearchTool
 from ntrp.tools.files import ReadFileTool
 from ntrp.tools.memory import ForgetTool, RecallTool, RememberTool
 from ntrp.tools.notes import (
@@ -38,7 +38,7 @@ ALL_TOOLS: list[type[Tool]] = [
     CancelBackgroundTaskTool,
     ListBackgroundTasksTool,
     ReadFileTool,
-    ExploreTool,
+    ResearchTool,
     SetDirectivesTool,
     CurrentTimeTool,
     WebSearchTool,

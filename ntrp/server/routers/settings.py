@@ -60,7 +60,7 @@ def _config_response(rt: Runtime) -> dict:
 
     return {
         "chat_model": config.chat_model,
-        "explore_model": config.explore_model,
+        "research_model": config.research_model,
         "memory_model": config.memory_model,
         "embedding_model": config.embedding_model,
         "web_search": config.web_search,
@@ -136,7 +136,7 @@ async def get_models(runtime: Runtime = Depends(get_runtime)):
         "models": list_models(),
         "groups": [{"provider": p, "models": ms} for p, ms in groups.items()],
         "chat_model": config.chat_model,
-        "explore_model": config.explore_model,
+        "research_model": config.research_model,
         "memory_model": config.memory_model,
     }
 
@@ -368,7 +368,7 @@ async def delete_custom_model(
     # Check if active model is being removed
     config = runtime.config
     clear_fields = {}
-    for key in ("chat_model", "explore_model", "memory_model"):
+    for key in ("chat_model", "research_model", "memory_model"):
         if getattr(config, key) == model_id:
             clear_fields[key] = None
 

@@ -21,8 +21,7 @@ function extractDescription(name: string, argsJson?: string): string | undefined
         return args.query;
       case "web_search":
         return args.query;
-      case "delegate":
-      case "explore":
+      case "research":
         return args.task || args.description;
       default:
         return undefined;

@@ -13,7 +13,7 @@ curl http://localhost:6877/config \
 ```json
 {
   "chat_model": "claude-sonnet-4-6",
-  "explore_model": "claude-sonnet-4-6",
+  "research_model": "claude-sonnet-4-6",
   "memory_model": "claude-sonnet-4-6",
   "embedding_model": "text-embedding-3-small",
   "has_notes": true,
@@ -39,7 +39,7 @@ curl -X PATCH http://localhost:6877/config \
 
 ## Models
 
-### List chat/explore/memory models
+### List chat/research/memory models
 
 ```bash
 curl http://localhost:6877/models \

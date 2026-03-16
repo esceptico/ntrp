@@ -221,7 +221,7 @@ export function useStreaming({
 
         case "cancelled": {
           const containers = s.toolChain.filter(
-            (item) => (item.name === "explore" || item.name === "delegate") && s.toolChain.some((c) => c.parentId === item.id)
+            (item) => item.name === "research" && s.toolChain.some((c) => c.parentId === item.id)
           );
           for (const container of containers) {
             const cCount = s.toolChain.filter((c) => c.parentId === container.id).length;

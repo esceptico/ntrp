@@ -66,7 +66,7 @@ class SourceToggles(BaseModel):
 
 class UpdateConfigRequest(BaseModel):
     chat_model: str | None = None
-    explore_model: str | None = None
+    research_model: str | None = None
     memory_model: str | None = None
     max_depth: int | None = None
     compression_threshold: float | None = None

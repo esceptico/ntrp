@@ -4,7 +4,7 @@ from typing import Self
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.core.agent import Agent
-from ntrp.core.ledger import ExplorationLedger
+from ntrp.core.ledger import ResearchLedger
 from ntrp.core.spawner import create_spawn_fn
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 from ntrp.tools.executor import ToolExecutor
@@ -13,7 +13,7 @@ from ntrp.tools.executor import ToolExecutor
 @dataclass(frozen=True)
 class AgentConfig:
     model: str
-    explore_model: str | None
+    research_model: str | None
     max_depth: int
     compression_threshold: float = 0.8
     max_messages: int = 120
@@ -24,7 +24,7 @@ class AgentConfig:
     def from_config(cls, config, *, model: str | None = None) -> Self:
         return cls(
             model=model or config.chat_model,
-            explore_model=config.explore_model,
+            research_model=config.research_model,
             max_depth=config.max_depth,
             compression_threshold=config.compression_threshold,
             max_messages=config.max_messages,
@@ -49,7 +49,7 @@ def create_agent(
         run_id=run_id,
         max_depth=config.max_depth,
         extra_auto_approve=extra_auto_approve or set(),
-        explore_model=config.explore_model,
+        research_model=config.research_model,
     )
 
     tool_ctx = ToolContext(
@@ -59,7 +59,7 @@ def create_agent(
         io=io or IOBridge(),
         services=executor.tool_services,
         channel=channel,
-        ledger=ExplorationLedger(),
+        ledger=ResearchLedger(),
     )
     tool_ctx.spawn_fn = create_spawn_fn(
         executor=executor,
