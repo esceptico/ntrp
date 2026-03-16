@@ -11,9 +11,11 @@ Tools are capabilities the agent can invoke during a conversation. Some tools re
 
 | Tool | Description | Approval |
 |------|-------------|----------|
-| `bash` | Execute shell commands | 🔒 Dangerous commands |
-| `read_file` | Read file contents | — |
+| `bash` | Execute shell commands (supports `background=true` for long-running tasks) | 🔒 Dangerous commands |
+| `read_file` | Read file contents (supports `~` expansion) | — |
 | `current_time` | Get current date and time | — |
+| `explore` | Spawn a sub-agent for research (`depth`: quick/normal/deep, `background`: true/false) | — |
+| `set_directives` | Set persistent behavioral directives injected into the system prompt | 🔒 |
 
 ## Notes (Obsidian)
 
@@ -22,6 +24,7 @@ Requires `NTRP_VAULT_PATH` to be set.
 | Tool | Description | Approval |
 |------|-------------|----------|
 | `notes` | Search and list notes | — |
+| `read_note` | Read full note contents | — |
 | `edit_note` | Edit a note | 🔒 |
 | `create_note` | Create a new note | 🔒 |
 | `delete_note` | Delete a note | 🔒 |
@@ -76,6 +79,15 @@ Web search uses `WEB_SEARCH` mode (`auto`, `exa`, `ddgs`, `none`). `EXA_API_KEY`
 | `delete_automation` | Remove an automation | 🔒 |
 | `run_automation` | Trigger immediate run | 🔒 |
 | `get_automation_result` | Get last run result | — |
+
+## Background tasks
+
+| Tool | Description | Approval |
+|------|-------------|----------|
+| `cancel_background_task` | Cancel a running background task by ID | 🔒 |
+| `list_background_tasks` | List all running background tasks | — |
+
+Background tasks are created by `bash` (with `background=true`) and `explore` (with `background=true`). Results are delivered automatically via SSE when complete.
 
 ## Notifications
 

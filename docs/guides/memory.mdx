@@ -43,7 +43,7 @@ Cross-domain insights that connect seemingly unrelated facts.
 
 > "Pattern: work stress correlates with reduced exercise frequency"
 
-Generated during weekly consolidation by clustering facts across domains. Dreams are disabled by default — enable them in **Settings > Connections > Memory**.
+Generated during weekly consolidation by clustering facts across domains. Dreams are disabled by default — enable them in **Settings > Memory**.
 
 ## Write path
 
@@ -56,20 +56,31 @@ When ntrp learns something new:
 
 ## Consolidation
 
-A background loop runs every 30 minutes (configurable in **Settings > Limits**):
+Consolidation now runs as a builtin automation with dual triggers: every 30 minutes and after 10 minutes of idle time (configurable in **Settings > Memory**).
 
 1. **Per-fact** — search for similar observations, decide whether to update existing or create new
 2. **Temporal pass** — find trends and transitions across an entity's facts
 3. **Observation merge** — deduplicate similar observations (cosine > 0.90)
 4. **Fact merge** — deduplicate near-identical facts
 5. **Dream pass** — cluster facts, discover cross-domain patterns
+6. **Archival pass** — archive old, low-value facts that have been consolidated
+
+### Extraction
+
+Fact extraction from conversations is also a builtin automation. It fires every 3 user messages or after 5 minutes of idle time, extracting durable facts from the conversation without running a full agent loop.
+
+Both builtin automations are visible in the automations viewer under the **Internal** tab.
+
+## Archival
+
+Facts and observations that have been fully consolidated, have low access decay, and exceed an age threshold are automatically archived. Archived items are excluded from retrieval but not deleted — they can be restored if needed.
 
 ## Retrieval
 
 When you ask ntrp something, it retrieves context in two phases:
 
 1. **Observations** — vector + full-text hybrid search, top 5 results
-2. **Facts** — vector + FTS + entity expansion + temporal context, reranked
+2. **Facts** — vector + FTS, reranked (consolidated and archived facts excluded)
 
 This gives the agent both high-level understanding (observations) and specific details (facts).
 

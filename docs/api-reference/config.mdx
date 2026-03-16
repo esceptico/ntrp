@@ -1,6 +1,6 @@
 ---
 title: "Config"
-description: "Server configuration and model management."
+description: "Server configuration, model management, providers, and notifiers."
 ---
 
 ## Get config
@@ -19,10 +19,11 @@ curl http://localhost:6877/config \
   "has_notes": true,
   "has_browser": false,
   "sources": {
-    "gmail": {"enabled": true, "connected": true},
-    "calendar": {"enabled": false, "connected": false},
-    "memory": {"enabled": true},
-    "web": {"connected": true}
+    "google": {"enabled": true, "connected": true},
+    "memory": {"enabled": true, "connected": true, "dreams": false},
+    "web": {"connected": true, "mode": "auto", "provider": "ddgs"},
+    "notes": {"connected": true, "path": "/Users/you/notes"},
+    "browser": {"connected": false, "type": null}
   }
 }
 ```
@@ -36,23 +37,25 @@ curl -X PATCH http://localhost:6877/config \
   -d '{"chat_model": "gpt-5.2"}'
 ```
 
-## List available models
+## Models
 
-### Chat/explore/memory models
+### List chat/explore/memory models
 
 ```bash
 curl http://localhost:6877/models \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-### Embedding models
+Returns models grouped by provider, including Claude OAuth models when configured.
+
+### List embedding models
 
 ```bash
 curl http://localhost:6877/models/embedding \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-## Change embedding model
+### Change embedding model
 
 Changing the embedding model triggers a full re-index of memory:
 
@@ -63,9 +66,137 @@ curl -X POST http://localhost:6877/config/embedding \
   -d '{"embedding_model": "text-embedding-3-large"}'
 ```
 
+### Add custom model
+
+Register an OpenAI-compatible model endpoint:
+
+```bash
+curl -X POST http://localhost:6877/models/custom \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_id": "my-model",
+    "base_url": "http://localhost:11434/v1",
+    "context_window": 128000,
+    "max_output_tokens": 8192,
+    "api_key": "optional-key"
+  }'
+```
+
+### Remove custom model
+
+```bash
+curl -X DELETE http://localhost:6877/models/custom/my-model \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Providers
+
+### List providers
+
+```bash
+curl http://localhost:6877/providers \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Returns all providers (Anthropic, OpenAI, Google, OpenRouter, Claude OAuth, Custom) with connection status, available models, and masked API key hints.
+
+### Connect provider
+
+```bash
+curl -X POST http://localhost:6877/providers/openai/connect \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"api_key": "sk-...", "chat_model": "gpt-5.2"}'
+```
+
+### Connect via Claude OAuth
+
+```bash
+curl -X POST http://localhost:6877/providers/anthropic/oauth \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Opens a browser window for PKCE-based OAuth login with your Claude Pro/Max subscription.
+
+### Disconnect provider
+
+```bash
+curl -X DELETE http://localhost:6877/providers/openai \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Services
+
+External service integrations (Exa web search, Telegram).
+
+### List services
+
+```bash
+curl http://localhost:6877/services \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### Connect service
+
+```bash
+curl -X POST http://localhost:6877/services/telegram/connect \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"api_key": "bot-token..."}'
+```
+
+### Disconnect service
+
+```bash
+curl -X DELETE http://localhost:6877/services/telegram \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Notifier configs
+
+Notifiers deliver automation results to external channels.
+
+### List configs
+
+```bash
+curl http://localhost:6877/notifiers/configs \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### List available types
+
+```bash
+curl http://localhost:6877/notifiers/types \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### Create notifier
+
+```bash
+curl -X POST http://localhost:6877/notifiers/configs \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my-telegram", "type": "telegram", "config": {"chat_id": "123456"}}'
+```
+
+### Test notifier
+
+```bash
+curl -X POST http://localhost:6877/notifiers/configs/my-telegram/test \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### Delete notifier
+
+```bash
+curl -X DELETE http://localhost:6877/notifiers/configs/my-telegram \
+  -H "Authorization: Bearer $API_KEY"
+```
+
 ## Directives
 
-System directives customize the agent's behavior.
+System directives customize the agent's behavior. They persist across sessions and are injected into the system prompt.
 
 ### Get directives
 
@@ -80,5 +211,23 @@ curl http://localhost:6877/directives \
 curl -X PUT http://localhost:6877/directives \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"directives": "Always respond in Spanish. Be concise."}'
+  -d '{"content": "Always respond in Spanish. Be concise."}'
+```
+
+## Context
+
+### Get token usage
+
+```bash
+curl http://localhost:6877/context \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### Compact context
+
+Compress conversation history to free token space:
+
+```bash
+curl -X POST http://localhost:6877/compact \
+  -H "Authorization: Bearer $API_KEY"
 ```

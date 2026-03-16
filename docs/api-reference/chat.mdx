@@ -22,6 +22,10 @@ Fire-and-forget message send. If an agent is already running, the message is que
   The user message to send.
 </ParamField>
 
+<ParamField body="images" type="array">
+  Optional array of image objects to include with the message. Each image has `media_type` (e.g. `image/jpeg`, `image/png`) and `data` (base64-encoded content).
+</ParamField>
+
 <ParamField body="session_id" type="string" required>
   Target session ID.
 </ParamField>
@@ -35,6 +39,19 @@ curl -X POST http://localhost:6877/chat/message \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"message": "What meetings do I have today?", "session_id": "abc-123"}'
+```
+
+With an image:
+
+```bash
+curl -X POST http://localhost:6877/chat/message \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "What is in this image?",
+    "session_id": "abc-123",
+    "images": [{"media_type": "image/jpeg", "data": "<base64>"}]
+  }'
 ```
 
 ```json
@@ -57,6 +74,17 @@ curl -X POST http://localhost:6877/tools/result \
     "result": "Approved",
     "approved": true
   }'
+```
+
+## Background a run
+
+Move an active agent run into background mode. The UI is unblocked immediately and results are delivered via SSE when complete.
+
+```bash
+curl -X POST http://localhost:6877/chat/background \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"run_id": "run_abc"}'
 ```
 
 ## Cancel

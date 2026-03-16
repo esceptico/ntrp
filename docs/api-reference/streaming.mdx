@@ -21,11 +21,21 @@ Agent is processing. Includes a status message.
 
 ### `text`
 
-Streamed response text (arrives in chunks).
+Complete response text block.
 
 ```json
-{"type": "text", "content": "Based on your "}
+{"type": "text", "content": "Based on your calendar, you have 3 meetings today."}
 ```
+
+### `text_delta`
+
+Streamed token-level text delta. Only sent when streaming is enabled (pass `?stream=true` on the SSE connection, or enable in **Settings > Connection**).
+
+```json
+{"type": "text_delta", "content": "Based"}
+```
+
+Deltas arrive as individual tokens. Accumulate them to build the full response. A final `text` event is also sent as a complete fallback.
 
 ### `tool_call`
 
@@ -107,12 +117,28 @@ An error occurred.
 {"type": "error", "content": "Rate limit exceeded", "fatal": false}
 ```
 
+### `background_task`
+
+A background task changed state (started, completed, failed, or cancelled).
+
+```json
+{"type": "background_task", "task_id": "bg_abc123", "command": "explore(deep): research topic", "status": "completed"}
+```
+
+### `backgrounded`
+
+A running agent was moved to background mode.
+
+```json
+{"type": "backgrounded", "run_id": "run_abc"}
+```
+
 ### `cancelled`
 
 User cancelled the run.
 
 ```json
-{"type": "cancelled"}
+{"type": "cancelled", "run_id": "run_abc"}
 ```
 
 ## Approval flow

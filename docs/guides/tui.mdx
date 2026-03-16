@@ -20,12 +20,27 @@ After connecting, if no LLM provider is configured, a **provider onboarding** di
 | Shortcut | Action |
 |----------|--------|
 | `Enter` | Send message |
-| `Escape` | Cancel running agent |
+| `Escape` | Cancel running agent / remove attached image |
 | `Ctrl+C` | Exit |
 | `Ctrl+L` | Toggle sidebar |
 | `Ctrl+N` | New session |
 | `Shift+Tab` | Cycle to next session |
 | `Tab` `Tab` | Toggle auto-approve mode |
+| `Cmd+V` / `Ctrl+V` | Paste image from clipboard |
+
+## Image input
+
+Paste images directly into the chat input with `Cmd+V` (macOS) or `Ctrl+V`. A pixelated preview appears above the input area. You can also use the `/image` command to attach an image.
+
+- Supported formats: PNG, JPEG
+- Images are resized to max 1568px and compressed to JPEG before sending
+- Press `Escape` to remove an attached image before sending
+- Images are stored in message history and re-rendered on replay
+- Works with all providers: Anthropic, OpenAI, and Gemini
+
+## Mouse support
+
+Click on list items to select them. Works across all list views: sidebar sessions, approval dialogs, settings, memory viewer, and automations viewer. Keyboard navigation still works alongside mouse clicks.
 
 ## Slash commands
 
@@ -35,7 +50,6 @@ After connecting, if no LLM provider is configured, a **provider onboarding** di
 | `/sessions` | Switch, create, or delete sessions |
 | `/name <name>` | Rename current session |
 | `/delete [query]` | Delete a session |
-| `/restore <query>` | Restore an archived session |
 | `/init` | Scan sources and learn about you |
 | `/index` | Re-index notes for semantic search |
 | `/memory` | View memory (facts, observations) |
@@ -49,6 +63,7 @@ After connecting, if no LLM provider is configured, a **provider onboarding** di
 | `/purge confirm` | Clear graph memory (keeps note embeddings) |
 | `/connect` | Manage LLM providers |
 | `/models` | Switch models |
+| `/image` | Attach image from clipboard |
 | `/logout` | Clear credentials and disconnect |
 | `/exit` | Exit application |
 
@@ -63,6 +78,22 @@ The default view. Type messages, see agent responses with tool call visualizatio
 ### Settings (`/settings`)
 
 Configure models, integrations, server connection, and UI preferences. Uses drill navigation — `↑↓` to navigate sections, `Enter` to drill in, `Escape` to back out.
+
+Settings are organized into these sections:
+
+| Section | What's in it |
+|---------|-------------|
+| **Connection** | Server address, token streaming toggle |
+| **API Keys** | Model provider credentials (Claude, OpenAI, Gemini) |
+| **Sources** | Data source toggles (vault, Google, browser, web search) |
+| **Memory** | Consolidation interval, dream generation |
+| **Instructions** | System prompt and directives |
+| **Context** | Compression thresholds, message limits, summary tokens |
+| **Agent** | Subagent depth, exploration settings |
+| **Notifications** | Email, Telegram, bash notifiers |
+| **Skills** | Builtin and custom skills management |
+| **MCP Servers** | Model context protocol servers |
+| **Interface** | Theme, accent color, sidebar section visibility |
 
 ### Memory viewer (`/memory`)
 
@@ -100,7 +131,7 @@ The sidebar (toggle with `Ctrl+L`) shows:
 - Upcoming automations
 - Recent sessions
 
-Section visibility is configurable in **Settings > Sidebar**. Requires terminal width of at least 94 columns.
+Section visibility is configurable in **Settings > Interface**. Requires terminal width of at least 94 columns.
 
 ## Auto-approve mode
 

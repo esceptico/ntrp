@@ -12,11 +12,9 @@ curl -X POST http://localhost:6877/automations \
   -d '{
     "name": "Morning briefing",
     "description": "Summarize unread emails and today calendar",
-    "trigger": {
-      "type": "time",
-      "at": "09:00",
-      "days": "weekdays"
-    },
+    "trigger_type": "time",
+    "at": "09:00",
+    "days": "weekdays",
     "notifiers": ["telegram"]
   }'
 ```
@@ -30,16 +28,47 @@ curl -X POST http://localhost:6877/automations \
 {"type": "time", "at": "08:00"}
 ```
 
-**Interval:**
+**Interval (with optional time window):**
 ```json
 {"type": "time", "every": "2h"}
-{"type": "time", "every": "30m"}
+{"type": "time", "every": "30m", "start": "09:00", "end": "18:00"}
 ```
 
 **Event-driven:**
 ```json
-{"type": "event", "event_type": "calendar", "lead_minutes": 15}
+{"type": "event", "event_type": "event_approaching", "lead_minutes": 15}
 ```
+
+**Idle (fires after user inactivity):**
+```json
+{"type": "idle", "idle_minutes": 5}
+```
+
+**Count (fires every N user messages):**
+```json
+{"type": "count", "every_n": 3}
+```
+
+### Multi-trigger
+
+Pass a `triggers` array to combine multiple triggers (OR logic):
+
+```bash
+curl -X POST http://localhost:6877/automations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Extract facts",
+    "description": "Extract facts from recent conversation",
+    "triggers": [
+      {"type": "count", "every_n": 5},
+      {"type": "idle", "idle_minutes": 10}
+    ],
+    "cooldown_minutes": 10
+  }'
+```
+
+The `cooldown_minutes` field prevents an automation from firing again too soon after a run.
 
 ## List automations
 

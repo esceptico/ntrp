@@ -7,7 +7,7 @@ description: "Schedule tasks that run autonomously."
 
 Automations let ntrp act on its own — daily summaries, inbox monitoring, reminders, or any task you'd otherwise forget to do manually.
 
-Each automation has a **trigger** (when to run), a **description** (what to do in natural language), and optional **notifiers** (where to send results).
+Each automation has one or more **triggers** (when to run), a **description** (what to do in natural language), and optional **notifiers** (where to send results). When multiple triggers are defined, the automation fires when **any** trigger condition is met.
 
 ## Trigger types
 
@@ -22,12 +22,14 @@ Every day at 22:00 → "Review what I committed today and update my work log"
 
 ### Interval
 
-Run repeatedly at a fixed interval:
+Run repeatedly at a fixed interval, with optional time windows:
 
 ```
 Every 2h → "Check for new emails from VIP senders and notify me"
-Every 30m → "Monitor the deployment pipeline status"
+Every 30m (09:00–18:00) → "Monitor the deployment pipeline status"
 ```
+
+Interval triggers support `start` and `end` times to constrain the window. Outside the window, the next run advances to the start of the next eligible day.
 
 ### Event-driven
 
@@ -37,11 +39,49 @@ Trigger before calendar events:
 15 minutes before any meeting → "Pull up notes about attendees from memory"
 ```
 
+### Idle
+
+Fire once after a period of user inactivity. Resets when the user sends a new message.
+
+```
+After 5 minutes idle → "Extract facts from recent conversation"
+```
+
+### Count
+
+Fire every N user messages in a session. The counter resets per session.
+
+```
+Every 3 turns → "Extract durable facts from the conversation"
+```
+
+## Multi-trigger
+
+Automations accept multiple triggers (OR logic). This is useful for combining time-based and activity-based conditions:
+
+```
+[every 30m + idle 10m] → "Consolidate and merge memory"
+[every 3 turns + idle 5m] → "Extract facts from conversation"
+```
+
+## Builtin automations
+
+ntrp ships with two internal automations that run automatically:
+
+| Automation | Triggers | Purpose |
+|------------|----------|---------|
+| **Chat Extraction** | Every 3 turns + idle 5m | Extract durable facts from conversations |
+| **Memory Consolidation** | Every 30m + idle 10m | Merge, archive, and consolidate memory |
+
+Builtin automations are visible in the automations viewer (internal tab) and can be toggled on/off, but cannot be deleted. They use handler functions instead of full agent loops.
+
 ## Creating automations
 
 ### From the TUI
 
-Open `/automations` and press `n` to create. The form uses drill navigation:
+Open `/automations` and press `n` to create. The automations viewer has two tabs: **User** (your automations) and **Internal** (builtin automations like extraction and consolidation).
+
+The create/edit form uses drill navigation:
 
 | Shortcut | Action |
 |----------|--------|
@@ -52,7 +92,7 @@ Open `/automations` and press `n` to create. The form uses drill navigation:
 | `Escape` | Stop editing / exit form |
 | `Ctrl+S` | Save |
 
-To edit an existing automation, highlight it and press `e`.
+To edit an existing automation, highlight it and press `e`. You can add multiple triggers to a single automation.
 
 ### From chat
 
@@ -66,6 +106,8 @@ Send the result to my Telegram.
 
 ### Via the API
 
+Single trigger:
+
 ```bash
 curl -X POST http://localhost:6877/automations \
   -H "Authorization: Bearer $NTRP_API_KEY" \
@@ -73,8 +115,26 @@ curl -X POST http://localhost:6877/automations \
   -d '{
     "name": "Morning briefing",
     "description": "Summarize unread emails and today's calendar events",
-    "trigger": {"type": "time", "at": "09:00", "days": "weekdays"},
+    "trigger_type": "time",
+    "at": "09:00",
+    "days": "weekdays",
     "notifiers": ["telegram"]
+  }'
+```
+
+Multi-trigger:
+
+```bash
+curl -X POST http://localhost:6877/automations \
+  -H "Authorization: Bearer $NTRP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Extract conversation facts",
+    "description": "Extract durable facts from recent conversation",
+    "triggers": [
+      {"type": "count", "every_n": 5},
+      {"type": "idle", "idle_minutes": 10}
+    ]
   }'
 ```
 

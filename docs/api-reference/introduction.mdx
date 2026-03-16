@@ -30,11 +30,11 @@ All endpoints return JSON. The event stream (`GET /chat/events/{session_id}`) us
 
 | Group | Endpoints | Description |
 |-------|-----------|-------------|
-| [Chat](/api-reference/chat) | `GET /chat/events`, `POST /chat/message`, `POST /cancel` | Persistent SSE stream + fire-and-forget messaging |
+| [Chat](/api-reference/chat) | `GET /chat/events`, `POST /chat/message`, `POST /chat/background`, `POST /cancel` | SSE stream, messaging, background mode |
 | [Sessions](/api-reference/sessions) | `/session*`, `/sessions*` | Session management |
 | [Memory](/api-reference/memory) | `/facts*`, `/observations*`, `/dreams*` | Memory CRUD |
-| [Automations](/api-reference/automations) | `/automations*` | Scheduled tasks |
-| [Config](/api-reference/config) | `/config*`, `/models*` | Server configuration |
+| [Automations](/api-reference/automations) | `/automations*`, `/notifiers*` | Scheduled tasks, notifier configs |
+| [Config](/api-reference/config) | `/config*`, `/models*`, `/providers*`, `/services*`, `/directives` | Configuration, providers, models |
 | Health | `GET /health` | Server status (public) |
 
 ## Health check
@@ -46,7 +46,7 @@ curl http://localhost:6877/health
 ```json
 {
   "status": "ok",
-  "version": "0.12.1"
+  "version": "0.15.0"
 }
 ```
 
@@ -55,7 +55,7 @@ Pass a Bearer token to also verify authentication:
 ```json
 {
   "status": "ok",
-  "version": "0.12.1",
+  "version": "0.15.0",
   "auth": true
 }
 ```
