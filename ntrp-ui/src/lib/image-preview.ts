@@ -1,8 +1,10 @@
 import { PNG } from "pngjs";
 
-const UPPER_HALF = "▀";
+interface PixelRow {
+  pixels: Array<{ fg: string; bg: string }>;
+}
 
-export function renderImagePreview(base64: string, maxWidth = 40): string {
+export function getImagePixels(base64: string, maxWidth = 40): PixelRow[] {
   const buf = Buffer.from(base64, "base64");
   const png = PNG.sync.read(buf);
   const { width, height, data } = png;
@@ -11,22 +13,20 @@ export function renderImagePreview(base64: string, maxWidth = 40): string {
   const w = Math.round(width * scale);
   const h = Math.round(height * scale);
 
-  const sample = (x: number, y: number): [number, number, number] => {
+  const sample = (x: number, y: number): string => {
     const sx = Math.min(Math.floor(x / scale), width - 1);
     const sy = Math.min(Math.floor(y / scale), height - 1);
     const i = (sy * width + sx) * 4;
-    return [data[i], data[i + 1], data[i + 2]];
+    return `#${data[i].toString(16).padStart(2, "0")}${data[i + 1].toString(16).padStart(2, "0")}${data[i + 2].toString(16).padStart(2, "0")}`;
   };
 
-  const lines: string[] = [];
+  const rows: PixelRow[] = [];
   for (let y = 0; y < h - 1; y += 2) {
-    let line = "";
+    const pixels: PixelRow["pixels"] = [];
     for (let x = 0; x < w; x++) {
-      const [tr, tg, tb] = sample(x, y);
-      const [br, bg, bb] = sample(x, y + 1);
-      line += `\x1b[38;2;${tr};${tg};${tb};48;2;${br};${bg};${bb}m${UPPER_HALF}`;
+      pixels.push({ fg: sample(x, y), bg: sample(x, y + 1) });
     }
-    lines.push(line + "\x1b[0m");
+    rows.push({ pixels });
   }
-  return lines.join("\n");
+  return rows;
 }

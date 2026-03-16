@@ -10,7 +10,7 @@ import { EmptyBorder } from "../ui/border.js";
 import { AutocompleteList } from "./AutocompleteList.js";
 import { InputFooter } from "./InputFooter.js";
 import { getClipboardImage } from "../../lib/clipboard.js";
-import { renderImagePreview } from "../../lib/image-preview.js";
+import { getImagePixels } from "../../lib/image-preview.js";
 
 function formatModel(model?: string): string {
   if (!model) return "";
@@ -160,7 +160,7 @@ export const InputArea = memo(function InputArea({
 
     if (e.name === "escape") {
       if (imagesRef.current.length > 0) {
-        setImages([]);
+        setImages((prev) => prev.slice(0, -1));
         return;
       }
       if (!valueRef.current) return;
@@ -188,7 +188,7 @@ export const InputArea = memo(function InputArea({
   const modelName = formatModel(chatModel);
   const imagePreview = useMemo(() => {
     if (images.length === 0) return null;
-    return renderImagePreview(images[images.length - 1].data);
+    return getImagePixels(images[images.length - 1].data);
   }, [images]);
 
   return (
@@ -221,7 +221,15 @@ export const InputArea = memo(function InputArea({
             flexGrow={1}
           >
             {imagePreview && (
-              <text>{imagePreview}</text>
+              <box flexDirection="column" flexShrink={0} paddingBottom={1}>
+                {imagePreview.map((row, y) => (
+                  <text key={y}>
+                    {row.pixels.map((p, x) => (
+                      <span key={x} fg={p.fg} bg={p.bg}>▀</span>
+                    ))}
+                  </text>
+                ))}
+              </box>
             )}
             <textarea
               ref={inputRef as any}
