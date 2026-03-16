@@ -16,8 +16,8 @@ from ntrp.llm.utils import blocks_to_text
 
 
 class OpenAIClient(CompletionClient, EmbeddingClient):
-    def __init__(self, base_url: str | None = None, api_key: str | None = None):
-        self._client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
+    def __init__(self, base_url: str | None = None, api_key: str | None = None, timeout: float = 60.0):
+        self._client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
 
     def _prepare(
         self,

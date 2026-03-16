@@ -25,8 +25,8 @@ _FINISH_REASONS = {
 
 
 class AnthropicClient(CompletionClient):
-    def __init__(self, api_key: str | None = None, auth_token: str | None = None):
-        kwargs: dict = {}
+    def __init__(self, api_key: str | None = None, auth_token: str | None = None, timeout: float = 60.0):
+        kwargs: dict = {"timeout": timeout}
         if auth_token:
             kwargs["auth_token"] = auth_token
             kwargs["default_headers"] = {"anthropic-beta": "oauth-2025-04-20"}
