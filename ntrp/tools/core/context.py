@@ -172,7 +172,7 @@ class BackgroundTaskRegistry:
                 ToolResultEvent(
                     tool_id=synthetic_call_id,
                     name=tool_name,
-                    result=pointer,
+                    result=result,
                     preview=f"{display_name} ({status})",
                     duration_ms=duration_ms,
                     display_name=display_name,
