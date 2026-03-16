@@ -193,16 +193,13 @@ async def _drain_backgrounded(
     except Exception:
         _logger.exception("Backgrounded drain failed (run_id=%s)", ctx.run.run_id)
     finally:
-        if agent.inject_queue:
-            agent.messages.extend(agent.inject_queue)
-            agent.inject_queue.clear()
         ctx.run.messages = agent.messages
         ctx.run.usage = agent.usage
         last_tokens = getattr(agent, "_last_input_tokens", None)
         metadata = {"last_input_tokens": last_tokens} if last_tokens is not None else None
 
-        # Swap on_result BEFORE the save so no messages are lost in the
-        # window between inject_queue.clear() and the save completing.
+        # Swap on_result FIRST so no messages land in inject_queue after
+        # this point. Then flush any remaining inject_queue into messages.
         save_lock = asyncio.Lock()
 
         async def _save_directly(messages: list[dict]) -> None:
@@ -211,6 +208,10 @@ async def _drain_backgrounded(
                 await ctx.session_service.save(ctx.session_state, agent.messages, metadata=metadata)
 
         agent.ctx.background_tasks.on_result = _save_directly
+
+        if agent.inject_queue:
+            agent.messages.extend(agent.inject_queue)
+            agent.inject_queue.clear()
 
         async with save_lock:
             await ctx.session_service.save(ctx.session_state, agent.messages, metadata=metadata)

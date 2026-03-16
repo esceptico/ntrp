@@ -422,6 +422,7 @@ export function useStreaming({
       }
     });
     prevBgCountRef.current = getSession(targetId).backgroundTaskCount;
+    prevIsStreamingRef.current = getSession(targetId).isStreaming;
     setViewedId(targetId);
   }, [getSession, mutateSession, setViewedId]);
 
@@ -484,7 +485,7 @@ export function useStreaming({
     const shouldTrigger =
       // Task just completed while idle
       (backgroundTaskCount < prev && !isStreaming) ||
-      // Streaming just ended — check for tasks that completed during the run
+      // Streaming just ended — process any tasks that completed during the run
       (wasStreaming && !isStreaming);
 
     if (!shouldTrigger) return;
