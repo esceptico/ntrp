@@ -10,7 +10,7 @@ from ntrp.channel import Channel
 from ntrp.constants import NTRP_TMP_BASE, OFFLOAD_PREVIEW_LINES
 from ntrp.context.models import SessionState
 from ntrp.core.ledger import ResearchLedger
-from ntrp.events.sse import ApprovalNeededEvent, BackgroundTaskEvent, ToolCallEvent, ToolResultEvent
+from ntrp.events.sse import ApprovalNeededEvent, BackgroundTaskEvent
 from ntrp.tools.core.types import ToolResult
 
 if TYPE_CHECKING:
@@ -113,14 +113,14 @@ class BackgroundTaskRegistry:
         return path
 
     @staticmethod
-    def _build_result_pointer(content: str, task_id: str, label: str) -> str:
+    def _build_result_summary(content: str, task_id: str, label: str) -> str:
         lines = content.split("\n")
         preview = "\n".join(lines[:OFFLOAD_PREVIEW_LINES])
+        truncated = "...\n" if len(lines) > OFFLOAD_PREVIEW_LINES else ""
         return (
             f"Background task completed: {label}\n"
-            f"Full result: {len(lines)} lines (task_id={task_id})\n\n"
-            f"{preview}\n...\n\n"
-            f"Use get_background_result(task_id='{task_id}') to read the full output."
+            f"{len(lines)} lines — use get_background_result(task_id='{task_id}') for full output.\n\n"
+            f"{preview}\n{truncated}"
         )
 
     async def deliver_result(
@@ -136,11 +136,7 @@ class BackgroundTaskRegistry:
         emit: Callable[[Any], Awaitable[None]] | None,
     ) -> None:
         self._write_result_file(task_id, result)
-        lines = result.split("\n")
-        if len(lines) > OFFLOAD_PREVIEW_LINES:
-            pointer = self._build_result_pointer(result, task_id, label)
-        else:
-            pointer = f"Background task completed: {label}\n\n{result}"
+        summary = self._build_result_summary(result, task_id, label)
 
         synthetic_call_id = f"bg_{task_id}"
         messages = [
@@ -161,29 +157,11 @@ class BackgroundTaskRegistry:
             {
                 "role": "tool",
                 "tool_call_id": synthetic_call_id,
-                "content": pointer,
+                "content": summary,
             },
         ]
 
         if emit:
-            await emit(
-                ToolCallEvent(
-                    tool_id=synthetic_call_id,
-                    name=tool_name,
-                    args=tool_args,
-                    display_name=display_name,
-                )
-            )
-            await emit(
-                ToolResultEvent(
-                    tool_id=synthetic_call_id,
-                    name=tool_name,
-                    result=result,
-                    preview=f"{display_name} ({status})",
-                    duration_ms=duration_ms,
-                    display_name=display_name,
-                )
-            )
             await emit(BackgroundTaskEvent(task_id=task_id, command=label, status=status))
 
         await self.inject(messages)
