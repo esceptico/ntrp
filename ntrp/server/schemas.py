@@ -5,8 +5,14 @@ from pydantic import BaseModel, Field
 # --- Chat / run ---
 
 
+class ImageBlock(BaseModel):
+    media_type: str
+    data: str  # base64-encoded
+
+
 class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=100_000)
+    message: str = Field("", max_length=100_000)
+    images: list[ImageBlock] = Field(default_factory=list)
     skip_approvals: bool = False
     session_id: str | None = None
 

@@ -191,7 +191,24 @@ class AnthropicClient(CompletionClient):
             elif role == "tool":
                 self._append_tool_result(result, msg)
             elif role == "user":
-                result.append({"role": "user", "content": msg["content"]})
+                result.append({"role": "user", "content": self._convert_user_content(msg["content"])})
+        return result
+
+    def _convert_user_content(self, content: str | list) -> str | list[dict]:
+        if isinstance(content, str):
+            return content
+        result = []
+        for block in content:
+            match block.get("type"):
+                case "text":
+                    result.append({"type": "text", "text": block["text"]})
+                case "image":
+                    result.append(
+                        {
+                            "type": "image",
+                            "source": {"type": "base64", "media_type": block["media_type"], "data": block["data"]},
+                        }
+                    )
         return result
 
     def _convert_assistant(self, msg: dict) -> dict:
@@ -249,9 +266,14 @@ class AnthropicClient(CompletionClient):
         last = messages[-1]
         content = last.get("content")
         if isinstance(content, str):
-            last["content"] = [{"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}]
+            if content:
+                last["content"] = [{"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}]
         elif isinstance(content, list) and content:
-            content[-1]["cache_control"] = {"type": "ephemeral"}
+            for target in reversed(content):
+                btype = target.get("type")
+                if btype in ("text", "image", "tool_result", "tool_use") and (btype != "text" or target.get("text")):
+                    target["cache_control"] = {"type": "ephemeral"}
+                    break
 
     # --- Response parsing ---
 

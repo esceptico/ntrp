@@ -77,17 +77,25 @@ export function connectEvents(
   return () => controller.abort();
 }
 
+export interface ImageBlock {
+  media_type: string;
+  data: string;
+}
+
 export async function sendChatMessage(
   message: string,
   sessionId: string,
   config: Config,
   skipApprovals: boolean = false,
+  images?: ImageBlock[],
 ): Promise<{ run_id: string; session_id: string }> {
-  return api.post(`${config.serverUrl}/chat/message`, {
+  const body: Record<string, unknown> = {
     message,
     session_id: sessionId,
     skip_approvals: skipApprovals,
-  }) as Promise<{ run_id: string; session_id: string }>;
+  };
+  if (images?.length) body.images = images;
+  return api.post(`${config.serverUrl}/chat/message`, body) as Promise<{ run_id: string; session_id: string }>;
 }
 
 export async function cancelRun(runId: string, config: Config): Promise<void> {

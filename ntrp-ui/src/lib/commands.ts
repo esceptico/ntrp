@@ -19,5 +19,6 @@ export const COMMANDS = [
   { name: "clear", description: "Clear current session messages" },
   { name: "purge", description: "Clear graph memory (keeps note embeddings)" },
   { name: "logout", description: "Clear credentials and disconnect" },
+  { name: "image", description: "Attach image from clipboard" },
   { name: "exit", description: "Exit application" },
 ] as const satisfies readonly SlashCommand[];

@@ -76,11 +76,22 @@ async def _resolve_session(runtime: Runtime) -> SessionData:
     return SessionData(runtime.session_service.create(), [])
 
 
+def build_user_content(text: str, images: list[dict] | None = None) -> str | list[dict]:
+    if not images:
+        return text
+    blocks: list[dict] = []
+    if text:
+        blocks.append({"type": "text", "text": text})
+    blocks.extend({"type": "image", "media_type": img["media_type"], "data": img["data"]} for img in images)
+    return blocks
+
+
 async def _prepare_messages(
     runtime: Runtime,
     messages: list[dict],
     user_message: str,
     last_activity: datetime | None = None,
+    images: list[dict] | None = None,
 ) -> list[dict]:
     memory_context = None
     if runtime.memory:
@@ -109,13 +120,17 @@ async def _prepare_messages(
     else:
         messages.insert(0, {"role": "system", "content": system_blocks})
 
-    messages.append({"role": "user", "content": user_message})
+    messages.append({"role": "user", "content": build_user_content(user_message, images)})
 
     return messages
 
 
 async def prepare_chat(
-    runtime: Runtime, message: str, skip_approvals: bool = False, session_id: str | None = None
+    runtime: Runtime,
+    message: str,
+    skip_approvals: bool = False,
+    session_id: str | None = None,
+    images: list[dict] | None = None,
 ) -> ChatContext:
     registry = runtime.run_registry
 
@@ -136,10 +151,13 @@ async def prepare_chat(
     elif runtime.skill_registry:
         user_message, _ = expand_skill_command(user_message, runtime.skill_registry)
 
-    if not session_state.name and not is_init and not message.strip().startswith("/"):
-        session_state.name = message.strip()[:50]
+    name_candidate = message.strip() or ("[image]" if images else "")
+    if not session_state.name and not is_init and name_candidate and not name_candidate.startswith("/"):
+        session_state.name = name_candidate[:50]
 
-    messages = await _prepare_messages(runtime, messages, user_message, last_activity=session_state.last_activity)
+    messages = await _prepare_messages(
+        runtime, messages, user_message, last_activity=session_state.last_activity, images=images
+    )
 
     run = registry.create_run(session_state.session_id)
     run.messages = messages

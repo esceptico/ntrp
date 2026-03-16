@@ -155,7 +155,11 @@ class SessionStore:
             if idx <= max_existing:
                 continue
             role = msg.get("role", "")
-            content = msg.get("content") if role in ("user", "assistant", "tool") else None
+            raw_content = msg.get("content") if role in ("user", "assistant", "tool") else None
+            if isinstance(raw_content, list):
+                content = json.dumps(raw_content)
+            else:
+                content = raw_content
             await self.conn.execute(
                 SQL_INSERT_CHAT_MESSAGE,
                 (session_id, role, content, now.isoformat(), idx),
@@ -266,7 +270,8 @@ class SessionStore:
             messages = json.loads(row["messages"])
             for idx, msg in enumerate(messages):
                 role = msg.get("role", "")
-                content = msg.get("content") if role in ("user", "assistant", "tool") else None
+                raw_content = msg.get("content") if role in ("user", "assistant", "tool") else None
+                content = json.dumps(raw_content) if isinstance(raw_content, list) else raw_content
                 await self.conn.execute(
                     SQL_INSERT_CHAT_MESSAGE,
                     (row["session_id"], role, content, session_time, idx),

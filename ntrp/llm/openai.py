@@ -195,12 +195,33 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         await self._client.close()
 
     def _preprocess_messages(self, messages: list[dict]) -> list[dict]:
-        return [
-            {**msg, "content": blocks_to_text(msg["content"])}
-            if msg["role"] == "system" and isinstance(msg["content"], list)
-            else msg
-            for msg in messages
-        ]
+        result = []
+        for msg in messages:
+            content = msg["content"]
+            if not isinstance(content, list):
+                result.append(msg)
+            elif msg["role"] == "system":
+                result.append({**msg, "content": blocks_to_text(content)})
+            elif msg["role"] == "user":
+                result.append({**msg, "content": self._convert_user_content(content)})
+            else:
+                result.append(msg)
+        return result
+
+    def _convert_user_content(self, content: list) -> list[dict]:
+        result = []
+        for block in content:
+            match block.get("type"):
+                case "text":
+                    result.append({"type": "text", "text": block["text"]})
+                case "image":
+                    result.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{block['media_type']};base64,{block['data']}"},
+                        }
+                    )
+        return result
 
     def _parse_response(self, response, model: str) -> CompletionResponse:
         choice = response.choices[0]

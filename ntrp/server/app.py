@@ -21,7 +21,7 @@ from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import BackgroundRequest, CancelRequest, ChatRequest, ToolResultRequest
 from ntrp.server.state import RunRegistry, RunStatus
-from ntrp.services.chat import prepare_chat, run_chat
+from ntrp.services.chat import build_user_content, prepare_chat, run_chat
 from ntrp.settings import verify_api_key
 
 SSE_KEEPALIVE = ":\n\n"
@@ -188,14 +188,16 @@ async def chat_message(
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id required")
 
+    images = [img.model_dump() for img in request.images] if request.images else None
+
     # If agent is already running, queue message for safe injection
     active_run = runtime.run_registry.get_active_run(session_id)
     if active_run:
-        active_run.inject_queue.append({"role": "user", "content": request.message})
+        active_run.inject_queue.append({"role": "user", "content": build_user_content(request.message, images)})
         return {"run_id": active_run.run_id, "session_id": session_id}
 
     try:
-        ctx = await prepare_chat(runtime, request.message, request.skip_approvals, session_id=session_id)
+        ctx = await prepare_chat(runtime, request.message, request.skip_approvals, session_id=session_id, images=images)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

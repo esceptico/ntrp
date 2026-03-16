@@ -3,6 +3,7 @@ import { useRenderer } from "@opentui/react";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import type { Selection, ScrollBoxRenderable } from "@opentui/core";
 import type { Message, Config } from "./types.js";
+import type { ImageBlock } from "./api/chat.js";
 import { colors, setTheme, useThemeVersion, themeNames, type Theme } from "./components/ui/index.js";
 import { BULLET } from "./lib/constants.js";
 import { queryClient } from "./lib/queryClient.js";
@@ -137,12 +138,14 @@ function AppContent({
   useEffect(() => {
     const onSelection = (selection: Selection) => {
       const text = selection.getSelectedText();
-      if (text) {
-        renderer.copyToClipboardOSC52(text);
-        if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
-        setCopiedFlash(true);
-        copiedTimerRef.current = setTimeout(() => setCopiedFlash(false), 1500);
+      if (!text) return;
+      renderer.copyToClipboardOSC52(text);
+      if (process.platform === "darwin") {
+        Bun.spawn(["pbcopy"], { stdin: new TextEncoder().encode(text) });
       }
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+      setCopiedFlash(true);
+      copiedTimerRef.current = setTimeout(() => setCopiedFlash(false), 1500);
     };
     renderer.on("selection", onSelection);
     return () => {
@@ -218,9 +221,9 @@ function AppContent({
   ], [skills]);
 
   const handleSubmit = useCallback(
-    async (value: string) => {
+    async (value: string, images?: ImageBlock[]) => {
       const trimmed = value.trim();
-      if (!trimmed) return;
+      if (!trimmed && !images?.length) return;
 
       if (trimmed.startsWith("/")) {
         if (pendingApproval) return;
@@ -228,7 +231,7 @@ function AppContent({
         if (handled) return;
         const cmdName = trimmed.slice(1).split(" ")[0];
         if (skills.some(s => s.name === cmdName)) {
-          sendMessage(trimmed);
+          sendMessage(trimmed, images);
         } else {
           addMessage({ role: "error", content: `Unknown command: ${trimmed}` });
         }
@@ -236,11 +239,11 @@ function AppContent({
       }
 
       if (pendingApproval) {
-        enqueue(trimmed);
+        enqueue(trimmed, images);
         return;
       }
 
-      sendMessage(trimmed);
+      sendMessage(trimmed, images);
     },
     [pendingApproval, sendMessage, handleCommand, addMessage, skills, enqueue]
   );

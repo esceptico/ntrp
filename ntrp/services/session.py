@@ -70,7 +70,16 @@ class SessionService:
         if last_user_idx is None:
             return None
 
-        user_message = data.messages[last_user_idx]["content"]
+        raw = data.messages[last_user_idx]["content"]
+        user_message = (
+            raw
+            if isinstance(raw, str)
+            else "\n\n".join(
+                b["text"] for b in raw if isinstance(b, dict) and b.get("type") == "text" and b.get("text")
+            )
+            if isinstance(raw, list)
+            else ""
+        )
         reverted_count = len(data.messages) - last_user_idx
         data.messages = data.messages[:last_user_idx]
         metadata = {"last_input_tokens": data.last_input_tokens} if data.last_input_tokens else None

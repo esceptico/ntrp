@@ -1,13 +1,16 @@
 import { useState, useCallback, useRef, memo, useEffect } from "react";
-import type { TextareaRenderable, KeyEvent } from "@opentui/core";
+import type { TextareaRenderable, KeyEvent, PasteEvent } from "@opentui/core";
 import type { SlashCommand } from "../../types.js";
 import type { Status as StatusType } from "../../lib/constants.js";
+import type { ImageBlock } from "../../api/chat.js";
 import { colors } from "../ui/colors.js";
 import { useAccentColor } from "../../hooks/index.js";
 import { useAutocomplete } from "../../hooks/useAutocomplete.js";
 import { EmptyBorder } from "../ui/border.js";
 import { AutocompleteList } from "./AutocompleteList.js";
 import { InputFooter } from "./InputFooter.js";
+import { $ } from "bun";
+import { getClipboardImage } from "../../lib/clipboard.js";
 
 function formatModel(model?: string): string {
   if (!model) return "";
@@ -16,7 +19,7 @@ function formatModel(model?: string): string {
 }
 
 interface InputAreaProps {
-  onSubmit: (v: string) => void;
+  onSubmit: (v: string, images?: ImageBlock[]) => void;
   disabled: boolean;
   focus: boolean;
   isStreaming: boolean;
@@ -55,6 +58,7 @@ export const InputArea = memo(function InputArea({
   const inputRef = useRef<TextareaRenderable>(null);
   const [value, setValue] = useState("");
   const [escHint, setEscHint] = useState(false);
+  const [images, setImages] = useState<ImageBlock[]>([]);
 
   const escPendingRef = useRef(false);
   const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -91,6 +95,7 @@ export const InputArea = memo(function InputArea({
     }
     inputRef.current?.clear();
     setValue("");
+    setImages([]);
     resetIndex();
     escPendingRef.current = false;
     setEscHint(false);
@@ -99,25 +104,54 @@ export const InputArea = memo(function InputArea({
   const valueRef = useRef(value);
   valueRef.current = value;
 
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
+
   const doSubmit = useCallback(() => {
     if (disabled) return;
     const text = inputRef.current?.plainText ?? "";
-    if (!text.trim()) return;
+    if (!text.trim() && imagesRef.current.length === 0) return;
+
+    const pendingImages = imagesRef.current.length > 0 ? imagesRef.current : undefined;
 
     const selected = getSelectedCommand();
     if (selected) {
-      onSubmit(`/${selected.name}`);
+      onSubmit(`/${selected.name}`, pendingImages);
       resetInput();
       return;
     }
 
-    onSubmit(text);
+    onSubmit(text, pendingImages);
     resetInput();
   }, [disabled, onSubmit, resetInput, getSelectedCommand]);
+
+  // Cmd+V path: terminal sends bracketed paste. Only intercept when text is
+  // empty (image-only clipboard). Non-empty text paste goes through untouched.
+  const handlePaste = useCallback((e: PasteEvent) => {
+    if (e.text) return; // normal text paste — don't touch
+    e.preventDefault();
+    getClipboardImage().then((img) => {
+      if (img) setImages((prev) => [...prev, img]);
+    });
+  }, []);
 
   const handleKeyDown = useCallback((e: KeyEvent) => {
     if (disabled) {
       e.preventDefault();
+      return;
+    }
+
+    // Ctrl+V with kitty protocol — arrives as key event, not paste
+    if (e.name === "v" && e.ctrl) {
+      e.preventDefault();
+      getClipboardImage().then(async (img) => {
+        if (img) {
+          setImages((prev) => [...prev, img]);
+        } else if (process.platform === "darwin") {
+          const text = await $`pbpaste`.nothrow().text();
+          if (text) inputRef.current?.editBuffer.insertText(text);
+        }
+      });
       return;
     }
 
@@ -130,6 +164,10 @@ export const InputArea = memo(function InputArea({
     if (handleAutocompleteKey(e)) return;
 
     if (e.name === "escape") {
+      if (imagesRef.current.length > 0) {
+        setImages([]);
+        return;
+      }
       if (!valueRef.current) return;
       if (escPendingRef.current) {
         resetInput();
@@ -187,17 +225,21 @@ export const InputArea = memo(function InputArea({
               ref={inputRef as any}
               minHeight={1}
               maxHeight={6}
-              placeholder="Message ntrp..."
+              placeholder={images.length > 0 ? `${images.length} image${images.length > 1 ? "s" : ""} attached · type a message or press Enter` : "Message ntrp..."}
               focused={focus}
               textColor={colors.text.primary}
               focusedBackgroundColor={colors.background.element}
               keyBindings={[
                 { name: "return", shift: true, action: "newline" },
               ]}
+              onPaste={handlePaste}
               onKeyDown={handleKeyDown}
               onContentChange={handleContentChange}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
+              {images.length > 0 ? (
+                <text><span fg={accentValue}>{images.length} image{images.length > 1 ? "s" : ""} · esc to remove</span></text>
+              ) : null}
               {(sessionName || chatModel) ? (
                 <text flexShrink={0} fg={colors.text.muted}>
                   {sessionName ? `${sessionName} · ${modelName}` : modelName}

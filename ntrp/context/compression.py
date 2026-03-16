@@ -7,6 +7,7 @@ from ntrp.constants import (
 from ntrp.context.prompts import SUMMARIZE_PROMPT_TEMPLATE
 from ntrp.llm.models import get_model
 from ntrp.llm.router import get_completion_client
+from ntrp.llm.utils import blocks_to_text
 
 
 def should_compress(
@@ -60,7 +61,8 @@ def _build_conversation_text(messages: list, start: int, end: int) -> str:
     for msg in messages[start:end]:
         if (role := msg["role"]) == "tool":
             continue
-        if not (content := msg["content"]):
+        content = blocks_to_text(msg["content"])
+        if not content:
             continue
         if content.startswith("[Session State Handoff]"):
             text_parts.append(f"[PRIOR SUMMARY — preserve key points]\n{content}")

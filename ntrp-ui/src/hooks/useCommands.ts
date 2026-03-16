@@ -1,7 +1,6 @@
 import { useCallback, useRef } from "react";
-import type { Config } from "../types.js";
-import type { HistoryMessage } from "../api/client.js";
-import type { Message } from "../types.js";
+import type { Config, Message } from "../types.js";
+import type { HistoryMessage, ImageBlock } from "../api/client.js";
 import { Status, type Status as StatusType } from "../lib/constants.js";
 import { convertHistoryToMessages } from "../lib/history.js";
 import {
@@ -17,6 +16,7 @@ import {
   type SessionListItem,
 } from "../api/client.js";
 import { deleteCredentials } from "../lib/secrets.js";
+import { getClipboardImage } from "../lib/clipboard.js";
 
 type ViewMode = "chat" | "memory" | "automations";
 
@@ -36,7 +36,7 @@ interface CommandContext {
   updateSessionInfo: (info: { session_id: string; sources?: string[]; session_name?: string }) => void;
   addMessage: (msg: { role: string; content: string }) => void;
   clearMessages: () => void;
-  sendMessage: (msg: string) => void;
+  sendMessage: (msg: string, images?: ImageBlock[]) => void;
   setStatus: (status: StatusType) => void;
   toggleSettings: () => void;
   openDialog: (id: string) => void;
@@ -101,8 +101,12 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
 
   retry: async ({ addMessage, sendMessage, revert }) => {
     const userMessage = await revert();
-    if (!userMessage) {
+    if (userMessage === null) {
       addMessage({ role: "error", content: "Nothing to retry" });
+      return true;
+    }
+    if (!userMessage) {
+      addMessage({ role: "status", content: "Reverted (image-only message cannot be retried)" });
       return true;
     }
     sendMessage(userMessage);
@@ -111,11 +115,11 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
 
   undo: async ({ addMessage, revert, setInputText }) => {
     const userMessage = await revert();
-    if (!userMessage) {
+    if (userMessage === null) {
       addMessage({ role: "error", content: "Nothing to undo" });
       return true;
     }
-    setInputText(userMessage);
+    if (userMessage) setInputText(userMessage);
     return true;
   },
 
@@ -240,6 +244,16 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   logout: async ({ logout }) => {
     await deleteCredentials();
     logout();
+    return true;
+  },
+
+  image: async ({ addMessage, sendMessage }, args) => {
+    const img = await getClipboardImage();
+    if (!img) {
+      addMessage({ role: "error", content: "No image in clipboard" });
+      return true;
+    }
+    sendMessage(args.join(" "), [img]);
     return true;
   },
 

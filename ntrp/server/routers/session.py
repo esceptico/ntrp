@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
+from ntrp.llm.utils import blocks_to_text
 from ntrp.server.deps import require_session_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import ClearSessionRequest, CreateSessionRequest, RenameSessionRequest, SessionResponse
@@ -21,7 +22,7 @@ async def get_session_history(svc: SessionService = Depends(require_session_serv
         if role == "system":
             continue
 
-        entry: dict = {"role": role, "content": msg.get("content", "") or ""}
+        entry: dict = {"role": role, "content": blocks_to_text(msg.get("content", "") or "")}
 
         if role == "assistant" and "tool_calls" in msg:
             entry["tool_calls"] = [

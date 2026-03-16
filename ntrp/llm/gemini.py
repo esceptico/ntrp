@@ -108,8 +108,22 @@ class GeminiClient(CompletionClient, EmbeddingClient):
         return system_instruction, contents
 
     def _convert_user(self, msg: dict) -> types.Content:
-        text = blocks_to_text(msg["content"])
-        return types.Content(role="user", parts=[types.Part(text=text)])
+        content = msg["content"]
+        if isinstance(content, str):
+            return types.Content(role="user", parts=[types.Part(text=content)])
+        parts: list[types.Part] = []
+        for block in content:
+            match block.get("type"):
+                case "text":
+                    parts.append(types.Part(text=block["text"]))
+                case "image":
+                    parts.append(
+                        types.Part.from_bytes(
+                            data=base64.b64decode(block["data"]),
+                            mime_type=block["media_type"],
+                        )
+                    )
+        return types.Content(role="user", parts=parts or [types.Part(text="")])
 
     def _convert_assistant(self, msg: dict) -> types.Content | None:
         parts: list[types.Part] = []
