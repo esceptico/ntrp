@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Literal, Self
 
@@ -45,7 +46,7 @@ MODEL_DEFAULTS = {
 PERSIST_KEYS = frozenset(
     {
         "chat_model",
-        "explore_model",
+        "research_model",
         "memory_model",
         "embedding_model",
         "browser",
@@ -89,7 +90,7 @@ class Config(BaseSettings):
 
     # Model IDs
     chat_model: str | None = None
-    explore_model: str | None = None
+    research_model: str | None = None
     memory_model: str | None = None
     embedding_model: str | None = None
 
@@ -139,11 +140,17 @@ class Config(BaseSettings):
 
     @model_validator(mode="after")
     def _resolve_model_defaults(self) -> Self:
+        self._migrate_deprecated_env()
         self._resolve_chat_model()
         self._apply_oauth_prefix()
         self._fill_model_fallbacks()
         self._resolve_embedding_model()
         return self
+
+    def _migrate_deprecated_env(self) -> None:
+        if not self.research_model and (legacy := os.environ.get("NTRP_EXPLORE_MODEL")):
+            _logger.warning("NTRP_EXPLORE_MODEL is deprecated, use NTRP_RESEARCH_MODEL")
+            self.research_model = legacy
 
     def _resolve_chat_model(self) -> None:
         if self.chat_model:
@@ -172,15 +179,15 @@ class Config(BaseSettings):
         if not oauth_configured():
             return
         anthropic_models = get_models_by_provider(Provider.ANTHROPIC)
-        for field in ("chat_model", "memory_model", "explore_model"):
+        for field in ("chat_model", "memory_model", "research_model"):
             if (val := getattr(self, field, None)) and not is_oauth_model(val) and val in anthropic_models:
                 setattr(self, field, f"{OAUTH_PREFIX}{val}")
 
     def _fill_model_fallbacks(self) -> None:
         if not self.memory_model and self.chat_model:
             self.memory_model = self.chat_model
-        if not self.explore_model and self.chat_model:
-            self.explore_model = self.chat_model
+        if not self.research_model and self.chat_model:
+            self.research_model = self.chat_model
 
     def _resolve_embedding_model(self) -> None:
         if self.embedding_model:
@@ -190,7 +197,7 @@ class Config(BaseSettings):
                 self.embedding_model = embedding
                 return
 
-    @field_validator("chat_model", "explore_model", "memory_model")
+    @field_validator("chat_model", "research_model", "memory_model")
     @classmethod
     def _validate_model(cls, v: str | None) -> str | None:
         if v is None:
@@ -286,6 +293,8 @@ def _migrate_legacy_settings(settings: dict) -> None:
                 settings.setdefault(key, settings["sources"][key])
     if "gmail" in settings or "calendar" in settings:
         settings.setdefault("google", settings.pop("gmail", False) or settings.pop("calendar", False))
+    if "explore_model" in settings:
+        settings.setdefault("research_model", settings.pop("explore_model"))
 
 
 def get_config() -> Config:

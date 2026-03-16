@@ -11,7 +11,7 @@ export const COMMANDS = [
   { name: "automations", description: "View and manage automations" },
   { name: "theme", description: "Choose a theme" },
   { name: "connect", description: "Manage LLM providers" },
-  { name: "models", description: "Switch models (agent, explore, memory, embedding)" },
+  { name: "models", description: "Switch models (agent, research, memory, embedding)" },
   { name: "settings", description: "Model, connections, and UI settings" },
   { name: "retry", description: "Revert last exchange and resend" },
   { name: "undo", description: "Revert last exchange" },

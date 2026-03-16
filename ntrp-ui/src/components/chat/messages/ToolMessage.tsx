@@ -2,7 +2,7 @@ import { memo } from "react";
 import { colors, useThemeVersion } from "../../ui/colors.js";
 import { useDimensions } from "../../../contexts/index.js";
 import { truncateText } from "../../ui/index.js";
-import { MAX_TOOL_OUTPUT_LINES, MIN_DELEGATE_DURATION_SHOW } from "../../../lib/constants.js";
+import { MAX_TOOL_OUTPUT_LINES, MIN_RESEARCH_DURATION_SHOW } from "../../../lib/constants.js";
 
 const TOOL_MARKER = "\u2192"; // →
 
@@ -10,26 +10,26 @@ function isReadTool(name: string): boolean {
   return ["read_note", "read_file", "view"].includes(name);
 }
 
-interface DelegateMessageProps {
+interface ResearchMessageProps {
   description?: string;
   toolCount?: number;
   duration?: number;
   cancelled?: boolean;
 }
 
-const DelegateMessage = memo(function DelegateMessage({
+const ResearchMessage = memo(function ResearchMessage({
   description,
   toolCount,
   duration,
   cancelled,
-}: DelegateMessageProps) {
+}: ResearchMessageProps) {
   useThemeVersion();
   const { width: terminalWidth } = useDimensions();
   const parts: string[] = [];
   if (toolCount && toolCount > 0) parts.push(`${toolCount} tool${toolCount !== 1 ? "s" : ""}`);
-  if (duration && duration >= MIN_DELEGATE_DURATION_SHOW) parts.push(`${duration}s`);
+  if (duration && duration >= MIN_RESEARCH_DURATION_SHOW) parts.push(`${duration}s`);
   const stats = parts.length > 0 ? ` \u00B7 ${parts.join(" \u00B7 ")}` : "";
-  const descText = description || "delegate";
+  const descText = description || "research";
   const contentWidth = Math.max(0, terminalWidth - 7);
   const descWidth = Math.max(0, contentWidth - 2 - stats.length);
   const statusLabel = cancelled ? "Cancelled" : "Done";
@@ -70,9 +70,9 @@ export const ToolMessage = memo(function ToolMessage({
   const contentWidth = Math.max(0, width - 3);
   const suffix = autoApproved ? AUTO_SUFFIX : "";
 
-  if (name === "delegate" || name === "explore") {
+  if (name === "research") {
     return (
-      <DelegateMessage
+      <ResearchMessage
         description={description}
         toolCount={toolCount}
         duration={duration}

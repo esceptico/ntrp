@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
-from ntrp.core.ledger import ExplorationLedger
+from ntrp.core.ledger import ResearchLedger
 from ntrp.events.sse import ApprovalNeededEvent
 from ntrp.tools.core.types import ToolResult
 
@@ -38,7 +38,7 @@ class RunContext:
     current_depth: int = 0
     max_depth: int = 0
     extra_auto_approve: set[str] = field(default_factory=set)
-    explore_model: str | None = None
+    research_model: str | None = None
 
 
 @dataclass
@@ -109,7 +109,7 @@ class ToolContext:
     io: IOBridge
     services: dict[str, Any] = field(default_factory=dict)
     channel: Channel = field(default_factory=Channel)
-    ledger: ExplorationLedger | None = None
+    ledger: ResearchLedger | None = None
     spawn_fn: Callable[..., Awaitable[str]] | None = None
     background_tasks: BackgroundTaskRegistry = field(default_factory=BackgroundTaskRegistry)
 

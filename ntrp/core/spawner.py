@@ -48,7 +48,7 @@ def create_spawn_fn(
             current_depth=current_depth + 1,
             max_depth=max_depth,
             extra_auto_approve=calling_ctx.run.extra_auto_approve,
-            explore_model=calling_ctx.run.explore_model,
+            research_model=calling_ctx.run.research_model,
         )
         child_ctx = ToolContext(
             session_state=child_state,

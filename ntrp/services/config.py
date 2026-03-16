@@ -73,7 +73,7 @@ class ConfigService:
             else:
                 settings["provider_keys"] = provider_keys
 
-            for key in ("chat_model", "explore_model", "memory_model"):
+            for key in ("chat_model", "research_model", "memory_model"):
                 if (val := settings.get(key)) and strip_oauth_prefix(val) in provider_models:
                     settings.pop(key)
 
@@ -84,7 +84,7 @@ class ConfigService:
 
         def mutate(settings: dict) -> None:
             clear_oauth_settings(settings)
-            for key in ("chat_model", "explore_model", "memory_model"):
+            for key in ("chat_model", "research_model", "memory_model"):
                 if is_oauth_model(settings.get(key, "")):
                     settings.pop(key)
 

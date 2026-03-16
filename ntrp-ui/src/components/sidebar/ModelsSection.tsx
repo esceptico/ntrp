@@ -13,8 +13,8 @@ export function ModelsSection({ cfg, width }: { cfg: ServerConfig; width: number
   return (
     <box flexDirection="column">
       <SectionHeader label="MODELS" />
-      {(["chat", "expl", "mem", "emb"] as const).map((label) => {
-        const key = { chat: "chat_model", expl: "explore_model", mem: "memory_model", emb: "embedding_model" }[label] as keyof typeof cfg;
+      {(["chat", "rsrch", "mem", "emb"] as const).map((label) => {
+        const key = { chat: "chat_model", rsrch: "research_model", mem: "memory_model", emb: "embedding_model" }[label] as keyof typeof cfg;
         const raw = (cfg[key] as string) ?? "";
         const isOAuth = raw.startsWith("oauth:");
         const display = formatModel(isOAuth ? raw.slice(6) : raw);

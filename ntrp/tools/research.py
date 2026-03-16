@@ -4,9 +4,9 @@ import time
 
 from pydantic import BaseModel, Field
 
-from ntrp.constants import EXPLORE_TIMEOUT, USER_ENTITY_NAME
+from ntrp.constants import RESEARCH_TIMEOUT, USER_ENTITY_NAME
 from ntrp.core.isolation import IsolationLevel
-from ntrp.core.prompts import EXPLORE_PROMPTS, current_date_formatted, env
+from ntrp.core.prompts import RESEARCH_PROMPTS, current_date_formatted, env
 from ntrp.events.sse import BackgroundTaskEvent, ToolCallEvent, ToolResultEvent
 from ntrp.logging import get_logger
 from ntrp.tools.core.base import Tool, ToolResult
@@ -14,12 +14,12 @@ from ntrp.tools.core.context import ToolExecution
 
 _logger = get_logger(__name__)
 
-EXPLORE_SYSTEM_PROMPT = env.from_string("""{{ base_prompt }}
+RESEARCH_SYSTEM_PROMPT = env.from_string("""{{ base_prompt }}
 
 Today is {{ date }}.
 {% if remaining_depth > 1 %}
 
-DEPTH BUDGET: You can spawn {{ remaining_depth - 1 }} more levels of sub-agents. Use explore() to delegate sub-topics — don't try to cover everything yourself.
+DEPTH BUDGET: You can spawn {{ remaining_depth - 1 }} more levels of sub-agents. Use research() to delegate sub-topics — don't try to cover everything yourself.
 {% elif remaining_depth == 1 %}
 
 DEPTH BUDGET: You are at the last level — no more sub-agents. Do all work directly.
@@ -36,8 +36,8 @@ USER CONTEXT:
 {% endfor %}
 {% endif %}""")
 
-EXPLORE_DESCRIPTION = (
-    "Spawn an exploration agent for information gathering. "
+RESEARCH_DESCRIPTION = (
+    "Spawn a research agent with access to all read-only tools. "
     "Can run in parallel (call multiple in one turn) and nest recursively. "
     "Use depth='deep' for thorough research, 'quick' for fast lookups. "
     "Set background=true to run without blocking — results are delivered automatically."
@@ -45,13 +45,13 @@ EXPLORE_DESCRIPTION = (
 
 DEPTH_TIMEOUTS = {
     "quick": 120,
-    "normal": EXPLORE_TIMEOUT,
+    "normal": RESEARCH_TIMEOUT,
     "deep": 600,
 }
 
 
-class ExploreInput(BaseModel):
-    task: str = Field(description="What to explore or research.")
+class ResearchInput(BaseModel):
+    task: str = Field(description="What to research.")
     depth: str = Field(
         default="normal",
         description="How thorough: 'quick' (fast scan), 'normal' (balanced), 'deep' (exhaustive).",
@@ -62,11 +62,11 @@ class ExploreInput(BaseModel):
     )
 
 
-class ExploreTool(Tool):
-    name = "explore"
-    display_name = "Explore"
-    description = EXPLORE_DESCRIPTION
-    input_model = ExploreInput
+class ResearchTool(Tool):
+    name = "research"
+    display_name = "Research"
+    description = RESEARCH_DESCRIPTION
+    input_model = ResearchInput
 
     async def _build_prompt(self, ctx, depth: str, remaining_depth: int, tool_id: str) -> str:
         ledger_summary = None
@@ -78,8 +78,8 @@ class ExploreTool(Tool):
         if memory:
             user_facts = await memory.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=5)
 
-        return EXPLORE_SYSTEM_PROMPT.render(
-            base_prompt=EXPLORE_PROMPTS[depth],
+        return RESEARCH_SYSTEM_PROMPT.render(
+            base_prompt=RESEARCH_PROMPTS[depth],
             date=current_date_formatted(),
             remaining_depth=remaining_depth,
             ledger_summary=ledger_summary,
@@ -98,7 +98,7 @@ class ExploreTool(Tool):
             await ctx.ledger.register(execution.tool_id, task, depth)
 
         remaining = ctx.run.max_depth - ctx.run.current_depth - 1
-        exclude = {"explore"} if depth == "quick" or remaining <= 1 else None
+        exclude = {"research"} if depth == "quick" or remaining <= 1 else None
 
         tools = ctx.registry.get_schemas(mutates=False, capabilities=ctx.capabilities)
         if exclude:
@@ -114,7 +114,7 @@ class ExploreTool(Tool):
                     system_prompt=prompt,
                     tools=tools,
                     timeout=timeout,
-                    model_override=ctx.run.explore_model,
+                    model_override=ctx.run.research_model,
                     parent_id=execution.tool_id,
                     isolation=IsolationLevel.FULL,
                 )
@@ -122,11 +122,11 @@ class ExploreTool(Tool):
                 if ctx.ledger:
                     await ctx.ledger.complete(execution.tool_id)
 
-            return ToolResult(content=result, preview=f"Explored ({depth})")
+            return ToolResult(content=result, preview=f"Researched ({depth})")
 
         registry = ctx.background_tasks
         bg_task_id = registry.generate_id()
-        label = f"explore({depth}): {task}"
+        label = f"research({depth}): {task}"
 
         async def _run_background():
             start = time.monotonic()
@@ -137,7 +137,7 @@ class ExploreTool(Tool):
                     system_prompt=prompt,
                     tools=tools,
                     timeout=timeout,
-                    model_override=ctx.run.explore_model,
+                    model_override=ctx.run.research_model,
                     parent_id=execution.tool_id,
                     isolation=IsolationLevel.FULL,
                 )
@@ -147,7 +147,7 @@ class ExploreTool(Tool):
             except Exception as e:
                 result = f"Error: {e}"
                 status = "failed"
-                _logger.warning("Background explore %s failed: %s", bg_task_id, e)
+                _logger.warning("Background research %s failed: %s", bg_task_id, e)
             finally:
                 if ctx.ledger:
                     await ctx.ledger.complete(execution.tool_id)
@@ -181,19 +181,19 @@ class ExploreTool(Tool):
                 await emit(
                     ToolCallEvent(
                         tool_id=synthetic_call_id,
-                        name="explore",
+                        name="research",
                         args={"task": task, "depth": depth},
-                        display_name="Explore",
+                        display_name="Research",
                     )
                 )
                 await emit(
                     ToolResultEvent(
                         tool_id=synthetic_call_id,
-                        name="explore",
+                        name="research",
                         result=result,
-                        preview=f"Explored ({depth})" if status == "completed" else "failed",
+                        preview=f"Researched ({depth})" if status == "completed" else "failed",
                         duration_ms=duration_ms,
-                        display_name="Explore",
+                        display_name="Research",
                     )
                 )
                 await emit(BackgroundTaskEvent(task_id=bg_task_id, command=label, status=status))
@@ -207,6 +207,6 @@ class ExploreTool(Tool):
             await ctx.io.emit(BackgroundTaskEvent(task_id=bg_task_id, command=label, status="started"))
 
         return ToolResult(
-            content=f"Background exploration {bg_task_id} started: {task}",
+            content=f"Background research {bg_task_id} started: {task}",
             preview=f"Background · {bg_task_id}",
         )

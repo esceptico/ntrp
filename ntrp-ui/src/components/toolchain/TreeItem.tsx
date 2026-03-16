@@ -28,7 +28,7 @@ function getStatusColor(status: ToolChainItem["status"]): string {
 }
 
 function isContainer(name: string): boolean {
-  return name === "delegate" || name === "explore";
+  return name === "research";
 }
 
 export function buildTree(items: ToolChainItem[]): TreeNode[] {

@@ -12,7 +12,7 @@ import {
 import { useKeypress, useAccentColor, type Key } from "../../hooks/index.js";
 import type { Config } from "../../types.js";
 
-type ModelType = "chat" | "explore" | "memory" | "embedding";
+type ModelType = "chat" | "research" | "memory" | "embedding";
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
@@ -47,7 +47,7 @@ function buildModelOptions(modelList: string[], groups: ModelGroup[], currentMod
 
 const MODEL_TYPES: { type: ModelType; label: string; description: string }[] = [
   { type: "chat", label: "Agent", description: "Main conversation model" },
-  { type: "explore", label: "Explore", description: "Deep research & exploration" },
+  { type: "research", label: "Research", description: "Research agent model" },
   { type: "memory", label: "Memory", description: "Fact extraction & consolidation" },
   { type: "embedding", label: "Embedding", description: "Vector embeddings for search" },
 ];
@@ -79,7 +79,7 @@ export function ModelPicker({ config, serverConfig, onModelChange, onServerConfi
 
   const currentModels: Record<ModelType, string> = {
     chat: localOverrides.chat ?? serverConfig?.chat_model ?? "",
-    explore: localOverrides.explore ?? serverConfig?.explore_model ?? "",
+    research: localOverrides.research ?? serverConfig?.research_model ?? "",
     memory: localOverrides.memory ?? serverConfig?.memory_model ?? "",
     embedding: localOverrides.embedding ?? serverConfig?.embedding_model ?? "",
   };
