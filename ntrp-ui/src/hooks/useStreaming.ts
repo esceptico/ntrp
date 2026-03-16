@@ -496,10 +496,10 @@ export function useStreaming({
     const completed = s?.completedBackgroundTasks ?? [];
     if (completed.length === 0) return;
 
-    const labels = completed.map((c) => `• ${c}`).join("\n");
+    const labels = completed.join("\n- ");
     mutateSession(id, (s) => { s.completedBackgroundTasks = []; });
     sendMessage(
-      `[background tasks completed — use get_background_result for each]\n${labels}`
+      `[background tasks completed, results are in the preceding messages — read and synthesize them]\n\nCompleted:\n- ${labels}`
     );
   }, [backgroundTaskCount, isStreaming, sendMessage, store, mutateSession]);
 
