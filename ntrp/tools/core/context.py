@@ -118,11 +118,7 @@ class BackgroundTaskRegistry:
         if len(lines) <= OFFLOAD_PREVIEW_LINES:
             return f"Background task completed: {label}\n\n{content}"
         preview = "\n".join(lines[:OFFLOAD_PREVIEW_LINES])
-        return (
-            f"Background task completed: {label}\n"
-            f"Full result ({len(lines)} lines): {path}\n\n"
-            f"{preview}\n..."
-        )
+        return f"Background task completed: {label}\nFull result ({len(lines)} lines): {path}\n\n{preview}\n..."
 
     async def deliver_result(
         self,
@@ -164,20 +160,24 @@ class BackgroundTaskRegistry:
         ]
 
         if emit:
-            await emit(ToolCallEvent(
-                tool_id=synthetic_call_id,
-                name=tool_name,
-                args=tool_args,
-                display_name=display_name,
-            ))
-            await emit(ToolResultEvent(
-                tool_id=synthetic_call_id,
-                name=tool_name,
-                result=pointer,
-                preview=f"{display_name} ({status})",
-                duration_ms=duration_ms,
-                display_name=display_name,
-            ))
+            await emit(
+                ToolCallEvent(
+                    tool_id=synthetic_call_id,
+                    name=tool_name,
+                    args=tool_args,
+                    display_name=display_name,
+                )
+            )
+            await emit(
+                ToolResultEvent(
+                    tool_id=synthetic_call_id,
+                    name=tool_name,
+                    result=pointer,
+                    preview=f"{display_name} ({status})",
+                    duration_ms=duration_ms,
+                    display_name=display_name,
+                )
+            )
             await emit(BackgroundTaskEvent(task_id=task_id, command=label, status=status))
 
         await self.inject(messages)
