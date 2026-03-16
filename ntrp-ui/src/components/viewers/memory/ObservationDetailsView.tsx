@@ -72,12 +72,12 @@ export function ObservationDetailsView({
   const textWidth = width - 2;
 
   if (confirmDelete) {
-    return <DeleteConfirmation width={width} message={`Delete this observation? This will remove the observation and ${details.supporting_facts.length} supporting fact references.`} />;
+    return <DeleteConfirmation width={width} height={height} message={`Delete this observation? This will remove the observation and ${details.supporting_facts.length} supporting fact references.`} />;
   }
 
   if (editMode) {
     return (
-      <box flexDirection="column" width={width} paddingLeft={1}>
+      <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
         <text><span fg={colors.text.muted}>EDIT OBSERVATION</span></text>
         <box marginTop={1}>
           <TextEditArea

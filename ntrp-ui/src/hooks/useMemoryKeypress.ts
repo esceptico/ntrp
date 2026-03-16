@@ -139,7 +139,7 @@ export function useMemoryKeypress({
             factsTab.setCursorPos(selectedFact.text.length);
             return;
           }
-          if (key.name === "d" || key.name === "delete") {
+          if ((key.name === "d" || key.name === "delete") && factsTab.factDetails) {
             factsTab.setFocusPane("details");
             factsTab.setConfirmDelete(true);
             return;
@@ -217,7 +217,7 @@ export function useMemoryKeypress({
             obsTab.setCursorPos(selectedObs.summary.length);
             return;
           }
-          if (key.name === "d" || key.name === "delete") {
+          if ((key.name === "d" || key.name === "delete") && obsTab.obsDetails) {
             obsTab.setFocusPane("details");
             obsTab.setConfirmDelete(true);
             return;
@@ -253,7 +253,7 @@ export function useMemoryKeypress({
 
       if (activeTab === "dreams" && dreamsTab.focusPane === "list") {
         const selectedDream = dreamsTab.filteredDreams[dreamsTab.selectedIndex];
-        if (selectedDream && (key.name === "d" || key.name === "delete")) {
+        if (selectedDream && (key.name === "d" || key.name === "delete") && dreamsTab.dreamDetails) {
           dreamsTab.setFocusPane("details");
           dreamsTab.setConfirmDelete(true);
           return;

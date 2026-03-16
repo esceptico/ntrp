@@ -28,52 +28,37 @@ export function useMemoryData(config: Config): UseMemoryDataResult {
   const [facts, setFacts] = useState<Fact[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [dreams, setDreams] = useState<Dream[]>([]);
+  const [fetchCount, setFetchCount] = useState(0);
 
-  const loadedRef = useRef(false);
+  const fetchIdRef = useRef(0);
 
   useEffect(() => {
-    if (loadedRef.current) return;
-    loadedRef.current = true;
+    const id = ++fetchIdRef.current;
+    setLoading(true);
 
     (async () => {
-      setLoading(true);
       try {
         const [factsData, obsData, dreamsData] = await Promise.all([
           getFacts(config, 200),
           getObservations(config, 100),
           getDreams(config, 50),
         ]);
+        if (fetchIdRef.current !== id) return;
         setFacts(factsData.facts || []);
         setObservations(obsData.observations || []);
         setDreams(dreamsData.dreams || []);
       } catch (e) {
+        if (fetchIdRef.current !== id) return;
         setError(`Failed to load: ${e}`);
       } finally {
-        setLoading(false);
+        if (fetchIdRef.current === id) setLoading(false);
       }
     })();
-  }, [config]);
+  }, [config, fetchCount]);
 
   const reload = useCallback(() => {
-    loadedRef.current = false;
-    setLoading(true);
-    (async () => {
-      try {
-        const [factsData, obsData, dreamsData] = await Promise.all([
-          getFacts(config, 200),
-          getObservations(config, 100),
-          getDreams(config, 50),
-        ]);
-        setFacts(factsData.facts || []);
-        setObservations(obsData.observations || []);
-        setDreams(dreamsData.dreams || []);
-      } catch (e) {
-        setError(`Failed to load: ${e}`);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [config]);
+    setFetchCount((c) => c + 1);
+  }, []);
 
   return {
     facts,

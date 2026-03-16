@@ -1,4 +1,5 @@
 import { colors, TextInputField } from "../../ui/index.js";
+import type { TriggerType } from "../../../hooks/useAutomationTriggerState.js";
 import {
   SCHEDULE_MODES, SCHEDULE_DAYS, INTERVAL_DAYS, EVENT_TYPES,
   type CreateFocus,
@@ -9,7 +10,7 @@ import { DayPicker } from "./DayPicker.js";
 export interface TriggerFieldsProps {
   focus: CreateFocus;
   editing: boolean;
-  triggerType: "time" | "event";
+  triggerType: TriggerType;
   scheduleMode: "schedule" | "interval";
   daysOption: string;
   eventType: string;
@@ -25,6 +26,10 @@ export interface TriggerFieldsProps {
   endCursorPos: number;
   eventLeadValue: string;
   eventLeadCursorPos: number;
+  idleMinutesValue: string;
+  idleMinutesCursorPos: number;
+  everyNValue: string;
+  everyNCursorPos: number;
 }
 
 function parseHmToMinutes(value: string): number | null {
@@ -61,6 +66,8 @@ export function TriggerFields({
   startValue, startCursorPos,
   endValue, endCursorPos,
   eventLeadValue, eventLeadCursorPos,
+  idleMinutesValue, idleMinutesCursorPos,
+  everyNValue, everyNCursorPos,
 }: TriggerFieldsProps) {
   const daysOptions = scheduleMode === "schedule" ? SCHEDULE_DAYS : INTERVAL_DAYS;
 
@@ -94,7 +101,7 @@ export function TriggerFields({
                 {focus === "interval" && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
               </box>
               <box flexDirection="row">
-                {labelCell("WINDOW", focus === "start" || focus === "end")}
+                {labelCell("ACTIVE", focus === "start" || focus === "end")}
                 <TextInputField
                   value={startValue}
                   cursorPos={startCursorPos}
@@ -110,7 +117,7 @@ export function TriggerFields({
                   placeholder="18:00"
                   showCursor={editing && focus === "end"}
                 />
-                {(focus === "start" || focus === "end") && !editing && <text><span fg={colors.text.muted}> enter to edit</span></text>}
+                {(focus === "start" || focus === "end") && !editing && <text><span fg={colors.text.muted}> optional active window</span></text>}
               </box>
             </>
           )}
@@ -144,6 +151,34 @@ export function TriggerFields({
             </box>
           )}
         </>
+      )}
+
+      {triggerType === "idle" && (
+        <box flexDirection="row">
+          {labelCell("AFTER", focus === "idle_minutes")}
+          <TextInputField
+            value={idleMinutesValue}
+            cursorPos={idleMinutesCursorPos}
+            placeholder="5"
+            showCursor={editing && focus === "idle_minutes"}
+          />
+          <text><span fg={colors.text.muted}> minutes of inactivity</span></text>
+          {focus === "idle_minutes" && !editing && <text><span fg={colors.text.muted}>  enter to edit</span></text>}
+        </box>
+      )}
+
+      {triggerType === "count" && (
+        <box flexDirection="row">
+          {labelCell("EVERY", focus === "every_n")}
+          <TextInputField
+            value={everyNValue}
+            cursorPos={everyNCursorPos}
+            placeholder="10"
+            showCursor={editing && focus === "every_n"}
+          />
+          <text><span fg={colors.text.muted}> turns</span></text>
+          {focus === "every_n" && !editing && <text><span fg={colors.text.muted}>  enter to edit</span></text>}
+        </box>
       )}
     </>
   );

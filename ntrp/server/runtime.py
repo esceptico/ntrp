@@ -2,18 +2,20 @@ import asyncio
 
 from fastapi import HTTPException, Request
 
+from ntrp.automation.builtins import seed_builtins
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
 from ntrp.channel import Channel
 from ntrp.config import Config, get_config
 from ntrp.core.factory import AgentConfig
-from ntrp.events.internal import FactCreated, FactDeleted, FactUpdated, MemoryCleared, SourceChanged
+from ntrp.events.internal import FactCreated, FactDeleted, FactUpdated, MemoryCleared, RunCompleted, SourceChanged
 from ntrp.events.triggers import TRIGGER_EVENT_TYPES, TriggerEvent
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import init as llm_init
 from ntrp.llm.router import reset as llm_reset
 from ntrp.logging import get_logger
 from ntrp.mcp.manager import MCPManager
+from ntrp.memory.extraction_handler import create_chat_extraction_handler
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.indexable import MemoryIndexable
 from ntrp.memory.service import MemoryService
@@ -141,8 +143,6 @@ class Runtime:
         self.memory_service = MemoryService(self.memory, self.channel)
 
     async def _close_memory(self) -> None:
-        if self.memory_service:
-            self.memory_service.close()
         if self.memory:
             await self.memory.close()
         self.memory = None
@@ -162,9 +162,6 @@ class Runtime:
             if self.memory.model != self.config.memory_model:
                 self.memory.update_model(self.config.memory_model)
             self.memory.dreams_enabled = self.config.dreams
-            new_interval = self.config.consolidation_interval * 60
-            if self.memory._consolidation_interval != new_interval:
-                self.memory.restart_consolidation(new_interval)
         elif not self.config.memory and self.memory:
             await self._close_memory()
 
@@ -247,7 +244,10 @@ class Runtime:
         await self.notifier_service.rebuild()
 
     def _init_automation(self) -> None:
-        self.scheduler = Scheduler(store=self.stores.automations, build_deps=self.build_operator_deps)
+        self.scheduler = Scheduler(
+            store=self.stores.automations,
+            build_deps=self.build_operator_deps,
+        )
         self.automation_service = AutomationService(
             store=self.stores.automations,
             scheduler=self.scheduler,
@@ -318,7 +318,18 @@ class Runtime:
             notification_log=self.stores.notifications,
         )
 
-    def start_scheduler(self) -> None:
+    async def start_scheduler(self) -> None:
+        if self.memory:
+            self.scheduler.register_handler(
+                "chat_extraction",
+                create_chat_extraction_handler(self.memory, self.channel),
+            )
+            self.scheduler.register_handler(
+                "consolidation",
+                self._build_consolidation_handler(),
+            )
+
+        await seed_builtins(self.stores.automations)
         self.scheduler.start()
         self._wire_event_triggers()
 
@@ -356,6 +367,14 @@ class Runtime:
         self.channel.subscribe(MemoryCleared, on_memory_cleared)
         self.channel.subscribe(SourceChanged, on_source_changed)
 
+    def _build_consolidation_handler(self):
+        async def handler(context: dict | None) -> str | None:
+            if not self.memory:
+                return None
+            return await self.memory.run_consolidation()
+
+        return handler
+
     def _wire_event_triggers(self) -> None:
         async def on_trigger(event: TriggerEvent) -> None:
             if self.scheduler:
@@ -363,6 +382,12 @@ class Runtime:
 
         for event_cls in TRIGGER_EVENT_TYPES:
             self.channel.subscribe(event_cls, on_trigger)
+
+        async def on_run_completed(event: RunCompleted) -> None:
+            if self.scheduler:
+                await self.scheduler.handle_run_completed(event)
+
+        self.channel.subscribe(RunCompleted, on_run_completed)
 
     def start_monitor(self) -> None:
         if self.stores.monitor is None:
@@ -386,10 +411,6 @@ class Runtime:
         if self.monitor:
             await self.monitor.stop()
         self.start_monitor()
-
-    def start_consolidation(self) -> None:
-        if self.memory:
-            self.memory.start_consolidation(interval=self.config.consolidation_interval * 60)
 
     def start_indexing(self) -> None:
         if self.indexer:

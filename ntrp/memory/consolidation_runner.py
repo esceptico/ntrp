@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from ntrp.constants import CONSOLIDATION_INTERVAL, CONSOLIDATION_MAX_BACKOFF_MULTIPLIER
 from ntrp.embedder import Embedder
 from ntrp.events.internal import ConsolidationCompleted
 from ntrp.logging import get_logger
@@ -22,7 +21,7 @@ _logger = get_logger(__name__)
 
 
 class ConsolidationRunner:
-    """Background loop that consolidates, merges, dreams, and archives memory."""
+    """Consolidates, merges, dreams, and archives memory. Invoked by the automation scheduler."""
 
     def __init__(
         self,
@@ -46,9 +45,8 @@ class ConsolidationRunner:
         self._db_lock = db_lock
         self._db_conn = db_conn
 
-        self._task: asyncio.Task | None = None
-        self.interval: float | None = None
         self.dreams_enabled: bool = False
+        self._running: bool = False
 
         self._last_temporal_pass: datetime | None = None
         self._last_dream_pass: datetime | None = None
@@ -62,46 +60,23 @@ class ConsolidationRunner:
 
     @property
     def running(self) -> bool:
-        return self._task is not None and not self._task.done()
+        return self._running
 
-    def start(self, interval: float = CONSOLIDATION_INTERVAL) -> None:
-        if self._task is None:
-            self.interval = interval
-            self._task = asyncio.create_task(self._loop(interval))
-
-    def restart(self, interval: float) -> None:
-        if self._task:
-            self._task.cancel()
-            self._task = None
-        self.start(interval)
-
-    async def stop(self) -> None:
-        if self._task:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-            self._task = None
-
-    async def _loop(self, interval: float) -> None:
-        backoff = interval
-        max_backoff = interval * CONSOLIDATION_MAX_BACKOFF_MULTIPLIER
-        while True:
-            await asyncio.sleep(backoff)
-            try:
-                await self._consolidate_pending()
-                await self._maybe_run_temporal_pass()
-                await self._maybe_run_observation_merge()
-                await self._maybe_run_fact_merge()
-                await self._maybe_run_dream_pass()
-                await self._maybe_run_archival_pass()
-                backoff = interval
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                _logger.warning("Consolidation batch failed: %s", e)
-                backoff = min(backoff * 2, max_backoff)
+    async def run_once(self) -> str:
+        self._running = True
+        try:
+            results = []
+            count = await self._consolidate_pending()
+            if count:
+                results.append(f"consolidated {count} facts")
+            await self._maybe_run_temporal_pass()
+            await self._maybe_run_observation_merge()
+            await self._maybe_run_fact_merge()
+            await self._maybe_run_dream_pass()
+            await self._maybe_run_archival_pass()
+            return "; ".join(results) if results else "no pending work"
+        finally:
+            self._running = False
 
     @asynccontextmanager
     async def _atomic(self) -> AsyncGenerator[None]:
@@ -146,8 +121,9 @@ class ConsolidationRunner:
                 await self.facts.mark_consolidated(fact.id)
                 count += 1
 
-        _logger.info("Consolidated %d facts", count)
-        self._publish(ConsolidationCompleted(facts_processed=count, observations_created=obs_created))
+        if count > 0:
+            _logger.info("Consolidated %d facts", count)
+            self._publish(ConsolidationCompleted(facts_processed=count, observations_created=obs_created))
         return count
 
     async def _maybe_run_temporal_pass(self) -> None:

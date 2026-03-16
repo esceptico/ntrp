@@ -1,4 +1,4 @@
-"""Tests for per-turn memory extraction via RunCompleted events."""
+"""Tests for chat extraction via the extraction handler."""
 
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -10,11 +10,10 @@ import pytest_asyncio
 import ntrp.llm.models as llm_models
 from ntrp.channel import Channel
 from ntrp.config import Config
-from ntrp.constants import EXTRACTION_EVERY_N_TURNS
 from ntrp.events.internal import RunCompleted
 from ntrp.llm.models import EmbeddingModel, Provider
+from ntrp.memory.extraction_handler import create_chat_extraction_handler
 from ntrp.memory.facts import FactMemory
-from ntrp.memory.service import MemoryService
 from ntrp.settings import hash_api_key
 from ntrp.usage import Usage
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
@@ -77,47 +76,86 @@ async def memory(tmp_path: Path, monkeypatch) -> AsyncGenerator[FactMemory]:
     await mem.close()
 
 
-class TestExtractionTurnCounter:
-    """Extraction only fires every N turns."""
+class TestExtractionCountTrigger:
+    """Extraction fires on count trigger with session context."""
 
     @pytest.mark.asyncio
-    async def test_skips_before_n_turns(self, memory: FactMemory):
+    async def test_count_trigger_extracts(self, memory: FactMemory):
         channel = Channel()
-        svc = MemoryService(memory, channel)
+        handler = create_chat_extraction_handler(memory, channel)
 
         mock_extract = AsyncMock(return_value=["User likes Python"])
-        with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            for _i in range(EXTRACTION_EVERY_N_TURNS - 1):
-                event = _make_event("sess-1", _make_messages(4))
-                await svc._on_run_completed(event)
-
-            mock_extract.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_fires_at_n_turns(self, memory: FactMemory):
-        channel = Channel()
-        svc = MemoryService(memory, channel)
-
-        mock_extract = AsyncMock(return_value=["User likes Python"])
-        with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            for _i in range(EXTRACTION_EVERY_N_TURNS):
-                event = _make_event("sess-1", _make_messages(4))
-                await svc._on_run_completed(event)
+        with patch("ntrp.memory.extraction_handler.extract_from_chat", mock_extract):
+            msgs = _make_messages(10)
+            result = await handler(
+                {
+                    "trigger_type": "count",
+                    "session_id": "sess-1",
+                    "messages": list(msgs),
+                }
+            )
 
             mock_extract.assert_called_once()
+            assert result is not None
+            assert "1 facts" in result
 
     @pytest.mark.asyncio
-    async def test_fires_every_n_turns(self, memory: FactMemory):
+    async def test_count_trigger_no_facts(self, memory: FactMemory):
         channel = Channel()
-        svc = MemoryService(memory, channel)
+        handler = create_chat_extraction_handler(memory, channel)
 
         mock_extract = AsyncMock(return_value=[])
-        with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            for _i in range(EXTRACTION_EVERY_N_TURNS * 3):
-                event = _make_event("sess-1", _make_messages(4))
-                await svc._on_run_completed(event)
+        with patch("ntrp.memory.extraction_handler.extract_from_chat", mock_extract):
+            result = await handler(
+                {
+                    "trigger_type": "count",
+                    "session_id": "sess-1",
+                    "messages": list(_make_messages(4)),
+                }
+            )
 
-            assert mock_extract.call_count == 3
+            assert result is None
+
+
+class TestExtractionIdleTrigger:
+    """Extraction fires on idle trigger for all pending sessions."""
+
+    @pytest.mark.asyncio
+    async def test_idle_extracts_pending(self, memory: FactMemory):
+        channel = Channel()
+        handler = create_chat_extraction_handler(memory, channel)
+
+        # Simulate RunCompleted events accumulating pending messages
+        event1 = _make_event("sess-1", _make_messages(6))
+        event2 = _make_event("sess-2", _make_messages(4))
+
+        # Publish events to channel to update pending state
+        channel.publish(event1)
+        channel.publish(event2)
+
+        # Wait for channel to process
+        import asyncio
+
+        await asyncio.sleep(0.1)
+
+        mock_extract = AsyncMock(return_value=["Fact from idle"])
+        with patch("ntrp.memory.extraction_handler.extract_from_chat", mock_extract):
+            await handler({"trigger_type": "idle", "idle_minutes": 5})
+
+            # Should have extracted from both pending sessions
+            assert mock_extract.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_idle_no_pending(self, memory: FactMemory):
+        channel = Channel()
+        handler = create_chat_extraction_handler(memory, channel)
+
+        mock_extract = AsyncMock(return_value=[])
+        with patch("ntrp.memory.extraction_handler.extract_from_chat", mock_extract):
+            result = await handler({"trigger_type": "idle", "idle_minutes": 5})
+
+            mock_extract.assert_not_called()
+            assert result is None
 
 
 class TestExtractionCursor:
@@ -126,91 +164,35 @@ class TestExtractionCursor:
     @pytest.mark.asyncio
     async def test_cursor_advances(self, memory: FactMemory):
         channel = Channel()
-        svc = MemoryService(memory, channel)
+        handler = create_chat_extraction_handler(memory, channel)
 
         mock_extract = AsyncMock(return_value=[])
-        with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            # First batch: 10 messages
-            msgs1 = _make_messages(10)
-            for _i in range(EXTRACTION_EVERY_N_TURNS):
-                await svc._on_run_completed(_make_event("sess-1", msgs1))
+        with patch("ntrp.memory.extraction_handler.extract_from_chat", mock_extract):
+            # First extraction: 10 messages
+            msgs1 = list(_make_messages(10))
+            await handler(
+                {
+                    "trigger_type": "count",
+                    "session_id": "sess-1",
+                    "messages": msgs1,
+                }
+            )
 
-            assert svc._cursors["sess-1"] == 10
-
-            # Second batch: 20 messages (10 old + 10 new)
-            msgs2 = _make_messages(20)
-            for _i in range(EXTRACTION_EVERY_N_TURNS):
-                await svc._on_run_completed(_make_event("sess-1", msgs2))
-
-            assert svc._cursors["sess-1"] == 20
+            # Second extraction: 20 messages (10 old + 10 new)
+            msgs2 = list(_make_messages(20))
+            await handler(
+                {
+                    "trigger_type": "count",
+                    "session_id": "sess-1",
+                    "messages": msgs2,
+                }
+            )
 
             # Second call should get context window + new messages
             second_call_msgs = mock_extract.call_args_list[1][0][0]
-            # context_start = max(0, 10 - EXTRACTION_CONTEXT_MESSAGES) = 0
+            # context_start = max(0, 10 - 10) = 0
             # window = msgs2[0:] = all 20 messages
             assert len(second_call_msgs) == 20
-
-    @pytest.mark.asyncio
-    async def test_context_window_slicing(self, memory: FactMemory):
-        channel = Channel()
-        svc = MemoryService(memory, channel)
-
-        mock_extract = AsyncMock(return_value=[])
-        with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            # First batch: 30 messages
-            msgs1 = _make_messages(30)
-            for _i in range(EXTRACTION_EVERY_N_TURNS):
-                await svc._on_run_completed(_make_event("sess-1", msgs1))
-
-            assert svc._cursors["sess-1"] == 30
-
-            # Second batch: 50 messages (30 old + 20 new)
-            msgs2 = _make_messages(50)
-            for _i in range(EXTRACTION_EVERY_N_TURNS):
-                await svc._on_run_completed(_make_event("sess-1", msgs2))
-
-            # context_start = max(0, 30 - 10) = 20
-            # window = msgs2[20:] = 30 messages (10 context + 20 new)
-            second_call_msgs = mock_extract.call_args_list[1][0][0]
-            assert len(second_call_msgs) == 30
-
-
-class TestExtractionSkips:
-    """Extraction is skipped for cancelled runs and empty messages."""
-
-    @pytest.mark.asyncio
-    async def test_skips_cancelled_run(self, memory: FactMemory):
-        channel = Channel()
-        svc = MemoryService(memory, channel)
-
-        mock_extract = AsyncMock(return_value=[])
-        with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            for _i in range(EXTRACTION_EVERY_N_TURNS):
-                event = RunCompleted(
-                    run_id="run-1",
-                    session_id="sess-1",
-                    messages=_make_messages(4),
-                    usage=Usage(),
-                    result=None,  # cancelled
-                )
-                await svc._on_run_completed(event)
-
-            mock_extract.assert_not_called()
-            # Turn counter should not have incremented
-            assert svc._turn_counts.get("sess-1", 0) == 0
-
-    @pytest.mark.asyncio
-    async def test_skips_empty_messages(self, memory: FactMemory):
-        channel = Channel()
-        svc = MemoryService(memory, channel)
-
-        mock_extract = AsyncMock(return_value=[])
-        with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            for _i in range(EXTRACTION_EVERY_N_TURNS):
-                event = _make_event("sess-1", ())
-                await svc._on_run_completed(event)
-
-            mock_extract.assert_not_called()
 
 
 class TestExtractionRemember:
@@ -219,36 +201,39 @@ class TestExtractionRemember:
     @pytest.mark.asyncio
     async def test_facts_stored(self, memory: FactMemory):
         channel = Channel()
-        svc = MemoryService(memory, channel)
+        handler = create_chat_extraction_handler(memory, channel)
 
         mock_extract = AsyncMock(return_value=["User prefers dark mode", "User works at Acme"])
-        with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            for _i in range(EXTRACTION_EVERY_N_TURNS):
-                event = _make_event("sess-1", _make_messages(6))
-                await svc._on_run_completed(event)
+        with patch("ntrp.memory.extraction_handler.extract_from_chat", mock_extract):
+            await handler(
+                {
+                    "trigger_type": "count",
+                    "session_id": "sess-1",
+                    "messages": list(_make_messages(6)),
+                }
+            )
 
         facts = await memory.facts.list_recent(limit=10)
         texts = {f.text for f in facts}
         assert "User prefers dark mode" in texts
         assert "User works at Acme" in texts
 
+
+class TestExtractionSkips:
+    """Handler returns None for unknown trigger types or missing context."""
+
     @pytest.mark.asyncio
-    async def test_independent_sessions(self, memory: FactMemory):
+    async def test_skips_no_context(self, memory: FactMemory):
         channel = Channel()
-        svc = MemoryService(memory, channel)
+        handler = create_chat_extraction_handler(memory, channel)
 
-        mock_extract = AsyncMock(return_value=[])
-        with patch("ntrp.memory.service.extract_from_chat", mock_extract):
-            # Interleave two sessions, each below threshold
-            for _i in range(EXTRACTION_EVERY_N_TURNS - 1):
-                await svc._on_run_completed(_make_event("sess-1", _make_messages(4)))
-                await svc._on_run_completed(_make_event("sess-2", _make_messages(4)))
+        result = await handler(None)
+        assert result is None
 
-            mock_extract.assert_not_called()
+    @pytest.mark.asyncio
+    async def test_skips_unknown_trigger(self, memory: FactMemory):
+        channel = Channel()
+        handler = create_chat_extraction_handler(memory, channel)
 
-            # Push sess-1 to threshold
-            await svc._on_run_completed(_make_event("sess-1", _make_messages(4)))
-            assert mock_extract.call_count == 1
-
-            # sess-2 still below
-            assert svc._turn_counts["sess-2"] == EXTRACTION_EVERY_N_TURNS - 1
+        result = await handler({"trigger_type": "unknown"})
+        assert result is None

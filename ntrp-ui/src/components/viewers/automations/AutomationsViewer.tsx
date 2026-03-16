@@ -15,9 +15,29 @@ interface AutomationsViewerProps {
   onClose: () => void;
 }
 
+type Tab = "user" | "internal";
+
+function TabHeader({ active, width }: { active: Tab; width: number }) {
+  const userLabel = active === "user" ? "[Automations]" : " Automations ";
+  const internalLabel = active === "internal" ? "[Internal]" : " Internal ";
+  const userColor = active === "user" ? colors.text.primary : colors.text.muted;
+  const internalColor = active === "internal" ? colors.text.primary : colors.text.muted;
+
+  return (
+    <box flexDirection="row" marginBottom={1}>
+      <text><span fg={userColor}>{userLabel}</span></text>
+      <text><span fg={colors.text.disabled}> │ </span></text>
+      <text><span fg={internalColor}>{internalLabel}</span></text>
+      <text><span fg={colors.text.disabled}>  tab to switch</span></text>
+    </box>
+  );
+}
+
 export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
   const {
     automations,
+    activeTab,
+    setActiveTab,
     selectedIndex,
     loading,
     error,
@@ -61,6 +81,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     createMode,
     saving,
     availableNotifiers,
+    activeTab,
     setSelectedIndex,
     setConfirmDelete,
     setViewingResult,
@@ -68,6 +89,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     setLoading,
     setCreateMode,
     setCreateError,
+    setActiveTab,
     onClose,
     handleToggle,
     handleDelete,
@@ -96,6 +118,9 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     showModelDropdown,
     createDesc,
     createDescCursor,
+    triggersList,
+    triggerCursor,
+    editingTriggerIndex,
     createModelOptions,
     selectedModel,
     nameInput,
@@ -104,9 +129,13 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     startInput,
     endInput,
     eventLeadInput,
+    idleMinutesInput,
+    everyNInput,
+    cooldownInput,
     setCreateModelIndex,
     setShowModelDropdown,
     getCreateValidationError,
+    getTriggerValidationError,
   } = form;
 
   const createCanSave = createMode && !saving && getCreateValidationError() === null;
@@ -140,16 +169,26 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
 
   const getFooter = (): React.ReactNode => {
     if (viewingResult) return <Hints items={[["j/k", "scroll"], ["q", "back"]]} />;
-    if (createMode) return saving
-      ? <text><span fg={colors.text.muted}>{editingTaskId ? "Updating..." : "Creating..."}</span></text>
-      : <Hints
+    if (createMode) {
+      if (saving) return <text><span fg={colors.text.muted}>{editingTaskId ? "Updating..." : "Creating..."}</span></text>;
+      if (editingTriggerIndex !== null) {
+        return <Hints items={createEditing
+          ? [["type", "input"], ["esc", "done"]]
+          : [["↑↓", "navigate"], ["enter", "edit"], ["←→", "adjust"], ["esc", "save trigger"]]
+        } />;
+      }
+      return <Hints
         items={createEditing
           ? [["type", "input"], ["esc", "done"], [createCanSave ? "^s" : "^S(off)", "save"]]
-          : [["↑↓", "navigate"], ["enter", "edit"], ["←→", "adjust"], [createCanSave ? "^s" : "^S(off)", "save"], ["esc", "cancel"]]
+          : [["↑↓", "navigate"], ["enter", "edit/open"], [createCanSave ? "^s" : "^S(off)", "save"], ["esc", "cancel"]]
         }
       />;
+    }
     if (confirmDelete) return <Hints items={[["y", "confirm"], ["n", "cancel"]]} />;
-    return <Hints items={[["n", "new"], ["enter", "detail"], ["spc", "toggle"], ["e", "edit"], ["x", "run"], ["d", "del"]]} />;
+    if (activeTab === "internal") {
+      return <Hints items={[["tab", "switch"], ["enter", "detail"], ["spc", "toggle"], ["e", "edit"], ["x", "run"]]} />;
+    }
+    return <Hints items={[["tab", "switch"], ["n", "new"], ["enter", "detail"], ["spc", "toggle"], ["e", "edit"], ["x", "run"], ["d", "del"]]} />;
   };
 
   if (loading) {
@@ -202,6 +241,7 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
               writable={createWritable}
               saving={saving}
               error={createError}
+              triggerError={editingTriggerIndex !== null ? getTriggerValidationError() : null}
               width={width}
               availableNotifiers={availableNotifiers}
               notifiers={createNotifiers}
@@ -221,21 +261,34 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
               startCursorPos={startInput.cursorPos}
               endValue={endInput.value}
               endCursorPos={endInput.cursorPos}
+              idleMinutesValue={idleMinutesInput.value}
+              idleMinutesCursorPos={idleMinutesInput.cursorPos}
+              everyNValue={everyNInput.value}
+              everyNCursorPos={everyNInput.cursorPos}
+              cooldownValue={cooldownInput.value}
+              cooldownCursorPos={cooldownInput.cursorPos}
               canSave={createCanSave}
+              triggersList={triggersList}
+              triggerCursor={triggerCursor}
+              editingTriggerIndex={editingTriggerIndex}
             />
           );
         }
 
-        const visibleLines = Math.max(1, Math.floor((height - 2) / 4));
+        const visibleLines = Math.max(1, Math.floor((height - 4) / 4));
+        const emptyMessage = activeTab === "user"
+          ? "No automations. Press [n] to create one."
+          : "No internal automations.";
 
         return (
           <box flexDirection="column" height={height} overflow="hidden">
+            <TabHeader active={activeTab} width={width} />
             <BaseSelectionList
               items={automations}
               selectedIndex={selectedIndex}
               renderItem={(item, context) => <AutomationItem item={item} context={context} textWidth={width - 2} />}
               visibleLines={visibleLines}
-              emptyMessage="No automations. Press [n] to create one."
+              emptyMessage={emptyMessage}
               getKey={(item) => item.task_id}
               width={width}
               indicator="▶"

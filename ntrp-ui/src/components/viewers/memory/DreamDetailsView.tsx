@@ -59,7 +59,7 @@ export function DreamDetailsView({
   const textWidth = width - 2;
 
   if (confirmDelete) {
-    return <DeleteConfirmation width={width} message="Delete this dream? This cannot be undone." />;
+    return <DeleteConfirmation width={width} height={height} message="Delete this dream? This cannot be undone." />;
   }
 
   return (

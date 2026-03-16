@@ -1,11 +1,11 @@
 import React from "react";
 import { truncateText } from "../../lib/utils.js";
 import type { Automation } from "../../api/client.js";
-import { formatCountdown, triggerLabel } from "../../lib/format.js";
+import { formatCountdown, triggersLabel } from "../../lib/format.js";
 import { SectionHeader, D, S } from "./shared.js";
 
 function AutomationRow({ automation, width }: { automation: Automation; width: number }) {
-  const time = triggerLabel(automation.trigger, true);
+  const time = triggersLabel(automation.triggers, true);
   const eta = automation.next_run_at ? formatCountdown(automation.next_run_at) : "";
   const prefix = `${time} `;
   const suffix = eta ? ` ${eta}` : "";

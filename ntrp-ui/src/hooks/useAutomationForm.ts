@@ -1,8 +1,8 @@
 import { useState, useCallback } from "react";
-import type { Automation, CreateAutomationData, UpdateAutomationData } from "../api/client.js";
+import type { Automation, CreateAutomationData, Trigger, UpdateAutomationData } from "../api/client.js";
 import { useInlineTextInput } from "./useInlineTextInput.js";
 import { useTextInput } from "./useTextInput.js";
-import { useAutomationTriggerState } from "./useAutomationTriggerState.js";
+import { useAutomationTriggerState, type TriggerType } from "./useAutomationTriggerState.js";
 import { useAutomationModelPicker } from "./useAutomationModelPicker.js";
 import {
   SCHEDULE_DAYS,
@@ -10,11 +10,10 @@ import {
   type CreateFocus,
 } from "../components/viewers/automations/AutomationCreateView.js";
 
-export function buildAutomationPayload(params: {
-  name: string;
-  description: string;
-  model: string;
-  triggerType: "time" | "event";
+// --- Build a Trigger object from the form fields ---
+
+function buildTriggerFromFields(params: {
+  triggerType: TriggerType;
   scheduleMode: "schedule" | "interval";
   time: string;
   every: string;
@@ -24,51 +23,84 @@ export function buildAutomationPayload(params: {
   customDays: string[];
   eventType: string;
   eventLead: number;
+  idleMinutes: number;
+  everyN: number;
+}): Trigger {
+  if (params.triggerType === "idle") {
+    return { type: "idle", idle_minutes: params.idleMinutes };
+  }
+  if (params.triggerType === "count") {
+    return { type: "count", every_n: params.everyN };
+  }
+  if (params.triggerType === "event") {
+    const t: Trigger = { type: "event", event_type: params.eventType };
+    if (params.eventType === "event_approaching") {
+      t.lead_minutes = params.eventLead;
+    }
+    return t;
+  }
+  const t: Trigger = { type: "time" };
+  if (params.scheduleMode === "schedule") {
+    t.at = params.time;
+  } else {
+    t.every = params.every;
+    if (params.start && params.end) {
+      t.start = params.start;
+      t.end = params.end;
+    }
+  }
+  if (params.daysOption === "custom") {
+    t.days = params.customDays.join(",");
+  } else if (params.daysOption !== "once" && params.daysOption !== "always") {
+    t.days = params.daysOption;
+  }
+  return t;
+}
+
+export { buildTriggerFromFields };
+
+// --- Build the API payload ---
+
+export function buildAutomationPayload(params: {
+  name: string;
+  description: string;
+  model: string;
   notifiers: string[];
   writable: boolean;
-}): CreateAutomationData | UpdateAutomationData {
-  const data: CreateAutomationData | UpdateAutomationData = {
+  triggers: Trigger[];
+  cooldown_minutes: number | undefined;
+}): CreateAutomationData {
+  return {
     name: params.name,
     description: params.description,
     model: params.model,
-    trigger_type: params.triggerType,
     notifiers: params.notifiers,
     writable: params.writable,
+    triggers: params.triggers,
+    cooldown_minutes: params.cooldown_minutes,
   };
-
-  if (params.triggerType === "time") {
-    if (params.scheduleMode === "schedule") {
-      data.at = params.time;
-    } else {
-      data.every = params.every;
-      if (params.start && params.end) {
-        data.start = params.start;
-        data.end = params.end;
-      }
-    }
-    if (params.daysOption === "custom") {
-      data.days = params.customDays.join(",");
-    } else if (params.daysOption !== "once" && params.daysOption !== "always") {
-      data.days = params.daysOption;
-    }
-  } else {
-    data.event_type = params.eventType;
-    if (params.eventType === "event_approaching") {
-      data.lead_minutes = params.eventLead;
-    }
-  }
-
-  return data;
 }
 
+// --- Focus order ---
+
 export function createFocusOrder(params: {
-  triggerType: "time" | "event";
+  editingTrigger: boolean;
+  triggerType: TriggerType;
   scheduleMode: "schedule" | "interval";
   daysOption: string;
   eventType: string;
   hasNotifiers: boolean;
 }): CreateFocus[] {
-  const order: CreateFocus[] = ["name", "description", "model", "trigger_type"];
+  if (!params.editingTrigger) {
+    // Main form: triggers_list is a single focusable item
+    const order: CreateFocus[] = ["name", "description", "model", "triggers_list", "cooldown"];
+    if (params.hasNotifiers) order.push("notifiers");
+    order.push("writable");
+    return order;
+  }
+
+  // Trigger editor fields
+  const order: CreateFocus[] = ["trigger_type"];
   if (params.triggerType === "time") {
     order.push("mode");
     if (params.scheduleMode === "schedule") {
@@ -78,14 +110,18 @@ export function createFocusOrder(params: {
     }
     order.push("days");
     if (params.daysOption === "custom") order.push("day_picker");
-  } else {
+  } else if (params.triggerType === "event") {
     order.push("event_type");
     if (params.eventType === "event_approaching") order.push("event_lead");
+  } else if (params.triggerType === "idle") {
+    order.push("idle_minutes");
+  } else if (params.triggerType === "count") {
+    order.push("every_n");
   }
-  if (params.hasNotifiers) order.push("notifiers");
-  order.push("writable");
   return order;
 }
+
+// --- Form state interface ---
 
 interface UseAutomationFormParams {
   availableModels: string[];
@@ -97,7 +133,7 @@ export interface AutomationFormState {
   editingTaskId: string | null;
   createFocus: CreateFocus;
   createEditing: boolean;
-  createTriggerType: "time" | "event";
+  createTriggerType: TriggerType;
   createScheduleMode: "schedule" | "interval";
   createDaysOption: string;
   createEventType: string;
@@ -106,6 +142,9 @@ export interface AutomationFormState {
   createNotifierCursor: number;
   createCustomDays: string[];
   createDayCursor: number;
+  triggersList: Trigger[];
+  triggerCursor: number;
+  editingTriggerIndex: number | null;
   createModelCustomOption: string | null;
   createModelIndex: number;
   showModelDropdown: boolean;
@@ -118,12 +157,15 @@ export interface AutomationFormState {
   startInput: ReturnType<typeof useInlineTextInput>;
   endInput: ReturnType<typeof useInlineTextInput>;
   eventLeadInput: ReturnType<typeof useInlineTextInput>;
+  idleMinutesInput: ReturnType<typeof useInlineTextInput>;
+  everyNInput: ReturnType<typeof useInlineTextInput>;
+  cooldownInput: ReturnType<typeof useInlineTextInput>;
   createModelOptions: string[];
   selectedModel: string;
   setEditingTaskId: React.Dispatch<React.SetStateAction<string | null>>;
   setCreateFocus: React.Dispatch<React.SetStateAction<CreateFocus>>;
   setCreateEditing: React.Dispatch<React.SetStateAction<boolean>>;
-  setCreateTriggerType: React.Dispatch<React.SetStateAction<"time" | "event">>;
+  setCreateTriggerType: React.Dispatch<React.SetStateAction<TriggerType>>;
   setCreateScheduleMode: React.Dispatch<React.SetStateAction<"schedule" | "interval">>;
   setCreateDaysOption: React.Dispatch<React.SetStateAction<string>>;
   setCreateEventType: React.Dispatch<React.SetStateAction<string>>;
@@ -132,16 +174,27 @@ export interface AutomationFormState {
   setCreateNotifierCursor: React.Dispatch<React.SetStateAction<number>>;
   setCreateCustomDays: React.Dispatch<React.SetStateAction<string[]>>;
   setCreateDayCursor: React.Dispatch<React.SetStateAction<number>>;
+  setTriggersList: React.Dispatch<React.SetStateAction<Trigger[]>>;
+  setTriggerCursor: React.Dispatch<React.SetStateAction<number>>;
+  setEditingTriggerIndex: React.Dispatch<React.SetStateAction<number | null>>;
   setCreateModelCustomOption: React.Dispatch<React.SetStateAction<string | null>>;
   setCreateModelIndex: React.Dispatch<React.SetStateAction<number>>;
   setShowModelDropdown: React.Dispatch<React.SetStateAction<boolean>>;
   setCreateDesc: React.Dispatch<React.SetStateAction<string>>;
   setCreateDescCursor: React.Dispatch<React.SetStateAction<number>>;
+  // Actions
+  enterTriggerEditor: (index: number) => void;
+  addTrigger: () => void;
+  removeTrigger: () => void;
+  saveTriggerEdit: () => void;
   resetCreateState: () => void;
   getCreateValidationError: () => string | null;
+  getTriggerValidationError: () => string | null;
   openFullEditor: (item: Automation) => void;
   parseLeadToMinutes: (raw: string) => number | null;
 }
+
+// --- Hook implementation ---
 
 export function useAutomationForm({
   availableModels,
@@ -154,6 +207,10 @@ export function useAutomationForm({
   const [createWritable, setCreateWritable] = useState(false);
   const [createNotifiers, setCreateNotifiers] = useState<string[]>([]);
   const [createNotifierCursor, setCreateNotifierCursor] = useState(0);
+
+  const [triggersList, setTriggersList] = useState<Trigger[]>([]);
+  const [triggerCursor, setTriggerCursor] = useState(0);
+  const [editingTriggerIndex, setEditingTriggerIndex] = useState<number | null>(null);
 
   const nameInput = useInlineTextInput();
   const [createDesc, setCreateDesc] = useState("");
@@ -168,6 +225,112 @@ export function useAutomationForm({
   const trigger = useAutomationTriggerState();
   const model = useAutomationModelPicker(availableModels);
 
+  // Load a trigger into the editor fields
+  const loadTriggerIntoFields = useCallback((t: Trigger) => {
+    trigger.resetTriggerState();
+    if (t.type === "idle") {
+      trigger.setCreateTriggerType("idle");
+      trigger.idleMinutesInput.reset();
+      trigger.idleMinutesInput.setValue(String(t.idle_minutes));
+    } else if (t.type === "count") {
+      trigger.setCreateTriggerType("count");
+      trigger.everyNInput.reset();
+      trigger.everyNInput.setValue(String(t.every_n));
+    } else if (t.type === "event") {
+      trigger.setCreateTriggerType("event");
+      trigger.setCreateEventType(t.event_type);
+      trigger.eventLeadInput.reset();
+      trigger.eventLeadInput.setValue(`${t.lead_minutes ?? 60}m`);
+    } else {
+      trigger.setCreateTriggerType("time");
+      if (t.every) {
+        trigger.setCreateScheduleMode("interval");
+        trigger.intervalInput.reset();
+        trigger.intervalInput.setValue(t.every);
+        trigger.startInput.reset();
+        trigger.endInput.reset();
+        if (t.start) trigger.startInput.setValue(t.start);
+        if (t.end) trigger.endInput.setValue(t.end);
+        trigger.timeInput.reset();
+      } else {
+        trigger.setCreateScheduleMode("schedule");
+        trigger.timeInput.reset();
+        if (t.at) trigger.timeInput.setValue(t.at);
+        trigger.intervalInput.reset();
+        trigger.startInput.reset();
+        trigger.endInput.reset();
+      }
+      const rawDays = t.days;
+      const scheduleDefault = t.every ? "always" : "once";
+      const allowed = t.every ? INTERVAL_DAYS : SCHEDULE_DAYS;
+      if (!rawDays) {
+        trigger.setCreateDaysOption(scheduleDefault);
+      } else if ((allowed as readonly string[]).includes(rawDays)) {
+        trigger.setCreateDaysOption(rawDays);
+      } else {
+        trigger.setCreateDaysOption("custom");
+        trigger.setCreateCustomDays(rawDays.split(",").map((d) => d.trim()).filter(Boolean));
+      }
+    }
+  }, [trigger]);
+
+  // Build trigger from current field values
+  const buildCurrentTrigger = useCallback((): Trigger => {
+    return buildTriggerFromFields({
+      triggerType: trigger.createTriggerType,
+      scheduleMode: trigger.createScheduleMode,
+      time: trigger.timeInput.value,
+      every: trigger.intervalInput.value,
+      start: trigger.startInput.value,
+      end: trigger.endInput.value,
+      daysOption: trigger.createDaysOption,
+      customDays: trigger.createCustomDays,
+      eventType: trigger.createEventType,
+      eventLead: trigger.parseLeadToMinutes(trigger.eventLeadInput.value) ?? 60,
+      idleMinutes: Number(trigger.idleMinutesInput.value) || 5,
+      everyN: Number(trigger.everyNInput.value) || 10,
+    });
+  }, [trigger]);
+
+  // Enter trigger editor for existing trigger
+  const enterTriggerEditor = useCallback((index: number) => {
+    const t = triggersList[index];
+    if (!t) return;
+    loadTriggerIntoFields(t);
+    setEditingTriggerIndex(index);
+    setCreateFocus("trigger_type");
+    setCreateEditing(false);
+  }, [triggersList, loadTriggerIntoFields]);
+
+  // Add new trigger and enter editor
+  const addTrigger = useCallback(() => {
+    const newTrigger: Trigger = { type: "time", at: "09:00" };
+    setTriggersList((prev) => [...prev, newTrigger]);
+    const newIndex = triggersList.length;
+    loadTriggerIntoFields(newTrigger);
+    setEditingTriggerIndex(newIndex);
+    setTriggerCursor(newIndex);
+    setCreateFocus("trigger_type");
+    setCreateEditing(false);
+  }, [triggersList.length, loadTriggerIntoFields]);
+
+  // Remove trigger at cursor
+  const removeTrigger = useCallback(() => {
+    if (triggersList.length === 0) return;
+    setTriggersList((prev) => prev.filter((_, i) => i !== triggerCursor));
+    setTriggerCursor((c) => Math.min(c, Math.max(0, triggersList.length - 2)));
+  }, [triggersList.length, triggerCursor]);
+
+  // Save current editor fields back to the list
+  const saveTriggerEdit = useCallback(() => {
+    if (editingTriggerIndex === null) return;
+    const built = buildCurrentTrigger();
+    setTriggersList((prev) => prev.map((t, i) => i === editingTriggerIndex ? built : t));
+    setEditingTriggerIndex(null);
+    setCreateFocus("triggers_list");
+    setCreateEditing(false);
+  }, [editingTriggerIndex, buildCurrentTrigger]);
+
   const resetCreateState = useCallback(() => {
     setEditingTaskId(null);
     setCreateMode(false);
@@ -177,6 +340,9 @@ export function useAutomationForm({
     setCreateNotifiers([]);
     setCreateNotifierCursor(0);
     setCreateError(null);
+    setTriggersList([]);
+    setTriggerCursor(0);
+    setEditingTriggerIndex(null);
     nameInput.reset();
     setCreateDesc("");
     setCreateDescCursor(0);
@@ -190,51 +356,48 @@ export function useAutomationForm({
     model,
   ]);
 
-  const getCreateValidationError = useCallback((): string | null => {
-    const name = nameInput.value.trim();
-    const description = createDesc.trim();
-    if (!name || !description) return "Name and description are required";
+  const getTriggerValidationError = useCallback((): string | null => {
     if (trigger.createTriggerType === "time") {
       if (trigger.createScheduleMode === "schedule") {
-        const at = trigger.timeInput.value.trim();
-        if (!at) return "Time is required for schedule mode";
+        if (!trigger.timeInput.value.trim()) return "Time is required (e.g. 09:00)";
       } else {
-        const every = trigger.intervalInput.value.trim();
-        if (!every) return "Interval is required for interval mode";
+        if (!trigger.intervalInput.value.trim()) return "Frequency is required (e.g. 30m, 2h)";
         const start = trigger.startInput.value.trim();
         const end = trigger.endInput.value.trim();
-        if ((start && !end) || (!start && end)) return "Both start and end times are required";
+        if ((start && !end) || (!start && end)) return "Both start and end required for active window";
       }
       if (trigger.createDaysOption === "custom" && trigger.createCustomDays.length === 0) {
         return "Select at least one day";
       }
-    }
-    if (trigger.createTriggerType === "event" && trigger.createEventType === "event_approaching") {
-      const lead = trigger.parseLeadToMinutes(trigger.eventLeadInput.value);
-      if (lead === null) return "Lead time must be like 30m or 2h30m";
+    } else if (trigger.createTriggerType === "event") {
+      if (trigger.createEventType === "event_approaching") {
+        const lead = trigger.parseLeadToMinutes(trigger.eventLeadInput.value);
+        if (lead === null) return "Lead time must be like 30m or 2h30m";
+      }
+    } else if (trigger.createTriggerType === "idle") {
+      const mins = Number(trigger.idleMinutesInput.value);
+      if (!mins || mins < 1) return "Idle minutes must be at least 1";
+    } else if (trigger.createTriggerType === "count") {
+      const n = Number(trigger.everyNInput.value);
+      if (!n || n < 1) return "Turn count must be at least 1";
     }
     return null;
-  }, [
-    nameInput.value,
-    createDesc,
-    trigger.createTriggerType,
-    trigger.createScheduleMode,
-    trigger.createDaysOption,
-    trigger.createCustomDays,
-    trigger.createEventType,
-    trigger.timeInput.value,
-    trigger.intervalInput.value,
-    trigger.startInput.value,
-    trigger.endInput.value,
-    trigger.eventLeadInput.value,
-    trigger.parseLeadToMinutes,
-  ]);
+  }, [trigger]);
+
+  const getCreateValidationError = useCallback((): string | null => {
+    const name = nameInput.value.trim();
+    const description = createDesc.trim();
+    if (!name || !description) return "Name and description are required";
+    if (triggersList.length === 0) return "At least one trigger is required";
+    return null;
+  }, [nameInput.value, createDesc, triggersList.length]);
 
   const openFullEditor = useCallback((item: Automation) => {
     setEditingTaskId(item.task_id);
     setCreateMode(true);
     setCreateError(null);
     setCreateFocus("name");
+    setEditingTriggerIndex(null);
 
     nameInput.reset();
     nameInput.setValue(item.name ?? "");
@@ -250,56 +413,18 @@ export function useAutomationForm({
     }
     setCreateDesc(item.description ?? "");
     setCreateDescCursor((item.description ?? "").length);
-
     setCreateNotifiers(item.notifiers ?? []);
     setCreateNotifierCursor(0);
     setCreateWritable(item.writable);
-    trigger.setCreateCustomDays([]);
-    trigger.setCreateDayCursor(0);
 
-    if (item.trigger.type === "event") {
-      trigger.setCreateTriggerType("event");
-      trigger.setCreateEventType(item.trigger.event_type);
-      trigger.eventLeadInput.reset();
-      trigger.eventLeadInput.setValue(`${item.trigger.lead_minutes ?? 60}m`);
-      trigger.setCreateScheduleMode("schedule");
-      trigger.setCreateDaysOption("once");
-      trigger.timeInput.reset();
-      trigger.intervalInput.reset();
-      trigger.startInput.reset();
-      trigger.endInput.reset();
-      return;
-    }
+    // Load all triggers into the list
+    setTriggersList([...item.triggers]);
+    setTriggerCursor(0);
 
-    trigger.setCreateTriggerType("time");
-    if (item.trigger.every) {
-      trigger.setCreateScheduleMode("interval");
-      trigger.intervalInput.reset();
-      trigger.intervalInput.setValue(item.trigger.every);
-      trigger.startInput.reset();
-      trigger.endInput.reset();
-      if (item.trigger.start) trigger.startInput.setValue(item.trigger.start);
-      if (item.trigger.end) trigger.endInput.setValue(item.trigger.end);
-      trigger.timeInput.reset();
-    } else {
-      trigger.setCreateScheduleMode("schedule");
-      trigger.timeInput.reset();
-      if (item.trigger.at) trigger.timeInput.setValue(item.trigger.at);
-      trigger.intervalInput.reset();
-      trigger.startInput.reset();
-      trigger.endInput.reset();
-    }
-
-    const rawDays = item.trigger.days;
-    const scheduleDefault = item.trigger.every ? "always" : "once";
-    const allowed = item.trigger.every ? INTERVAL_DAYS : SCHEDULE_DAYS;
-    if (!rawDays) {
-      trigger.setCreateDaysOption(scheduleDefault);
-    } else if ((allowed as readonly string[]).includes(rawDays)) {
-      trigger.setCreateDaysOption(rawDays);
-    } else {
-      trigger.setCreateDaysOption("custom");
-      trigger.setCreateCustomDays(rawDays.split(",").map((d) => d.trim()).filter(Boolean));
+    // Load cooldown
+    trigger.cooldownInput.reset();
+    if (item.cooldown_minutes) {
+      trigger.cooldownInput.setValue(String(item.cooldown_minutes));
     }
   }, [
     setCreateMode,
@@ -312,7 +437,6 @@ export function useAutomationForm({
     model,
     setCreateDesc,
     setCreateDescCursor,
-    trigger,
   ]);
 
   return {
@@ -328,6 +452,9 @@ export function useAutomationForm({
     createNotifierCursor,
     createCustomDays: trigger.createCustomDays,
     createDayCursor: trigger.createDayCursor,
+    triggersList,
+    triggerCursor,
+    editingTriggerIndex,
     createModelCustomOption: model.createModelCustomOption,
     createModelIndex: model.createModelIndex,
     showModelDropdown: model.showModelDropdown,
@@ -340,6 +467,9 @@ export function useAutomationForm({
     startInput: trigger.startInput,
     endInput: trigger.endInput,
     eventLeadInput: trigger.eventLeadInput,
+    idleMinutesInput: trigger.idleMinutesInput,
+    everyNInput: trigger.everyNInput,
+    cooldownInput: trigger.cooldownInput,
     createModelOptions: model.createModelOptions,
     selectedModel: model.selectedModel,
     setEditingTaskId,
@@ -354,13 +484,22 @@ export function useAutomationForm({
     setCreateNotifierCursor,
     setCreateCustomDays: trigger.setCreateCustomDays,
     setCreateDayCursor: trigger.setCreateDayCursor,
+    setTriggersList,
+    setTriggerCursor,
+    setEditingTriggerIndex,
     setCreateModelCustomOption: model.setCreateModelCustomOption,
     setCreateModelIndex: model.setCreateModelIndex,
     setShowModelDropdown: model.setShowModelDropdown,
     setCreateDesc,
     setCreateDescCursor,
+    enterTriggerEditor,
+    addTrigger,
+    removeTrigger,
+    saveTriggerEdit,
+
     resetCreateState,
     getCreateValidationError,
+    getTriggerValidationError,
     openFullEditor,
     parseLeadToMinutes: trigger.parseLeadToMinutes,
   };
