@@ -4,7 +4,7 @@ import json
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
-from ntrp.constants import OFFLOAD_PREVIEW_CHARS, OFFLOAD_THRESHOLD
+from ntrp.constants import OFFLOAD_PREVIEW_LINES, OFFLOAD_THRESHOLD
 from ntrp.core.async_queue import AsyncQueue
 from ntrp.core.models import PendingToolCall, ToolExecutionResult
 from ntrp.events.internal import ToolExecuted
@@ -35,28 +35,31 @@ class ToolRunner:
         self._offload_counter = 0
 
     def _maybe_offload(self, tool_name: str, result: ToolResult) -> ToolResult:
-        """Offload large tool results to filesystem, return compact reference.
-
-        Manus pattern: full representation stored in file, compact reference in context.
-        Agent can use read_file() to access full content if needed.
-        """
         content = result.content
         if len(content) <= OFFLOAD_THRESHOLD:
             return result
 
-        # Write full result to session-scoped temp file
         self._offload_counter += 1
         offload_dir = OFFLOAD_BASE / self.ctx.session_id / "results"
         offload_dir.mkdir(parents=True, exist_ok=True)
         offload_path = offload_dir / f"{tool_name}_{self._offload_counter}.txt"
         offload_path.write_text(content, encoding="utf-8")
 
-        # Create compact reference for context window
-        compact = content[:OFFLOAD_PREVIEW_CHARS]
-        if len(content) > OFFLOAD_PREVIEW_CHARS:
-            compact += f"\n\n[...{len(content) - OFFLOAD_PREVIEW_CHARS} chars offloaded → {offload_path}]"
-
+        compact = self._build_offload_summary(content, offload_path)
         return ToolResult(content=compact, preview=result.preview, data=result.data)
+
+    @staticmethod
+    def _build_offload_summary(content: str, offload_path: Path) -> str:
+        lines = content.split("\n")
+        total = len(lines)
+        preview = "\n".join(lines[:OFFLOAD_PREVIEW_LINES])
+
+        return (
+            f"{preview}\n\n"
+            f"[{total} lines total, {total - OFFLOAD_PREVIEW_LINES} more offloaded → {offload_path}]\n"
+            f"Use bash(grep -n 'pattern' '{offload_path}') to find specific content, "
+            f"or read_file(path='{offload_path}', offset=N, limit=M) to read a specific section."
+        )
 
     def _display_name(self, name: str) -> str:
         tool = self.executor.registry.get(name)
