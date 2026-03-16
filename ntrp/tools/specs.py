@@ -19,7 +19,6 @@ from ntrp.tools.calendar import (
 from ntrp.tools.core.base import Tool
 from ntrp.tools.directives import SetDirectivesTool
 from ntrp.tools.email import EmailsTool, ReadEmailTool, SendEmailTool
-from ntrp.tools.research import ResearchTool
 from ntrp.tools.files import ReadFileTool
 from ntrp.tools.memory import ForgetTool, RecallTool, RememberTool
 from ntrp.tools.notes import (
@@ -30,6 +29,7 @@ from ntrp.tools.notes import (
     NotesTool,
     ReadNoteTool,
 )
+from ntrp.tools.research import ResearchTool
 from ntrp.tools.time import CurrentTimeTool
 from ntrp.tools.web import WebFetchTool, WebSearchTool
 

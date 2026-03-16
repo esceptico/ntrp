@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from jinja2 import Environment
 
-from ntrp.constants import AGENT_MAX_DEPTH, CONVERSATION_GAP_THRESHOLD, RESEARCH_TIMEOUT
+from ntrp.constants import AGENT_MAX_DEPTH, CONVERSATION_GAP_THRESHOLD
 
 env = Environment(trim_blocks=True, lstrip_blocks=True)
 
