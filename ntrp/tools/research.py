@@ -139,6 +139,7 @@ class ResearchTool(Tool):
                     model_override=ctx.run.research_model,
                     parent_id=execution.tool_id,
                     isolation=IsolationLevel.FULL,
+                    silent=True,
                 )
                 status = "completed"
             except asyncio.CancelledError:

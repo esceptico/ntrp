@@ -6,7 +6,7 @@ from ntrp.constants import SUBAGENT_DEFAULT_TIMEOUT
 from ntrp.context.models import SessionState
 from ntrp.core.agent import Agent
 from ntrp.core.isolation import IsolationLevel
-from ntrp.tools.core.context import RunContext, ToolContext
+from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 from ntrp.tools.executor import ToolExecutor
 
 
@@ -39,6 +39,7 @@ def create_spawn_fn(
         model_override: str | None = None,
         parent_id: str | None = None,
         isolation: IsolationLevel = IsolationLevel.FULL,
+        silent: bool = False,
     ) -> str:
         filtered_tools = tools or executor.get_tools()
         child_state = _create_session_state(calling_ctx, isolation)
@@ -54,7 +55,7 @@ def create_spawn_fn(
             session_state=child_state,
             registry=executor.registry,
             run=child_run,
-            io=calling_ctx.io,
+            io=IOBridge() if silent else calling_ctx.io,
             services=calling_ctx.services,
             channel=calling_ctx.channel,
             ledger=calling_ctx.ledger,

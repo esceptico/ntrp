@@ -37,6 +37,7 @@ export interface SessionStreamState {
   messageIdCounter: number;
   notification: SessionNotification | null;
   backgroundTaskCount: number;
+  completedBackgroundTasks: string[];
 }
 
 function createSessionState(): SessionStreamState {
@@ -57,6 +58,7 @@ function createSessionState(): SessionStreamState {
     messageIdCounter: 0,
     notification: null,
     backgroundTaskCount: 0,
+    completedBackgroundTasks: [],
   };
 }
 
