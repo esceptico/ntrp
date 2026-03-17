@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -25,7 +26,7 @@ class NotifyInput(BaseModel):
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=2, min=2, max=10),
-    before_sleep=before_sleep_log(_logger, "WARNING"),
+    before_sleep=before_sleep_log(_logger, logging.WARNING),
     reraise=True,
 )
 async def _send_with_retry(notifier: Notifier, subject: str, body: str) -> None:

@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Literal
 
 from pydantic import BaseModel
@@ -88,7 +89,7 @@ async def _llm_consolidation_decisions(
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=3, min=3, max=15),
-    before_sleep=before_sleep_log(_logger, "WARNING"),
+    before_sleep=before_sleep_log(_logger, logging.WARNING),
     reraise=True,
 )
 async def _call_consolidation_llm(prompt: str, model: str) -> list[ConsolidationAction]:
