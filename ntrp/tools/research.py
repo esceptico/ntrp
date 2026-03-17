@@ -105,6 +105,9 @@ class ResearchTool(Tool):
         prompt = await self._build_prompt(ctx, depth, remaining, execution.tool_id)
         timeout = DEPTH_TIMEOUTS[depth]
 
+        if ctx.run.current_depth > 0:
+            background = False
+
         if not background:
             try:
                 result = await ctx.spawn_fn(

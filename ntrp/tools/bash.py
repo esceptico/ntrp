@@ -191,6 +191,9 @@ class BashTool(Tool):
         if is_blocked_command(command):
             return ToolResult(content=f"Blocked: {command}", preview="Blocked", is_error=True)
 
+        if execution.ctx.run.current_depth > 0:
+            background = False
+
         if not background:
             output = await asyncio.to_thread(execute_bash, command, working_dir, self.timeout)
             lines = output.count("\n") + 1
