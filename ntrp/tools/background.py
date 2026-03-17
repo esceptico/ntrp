@@ -46,7 +46,7 @@ class GetBackgroundResultTool(Tool):
         path = Path(NTRP_TMP_BASE) / session_id / "bg_results" / f"{task_id}.txt"
         if not path.exists():
             return ToolResult(
-                content=f"No result file for task {task_id}. The task may still be running or the ID is incorrect.",
+                content=f"No result for task {task_id} — use list_background_tasks to check if it's still running.",
                 preview="Not found",
                 is_error=True,
             )
