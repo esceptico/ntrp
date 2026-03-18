@@ -4,6 +4,7 @@ from typing import Self
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.core.agent import Agent
+from ntrp.core.compactor import Compactor, SummaryCompactor
 from ntrp.core.ledger import ResearchLedger
 from ntrp.core.spawner import create_spawn_fn
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
@@ -15,10 +16,7 @@ class AgentConfig:
     model: str
     research_model: str | None
     max_depth: int
-    compression_threshold: float = 0.8
-    max_messages: int = 120
-    compression_keep_ratio: float = 0.2
-    summary_max_tokens: int = 1500
+    compactor: Compactor | None = None
 
     @classmethod
     def from_config(cls, config, *, model: str | None = None) -> Self:
@@ -26,10 +24,12 @@ class AgentConfig:
             model=model or config.chat_model,
             research_model=config.research_model,
             max_depth=config.max_depth,
-            compression_threshold=config.compression_threshold,
-            max_messages=config.max_messages,
-            compression_keep_ratio=config.compression_keep_ratio,
-            summary_max_tokens=config.summary_max_tokens,
+            compactor=SummaryCompactor(
+                threshold=config.compression_threshold,
+                max_messages=config.max_messages,
+                keep_ratio=config.compression_keep_ratio,
+                summary_max_tokens=config.summary_max_tokens,
+            ),
         )
 
 
@@ -77,8 +77,5 @@ def create_agent(
         ctx=tool_ctx,
         max_depth=config.max_depth,
         current_depth=0,
-        compression_threshold=config.compression_threshold,
-        max_messages=config.max_messages,
-        compression_keep_ratio=config.compression_keep_ratio,
-        summary_max_tokens=config.summary_max_tokens,
+        compactor=config.compactor,
     )

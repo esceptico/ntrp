@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
 
-from ntrp.context.compression import compress_context_async, find_compressible_range
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
+from ntrp.core.compactor import compact_messages, compactable_range
 from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
@@ -105,24 +105,23 @@ async def compact_session(
     before_count = len(messages)
     before_tokens = data.last_input_tokens
 
-    if (compressible := find_compressible_range(messages, keep_ratio=keep_ratio)) is None:
+    r = compactable_range(messages, keep_ratio=keep_ratio)
+    if r is None:
         return {
             "status": "nothing_to_compact",
             "message": f"Nothing to compact ({before_count} messages)",
             "message_count": before_count,
         }
-    start, end = compressible
+    msg_count = r[1] - r[0]
 
-    msg_count = end - start
-    new_messages, was_compressed = await compress_context_async(
-        messages=messages,
-        model=model,
-        force=True,
+    new_messages = await compact_messages(
+        messages,
+        model,
         keep_ratio=keep_ratio,
         summary_max_tokens=summary_max_tokens,
     )
 
-    if was_compressed:
+    if new_messages is not None:
         await svc.save(
             session_state,
             new_messages,

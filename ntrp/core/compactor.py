@@ -1,3 +1,5 @@
+from typing import Protocol
+
 from ntrp.constants import (
     COMPRESSION_KEEP_RATIO,
     COMPRESSION_THRESHOLD,
@@ -10,7 +12,18 @@ from ntrp.llm.router import get_completion_client
 from ntrp.llm.utils import blocks_to_text
 
 
-def should_compress(
+class Compactor(Protocol):
+    async def maybe_compact(
+        self,
+        messages: list[dict],
+        model: str,
+        last_input_tokens: int | None,
+    ) -> list[dict] | None:
+        """Return compacted messages, or None if no compaction needed."""
+        ...
+
+
+def compact_needed(
     messages: list[dict],
     model: str,
     actual_input_tokens: int | None = None,
@@ -20,19 +33,17 @@ def should_compress(
 ) -> bool:
     if len(messages) > max_messages:
         return True
-
     if actual_input_tokens is not None:
         limit = get_model(model).max_context_tokens
         return actual_input_tokens > int(limit * threshold)
-
     return False
 
 
-def find_compressible_range(
+def compactable_range(
     messages: list[dict],
     keep_ratio: float = COMPRESSION_KEEP_RATIO,
 ) -> tuple[int, int] | None:
-    """Find (start, end) range of messages to summarize, or None if nothing to compress.
+    """Find (start, end) range of messages to summarize, or None if nothing to compact.
 
     Keeps the most recent `keep_ratio` fraction of messages (excluding system),
     snapping the boundary forward past tool messages to avoid splitting a turn.
@@ -41,16 +52,14 @@ def find_compressible_range(
     if n <= 4:
         return None
 
-    # messages[0] is system — compressible range starts at 1
-    compressible = n - 1  # messages after system
+    compressible = n - 1
     keep_count = max(4, int(compressible * keep_ratio))
     tail_start = n - keep_count
 
-    # Snap forward past tool messages to avoid splitting mid-turn
     while tail_start < n and messages[tail_start]["role"] == "tool":
         tail_start += 1
 
-    if tail_start <= 1:
+    if tail_start <= 1 or tail_start >= n:
         return None
 
     return (1, tail_start)
@@ -85,7 +94,7 @@ def _build_summarize_request(conversation_text: str, model: str, summary_max_tok
     }
 
 
-async def summarize_messages_async(
+async def compact_summarize(
     messages: list,
     start: int,
     end: int,
@@ -101,7 +110,7 @@ async def summarize_messages_async(
     return content.strip()
 
 
-def _build_compressed_messages(messages: list[dict], end: int, summary: str) -> list[dict]:
+def _build_compacted_messages(messages: list[dict], end: int, summary: str) -> list[dict]:
     return [
         messages[0],
         {"role": "assistant", "content": f"[Session State Handoff]\n{summary}"},
@@ -109,24 +118,53 @@ def _build_compressed_messages(messages: list[dict], end: int, summary: str) -> 
     ]
 
 
-async def compress_context_async(
+async def compact_messages(
     messages: list[dict],
     model: str,
-    on_compress=None,
-    force: bool = False,
+    *,
     keep_ratio: float = COMPRESSION_KEEP_RATIO,
     summary_max_tokens: int = SUMMARY_MAX_TOKENS,
-) -> tuple[list[dict], bool]:
-    if not force and not should_compress(messages, model):
-        return messages, False
+) -> list[dict] | None:
+    """Compact messages by summarizing old ones. Returns new messages or None if nothing to compact."""
+    r = compactable_range(messages, keep_ratio=keep_ratio)
+    if r is None:
+        return None
+    start, end = r
+    summary = await compact_summarize(messages, start, end, model, summary_max_tokens)
+    return _build_compacted_messages(messages, end, summary)
 
-    compressible = find_compressible_range(messages, keep_ratio=keep_ratio)
-    if compressible is None:
-        return messages, False
-    start, end = compressible
 
-    if on_compress:
-        await on_compress(f"compressing context ({end - start} messages)...")
+class SummaryCompactor:
+    def __init__(
+        self,
+        threshold: float = COMPRESSION_THRESHOLD,
+        max_messages: int = MAX_MESSAGES,
+        keep_ratio: float = COMPRESSION_KEEP_RATIO,
+        summary_max_tokens: int = SUMMARY_MAX_TOKENS,
+    ):
+        self.threshold = threshold
+        self.max_messages = max_messages
+        self.keep_ratio = keep_ratio
+        self.summary_max_tokens = summary_max_tokens
 
-    summary = await summarize_messages_async(messages, start, end, model, summary_max_tokens)
-    return _build_compressed_messages(messages, end, summary), True
+    async def maybe_compact(
+        self,
+        messages: list[dict],
+        model: str,
+        last_input_tokens: int | None,
+    ) -> list[dict] | None:
+        if not compact_needed(
+            messages,
+            model,
+            last_input_tokens,
+            threshold=self.threshold,
+            max_messages=self.max_messages,
+        ):
+            return None
+
+        return await compact_messages(
+            messages,
+            model,
+            keep_ratio=self.keep_ratio,
+            summary_max_tokens=self.summary_max_tokens,
+        )

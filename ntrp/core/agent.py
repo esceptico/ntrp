@@ -1,19 +1,13 @@
 import asyncio
 from collections.abc import AsyncGenerator
 
-from ntrp.constants import (
-    AGENT_MAX_ITERATIONS,
-    COMPRESSION_KEEP_RATIO,
-    COMPRESSION_THRESHOLD,
-    MAX_MESSAGES,
-    SUMMARY_MAX_TOKENS,
-)
-from ntrp.context.compression import compress_context_async, find_compressible_range, should_compress
+from ntrp.constants import AGENT_MAX_ITERATIONS
+from ntrp.core.compactor import Compactor
 from ntrp.core.parsing import normalize_assistant_message, parse_tool_calls
 from ntrp.core.state import AgentState, StateCallback
 from ntrp.core.tool_runner import ToolRunner
 from ntrp.events.internal import ContextCompressed
-from ntrp.events.sse import BackgroundTaskEvent, SSEEvent, TextDeltaEvent, TextEvent, ThinkingEvent, ToolResultEvent
+from ntrp.events.sse import BackgroundTaskEvent, SSEEvent, TextDeltaEvent, TextEvent, ToolResultEvent
 from ntrp.llm.models import get_model
 from ntrp.llm.router import get_completion_client
 from ntrp.llm.types import CompletionResponse, ToolCall
@@ -37,10 +31,7 @@ class Agent:
         current_depth: int = 0,
         parent_id: str | None = None,
         on_state_change: StateCallback | None = None,
-        compression_threshold: float = COMPRESSION_THRESHOLD,
-        max_messages: int = MAX_MESSAGES,
-        compression_keep_ratio: float = COMPRESSION_KEEP_RATIO,
-        summary_max_tokens: int = SUMMARY_MAX_TOKENS,
+        compactor: Compactor | None = None,
     ):
         self.tools = tools
         self.executor = tool_executor
@@ -51,16 +42,13 @@ class Agent:
         self.parent_id = parent_id
         self.on_state_change = on_state_change
         self.ctx = ctx
-        self.compression_threshold = compression_threshold
-        self.max_messages = max_messages
-        self.compression_keep_ratio = compression_keep_ratio
-        self.summary_max_tokens = summary_max_tokens
+        self.compactor = compactor
 
         self._state = AgentState.IDLE
         self.messages: list[dict] = []
         self.inject_queue: list[dict] = []
         self.usage = Usage()
-        self._last_input_tokens: int | None = None  # For adaptive compression
+        self._last_input_tokens: int | None = None
 
     @property
     def state(self) -> AgentState:
@@ -115,37 +103,22 @@ class Agent:
         self.usage += step
         self._last_input_tokens = step.prompt_tokens + step.cache_read_tokens + step.cache_write_tokens
 
-    async def _maybe_compact(self) -> AsyncGenerator[SSEEvent]:
-        if not should_compress(
-            self.messages,
-            self.model,
-            self._last_input_tokens,
-            threshold=self.compression_threshold,
-            max_messages=self.max_messages,
-        ):
-            return
+    async def _maybe_compact(self) -> tuple[dict, ...]:
+        if not self.compactor:
+            return ()
 
-        if self.current_depth == 0:
-            yield ThinkingEvent(status="compressing context...")
+        before = len(self.messages)
+        compacted = await self.compactor.maybe_compact(self.messages, self.model, self._last_input_tokens)
+        if compacted is None:
+            return ()
 
-        compressible = find_compressible_range(self.messages, keep_ratio=self.compression_keep_ratio)
-        if compressible is None:
-            return
-        start, end = compressible
-
-        discarded = tuple(self.messages[start:end])
-        new_messages, _ = await compress_context_async(
-            self.messages,
-            self.model,
-            force=True,
-            keep_ratio=self.compression_keep_ratio,
-            summary_max_tokens=self.summary_max_tokens,
-        )
+        # Messages removed are those between system (index 0) and the kept tail.
+        # The kept tail length = len(compacted) - 2 (system + handoff summary).
+        kept_tail = len(compacted) - 2
+        discarded = tuple(self.messages[1 : before - kept_tail])
         self.messages.clear()
-        self.messages.extend(new_messages)
-
-        if self.current_depth == 0:
-            self.ctx.channel.publish(ContextCompressed(messages=discarded, session_id=self.ctx.session_id))
+        self.messages.extend(compacted)
+        return discarded
 
     def _append_tool_results(self, tool_calls: list[ToolCall], results: dict[str, str]) -> None:
         for tc in tool_calls:
@@ -190,8 +163,10 @@ class Agent:
                     return
 
                 await self._set_state(AgentState.THINKING)
-                async for event in self._maybe_compact():
-                    yield event
+
+                discarded = await self._maybe_compact()
+                if discarded and self.current_depth == 0:
+                    self.ctx.channel.publish(ContextCompressed(messages=discarded, session_id=self.ctx.session_id))
 
                 try:
                     response = None
