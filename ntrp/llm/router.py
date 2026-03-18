@@ -48,9 +48,13 @@ def get_completion_client(model_id: str) -> CompletionClient:
             case Provider.GOOGLE:
                 _completion_clients[cache_key] = GeminiClient(api_key=key)
             case Provider.OPENROUTER:
-                _completion_clients[cache_key] = OpenAIClient(base_url="https://openrouter.ai/api/v1", api_key=key)
+                _completion_clients[cache_key] = OpenAIClient(
+                    base_url="https://openrouter.ai/api/v1", api_key=key, native_openai=False
+                )
             case Provider.CUSTOM:
-                _completion_clients[cache_key] = OpenAIClient(base_url=model.base_url, api_key=_api_keys.get(model.id))
+                _completion_clients[cache_key] = OpenAIClient(
+                    base_url=model.base_url, api_key=_api_keys.get(model.id), native_openai=False
+                )
             case _:
                 raise ValueError(f"Unknown provider: {model.provider}")
     return _completion_clients[cache_key]
