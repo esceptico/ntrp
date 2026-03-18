@@ -9,10 +9,10 @@ from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import INIT_INSTRUCTION, build_system_blocks
 from ntrp.events.internal import RunCompleted, RunStarted
 from ntrp.events.sse import (
-    BackgroundedEvent,
-    DoneEvent,
-    ErrorEvent,
-    SessionInfoEvent,
+    RunBackgroundedEvent,
+    RunErrorEvent,
+    RunFinishedEvent,
+    RunStartedEvent,
     TextEvent,
     ThinkingEvent,
 )
@@ -225,7 +225,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
     run.approval_queue = asyncio.Queue()
 
     await bus.emit(
-        SessionInfoEvent(
+        RunStartedEvent(
             session_id=session_state.session_id,
             run_id=run.run_id,
             sources=ctx.available_sources,
@@ -273,7 +273,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
 
         if bg_gen is not None:
             # Backgrounded: unlock UI, drain agent silently
-            await bus.emit(BackgroundedEvent(run_id=run.run_id))
+            await bus.emit(RunBackgroundedEvent(run_id=run.run_id))
             ctx.run_registry.complete_run(run.run_id)
             # Don't set run_finished — agent is still draining, results
             # should flow through inject_queue so the agent can process them.
@@ -291,12 +291,12 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         if result:
             await bus.emit(TextEvent(content=result))
 
-        await bus.emit(DoneEvent(run_id=run.run_id, usage=run.usage.to_dict()))
+        await bus.emit(RunFinishedEvent(run_id=run.run_id, usage=run.usage.to_dict()))
         ctx.run_registry.complete_run(run.run_id)
 
     except Exception as e:
         _logger.exception("Chat failed (run_id=%s, session_id=%s)", run.run_id, session_state.session_id)
-        await bus.emit(ErrorEvent(message=str(e), recoverable=False))
+        await bus.emit(RunErrorEvent(message=str(e), recoverable=False))
         run.status = RunStatus.ERROR
         ctx.run_registry.cleanup_old_runs()
 

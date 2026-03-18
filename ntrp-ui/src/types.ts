@@ -51,8 +51,8 @@ export interface ApprovalNeededEvent {
   content_preview?: string;
 }
 
-export interface SessionInfoEvent {
-  type: "session_info";
+export interface RunStartedEvent {
+  type: "run_started";
   session_id: string;
   run_id: string;
   sources: string[];
@@ -61,8 +61,8 @@ export interface SessionInfoEvent {
   session_name?: string;
 }
 
-export interface DoneEvent {
-  type: "done";
+export interface RunFinishedEvent {
+  type: "run_finished";
   run_id: string;
   usage: {
     prompt: number;
@@ -74,8 +74,8 @@ export interface DoneEvent {
   };
 }
 
-export interface ErrorEvent {
-  type: "error";
+export interface RunErrorEvent {
+  type: "run_error";
   message: string;
   recoverable: boolean;
 }
@@ -84,16 +84,16 @@ export interface BackgroundTaskEvent {
   type: "background_task";
   task_id: string;
   command: string;
-  status: "started" | "completed" | "failed";
+  status: "started" | "completed" | "failed" | "cancelled";
 }
 
-export interface CancelledEvent {
-  type: "cancelled";
+export interface RunCancelledEvent {
+  type: "run_cancelled";
   run_id: string;
 }
 
-export interface BackgroundedEvent {
-  type: "backgrounded";
+export interface RunBackgroundedEvent {
+  type: "run_backgrounded";
   run_id: string;
 }
 
@@ -103,20 +103,34 @@ export interface QuestionEvent {
   tool_id: string;
 }
 
+export interface TextMessageStartEvent {
+  type: "text_message_start";
+  message_id: string;
+  role: string;
+}
+
+export interface TextMessageEndEvent {
+  type: "text_message_end";
+  message_id: string;
+}
+
+
 export type ServerEvent =
   | ThinkingEvent
   | TextEvent
   | TextDeltaEvent
+  | TextMessageStartEvent
+  | TextMessageEndEvent
   | ToolCallEvent
   | ToolResultEvent
   | ApprovalNeededEvent
   | QuestionEvent
   | BackgroundTaskEvent
-  | SessionInfoEvent
-  | DoneEvent
-  | ErrorEvent
-  | CancelledEvent
-  | BackgroundedEvent;
+  | RunStartedEvent
+  | RunFinishedEvent
+  | RunErrorEvent
+  | RunCancelledEvent
+  | RunBackgroundedEvent;
 
 export interface Message {
   id?: string;

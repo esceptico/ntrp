@@ -8,7 +8,7 @@ from importlib.metadata import version
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from ntrp.events.sse import TextDeltaEvent
+from ntrp.events.sse import TextDeltaEvent, TextEvent, TextMessageEndEvent, TextMessageStartEvent
 from ntrp.server.bus import BusRegistry
 from ntrp.server.middleware import AuthMiddleware, SSEStreamingResponse, _extract_bearer_token
 from ntrp.server.routers.automation import router as automation_router
@@ -131,6 +131,12 @@ async def _event_stream(
     bus = bus_registry.get_or_create(session_id)
     queue = bus.subscribe()
     last_event_at = time.monotonic()
+
+    # Transform state: wrap TextDelta/Text sequences in Start/End boundaries.
+    # Inspired by AG-UI's transformChunks pattern.
+    in_text_message = False
+    msg_counter = 0
+
     try:
         while True:
             try:
@@ -140,10 +146,29 @@ async def _event_stream(
                     last_event_at = time.monotonic()
                     yield SSE_KEEPALIVE
                 continue
+
             if event is None:
+                if in_text_message:
+                    yield TextMessageEndEvent(message_id=f"msg-{msg_counter}").to_sse_string()
                 break
+
+            is_text = isinstance(event, TextDeltaEvent | TextEvent)
+
+            if is_text and not in_text_message:
+                msg_counter += 1
+                in_text_message = True
+                last_event_at = time.monotonic()
+                yield TextMessageStartEvent(message_id=f"msg-{msg_counter}").to_sse_string()
+                await asyncio.sleep(0)
+            elif not is_text and in_text_message:
+                in_text_message = False
+                last_event_at = time.monotonic()
+                yield TextMessageEndEvent(message_id=f"msg-{msg_counter}").to_sse_string()
+                await asyncio.sleep(0)
+
             if not stream and isinstance(event, TextDeltaEvent):
                 continue
+
             last_event_at = time.monotonic()
             yield event.to_sse_string()
             # Yield to event loop so the transport flushes each event
