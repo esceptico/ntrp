@@ -6,6 +6,7 @@ import type { ToolChainItem } from "../components/toolchain/types.js";
 import { connectEvents, sendChatMessage, submitToolResult, cancelRun, backgroundRun, revertSession, type ImageBlock } from "../api/client.js";
 import {
   MAX_TOOL_DESCRIPTION_CHARS,
+  MAX_ASSISTANT_CHARS,
   Status,
   type Status as StatusType,
 } from "../lib/constants.js";
@@ -94,10 +95,16 @@ export function useStreaming({
       getSession(targetId).pendingText = event.question;
       return;
     }
+    if (event.type === "text_message_start") {
+      const s = getSession(targetId);
+      s.pendingMessageId = event.message_id;
+      s.pendingText = "";
+      return;
+    }
 
     mutateSession(targetId, (s) => {
       switch (event.type) {
-        case "session_info":
+        case "run_started":
           s.runId = event.run_id;
           if (targetId === viewedId) {
             onSessionInfoRef.current?.({
@@ -115,11 +122,6 @@ export function useStreaming({
           break;
 
         case "tool_call": {
-          const text = s.pendingText.trim();
-          if (text && s.currentDepth === 0) {
-            addMessageToSession(s, { role: "assistant", content: text });
-            s.pendingText = "";
-          }
           s.currentDepth = event.depth;
           s.status = Status.TOOL;
           const description = truncateText(event.description, MAX_TOOL_DESCRIPTION_CHARS, 'end');
@@ -189,7 +191,7 @@ export function useStreaming({
           break;
         }
 
-        case "done":
+        case "run_finished":
           finalizeText(s);
           s.usage = {
             prompt: s.usage.prompt + event.usage.prompt,
@@ -210,7 +212,7 @@ export function useStreaming({
           }
           break;
 
-        case "error":
+        case "run_error":
           finalizeText(s);
           addMessageToSession(s, { role: "error", content: event.message });
           s.status = Status.IDLE;
@@ -220,7 +222,7 @@ export function useStreaming({
           }
           break;
 
-        case "cancelled": {
+        case "run_cancelled": {
           const containers = s.toolChain.filter(
             (item) => item.name === "research" && s.toolChain.some((c) => c.parentId === item.id)
           );
@@ -239,7 +241,7 @@ export function useStreaming({
           break;
         }
 
-        case "backgrounded":
+        case "run_backgrounded":
           finalizeText(s);
           s.pendingApproval = null;
           s.status = Status.IDLE;
@@ -262,6 +264,14 @@ export function useStreaming({
             }
           }
           break;
+
+        case "text_message_end": {
+          const content = truncateText(s.pendingText, MAX_ASSISTANT_CHARS, 'end');
+          s.pendingText = "";
+          s.pendingMessageId = null;
+          if (content) addMessageToSession(s, { role: "assistant", content });
+          break;
+        }
 
         default: {
           const _exhaustive: never = event;

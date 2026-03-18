@@ -30,6 +30,7 @@ export interface SessionStreamState {
   historyLoaded: boolean;
   runId: string | null;
   pendingText: string;
+  pendingMessageId: string | null;
   currentDepth: number;
   tools: ToolTracker;
   alwaysAllowedTools: Set<string>;
@@ -51,6 +52,7 @@ function createSessionState(): SessionStreamState {
     historyLoaded: false,
     runId: null,
     pendingText: "",
+    pendingMessageId: null,
     currentDepth: 0,
     tools: { descriptions: new Map(), startTimes: new Map(), sequence: 0 },
     alwaysAllowedTools: new Set(),

@@ -7,16 +7,18 @@ class EventType(StrEnum):
     THINKING = "thinking"
     TEXT = "text"
     TEXT_DELTA = "text_delta"
+    TEXT_MESSAGE_START = "text_message_start"
+    TEXT_MESSAGE_END = "text_message_end"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
     APPROVAL_NEEDED = "approval_needed"
     QUESTION = "question"
-    SESSION_INFO = "session_info"
+    RUN_STARTED = "run_started"
     BACKGROUND_TASK = "background_task"
-    DONE = "done"
-    ERROR = "error"
-    CANCELLED = "cancelled"
-    BACKGROUNDED = "backgrounded"
+    RUN_FINISHED = "run_finished"
+    RUN_ERROR = "run_error"
+    RUN_CANCELLED = "run_cancelled"
+    RUN_BACKGROUNDED = "run_backgrounded"
 
 
 @dataclass(frozen=True)
@@ -108,8 +110,8 @@ class QuestionEvent(SSEEvent):
 
 
 @dataclass(frozen=True)
-class SessionInfoEvent(SSEEvent):
-    type: EventType = field(default=EventType.SESSION_INFO, init=False)
+class RunStartedEvent(SSEEvent):
+    type: EventType = field(default=EventType.RUN_STARTED, init=False)
     session_id: str
     run_id: str
     sources: list[str] = field(default_factory=list)
@@ -127,29 +129,42 @@ class BackgroundTaskEvent(SSEEvent):
 
 
 @dataclass(frozen=True)
-class DoneEvent(SSEEvent):
-    type: EventType = field(default=EventType.DONE, init=False)
+class RunFinishedEvent(SSEEvent):
+    type: EventType = field(default=EventType.RUN_FINISHED, init=False)
     run_id: str
     usage: dict = field(default_factory=dict)  # {"prompt": N, "completion": N}
 
 
 @dataclass(frozen=True)
-class ErrorEvent(SSEEvent):
-    type: EventType = field(default=EventType.ERROR, init=False)
+class RunErrorEvent(SSEEvent):
+    type: EventType = field(default=EventType.RUN_ERROR, init=False)
     message: str
     recoverable: bool = False
 
 
 @dataclass(frozen=True)
-class CancelledEvent(SSEEvent):
-    type: EventType = field(default=EventType.CANCELLED, init=False)
+class RunCancelledEvent(SSEEvent):
+    type: EventType = field(default=EventType.RUN_CANCELLED, init=False)
     run_id: str
 
 
 @dataclass(frozen=True)
-class BackgroundedEvent(SSEEvent):
-    type: EventType = field(default=EventType.BACKGROUNDED, init=False)
+class RunBackgroundedEvent(SSEEvent):
+    type: EventType = field(default=EventType.RUN_BACKGROUNDED, init=False)
     run_id: str
+
+
+@dataclass(frozen=True)
+class TextMessageStartEvent(SSEEvent):
+    type: EventType = field(default=EventType.TEXT_MESSAGE_START, init=False)
+    message_id: str
+    role: str = "assistant"
+
+
+@dataclass(frozen=True)
+class TextMessageEndEvent(SSEEvent):
+    type: EventType = field(default=EventType.TEXT_MESSAGE_END, init=False)
+    message_id: str
 
 
 @dataclass(frozen=True)

@@ -2,7 +2,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from ntrp.events.sse import CancelledEvent, SSEEvent
+from ntrp.events.sse import RunCancelledEvent, SSEEvent
 
 if TYPE_CHECKING:
     from ntrp.core.agent import Agent
@@ -43,7 +43,7 @@ async def run_agent_loop(
         result = ""
 
     if ctx.run.cancelled:
-        await bus.emit(CancelledEvent(run_id=ctx.run.run_id))
+        await bus.emit(RunCancelledEvent(run_id=ctx.run.run_id))
         return None, None
 
     return result, None
