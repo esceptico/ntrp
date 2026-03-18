@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useTextInput } from "./useTextInput.js";
 import type { Key } from "./useKeypress.js";
 import { CUSTOM_PRESETS, CUSTOM_FIELDS, type CustomField } from "../components/onboarding/index.js";
-import { getProviders, connectProvider, connectProviderOAuth, updateConfig, addCustomModel, type ProviderInfo } from "../api/client.js";
+import { getProviders, connectProvider, updateConfig, addCustomModel, type ProviderInfo } from "../api/client.js";
 import type { Config } from "../types.js";
 
 type Step = "providers" | "apiKey" | "modelSelect" | "customModel";
@@ -103,28 +103,7 @@ export function useOnboardingState({ config, closable, onClose, onDone }: UseOnb
     setSelectedProvider(provider);
     setError(null);
 
-    if (provider.id === "claude_oauth") {
-      if (provider.connected) {
-        showModels(provider);
-      } else {
-        setSaving(true);
-        try {
-          await connectProviderOAuth(config, "anthropic");
-          const fresh = await refreshProviders();
-          const updated = fresh.find(p => p.id === "claude_oauth");
-          if (!updated) {
-            setError("OAuth connected but provider not found \u2014 try again");
-            return;
-          }
-          setSelectedProvider(updated);
-          showModels(updated);
-        } catch (e) {
-          setError(e instanceof Error ? e.message : "OAuth failed");
-        } finally {
-          setSaving(false);
-        }
-      }
-    } else if (provider.connected) {
+    if (provider.connected) {
       showModels(provider);
     } else {
       setApiKeyValue("");
@@ -155,7 +134,7 @@ export function useOnboardingState({ config, closable, onClose, onDone }: UseOnb
   }, [apiKeyValue, selectedProvider, hasConnected, config, refreshProviders, showModels]);
 
   const handleSelectModel = useCallback(async (model: string) => {
-    const id = selectedProvider?.id === "claude_oauth" ? `oauth:${model}` : model;
+    const id = model;
     setSaving(true);
     setError(null);
     try {

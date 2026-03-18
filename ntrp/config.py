@@ -7,13 +7,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ntrp.embedder import EmbeddingConfig
 from ntrp.llm.models import (
-    OAUTH_PREFIX,
     Provider,
     get_embedding_model,
     get_embedding_models,
     get_models,
     get_models_by_provider,
-    is_oauth_model,
     load_custom_models,
 )
 from ntrp.logging import get_logger
@@ -142,7 +140,6 @@ class Config(BaseSettings):
     def _resolve_model_defaults(self) -> Self:
         self._migrate_deprecated_env()
         self._resolve_chat_model()
-        self._apply_oauth_prefix()
         self._fill_model_fallbacks()
         self._resolve_embedding_model()
         return self
@@ -155,33 +152,12 @@ class Config(BaseSettings):
     def _resolve_chat_model(self) -> None:
         if self.chat_model:
             return
-        # Pick default chat model from the first available provider
         for field, (chat, memory, _) in MODEL_DEFAULTS.items():
             if getattr(self, field, None):
                 self.chat_model = chat
                 if not self.memory_model:
                     self.memory_model = memory
                 return
-        # Fall back to OAuth if configured
-        from ntrp.llm.claude_oauth import is_configured as oauth_configured
-
-        if oauth_configured():
-            chat, memory, _ = MODEL_DEFAULTS["anthropic_api_key"]
-            self.chat_model = f"{OAUTH_PREFIX}{chat}"
-            if not self.memory_model:
-                self.memory_model = f"{OAUTH_PREFIX}{memory}"
-
-    def _apply_oauth_prefix(self) -> None:
-        if self.anthropic_api_key or not self.chat_model:
-            return
-        from ntrp.llm.claude_oauth import is_configured as oauth_configured
-
-        if not oauth_configured():
-            return
-        anthropic_models = get_models_by_provider(Provider.ANTHROPIC)
-        for field in ("chat_model", "memory_model", "research_model"):
-            if (val := getattr(self, field, None)) and not is_oauth_model(val) and val in anthropic_models:
-                setattr(self, field, f"{OAUTH_PREFIX}{val}")
 
     def _fill_model_fallbacks(self) -> None:
         if not self.memory_model and self.chat_model:
@@ -202,9 +178,7 @@ class Config(BaseSettings):
     def _validate_model(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        from ntrp.llm.models import strip_oauth_prefix
-
-        if strip_oauth_prefix(v) not in get_models():
+        if v not in get_models():
             _logger.warning("Unknown model '%s' in settings, falling back to default", v)
             return None
         return v
@@ -249,11 +223,7 @@ class Config(BaseSettings):
 
     @property
     def has_providers(self) -> bool:
-        if self.anthropic_api_key or self.openai_api_key or self.gemini_api_key or self.openrouter_api_key:
-            return True
-        from ntrp.llm.claude_oauth import is_configured as oauth_configured
-
-        return oauth_configured()
+        return bool(self.anthropic_api_key or self.openai_api_key or self.gemini_api_key or self.openrouter_api_key)
 
     @property
     def has_any_model(self) -> bool:

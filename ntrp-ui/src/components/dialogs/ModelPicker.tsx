@@ -16,23 +16,18 @@ type ModelType = "chat" | "research" | "memory" | "embedding";
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
-  claude_oauth: "Claude Pro/Max",
   openai: "OpenAI",
   google: "Google",
   openrouter: "OpenRouter",
   custom: "Custom",
 };
 
-function stripOAuthPrefix(model: string): string {
-  return model.startsWith("oauth:") ? model.slice(6) : model;
-}
-
 function buildModelOptions(modelList: string[], groups: ModelGroup[], currentModel: string): SelectOption[] {
   if (groups.length > 0) {
     return groups.flatMap(g =>
       g.models.map(m => ({
         value: m,
-        title: stripOAuthPrefix(m),
+        title: m,
         category: PROVIDER_LABELS[g.provider] || g.provider,
         indicator: m === currentModel ? "●" : undefined,
       }))
@@ -40,7 +35,7 @@ function buildModelOptions(modelList: string[], groups: ModelGroup[], currentMod
   }
   return modelList.map(m => ({
     value: m,
-    title: stripOAuthPrefix(m),
+    title: m,
     indicator: m === currentModel ? "●" : undefined,
   }));
 }
@@ -240,7 +235,7 @@ export function ModelPicker({ config, serverConfig, onModelChange, onServerConfi
         <box flexDirection="column">
           {MODEL_TYPES.map((mt, i) => {
             const selected = i === typeIndex;
-            const rawModel = stripOAuthPrefix(currentModels[mt.type]);
+            const rawModel = currentModels[mt.type];
             const shortName = rawModel.split("/").pop() || rawModel || "—";
             return (
               <box key={mt.type} flexDirection="row">
