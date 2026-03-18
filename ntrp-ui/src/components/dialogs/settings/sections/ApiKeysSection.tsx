@@ -26,7 +26,7 @@ function renderProviderStatus(provider: ProviderInfo, _selected: boolean) {
     return (
       <text>
         <span fg={colors.status.success}>{"\u2713 "}</span>
-        <span fg={colors.text.disabled}>{provider.key_hint ?? (provider.id === "claude_oauth" ? "oauth" : "")}</span>
+        <span fg={colors.text.disabled}>{provider.key_hint ?? ""}</span>
         {provider.from_env && <span fg={colors.text.muted}>{" (env)"}</span>}
       </text>
     );
@@ -45,13 +45,8 @@ export function ApiKeysSection({ providers, services, activeList, accent }: ApiK
         accent={activeList === "providers" ? accent : inactiveAccent}
         labelWidth={28}
         renderStatus={renderProviderStatus}
-        isEditable={(p) => p.id !== "custom" && p.id !== "claude_oauth"}
+        isEditable={(p) => p.id !== "custom"}
       />
-      {providers.oauthConnecting && (
-        <box marginTop={1}>
-          <text><span fg={colors.text.muted}>  Waiting for browser login...</span></text>
-        </box>
-      )}
 
       <Header>Services</Header>
       <CredentialSection

@@ -2,9 +2,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from ntrp.config import PERSIST_KEYS, PROVIDER_KEY_FIELDS, SERVICE_KEY_FIELDS
-from ntrp.llm.claude_oauth import clear_cache as clear_oauth_cache
-from ntrp.llm.claude_oauth import clear_settings as clear_oauth_settings
-from ntrp.llm.models import Provider, get_models_by_provider, is_oauth_model, strip_oauth_prefix
+from ntrp.llm.models import Provider, get_models_by_provider
 from ntrp.settings import load_user_settings, save_user_settings
 
 
@@ -57,9 +55,6 @@ class ConfigService:
         await self._with_rollback(mutate)
 
     async def disconnect_provider(self, provider: str) -> None:
-        if provider == "claude_oauth":
-            return await self._disconnect_oauth()
-
         if provider not in PROVIDER_KEY_FIELDS:
             raise ValueError(f"Unknown provider: {provider}. Available: {', '.join(PROVIDER_KEY_FIELDS)}")
 
@@ -74,18 +69,7 @@ class ConfigService:
                 settings["provider_keys"] = provider_keys
 
             for key in ("chat_model", "research_model", "memory_model"):
-                if (val := settings.get(key)) and strip_oauth_prefix(val) in provider_models:
-                    settings.pop(key)
-
-        await self._with_rollback(mutate)
-
-    async def _disconnect_oauth(self) -> None:
-        clear_oauth_cache()
-
-        def mutate(settings: dict) -> None:
-            clear_oauth_settings(settings)
-            for key in ("chat_model", "research_model", "memory_model"):
-                if is_oauth_model(settings.get(key, "")):
+                if (val := settings.get(key)) and val in provider_models:
                     settings.pop(key)
 
         await self._with_rollback(mutate)

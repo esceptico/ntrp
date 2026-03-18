@@ -1,14 +1,10 @@
-import asyncio
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
 
 from ntrp.config import PROVIDER_KEY_FIELDS, SERVICE_KEY_FIELDS
-from ntrp.llm.claude_oauth import is_configured as oauth_configured
-from ntrp.llm.claude_oauth import login as oauth_login
 from ntrp.llm.models import (
-    OAUTH_PREFIX,
     Provider,
     add_custom_model,
     get_embedding_models_by_provider,
@@ -127,11 +123,7 @@ async def get_models(runtime: Runtime = Depends(get_runtime)):
         provider_key = m.provider.value
         groups.setdefault(provider_key, []).append(mid)
 
-    # Add Claude Pro/Max group when OAuth is configured
     config = runtime.config
-    if oauth_configured() and Provider.ANTHROPIC.value in groups:
-        groups["claude_oauth"] = [f"{OAUTH_PREFIX}{mid}" for mid in groups[Provider.ANTHROPIC.value]]
-
     return {
         "models": list_models(),
         "groups": [{"provider": p, "models": ms} for p, ms in groups.items()],
@@ -193,20 +185,6 @@ async def get_providers(runtime: Runtime = Depends(get_runtime)):
             }
         )
 
-    # Claude Pro/Max (OAuth) — always show so users can initiate the flow
-    anthropic_models = get_models_by_provider(Provider.ANTHROPIC)
-    providers.append(
-        {
-            "id": "claude_oauth",
-            "name": "Claude Pro/Max",
-            "connected": oauth_configured(),
-            "key_hint": None,
-            "from_env": False,
-            "models": list(anthropic_models.keys()),
-            "embedding_models": [],
-        }
-    )
-
     # Custom models entry
     custom_models = get_models_by_provider(Provider.CUSTOM)
     providers.append(
@@ -247,18 +225,6 @@ async def connect_provider(
             raise HTTPException(status_code=400, detail=str(e))
 
     return {"status": "connected", "provider": provider_id}
-
-
-@router.post("/providers/anthropic/oauth")
-async def connect_anthropic_oauth(
-    runtime: Runtime = Depends(get_runtime),
-):
-    try:
-        await asyncio.to_thread(oauth_login)
-        await runtime.reload_config()
-        return {"status": "connected", "provider": "anthropic"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/providers/{provider_id}")

@@ -35,16 +35,3 @@ export async function disconnectProvider(
   return api.delete(`${config.serverUrl}/providers/${providerId}`);
 }
 
-export async function connectProviderOAuth(
-  config: Config,
-  providerId: string,
-): Promise<{ status: string; provider: string }> {
-  return api.post(`${config.serverUrl}/providers/${providerId}/oauth`, {}, { timeout: 150_000 });
-}
-
-export async function disconnectProviderOAuth(
-  config: Config,
-  providerId: string,
-): Promise<{ status: string; provider: string }> {
-  return api.delete(`${config.serverUrl}/providers/${providerId}/oauth`);
-}

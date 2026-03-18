@@ -45,23 +45,10 @@ function getApiKeysHints(state: UseSettingsStateResult): HintPair[] {
     if (providers.editing) {
       return [["enter", "save"], ["esc", "cancel"]];
     }
-    if (providers.oauthConnecting) {
-      return [["esc", "back"]];
-    }
     const current = providers.items[providers.selectedIndex];
     if (current) {
       if (current.id === "custom") {
         return [["↑↓", "navigate"], ["esc", "back"]];
-      }
-      if (current.id === "claude_oauth") {
-        const hints: HintPair[] = [["↑↓", "navigate"]];
-        if (current.connected) {
-          hints.push(["d", "disconnect"]);
-        } else {
-          hints.push(["enter", "connect via browser"]);
-        }
-        hints.push(["esc", "back"]);
-        return hints;
       }
       const hints: HintPair[] = [["↑↓", "navigate"]];
       if (current.connected && !current.from_env) {
