@@ -81,11 +81,18 @@ DEFAULTS = [
         pricing=Pricing(price_in=2.50, price_out=15),
     ),
     Model(
-        "gpt-5.3-codex",
+        "gpt-5.4-mini",
         provider=Provider.OPENAI,
         max_context_tokens=400_000,
         max_output_tokens=128_000,
-        pricing=Pricing(price_in=1.75, price_out=14),
+        pricing=Pricing(price_in=0.75, price_out=4.50),
+    ),
+    Model(
+        "gpt-5.4-nano",
+        provider=Provider.OPENAI,
+        max_context_tokens=400_000,
+        max_output_tokens=128_000,
+        pricing=Pricing(price_in=0.20, price_out=1.25),
     ),
     Model(
         "gpt-5.2",
@@ -93,20 +100,6 @@ DEFAULTS = [
         max_context_tokens=128_000,
         max_output_tokens=16384,
         pricing=Pricing(price_in=1.75, price_out=14),
-    ),
-    Model(
-        "gpt-5-mini",
-        provider=Provider.OPENAI,
-        max_context_tokens=400_000,
-        max_output_tokens=128_000,
-        pricing=Pricing(price_in=0.25, price_out=2),
-    ),
-    Model(
-        "gpt-5-nano",
-        provider=Provider.OPENAI,
-        max_context_tokens=400_000,
-        max_output_tokens=128_000,
-        pricing=Pricing(price_in=0.05, price_out=0.40),
     ),
     # --- Google ---
     Model(

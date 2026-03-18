@@ -16,8 +16,15 @@ from ntrp.llm.utils import blocks_to_text
 
 
 class OpenAIClient(CompletionClient, EmbeddingClient):
-    def __init__(self, base_url: str | None = None, api_key: str | None = None, timeout: float = 60.0):
+    def __init__(
+        self,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        timeout: float = 60.0,
+        native_openai: bool = True,
+    ):
         self._client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+        self._native_openai = native_openai
 
     def _prepare(
         self,
@@ -33,11 +40,12 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         messages = self._preprocess_messages(messages)
         request: dict = {"model": model, "messages": messages}
 
+        token_key = "max_completion_tokens" if self._native_openai else "max_tokens"
         optional = {
             "tools": tools,
             "tool_choice": tool_choice if tools else None,
             "temperature": temperature,
-            "max_tokens": max_tokens,
+            token_key: max_tokens,
         }
         request.update({k: v for k, v in optional.items() if v is not None})
 
