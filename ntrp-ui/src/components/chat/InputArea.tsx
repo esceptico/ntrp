@@ -20,11 +20,14 @@ function formatModel(model?: string): string {
 
 interface InputAreaProps {
   onSubmit: (v: string, images?: ImageBlock[]) => void;
+  onEditSubmit?: (message: string, turns: number) => void;
   disabled: boolean;
   focus: boolean;
   isStreaming: boolean;
   status: StatusType;
   commands: readonly SlashCommand[];
+  messages?: readonly { role: string; content: string; id?: string }[];
+  onEditingChange?: (messageId: string | null) => void;
   queueCount?: number;
   skipApprovals?: boolean;
   chatModel?: string;
@@ -38,11 +41,14 @@ interface InputAreaProps {
 
 export const InputArea = memo(function InputArea({
   onSubmit,
+  onEditSubmit,
   disabled,
   focus,
   isStreaming,
   status,
   commands,
+  messages = [],
+  onEditingChange,
   queueCount = 0,
   skipApprovals = false,
   chatModel,
@@ -62,6 +68,23 @@ export const InputArea = memo(function InputArea({
 
   const escPendingRef = useRef(false);
   const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const userEntries = useMemo(
+    () => messages.filter((m) => m.role === "user").map((m) => ({ content: m.content, id: m.id })),
+    [messages]
+  );
+  const historyIndexRef = useRef(-1);
+  const historyNavRef = useRef(false);
+
+  const notifyEditing = useCallback((idx: number) => {
+    if (!onEditingChange) return;
+    if (idx < 0) {
+      onEditingChange(null);
+    } else {
+      const entry = userEntries[userEntries.length - 1 - idx];
+      onEditingChange(entry?.id ?? null);
+    }
+  }, [onEditingChange, userEntries]);
 
   useEffect(() => {
     return () => {
@@ -118,12 +141,26 @@ export const InputArea = memo(function InputArea({
     if (selected) {
       onSubmit(`/${selected.name}`, pendingImages);
       resetInput();
+      historyIndexRef.current = -1;
+      notifyEditing(-1);
+      return;
+    }
+
+    const histIdx = historyIndexRef.current;
+    if (histIdx >= 0 && onEditSubmit) {
+      const turns = histIdx + 1;
+      onEditSubmit(text, turns);
+      resetInput();
+      historyIndexRef.current = -1;
+      notifyEditing(-1);
       return;
     }
 
     onSubmit(text, pendingImages);
     resetInput();
-  }, [disabled, onSubmit, resetInput, getSelectedCommand]);
+    historyIndexRef.current = -1;
+    notifyEditing(-1);
+  }, [disabled, onSubmit, onEditSubmit, resetInput, getSelectedCommand, notifyEditing]);
 
   const attachClipboardImage = useCallback(() => {
     const img = getClipboardImage();
@@ -158,6 +195,39 @@ export const InputArea = memo(function InputArea({
 
     if (handleAutocompleteKey(e)) return;
 
+    if (e.name === "up" && !showAutocomplete && (!valueRef.current || historyIndexRef.current >= 0)) {
+      e.preventDefault();
+      const nextIdx = historyIndexRef.current + 1;
+      if (nextIdx < userEntries.length) {
+        historyIndexRef.current = nextIdx;
+        historyNavRef.current = true;
+        const entry = userEntries[userEntries.length - 1 - nextIdx];
+        inputRef.current?.setText(entry.content);
+        inputRef.current?.editBuffer.setCursorByOffset(entry.content.length);
+        setValue(entry.content);
+        notifyEditing(nextIdx);
+      }
+      return;
+    }
+
+    if (e.name === "down" && !showAutocomplete && historyIndexRef.current >= 0) {
+      e.preventDefault();
+      historyNavRef.current = true;
+      const nextIdx = historyIndexRef.current - 1;
+      historyIndexRef.current = nextIdx;
+      if (nextIdx < 0) {
+        inputRef.current?.clear();
+        setValue("");
+      } else {
+        const entry = userEntries[userEntries.length - 1 - nextIdx];
+        inputRef.current?.setText(entry.content);
+        inputRef.current?.editBuffer.setCursorByOffset(entry.content.length);
+        setValue(entry.content);
+      }
+      notifyEditing(nextIdx);
+      return;
+    }
+
     if (e.name === "escape") {
       if (imagesRef.current.length > 0) {
         setImages((prev) => prev.slice(0, -1));
@@ -177,13 +247,19 @@ export const InputArea = memo(function InputArea({
       }
       return;
     }
-  }, [disabled, doSubmit, resetInput, handleAutocompleteKey]);
+  }, [disabled, doSubmit, resetInput, handleAutocompleteKey, showAutocomplete, userEntries, notifyEditing]);
 
   const handleContentChange = useCallback(() => {
     const text = inputRef.current?.plainText ?? "";
     setValue(text);
     resetIndex();
-  }, [resetIndex]);
+    if (historyNavRef.current) {
+      historyNavRef.current = false;
+    } else if (historyIndexRef.current >= 0) {
+      historyIndexRef.current = -1;
+      notifyEditing(-1);
+    }
+  }, [resetIndex, notifyEditing]);
 
   const modelName = formatModel(chatModel);
   const imagePreview = useMemo(() => {

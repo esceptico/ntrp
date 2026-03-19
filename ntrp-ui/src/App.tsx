@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRenderer } from "@opentui/react";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
-import type { Selection, ScrollBoxRenderable } from "@opentui/core";
+import type { Selection, ScrollBoxRenderable, Renderable } from "@opentui/core";
 import type { Message, Config } from "./types.js";
 import type { ImageBlock } from "./api/chat.js";
 import { colors, setTheme, useThemeVersion, themeNames, type Theme } from "./components/ui/index.js";
@@ -91,6 +91,7 @@ function AppContent({
 
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const dialog = useDialog();
 
   const { data: skillsData } = useQuery({
@@ -122,6 +123,7 @@ function AppContent({
     cancel,
     background,
     revert,
+    revertAndResend,
     setStatus,
     switchToSession,
     deleteSessionState,
@@ -249,14 +251,32 @@ function AppContent({
     [pendingApproval, sendMessage, handleCommand, addMessage, skills, enqueue]
   );
 
+  const handleEditSubmit = useCallback(
+    (message: string, turns: number) => {
+      revertAndResend(message, turns);
+    },
+    [revertAndResend]
+  );
+
   const closeView = useCallback(() => setViewMode("chat"), []);
 
   const chatScrollRef = useRef<ScrollBoxRenderable | null>(null);
+  const messageRefsMap = useRef<Map<string, Renderable>>(new Map());
 
   useEffect(() => {
     const scroll = chatScrollRef.current;
     if (scroll) setTimeout(() => scroll.scrollTo(scroll.scrollHeight), 0);
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!editingMessageId) return;
+    const scroll = chatScrollRef.current;
+    const el = messageRefsMap.current.get(editingMessageId);
+    if (!scroll || !el) return;
+    const offset = el.y - scroll.content.y;
+    const viewportHeight = scroll.viewport.height;
+    scroll.scrollTo(Math.max(0, offset - Math.floor(viewportHeight / 2)));
+  }, [editingMessageId]);
 
   const cycleIdRef = useRef<string | null>(null);
 
@@ -392,8 +412,15 @@ function AppContent({
             const needsMargin = index > 0 && !(isToolMessage && prevIsToolMessage);
 
             return (
-              <box key={item.id} marginTop={needsMargin ? 1 : 0}>
-                <MessageDisplay msg={item} />
+              <box
+                key={item.id}
+                marginTop={needsMargin ? 1 : 0}
+                ref={item.id ? (r: Renderable) => {
+                  if (r) messageRefsMap.current.set(item.id!, r);
+                  else messageRefsMap.current.delete(item.id!);
+                } : undefined}
+              >
+                <MessageDisplay msg={item} editing={item.id === editingMessageId} />
               </box>
             );
           })}
@@ -432,11 +459,14 @@ function AppContent({
         <box flexShrink={0}>
           <InputArea
             onSubmit={handleSubmit}
+            onEditSubmit={handleEditSubmit}
             disabled={!serverConnected || hasOverlay || showSettings || !!pendingApproval}
             focus={isInChatMode && !hasOverlay && !showSettings && !pendingApproval}
             isStreaming={isStreaming}
             status={status}
             commands={allCommands}
+            messages={messages}
+            onEditingChange={setEditingMessageId}
             queueCount={messageQueue.length}
             skipApprovals={skipApprovals}
             chatModel={serverConfig?.chat_model}

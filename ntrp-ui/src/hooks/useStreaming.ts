@@ -468,6 +468,37 @@ export function useStreaming({
     }
   }, [store, mutateSession]);
 
+  const revertAndResend = useCallback(async (message: string, turns: number): Promise<boolean> => {
+    const id = store.getState().viewedId;
+    if (!id) return false;
+    const s = store.getState().sessions.get(id);
+    if (!s || s.isStreaming) return false;
+
+    try {
+      await revertSession(configRef.current, id, turns);
+      mutateSession(id, (s) => {
+        let count = 0;
+        let targetIdx = -1;
+        for (let i = s.messages.length - 1; i >= 0; i--) {
+          if (s.messages[i].role === "user") {
+            count++;
+            if (count >= turns) {
+              targetIdx = i;
+              break;
+            }
+          }
+        }
+        if (targetIdx >= 0) {
+          s.messages = s.messages.slice(0, targetIdx);
+        }
+      });
+      sendMessage(message);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [store, mutateSession, sendMessage]);
+
   const deleteSessionState = useCallback((targetId: string) => {
     deleteSession(targetId);
   }, [deleteSession]);
@@ -536,6 +567,7 @@ export function useStreaming({
     cancel,
     background,
     revert,
+    revertAndResend,
     switchToSession,
     deleteSessionState,
   };

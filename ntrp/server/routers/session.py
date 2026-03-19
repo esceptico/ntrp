@@ -4,7 +4,13 @@ from ntrp.constants import HISTORY_MESSAGE_LIMIT
 from ntrp.llm.utils import blocks_to_text
 from ntrp.server.deps import require_session_service
 from ntrp.server.runtime import Runtime, get_runtime
-from ntrp.server.schemas import ClearSessionRequest, CreateSessionRequest, RenameSessionRequest, SessionResponse
+from ntrp.server.schemas import (
+    ClearSessionRequest,
+    CreateSessionRequest,
+    RenameSessionRequest,
+    RevertRequest,
+    SessionResponse,
+)
 from ntrp.services.session import SessionService
 
 router = APIRouter(tags=["session"])
@@ -92,11 +98,10 @@ async def clear_session(svc: SessionService = Depends(require_session_service), 
 
 
 @router.post("/session/revert")
-async def revert_session(
-    svc: SessionService = Depends(require_session_service), req: ClearSessionRequest | None = None
-):
+async def revert_session(svc: SessionService = Depends(require_session_service), req: RevertRequest | None = None):
     target_id = req.session_id if req else None
-    result = await svc.revert(target_id)
+    turns = req.turns if req else 1
+    result = await svc.revert(target_id, turns=turns)
     if not result:
         raise HTTPException(status_code=400, detail="Nothing to revert")
     return result
