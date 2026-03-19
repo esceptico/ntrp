@@ -65,19 +65,6 @@ class MCPTokenStorage:
 
 
 def create_oauth_provider(server_name: str, server_url: str) -> OAuthClientProvider:
-    return OAuthClientProvider(
-        server_url=server_url,
-        client_metadata=OAuthClientMetadata(
-            redirect_uris=["http://localhost:0/callback"],
-            client_name="NTRP",
-        ),
-        storage=MCPTokenStorage(server_name),
-        redirect_handler=None,
-        callback_handler=None,
-    )
-
-
-def run_mcp_oauth(server_name: str, server_url: str) -> None:
     code_result: dict[str, Any] = {}
     done = Event()
 
@@ -119,7 +106,6 @@ def run_mcp_oauth(server_name: str, server_url: str) -> None:
 
     async def callback_handler() -> tuple[str, str | None]:
         server.timeout = 5
-
         deadline = time.time() + LOGIN_TIMEOUT
         while not done.is_set():
             if time.time() > deadline:
@@ -134,28 +120,28 @@ def run_mcp_oauth(server_name: str, server_url: str) -> None:
             raise RuntimeError("OAuth timed out — no authorization code received")
         return (code_result["code"], code_result.get("state"))
 
-    storage = MCPTokenStorage(server_name)
-    storage.clear()
-
-    provider = OAuthClientProvider(
+    return OAuthClientProvider(
         server_url=server_url,
         client_metadata=OAuthClientMetadata(
             redirect_uris=[redirect_uri],
             client_name="NTRP",
         ),
-        storage=storage,
+        storage=MCPTokenStorage(server_name),
         redirect_handler=redirect_handler,
         callback_handler=callback_handler,
         timeout=LOGIN_TIMEOUT,
     )
+
+
+def run_mcp_oauth(server_name: str, server_url: str) -> None:
+    MCPTokenStorage(server_name).clear()
+    provider = create_oauth_provider(server_name, server_url)
 
     loop = asyncio.new_event_loop()
     try:
 
         async def _run():
             async with create_mcp_http_client(auth=provider) as client:
-                # Make a request to the server URL to trigger the OAuth flow.
-                # The OAuthClientProvider intercepts the 401 and runs auth.
                 resp = await client.get(server_url)
                 _logger.info("MCP OAuth completed for %r (status=%d)", server_name, resp.status_code)
 
