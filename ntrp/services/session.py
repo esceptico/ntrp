@@ -57,20 +57,23 @@ class SessionService:
     async def list_archived(self, limit: int = 20) -> list[dict]:
         return await self.store.list_archived_sessions(limit=limit)
 
-    async def revert(self, session_id: str | None = None) -> dict | None:
+    async def revert(self, session_id: str | None = None, turns: int = 1) -> dict | None:
         if not (data := await self.load(session_id)) or not data.messages:
             return None
 
-        last_user_idx = None
+        target_idx = None
+        seen = 0
         for i in range(len(data.messages) - 1, -1, -1):
             if data.messages[i].get("role") == "user":
-                last_user_idx = i
-                break
+                seen += 1
+                if seen >= turns:
+                    target_idx = i
+                    break
 
-        if last_user_idx is None:
+        if target_idx is None:
             return None
 
-        raw = data.messages[last_user_idx]["content"]
+        raw = data.messages[target_idx]["content"]
         user_message = (
             raw
             if isinstance(raw, str)
@@ -80,8 +83,8 @@ class SessionService:
             if isinstance(raw, list)
             else ""
         )
-        reverted_count = len(data.messages) - last_user_idx
-        data.messages = data.messages[:last_user_idx]
+        reverted_count = len(data.messages) - target_idx
+        data.messages = data.messages[:target_idx]
         metadata = {"last_input_tokens": data.last_input_tokens} if data.last_input_tokens else None
         await self.save(data.state, data.messages, metadata=metadata)
         return {"user_message": user_message, "reverted_count": reverted_count}

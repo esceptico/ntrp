@@ -58,6 +58,11 @@ class ClearSessionRequest(BaseModel):
     session_id: str | None = None
 
 
+class RevertRequest(BaseModel):
+    session_id: str | None = None
+    turns: int = 1
+
+
 class SourceToggles(BaseModel):
     google: bool | None = None
     memory: bool | None = None

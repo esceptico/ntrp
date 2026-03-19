@@ -122,6 +122,7 @@ function AppContent({
     cancel,
     background,
     revert,
+    revertAndResend,
     setStatus,
     switchToSession,
     deleteSessionState,
@@ -247,6 +248,13 @@ function AppContent({
       sendMessage(trimmed, images);
     },
     [pendingApproval, sendMessage, handleCommand, addMessage, skills, enqueue]
+  );
+
+  const handleEditSubmit = useCallback(
+    (message: string, turns: number) => {
+      revertAndResend(message, turns);
+    },
+    [revertAndResend]
   );
 
   const closeView = useCallback(() => setViewMode("chat"), []);
@@ -432,11 +440,13 @@ function AppContent({
         <box flexShrink={0}>
           <InputArea
             onSubmit={handleSubmit}
+            onEditSubmit={handleEditSubmit}
             disabled={!serverConnected || hasOverlay || showSettings || !!pendingApproval}
             focus={isInChatMode && !hasOverlay && !showSettings && !pendingApproval}
             isStreaming={isStreaming}
             status={status}
             commands={allCommands}
+            messages={messages}
             queueCount={messageQueue.length}
             skipApprovals={skipApprovals}
             chatModel={serverConfig?.chat_model}
