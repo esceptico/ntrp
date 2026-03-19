@@ -274,7 +274,8 @@ function AppContent({
     const el = messageRefsMap.current.get(editingMessageId);
     if (!scroll || !el) return;
     const offset = el.y - scroll.content.y;
-    scroll.scrollTo(offset);
+    const viewportHeight = scroll.viewport.height;
+    scroll.scrollTo(Math.max(0, offset - Math.floor(viewportHeight / 2)));
   }, [editingMessageId]);
 
   const cycleIdRef = useRef<string | null>(null);
