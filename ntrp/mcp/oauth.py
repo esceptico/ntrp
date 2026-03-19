@@ -45,7 +45,7 @@ class MCPTokenStorage:
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
         data = self._read()
-        data["tokens"] = tokens.model_dump(exclude_none=True)
+        data["tokens"] = tokens.model_dump(mode="json", exclude_none=True)
         self._write(data)
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
@@ -56,8 +56,12 @@ class MCPTokenStorage:
 
     async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
         data = self._read()
-        data["client_info"] = client_info.model_dump(exclude_none=True)
+        data["client_info"] = client_info.model_dump(mode="json", exclude_none=True)
         self._write(data)
+
+    def clear(self) -> None:
+        if self._path.exists():
+            self._path.unlink()
 
 
 def create_oauth_provider(server_name: str, server_url: str) -> OAuthClientProvider:
@@ -131,6 +135,7 @@ def run_mcp_oauth(server_name: str, server_url: str) -> None:
         return (code_result["code"], code_result.get("state"))
 
     storage = MCPTokenStorage(server_name)
+    storage.clear()
 
     provider = OAuthClientProvider(
         server_url=server_url,
