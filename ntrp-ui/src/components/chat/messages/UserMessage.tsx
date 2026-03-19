@@ -18,18 +18,17 @@ export const UserMessage = memo(function UserMessage({ content, images, editing 
     return images.map((img) => getImagePixels(img.data, img.media_type));
   }, [images]);
 
+  const borderProps = editing
+    ? { border: true as const, borderColor: colors.status.warning }
+    : { border: SplitBorder.border, borderColor: accentValue, customBorderChars: SplitBorder.customBorderChars };
+
   return (
-    <box
-      overflow="hidden"
-      border={SplitBorder.border}
-      borderColor={editing ? colors.status.warning : accentValue}
-      customBorderChars={SplitBorder.customBorderChars}
-    >
+    <box overflow="hidden" {...borderProps}>
       <box
-        paddingTop={1}
-        paddingBottom={1}
-        paddingLeft={2}
-        paddingRight={2}
+        paddingTop={editing ? 0 : 1}
+        paddingBottom={editing ? 0 : 1}
+        paddingLeft={editing ? 1 : 2}
+        paddingRight={editing ? 1 : 2}
         backgroundColor={colors.background.panel}
         flexShrink={0}
       >
@@ -45,7 +44,6 @@ export const UserMessage = memo(function UserMessage({ content, images, editing 
           </box>
         ))}
         {content && <text fg={colors.text.primary}>{content}</text>}
-        {editing && <text fg={colors.status.warning}>editing</text>}
       </box>
     </box>
   );

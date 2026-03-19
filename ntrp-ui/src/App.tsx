@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRenderer } from "@opentui/react";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
-import type { Selection, ScrollBoxRenderable } from "@opentui/core";
+import type { Selection, ScrollBoxRenderable, Renderable } from "@opentui/core";
 import type { Message, Config } from "./types.js";
 import type { ImageBlock } from "./api/chat.js";
 import { colors, setTheme, useThemeVersion, themeNames, type Theme } from "./components/ui/index.js";
@@ -261,11 +261,21 @@ function AppContent({
   const closeView = useCallback(() => setViewMode("chat"), []);
 
   const chatScrollRef = useRef<ScrollBoxRenderable | null>(null);
+  const messageRefsMap = useRef<Map<string, Renderable>>(new Map());
 
   useEffect(() => {
     const scroll = chatScrollRef.current;
     if (scroll) setTimeout(() => scroll.scrollTo(scroll.scrollHeight), 0);
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!editingMessageId) return;
+    const scroll = chatScrollRef.current;
+    const el = messageRefsMap.current.get(editingMessageId);
+    if (!scroll || !el) return;
+    const offset = el.y - scroll.content.y;
+    scroll.scrollTo(offset);
+  }, [editingMessageId]);
 
   const cycleIdRef = useRef<string | null>(null);
 
@@ -401,7 +411,14 @@ function AppContent({
             const needsMargin = index > 0 && !(isToolMessage && prevIsToolMessage);
 
             return (
-              <box key={item.id} marginTop={needsMargin ? 1 : 0}>
+              <box
+                key={item.id}
+                marginTop={needsMargin ? 1 : 0}
+                ref={item.id ? (r: Renderable) => {
+                  if (r) messageRefsMap.current.set(item.id!, r);
+                  else messageRefsMap.current.delete(item.id!);
+                } : undefined}
+              >
                 <MessageDisplay msg={item} editing={item.id === editingMessageId} />
               </box>
             );
