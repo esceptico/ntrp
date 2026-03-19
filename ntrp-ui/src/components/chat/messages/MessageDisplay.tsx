@@ -10,14 +10,16 @@ import { ThinkingMessage } from "./ThinkingMessage.js";
 
 interface MessageDisplayProps {
   msg: Message;
+  editing?: boolean;
 }
 
 export const MessageDisplay = memo(function MessageDisplay({
   msg,
+  editing,
 }: MessageDisplayProps) {
   switch (msg.role) {
     case "user":
-      return <UserMessage content={msg.content} images={msg.images} />;
+      return <UserMessage content={msg.content} images={msg.images} editing={editing} />;
     case "assistant":
       return <AssistantMessage content={msg.content} />;
     case "tool":

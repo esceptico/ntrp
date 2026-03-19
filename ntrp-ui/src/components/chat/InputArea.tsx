@@ -26,7 +26,8 @@ interface InputAreaProps {
   isStreaming: boolean;
   status: StatusType;
   commands: readonly SlashCommand[];
-  messages?: readonly { role: string; content: string }[];
+  messages?: readonly { role: string; content: string; id?: string }[];
+  onEditingChange?: (messageId: string | null) => void;
   queueCount?: number;
   skipApprovals?: boolean;
   chatModel?: string;
@@ -47,6 +48,7 @@ export const InputArea = memo(function InputArea({
   status,
   commands,
   messages = [],
+  onEditingChange,
   queueCount = 0,
   skipApprovals = false,
   chatModel,
@@ -67,12 +69,22 @@ export const InputArea = memo(function InputArea({
   const escPendingRef = useRef(false);
   const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const userMessages = useMemo(
-    () => messages.filter((m) => m.role === "user").map((m) => m.content),
+  const userEntries = useMemo(
+    () => messages.filter((m) => m.role === "user").map((m) => ({ content: m.content, id: m.id })),
     [messages]
   );
   const historyIndexRef = useRef(-1);
   const historyNavRef = useRef(false);
+
+  const notifyEditing = useCallback((idx: number) => {
+    if (!onEditingChange) return;
+    if (idx < 0) {
+      onEditingChange(null);
+    } else {
+      const entry = userEntries[userEntries.length - 1 - idx];
+      onEditingChange(entry?.id ?? null);
+    }
+  }, [onEditingChange, userEntries]);
 
   useEffect(() => {
     return () => {
@@ -130,6 +142,7 @@ export const InputArea = memo(function InputArea({
       onSubmit(`/${selected.name}`, pendingImages);
       resetInput();
       historyIndexRef.current = -1;
+      notifyEditing(-1);
       return;
     }
 
@@ -139,13 +152,15 @@ export const InputArea = memo(function InputArea({
       onEditSubmit(text, turns);
       resetInput();
       historyIndexRef.current = -1;
+      notifyEditing(-1);
       return;
     }
 
     onSubmit(text, pendingImages);
     resetInput();
     historyIndexRef.current = -1;
-  }, [disabled, onSubmit, onEditSubmit, resetInput, getSelectedCommand]);
+    notifyEditing(-1);
+  }, [disabled, onSubmit, onEditSubmit, resetInput, getSelectedCommand, notifyEditing]);
 
   const attachClipboardImage = useCallback(() => {
     const img = getClipboardImage();
@@ -183,13 +198,14 @@ export const InputArea = memo(function InputArea({
     if (e.name === "up" && !showAutocomplete && (!valueRef.current || historyIndexRef.current >= 0)) {
       e.preventDefault();
       const nextIdx = historyIndexRef.current + 1;
-      if (nextIdx < userMessages.length) {
+      if (nextIdx < userEntries.length) {
         historyIndexRef.current = nextIdx;
         historyNavRef.current = true;
-        const msg = userMessages[userMessages.length - 1 - nextIdx];
-        inputRef.current?.setText(msg);
-        inputRef.current?.editBuffer.setCursorByOffset(msg.length);
-        setValue(msg);
+        const entry = userEntries[userEntries.length - 1 - nextIdx];
+        inputRef.current?.setText(entry.content);
+        inputRef.current?.editBuffer.setCursorByOffset(entry.content.length);
+        setValue(entry.content);
+        notifyEditing(nextIdx);
       }
       return;
     }
@@ -203,11 +219,12 @@ export const InputArea = memo(function InputArea({
         inputRef.current?.clear();
         setValue("");
       } else {
-        const msg = userMessages[userMessages.length - 1 - nextIdx];
-        inputRef.current?.setText(msg);
-        inputRef.current?.editBuffer.setCursorByOffset(msg.length);
-        setValue(msg);
+        const entry = userEntries[userEntries.length - 1 - nextIdx];
+        inputRef.current?.setText(entry.content);
+        inputRef.current?.editBuffer.setCursorByOffset(entry.content.length);
+        setValue(entry.content);
       }
+      notifyEditing(nextIdx);
       return;
     }
 
@@ -230,7 +247,7 @@ export const InputArea = memo(function InputArea({
       }
       return;
     }
-  }, [disabled, doSubmit, resetInput, handleAutocompleteKey, showAutocomplete, userMessages]);
+  }, [disabled, doSubmit, resetInput, handleAutocompleteKey, showAutocomplete, userEntries, notifyEditing]);
 
   const handleContentChange = useCallback(() => {
     const text = inputRef.current?.plainText ?? "";
@@ -238,10 +255,11 @@ export const InputArea = memo(function InputArea({
     resetIndex();
     if (historyNavRef.current) {
       historyNavRef.current = false;
-    } else {
+    } else if (historyIndexRef.current >= 0) {
       historyIndexRef.current = -1;
+      notifyEditing(-1);
     }
-  }, [resetIndex]);
+  }, [resetIndex, notifyEditing]);
 
   const modelName = formatModel(chatModel);
   const imagePreview = useMemo(() => {

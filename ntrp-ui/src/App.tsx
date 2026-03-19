@@ -91,6 +91,7 @@ function AppContent({
 
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const dialog = useDialog();
 
   const { data: skillsData } = useQuery({
@@ -401,7 +402,7 @@ function AppContent({
 
             return (
               <box key={item.id} marginTop={needsMargin ? 1 : 0}>
-                <MessageDisplay msg={item} />
+                <MessageDisplay msg={item} editing={item.id === editingMessageId} />
               </box>
             );
           })}
@@ -447,6 +448,7 @@ function AppContent({
             status={status}
             commands={allCommands}
             messages={messages}
+            onEditingChange={setEditingMessageId}
             queueCount={messageQueue.length}
             skipApprovals={skipApprovals}
             chatModel={serverConfig?.chat_model}

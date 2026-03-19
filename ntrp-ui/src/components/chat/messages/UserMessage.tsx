@@ -7,9 +7,10 @@ import { getImagePixels } from "../../../lib/image-preview.js";
 interface UserMessageProps {
   content: string;
   images?: Array<{ media_type: string; data: string }>;
+  editing?: boolean;
 }
 
-export const UserMessage = memo(function UserMessage({ content, images }: UserMessageProps) {
+export const UserMessage = memo(function UserMessage({ content, images, editing }: UserMessageProps) {
   const { accentValue } = useAccentColor();
 
   const previews = useMemo(() => {
@@ -21,7 +22,7 @@ export const UserMessage = memo(function UserMessage({ content, images }: UserMe
     <box
       overflow="hidden"
       border={SplitBorder.border}
-      borderColor={accentValue}
+      borderColor={editing ? colors.status.warning : accentValue}
       customBorderChars={SplitBorder.customBorderChars}
     >
       <box
@@ -44,6 +45,7 @@ export const UserMessage = memo(function UserMessage({ content, images }: UserMe
           </box>
         ))}
         {content && <text fg={colors.text.primary}>{content}</text>}
+        {editing && <text fg={colors.status.warning}>editing</text>}
       </box>
     </box>
   );
