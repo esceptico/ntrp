@@ -60,7 +60,7 @@ class ClearSessionRequest(BaseModel):
 
 class RevertRequest(BaseModel):
     session_id: str | None = None
-    turns: int = 1
+    turns: int = Field(1, ge=1)
 
 
 class SourceToggles(BaseModel):
