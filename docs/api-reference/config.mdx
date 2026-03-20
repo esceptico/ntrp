@@ -46,7 +46,7 @@ curl http://localhost:6877/models \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-Returns models grouped by provider, including Claude OAuth models when configured.
+Returns models grouped by provider.
 
 ### List embedding models
 
@@ -99,7 +99,7 @@ curl http://localhost:6877/providers \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-Returns all providers (Anthropic, OpenAI, Google, OpenRouter, Claude OAuth, Custom) with connection status, available models, and masked API key hints.
+Returns all providers (Anthropic, OpenAI, Google, OpenRouter, Custom) with connection status, available models, and masked API key hints.
 
 ### Connect provider
 
@@ -109,15 +109,6 @@ curl -X POST http://localhost:6877/providers/openai/connect \
   -H "Content-Type: application/json" \
   -d '{"api_key": "sk-...", "chat_model": "gpt-5.2"}'
 ```
-
-### Connect via Claude OAuth
-
-```bash
-curl -X POST http://localhost:6877/providers/anthropic/oauth \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-Opens a browser window for PKCE-based OAuth login with your Claude Pro/Max subscription.
 
 ### Disconnect provider
 
