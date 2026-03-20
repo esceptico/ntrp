@@ -42,9 +42,9 @@ export const Sidebar = React.memo(function Sidebar({ serverConfig, serverVersion
         <box flexDirection="column">
           <text>
             <span fg={accentValue}>ntrp</span>
-            {serverVersion && <span fg={D}> v{serverVersion}</span>}
+            {serverVersion && <span fg={D()}> v{serverVersion}</span>}
           </text>
-          <text><span fg={D}>{truncateText(serverUrl, contentWidth)}</span></text>
+          <text><span fg={D()}>{truncateText(serverUrl, contentWidth)}</span></text>
         </box>
 
         {sections.models && serverConfig && <ModelsSection cfg={serverConfig} width={contentWidth} />}

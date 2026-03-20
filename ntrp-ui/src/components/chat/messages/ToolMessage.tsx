@@ -37,11 +37,11 @@ const ResearchMessage = memo(function ResearchMessage({
   return (
     <box flexDirection="column" overflow="hidden" paddingLeft={3}>
       <text>
-        <span fg={colors.text.disabled}>{TOOL_MARKER} </span>
+        <span fg={cancelled ? colors.tool.error : colors.tool.completed}>{TOOL_MARKER} </span>
         <span fg={colors.text.muted}>{truncateText(descText, descWidth)}</span>
         {stats && <span fg={colors.text.disabled}>{stats}</span>}
       </text>
-      <text><span fg={colors.text.disabled}>{"  "} {statusLabel}</span></text>
+      <text><span fg={cancelled ? colors.status.error : colors.text.disabled}>{"  "} {statusLabel}</span></text>
     </box>
   );
 });
@@ -96,9 +96,9 @@ export const ToolMessage = memo(function ToolMessage({
     return (
       <box flexDirection="column" overflow="hidden" paddingLeft={3}>
         <text>
-          <span fg={colors.text.disabled}>{TOOL_MARKER} </span>
+          <span fg={colors.tool.completed}>{TOOL_MARKER} </span>
           <span fg={colors.text.muted}>{truncateText(displayName, contentWidth - 2 - suffix.length)}</span>
-          {suffix && <span fg={colors.text.disabled}>{suffix}</span>}
+          {suffix && <span fg={colors.status.success}>{suffix}</span>}
         </text>
         <text>
           <span fg={colors.text.disabled}>
@@ -118,9 +118,9 @@ export const ToolMessage = memo(function ToolMessage({
   return (
     <box flexDirection="column" overflow="hidden" paddingLeft={3}>
       <text>
-        <span fg={colors.text.disabled}>{TOOL_MARKER} </span>
+        <span fg={colors.tool.completed}>{TOOL_MARKER} </span>
         <span fg={colors.text.muted}>{truncateText(displayName, contentWidth - 2 - suffix.length)}</span>
-        {suffix && <span fg={colors.text.disabled}>{suffix}</span>}
+        {suffix && <span fg={colors.status.success}>{suffix}</span>}
       </text>
       {(visibleLines.length > 0 || hiddenCount > 0) && (
         <box flexDirection="row">

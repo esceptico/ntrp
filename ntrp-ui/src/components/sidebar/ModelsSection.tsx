@@ -19,8 +19,8 @@ export function ModelsSection({ cfg, width }: { cfg: ServerConfig; width: number
         const display = formatModel(raw);
         return (
           <text key={label}>
-            <span fg={D}>{label.padEnd(5)}</span>
-            <span fg={S}>{truncateText(display, width - 5)}</span>
+            <span fg={D()}>{label.padEnd(5)}</span>
+            <span fg={S()}>{truncateText(display, width - 5)}</span>
           </text>
         );
       })}

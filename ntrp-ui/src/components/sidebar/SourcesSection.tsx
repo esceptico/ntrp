@@ -22,7 +22,7 @@ export function SourcesSection({ cfg }: { cfg: ServerConfig }) {
     <box flexDirection="column">
       <SectionHeader label="SOURCES" />
       {entries.map(({ key, label, on, error }) => {
-        const color = error ? colors.status.error : on ? S : D;
+        const color = error ? colors.status.error : on ? colors.status.success : D();
         return (
           <text key={key}>
             <span fg={color}>{error ? "!" : on ? "\u2022" : "\u00B7"}</span>
