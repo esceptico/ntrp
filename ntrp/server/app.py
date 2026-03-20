@@ -59,7 +59,10 @@ async def lifespan(app: FastAPI):
     app.state.bus_registry = BusRegistry()
     _install_shutdown_handlers(runtime, app.state.bus_registry)
 
-    yield
+    try:
+        yield
+    except asyncio.CancelledError:
+        pass
 
     await runtime.close()
 

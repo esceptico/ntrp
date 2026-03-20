@@ -65,6 +65,26 @@ class MCPTokenStorage:
 
 
 def create_oauth_provider(server_name: str, server_url: str) -> OAuthClientProvider:
+    """Create a provider that reuses stored tokens but cannot start a new OAuth flow.
+
+    Used during session connect — if tokens are valid, they're attached
+    automatically. If re-auth is needed, the connection fails and the user
+    must re-authenticate via the /mcp/servers/{name}/oauth endpoint.
+    """
+    return OAuthClientProvider(
+        server_url=server_url,
+        client_metadata=OAuthClientMetadata(
+            redirect_uris=["http://localhost:0/callback"],
+            client_name="NTRP",
+        ),
+        storage=MCPTokenStorage(server_name),
+        redirect_handler=None,
+        callback_handler=None,
+    )
+
+
+def run_mcp_oauth(server_name: str, server_url: str) -> None:
+    """Run a full interactive OAuth flow: clear old tokens, open browser, wait for callback."""
     code_result: dict[str, Any] = {}
     done = Event()
 
@@ -120,22 +140,20 @@ def create_oauth_provider(server_name: str, server_url: str) -> OAuthClientProvi
             raise RuntimeError("OAuth timed out — no authorization code received")
         return (code_result["code"], code_result.get("state"))
 
-    return OAuthClientProvider(
+    storage = MCPTokenStorage(server_name)
+    storage.clear()
+
+    provider = OAuthClientProvider(
         server_url=server_url,
         client_metadata=OAuthClientMetadata(
             redirect_uris=[redirect_uri],
             client_name="NTRP",
         ),
-        storage=MCPTokenStorage(server_name),
+        storage=storage,
         redirect_handler=redirect_handler,
         callback_handler=callback_handler,
         timeout=LOGIN_TIMEOUT,
     )
-
-
-def run_mcp_oauth(server_name: str, server_url: str) -> None:
-    MCPTokenStorage(server_name).clear()
-    provider = create_oauth_provider(server_name, server_url)
 
     loop = asyncio.new_event_loop()
     try:
