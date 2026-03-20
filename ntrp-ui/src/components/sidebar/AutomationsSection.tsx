@@ -14,9 +14,9 @@ function AutomationRow({ automation, width }: { automation: Automation; width: n
 
   return (
     <text>
-      <span fg={D}>{prefix}</span>
-      <span fg={S}>{name}</span>
-      {suffix && <span fg={D}>{suffix}</span>}
+      <span fg={D()}>{prefix}</span>
+      <span fg={S()}>{name}</span>
+      {suffix && <span fg={D()}>{suffix}</span>}
     </text>
   );
 }

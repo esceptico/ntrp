@@ -4,14 +4,14 @@ import type { TokenUsage } from "../../types.js";
 
 export type UsageData = TokenUsage;
 
-export const H = colors.text.secondary;
-export const D = colors.text.disabled;
-export const S = colors.text.muted;
+export function H() { return colors.text.secondary; }
+export function D() { return colors.text.disabled; }
+export function S() { return colors.text.muted; }
 
 export function SectionHeader({ label }: { label: string }) {
   return (
     <text>
-      <span fg={H}>{label}</span>
+      <span fg={H()}>{label}</span>
     </text>
   );
 }

@@ -17,9 +17,26 @@ function getStatusColor(status: ToolChainItem["status"]): string {
     case "running":
       return colors.tool.running;
     case "done":
-      return colors.text.muted;
+      return colors.tool.completed;
     case "pending":
       return colors.tool.pending;
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
+function getLabelColor(status: ToolChainItem["status"]): string {
+  switch (status) {
+    case "error":
+      return colors.tool.error;
+    case "running":
+      return colors.text.primary;
+    case "done":
+      return colors.text.secondary;
+    case "pending":
+      return colors.text.muted;
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
@@ -69,6 +86,8 @@ export function TreeItem({ node, indent, expanded, width }: TreeItemProps) {
   const prefix = indent > 0 ? "  ".repeat(indent) : "";
   const contentWidth = Math.max(0, width - prefix.length - 2);
 
+  const labelColor = getLabelColor(node.status);
+
   if (!isContainer(node.name)) {
     const preview = node.preview || node.result?.split("\n")[0] || "";
     const resultLine = truncateText(preview, Math.min(MAX_TOOL_RESULT_LINE_CHARS, contentWidth - 2));
@@ -79,7 +98,7 @@ export function TreeItem({ node, indent, expanded, width }: TreeItemProps) {
       <box flexDirection="column" width={width} overflow="hidden">
         <text>
           <span fg={color}>{prefix}{icon}</span>
-          <span fg={colors.text.secondary}>{truncateText(label, contentWidth)}</span>
+          <span fg={labelColor}>{truncateText(label, contentWidth)}</span>
         </text>
         {resultLine && node.status === "done" && !hasDiff && (
           <text>
@@ -101,7 +120,7 @@ export function TreeItem({ node, indent, expanded, width }: TreeItemProps) {
       <box flexDirection="column" width={width} overflow="hidden">
         <text>
           <span fg={color}>{prefix}{icon}</span>
-          <span fg={colors.text.secondary}>{truncateText(label, contentWidth - 15)}</span>
+          <span fg={labelColor}>{truncateText(label, contentWidth - 15)}</span>
           {stats && <span fg={colors.text.muted}>{stats}</span>}
         </text>
         {currentLabel && (
@@ -120,7 +139,7 @@ export function TreeItem({ node, indent, expanded, width }: TreeItemProps) {
     <box flexDirection="column" width={width} overflow="hidden">
       <text>
         <span fg={color}>{prefix}{icon}</span>
-        <span fg={colors.text.secondary}>{truncateText(label, contentWidth - 15)}</span>
+        <span fg={labelColor}>{truncateText(label, contentWidth - 15)}</span>
         {stats && <span fg={colors.text.muted}>{stats}</span>}
       </text>
       {node.children.map((child) => (

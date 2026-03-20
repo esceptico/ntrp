@@ -7,16 +7,16 @@ export function MemorySection({ stats }: { stats: Stats }) {
     <box flexDirection="column">
       <SectionHeader label="MEMORY" />
       <text>
-        <span fg={S}>{stats.fact_count}</span>
-        <span fg={D}> facts</span>
+        <span fg={S()}>{stats.fact_count}</span>
+        <span fg={D()}> facts</span>
       </text>
       <text>
-        <span fg={S}>{stats.observation_count}</span>
-        <span fg={D}> observations</span>
+        <span fg={S()}>{stats.observation_count}</span>
+        <span fg={D()}> observations</span>
       </text>
       <text>
-        <span fg={S}>{stats.dream_count}</span>
-        <span fg={D}> dreams</span>
+        <span fg={S()}>{stats.dream_count}</span>
+        <span fg={D()}> dreams</span>
       </text>
     </box>
   );

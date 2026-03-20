@@ -22,7 +22,7 @@ function getGlowColor(state: SessionNotification | undefined, streamingColor: st
   if (!state) return undefined;
   switch (state) {
     case "streaming": return streamingColor;
-    case "done": return streamingColor;
+    case "done": return colors.status.success;
     case "approval": return colors.status.warning;
     case "error": return colors.status.error;
   }
@@ -42,13 +42,13 @@ function SessionRow({ session, isCurrent, glowColor, width }: { session: Session
   const suffix = ` ${age}`;
   const nameWidth = Math.max(4, width - indicator.length - suffix.length);
   const displayName = truncateText(label, nameWidth);
-  const nameColor = isCurrent ? H : glowColor ?? S;
+  const nameColor = isCurrent ? H() : glowColor ?? S();
 
   return (
     <text>
-      <span fg={isCurrent ? H : D}>{indicator}</span>
+      <span fg={isCurrent ? H() : D()}>{indicator}</span>
       <span fg={nameColor}>{displayName}</span>
-      <span fg={D}>{suffix}</span>
+      <span fg={D()}>{suffix}</span>
     </text>
   );
 }
