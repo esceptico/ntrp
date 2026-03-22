@@ -19,6 +19,8 @@ _OAUTH_REAUTH_MSG = "OAuth tokens expired — re-authenticate via /mcp/servers/{
 
 
 def _is_oauth_error(exc: BaseException) -> bool:
+    if isinstance(exc, ExceptionGroup):
+        return any(_is_oauth_error(e) for e in exc.exceptions)
     name = type(exc).__name__
     msg = str(exc)
     return "OAuthFlowError" in name or "redirect handler" in msg
