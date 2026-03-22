@@ -71,13 +71,12 @@ class MCPServerSession:
             args=transport.args,
             env=transport.env,
         )
-        async with stdio_client(params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                self._session = session
-                await self._discover_tools()
-                self._ready.set()
-                await self._shutdown.wait()
+        async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
+            await session.initialize()
+            self._session = session
+            await self._discover_tools()
+            self._ready.set()
+            await self._shutdown.wait()
 
     async def _run_http(self) -> None:
         transport = self.config.transport
@@ -90,13 +89,16 @@ class MCPServerSession:
         else:
             http_client = create_mcp_http_client(headers=transport.headers or None)
 
-        async with http_client, streamable_http_client(transport.url, http_client=http_client) as (read, write, _):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                self._session = session
-                await self._discover_tools()
-                self._ready.set()
-                await self._shutdown.wait()
+        async with (
+            http_client,
+            streamable_http_client(transport.url, http_client=http_client) as (read, write, _),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            self._session = session
+            await self._discover_tools()
+            self._ready.set()
+            await self._shutdown.wait()
 
     async def _discover_tools(self) -> None:
         if not self._session:
@@ -130,9 +132,7 @@ class MCPServerSession:
                 # First connection attempt failed — report and stop.
                 if not self._ready.is_set():
                     if _is_oauth_error(exc):
-                        self._error = RuntimeError(
-                            _OAUTH_REAUTH_MSG.format(name=self.name)
-                        )
+                        self._error = RuntimeError(_OAUTH_REAUTH_MSG.format(name=self.name))
                     else:
                         self._error = exc
                     self._ready.set()
@@ -154,13 +154,19 @@ class MCPServerSession:
                 if retries > _MAX_RECONNECT_RETRIES:
                     _logger.warning(
                         "MCP server %r failed after %d reconnect attempts: %s",
-                        self.name, _MAX_RECONNECT_RETRIES, exc,
+                        self.name,
+                        _MAX_RECONNECT_RETRIES,
+                        exc,
                     )
                     return
 
                 _logger.warning(
                     "MCP server %r connection lost (%d/%d), reconnecting in %.0fs: %s",
-                    self.name, retries, _MAX_RECONNECT_RETRIES, backoff, exc,
+                    self.name,
+                    retries,
+                    _MAX_RECONNECT_RETRIES,
+                    backoff,
+                    exc,
                 )
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, _MAX_BACKOFF)
@@ -188,7 +194,7 @@ class MCPServerSession:
             if self._task and not self._task.done():
                 try:
                     await asyncio.wait_for(self._ready.wait(), timeout=30)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
             if not self._session:
                 raise RuntimeError(f"MCP server {self.name!r} is not connected")
@@ -199,7 +205,7 @@ class MCPServerSession:
         if self._task and not self._task.done():
             try:
                 await asyncio.wait_for(self._task, timeout=10)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 _logger.warning("MCP server %r shutdown timed out, cancelling", self.name)
                 self._task.cancel()
                 try:
