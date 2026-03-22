@@ -39,13 +39,23 @@ class MCPTokenStorage:
 
     async def get_tokens(self) -> OAuthToken | None:
         data = self._read()
-        if tokens := data.get("tokens"):
-            return OAuthToken(**tokens)
-        return None
+        if not (tokens := data.get("tokens")):
+            return None
+        # If access token has expired, strip it so the SDK falls into
+        # the refresh path instead of sending a stale token and hitting 401.
+        expires_at = data.get("expires_at")
+        if expires_at and time.time() > expires_at:
+            tokens = {k: v for k, v in tokens.items() if k != "access_token"}
+            if not tokens.get("refresh_token"):
+                return None
+        return OAuthToken(**tokens)
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
         data = self._read()
-        data["tokens"] = tokens.model_dump(mode="json", exclude_none=True)
+        dumped = tokens.model_dump(mode="json", exclude_none=True)
+        data["tokens"] = dumped
+        if tokens.expires_in:
+            data["expires_at"] = time.time() + tokens.expires_in
         self._write(data)
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
