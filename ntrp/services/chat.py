@@ -1,4 +1,5 @@
 import asyncio
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -101,6 +102,15 @@ def _time_gap_note(last_activity: datetime) -> str:
     return f"<time_since_last_message>{elapsed}</time_since_last_message>"
 
 
+_TIME_GAP_RE = re.compile(r"\n*<time_since_last_message>.*?</time_since_last_message>", re.DOTALL)
+
+
+def _strip_time_gaps(messages: list[dict]) -> None:
+    for msg in messages:
+        if msg.get("role") == "user" and isinstance(msg.get("content"), str):
+            msg["content"] = _TIME_GAP_RE.sub("", msg["content"])
+
+
 async def _prepare_messages(
     runtime: Runtime,
     messages: list[dict],
@@ -126,6 +136,8 @@ async def _prepare_messages(
         notifier_names=notifier_names,
         use_cache_control=_is_anthropic(runtime.config.chat_model),
     )
+
+    _strip_time_gaps(messages)
 
     if not messages:
         messages = [{"role": "system", "content": system_blocks}]
