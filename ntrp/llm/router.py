@@ -53,7 +53,7 @@ def get_completion_client(model_id: str) -> CompletionClient:
                 )
             case Provider.CUSTOM:
                 _completion_clients[cache_key] = OpenAIClient(
-                    base_url=model.base_url, api_key=_api_keys.get(model.id), native_openai=False
+                    base_url=model.base_url, api_key=_api_keys.get(model.id) or "unused", native_openai=False
                 )
             case _:
                 raise ValueError(f"Unknown provider: {model.provider}")
@@ -71,7 +71,9 @@ def get_embedding_client(model_id: str) -> EmbeddingClient:
             case Provider.GOOGLE:
                 _embedding_clients[cache_key] = GeminiClient(api_key=key)
             case Provider.CUSTOM:
-                _embedding_clients[cache_key] = OpenAIClient(base_url=model.base_url, api_key=_api_keys.get(model.id))
+                _embedding_clients[cache_key] = OpenAIClient(
+                    base_url=model.base_url, api_key=_api_keys.get(model.id) or "unused"
+                )
             case _:
                 raise ValueError(f"Provider {model.provider} does not support embeddings")
     return _embedding_clients[cache_key]

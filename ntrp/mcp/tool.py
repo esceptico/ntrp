@@ -1,14 +1,10 @@
-from __future__ import annotations
+from typing import Any, ClassVar
 
-from typing import TYPE_CHECKING, Any, ClassVar
+from mcp.types import Tool as McpTool
 
+from ntrp.mcp.session import MCPServerSession
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
-
-if TYPE_CHECKING:
-    from mcp.types import Tool as McpTool
-
-    from ntrp.mcp.session import MCPServerSession
 
 
 class MCPTool(Tool):
