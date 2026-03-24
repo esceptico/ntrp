@@ -1,13 +1,11 @@
 import asyncio
 import shlex
 import subprocess
-import time
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from ntrp.constants import BASH_OUTPUT_LIMIT, BASH_TIMEOUT
-from ntrp.events.sse import BackgroundTaskEvent
 from ntrp.logging import get_logger
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
@@ -84,8 +82,6 @@ BASH_DESCRIPTION = f"""Execute a bash command in the user's shell.
 
 Each command runs in a fresh subprocess — no state (env vars, shell functions, cwd) persists between calls. Commands run in the server's working directory by default. Use the working_dir parameter to run in a different directory instead of 'cd'.
 
-Set background=true for commands that may take more than a few seconds (installs, builds, test suites, downloads). The command runs asynchronously and results are delivered automatically when it finishes. Use list_background_tasks to check running tasks and cancel_background_task to stop one.
-
 PREFER OTHER TOOLS:
 - For searching files: use search() instead of grep/find
 - For reading files: use read_note() or read_file()
@@ -159,9 +155,6 @@ def execute_bash(command: str, working_dir: str | None = None, timeout: int = BA
 class BashInput(BaseModel):
     command: str = Field(description="The shell command to execute")
     working_dir: str | None = Field(default=None, description="Working directory (optional, defaults to current)")
-    background: bool = Field(
-        default=False, description="Run in background, return immediately. Results delivered automatically when done."
-    )
 
 
 class BashTool(Tool):
@@ -185,58 +178,11 @@ class BashTool(Tool):
         execution: ToolExecution,
         command: str,
         working_dir: str | None = None,
-        background: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
         if is_blocked_command(command):
             return ToolResult(content=f"Blocked: {command}", preview="Blocked", is_error=True)
 
-        if execution.ctx.run.current_depth > 0:
-            background = False
-
-        if not background:
-            output = await asyncio.to_thread(execute_bash, command, working_dir, self.timeout)
-            lines = output.count("\n") + 1
-            return ToolResult(content=output, preview=f"{lines} lines")
-
-        registry = execution.ctx.background_tasks
-        task_id = registry.generate_id()
-
-        async def _run_background():
-            start = time.monotonic()
-            try:
-                output = await asyncio.to_thread(execute_bash, command, working_dir, self.timeout)
-                status = "completed"
-            except asyncio.CancelledError:
-                return
-            except Exception as e:
-                output = f"Error: {e}"
-                status = "failed"
-                _logger.warning("Background task %s failed: %s", task_id, e)
-            duration_ms = int((time.monotonic() - start) * 1000)
-
-            try:
-                await registry.deliver_result(
-                    task_id=task_id,
-                    result=output,
-                    label=command,
-                    status=status,
-                    duration_ms=duration_ms,
-                    tool_name="bash",
-                    tool_args={"command": command},
-                    display_name="Bash",
-                    emit=execution.ctx.io.emit,
-                )
-            except Exception:
-                _logger.exception("Background task %s delivery failed", task_id)
-
-        task = asyncio.create_task(_run_background())
-        registry.register(task_id, task, command=command)
-
-        if execution.ctx.io.emit:
-            await execution.ctx.io.emit(BackgroundTaskEvent(task_id=task_id, command=command, status="started"))
-
-        return ToolResult(
-            content=f"Background task {task_id} started: {command}",
-            preview=f"Background · {task_id}",
-        )
+        output = await asyncio.to_thread(execute_bash, command, working_dir, self.timeout)
+        lines = output.count("\n") + 1
+        return ToolResult(content=output, preview=f"{lines} lines")

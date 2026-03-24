@@ -8,6 +8,50 @@ from ntrp.events.sse import BackgroundTaskEvent
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
+BACKGROUND_SYSTEM_PROMPT = (
+    "You are a background agent. Complete the given task using available read-only tools, "
+    "then return a concise summary of the result. Be thorough but focused. "
+    "You are read-only — report what you find, the caller decides what to do with it."
+)
+
+BACKGROUND_DESCRIPTION = (
+    "Spawn a background agent that runs independently and delivers results automatically when done. "
+    "The agent has read-only tool access (search, read, web, memory, bash). "
+    "Use for long-running tasks: deep research, multi-source investigation, data gathering. "
+    "Use cancel_background_task to stop, list_background_tasks to check status, "
+    "get_background_result to read full output."
+)
+
+
+class BackgroundInput(BaseModel):
+    task: str = Field(description="What the background agent should do.")
+
+
+class BackgroundTool(Tool):
+    name = "background"
+    display_name = "Background"
+    description = BACKGROUND_DESCRIPTION
+    input_model = BackgroundInput
+
+    async def execute(self, execution: ToolExecution, task: str, **kwargs: Any) -> ToolResult:
+        ctx = execution.ctx
+
+        if not ctx.spawn_fn:
+            return ToolResult(content="Error: spawn capability not available", preview="Error", is_error=True)
+
+        tools = ctx.registry.get_schemas(mutates=False, capabilities=ctx.capabilities)
+
+        result = await ctx.spawn_fn(
+            ctx,
+            task=task,
+            system_prompt=BACKGROUND_SYSTEM_PROMPT,
+            tools=tools,
+            parent_id=execution.tool_id,
+            background=True,
+        )
+
+        return ToolResult(content=result, preview=result[:80])
+
 
 class CancelBackgroundTaskInput(BaseModel):
     task_id: str = Field(description="The ID of the background task to cancel")

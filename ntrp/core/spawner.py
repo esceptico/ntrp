@@ -1,4 +1,5 @@
 import asyncio
+import time
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -6,8 +7,12 @@ from ntrp.constants import SUBAGENT_DEFAULT_TIMEOUT
 from ntrp.context.models import SessionState
 from ntrp.core.agent import Agent
 from ntrp.core.isolation import IsolationLevel
+from ntrp.events.sse import BackgroundTaskEvent, ToolCallEvent, ToolResultEvent
+from ntrp.logging import get_logger
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 from ntrp.tools.executor import ToolExecutor
+
+_logger = get_logger(__name__)
 
 
 def _create_session_state(calling_ctx: ToolContext, isolation: IsolationLevel) -> SessionState:
@@ -40,6 +45,7 @@ def create_spawn_fn(
         parent_id: str | None = None,
         isolation: IsolationLevel = IsolationLevel.FULL,
         silent: bool = False,
+        background: bool = False,
     ) -> str:
         filtered_tools = tools or executor.get_tools()
         child_state = _create_session_state(calling_ctx, isolation)
@@ -51,11 +57,43 @@ def create_spawn_fn(
             extra_auto_approve=calling_ctx.run.extra_auto_approve,
             research_model=calling_ctx.run.research_model,
         )
+
+        # Pre-generate IDs for background so the emit wrapper can reference them
+        if background:
+            registry = calling_ctx.background_tasks
+            task_id = registry.generate_id()
+            label = task[:80]
+
+        if background and calling_ctx.io.emit:
+            parent_emit = calling_ctx.io.emit
+
+            async def _bg_emit(event):
+                if isinstance(event, ToolCallEvent):
+                    await parent_emit(BackgroundTaskEvent(
+                        task_id=task_id,
+                        command=label,
+                        status="activity",
+                        detail=event.display_name or event.name,
+                    ))
+                elif isinstance(event, ToolResultEvent):
+                    await parent_emit(BackgroundTaskEvent(
+                        task_id=task_id,
+                        command=label,
+                        status="activity",
+                        detail=f"{event.display_name or event.name}: {event.preview}",
+                    ))
+
+            bg_io = IOBridge(emit=_bg_emit)
+        elif silent or background:
+            bg_io = IOBridge()
+        else:
+            bg_io = calling_ctx.io
+
         child_ctx = ToolContext(
             session_state=child_state,
             registry=executor.registry,
             run=child_run,
-            io=IOBridge() if silent else calling_ctx.io,
+            io=bg_io,
             services=calling_ctx.services,
             channel=calling_ctx.channel,
             ledger=calling_ctx.ledger,
@@ -79,12 +117,52 @@ def create_spawn_fn(
             parent_id=parent_id,
         )
 
-        try:
-            return await asyncio.wait_for(
-                sub_agent.run(task),
-                timeout=timeout,
-            )
-        except TimeoutError:
-            return f"Error: Sub-agent timed out after {timeout}s"
+        if not background:
+            try:
+                return await asyncio.wait_for(
+                    sub_agent.run(task),
+                    timeout=timeout,
+                )
+            except TimeoutError:
+                return f"Error: Sub-agent timed out after {timeout}s"
+
+        async def _run_background():
+            start = time.monotonic()
+            try:
+                result = await asyncio.wait_for(sub_agent.run(task), timeout=timeout)
+                status = "completed"
+            except asyncio.CancelledError:
+                return
+            except TimeoutError:
+                result = f"Error: Background agent timed out after {timeout}s"
+                status = "failed"
+            except Exception as e:
+                result = f"Error: {e}"
+                status = "failed"
+                _logger.warning("Background task %s failed: %s", task_id, e)
+            duration_ms = int((time.monotonic() - start) * 1000)
+
+            try:
+                await registry.deliver_result(
+                    task_id=task_id,
+                    result=result,
+                    label=label,
+                    status=status,
+                    duration_ms=duration_ms,
+                    tool_name="background",
+                    tool_args={"task": task},
+                    display_name="Background",
+                    emit=calling_ctx.io.emit,
+                )
+            except Exception:
+                _logger.exception("Background task %s delivery failed", task_id)
+
+        bg_task = asyncio.create_task(_run_background())
+        registry.register(task_id, bg_task, command=label)
+
+        if calling_ctx.io.emit:
+            await calling_ctx.io.emit(BackgroundTaskEvent(task_id=task_id, command=label, status="started"))
+
+        return f"Background task {task_id} started: {task}"
 
     return spawn_child
