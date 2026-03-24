@@ -1,5 +1,4 @@
 import asyncio
-import secrets
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -44,7 +43,9 @@ class RunRegistry:
         return self._bg_registries[session_id]
 
     def create_run(self, session_id: str) -> RunState:
-        run_id = secrets.token_hex(4)
+        from coolname import generate_slug
+
+        run_id = generate_slug(2)
         run = RunState(run_id=run_id, session_id=session_id)
         self._runs[run_id] = run
         return run

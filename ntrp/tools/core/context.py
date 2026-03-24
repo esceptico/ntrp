@@ -1,10 +1,11 @@
 import asyncio
 import json
-import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict
+
+from coolname import generate_slug
 
 from ntrp.channel import Channel
 from ntrp.constants import NTRP_TMP_BASE, OFFLOAD_PREVIEW_LINES
@@ -68,7 +69,7 @@ class BackgroundTaskRegistry:
     _commands: dict[str, str] = field(default_factory=dict)
 
     def generate_id(self) -> str:
-        return secrets.token_hex(4)
+        return generate_slug(2)
 
     def _remove(self, task_id: str) -> None:
         self._tasks.pop(task_id, None)

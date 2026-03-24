@@ -278,6 +278,15 @@ wheels = [
 ]
 
 [[package]]
+name = "coolname"
+version = "4.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/50/97/c6d3911b2c9ba7c129820bbbd2ef1e9bae8402aa70f15820dc3a9d770e87/coolname-4.1.0.tar.gz", hash = "sha256:1db8b0857d0e40795cf555f449542cc3b8fe4a85b64ae3507fb475bafa2924fa", size = 38433 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f9/96/e0ea059650e0db3755d2e734cd65fb15aa5546e5cdf96e7e68ae018cc994/coolname-4.1.0-py3-none-any.whl", hash = "sha256:2721ab2112788ad3f92b398ed48533d58be30450c4e7b266f9407fcdf37c8d24", size = 39907 },
+]
+
+[[package]]
 name = "cryptography"
 version = "46.0.5"
 source = { registry = "https://pypi.org/simple" }
@@ -1123,6 +1132,7 @@ dependencies = [
     { name = "aiosqlite" },
     { name = "anthropic" },
     { name = "click" },
+    { name = "coolname" },
     { name = "ddgs" },
     { name = "exa-py" },
     { name = "fastapi" },
@@ -1163,6 +1173,7 @@ requires-dist = [
     { name = "aiosqlite", specifier = ">=0.22.1" },
     { name = "anthropic", specifier = ">=0.40.0" },
     { name = "click", specifier = ">=8.0.0" },
+    { name = "coolname", specifier = ">=4.1.0" },
     { name = "ddgs", specifier = ">=9.6.0" },
     { name = "exa-py", specifier = ">=2.0.2" },
     { name = "fastapi", specifier = ">=0.115.0" },

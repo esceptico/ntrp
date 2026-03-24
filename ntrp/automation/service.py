@@ -1,8 +1,9 @@
-import secrets
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
+
+from coolname import generate_slug
 
 from ntrp.automation.models import Automation
 from ntrp.automation.scheduler import Scheduler
@@ -254,7 +255,7 @@ class AutomationService:
 
         now = datetime.now(UTC)
         automation = Automation(
-            task_id=secrets.token_hex(4),
+            task_id=generate_slug(2),
             name=name,
             description=description,
             model=_normalize_and_validate_model(model),
