@@ -69,19 +69,23 @@ def create_spawn_fn(
 
             async def _bg_emit(event):
                 if isinstance(event, ToolCallEvent):
-                    await parent_emit(BackgroundTaskEvent(
-                        task_id=task_id,
-                        command=label,
-                        status="activity",
-                        detail=event.display_name or event.name,
-                    ))
+                    await parent_emit(
+                        BackgroundTaskEvent(
+                            task_id=task_id,
+                            command=label,
+                            status="activity",
+                            detail=event.display_name or event.name,
+                        )
+                    )
                 elif isinstance(event, ToolResultEvent):
-                    await parent_emit(BackgroundTaskEvent(
-                        task_id=task_id,
-                        command=label,
-                        status="activity",
-                        detail=f"{event.display_name or event.name}: {event.preview}",
-                    ))
+                    await parent_emit(
+                        BackgroundTaskEvent(
+                            task_id=task_id,
+                            command=label,
+                            status="activity",
+                            detail=f"{event.display_name or event.name}: {event.preview}",
+                        )
+                    )
 
             bg_io = IOBridge(emit=_bg_emit)
         elif silent or background:

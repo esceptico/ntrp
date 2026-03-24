@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel, Field
 
 from ntrp.constants import RESEARCH_TIMEOUT, USER_ENTITY_NAME
@@ -77,9 +76,7 @@ class ResearchTool(Tool):
             user_facts=user_facts,
         )
 
-    async def execute(
-        self, execution: ToolExecution, task: str, depth: str = "normal", **kwargs
-    ) -> ToolResult:
+    async def execute(self, execution: ToolExecution, task: str, depth: str = "normal", **kwargs) -> ToolResult:
         ctx = execution.ctx
 
         if not ctx.spawn_fn:

@@ -282,9 +282,4 @@ async def background_run(request: BackgroundRequest, runtime: Runtime = Depends(
 async def list_background_tasks(session_id: str, runtime: Runtime = Depends(get_runtime)):
     registry = runtime.run_registry.get_background_registry(session_id)
     pending = registry.list_pending()
-    return {
-        "tasks": [
-            {"task_id": tid, "command": cmd}
-            for tid, cmd in pending
-        ]
-    }
+    return {"tasks": [{"task_id": tid, "command": cmd} for tid, cmd in pending]}
