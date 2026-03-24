@@ -73,7 +73,7 @@ LIMIT ?
 SQL_CHAT_MAX_INDEX = "SELECT MAX(message_index) FROM chat_messages WHERE session_id = ?"
 
 SQL_INSERT_CHAT_MESSAGE = """
-    INSERT INTO chat_messages (session_id, role, content, created_at, message_index)
+    INSERT OR IGNORE INTO chat_messages (session_id, role, content, created_at, message_index)
     VALUES (?, ?, ?, ?, ?)
 """
 
