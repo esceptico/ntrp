@@ -1,9 +1,9 @@
 import asyncio
-import secrets
 import socket
 
 import click
 import uvicorn
+from coolname import generate_slug
 from rich.console import Console
 
 from ntrp.config import get_config
@@ -114,7 +114,7 @@ async def _run_headless(prompt: str):
             memory_context=None,
         )
 
-        run_id = secrets.token_hex(4)
+        run_id = generate_slug(2)
         session_state = runtime.session_service.create()
 
         config = AgentConfig.from_config(runtime.config)

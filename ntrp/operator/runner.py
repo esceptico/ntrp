@@ -1,6 +1,7 @@
-import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+
+from coolname import generate_slug
 
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
@@ -47,7 +48,7 @@ class RunResult:
 
 
 async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
-    run_id = secrets.token_hex(4)
+    run_id = generate_slug(2)
 
     memory_context = None
     if deps.memory:
