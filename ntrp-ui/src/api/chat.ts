@@ -106,6 +106,11 @@ export async function backgroundRun(runId: string, config: Config): Promise<void
   await api.post(`${config.serverUrl}/chat/background`, { run_id: runId });
 }
 
+export async function getBackgroundTasks(sessionId: string, config: Config): Promise<{ tasks: { task_id: string; command: string }[] }> {
+  const res = await api.get(`${config.serverUrl}/chat/background-tasks?session_id=${encodeURIComponent(sessionId)}`);
+  return res.json();
+}
+
 export async function submitToolResult(
   runId: string,
   toolId: string,

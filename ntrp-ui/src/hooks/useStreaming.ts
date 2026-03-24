@@ -3,7 +3,7 @@ import { useStore } from "zustand";
 import type { Message, ServerEvent, Config, PendingApproval, TokenUsage } from "../types.js";
 import { ZERO_USAGE } from "../types.js";
 import type { ToolChainItem } from "../components/toolchain/types.js";
-import { connectEvents, sendChatMessage, submitToolResult, cancelRun, backgroundRun, revertSession, type ImageBlock } from "../api/client.js";
+import { connectEvents, sendChatMessage, submitToolResult, cancelRun, backgroundRun, getBackgroundTasks, revertSession, type ImageBlock } from "../api/client.js";
 import {
   MAX_TOOL_DESCRIPTION_CHARS,
   MAX_ASSISTANT_CHARS,
@@ -61,6 +61,7 @@ export function useStreaming({
   const pendingApproval = viewed?.pendingApproval ?? null;
   const usage = viewed?.usage ?? ZERO_USAGE;
   const backgroundTaskCount = viewed?.backgroundTaskCount ?? 0;
+  const backgroundTasks = viewed?.backgroundTasks ?? new Map();
   const pendingText = viewed?.pendingText ?? "";
 
   const sessions = useStore(store, (state) => state.sessions);
@@ -257,11 +258,24 @@ export function useStreaming({
         case "background_task":
           if (event.status === "started") {
             s.backgroundTaskCount++;
+            s.backgroundTasks.set(event.task_id, {
+              id: event.task_id,
+              command: event.command,
+              status: "running",
+              startedAt: Date.now(),
+              activity: [],
+            });
+          } else if (event.status === "activity") {
+            const task = s.backgroundTasks.get(event.task_id);
+            if (task && event.detail) {
+              task.activity = [...task.activity, event.detail];
+            }
           } else {
             s.backgroundTaskCount = Math.max(0, s.backgroundTaskCount - 1);
             if (event.status === "completed" || event.status === "failed") {
               s.completedBackgroundTasks.push(event.command);
             }
+            s.backgroundTasks.delete(event.task_id);
           }
           break;
 
@@ -300,6 +314,25 @@ export function useStreaming({
 
     const targetId = sessionId;
     getSession(targetId); // ensure session exists
+
+    // Restore background task state from server on (re)connect
+    getBackgroundTasks(targetId, configRef.current).then((res) => {
+      if (res.tasks.length === 0) return;
+      mutateSession(targetId, (s) => {
+        for (const t of res.tasks) {
+          if (!s.backgroundTasks.has(t.task_id)) {
+            s.backgroundTasks.set(t.task_id, {
+              id: t.task_id,
+              command: t.command,
+              status: "running",
+              startedAt: Date.now(),
+              activity: [],
+            });
+          }
+        }
+        s.backgroundTaskCount = s.backgroundTasks.size;
+      });
+    }).catch(() => {});
 
     const disconnect = connectEvents(
       targetId,
@@ -557,6 +590,7 @@ export function useStreaming({
     pendingApproval,
     usage,
     backgroundTaskCount,
+    backgroundTasks,
     pendingText,
     sessionStates,
     addMessage,

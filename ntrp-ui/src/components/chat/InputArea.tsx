@@ -3,6 +3,7 @@ import type { TextareaRenderable, KeyEvent, PasteEvent } from "@opentui/core";
 import type { SlashCommand } from "../../types.js";
 import type { Status as StatusType } from "../../lib/constants.js";
 import type { ImageBlock } from "../../api/chat.js";
+import type { BackgroundTask } from "../../stores/streamingStore.js";
 import { colors } from "../ui/colors.js";
 import { useAccentColor } from "../../hooks/index.js";
 import { useAutocomplete } from "../../hooks/useAutocomplete.js";
@@ -35,6 +36,7 @@ interface InputAreaProps {
   indexStatus?: { indexing: boolean; progress: { total: number; done: number }; reembedding?: boolean; reembed_progress?: { total: number; done: number } | null } | null;
   copiedFlash?: boolean;
   backgroundTaskCount?: number;
+  backgroundTasks?: Map<string, BackgroundTask>;
   prefill?: string | null;
   onPrefillConsumed?: () => void;
 }
@@ -56,6 +58,7 @@ export const InputArea = memo(function InputArea({
   indexStatus = null,
   copiedFlash = false,
   backgroundTaskCount = 0,
+  backgroundTasks,
   prefill = null,
   onPrefillConsumed,
 }: InputAreaProps) {
@@ -363,6 +366,7 @@ export const InputArea = memo(function InputArea({
           escHint={escHint}
           copiedFlash={copiedFlash}
           backgroundTaskCount={backgroundTaskCount}
+          backgroundTasks={backgroundTasks}
           indexStatus={indexStatus}
         />
       </box>

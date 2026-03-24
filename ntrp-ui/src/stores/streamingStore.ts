@@ -14,6 +14,16 @@ import { truncateText } from "../lib/utils.js";
 export type SessionNotification = "streaming" | "done" | "approval" | "error";
 export type MessageInput = Omit<Message, "id"> & { id?: string };
 
+export type BackgroundTaskStatus = "running" | "completed" | "failed" | "cancelled";
+
+export interface BackgroundTask {
+  id: string;
+  command: string;
+  status: BackgroundTaskStatus;
+  startedAt: number;
+  activity: string[];
+}
+
 export interface ToolTracker {
   descriptions: Map<string, string>;
   startTimes: Map<string, number>;
@@ -39,6 +49,7 @@ export interface SessionStreamState {
   notification: SessionNotification | null;
   backgroundTaskCount: number;
   completedBackgroundTasks: string[];
+  backgroundTasks: Map<string, BackgroundTask>;
 }
 
 function createSessionState(): SessionStreamState {
@@ -61,6 +72,7 @@ function createSessionState(): SessionStreamState {
     notification: null,
     backgroundTaskCount: 0,
     completedBackgroundTasks: [],
+    backgroundTasks: new Map(),
   };
 }
 
@@ -106,6 +118,7 @@ export function createStreamingStore() {
         tools: { ...s.tools, descriptions: new Map(s.tools.descriptions), startTimes: new Map(s.tools.startTimes) },
         alwaysAllowedTools: new Set(s.alwaysAllowedTools),
         autoApprovedIds: new Set(s.autoApprovedIds),
+        backgroundTasks: new Map(s.backgroundTasks),
       });
       set({ sessions });
     }

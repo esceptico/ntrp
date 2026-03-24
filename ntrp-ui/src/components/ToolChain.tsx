@@ -11,7 +11,7 @@ export function ToolChainDisplay({ items, maxItems = 5 }: { items: ToolChainItem
 
   useKeypress(
     useCallback((key: Key) => {
-      if (key.ctrl && key.name === "o") setExpanded((prev) => !prev);
+      if (key.ctrl && key.name === "e") setExpanded((prev) => !prev);
     }, []),
     { isActive: true }
   );
