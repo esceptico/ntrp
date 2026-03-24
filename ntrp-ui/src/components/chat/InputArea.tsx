@@ -260,9 +260,6 @@ export const InputArea = memo(function InputArea({
     resetIndex();
     if (historyNavRef.current) {
       historyNavRef.current = false;
-    } else if (historyIndexRef.current >= 0) {
-      historyIndexRef.current = -1;
-      notifyEditing(-1);
     }
   }, [resetIndex, notifyEditing]);
 
