@@ -167,6 +167,8 @@ class ToolRunner:
                         data=result.data,
                     )
                 )
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 duration_ms = ms_now() - start_ms
                 results_queue.enqueue(

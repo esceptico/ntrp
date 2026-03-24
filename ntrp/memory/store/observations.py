@@ -116,8 +116,9 @@ def _row_dict(row: aiosqlite.Row) -> dict:
 
 
 class ObservationRepository:
-    def __init__(self, conn: aiosqlite.Connection):
+    def __init__(self, conn: aiosqlite.Connection, read_conn: aiosqlite.Connection | None = None):
         self.conn = conn
+        self.read_conn = read_conn or conn
 
     async def create(
         self,
@@ -392,7 +393,7 @@ class ObservationRepository:
         return [Observation.model_validate(_row_dict(r)) for r in rows]
 
     async def get_for_entity(self, entity_id: int, limit: int = 20) -> list[Observation]:
-        rows = await self.conn.execute_fetchall(_SQL_GET_OBSERVATIONS_FOR_ENTITY, (entity_id, limit))
+        rows = await self.read_conn.execute_fetchall(_SQL_GET_OBSERVATIONS_FOR_ENTITY, (entity_id, limit))
         return [Observation.model_validate(_row_dict(r)) for r in rows]
 
     async def get_entity_ids(self, observation_ids: list[int]) -> list[int]:

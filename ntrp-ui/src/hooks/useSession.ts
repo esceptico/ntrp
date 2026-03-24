@@ -77,16 +77,22 @@ export function useSession(config: Config) {
   }, [initializeSession]);
 
   // Heartbeat: detect server going down, reconnect when it comes back
+  const failCountRef = useRef(0);
   useEffect(() => {
     if (!initRef.current) return;
+    failCountRef.current = 0;
 
     const intervalMs = serverConnected ? 10000 : 3000;
     const poll = setInterval(async () => {
       const health = await checkHealth(config);
-      if (health.ok && !serverConnected) {
-        await initializeSession();
-      } else if (!health.ok && serverConnected) {
-        setServerConnected(false);
+      if (health.ok) {
+        failCountRef.current = 0;
+        if (!serverConnected) await initializeSession();
+      } else {
+        failCountRef.current++;
+        if (serverConnected && failCountRef.current >= 3) {
+          setServerConnected(false);
+        }
       }
     }, intervalMs);
 

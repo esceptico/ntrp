@@ -57,11 +57,12 @@ class FactMemory:
         channel: Channel,
         embedder: Embedder | None = None,
         extractor: Extractor | None = None,
+        read_conn: aiosqlite.Connection | None = None,
     ):
         self.db = GraphDatabase(conn, embedding.dim)
-        self.facts = FactRepository(conn)
-        self.observations = ObservationRepository(conn)
-        self.dreams = DreamRepository(conn)
+        self.facts = FactRepository(conn, read_conn)
+        self.observations = ObservationRepository(conn, read_conn)
+        self.dreams = DreamRepository(conn, read_conn)
         self.embedder = embedder or Embedder(embedding)
         self.extractor = extractor or Extractor(model)
         self.channel = channel
@@ -104,7 +105,8 @@ class FactMemory:
         channel: Channel,
     ) -> Self:
         conn = await database.connect(db_path, vec=True)
-        instance = cls(conn, embedding, model, channel=channel)
+        read_conn = await database.connect(db_path, vec=True, readonly=True)
+        instance = cls(conn, embedding, model, channel=channel, read_conn=read_conn)
         await instance.db.init_schema()
         if instance.db.dim_changed:
             _logger.info("Embedding dimension changed — starting background re-embed")
@@ -194,6 +196,8 @@ class FactMemory:
             except asyncio.CancelledError:
                 pass
             self._reembed_task = None
+        if self.facts.read_conn is not self.db.conn:
+            await self.facts.read_conn.close()
         await self.db.conn.close()
 
     # --- Core API ---

@@ -22,13 +22,16 @@ def deserialize_embedding(data: bytes | None) -> np.ndarray | None:
     return np.frombuffer(data, dtype=np.float32).copy()
 
 
-async def connect(db_path: Path, *, vec: bool = False) -> aiosqlite.Connection:
-    conn = await aiosqlite.connect(db_path)
+async def connect(db_path: Path, *, vec: bool = False, readonly: bool = False) -> aiosqlite.Connection:
+    conn = await aiosqlite.connect(db_path, isolation_level=None if readonly else "")
     conn.row_factory = aiosqlite.Row
     await conn.execute("PRAGMA journal_mode=WAL;")
     await conn.execute("PRAGMA synchronous=NORMAL;")
     await conn.execute("PRAGMA busy_timeout=30000;")
-    await conn.execute("PRAGMA foreign_keys=ON;")
+    if readonly:
+        await conn.execute("PRAGMA query_only=ON;")
+    else:
+        await conn.execute("PRAGMA foreign_keys=ON;")
     if vec:
         await conn.enable_load_extension(True)
         await conn.load_extension(sqlite_vec.loadable_path())

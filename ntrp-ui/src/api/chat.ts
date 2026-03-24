@@ -107,8 +107,11 @@ export async function backgroundRun(runId: string, config: Config): Promise<void
 }
 
 export async function getBackgroundTasks(sessionId: string, config: Config): Promise<{ tasks: { task_id: string; command: string }[] }> {
-  const res = await api.get(`${config.serverUrl}/chat/background-tasks?session_id=${encodeURIComponent(sessionId)}`);
-  return res.json();
+  return api.get(`${config.serverUrl}/chat/background-tasks?session_id=${encodeURIComponent(sessionId)}`);
+}
+
+export async function cancelBackgroundTask(sessionId: string, taskId: string, config: Config): Promise<void> {
+  await api.post(`${config.serverUrl}/chat/background-tasks/${taskId}/cancel?session_id=${encodeURIComponent(sessionId)}`);
 }
 
 export async function submitToolResult(

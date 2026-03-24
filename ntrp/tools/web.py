@@ -1,3 +1,4 @@
+import asyncio
 import json
 from enum import StrEnum
 from typing import Any
@@ -55,7 +56,8 @@ class WebSearchTool(Tool):
     ) -> ToolResult:
         source = execution.ctx.get_source(WebSearchSource, "web")
         try:
-            results = source.search_with_details(
+            results = await asyncio.to_thread(
+                source.search_with_details,
                 query=query,
                 num_results=min(max(num_results, 1), WEB_SEARCH_MAX_RESULTS),
                 category=category,
@@ -103,7 +105,7 @@ class WebFetchTool(Tool):
 
         source = execution.ctx.get_source(WebSearchSource, "web")
         try:
-            results = source.get_contents([url])
+            results = await asyncio.to_thread(source.get_contents, [url])
 
             if results:
                 r = results[0]

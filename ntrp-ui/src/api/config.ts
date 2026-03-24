@@ -80,7 +80,7 @@ export async function updateEmbeddingModel(
 
 export async function checkHealth(config: Config): Promise<{ ok: boolean; version: string | null; hasProviders: boolean }> {
   try {
-    const res = await api.get<{ status: string; version?: string; auth?: boolean; has_providers?: boolean }>(`${config.serverUrl}/health`);
+    const res = await api.get<{ status: string; version?: string; auth?: boolean; has_providers?: boolean }>(`${config.serverUrl}/health`, { timeout: 5000 });
     const ok = res.auth !== false;
     return { ok, version: res.version ?? null, hasProviders: res.has_providers ?? true };
   } catch {
