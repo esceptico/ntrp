@@ -7,7 +7,12 @@ from ntrp.tools.automation import (
     RunAutomationTool,
     UpdateAutomationTool,
 )
-from ntrp.tools.background import CancelBackgroundTaskTool, GetBackgroundResultTool, ListBackgroundTasksTool
+from ntrp.tools.background import (
+    BackgroundTool,
+    CancelBackgroundTaskTool,
+    GetBackgroundResultTool,
+    ListBackgroundTasksTool,
+)
 from ntrp.tools.bash import BashTool
 from ntrp.tools.browser import BrowserTool
 from ntrp.tools.calendar import (
@@ -34,6 +39,7 @@ from ntrp.tools.time import CurrentTimeTool
 from ntrp.tools.web import WebFetchTool, WebSearchTool
 
 ALL_TOOLS: list[type[Tool]] = [
+    BackgroundTool,
     BashTool,
     CancelBackgroundTaskTool,
     GetBackgroundResultTool,

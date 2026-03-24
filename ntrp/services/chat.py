@@ -183,7 +183,9 @@ async def _drain_backgrounded(
     ctx: ChatContext,
 ) -> None:
     """Continue draining an agent stream silently after the run was backgrounded."""
-    agent.ctx.session_state.skip_approvals = True
+    # No UI connected — restrict to read-only tools so nothing mutates unattended.
+    read_only = {t["function"]["name"] for t in ctx.executor.get_tools(mutates=False)}
+    agent.tools = [t for t in agent.tools if t["function"]["name"] in read_only]
     agent.ctx.io.emit = None
     try:
         async for _ in gen:
@@ -205,7 +207,10 @@ async def _drain_backgrounded(
         async def _save_directly(messages: list[dict]) -> None:
             async with save_lock:
                 agent.messages.extend(messages)
-                await ctx.session_service.save(ctx.session_state, agent.messages, metadata=metadata)
+                try:
+                    await ctx.session_service.save(ctx.session_state, agent.messages, metadata=metadata)
+                except Exception:
+                    _logger.exception("Background direct-save failed (run_id=%s)", ctx.run.run_id)
 
         agent.ctx.background_tasks.on_result = _save_directly
 
@@ -213,8 +218,11 @@ async def _drain_backgrounded(
             agent.messages.extend(agent.inject_queue)
             agent.inject_queue.clear()
 
-        async with save_lock:
-            await ctx.session_service.save(ctx.session_state, agent.messages, metadata=metadata)
+        try:
+            async with save_lock:
+                await ctx.session_service.save(ctx.session_state, agent.messages, metadata=metadata)
+        except Exception:
+            _logger.exception("Backgrounded final save failed (run_id=%s)", ctx.run.run_id)
 
 
 async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
@@ -241,6 +249,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
     agent: Agent | None = None
     result: str | None = None
     try:
+        bg_registry = ctx.run_registry.get_background_registry(session_state.session_id)
         agent = create_agent(
             executor=ctx.executor,
             config=ctx.config,
@@ -253,6 +262,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 approval_queue=run.approval_queue,
             ),
             extra_auto_approve=INIT_AUTO_APPROVE if ctx.is_init else None,
+            background_tasks=bg_registry,
         )
 
         # Share inject_queue and mark running only after wiring is complete
@@ -278,7 +288,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             # Don't set run_finished — agent is still draining, results
             # should flow through inject_queue so the agent can process them.
             # _drain_backgrounded swaps on_result to direct-save when done.
-            asyncio.create_task(_drain_backgrounded(bg_gen, agent, ctx))
+            run.drain_task = asyncio.create_task(_drain_backgrounded(bg_gen, agent, ctx))
             return
 
         if result is None:
@@ -303,8 +313,6 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
     finally:
         if not run.backgrounded:
             if agent:
-                if run.status in (RunStatus.CANCELLED, RunStatus.ERROR) or run.cancelled:
-                    agent.ctx.background_tasks.cancel_all()
                 if agent.inject_queue:
                     agent.messages.extend(agent.inject_queue)
                     agent.inject_queue.clear()

@@ -125,7 +125,8 @@ class BackgroundTaskEvent(SSEEvent):
     type: EventType = field(default=EventType.BACKGROUND_TASK, init=False)
     task_id: str
     command: str
-    status: str  # "started", "completed", "failed", "cancelled"
+    status: str  # "started", "completed", "failed", "cancelled", "activity"
+    detail: str | None = None
 
 
 @dataclass(frozen=True)

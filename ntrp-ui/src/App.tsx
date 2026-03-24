@@ -128,6 +128,7 @@ function AppContent({
     switchToSession,
     deleteSessionState,
     backgroundTaskCount,
+    backgroundTasks,
     pendingText,
   } = streaming;
 
@@ -474,6 +475,7 @@ function AppContent({
             indexStatus={indexStatus}
             copiedFlash={copiedFlash}
             backgroundTaskCount={backgroundTaskCount}
+            backgroundTasks={backgroundTasks}
             prefill={prefill}
             onPrefillConsumed={() => setPrefill(null)}
           />

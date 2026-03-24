@@ -11,7 +11,10 @@ from ntrp.constants import NTRP_TMP_BASE, OFFLOAD_PREVIEW_LINES
 from ntrp.context.models import SessionState
 from ntrp.core.ledger import ResearchLedger
 from ntrp.events.sse import ApprovalNeededEvent, BackgroundTaskEvent
+from ntrp.logging import get_logger
 from ntrp.tools.core.types import ToolResult
+
+_logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from ntrp.tools.core.registry import ToolRegistry
@@ -81,9 +84,9 @@ class BackgroundTaskRegistry:
         cancelled: list[tuple[str, str]] = []
         for task_id, task in list(self._tasks.items()):
             if not task.done():
-                command = self._commands[task_id]
-                task.cancel()
+                command = self._commands.get(task_id, "")
                 cancelled.append((task_id, command))
+                task.cancel()
         return cancelled
 
     def cancel(self, task_id: str) -> str | None:
@@ -91,8 +94,9 @@ class BackgroundTaskRegistry:
         task = self._tasks.get(task_id)
         if task is None or task.done():
             return None
+        command = self._commands.get(task_id, "")
         task.cancel()
-        return self._commands[task_id]
+        return command
 
     def list_pending(self) -> list[tuple[str, str]]:
         return [(tid, self._commands[tid]) for tid, t in self._tasks.items() if not t.done()]
@@ -100,6 +104,8 @@ class BackgroundTaskRegistry:
     async def inject(self, messages: list[dict]) -> None:
         if self.on_result:
             await self.on_result(messages)
+        else:
+            _logger.warning("Background task result dropped — on_result not wired")
 
     @property
     def pending_count(self) -> int:
@@ -226,7 +232,7 @@ class ToolExecution:
             return None
 
         if not self.ctx.io.emit or not self.ctx.io.approval_queue:
-            return None
+            return Rejection(feedback="No UI connected — cannot approve")
 
         await self.ctx.io.emit(
             ApprovalNeededEvent(

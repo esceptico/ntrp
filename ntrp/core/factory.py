@@ -7,7 +7,7 @@ from ntrp.core.agent import Agent
 from ntrp.core.compactor import Compactor, SummaryCompactor
 from ntrp.core.ledger import ResearchLedger
 from ntrp.core.spawner import create_spawn_fn
-from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
+from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from ntrp.tools.executor import ToolExecutor
 
 
@@ -44,6 +44,7 @@ def create_agent(
     run_id: str,
     io: IOBridge | None = None,
     extra_auto_approve: set[str] | None = None,
+    background_tasks: BackgroundTaskRegistry | None = None,
 ) -> Agent:
     run_ctx = RunContext(
         run_id=run_id,
@@ -60,8 +61,8 @@ def create_agent(
         services=executor.tool_services,
         channel=channel,
         ledger=ResearchLedger(),
+        background_tasks=background_tasks or BackgroundTaskRegistry(session_id=session_state.session_id),
     )
-    tool_ctx.background_tasks.session_id = session_state.session_id
     tool_ctx.spawn_fn = create_spawn_fn(
         executor=executor,
         model=config.model,

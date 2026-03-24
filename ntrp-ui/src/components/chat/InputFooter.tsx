@@ -1,6 +1,53 @@
+import { useState, useEffect, useCallback } from "react";
 import { Status, type Status as StatusType } from "../../lib/constants.js";
 import { colors } from "../ui/colors.js";
+import { truncateText } from "../../lib/utils.js";
+import { useKeypress, type Key } from "../../hooks/index.js";
+import type { BackgroundTask } from "../../stores/streamingStore.js";
 import { BraillePendulum, BrailleCompress, BrailleSort, CyclingStatus } from "../ui/spinners/index.js";
+
+function formatElapsed(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m${s % 60}s`;
+}
+
+function TaskDetails({ tasks }: { tasks: Map<string, BackgroundTask> }) {
+  const [, tick] = useState(0);
+
+  useEffect(() => {
+    if (tasks.size === 0) return;
+    const id = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [tasks.size]);
+
+  const entries = [...tasks.values()].sort((a, b) => a.startedAt - b.startedAt);
+  const now = Date.now();
+
+  return (
+    <box flexDirection="column" marginLeft={3} marginBottom={1}>
+      {entries.map((t) => {
+        const last = t.activity.length > 0 ? t.activity[t.activity.length - 1] : null;
+        return (
+          <box key={t.id} flexDirection="column">
+            <text>
+              <span fg={colors.status.info}>◦ </span>
+              <span fg={colors.text.muted}>{truncateText(t.command, 60)}</span>
+              <span fg={colors.text.disabled}> · {t.id} · {formatElapsed(now - t.startedAt)}</span>
+              <span fg={colors.text.disabled}> · {t.activity.length} calls</span>
+            </text>
+            {last && (
+              <text>
+                <span fg={colors.text.disabled}>  ⎿ {truncateText(last, 58)}</span>
+              </text>
+            )}
+          </box>
+        );
+      })}
+    </box>
+  );
+}
 
 export interface InputFooterProps {
   isStreaming: boolean;
@@ -9,6 +56,7 @@ export interface InputFooterProps {
   escHint: boolean;
   copiedFlash: boolean;
   backgroundTaskCount?: number;
+  backgroundTasks?: Map<string, BackgroundTask>;
   indexStatus?: {
     indexing: boolean;
     progress: { total: number; done: number };
@@ -17,79 +65,106 @@ export interface InputFooterProps {
   } | null;
 }
 
-export function InputFooter({ isStreaming, status, accentValue, escHint, copiedFlash, backgroundTaskCount, indexStatus }: InputFooterProps) {
+export function InputFooter({ isStreaming, status, accentValue, escHint, copiedFlash, backgroundTaskCount, backgroundTasks, indexStatus }: InputFooterProps) {
+  const [expanded, setExpanded] = useState(false);
+  const hasTasks = backgroundTaskCount != null && backgroundTaskCount > 0;
+
+  useKeypress(
+    useCallback((key: Key) => {
+      if (key.ctrl && key.name === "b") setExpanded((v) => !v);
+    }, []),
+    { isActive: hasTasks }
+  );
+  const hasTaskDetails = backgroundTasks && backgroundTasks.size > 0;
+
   if (isStreaming || status === Status.COMPRESSING) {
     return (
-      <box flexDirection="row" justifyContent="space-between">
-        <box flexDirection="row" gap={1} flexGrow={1}>
-          <box marginLeft={1}>
+      <box flexDirection="column">
+        {expanded && hasTaskDetails && <TaskDetails tasks={backgroundTasks} />}
+        <box flexDirection="row" justifyContent="space-between">
+          <box flexDirection="row" gap={1} flexGrow={1}>
+            <box marginLeft={1}>
+              {status === Status.COMPRESSING ? (
+                <BrailleCompress width={8} color={accentValue} interval={30} />
+              ) : (
+                <BraillePendulum width={8} color={accentValue} spread={1} interval={20} />
+              )}
+            </box>
             {status === Status.COMPRESSING ? (
-              <BrailleCompress width={8} color={accentValue} interval={30} />
+              <text><span fg={colors.text.muted}>compressing context</span></text>
             ) : (
-              <BraillePendulum width={8} color={accentValue} spread={1} interval={20} />
+              <CyclingStatus status={status} isStreaming={isStreaming} />
+            )}
+            {hasTasks && (
+              <box onMouseDown={() => setExpanded((v) => !v)}>
+                <text>
+                  <span fg={colors.text.disabled}>{` · ${backgroundTaskCount} background `}</span>
+                  <span fg={colors.footer}>ctrl+b</span>
+                </text>
+              </box>
             )}
           </box>
-          {status === Status.COMPRESSING ? (
-            <text><span fg={colors.text.muted}>compressing context</span></text>
-          ) : (
-            <CyclingStatus status={status} isStreaming={isStreaming} />
-          )}
-          {backgroundTaskCount != null && backgroundTaskCount > 0 && (
-            <text><span fg={colors.text.disabled}>{` · ${backgroundTaskCount} background tasks`}</span></text>
+          {isStreaming && (
+            <box flexDirection="row" gap={2}>
+              <text>
+                <span fg={colors.footer}>ctrl+o</span>
+                <span fg={colors.text.disabled}> background</span>
+              </text>
+              <text>
+                <span fg={colors.footer}>esc</span>
+                <span fg={colors.text.disabled}> interrupt</span>
+              </text>
+            </box>
           )}
         </box>
-        {isStreaming && (
-          <box flexDirection="row" gap={2}>
-            <text>
-              <span fg={colors.footer}>ctrl+o</span>
-              <span fg={colors.text.disabled}> background</span>
-            </text>
-            <text>
-              <span fg={colors.footer}>esc</span>
-              <span fg={colors.text.disabled}> interrupt</span>
-            </text>
-          </box>
-        )}
       </box>
     );
   }
 
   return (
-    <box flexDirection="row" justifyContent="space-between">
-      <box flexDirection="row" marginLeft={3}>
-        {backgroundTaskCount != null && backgroundTaskCount > 0 ? (
-          <text><span fg={colors.text.disabled}>{backgroundTaskCount} {backgroundTaskCount === 1 ? "task" : "tasks"} running in background</span></text>
-        ) : indexStatus?.indexing || indexStatus?.reembedding ? (
-          <box flexDirection="row" gap={1}>
-            <BrailleSort width={8} color={accentValue} interval={40} />
-            <text><span fg={colors.text.muted}>{indexStatus.reembedding ? "re-embedding" : "indexing"}</span></text>
-          </box>
-        ) : null}
-        <text>
-          {copiedFlash ? (
-            <span fg={colors.text.muted}>Copied to clipboard</span>
-          ) : escHint ? (
-            <span fg={accentValue}>esc again to clear</span>
+    <box flexDirection="column">
+      {expanded && hasTaskDetails && <TaskDetails tasks={backgroundTasks} />}
+      <box flexDirection="row" justifyContent="space-between">
+        <box flexDirection="row" marginLeft={3}>
+          {hasTasks ? (
+            <box onMouseDown={() => setExpanded((v) => !v)}>
+              <text>
+                <span fg={colors.text.disabled}>{backgroundTaskCount} {backgroundTaskCount === 1 ? "task" : "tasks"} in background </span>
+                <span fg={colors.footer}>ctrl+b</span>
+              </text>
+            </box>
+          ) : indexStatus?.indexing || indexStatus?.reembedding ? (
+            <box flexDirection="row" gap={1}>
+              <BrailleSort width={8} color={accentValue} interval={40} />
+              <text><span fg={colors.text.muted}>{indexStatus.reembedding ? "re-embedding" : "indexing"}</span></text>
+            </box>
           ) : null}
-        </text>
-      </box>
-      <box gap={2} flexDirection="row">
-        <text>
-          <span fg={colors.footer}>ctrl+n</span>
-          <span fg={colors.text.disabled}> new chat</span>
-        </text>
-        <text>
-          <span fg={colors.footer}>ctrl+l</span>
-          <span fg={colors.text.disabled}> side panel</span>
-        </text>
-        <text>
-          <span fg={colors.footer}>tab tab</span>
-          <span fg={colors.text.disabled}> approvals</span>
-        </text>
-        <text>
-          <span fg={colors.footer}>shift+tab</span>
-          <span fg={colors.text.disabled}> switch chat</span>
-        </text>
+          <text>
+            {copiedFlash ? (
+              <span fg={colors.text.muted}>Copied to clipboard</span>
+            ) : escHint ? (
+              <span fg={accentValue}>esc again to clear</span>
+            ) : null}
+          </text>
+        </box>
+        <box gap={2} flexDirection="row">
+          <text>
+            <span fg={colors.footer}>ctrl+n</span>
+            <span fg={colors.text.disabled}> new chat</span>
+          </text>
+          <text>
+            <span fg={colors.footer}>ctrl+l</span>
+            <span fg={colors.text.disabled}> side panel</span>
+          </text>
+          <text>
+            <span fg={colors.footer}>tab tab</span>
+            <span fg={colors.text.disabled}> approvals</span>
+          </text>
+          <text>
+            <span fg={colors.footer}>shift+tab</span>
+            <span fg={colors.text.disabled}> switch chat</span>
+          </text>
+        </box>
       </box>
     </box>
   );

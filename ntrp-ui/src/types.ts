@@ -84,7 +84,8 @@ export interface BackgroundTaskEvent {
   type: "background_task";
   task_id: string;
   command: string;
-  status: "started" | "completed" | "failed" | "cancelled";
+  status: "started" | "completed" | "failed" | "cancelled" | "activity";
+  detail?: string;
 }
 
 export interface RunCancelledEvent {

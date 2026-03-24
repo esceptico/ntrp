@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
+from ntrp.tools.core.context import BackgroundTaskRegistry
 from ntrp.usage import Usage
 
 
@@ -29,11 +30,18 @@ class RunState:
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     cancelled: bool = False
     backgrounded: bool = False
+    drain_task: asyncio.Task | None = None
 
 
 class RunRegistry:
     def __init__(self):
         self._runs: dict[str, RunState] = {}
+        self._bg_registries: dict[str, BackgroundTaskRegistry] = {}
+
+    def get_background_registry(self, session_id: str) -> BackgroundTaskRegistry:
+        if session_id not in self._bg_registries:
+            self._bg_registries[session_id] = BackgroundTaskRegistry(session_id=session_id)
+        return self._bg_registries[session_id]
 
     def create_run(self, session_id: str) -> RunState:
         run_id = secrets.token_hex(4)
@@ -79,6 +87,9 @@ class RunRegistry:
                 run.status = RunStatus.CANCELLED
                 run.task.cancel()
                 tasks.append(run.task)
+            if run.drain_task and not run.drain_task.done():
+                run.drain_task.cancel()
+                tasks.append(run.drain_task)
         if tasks:
             await asyncio.wait(tasks, timeout=timeout)
         return len(tasks)
