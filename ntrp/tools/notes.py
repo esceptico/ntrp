@@ -1,3 +1,4 @@
+import asyncio
 import difflib
 import re
 from typing import Any
@@ -97,10 +98,10 @@ class NotesTool(Tool):
         if query:
             search_index = execution.ctx.services.get("search_index")
             return await self._search(source, query, limit, search_index)
-        return self._list(source, limit)
+        return await self._list(source, limit)
 
-    def _list(self, source: NotesSource, limit: int) -> ToolResult:
-        files_by_mtime = source.get_all_with_mtime()
+    async def _list(self, source: NotesSource, limit: int) -> ToolResult:
+        files_by_mtime = await asyncio.to_thread(source.get_all_with_mtime)
 
         sorted_files = sorted(
             files_by_mtime.items(),
@@ -137,18 +138,22 @@ class NotesTool(Tool):
             except Exception as e:
                 _logger.warning("Hybrid search failed, falling back to text search: %s", e)
 
-        seen = set()
-        results = []
-        for path in source.search(query):
-            if path in seen:
-                continue
-            seen.add(path)
-            content = source.read(path) or ""
-            snippet = truncate(content.replace("\n", " ").strip(), SNIPPET_TRUNCATE)
-            title = path.split("/")[-1].replace(".md", "")
-            results.append((title, path, snippet))
-            if len(results) >= limit:
-                break
+        def _text_search():
+            seen = set()
+            results = []
+            for path in source.search(query):
+                if path in seen:
+                    continue
+                seen.add(path)
+                content = source.read(path) or ""
+                snippet = truncate(content.replace("\n", " ").strip(), SNIPPET_TRUNCATE)
+                title = path.split("/")[-1].replace(".md", "")
+                results.append((title, path, snippet))
+                if len(results) >= limit:
+                    break
+            return results
+
+        results = await asyncio.to_thread(_text_search)
 
         if not results:
             return ToolResult(content=f"No notes found for '{query}'", preview="0 notes")
@@ -182,7 +187,7 @@ class ReadNoteTool(Tool):
         source = execution.ctx.get_source(NotesSource, "notes")
         offset = offset or 1
         limit = limit or DEFAULT_READ_LINES
-        content = source.read(path)
+        content = await asyncio.to_thread(source.read, path)
         if content is None:
             return ToolResult(
                 content=f"Note not found: {path}. Use notes() to see available notes.",

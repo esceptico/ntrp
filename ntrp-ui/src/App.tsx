@@ -3,7 +3,7 @@ import { useRenderer } from "@opentui/react";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import type { Selection, ScrollBoxRenderable, Renderable } from "@opentui/core";
 import type { Message, Config } from "./types.js";
-import type { ImageBlock } from "./api/chat.js";
+import { cancelBackgroundTask, type ImageBlock } from "./api/chat.js";
 import { colors, setTheme, useThemeVersion, themeNames, type Theme } from "./components/ui/index.js";
 import { BULLET } from "./lib/constants.js";
 import { queryClient } from "./lib/queryClient.js";
@@ -223,6 +223,10 @@ function AppContent({
     ...COMMANDS,
     ...skills.map(s => ({ name: s.name, description: `(skill) ${s.description}` })),
   ], [skills]);
+
+  const handleCancelBackgroundTask = useCallback((taskId: string) => {
+    if (sessionId) cancelBackgroundTask(sessionId, taskId, config).catch(() => {});
+  }, [sessionId, config]);
 
   const handleSubmit = useCallback(
     async (value: string, images?: ImageBlock[]) => {
@@ -476,6 +480,7 @@ function AppContent({
             copiedFlash={copiedFlash}
             backgroundTaskCount={backgroundTaskCount}
             backgroundTasks={backgroundTasks}
+            onCancelBackgroundTask={handleCancelBackgroundTask}
             prefill={prefill}
             onPrefillConsumed={() => setPrefill(null)}
           />

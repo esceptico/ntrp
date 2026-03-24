@@ -8,7 +8,7 @@ from importlib.metadata import version
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from ntrp.events.sse import TextDeltaEvent, TextEvent, TextMessageEndEvent, TextMessageStartEvent
+from ntrp.events.sse import BackgroundTaskEvent, TextDeltaEvent, TextEvent, TextMessageEndEvent, TextMessageStartEvent
 from ntrp.server.bus import BusRegistry
 from ntrp.server.middleware import AuthMiddleware, SSEStreamingResponse, _extract_bearer_token
 from ntrp.server.routers.automation import router as automation_router
@@ -156,6 +156,7 @@ async def _event_stream(
                 break
 
             is_text = isinstance(event, TextDeltaEvent | TextEvent)
+            is_passthrough = isinstance(event, BackgroundTaskEvent)
 
             if is_text and not in_text_message:
                 msg_counter += 1
@@ -163,7 +164,7 @@ async def _event_stream(
                 last_event_at = time.monotonic()
                 yield TextMessageStartEvent(message_id=f"msg-{msg_counter}").to_sse_string()
                 await asyncio.sleep(0)
-            elif not is_text and in_text_message:
+            elif not is_text and not is_passthrough and in_text_message:
                 in_text_message = False
                 last_event_at = time.monotonic()
                 yield TextMessageEndEvent(message_id=f"msg-{msg_counter}").to_sse_string()
@@ -283,3 +284,12 @@ async def list_background_tasks(session_id: str, runtime: Runtime = Depends(get_
     registry = runtime.run_registry.get_background_registry(session_id)
     pending = registry.list_pending()
     return {"tasks": [{"task_id": tid, "command": cmd} for tid, cmd in pending]}
+
+
+@app.post("/chat/background-tasks/{task_id}/cancel")
+async def cancel_background_task(task_id: str, session_id: str, runtime: Runtime = Depends(get_runtime)):
+    registry = runtime.run_registry.get_background_registry(session_id)
+    command = registry.cancel(task_id)
+    if command is None:
+        raise HTTPException(status_code=404, detail="Task not found or already done")
+    return {"status": "cancelled", "task_id": task_id}

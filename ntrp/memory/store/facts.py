@@ -191,8 +191,9 @@ def _row_dict(row: aiosqlite.Row) -> dict:
 
 
 class FactRepository:
-    def __init__(self, conn: aiosqlite.Connection):
+    def __init__(self, conn: aiosqlite.Connection, read_conn: aiosqlite.Connection | None = None):
         self.conn = conn
+        self.read_conn = read_conn or conn
 
     async def get(self, fact_id: int) -> Fact | None:
         rows = await self.conn.execute_fetchall(_SQL_GET_FACT, (fact_id,))
@@ -352,7 +353,7 @@ class FactRepository:
         return result
 
     async def get_facts_for_entity(self, name: str, limit: int = 100) -> list[Fact]:
-        rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_FOR_ENTITY, (name, name, limit))
+        rows = await self.read_conn.execute_fetchall(_SQL_GET_FACTS_FOR_ENTITY, (name, name, limit))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def search_facts_vector(self, query_embedding: Embedding, limit: int = 10) -> list[tuple[Fact, float]]:
@@ -390,7 +391,7 @@ class FactRepository:
         return Entity.model_validate(_row_dict(rows[0])) if rows else None
 
     async def get_entity_by_name(self, name: str) -> Entity | None:
-        rows = await self.conn.execute_fetchall(_SQL_GET_ENTITY_BY_NAME, (name,))
+        rows = await self.read_conn.execute_fetchall(_SQL_GET_ENTITY_BY_NAME, (name,))
         return Entity.model_validate(_row_dict(rows[0])) if rows else None
 
     async def create_entity(self, name: str) -> Entity:

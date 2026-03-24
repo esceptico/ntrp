@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Status, type Status as StatusType } from "../../lib/constants.js";
 import { colors } from "../ui/colors.js";
 import { truncateText } from "../../lib/utils.js";
@@ -13,7 +13,7 @@ function formatElapsed(ms: number): string {
   return `${m}m${s % 60}s`;
 }
 
-function TaskDetails({ tasks }: { tasks: Map<string, BackgroundTask> }) {
+function TaskDetails({ tasks, onCancel }: { tasks: Map<string, BackgroundTask>; onCancel?: (id: string) => void }) {
   const [, tick] = useState(0);
 
   useEffect(() => {
@@ -22,7 +22,7 @@ function TaskDetails({ tasks }: { tasks: Map<string, BackgroundTask> }) {
     return () => clearInterval(id);
   }, [tasks.size]);
 
-  const entries = [...tasks.values()].sort((a, b) => a.startedAt - b.startedAt);
+  const entries = useMemo(() => [...tasks.values()].sort((a, b) => a.startedAt - b.startedAt), [tasks]);
   const now = Date.now();
 
   return (
@@ -31,12 +31,19 @@ function TaskDetails({ tasks }: { tasks: Map<string, BackgroundTask> }) {
         const last = t.activity.length > 0 ? t.activity[t.activity.length - 1] : null;
         return (
           <box key={t.id} flexDirection="column">
-            <text>
-              <span fg={colors.status.info}>◦ </span>
-              <span fg={colors.text.muted}>{truncateText(t.command, 60)}</span>
-              <span fg={colors.text.disabled}> · {t.id} · {formatElapsed(now - t.startedAt)}</span>
-              <span fg={colors.text.disabled}> · {t.activity.length} calls</span>
-            </text>
+            <box flexDirection="row">
+              <text>
+                <span fg={colors.status.info}>◦ </span>
+                <span fg={colors.text.muted}>{truncateText(t.command, 50)}</span>
+                <span fg={colors.text.disabled}> · {t.id} · {formatElapsed(now - t.startedAt)}</span>
+                <span fg={colors.text.disabled}> · {t.activity.length} calls</span>
+              </text>
+              {onCancel && (
+                <box marginLeft={1} onMouseDown={() => onCancel(t.id)}>
+                  <text><span fg={colors.status.error}> ✕</span></text>
+                </box>
+              )}
+            </box>
             {last && (
               <text>
                 <span fg={colors.text.disabled}>  ⎿ {truncateText(last, 58)}</span>
@@ -57,6 +64,7 @@ export interface InputFooterProps {
   copiedFlash: boolean;
   backgroundTaskCount?: number;
   backgroundTasks?: Map<string, BackgroundTask>;
+  onCancelBackgroundTask?: (taskId: string) => void;
   indexStatus?: {
     indexing: boolean;
     progress: { total: number; done: number };
@@ -65,14 +73,18 @@ export interface InputFooterProps {
   } | null;
 }
 
-export function InputFooter({ isStreaming, status, accentValue, escHint, copiedFlash, backgroundTaskCount, backgroundTasks, indexStatus }: InputFooterProps) {
+export function InputFooter({ isStreaming, status, accentValue, escHint, copiedFlash, backgroundTaskCount, backgroundTasks, onCancelBackgroundTask, indexStatus }: InputFooterProps) {
   const [expanded, setExpanded] = useState(false);
   const hasTasks = backgroundTaskCount != null && backgroundTaskCount > 0;
 
   useKeypress(
     useCallback((key: Key) => {
       if (key.ctrl && key.name === "b") setExpanded((v) => !v);
-    }, []),
+      if (key.ctrl && key.name === "x" && expanded && onCancelBackgroundTask && backgroundTasks?.size) {
+        const latest = [...backgroundTasks.values()].sort((a, b) => b.startedAt - a.startedAt)[0];
+        if (latest) onCancelBackgroundTask(latest.id);
+      }
+    }, [expanded, onCancelBackgroundTask, backgroundTasks]),
     { isActive: hasTasks }
   );
   const hasTaskDetails = backgroundTasks && backgroundTasks.size > 0;
@@ -80,7 +92,7 @@ export function InputFooter({ isStreaming, status, accentValue, escHint, copiedF
   if (isStreaming || status === Status.COMPRESSING) {
     return (
       <box flexDirection="column">
-        {expanded && hasTaskDetails && <TaskDetails tasks={backgroundTasks} />}
+        {expanded && hasTaskDetails && <TaskDetails tasks={backgroundTasks} onCancel={onCancelBackgroundTask} />}
         <box flexDirection="row" justifyContent="space-between">
           <box flexDirection="row" gap={1} flexGrow={1}>
             <box marginLeft={1}>
@@ -99,7 +111,7 @@ export function InputFooter({ isStreaming, status, accentValue, escHint, copiedF
               <box onMouseDown={() => setExpanded((v) => !v)}>
                 <text>
                   <span fg={colors.text.disabled}>{` · ${backgroundTaskCount} background `}</span>
-                  <span fg={colors.footer}>ctrl+b</span>
+                  <span fg={colors.footer}>{expanded ? "ctrl+x stop · ctrl+b hide" : "ctrl+b"}</span>
                 </text>
               </box>
             )}
@@ -123,7 +135,7 @@ export function InputFooter({ isStreaming, status, accentValue, escHint, copiedF
 
   return (
     <box flexDirection="column">
-      {expanded && hasTaskDetails && <TaskDetails tasks={backgroundTasks} />}
+      {expanded && hasTaskDetails && <TaskDetails tasks={backgroundTasks} onCancel={onCancelBackgroundTask} />}
       <box flexDirection="row" justifyContent="space-between">
         <box flexDirection="row" marginLeft={3}>
           {hasTasks ? (

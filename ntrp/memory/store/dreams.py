@@ -34,8 +34,9 @@ def _row_dict(row: aiosqlite.Row) -> dict:
 
 
 class DreamRepository:
-    def __init__(self, conn: aiosqlite.Connection):
+    def __init__(self, conn: aiosqlite.Connection, read_conn: aiosqlite.Connection | None = None):
         self.conn = conn
+        self.read_conn = read_conn or conn
 
     async def create(
         self, bridge: str, insight: str, source_fact_ids: list[int], embedding: Embedding | None = None

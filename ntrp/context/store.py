@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import UTC, datetime
 from typing import Any
@@ -97,8 +98,9 @@ SQL_DELETE_ARCHIVED = "DELETE FROM sessions WHERE session_id = ? AND archived_at
 
 
 class SessionStore:
-    def __init__(self, conn: aiosqlite.Connection):
+    def __init__(self, conn: aiosqlite.Connection, read_conn: aiosqlite.Connection | None = None):
         self.conn = conn
+        self.read_conn = read_conn or conn
 
     async def _update(self, sql: str, params: tuple) -> bool:
         cursor = await self.conn.execute(sql, params)
@@ -127,14 +129,19 @@ class SessionStore:
             elif isinstance(msg, dict):
                 serializable_messages.append(msg)
 
+        snapshot = list(serializable_messages)
+        meta = metadata or {}
+        messages_json, metadata_json = await asyncio.to_thread(
+            lambda: (json.dumps(snapshot, default=str), json.dumps(meta))
+        )
         await self.conn.execute(
             SQL_SAVE_SESSION,
             (
                 state.session_id,
                 state.started_at.isoformat(),
                 state.last_activity.isoformat(),
-                json.dumps(serializable_messages, default=str),
-                json.dumps(metadata or {}),
+                messages_json,
+                metadata_json,
                 state.name,
             ),
         )
@@ -150,23 +157,20 @@ class SessionStore:
             await self.conn.execute(SQL_DELETE_STALE_MESSAGES, (session_id, len(messages)))
             max_existing = len(messages) - 1
 
-        now = datetime.now(UTC)
+        now = datetime.now(UTC).isoformat()
+        params = []
         for idx, msg in enumerate(messages):
             if idx <= max_existing:
                 continue
             role = msg.get("role", "")
             raw_content = msg.get("content") if role in ("user", "assistant", "tool") else None
-            if isinstance(raw_content, list):
-                content = json.dumps(raw_content)
-            else:
-                content = raw_content
-            await self.conn.execute(
-                SQL_INSERT_CHAT_MESSAGE,
-                (session_id, role, content, now.isoformat(), idx),
-            )
+            content = json.dumps(raw_content) if isinstance(raw_content, list) else raw_content
+            params.append((session_id, role, content, now, idx))
+        if params:
+            await self.conn.executemany(SQL_INSERT_CHAT_MESSAGE, params)
 
     async def load_session(self, session_id: str) -> SessionData | None:
-        rows = await self.conn.execute_fetchall(SQL_LOAD_SESSION, (session_id,))
+        rows = await self.read_conn.execute_fetchall(SQL_LOAD_SESSION, (session_id,))
         if not rows:
             return None
 
@@ -188,8 +192,10 @@ class SessionStore:
             name=name,
         )
 
-        messages = json.loads(row["messages"]) if row["messages"] else []
-        metadata = json.loads(row["metadata"]) if row["metadata"] else {}
+        raw_messages, raw_metadata = row["messages"], row["metadata"]
+        messages, metadata = await asyncio.to_thread(
+            lambda: (json.loads(raw_messages) if raw_messages else [], json.loads(raw_metadata) if raw_metadata else {})
+        )
         return SessionData(
             state=state,
             messages=messages,
@@ -197,7 +203,7 @@ class SessionStore:
         )
 
     async def get_latest_id(self) -> str | None:
-        rows = await self.conn.execute_fetchall(SQL_GET_LATEST)
+        rows = await self.read_conn.execute_fetchall(SQL_GET_LATEST)
         return rows[0]["session_id"] if rows else None
 
     async def get_latest_session(self) -> SessionData | None:
@@ -206,7 +212,7 @@ class SessionStore:
         return await self.load_session(session_id)
 
     async def list_sessions(self, limit: int = 20) -> list[dict]:
-        rows = await self.conn.execute_fetchall(SQL_LIST_SESSIONS, (limit,))
+        rows = await self.read_conn.execute_fetchall(SQL_LIST_SESSIONS, (limit,))
         return [
             {
                 "session_id": row["session_id"],
@@ -228,7 +234,7 @@ class SessionStore:
         return await self._update(SQL_RESTORE, (session_id,))
 
     async def list_archived_sessions(self, limit: int = 20) -> list[dict]:
-        rows = await self.conn.execute_fetchall(SQL_LIST_ARCHIVED, (limit,))
+        rows = await self.read_conn.execute_fetchall(SQL_LIST_ARCHIVED, (limit,))
         return [
             {
                 "session_id": row["session_id"],
@@ -245,7 +251,7 @@ class SessionStore:
         return await self._update(SQL_DELETE_ARCHIVED, (session_id,))
 
     async def get_chat_slice(self, session_id: str, start_index: int, end_index: int) -> list[ChatMessage]:
-        rows = await self.conn.execute_fetchall(SQL_GET_CHAT_SLICE, (session_id, start_index, end_index))
+        rows = await self.read_conn.execute_fetchall(SQL_GET_CHAT_SLICE, (session_id, start_index, end_index))
         return [
             ChatMessage(
                 id=r["id"],

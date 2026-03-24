@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ntrp.constants import NTRP_TMP_BASE
+from ntrp.constants import BACKGROUND_AGENT_TIMEOUT, NTRP_TMP_BASE
 from ntrp.events.sse import BackgroundTaskEvent
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
@@ -46,6 +46,7 @@ class BackgroundTool(Tool):
             task=task,
             system_prompt=BACKGROUND_SYSTEM_PROMPT,
             tools=tools,
+            timeout=BACKGROUND_AGENT_TIMEOUT,
             parent_id=execution.tool_id,
             background=True,
         )

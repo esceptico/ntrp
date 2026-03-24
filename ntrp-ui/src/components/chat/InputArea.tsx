@@ -37,6 +37,7 @@ interface InputAreaProps {
   copiedFlash?: boolean;
   backgroundTaskCount?: number;
   backgroundTasks?: Map<string, BackgroundTask>;
+  onCancelBackgroundTask?: (taskId: string) => void;
   prefill?: string | null;
   onPrefillConsumed?: () => void;
 }
@@ -59,6 +60,7 @@ export const InputArea = memo(function InputArea({
   copiedFlash = false,
   backgroundTaskCount = 0,
   backgroundTasks,
+  onCancelBackgroundTask,
   prefill = null,
   onPrefillConsumed,
 }: InputAreaProps) {
@@ -367,6 +369,7 @@ export const InputArea = memo(function InputArea({
           copiedFlash={copiedFlash}
           backgroundTaskCount={backgroundTaskCount}
           backgroundTasks={backgroundTasks}
+          onCancelBackgroundTask={onCancelBackgroundTask}
           indexStatus={indexStatus}
         />
       </box>
