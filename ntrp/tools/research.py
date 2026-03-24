@@ -1,4 +1,3 @@
-import asyncio
 
 from pydantic import BaseModel, Field
 
