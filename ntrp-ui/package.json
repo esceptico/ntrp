@@ -1,6 +1,6 @@
 {
   "name": "ntrp-cli",
-  "version": "0.17.1",
+  "version": "0.17.2",
   "description": "ntrp – personal entropy reduction system",
   "type": "module",
   "bin": {
