@@ -32,6 +32,7 @@ dependencies = [
     "telegramify-markdown>=0.5.4,<1.0.0",
     "mcp>=1.0.0",
     "coolname>=4.1.0",
+    "trafilatura>=2.0.0",
 ]
 
 [project.urls]

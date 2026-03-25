@@ -1,30 +1,15 @@
-import html
-import re
-from urllib.error import URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 
+import trafilatura
 from ddgs import DDGS
+from trafilatura import bare_extraction
+from trafilatura.settings import use_config
 
 from ntrp.sources.base import WebContentResult, WebSearchResult, WebSearchSource
 
-_MAX_FETCH_BYTES = 1_000_000
-
-
-def _extract_title(raw_html: str, default: str) -> str:
-    m = re.search(r"<title[^>]*>(.*?)</title>", raw_html, flags=re.IGNORECASE | re.DOTALL)
-    if not m:
-        return default
-    title = re.sub(r"\s+", " ", html.unescape(m.group(1))).strip()
-    return title or default
-
-
-def _extract_text(raw_html: str) -> str:
-    text = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", raw_html)
-    text = re.sub(r"(?s)<[^>]+>", " ", text)
-    text = html.unescape(text)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+_cfg = use_config()
+_cfg.set("DEFAULT", "DOWNLOAD_TIMEOUT", "10")
+_cfg.set("DEFAULT", "MAX_FILE_SIZE", "1000000")
 
 
 def _guess_title(url: str) -> str:
@@ -69,42 +54,32 @@ class DDGSWebSource(WebSearchSource):
         out: list[WebContentResult] = []
         for url in urls:
             try:
-                req = Request(
-                    url,
-                    headers={
-                        "User-Agent": (
-                            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+                downloaded = trafilatura.fetch_url(url, config=_cfg)
+                if not downloaded:
+                    out.append(WebContentResult(title=_guess_title(url), url=url))
+                    continue
+
+                doc = bare_extraction(
+                    downloaded,
+                    url=url,
+                    favor_recall=True,
+                    include_links=True,
+                    with_metadata=True,
+                    config=_cfg,
+                )
+                if doc:
+                    title = doc.title or _guess_title(url)
+                    out.append(
+                        WebContentResult(
+                            title=title,
+                            url=url,
+                            text=doc.text or None,
+                            published_date=doc.date,
+                            author=doc.author,
                         )
-                    },
-                )
-                with urlopen(req, timeout=10) as resp:
-                    raw_bytes = resp.read(_MAX_FETCH_BYTES)
-                    content_type = resp.headers.get("Content-Type", "")
-                raw = raw_bytes.decode("utf-8", errors="replace")
-                if "text/html" in content_type.lower() or "<html" in raw.lower():
-                    title = _extract_title(raw, _guess_title(url))
-                    text = _extract_text(raw)
+                    )
                 else:
-                    title = _guess_title(url)
-                    text = raw.strip()
-                out.append(
-                    WebContentResult(
-                        title=title,
-                        url=url,
-                        text=text or None,
-                        published_date=None,
-                        author=None,
-                    )
-                )
-            except (ValueError, URLError, TimeoutError, OSError):
-                out.append(
-                    WebContentResult(
-                        title=_guess_title(url),
-                        url=url,
-                        text=None,
-                        published_date=None,
-                        author=None,
-                    )
-                )
+                    out.append(WebContentResult(title=_guess_title(url), url=url))
+            except Exception:
+                out.append(WebContentResult(title=_guess_title(url), url=url))
         return out
