@@ -32,6 +32,9 @@
     "@opentui/core": "0.1.84",
     "@opentui/react": "0.1.84",
     "@tanstack/react-query": "^5.90.21",
+    "tree-sitter-bash": "0.25.1",
+    "tree-sitter-json": "0.24.8",
+    "tree-sitter-python": "0.25.0",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
