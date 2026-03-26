@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import type { Automation, CreateAutomationData, NotifierSummary } from "../api/client.js";
+import type { Automation, CreateAutomationData } from "../api/client.js";
 import { useKeypress, type Key } from "./useKeypress.js";
 import type { AutomationFormState } from "./useAutomationForm.js";
 import { buildAutomationPayload, createFocusOrder } from "./useAutomationForm.js";
@@ -21,7 +21,6 @@ interface UseAutomationKeypressParams {
   viewingResult: Automation | null;
   createMode: boolean;
   saving: boolean;
-  availableNotifiers: NotifierSummary[];
   activeTab: AutomationTab;
   setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
   setConfirmDelete: React.Dispatch<React.SetStateAction<boolean>>;
@@ -50,7 +49,6 @@ export function useAutomationKeypress({
   viewingResult,
   createMode,
   saving,
-  availableNotifiers,
   activeTab,
   setSelectedIndex,
   setConfirmDelete,
@@ -78,8 +76,6 @@ export function useAutomationKeypress({
     createScheduleMode,
     createDaysOption,
     createEventType,
-    createNotifiers,
-    createNotifierCursor,
     createCustomDays,
     createDayCursor,
     createWritable,
@@ -106,8 +102,6 @@ export function useAutomationKeypress({
     setCreateDaysOption,
     setCreateEventType,
     setCreateWritable,
-    setCreateNotifiers,
-    setCreateNotifierCursor,
     setCreateCustomDays,
     setCreateDayCursor,
     setTriggerCursor,
@@ -164,7 +158,6 @@ export function useAutomationKeypress({
             name: nameInput.value.trim(),
             description: createDesc.trim(),
             model: selectedModel,
-            notifiers: createNotifiers,
             writable: createWritable,
             triggers: triggersList,
             cooldown_minutes: cooldown,
@@ -229,7 +222,6 @@ export function useAutomationKeypress({
             scheduleMode: createScheduleMode,
             daysOption: createDaysOption,
             eventType: createEventType,
-            hasNotifiers: false,
           });
           const triggerFocusIdx = triggerFocusOrder.indexOf(createFocus);
 
@@ -306,20 +298,7 @@ export function useAutomationKeypress({
 
         // Drilled into a main field
         if (createEditing) {
-          if (createFocus === "notifiers") {
-            if (key.name === "up" || key.name === "k") {
-              setCreateNotifierCursor((i) => Math.max(0, i - 1));
-            } else if (key.name === "down" || key.name === "j") {
-              setCreateNotifierCursor((i) => Math.min(availableNotifiers.length - 1, i + 1));
-            } else if (key.name === "space" || key.name === "return") {
-              const notifier = availableNotifiers[createNotifierCursor];
-              if (notifier) {
-                setCreateNotifiers((prev) =>
-                  prev.includes(notifier.name) ? prev.filter((n) => n !== notifier.name) : [...prev, notifier.name]
-                );
-              }
-            }
-          } else if (createFocus === "name") {
+          if (createFocus === "name") {
             nameInput.handleKey(key);
           } else if (createFocus === "description") {
             descInput.handleKey(key);
@@ -336,7 +315,6 @@ export function useAutomationKeypress({
           scheduleMode: createScheduleMode,
           daysOption: createDaysOption,
           eventType: createEventType,
-          hasNotifiers: availableNotifiers.length > 0,
         });
         const mainFocusIdx = mainFocusOrder.indexOf(createFocus);
 
@@ -376,8 +354,6 @@ export function useAutomationKeypress({
               enterTriggerEditor(triggerCursor);
             }
           } else if (createFocus === "name" || createFocus === "description" || createFocus === "cooldown") {
-            setCreateEditing(true);
-          } else if (createFocus === "notifiers") {
             setCreateEditing(true);
           } else if (createFocus === "model") {
             setShowModelDropdown(true);
@@ -451,7 +427,7 @@ export function useAutomationKeypress({
       confirmDelete, handleDelete, loadAutomations, handleViewResult, handleRun, setActiveTab,
       viewingResult, createMode, createFocus, createEditing, isEditingTrigger,
       createTriggerType, createScheduleMode,
-      createDaysOption, createEventType, createNotifierCursor, createCustomDays, createDayCursor,
+      createDaysOption, createEventType, createCustomDays, createDayCursor,
       selectedModel, triggersList, triggerCursor, editingTriggerIndex,
       handleCreate, handleUpdate, resetCreateState, getCreateValidationError,
       enterTriggerEditor, addTrigger, removeTrigger, saveTriggerEdit,
@@ -459,13 +435,12 @@ export function useAutomationKeypress({
       setSelectedIndex, setConfirmDelete, setViewingResult,
       setLoading, setCreateMode, setCreateFocus, setCreateEditing, setCreateTriggerType,
       setCreateScheduleMode, setCreateDaysOption, setCreateEventType, setCreateWritable,
-      setCreateNotifiers, setCreateNotifierCursor, setCreateCustomDays, setCreateDayCursor,
+      setCreateCustomDays, setCreateDayCursor,
       setTriggerCursor, setEditingTaskId, setCreateError,
       nameInput, descInput, timeInput, intervalInput, startInput, endInput,
       eventLeadInput, idleMinutesInput, everyNInput, cooldownInput, parseLeadToMinutes,
-      availableNotifiers,
       setDetailScroll, setCreateModelCustomOption, setCreateModelIndex, setShowModelDropdown,
-      setCreateDesc, setCreateDescCursor, createNotifiers, createWritable, createDesc,
+      setCreateDesc, setCreateDescCursor, createWritable, createDesc,
       saving,
     ]
   );

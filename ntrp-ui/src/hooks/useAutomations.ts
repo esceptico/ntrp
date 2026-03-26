@@ -9,10 +9,8 @@ import {
   deleteAutomation,
   runAutomation,
   toggleWritable,
-  getNotifiers,
   createAutomation,
   type Automation,
-  type NotifierSummary,
   type CreateAutomationData,
   type UpdateAutomationData,
 } from "../api/client.js";
@@ -29,7 +27,6 @@ interface UseAutomationsResult {
   confirmDelete: boolean;
   viewingResult: Automation | null;
   saving: boolean;
-  availableNotifiers: NotifierSummary[];
   availableModels: string[];
   createMode: boolean;
   createError: string | null;
@@ -63,7 +60,6 @@ export function useAutomations(config: Config): UseAutomationsResult {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [viewingResult, setViewingResult] = useState<Automation | null>(null);
   const [saving, setSaving] = useState(false);
-  const [availableNotifiers, setAvailableNotifiers] = useState<NotifierSummary[]>([]);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [createMode, setCreateMode] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -78,13 +74,11 @@ export function useAutomations(config: Config): UseAutomationsResult {
 
   const loadAutomations = useCallback(async () => {
     try {
-      const [data, notifiersData, modelsData] = await Promise.all([
+      const [data, modelsData] = await Promise.all([
         getAutomations(config),
-        getNotifiers(config),
         getSupportedModels(config).catch(() => ({ models: [] as string[] })),
       ]);
       setAutomations(data.automations);
-      setAvailableNotifiers(notifiersData.notifiers);
       setAvailableModels(modelsData.models ?? []);
       setError(null);
     } catch (e) {
@@ -200,7 +194,7 @@ export function useAutomations(config: Config): UseAutomationsResult {
   return {
     automations, activeTab, setActiveTab,
     selectedIndex, loading, error, confirmDelete, viewingResult,
-    saving, availableNotifiers, availableModels,
+    saving, availableModels,
     createMode, createError,
     setSelectedIndex, setConfirmDelete, setViewingResult,
     setAutomations, setLoading,

@@ -15,7 +15,6 @@ class Automation:
     created_at: datetime
     next_run_at: datetime | None
     last_run_at: datetime | None
-    notifiers: list[str]
     last_result: str | None
     running_since: datetime | None
     writable: bool

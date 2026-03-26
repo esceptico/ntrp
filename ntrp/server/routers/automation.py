@@ -10,7 +10,6 @@ from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
     CreateAutomationRequest,
     CreateNotifierRequest,
-    SetNotifiersRequest,
     UpdateAutomationRequest,
     UpdateNotifierRequest,
 )
@@ -29,7 +28,6 @@ def _automation_to_dict(a: Automation) -> dict:
         "created_at": a.created_at.isoformat(),
         "last_run_at": a.last_run_at.isoformat() if a.last_run_at else None,
         "next_run_at": a.next_run_at.isoformat() if a.next_run_at else None,
-        "notifiers": a.notifiers,
         "last_result": a.last_result,
         "writable": a.writable,
         "running_since": a.running_since.isoformat() if a.running_since else None,
@@ -54,7 +52,6 @@ async def create_automation(
             every=request.every,
             event_type=request.event_type,
             lead_minutes=request.lead_minutes,
-            notifiers=request.notifiers,
             writable=request.writable,
             start=request.start,
             end=request.end,
@@ -129,7 +126,6 @@ async def update_automation(
             lead_minutes=request.lead_minutes,
             start=request.start,
             end=request.end,
-            notifiers=request.notifiers,
             writable=request.writable,
             enabled=request.enabled,
             triggers=request.triggers,
@@ -147,19 +143,6 @@ async def list_notifiers(runtime: Runtime = Depends(get_runtime)):
     if not runtime.notifier_service:
         return {"notifiers": []}
     return {"notifiers": runtime.notifier_service.list_summary()}
-
-
-@router.put("/automations/{task_id}/notifiers")
-async def set_notifiers(
-    task_id: str, request: SetNotifiersRequest, svc: AutomationService = Depends(require_automation_service)
-):
-    try:
-        await svc.set_notifiers(task_id, request.notifiers)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="Automation not found")
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    return {"notifiers": request.notifiers}
 
 
 @router.delete("/automations/{task_id}")

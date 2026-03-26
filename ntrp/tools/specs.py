@@ -34,6 +34,7 @@ from ntrp.tools.notes import (
     NotesTool,
     ReadNoteTool,
 )
+from ntrp.tools.notify import NotifyTool
 from ntrp.tools.research import ResearchTool
 from ntrp.tools.time import CurrentTimeTool
 from ntrp.tools.web import WebFetchTool, WebSearchTool
@@ -60,6 +61,7 @@ ALL_TOOLS: list[type[Tool]] = [
     CreateNoteTool,
     DeleteNoteTool,
     MoveNoteTool,
+    NotifyTool,
     SendEmailTool,
     ReadEmailTool,
     EmailsTool,

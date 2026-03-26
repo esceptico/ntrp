@@ -240,7 +240,6 @@ class Scheduler:
             prompt=prompt,
             prompt_suffix=AUTOMATION_SUFFIX,
             writable=automation.writable,
-            notifiers=automation.notifiers,
             source_id=automation.task_id,
             model=automation.model,
         )

@@ -118,7 +118,6 @@ class CreateAutomationRequest(BaseModel):
     every: str | None = None
     event_type: str | None = None
     lead_minutes: int | str | None = None
-    notifiers: list[str] = Field(default_factory=list)
     writable: bool = False
     start: str | None = None
     end: str | None = None
@@ -138,15 +137,10 @@ class UpdateAutomationRequest(BaseModel):
     lead_minutes: int | str | None = None
     start: str | None = None
     end: str | None = None
-    notifiers: list[str] | None = None
     writable: bool | None = None
     enabled: bool | None = None
     triggers: list[dict] | None = None
     cooldown_minutes: int | None = None
-
-
-class SetNotifiersRequest(BaseModel):
-    notifiers: list[str]
 
 
 class CreateNotifierRequest(BaseModel):

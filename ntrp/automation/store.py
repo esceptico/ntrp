@@ -26,7 +26,6 @@ def _row_to_automation(row: dict) -> Automation:
         created_at=datetime.fromisoformat(row["created_at"]),
         next_run_at=_parse_dt(row["next_run_at"]),
         last_run_at=_parse_dt(row["last_run_at"]),
-        notifiers=json.loads(row["notifiers"]) if row["notifiers"] else [],
         last_result=row["last_result"],
         running_since=_parse_dt(row["running_since"]),
         writable=bool(row["writable"]),
@@ -96,13 +95,13 @@ CREATE TABLE IF NOT EXISTS automation_meta (
 
 _COLUMNS = (
     "task_id, name, description, model, triggers, enabled, "
-    "created_at, last_run_at, next_run_at, notifiers, last_result, running_since, "
+    "created_at, last_run_at, next_run_at, last_result, running_since, "
     "writable, handler, builtin, cooldown_minutes"
 )
 
 _SQL_SAVE = f"""
 INSERT OR REPLACE INTO scheduled_tasks ({_COLUMNS})
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SQL_GET_BY_ID = f"SELECT {_COLUMNS} FROM scheduled_tasks WHERE task_id = ?"
@@ -161,12 +160,10 @@ _SQL_SET_ENABLED = "UPDATE scheduled_tasks SET enabled = ? WHERE task_id = ?"
 
 _SQL_SET_WRITABLE = "UPDATE scheduled_tasks SET writable = ? WHERE task_id = ?"
 
-_SQL_SET_NOTIFIERS = "UPDATE scheduled_tasks SET notifiers = ? WHERE task_id = ?"
-
 _SQL_UPDATE_METADATA = """
 UPDATE scheduled_tasks
 SET name = ?, description = ?, model = ?, triggers = ?,
-    enabled = ?, next_run_at = ?, notifiers = ?, writable = ?,
+    enabled = ?, next_run_at = ?, writable = ?,
     cooldown_minutes = ?
 WHERE task_id = ?
 """
@@ -345,7 +342,6 @@ class AutomationStore:
                 automation.created_at.isoformat(),
                 automation.last_run_at.isoformat() if automation.last_run_at else None,
                 automation.next_run_at.isoformat() if automation.next_run_at else None,
-                json.dumps(automation.notifiers),
                 automation.last_result,
                 automation.running_since.isoformat() if automation.running_since else None,
                 int(automation.writable),
@@ -411,10 +407,6 @@ class AutomationStore:
         await self.conn.execute(_SQL_SET_WRITABLE, (int(writable), task_id))
         await self.conn.commit()
 
-    async def set_notifiers(self, task_id: str, notifiers: list[str]) -> None:
-        await self.conn.execute(_SQL_SET_NOTIFIERS, (json.dumps(notifiers), task_id))
-        await self.conn.commit()
-
     async def update_metadata(self, automation: Automation) -> None:
         await self.conn.execute(
             _SQL_UPDATE_METADATA,
@@ -425,7 +417,6 @@ class AutomationStore:
                 _serialize_triggers(automation.triggers),
                 int(automation.enabled),
                 automation.next_run_at.isoformat() if automation.next_run_at else None,
-                json.dumps(automation.notifiers),
                 int(automation.writable),
                 automation.cooldown_minutes,
                 automation.task_id,

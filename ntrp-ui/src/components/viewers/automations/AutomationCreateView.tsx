@@ -1,12 +1,11 @@
 import { colors, TextInputField, TextEditArea } from "../../ui/index.js";
-import type { NotifierSummary, Trigger } from "../../../api/client.js";
+import type { Trigger } from "../../../api/client.js";
 import type { TriggerType } from "../../../hooks/useAutomationTriggerState.js";
 import { triggerLabel } from "../../../lib/format.js";
 import { labelCell, selectorRow } from "./FormHelpers.js";
 import { TriggerFields } from "./TriggerFields.js";
-import { NotifierSelector } from "./NotifierSelector.js";
 
-export type CreateFocus = "name" | "description" | "model" | "triggers_list" | "cooldown" | "trigger_type" | "mode" | "time" | "interval" | "start" | "end" | "days" | "day_picker" | "event_type" | "event_lead" | "idle_minutes" | "every_n" | "notifiers" | "writable";
+export type CreateFocus = "name" | "description" | "model" | "triggers_list" | "cooldown" | "trigger_type" | "mode" | "time" | "interval" | "start" | "end" | "days" | "day_picker" | "event_type" | "event_lead" | "idle_minutes" | "every_n" | "writable";
 
 export const TRIGGER_TYPES = ["time", "event", "idle", "count"] as const;
 export const SCHEDULE_MODES = ["schedule", "interval"] as const;
@@ -27,9 +26,6 @@ interface AutomationCreateViewProps {
   error: string | null;
   triggerError: string | null;
   width: number;
-  availableNotifiers: NotifierSummary[];
-  notifiers: string[];
-  notifierCursor: number;
   customDays: string[];
   dayCursor: number;
   nameValue: string;
@@ -71,9 +67,6 @@ export function AutomationCreateView({
   error,
   triggerError,
   width,
-  availableNotifiers,
-  notifiers,
-  notifierCursor,
   customDays,
   dayCursor,
   nameValue,
@@ -233,17 +226,6 @@ export function AutomationCreateView({
         <text><span fg={colors.text.muted}> min between runs</span></text>
         {focus === "cooldown" && !editing && <text><span fg={colors.text.muted}>  enter to edit</span></text>}
       </box>
-
-      {/* --- Notifiers & writable --- */}
-      {availableNotifiers.length > 0 && (
-        <NotifierSelector
-          focus={focus}
-          editing={editing}
-          availableNotifiers={availableNotifiers}
-          notifiers={notifiers}
-          notifierCursor={notifierCursor}
-        />
-      )}
 
       <box flexDirection="row">
         {labelCell("WRITABLE", focus === "writable")}

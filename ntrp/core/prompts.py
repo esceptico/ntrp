@@ -137,7 +137,7 @@ STATIC_BLOCK = env.from_string("""{{ base_prompt }}
 {% if notifier_names %}
 
 ## NOTIFIERS
-Available notification channels: {{ notifier_names | join(", ") }}. Use these names in the `notifiers` field when creating automations.
+Available notification channels: {{ notifier_names | join(", ") }}. Use `notify()` to send notifications.
 {% endif %}
 {% if skills_xml %}
 

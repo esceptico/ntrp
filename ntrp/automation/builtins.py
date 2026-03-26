@@ -86,7 +86,6 @@ async def seed_builtins(store: AutomationStore) -> None:
             created_at=datetime.now(UTC),
             next_run_at=None,
             last_run_at=None,
-            notifiers=[],
             last_result=None,
             running_since=None,
             writable=spec.writable,

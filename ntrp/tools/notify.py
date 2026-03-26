@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -6,11 +7,11 @@ from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponenti
 
 from ntrp.logging import get_logger
 from ntrp.notifiers.base import Notifier
-from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
 _logger = get_logger(__name__)
+_SERVICE_NAME = "notifiers"
 
 NOTIFY_DESCRIPTION = (
     "Send a notification to the user via their configured channels. "
@@ -21,6 +22,9 @@ NOTIFY_DESCRIPTION = (
 class NotifyInput(BaseModel):
     subject: str = Field(description="Short notification subject/title")
     body: str = Field(description="Notification body — concise, informative")
+    names: list[str] | None = Field(
+        default=None, description="Notifier names to use, e.g. ['work-telegram'] (omit to send to all)"
+    )
 
 
 @retry(
@@ -33,46 +37,56 @@ async def _send_with_retry(notifier: Notifier, subject: str, body: str) -> None:
     await notifier.send(subject, body)
 
 
+@dataclass
+class _ResolvedNotifiers:
+    targets: list[Notifier]
+    unknown: list[str]
+    available: list[str]
+
+
 class NotifyTool(Tool):
     name = "notify"
     display_name = "Notify"
     description = NOTIFY_DESCRIPTION
     mutates = True
+    requires = frozenset({"notifiers"})
     input_model = NotifyInput
 
-    def __init__(
-        self,
-        notifiers: list[Notifier],
-        log_store: NotificationLogStore,
-        task_id: str,
-    ):
-        self._notifiers = notifiers
-        self._log_store = log_store
-        self._task_id = task_id
+    def _resolve_notifiers(self, execution: ToolExecution, names: list[str] | None = None) -> _ResolvedNotifiers:
+        all_notifiers: dict[str, Notifier] = execution.ctx.services[_SERVICE_NAME].notifiers
+        available = list(all_notifiers)
+        if not names:
+            return _ResolvedNotifiers(targets=list(all_notifiers.values()), unknown=[], available=available)
+        targets, unknown = [], []
+        for name in names:
+            if (notifier := all_notifiers.get(name)) is not None:
+                targets.append(notifier)
+            else:
+                unknown.append(name)
+        return _ResolvedNotifiers(targets=targets, unknown=unknown, available=available)
 
-    async def execute(self, execution: ToolExecution, subject: str, body: str, **kwargs: Any) -> ToolResult:
-        if not self._notifiers:
-            return ToolResult(
-                content="No notifiers configured for this task.",
-                preview="No notifiers",
-                is_error=True,
-            )
+    async def execute(
+        self, execution: ToolExecution, subject: str, body: str, names: list[str] | None = None, **kwargs: Any
+    ) -> ToolResult:
+        resolved = self._resolve_notifiers(execution, names)
+
+        if resolved.unknown:
+            msg = f"Unknown notifier(s): {', '.join(resolved.unknown)}. Available: {', '.join(resolved.available)}"
+            return ToolResult(content=msg, preview="Unknown notifier", is_error=True)
+
+        if not resolved.targets:
+            return ToolResult(content="No notifiers configured.", preview="No notifiers", is_error=True)
 
         sent: list[str] = []
         failed: list[str] = []
 
-        for notifier in self._notifiers:
+        for notifier in resolved.targets:
             try:
                 await _send_with_retry(notifier, subject, body)
                 sent.append(notifier.channel)
             except Exception:
                 _logger.exception("Notifier %s failed after retries", notifier.channel)
                 failed.append(notifier.channel)
-
-        try:
-            await self._log_store.save(self._task_id, subject, body, sent)
-        except Exception:
-            _logger.exception("Failed to log notification")
 
         if failed:
             return ToolResult(
