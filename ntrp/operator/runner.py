@@ -23,7 +23,7 @@ class OperatorDeps:
     channel: Channel
     source_details: dict[str, dict]
     create_session: Callable[[], SessionState]
-    notifier_names: list[str]
+    notifiers: list[dict[str, str]]
 
 
 @dataclass(frozen=True)
@@ -54,7 +54,7 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
         source_details=deps.source_details,
         memory_context=memory_context,
         directives=load_directives(),
-        notifier_names=deps.notifier_names or None,
+        notifiers=deps.notifiers or None,
     )
     system_prompt += request.prompt_suffix
 

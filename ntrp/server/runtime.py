@@ -315,7 +315,7 @@ class Runtime:
             channel=self.channel,
             source_details=self.source_mgr.get_details(),
             create_session=self.stores.sessions.create,
-            notifier_names=list(self.notifier_service.notifiers) if self.notifier_service else [],
+            notifiers=self.notifier_service.list_summary() if self.notifier_service else [],
         )
 
     async def start_scheduler(self) -> None:

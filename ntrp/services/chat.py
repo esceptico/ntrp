@@ -126,14 +126,14 @@ async def _prepare_messages(
     skills_context = runtime.skill_registry.to_prompt_xml() if runtime.skill_registry else None
     directives = load_directives()
 
-    notifier_names = list(runtime.notifier_service.notifiers) if runtime.notifier_service else None
+    notifiers = runtime.notifier_service.list_summary() if runtime.notifier_service else None
 
     system_blocks = build_system_blocks(
         source_details=runtime.source_mgr.get_details(),
         memory_context=memory_context,
         skills_context=skills_context,
         directives=directives,
-        notifier_names=notifier_names,
+        notifiers=notifiers,
         use_cache_control=_is_anthropic(runtime.config.chat_model),
     )
 
