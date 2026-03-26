@@ -48,7 +48,7 @@ class NotifyTool(Tool):
     name = "notify"
     display_name = "Notify"
     description = NOTIFY_DESCRIPTION
-    mutates = True
+    mutates = False
     requires = frozenset({"notifiers"})
     input_model = NotifyInput
 
