@@ -41,7 +41,7 @@ async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> 
   const { method = "GET", body, timeout = DEFAULT_TIMEOUT, signal } = options;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  const timeoutId = timeout > 0 ? setTimeout(() => controller.abort(), timeout) : null;
 
   const combinedSignal = signal
     ? AbortSignal.any([controller.signal, signal])
@@ -59,7 +59,7 @@ async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> 
       signal: combinedSignal,
     });
 
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
 
     if (!response.ok) {
       let errorMessage = `Request failed: ${response.status}`;
@@ -87,7 +87,7 @@ async function apiFetch<T>(url: string, options: FetchOptions = {}): Promise<T> 
 
     return await response.json();
   } catch (error) {
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
 
     if (error instanceof Error) {
       if (error.name === "AbortError") {
