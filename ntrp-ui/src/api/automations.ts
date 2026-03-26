@@ -38,7 +38,6 @@ export interface Automation {
   created_at: string;
   last_run_at: string | null;
   next_run_at: string | null;
-  notifiers: string[];
   last_result: string | null;
   writable: boolean;
   running_since: string | null;
@@ -59,7 +58,6 @@ export interface CreateAutomationData {
   end?: string;
   event_type?: string;
   lead_minutes?: number;
-  notifiers: string[];
   writable: boolean;
   triggers?: Trigger[];
   cooldown_minutes?: number;
@@ -77,7 +75,6 @@ export interface UpdateAutomationData {
   end?: string;
   event_type?: string;
   lead_minutes?: number;
-  notifiers?: string[];
   writable?: boolean;
   triggers?: Trigger[];
   cooldown_minutes?: number;
@@ -115,10 +112,3 @@ export async function runAutomation(config: Config, taskId: string): Promise<{ s
   return api.post<{ status: string }>(`${config.serverUrl}/automations/${taskId}/run`);
 }
 
-export async function setAutomationNotifiers(
-  config: Config,
-  taskId: string,
-  notifiers: string[]
-): Promise<{ notifiers: string[] }> {
-  return api.put<{ notifiers: string[] }>(`${config.serverUrl}/automations/${taskId}/notifiers`, { notifiers });
-}

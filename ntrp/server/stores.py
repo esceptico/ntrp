@@ -5,7 +5,6 @@ from ntrp.automation.store import AutomationStore
 from ntrp.config import Config
 from ntrp.context.store import SessionStore
 from ntrp.monitor.store import MonitorStateStore
-from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.notifiers.store import NotifierStore
 from ntrp.services.session import SessionService
 
@@ -25,7 +24,6 @@ class Stores:
         sessions: SessionService,
         automations: AutomationStore,
         notifiers: NotifierStore,
-        notifications: NotificationLogStore,
         monitor: MonitorStateStore,
     ):
         self.conn = conn
@@ -33,7 +31,6 @@ class Stores:
         self.sessions = sessions
         self.automations = automations
         self.notifiers = notifiers
-        self.notifications = notifications
         self.monitor = monitor
 
     @classmethod
@@ -51,9 +48,6 @@ class Stores:
         notifiers = NotifierStore(conn)
         await notifiers.init_schema()
 
-        notifications = NotificationLogStore(conn)
-        await notifications.init_schema()
-
         monitor = MonitorStateStore(conn)
         await monitor.init_schema()
 
@@ -63,7 +57,6 @@ class Stores:
             sessions=SessionService(session_store),
             automations=automations,
             notifiers=notifiers,
-            notifications=notifications,
             monitor=monitor,
         )
 

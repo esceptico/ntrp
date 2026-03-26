@@ -16,8 +16,7 @@ CREATE_AUTOMATION_DESCRIPTION = (
     f"e.g. '{EVENT_APPROACHING}'). "
     "Time triggers support two modes: schedule ('at' a specific time) or interval ('every' N hours/minutes). "
     "Optional model override per automation (falls back to default chat model when omitted). "
-    "Read-only by default, set writable=true for memory/note writes. "
-    "If the user wants to be notified, set notifiers to the relevant channel names."
+    "Read-only by default, set writable=true for memory/note writes."
 )
 
 LIST_AUTOMATIONS_DESCRIPTION = "List all automations with their trigger, status, and next run."
@@ -103,7 +102,6 @@ class CreateAutomationInput(BaseModel):
         default=None,
         description="For event_approaching only: trigger when event is this many minutes away (default 60).",
     )
-    notifiers: list[str] = Field(default_factory=list, description="Notifier channel names (e.g. ['work-telegram'])")
     writable: bool = Field(default=False, description="Allow automation to write to memory and notes")
 
 
@@ -130,7 +128,6 @@ class UpdateAutomationInput(BaseModel):
         default=None,
         description="New lead time for event_approaching (minutes or duration like '2h30m')",
     )
-    notifiers: list[str] | None = Field(default=None, description="New notifier list (replaces existing)")
     writable: bool | None = Field(default=None, description="Allow writes to memory and notes")
     enabled: bool | None = Field(default=None, description="Enable or disable the automation")
 
@@ -172,7 +169,6 @@ class CreateAutomationTool(Tool):
         end: str | None = None,
         event_type: str | None = None,
         lead_minutes: int | str | None = None,
-        notifiers: list[str] | None = None,
         writable: bool = False,
         **kwargs: Any,
     ) -> ApprovalInfo | None:
@@ -193,8 +189,6 @@ class CreateAutomationTool(Tool):
         preview = f"Trigger: {_triggers_label([trigger])}"
         if next_run:
             preview += f"\nNext run: {next_run.strftime('%Y-%m-%d %H:%M')}"
-        if notifiers:
-            preview += f"\nNotify: {', '.join(notifiers)}"
         if model:
             preview += f"\nModel: {model}"
         if writable:
@@ -216,7 +210,6 @@ class CreateAutomationTool(Tool):
         end: str | None = None,
         event_type: str | None = None,
         lead_minutes: int | str | None = None,
-        notifiers: list[str] | None = None,
         writable: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
@@ -230,7 +223,6 @@ class CreateAutomationTool(Tool):
                 every=every,
                 event_type=event_type,
                 lead_minutes=lead_minutes,
-                notifiers=notifiers,
                 writable=writable,
                 start=start,
                 end=end,
@@ -248,8 +240,6 @@ class CreateAutomationTool(Tool):
             lines.append(f"Model: {automation.model}")
         if automation.next_run_at:
             lines.append(f"Next run: {automation.next_run_at.strftime('%Y-%m-%d %H:%M')}")
-        if automation.notifiers:
-            lines.append(f"Notify: {', '.join(automation.notifiers)}")
 
         return ToolResult(content="\n".join(lines), preview=f"Created ({automation.task_id})")
 
@@ -295,7 +285,6 @@ class UpdateAutomationTool(Tool):
         lead_minutes: int | str | None = None,
         start: str | None = None,
         end: str | None = None,
-        notifiers: list[str] | None = None,
         **kwargs: Any,
     ) -> ApprovalInfo | None:
         try:
@@ -322,8 +311,6 @@ class UpdateAutomationTool(Tool):
         for key, value in fields.items():
             if value is not None:
                 changes.append(f"{key}: {value}")
-        if notifiers is not None:
-            changes.append(f"notifiers: {', '.join(notifiers)}")
 
         label = automation.name or automation.description[:60]
         return ApprovalInfo(
@@ -347,7 +334,6 @@ class UpdateAutomationTool(Tool):
         lead_minutes: int | str | None = None,
         start: str | None = None,
         end: str | None = None,
-        notifiers: list[str] | None = None,
         writable: bool | None = None,
         enabled: bool | None = None,
         **kwargs: Any,
@@ -366,7 +352,6 @@ class UpdateAutomationTool(Tool):
                 lead_minutes=lead_minutes,
                 start=start,
                 end=end,
-                notifiers=notifiers,
                 writable=writable,
                 enabled=enabled,
             )

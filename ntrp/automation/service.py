@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
@@ -51,11 +50,9 @@ class AutomationService:
         self,
         store: AutomationStore,
         scheduler: Scheduler,
-        get_notifiers: Callable[[], dict[str, Any]],
     ):
         self.store = store
         self.scheduler = scheduler
-        self._get_notifiers = get_notifiers
 
     @property
     def is_running(self) -> bool:
@@ -87,12 +84,6 @@ class AutomationService:
         await self.get(task_id)
         self.scheduler.schedule_run(task_id)
 
-    def _validate_notifiers(self, notifiers: list[str]) -> None:
-        available = self._get_notifiers()
-        unknown = set(notifiers) - set(available)
-        if unknown:
-            raise ValueError(f"Unknown notifier(s): {', '.join(sorted(unknown))}")
-
     def _build_metadata_changes(
         self,
         *,
@@ -101,7 +92,6 @@ class AutomationService:
         writable: bool | None,
         enabled: bool | None,
         model: str | None,
-        notifiers: list[str] | None,
         cooldown_minutes: int | None = None,
     ) -> dict[str, Any]:
         changes: dict[str, Any] = {}
@@ -115,9 +105,6 @@ class AutomationService:
             changes["enabled"] = enabled
         if model is not None:
             changes["model"] = _normalize_and_validate_model(model)
-        if notifiers is not None:
-            self._validate_notifiers(notifiers)
-            changes["notifiers"] = notifiers
         if cooldown_minutes is not None:
             changes["cooldown_minutes"] = cooldown_minutes
         return changes
@@ -160,7 +147,6 @@ class AutomationService:
         lead_minutes: int | str | None = None,
         start: str | None = None,
         end: str | None = None,
-        notifiers: list[str] | None = None,
         writable: bool | None = None,
         enabled: bool | None = None,
         model: str | None = None,
@@ -174,7 +160,6 @@ class AutomationService:
             writable=writable,
             enabled=enabled,
             model=model,
-            notifiers=notifiers,
             cooldown_minutes=cooldown_minutes,
         )
 
@@ -223,7 +208,6 @@ class AutomationService:
         every: str | None = None,
         event_type: str | None = None,
         lead_minutes: int | str | None = None,
-        notifiers: list[str] | None = None,
         writable: bool = False,
         start: str | None = None,
         end: str | None = None,
@@ -250,9 +234,6 @@ class AutomationService:
         else:
             raise ValueError("Either 'triggers' list or 'trigger_type' is required")
 
-        if notifiers:
-            self._validate_notifiers(notifiers)
-
         now = datetime.now(UTC)
         automation = Automation(
             task_id=generate_slug(2),
@@ -264,7 +245,6 @@ class AutomationService:
             created_at=now,
             next_run_at=next_run,
             last_run_at=None,
-            notifiers=notifiers or [],
             last_result=None,
             running_since=None,
             writable=writable,
@@ -272,11 +252,6 @@ class AutomationService:
         )
         await self.store.save(automation)
         return automation
-
-    async def set_notifiers(self, task_id: str, notifier_names: list[str]) -> None:
-        await self.get(task_id)
-        self._validate_notifiers(notifier_names)
-        await self.store.set_notifiers(task_id, notifier_names)
 
     async def delete(self, task_id: str) -> None:
         task = await self.get(task_id)

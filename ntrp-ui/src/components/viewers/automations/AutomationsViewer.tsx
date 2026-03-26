@@ -60,7 +60,6 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     handleViewResult,
     handleCreate,
     handleUpdate,
-    availableNotifiers,
     availableModels,
   } = useAutomations(config);
 
@@ -80,7 +79,6 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     viewingResult,
     createMode,
     saving,
-    availableNotifiers,
     activeTab,
     setSelectedIndex,
     setConfirmDelete,
@@ -110,8 +108,6 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
     createDaysOption,
     createEventType,
     createWritable,
-    createNotifiers,
-    createNotifierCursor,
     createCustomDays,
     createDayCursor,
     createModelIndex,
@@ -243,9 +239,6 @@ export function AutomationsViewer({ config, onClose }: AutomationsViewerProps) {
               error={createError}
               triggerError={editingTriggerIndex !== null ? getTriggerValidationError() : null}
               width={width}
-              availableNotifiers={availableNotifiers}
-              notifiers={createNotifiers}
-              notifierCursor={createNotifierCursor}
               customDays={createCustomDays}
               dayCursor={createDayCursor}
               nameValue={nameInput.value}

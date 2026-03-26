@@ -92,6 +92,8 @@ class Runtime:
             services["skill_registry"] = self.skill_registry
         if self.mcp_manager and self.mcp_manager.tools:
             services["mcp"] = self.mcp_manager
+        if self.notifier_service and self.notifier_service.notifiers:
+            services["notifiers"] = self.notifier_service
         return services
 
     def _create_executor(self) -> ToolExecutor:
@@ -251,7 +253,6 @@ class Runtime:
         self.automation_service = AutomationService(
             store=self.stores.automations,
             scheduler=self.scheduler,
-            get_notifiers=lambda: self.notifier_service.notifiers if self.notifier_service else {},
         )
 
     async def _init_mcp(self) -> None:
@@ -314,8 +315,7 @@ class Runtime:
             channel=self.channel,
             source_details=self.source_mgr.get_details(),
             create_session=self.stores.sessions.create,
-            notifiers=self.notifier_service.notifiers if self.notifier_service else {},
-            notification_log=self.stores.notifications,
+            notifiers=self.notifier_service.list_summary() if self.notifier_service else [],
         )
 
     async def start_scheduler(self) -> None:

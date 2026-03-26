@@ -37,7 +37,7 @@ export function AutomationItem({ item, context, textWidth }: AutomationItemProps
     <box flexDirection="column" marginBottom={1}>
       <text>
         <span fg={statusColor}>{statusIcon}</span>
-        <span fg={metaColor}>{` ${triggersLabel(item.triggers)}${builtinBadge}${item.writable ? "  \u270E" : ""}${item.notifiers.length > 0 ? `  \u2192 ${item.notifiers.join(", ")}` : ""}`}</span>
+        <span fg={metaColor}>{` ${triggersLabel(item.triggers)}${builtinBadge}${item.writable ? "  \u270E" : ""}`}</span>
       </text>
       {item.name
         ? <text><strong><span fg={textColor}>{item.name}</span></strong> <span fg={metaColor}>{truncateText(item.description, textWidth - item.name.length - 1)}</span></text>

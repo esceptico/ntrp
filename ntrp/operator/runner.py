@@ -10,11 +10,8 @@ from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted, RunStarted
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.formatting import format_session_memory
-from ntrp.notifiers.base import Notifier
-from ntrp.notifiers.log_store import NotificationLogStore
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
-from ntrp.tools.notify import NotifyTool
 from ntrp.usage import Usage
 
 
@@ -26,15 +23,13 @@ class OperatorDeps:
     channel: Channel
     source_details: dict[str, dict]
     create_session: Callable[[], SessionState]
-    notifiers: dict[str, Notifier]
-    notification_log: NotificationLogStore
+    notifiers: list[dict[str, str]]
 
 
 @dataclass(frozen=True)
 class RunRequest:
     prompt: str
     writable: bool
-    notifiers: list[str]
     source_id: str
     prompt_suffix: str = ""
     model: str | None = None
@@ -59,21 +54,13 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
         source_details=deps.source_details,
         memory_context=memory_context,
         directives=load_directives(),
-        notifier_names=list(deps.notifiers) if deps.notifiers else None,
+        notifiers=deps.notifiers or None,
     )
     system_prompt += request.prompt_suffix
 
     session_state = deps.create_session()
     executor = deps.executor
     tools = executor.get_tools() if request.writable else executor.get_tools(mutates=False)
-
-    if request.notifiers:
-        resolved = [deps.notifiers[name] for name in request.notifiers if name in deps.notifiers]
-        if resolved:
-            notify_tool = NotifyTool(resolved, deps.notification_log, request.source_id)
-            run_registry = executor.registry.copy_with(notify_tool)
-            executor = executor.with_registry(run_registry)
-            tools = [*tools, notify_tool.to_dict()]
 
     agent_config = deps.config
     if request.model:

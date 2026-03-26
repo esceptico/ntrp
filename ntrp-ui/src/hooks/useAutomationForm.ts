@@ -65,7 +65,6 @@ export function buildAutomationPayload(params: {
   name: string;
   description: string;
   model: string;
-  notifiers: string[];
   writable: boolean;
   triggers: Trigger[];
   cooldown_minutes: number | undefined;
@@ -74,7 +73,6 @@ export function buildAutomationPayload(params: {
     name: params.name,
     description: params.description,
     model: params.model,
-    notifiers: params.notifiers,
     writable: params.writable,
     triggers: params.triggers,
     cooldown_minutes: params.cooldown_minutes,
@@ -89,12 +87,10 @@ export function createFocusOrder(params: {
   scheduleMode: "schedule" | "interval";
   daysOption: string;
   eventType: string;
-  hasNotifiers: boolean;
 }): CreateFocus[] {
   if (!params.editingTrigger) {
     // Main form: triggers_list is a single focusable item
     const order: CreateFocus[] = ["name", "description", "model", "triggers_list", "cooldown"];
-    if (params.hasNotifiers) order.push("notifiers");
     order.push("writable");
     return order;
   }
@@ -138,8 +134,6 @@ export interface AutomationFormState {
   createDaysOption: string;
   createEventType: string;
   createWritable: boolean;
-  createNotifiers: string[];
-  createNotifierCursor: number;
   createCustomDays: string[];
   createDayCursor: number;
   triggersList: Trigger[];
@@ -170,8 +164,6 @@ export interface AutomationFormState {
   setCreateDaysOption: React.Dispatch<React.SetStateAction<string>>;
   setCreateEventType: React.Dispatch<React.SetStateAction<string>>;
   setCreateWritable: React.Dispatch<React.SetStateAction<boolean>>;
-  setCreateNotifiers: React.Dispatch<React.SetStateAction<string[]>>;
-  setCreateNotifierCursor: React.Dispatch<React.SetStateAction<number>>;
   setCreateCustomDays: React.Dispatch<React.SetStateAction<string[]>>;
   setCreateDayCursor: React.Dispatch<React.SetStateAction<number>>;
   setTriggersList: React.Dispatch<React.SetStateAction<Trigger[]>>;
@@ -205,8 +197,6 @@ export function useAutomationForm({
   const [createFocus, setCreateFocus] = useState<CreateFocus>("name");
   const [createEditing, setCreateEditing] = useState(false);
   const [createWritable, setCreateWritable] = useState(false);
-  const [createNotifiers, setCreateNotifiers] = useState<string[]>([]);
-  const [createNotifierCursor, setCreateNotifierCursor] = useState(0);
 
   const [triggersList, setTriggersList] = useState<Trigger[]>([]);
   const [triggerCursor, setTriggerCursor] = useState(0);
@@ -337,8 +327,6 @@ export function useAutomationForm({
     setCreateFocus("name");
     setCreateEditing(false);
     setCreateWritable(false);
-    setCreateNotifiers([]);
-    setCreateNotifierCursor(0);
     setCreateError(null);
     setTriggersList([]);
     setTriggerCursor(0);
@@ -413,8 +401,6 @@ export function useAutomationForm({
     }
     setCreateDesc(item.description ?? "");
     setCreateDescCursor((item.description ?? "").length);
-    setCreateNotifiers(item.notifiers ?? []);
-    setCreateNotifierCursor(0);
     setCreateWritable(item.writable);
 
     // Load all triggers into the list
@@ -430,8 +416,6 @@ export function useAutomationForm({
     setCreateMode,
     setCreateError,
     setCreateFocus,
-    setCreateNotifiers,
-    setCreateNotifierCursor,
     setCreateWritable,
     nameInput,
     model,
@@ -448,8 +432,6 @@ export function useAutomationForm({
     createDaysOption: trigger.createDaysOption,
     createEventType: trigger.createEventType,
     createWritable,
-    createNotifiers,
-    createNotifierCursor,
     createCustomDays: trigger.createCustomDays,
     createDayCursor: trigger.createDayCursor,
     triggersList,
@@ -480,8 +462,6 @@ export function useAutomationForm({
     setCreateDaysOption: trigger.setCreateDaysOption,
     setCreateEventType: trigger.setCreateEventType,
     setCreateWritable,
-    setCreateNotifiers,
-    setCreateNotifierCursor,
     setCreateCustomDays: trigger.setCreateCustomDays,
     setCreateDayCursor: trigger.setCreateDayCursor,
     setTriggersList,
