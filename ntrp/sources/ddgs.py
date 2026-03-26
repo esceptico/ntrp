@@ -1,3 +1,4 @@
+import logging
 from urllib.parse import urlparse
 
 import trafilatura
@@ -6,6 +7,8 @@ from trafilatura import bare_extraction
 from trafilatura.settings import use_config
 
 from ntrp.sources.base import WebContentResult, WebSearchResult, WebSearchSource
+
+_logger = logging.getLogger(__name__)
 
 _cfg = use_config()
 _cfg.set("DEFAULT", "DOWNLOAD_TIMEOUT", "10")
@@ -80,6 +83,7 @@ class DDGSWebSource(WebSearchSource):
                     )
                 else:
                     out.append(WebContentResult(title=_guess_title(url), url=url))
-            except Exception:
+            except Exception as e:
+                _logger.warning("Could not fetch content from %s: %s", url, e)
                 out.append(WebContentResult(title=_guess_title(url), url=url))
         return out

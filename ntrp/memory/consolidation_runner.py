@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from ntrp.constants import CONSOLIDATION_PASS_TIMEOUT
 from ntrp.embedder import Embedder
 from ntrp.events.internal import ConsolidationCompleted
 from ntrp.logging import get_logger
@@ -131,16 +132,21 @@ class ConsolidationRunner:
         if self._last_temporal_pass and (now - self._last_temporal_pass) < timedelta(days=1):
             return
         try:
-            created = await temporal_consolidation_pass(
-                self.facts,
-                self.observations,
-                self.model,
-                self.embedder.embed_one,
-                atomic=self._atomic,
+            created = await asyncio.wait_for(
+                temporal_consolidation_pass(
+                    self.facts,
+                    self.observations,
+                    self.model,
+                    self.embedder.embed_one,
+                    atomic=self._atomic,
+                ),
+                timeout=CONSOLIDATION_PASS_TIMEOUT,
             )
             if created > 0:
                 _logger.info("Temporal pass created %d observations", created)
             self._last_temporal_pass = now
+        except TimeoutError:
+            _logger.warning("Temporal consolidation pass timed out after %ds", CONSOLIDATION_PASS_TIMEOUT)
         except Exception as e:
             _logger.warning("Temporal consolidation pass failed: %s", e)
 
@@ -149,15 +155,20 @@ class ConsolidationRunner:
         if self._last_merge_pass and (now - self._last_merge_pass) < timedelta(days=1):
             return
         try:
-            merged = await observation_merge_pass(
-                self.observations,
-                self.model,
-                self.embedder.embed_one,
-                atomic=self._atomic,
+            merged = await asyncio.wait_for(
+                observation_merge_pass(
+                    self.observations,
+                    self.model,
+                    self.embedder.embed_one,
+                    atomic=self._atomic,
+                ),
+                timeout=CONSOLIDATION_PASS_TIMEOUT,
             )
             if merged > 0:
                 _logger.info("Observation merge pass: %d merges", merged)
             self._last_merge_pass = now
+        except TimeoutError:
+            _logger.warning("Observation merge pass timed out after %ds", CONSOLIDATION_PASS_TIMEOUT)
         except Exception as e:
             _logger.warning("Observation merge pass failed: %s", e)
 
@@ -166,17 +177,22 @@ class ConsolidationRunner:
         if self._last_fact_merge_pass and (now - self._last_fact_merge_pass) < timedelta(days=1):
             return
         try:
-            merged = await fact_merge_pass(
-                self.facts,
-                self.observations,
-                self.model,
-                self.embedder.embed_one,
-                atomic=self._atomic,
-                dream_repo=self.dreams,
+            merged = await asyncio.wait_for(
+                fact_merge_pass(
+                    self.facts,
+                    self.observations,
+                    self.model,
+                    self.embedder.embed_one,
+                    atomic=self._atomic,
+                    dream_repo=self.dreams,
+                ),
+                timeout=CONSOLIDATION_PASS_TIMEOUT,
             )
             if merged > 0:
                 _logger.info("Fact merge pass: %d merges", merged)
             self._last_fact_merge_pass = now
+        except TimeoutError:
+            _logger.warning("Fact merge pass timed out after %ds", CONSOLIDATION_PASS_TIMEOUT)
         except Exception as e:
             _logger.warning("Fact merge pass failed: %s", e)
 
@@ -187,16 +203,21 @@ class ConsolidationRunner:
         if self._last_dream_pass and (now - self._last_dream_pass) < timedelta(weeks=1):
             return
         try:
-            created = await run_dream_pass(
-                self.facts,
-                self.dreams,
-                self.model,
-                self.embedder.embed_one,
-                atomic=self._atomic,
+            created = await asyncio.wait_for(
+                run_dream_pass(
+                    self.facts,
+                    self.dreams,
+                    self.model,
+                    self.embedder.embed_one,
+                    atomic=self._atomic,
+                ),
+                timeout=CONSOLIDATION_PASS_TIMEOUT,
             )
             if created > 0:
                 _logger.info("Dream pass created %d dreams", created)
             self._last_dream_pass = now
+        except TimeoutError:
+            _logger.warning("Dream pass timed out after %ds", CONSOLIDATION_PASS_TIMEOUT)
         except Exception as e:
             _logger.warning("Dream pass failed: %s", e)
 

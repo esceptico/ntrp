@@ -23,6 +23,7 @@ BASH_TIMEOUT = 120
 RESEARCH_TIMEOUT = 300
 SUBAGENT_DEFAULT_TIMEOUT = 300
 BACKGROUND_AGENT_TIMEOUT = 3600
+CONSOLIDATION_PASS_TIMEOUT = 300  # per-pass timeout for consolidation LLM operations
 
 
 # --- Text Processing ---
