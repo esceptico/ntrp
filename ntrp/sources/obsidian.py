@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ntrp.sources.base import NotesSource
@@ -73,8 +73,8 @@ class ObsidianSource(NotesSource):
                 source_id=relative_path,
                 title=title,
                 content=content,
-                created_at=datetime.fromtimestamp(stat.st_ctime),
-                updated_at=datetime.fromtimestamp(stat.st_mtime),
+                created_at=datetime.fromtimestamp(stat.st_ctime, tz=UTC),
+                updated_at=datetime.fromtimestamp(stat.st_mtime, tz=UTC),
                 metadata={
                     "path": relative_path,
                     "size_bytes": stat.st_size,
@@ -90,7 +90,8 @@ class ObsidianSource(NotesSource):
             return None
         try:
             return filepath.read_text(encoding="utf-8")
-        except Exception:
+        except Exception as e:
+            _logger.warning("Could not read %s: %s", filepath, e)
             return None
 
     def search(self, pattern: str) -> list[str]:
@@ -102,7 +103,8 @@ class ObsidianSource(NotesSource):
                 content = filepath.read_text(encoding="utf-8")
                 if pattern_lower in content.lower():
                     matches.append(relative_path)
-            except Exception:
+            except Exception as e:
+                _logger.warning("Could not search %s: %s", filepath, e)
                 continue
 
         return matches
@@ -111,9 +113,10 @@ class ObsidianSource(NotesSource):
         result = {}
         for filepath, relative_path in _walk_markdown_files(self.vault_path):
             try:
-                mtime = datetime.fromtimestamp(filepath.stat().st_mtime)
+                mtime = datetime.fromtimestamp(filepath.stat().st_mtime, tz=UTC)
                 result[relative_path] = mtime
-            except Exception:
+            except Exception as e:
+                _logger.warning("Could not stat %s: %s", filepath, e)
                 continue
         return result
 
@@ -129,7 +132,8 @@ class ObsidianSource(NotesSource):
             filepath.parent.mkdir(parents=True, exist_ok=True)
             filepath.write_text(content, encoding="utf-8")
             return True
-        except Exception:
+        except Exception as e:
+            _logger.warning("Could not write %s: %s", filepath, e)
             return False
 
     def exists(self, relative_path: str) -> bool:
@@ -145,7 +149,8 @@ class ObsidianSource(NotesSource):
                 filepath.unlink()
                 return True
             return False
-        except Exception:
+        except Exception as e:
+            _logger.warning("Could not delete %s: %s", filepath, e)
             return False
 
     def move(self, source_path: str, dest_path: str) -> bool:
@@ -157,5 +162,6 @@ class ObsidianSource(NotesSource):
             dest.parent.mkdir(parents=True, exist_ok=True)
             source.rename(dest)
             return True
-        except Exception:
+        except Exception as e:
+            _logger.warning("Could not move %s → %s: %s", source, dest, e)
             return False
