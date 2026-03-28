@@ -86,11 +86,12 @@ class ResearchTool(Tool):
             await ctx.ledger.register(execution.tool_id, task, depth)
 
         remaining = ctx.run.max_depth - ctx.run.current_depth - 1
-        exclude = {"research"} if depth == "quick" or remaining <= 1 else None
+        exclude = {"background", "cancel_background_task", "list_background_tasks", "get_background_result"}
+        if depth == "quick" or remaining <= 1:
+            exclude.add("research")
 
         tools = ctx.registry.get_schemas(mutates=False, capabilities=ctx.capabilities)
-        if exclude:
-            tools = [t for t in tools if t["function"]["name"] not in exclude]
+        tools = [t for t in tools if t["function"]["name"] not in exclude]
         prompt = await self._build_prompt(ctx, depth, remaining, execution.tool_id)
         timeout = DEPTH_TIMEOUTS[depth]
 
