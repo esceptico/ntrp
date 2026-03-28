@@ -1,6 +1,8 @@
+import asyncio
 from typing import Protocol
 
 from ntrp.constants import (
+    COMPACTION_TIMEOUT,
     COMPRESSION_KEEP_RATIO,
     COMPRESSION_THRESHOLD,
     MAX_MESSAGES,
@@ -103,7 +105,10 @@ async def compact_summarize(
 ) -> str:
     conversation_text = _build_conversation_text(messages, start, end)
     client = get_completion_client(model)
-    response = await client.completion(**_build_summarize_request(conversation_text, model, summary_max_tokens))
+    response = await asyncio.wait_for(
+        client.completion(**_build_summarize_request(conversation_text, model, summary_max_tokens)),
+        timeout=COMPACTION_TIMEOUT,
+    )
     content = response.choices[0].message.content
     if not content:
         return "Unable to summarize."

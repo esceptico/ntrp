@@ -3,7 +3,7 @@ import { api } from "./fetch.js";
 
 export async function compactContext(config: Config, sessionId?: string): Promise<{ status: string; message: string }> {
   const body = sessionId ? { session_id: sessionId } : {};
-  return api.post<{ status: string; message: string }>(`${config.serverUrl}/compact`, body);
+  return api.post<{ status: string; message: string }>(`${config.serverUrl}/compact`, body, { timeout: 0 });
 }
 
 export async function getContextUsage(config: Config, sessionId?: string): Promise<{
