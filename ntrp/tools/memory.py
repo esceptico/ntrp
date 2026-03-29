@@ -4,6 +4,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ntrp.memory.formatting import format_memory_context
+from ntrp.memory.models import SourceType
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
@@ -65,7 +66,7 @@ class RememberTool(Tool):
 
         result = await memory.remember(
             text=fact,
-            source_type="chat",
+            source_type=SourceType.CHAT,
             source_ref=source,
             happened_at=event_time,
         )

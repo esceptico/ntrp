@@ -5,7 +5,7 @@ import aiosqlite
 
 from ntrp.database import serialize_embedding
 from ntrp.memory.fts import build_fts_query
-from ntrp.memory.models import Embedding, Entity, EntityRef, Fact
+from ntrp.memory.models import Embedding, Entity, EntityRef, Fact, SourceType
 
 _SQL_GET_FACT = "SELECT * FROM facts WHERE id = ?"
 _SQL_COUNT_FACTS = "SELECT COUNT(*) FROM facts"
@@ -221,7 +221,7 @@ class FactRepository:
     async def create(
         self,
         text: str,
-        source_type: str,
+        source_type: SourceType,
         source_ref: str | None = None,
         embedding: Embedding | None = None,
         happened_at: datetime | None = None,

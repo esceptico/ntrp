@@ -6,6 +6,7 @@ from ntrp.events.internal import RunCompleted
 from ntrp.logging import get_logger
 from ntrp.memory.chat_extraction import extract_from_chat
 from ntrp.memory.facts import FactMemory
+from ntrp.memory.models import SourceType
 
 _logger = get_logger(__name__)
 
@@ -57,7 +58,7 @@ def create_chat_extraction_handler(memory: FactMemory, channel: Channel) -> Call
         for fact_text in facts:
             await memory.remember(
                 text=fact_text,
-                source_type="chat",
+                source_type=SourceType.CHAT,
                 source_ref=source_ref,
             )
         return len(facts)

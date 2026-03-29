@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import pytest_asyncio
 
-from ntrp.memory.models import Fact
+from ntrp.memory.models import Fact, SourceType
 from ntrp.memory.retrieval import (
     entity_expand,
     hybrid_search,
@@ -77,7 +77,7 @@ class TestScoreFact:
             id=1,
             text="recent",
             embedding=None,
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             source_ref=None,
             created_at=now,
             happened_at=now,
@@ -89,7 +89,7 @@ class TestScoreFact:
             id=2,
             text="old",
             embedding=None,
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             source_ref=None,
             created_at=old,
             happened_at=old,
@@ -110,7 +110,7 @@ class TestScoreFact:
             id=1,
             text="frequent",
             embedding=None,
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             source_ref=None,
             created_at=now,
             happened_at=now,
@@ -122,7 +122,7 @@ class TestScoreFact:
             id=2,
             text="rare",
             embedding=None,
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             source_ref=None,
             created_at=now,
             happened_at=now,
@@ -142,7 +142,7 @@ class TestScoreFact:
             id=1,
             text="test",
             embedding=None,
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             source_ref=None,
             created_at=now,
             happened_at=now,
@@ -163,7 +163,7 @@ class TestHybridSearch:
         emb = mock_embedding("test query")
         await repo.create(
             text="test query content",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
         )
 
@@ -183,9 +183,9 @@ class TestEntityExpand:
     @pytest.mark.asyncio
     async def test_expands_through_shared_entities(self, repo: FactRepository):
         f1 = await repo.create(
-            text="Alice works at Google", source_type="test", embedding=mock_embedding("alice google")
+            text="Alice works at Google", source_type=SourceType.EXPLICIT, embedding=mock_embedding("alice google")
         )
-        f2 = await repo.create(text="Alice likes hiking", source_type="test")
+        f2 = await repo.create(text="Alice likes hiking", source_type=SourceType.EXPLICIT)
 
         e = await repo.create_entity(name="Alice")
         await repo.add_entity_ref(f1.id, "Alice", e.id)
@@ -205,9 +205,9 @@ class TestEntityExpand:
         e_rare = await repo.create_entity(name="UniqueEntity")
         e_common = await repo.create_entity(name="CommonEntity")
 
-        f_seed = await repo.create(text="Seed fact", source_type="test")
-        f_rare = await repo.create(text="Rare fact", source_type="test")
-        f_common = await repo.create(text="Common fact", source_type="test")
+        f_seed = await repo.create(text="Seed fact", source_type=SourceType.EXPLICIT)
+        f_rare = await repo.create(text="Rare fact", source_type=SourceType.EXPLICIT)
+        f_common = await repo.create(text="Common fact", source_type=SourceType.EXPLICIT)
 
         await repo.add_entity_ref(f_seed.id, "UniqueEntity", e_rare.id)
         await repo.add_entity_ref(f_seed.id, "CommonEntity", e_common.id)
@@ -216,7 +216,7 @@ class TestEntityExpand:
 
         # Add many more facts for common entity to increase its frequency
         for i in range(10):
-            f = await repo.create(text=f"Common fact {i}", source_type="test")
+            f = await repo.create(text=f"Common fact {i}", source_type=SourceType.EXPLICIT)
             await repo.add_entity_ref(f.id, "CommonEntity", e_common.id)
 
         expansion = await entity_expand(repo, [f_seed.id])
@@ -227,11 +227,11 @@ class TestEntityExpand:
     @pytest.mark.asyncio
     async def test_respects_max_facts(self, repo: FactRepository):
         e = await repo.create_entity(name="Alice")
-        seed = await repo.create(text="Seed", source_type="test")
+        seed = await repo.create(text="Seed", source_type=SourceType.EXPLICIT)
         await repo.add_entity_ref(seed.id, "Alice", e.id)
 
         for i in range(20):
-            f = await repo.create(text=f"Fact {i}", source_type="test")
+            f = await repo.create(text=f"Fact {i}", source_type=SourceType.EXPLICIT)
             await repo.add_entity_ref(f.id, "Alice", e.id)
 
         expansion = await entity_expand(repo, [seed.id], max_facts=5)
@@ -244,7 +244,7 @@ class TestRetrieveFacts:
         emb = mock_embedding("guitar music")
         await repo.create(
             text="I play guitar",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
         )
 
@@ -263,8 +263,8 @@ class TestRetrieveFacts:
     @pytest.mark.asyncio
     async def test_expands_through_entities(self, repo: FactRepository):
         emb = mock_embedding("main topic")
-        f1 = await repo.create(text="main topic fact", source_type="test", embedding=emb)
-        f2 = await repo.create(text="related fact via entity", source_type="test")
+        f1 = await repo.create(text="main topic fact", source_type=SourceType.EXPLICIT, embedding=emb)
+        f2 = await repo.create(text="related fact via entity", source_type=SourceType.EXPLICIT)
 
         e = await repo.create_entity(name="SharedEntity")
         await repo.add_entity_ref(f1.id, "SharedEntity", e.id)
@@ -283,7 +283,7 @@ class TestRetrieveWithObservations:
         emb = mock_embedding("morning routine")
         await repo.create(
             text="I wake up early",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
         )
         await obs_repo.create(

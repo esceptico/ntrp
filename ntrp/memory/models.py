@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 import numpy as np
@@ -8,6 +9,11 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from ntrp.database import deserialize_embedding
 
 type Embedding = np.ndarray
+
+
+class SourceType(StrEnum):
+    CHAT = "chat"
+    EXPLICIT = "explicit"
 
 
 def _parse_datetime(value: Any) -> datetime | None:
@@ -103,7 +109,7 @@ class Fact(_MemoryModel):
     id: int
     text: str
     embedding: Embedding | None
-    source_type: str
+    source_type: SourceType
     source_ref: str | None
     created_at: datetime
     happened_at: datetime | None

@@ -10,18 +10,20 @@ from ntrp.llm.models import get_model
 from ntrp.llm.types import (
     Choice,
     CompletionResponse,
+    FinishReason,
     FunctionCall,
     Message,
+    Role,
     ToolCall,
     Usage,
 )
 from ntrp.llm.utils import blocks_to_text, parse_args
 
-_FINISH_REASONS = {
-    "end_turn": "stop",
-    "tool_use": "tool_calls",
-    "max_tokens": "length",
-    "stop_sequence": "stop",
+_FINISH_REASONS: dict[str, FinishReason] = {
+    "end_turn": FinishReason.STOP,
+    "tool_use": FinishReason.TOOL_CALLS,
+    "max_tokens": FinishReason.LENGTH,
+    "stop_sequence": FinishReason.STOP,
 }
 
 
@@ -168,7 +170,7 @@ class AnthropicClient(CompletionClient):
     # --- Message conversion ---
 
     def _split_system(self, messages: list[dict]) -> tuple[list[dict] | None, list[dict]]:
-        if not messages or messages[0].get("role") != "system":
+        if not messages or messages[0].get("role") != Role.SYSTEM:
             return None, messages
 
         content = messages[0]["content"]
@@ -179,13 +181,13 @@ class AnthropicClient(CompletionClient):
     def _convert_messages(self, messages: list[dict]) -> list[dict]:
         result: list[dict] = []
         for msg in messages:
-            role = msg["role"]
-            if role == "assistant":
-                result.append(self._convert_assistant(msg))
-            elif role == "tool":
-                self._append_tool_result(result, msg)
-            elif role == "user":
-                result.append({"role": "user", "content": self._convert_user_content(msg["content"])})
+            match msg["role"]:
+                case Role.ASSISTANT:
+                    result.append(self._convert_assistant(msg))
+                case Role.TOOL:
+                    self._append_tool_result(result, msg)
+                case Role.USER:
+                    result.append({"role": Role.USER, "content": self._convert_user_content(msg["content"])})
         return result
 
     def _convert_user_content(self, content: str | list) -> str | list[dict]:
@@ -223,7 +225,7 @@ class AnthropicClient(CompletionClient):
                 }
             )
 
-        return {"role": "assistant", "content": content_blocks or ""}
+        return {"role": Role.ASSISTANT, "content": content_blocks or ""}
 
     def _append_tool_result(self, result: list[dict], msg: dict) -> None:
         block = {
@@ -232,12 +234,12 @@ class AnthropicClient(CompletionClient):
             "content": msg["content"],
         }
         # Merge consecutive tool results into one user message
-        if result and result[-1]["role"] == "user" and isinstance(result[-1]["content"], list):
+        if result and result[-1]["role"] == Role.USER and isinstance(result[-1]["content"], list):
             last_types = {b.get("type") for b in result[-1]["content"] if isinstance(b, dict)}
             if "tool_result" in last_types:
                 result[-1]["content"].append(block)
                 return
-        result.append({"role": "user", "content": [block]})
+        result.append({"role": Role.USER, "content": [block]})
 
     def _convert_tools(self, tools: list[dict]) -> list[dict]:
         return [
@@ -278,7 +280,7 @@ class AnthropicClient(CompletionClient):
         usage = self._parse_usage(response.usage)
 
         message = Message(
-            role="assistant",
+            role=Role.ASSISTANT,
             content=content,
             tool_calls=tool_calls or None,
             reasoning_content=reasoning,
@@ -288,7 +290,7 @@ class AnthropicClient(CompletionClient):
             choices=[
                 Choice(
                     message=message,
-                    finish_reason=_FINISH_REASONS.get(response.stop_reason, response.stop_reason),
+                    finish_reason=_FINISH_REASONS.get(response.stop_reason),
                 )
             ],
             usage=usage,

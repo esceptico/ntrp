@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 
+from ntrp.memory.models import SourceType
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
@@ -59,7 +60,7 @@ class TestTemporalPass:
         # Pattern facts — declining sleep
         f1 = await fact_repo.create(
             text="User slept 7.5 hours",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("sleep 7.5"),
             happened_at=base,
         )
@@ -67,7 +68,7 @@ class TestTemporalPass:
 
         f2 = await fact_repo.create(
             text="User slept 5 hours",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("sleep 5"),
             happened_at=base + timedelta(days=7),
         )
@@ -75,7 +76,7 @@ class TestTemporalPass:
 
         f3 = await fact_repo.create(
             text="User slept 4 hours, felt exhausted",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("sleep 4"),
             happened_at=base + timedelta(days=14),
         )
@@ -83,7 +84,7 @@ class TestTemporalPass:
 
         f4 = await fact_repo.create(
             text="User's resting heart rate was elevated",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("heart rate"),
             happened_at=base + timedelta(days=15),
         )
@@ -92,7 +93,7 @@ class TestTemporalPass:
         # Noise facts — same entity, same window, unrelated
         noise1 = await fact_repo.create(
             text="User had coffee with Sarah",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("coffee sarah"),
             happened_at=base + timedelta(days=2),
         )
@@ -100,7 +101,7 @@ class TestTemporalPass:
 
         noise2 = await fact_repo.create(
             text="User finished reading a book",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("finished book"),
             happened_at=base + timedelta(days=9),
         )
@@ -108,7 +109,7 @@ class TestTemporalPass:
 
         noise3 = await fact_repo.create(
             text="User went grocery shopping",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("grocery"),
             happened_at=base + timedelta(days=13),
         )
@@ -163,7 +164,7 @@ class TestTemporalPass:
         for i in range(4):
             f = await fact_repo.create(
                 text=f"User fact {i}",
-                source_type="test",
+                source_type=SourceType.EXPLICIT,
                 embedding=mock_embedding(f"fact {i}"),
                 happened_at=now - timedelta(days=i),
             )
@@ -194,7 +195,7 @@ class TestTemporalPass:
         for i in range(4):
             f = await fact_repo.create(
                 text=f"User did random thing {i}",
-                source_type="test",
+                source_type=SourceType.EXPLICIT,
                 embedding=mock_embedding(f"random {i}"),
                 happened_at=now - timedelta(days=i),
             )
@@ -227,7 +228,7 @@ class TestTemporalPass:
         for i in range(2):
             f = await fact_repo.create(
                 text=f"Alice fact {i}",
-                source_type="test",
+                source_type=SourceType.EXPLICIT,
                 embedding=mock_embedding(f"alice {i}"),
                 happened_at=now - timedelta(days=i),
             )

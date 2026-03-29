@@ -11,6 +11,7 @@ from ntrp.constants import (
 from ntrp.context.prompts import SUMMARIZE_PROMPT_TEMPLATE
 from ntrp.llm.models import get_model
 from ntrp.llm.router import get_completion_client
+from ntrp.llm.types import Role
 from ntrp.llm.utils import blocks_to_text
 
 
@@ -58,7 +59,7 @@ def compactable_range(
     keep_count = max(4, int(compressible * keep_ratio))
     tail_start = n - keep_count
 
-    while tail_start < n and messages[tail_start]["role"] == "tool":
+    while tail_start < n and messages[tail_start]["role"] == Role.TOOL:
         tail_start += 1
 
     if tail_start <= 1 or tail_start >= n:
@@ -70,7 +71,7 @@ def compactable_range(
 def _build_conversation_text(messages: list, start: int, end: int) -> str:
     text_parts = []
     for msg in messages[start:end]:
-        if (role := msg["role"]) == "tool":
+        if (role := msg["role"]) == Role.TOOL:
             continue
         content = blocks_to_text(msg["content"])
         if not content:
@@ -88,8 +89,8 @@ def _build_summarize_request(conversation_text: str, model: str, summary_max_tok
     return {
         "model": model,
         "messages": [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": conversation_text},
+            {"role": Role.SYSTEM, "content": prompt},
+            {"role": Role.USER, "content": conversation_text},
         ],
         "temperature": 0.3,
         "max_tokens": summary_max_tokens,
@@ -118,7 +119,7 @@ async def compact_summarize(
 def _build_compacted_messages(messages: list[dict], end: int, summary: str) -> list[dict]:
     return [
         messages[0],
-        {"role": "assistant", "content": f"[Session State Handoff]\n{summary}"},
+        {"role": Role.ASSISTANT, "content": f"[Session State Handoff]\n{summary}"},
         *messages[end:],
     ]
 

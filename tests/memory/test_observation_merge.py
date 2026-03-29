@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 import pytest_asyncio
 
+from ntrp.memory.models import SourceType
 from ntrp.memory.observation_merge import observation_merge_pass
 from ntrp.memory.retrieval import cosine_similarity, find_top_pair
 from ntrp.memory.store.base import GraphDatabase
@@ -409,7 +410,7 @@ class TestTemporalPassDedup:
         for i in range(5):
             f = await fact_repo.create(
                 text=f"TestEntity did thing {i}",
-                source_type="test",
+                source_type=SourceType.EXPLICIT,
                 embedding=mock_embedding(f"entity-fact-{i}"),
                 happened_at=now - timedelta(days=10 - i),
             )

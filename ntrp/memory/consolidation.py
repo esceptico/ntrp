@@ -10,6 +10,7 @@ from ntrp.constants import (
     CONSOLIDATION_TEMPERATURE,
 )
 from ntrp.llm.router import get_completion_client
+from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact, Observation
 from ntrp.memory.prompts import CONSOLIDATION_PROMPT
@@ -96,7 +97,7 @@ async def _call_consolidation_llm(prompt: str, model: str) -> list[Consolidation
     client = get_completion_client(model)
     response = await client.completion(
         model=model,
-        messages=[{"role": "user", "content": prompt}],
+        messages=[{"role": Role.USER, "content": prompt}],
         response_format=ConsolidationResponse,
         temperature=CONSOLIDATION_TEMPERATURE,
     )

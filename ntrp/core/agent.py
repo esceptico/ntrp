@@ -10,7 +10,7 @@ from ntrp.events.internal import ContextCompressed
 from ntrp.events.sse import SSEEvent, TextDeltaEvent, TextEvent, ToolResultEvent
 from ntrp.llm.models import get_model
 from ntrp.llm.router import get_completion_client
-from ntrp.llm.types import CompletionResponse, ToolCall
+from ntrp.llm.types import CompletionResponse, Role, ToolCall
 from ntrp.logging import get_logger
 from ntrp.tools.core.context import ToolContext
 from ntrp.tools.executor import ToolExecutor
@@ -64,12 +64,12 @@ class Agent:
         self.messages.clear()
         if history:
             self.messages.extend(history)
-            self.messages.append({"role": "user", "content": task})
+            self.messages.append({"role": Role.USER, "content": task})
         else:
             self.messages.extend(
                 [
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": task},
+                    {"role": Role.SYSTEM, "content": self.system_prompt},
+                    {"role": Role.USER, "content": task},
                 ]
             )
 
@@ -127,7 +127,7 @@ class Agent:
                 result = "Error: tool execution failed"
             self.messages.append(
                 {
-                    "role": "tool",
+                    "role": Role.TOOL,
                     "tool_call_id": tc.id,
                     "content": result,
                 }

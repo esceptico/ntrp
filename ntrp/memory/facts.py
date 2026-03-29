@@ -26,7 +26,7 @@ from ntrp.logging import get_logger
 from ntrp.memory.consolidation_runner import ConsolidationRunner
 from ntrp.memory.decay import decay_score
 from ntrp.memory.extraction import Extractor
-from ntrp.memory.models import ExtractionResult, Fact, FactContext, Observation
+from ntrp.memory.models import ExtractionResult, Fact, FactContext, Observation, SourceType
 from ntrp.memory.retrieval import retrieve_with_observations
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.dreams import DreamRepository
@@ -205,7 +205,7 @@ class FactMemory:
     async def remember(
         self,
         text: str,
-        source_type: str = "explicit",
+        source_type: SourceType = SourceType.EXPLICIT,
         source_ref: str | None = None,
         happened_at: datetime | None = None,
     ) -> RememberFactResult | None:
