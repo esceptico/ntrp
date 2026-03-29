@@ -15,6 +15,7 @@ from ntrp.constants import (
     OBSERVATION_MERGE_TEMPERATURE,
 )
 from ntrp.llm.router import get_completion_client
+from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Observation
 from ntrp.memory.prompts import OBSERVATION_MERGE_PROMPT
@@ -51,7 +52,7 @@ async def _llm_merge_decision(
         client = get_completion_client(model)
         resp = await client.completion(
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": Role.USER, "content": prompt}],
             response_format=MergeAction,
             temperature=OBSERVATION_MERGE_TEMPERATURE,
         )

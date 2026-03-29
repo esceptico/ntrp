@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from ntrp.memory.formatting import format_memory_context
-from ntrp.memory.models import Fact, FactContext, Observation
+from ntrp.memory.models import Fact, FactContext, Observation, SourceType
 
 
 def make_fact(id: int, text: str) -> Fact:
@@ -10,7 +10,7 @@ def make_fact(id: int, text: str) -> Fact:
         id=id,
         text=text,
         embedding=None,
-        source_type="test",
+        source_type=SourceType.EXPLICIT,
         source_ref=None,
         created_at=now,
         happened_at=None,

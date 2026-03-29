@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 
+from ntrp.memory.models import SourceType
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
 from tests.conftest import mock_embedding
@@ -16,7 +17,7 @@ class TestFactCRUD:
     async def test_create_and_get(self, repo: FactRepository):
         fact = await repo.create(
             text="Test fact",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("test"),
         )
 
@@ -36,7 +37,7 @@ class TestFactCRUD:
     async def test_delete(self, repo: FactRepository):
         fact = await repo.create(
             text="To delete",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
         )
 
         await repo.delete(fact.id)
@@ -44,8 +45,8 @@ class TestFactCRUD:
 
     @pytest.mark.asyncio
     async def test_list_recent(self, repo: FactRepository):
-        await repo.create(text="Fact 1", source_type="test")
-        await repo.create(text="Fact 2", source_type="test")
+        await repo.create(text="Fact 1", source_type=SourceType.EXPLICIT)
+        await repo.create(text="Fact 2", source_type=SourceType.EXPLICIT)
 
         facts = await repo.list_recent(limit=10)
         assert len(facts) >= 2
@@ -53,7 +54,7 @@ class TestFactCRUD:
     @pytest.mark.asyncio
     async def test_count(self, repo: FactRepository):
         initial = await repo.count()
-        await repo.create(text="New fact", source_type="test")
+        await repo.create(text="New fact", source_type=SourceType.EXPLICIT)
         assert await repo.count() == initial + 1
 
 
@@ -62,7 +63,7 @@ class TestReinforce:
     async def test_reinforce_updates_access(self, repo: FactRepository):
         fact = await repo.create(
             text="Reinforce test",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
         )
         assert fact.access_count == 0
 
@@ -77,8 +78,8 @@ class TestReinforce:
 
     @pytest.mark.asyncio
     async def test_reinforce_multiple(self, repo: FactRepository):
-        f1 = await repo.create(text="Fact 1", source_type="test")
-        f2 = await repo.create(text="Fact 2", source_type="test")
+        f1 = await repo.create(text="Fact 1", source_type=SourceType.EXPLICIT)
+        f2 = await repo.create(text="Fact 2", source_type=SourceType.EXPLICIT)
 
         await repo.reinforce([f1.id, f2.id])
 
@@ -89,7 +90,7 @@ class TestReinforce:
 class TestEntityRefs:
     @pytest.mark.asyncio
     async def test_add_and_get_entity_refs(self, repo: FactRepository):
-        fact = await repo.create(text="Alice works here", source_type="test")
+        fact = await repo.create(text="Alice works here", source_type=SourceType.EXPLICIT)
 
         ref = await repo.add_entity_ref(fact.id, "Alice")
 
@@ -101,8 +102,8 @@ class TestEntityRefs:
 
     @pytest.mark.asyncio
     async def test_get_facts_for_entity(self, repo: FactRepository):
-        f1 = await repo.create(text="Alice fact 1", source_type="test")
-        f2 = await repo.create(text="Alice fact 2", source_type="test")
+        f1 = await repo.create(text="Alice fact 1", source_type=SourceType.EXPLICIT)
+        f2 = await repo.create(text="Alice fact 2", source_type=SourceType.EXPLICIT)
 
         await repo.add_entity_ref(f1.id, "Alice")
         await repo.add_entity_ref(f2.id, "Alice")
@@ -114,8 +115,8 @@ class TestEntityRefs:
 class TestConsolidation:
     @pytest.mark.asyncio
     async def test_list_unconsolidated(self, repo: FactRepository):
-        f1 = await repo.create(text="Fact 1", source_type="test")
-        f2 = await repo.create(text="Fact 2", source_type="test")
+        f1 = await repo.create(text="Fact 1", source_type=SourceType.EXPLICIT)
+        f2 = await repo.create(text="Fact 2", source_type=SourceType.EXPLICIT)
 
         unconsolidated = await repo.list_unconsolidated(limit=10)
         fact_ids = [f.id for f in unconsolidated]
@@ -124,7 +125,7 @@ class TestConsolidation:
 
     @pytest.mark.asyncio
     async def test_mark_consolidated(self, repo: FactRepository):
-        fact = await repo.create(text="To consolidate", source_type="test")
+        fact = await repo.create(text="To consolidate", source_type=SourceType.EXPLICIT)
         assert fact.consolidated_at is None
 
         await repo.mark_consolidated(fact.id)
@@ -134,8 +135,8 @@ class TestConsolidation:
 
     @pytest.mark.asyncio
     async def test_consolidated_facts_not_in_unconsolidated(self, repo: FactRepository):
-        f1 = await repo.create(text="Fact 1", source_type="test")
-        f2 = await repo.create(text="Fact 2", source_type="test")
+        f1 = await repo.create(text="Fact 1", source_type=SourceType.EXPLICIT)
+        f2 = await repo.create(text="Fact 2", source_type=SourceType.EXPLICIT)
 
         await repo.mark_consolidated(f1.id)
 
@@ -151,7 +152,7 @@ class TestVectorSearch:
         emb = mock_embedding("guitar music")
         await repo.create(
             text="I play guitar",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
         )
 
@@ -204,9 +205,9 @@ class TestEntities:
 class TestGetFactsForEntity:
     @pytest.mark.asyncio
     async def test_gets_facts_with_user_entity(self, repo: FactRepository):
-        f1 = await repo.create(text="User works at Google", source_type="test")
-        f2 = await repo.create(text="User prefers Python", source_type="test")
-        f3 = await repo.create(text="Alice likes hiking", source_type="test")
+        f1 = await repo.create(text="User works at Google", source_type=SourceType.EXPLICIT)
+        f2 = await repo.create(text="User prefers Python", source_type=SourceType.EXPLICIT)
+        f3 = await repo.create(text="Alice likes hiking", source_type=SourceType.EXPLICIT)
 
         await repo.add_entity_ref(f1.id, "User")
         await repo.add_entity_ref(f2.id, "User")
@@ -221,7 +222,7 @@ class TestGetFactsForEntity:
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_no_user_entity(self, repo: FactRepository):
-        await repo.create(text="Random fact", source_type="test")
+        await repo.create(text="Random fact", source_type=SourceType.EXPLICIT)
 
         user_facts = await repo.get_facts_for_entity("User", limit=10)
         assert user_facts == []
@@ -230,7 +231,7 @@ class TestGetFactsForEntity:
 class TestEntityExpansion:
     @pytest.mark.asyncio
     async def test_get_entity_ids_for_facts(self, repo: FactRepository):
-        f1 = await repo.create(text="Fact 1", source_type="test")
+        f1 = await repo.create(text="Fact 1", source_type=SourceType.EXPLICIT)
         e1 = await repo.create_entity(name="Alice")
         await repo.add_entity_ref(f1.id, "Alice", e1.id)
 
@@ -240,8 +241,8 @@ class TestEntityExpansion:
     @pytest.mark.asyncio
     async def test_get_facts_for_entity_id(self, repo: FactRepository):
         e1 = await repo.create_entity(name="Alice")
-        f1 = await repo.create(text="Fact about Alice", source_type="test")
-        f2 = await repo.create(text="Another Alice fact", source_type="test")
+        f1 = await repo.create(text="Fact about Alice", source_type=SourceType.EXPLICIT)
+        f2 = await repo.create(text="Another Alice fact", source_type=SourceType.EXPLICIT)
         await repo.add_entity_ref(f1.id, "Alice", e1.id)
         await repo.add_entity_ref(f2.id, "Alice", e1.id)
 
@@ -251,7 +252,7 @@ class TestEntityExpansion:
     @pytest.mark.asyncio
     async def test_count_entity_facts_by_id(self, repo: FactRepository):
         e1 = await repo.create_entity(name="Alice")
-        f1 = await repo.create(text="Fact 1", source_type="test")
+        f1 = await repo.create(text="Fact 1", source_type=SourceType.EXPLICIT)
         await repo.add_entity_ref(f1.id, "Alice", e1.id)
 
         count = await repo.count_entity_facts_by_id(e1.id)

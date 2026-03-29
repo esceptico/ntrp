@@ -1,6 +1,21 @@
 from dataclasses import dataclass
+from enum import StrEnum
 
 from ntrp.usage import Usage
+
+
+class Role(StrEnum):
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL = "tool"
+
+
+class FinishReason(StrEnum):
+    STOP = "stop"
+    TOOL_CALLS = "tool_calls"
+    LENGTH = "length"
+    CONTENT_FILTER = "content_filter"
 
 
 @dataclass(frozen=True)
@@ -19,7 +34,7 @@ class ToolCall:
 
 @dataclass(frozen=True)
 class Message:
-    role: str
+    role: Role
     content: str | None
     tool_calls: list[ToolCall] | None
     reasoning_content: str | None
@@ -28,7 +43,7 @@ class Message:
 @dataclass(frozen=True)
 class Choice:
     message: Message
-    finish_reason: str | None
+    finish_reason: FinishReason | None
 
 
 @dataclass(frozen=True)

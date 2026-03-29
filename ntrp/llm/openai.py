@@ -8,12 +8,23 @@ from ntrp.llm.base import CompletionClient, EmbeddingClient
 from ntrp.llm.types import (
     Choice,
     CompletionResponse,
+    FinishReason,
     FunctionCall,
     Message,
+    Role,
     ToolCall,
     Usage,
 )
 from ntrp.llm.utils import blocks_to_text
+
+
+def _map_finish_reason(reason: str | None) -> FinishReason:
+    if not reason:
+        return FinishReason.STOP
+    try:
+        return FinishReason(reason)
+    except ValueError:
+        return FinishReason.STOP
 
 
 class OpenAIClient(CompletionClient, EmbeddingClient):
@@ -118,7 +129,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
 
         content_parts: list[str] = []
         tool_call_chunks: dict[int, dict] = {}
-        finish_reason = "stop"
+        finish_reason = FinishReason.STOP
         usage_chunk = None
         reasoning_parts: list[str] = []
 
@@ -130,7 +141,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
 
             choice = chunk.choices[0]
             if choice.finish_reason:
-                finish_reason = choice.finish_reason
+                finish_reason = _map_finish_reason(choice.finish_reason)
             delta = choice.delta
 
             if delta.content:
@@ -180,7 +191,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         reasoning = "".join(reasoning_parts) if reasoning_parts else None
 
         message = Message(
-            role="assistant",
+            role=Role.ASSISTANT,
             content=content,
             tool_calls=tool_calls,
             reasoning_content=reasoning,
@@ -209,12 +220,14 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
             content = msg["content"]
             if not isinstance(content, list):
                 result.append(msg)
-            elif msg["role"] == "system":
-                result.append({**msg, "content": blocks_to_text(content)})
-            elif msg["role"] == "user":
-                result.append({**msg, "content": self._convert_user_content(content)})
-            else:
-                result.append(msg)
+                continue
+            match msg["role"]:
+                case Role.SYSTEM:
+                    result.append({**msg, "content": blocks_to_text(content)})
+                case Role.USER:
+                    result.append({**msg, "content": self._convert_user_content(content)})
+                case _:
+                    result.append(msg)
         return result
 
     def _convert_user_content(self, content: list) -> list[dict]:
@@ -268,14 +281,14 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
             reasoning_content = extra.get("reasoning_content")
 
         message = Message(
-            role=msg.role,
+            role=Role(msg.role),
             content=msg.content,
             tool_calls=tool_calls,
             reasoning_content=reasoning_content,
         )
 
         return CompletionResponse(
-            choices=[Choice(message=message, finish_reason=choice.finish_reason)],
+            choices=[Choice(message=message, finish_reason=_map_finish_reason(choice.finish_reason))],
             usage=usage,
             model=model,
         )

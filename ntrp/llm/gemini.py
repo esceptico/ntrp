@@ -12,8 +12,10 @@ from ntrp.llm.base import CompletionClient, EmbeddingClient
 from ntrp.llm.types import (
     Choice,
     CompletionResponse,
+    FinishReason,
     FunctionCall,
     Message,
+    Role,
     ToolCall,
     Usage,
 )
@@ -82,7 +84,7 @@ class GeminiClient(CompletionClient, EmbeddingClient):
     def _build_tool_name_map(self, messages: list[dict]) -> dict[str, str]:
         name_map: dict[str, str] = {}
         for msg in messages:
-            if msg["role"] == "assistant":
+            if msg["role"] == Role.ASSISTANT:
                 for tc in msg.get("tool_calls", []):
                     name_map[tc["id"]] = tc["function"]["name"]
         return name_map
@@ -93,18 +95,17 @@ class GeminiClient(CompletionClient, EmbeddingClient):
         tool_name_map = self._build_tool_name_map(messages)
 
         for msg in messages:
-            role = msg["role"]
-
-            if role == "system":
-                system_instruction = blocks_to_text(msg["content"])
-            elif role == "user":
-                contents.append(self._convert_user(msg))
-            elif role == "assistant":
-                if content := self._convert_assistant(msg):
-                    contents.append(content)
-            elif role == "tool":
-                part = self._convert_tool_result(msg, tool_name_map)
-                self._append_tool_part(contents, part)
+            match msg["role"]:
+                case Role.SYSTEM:
+                    system_instruction = blocks_to_text(msg["content"])
+                case Role.USER:
+                    contents.append(self._convert_user(msg))
+                case Role.ASSISTANT:
+                    if content := self._convert_assistant(msg):
+                        contents.append(content)
+                case Role.TOOL:
+                    part = self._convert_tool_result(msg, tool_name_map)
+                    self._append_tool_part(contents, part)
 
         return system_instruction, contents
 
@@ -234,7 +235,7 @@ class GeminiClient(CompletionClient, EmbeddingClient):
         finish_reason = self._map_finish_reason(candidate.finish_reason)
 
         message = Message(
-            role="assistant",
+            role=Role.ASSISTANT,
             content=content,
             tool_calls=tool_calls or None,
             reasoning_content=None,
@@ -247,9 +248,9 @@ class GeminiClient(CompletionClient, EmbeddingClient):
         )
 
     def _empty_response(self, model: str, usage: Usage) -> CompletionResponse:
-        message = Message(role="assistant", content=None, tool_calls=None, reasoning_content=None)
+        message = Message(role=Role.ASSISTANT, content=None, tool_calls=None, reasoning_content=None)
         return CompletionResponse(
-            choices=[Choice(message=message, finish_reason="stop")],
+            choices=[Choice(message=message, finish_reason=FinishReason.STOP)],
             usage=usage,
             model=model,
         )
@@ -279,15 +280,15 @@ class GeminiClient(CompletionClient, EmbeddingClient):
         content = "\n".join(text_parts) if text_parts else None
         return content, tool_calls
 
-    def _map_finish_reason(self, reason) -> str:
-        mapping = {
-            "STOP": "stop",
-            "MAX_TOKENS": "length",
-            "SAFETY": "content_filter",
-            "FinishReason.STOP": "stop",
-            "FinishReason.MAX_TOKENS": "length",
+    def _map_finish_reason(self, reason) -> FinishReason:
+        mapping: dict[str, FinishReason] = {
+            "STOP": FinishReason.STOP,
+            "MAX_TOKENS": FinishReason.LENGTH,
+            "SAFETY": FinishReason.CONTENT_FILTER,
+            "FinishReason.STOP": FinishReason.STOP,
+            "FinishReason.MAX_TOKENS": FinishReason.LENGTH,
         }
-        return mapping.get(str(reason) if reason else "STOP", "stop")
+        return mapping.get(str(reason) if reason else "STOP", FinishReason.STOP)
 
     def _parse_usage(self, usage_meta) -> Usage:
         if not usage_meta:

@@ -12,6 +12,7 @@ from ntrp.constants import NTRP_TMP_BASE, OFFLOAD_PREVIEW_LINES
 from ntrp.context.models import SessionState
 from ntrp.core.ledger import ResearchLedger
 from ntrp.events.sse import ApprovalNeededEvent, BackgroundTaskEvent
+from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 from ntrp.tools.core.types import ToolResult
 
@@ -148,7 +149,7 @@ class BackgroundTaskRegistry:
         synthetic_call_id = f"bg_{task_id}"
         messages = [
             {
-                "role": "assistant",
+                "role": Role.ASSISTANT,
                 "content": None,
                 "tool_calls": [
                     {
@@ -162,7 +163,7 @@ class BackgroundTaskRegistry:
                 ],
             },
             {
-                "role": "tool",
+                "role": Role.TOOL,
                 "tool_call_id": synthetic_call_id,
                 "content": summary,
             },

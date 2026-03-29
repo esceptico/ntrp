@@ -9,6 +9,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from ntrp.config import Config
+from ntrp.memory.models import SourceType
 from ntrp.server.app import app
 from ntrp.server.runtime import Runtime
 from ntrp.settings import hash_api_key
@@ -86,7 +87,7 @@ async def sample_fact(test_runtime: Runtime) -> int:
     memory = test_runtime.memory
     result = await memory.remember(
         text="Alice works at Anthropic on AI safety",
-        source_type="test",
+        source_type=SourceType.EXPLICIT,
     )
     return result.fact.id
 
@@ -99,7 +100,7 @@ async def sample_observation(test_runtime: Runtime) -> int:
 
     result = await memory.remember(
         text="Test fact for observation",
-        source_type="test",
+        source_type=SourceType.EXPLICIT,
     )
 
     obs = await obs_repo.create(
@@ -190,7 +191,7 @@ class TestFactCRUD:
     async def test_delete_fact_cascades_to_entity_refs(self, test_client: AsyncClient, test_runtime: Runtime):
         """DELETE should cascade to entity_refs table"""
         memory = test_runtime.memory
-        result = await memory.remember(text="Bob works at Google", source_type="test")
+        result = await memory.remember(text="Bob works at Google", source_type=SourceType.EXPLICIT)
         fact_id = result.fact.id
 
         repo = memory.facts

@@ -2,7 +2,7 @@ import base64
 import json
 
 from ntrp.core.models import PendingToolCall
-from ntrp.llm.types import Message, ToolCall
+from ntrp.llm.types import Message, Role, ToolCall
 from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
@@ -20,7 +20,7 @@ def parse_tool_arguments(arguments: str | None) -> dict:
 
 def normalize_assistant_message(message: Message) -> dict:
     sanitized: dict = {
-        "role": "assistant",
+        "role": Role.ASSISTANT,
         "content": message.content or "",
     }
     if message.tool_calls:

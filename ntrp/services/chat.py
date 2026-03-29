@@ -19,6 +19,7 @@ from ntrp.events.sse import (
     ThinkingEvent,
 )
 from ntrp.llm.models import Provider, get_model
+from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 from ntrp.memory.formatting import format_session_memory
 from ntrp.server.bus import SessionBus
@@ -112,7 +113,7 @@ def _time_gap_note(last_activity: datetime) -> dict | None:
 def _retain_user_content(messages: list[dict]) -> list[dict]:
     result = []
     for msg in messages:
-        if msg.get("role") == "user" and isinstance(msg.get("content"), list):
+        if msg.get("role") == Role.USER and isinstance(msg.get("content"), list):
             msg = {**msg, "content": [b for b in msg["content"] if b.get("type") != "context"]}
         result.append(msg)
     return result
@@ -148,11 +149,11 @@ async def _prepare_messages(
     messages = _retain_user_content(messages)
 
     if not messages:
-        messages = [{"role": "system", "content": system_blocks}]
-    elif isinstance(messages[0], dict) and messages[0]["role"] == "system":
+        messages = [{"role": Role.SYSTEM, "content": system_blocks}]
+    elif isinstance(messages[0], dict) and messages[0]["role"] == Role.SYSTEM:
         messages[0]["content"] = system_blocks
     else:
-        messages.insert(0, {"role": "system", "content": system_blocks})
+        messages.insert(0, {"role": Role.SYSTEM, "content": system_blocks})
 
     ctx_blocks = list(context or [])
     if last_activity:
@@ -160,7 +161,7 @@ async def _prepare_messages(
         if time_gap:
             ctx_blocks.append(time_gap)
 
-    messages.append({"role": "user", "content": build_user_content(user_message, images, ctx_blocks or None)})
+    messages.append({"role": Role.USER, "content": build_user_content(user_message, images, ctx_blocks or None)})
 
     return messages
 

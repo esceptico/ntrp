@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from ntrp.constants import FACT_MERGE_SIMILARITY_THRESHOLD, FACT_MERGE_TEMPERATURE
 from ntrp.llm.router import get_completion_client
+from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact
 from ntrp.memory.prompts import FACT_MERGE_PROMPT
@@ -50,7 +51,7 @@ async def _llm_merge_decision(
         client = get_completion_client(model)
         resp = await client.completion(
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": Role.USER, "content": prompt}],
             response_format=FactMergeAction,
             temperature=FACT_MERGE_TEMPERATURE,
         )

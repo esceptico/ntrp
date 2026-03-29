@@ -1,4 +1,4 @@
-from ntrp.memory.models import Fact, Observation
+from ntrp.memory.models import Fact, Observation, SourceType
 
 MEMORY_CONTEXT_CHAR_BUDGET = 3000
 
@@ -6,7 +6,7 @@ MEMORY_CONTEXT_CHAR_BUDGET = 3000
 def _source_label(fact: Fact) -> str:
     date = fact.happened_at or fact.created_at
     date_str = date.strftime("%b %d") if date else ""
-    if fact.source_type == "chat":
+    if fact.source_type == SourceType.CHAT:
         return f" (conversation, {date_str})" if date_str else " (conversation)"
     if fact.source_type and date_str:
         return f" ({fact.source_type}, {date_str})"

@@ -9,6 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from ntrp.events.sse import BackgroundTaskEvent, TextDeltaEvent, TextEvent, TextMessageEndEvent, TextMessageStartEvent
+from ntrp.llm.types import Role
 from ntrp.server.bus import BusRegistry
 from ntrp.server.middleware import AuthMiddleware, SSEStreamingResponse, _extract_bearer_token
 from ntrp.server.routers.automation import router as automation_router
@@ -224,7 +225,7 @@ async def chat_message(
     active_run = runtime.run_registry.get_active_run(session_id)
     if active_run:
         active_run.inject_queue.append(
-            {"role": "user", "content": build_user_content(request.message, images, context)}
+            {"role": Role.USER, "content": build_user_content(request.message, images, context)}
         )
         return {"run_id": active_run.run_id, "session_id": session_id}
 

@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from ntrp.constants import CONSOLIDATION_TEMPERATURE
 from ntrp.core.prompts import env
 from ntrp.llm.router import get_completion_client
+from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
@@ -71,7 +72,7 @@ async def extract_from_chat(
         client = get_completion_client(model)
         response = await client.completion(
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": Role.USER, "content": prompt}],
             response_format=ChatExtractionSchema,
             temperature=CONSOLIDATION_TEMPERATURE,
         )

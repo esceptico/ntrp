@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 import pytest_asyncio
 
+from ntrp.memory.models import SourceType
 from ntrp.memory.dreams import (
     _centroid_nearest,
     _get_supporters,
@@ -152,7 +153,7 @@ class TestDreamGeneration:
             for i in range(5):
                 await fact_repo.create(
                     text=f"domain-{domain} fact-{i}",
-                    source_type="test",
+                    source_type=SourceType.EXPLICIT,
                     embedding=_make_distinct_embedding(domain, i),
                 )
         await fact_repo.conn.commit()
@@ -172,7 +173,7 @@ class TestDreamGeneration:
             for i in range(5):
                 await fact_repo.create(
                     text=f"domain-{domain} fact-{i}",
-                    source_type="test",
+                    source_type=SourceType.EXPLICIT,
                     embedding=_make_distinct_embedding(domain, i),
                 )
         await fact_repo.conn.commit()
@@ -220,7 +221,7 @@ class TestDreamGeneration:
             for i in range(5):
                 await fact_repo.create(
                     text=f"domain-{domain} fact-{i}",
-                    source_type="test",
+                    source_type=SourceType.EXPLICIT,
                     embedding=_make_distinct_embedding(domain, i),
                 )
         await fact_repo.conn.commit()
@@ -253,7 +254,7 @@ class TestDreamPassGating:
         for i in range(5):
             await fact_repo.create(
                 text=f"fact-{i}",
-                source_type="test",
+                source_type=SourceType.EXPLICIT,
                 embedding=mock_embedding(f"fact-{i}"),
             )
         await fact_repo.conn.commit()
@@ -272,7 +273,7 @@ class TestDreamPassGating:
             for i in range(5):
                 await fact_repo.create(
                     text=f"domain-{domain} fact-{i}",
-                    source_type="test",
+                    source_type=SourceType.EXPLICIT,
                     embedding=_make_distinct_embedding(domain, i),
                 )
         await fact_repo.conn.commit()

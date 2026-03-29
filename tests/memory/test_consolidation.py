@@ -15,7 +15,7 @@ from ntrp.memory.consolidation import (
     apply_consolidation,
     get_consolidation_decisions,
 )
-from ntrp.memory.models import Fact, HistoryEntry, Observation
+from ntrp.memory.models import Fact, HistoryEntry, Observation, SourceType
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
@@ -28,7 +28,7 @@ def make_fact(id: int, text: str, embedding=None, happened_at: datetime | None =
         id=id,
         text=text,
         embedding=embedding or mock_embedding(text),
-        source_type="test",
+        source_type=SourceType.EXPLICIT,
         source_ref=None,
         created_at=now,
         happened_at=happened_at,
@@ -107,7 +107,7 @@ class TestFormatObservations:
     async def test_formats_observations(self, fact_repo: FactRepository):
         fact = await fact_repo.create(
             text="Source fact text",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
         )
         obs = make_observation(1, "Test observation", evidence_count=1)
 
@@ -184,7 +184,7 @@ class TestExecuteAction:
 
     @pytest.mark.asyncio
     async def test_update_action(self, obs_repo: ObservationRepository, fact_repo: FactRepository):
-        f1 = await fact_repo.create(text="Alice prefers Python", source_type="test")
+        f1 = await fact_repo.create(text="Alice prefers Python", source_type=SourceType.EXPLICIT)
         obs = await obs_repo.create(summary="Alice is a Python developer", source_fact_id=f1.id)
 
         fact = make_fact(2, "Alice writes clean code")
@@ -222,7 +222,7 @@ class TestConsolidateFact:
     async def test_fact_without_embedding_skipped(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
         fact = await fact_repo.create(
             text="No embedding",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=None,
         )
         embedding = None
@@ -239,7 +239,7 @@ class TestConsolidateFact:
         """LLM returns skip for ephemeral facts."""
         fact = await fact_repo.create(
             text="User is at coffee shop",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("ephemeral"),
         )
         embedding = mock_embedding("test")
@@ -274,7 +274,7 @@ class TestConsolidateFact:
         """Fact creates a synthesized observation (higher-level than fact)."""
         fact = await fact_repo.create(
             text="Alice prefers Python",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("alice python"),
         )
         embedding = mock_embedding("test")
@@ -313,14 +313,14 @@ class TestConsolidateFact:
         emb = mock_embedding("alice developer")
         f1 = await fact_repo.create(
             text="Alice prefers Python",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
         )
         obs = await obs_repo.create(summary="Alice is a Python-focused developer", embedding=emb, source_fact_id=f1.id)
 
         fact = await fact_repo.create(
             text="Alice writes clean code",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
         )
         embedding = emb
@@ -360,14 +360,14 @@ class TestConsolidateFact:
         emb = mock_embedding("alice employment")
         f1 = await fact_repo.create(
             text="Alice works at Google",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
         )
         obs = await obs_repo.create(summary="Alice works at Google", embedding=emb, source_fact_id=f1.id)
 
         fact = await fact_repo.create(
             text="Alice now works at Meta",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
         )
         embedding = emb
@@ -405,7 +405,7 @@ class TestConsolidateFact:
         emb_work = mock_embedding("alice work")
         f1 = await fact_repo.create(
             text="Alice works at Google",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb_work,
         )
         await obs_repo.create(summary="Alice works at Google", embedding=emb_work, source_fact_id=f1.id)
@@ -413,7 +413,7 @@ class TestConsolidateFact:
         emb_hobby = mock_embedding("alice hobby")
         fact = await fact_repo.create(
             text="Alice likes hiking",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb_hobby,
         )
         embedding = emb_hobby
@@ -447,7 +447,7 @@ class TestConsolidateFact:
         """Invalid JSON from LLM results in skipped consolidation."""
         fact = await fact_repo.create(
             text="Bob likes pizza",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("bob pizza"),
         )
         embedding = mock_embedding("test")
@@ -474,7 +474,7 @@ class TestAlwaysConsolidated:
         """Even skipped facts get marked as consolidated."""
         fact = await fact_repo.create(
             text="User walked to the store",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("ephemeral"),
         )
         embedding = mock_embedding("test")
@@ -502,7 +502,7 @@ class TestAlwaysConsolidated:
         """Facts that create observations get marked consolidated."""
         fact = await fact_repo.create(
             text="Bob likes pizza",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("bob pizza"),
         )
         embedding = mock_embedding("test")
@@ -542,7 +542,7 @@ class TestTemporalConsolidation:
         jan_10 = datetime(2026, 1, 10, tzinfo=UTC)
         f1 = await fact_repo.create(
             text="Alice is leading the mobile team",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
             happened_at=jan_10,
         )
@@ -555,13 +555,13 @@ class TestTemporalConsolidation:
         # Noise facts
         await fact_repo.create(
             text="Alice presented at the all-hands meeting",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("alice all-hands"),
             happened_at=datetime(2026, 2, 15, tzinfo=UTC),
         )
         await fact_repo.create(
             text="Bob joined the mobile team",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("bob mobile"),
             happened_at=datetime(2026, 3, 1, tzinfo=UTC),
         )
@@ -570,7 +570,7 @@ class TestTemporalConsolidation:
         mar_5 = datetime(2026, 3, 5, tzinfo=UTC)
         new_fact = await fact_repo.create(
             text="Alice is now leading the backend rewrite",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
             happened_at=mar_5,
         )
@@ -611,7 +611,7 @@ class TestTemporalConsolidation:
         jan_10 = datetime(2026, 1, 10, tzinfo=UTC)
         f1 = await fact_repo.create(
             text="Alice is building the iOS app",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
             happened_at=jan_10,
         )
@@ -624,20 +624,20 @@ class TestTemporalConsolidation:
         # Noise
         await fact_repo.create(
             text="Alice stopped using Flutter",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("alice flutter"),
             happened_at=datetime(2026, 2, 18, tzinfo=UTC),
         )
         await fact_repo.create(
             text="The backend team is hiring",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("backend hiring"),
             happened_at=datetime(2026, 2, 22, tzinfo=UTC),
         )
 
         new_fact = await fact_repo.create(
             text="Alice is also helping with the backend API",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
             happened_at=datetime(2026, 2, 20, tzinfo=UTC),
         )
@@ -675,13 +675,13 @@ class TestTemporalConsolidation:
 
         f1 = await fact_repo.create(
             text="Alice runs mobile team",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
             happened_at=jan,
         )
         f2 = await fact_repo.create(
             text="Alice mentors two juniors",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
             happened_at=feb,
         )
@@ -702,20 +702,20 @@ class TestTemporalConsolidation:
         # Noise
         await fact_repo.create(
             text="Alice's mentee got promoted",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("mentee promoted"),
             happened_at=datetime(2026, 3, 15, tzinfo=UTC),
         )
         await fact_repo.create(
             text="Mobile team shipped v2.0",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=mock_embedding("mobile v2"),
             happened_at=datetime(2026, 3, 20, tzinfo=UTC),
         )
 
         new_fact = await fact_repo.create(
             text="Alice transitioned off the mobile team",
-            source_type="test",
+            source_type=SourceType.EXPLICIT,
             embedding=emb,
             happened_at=datetime(2026, 4, 1, tzinfo=UTC),
         )

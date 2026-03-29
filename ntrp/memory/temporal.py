@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from ntrp.constants import CONSOLIDATION_TEMPERATURE, OBSERVATION_MERGE_SIMILARITY_THRESHOLD
 from ntrp.llm.router import get_completion_client
+from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding
 from ntrp.memory.prompts import TEMPORAL_PATTERN_PROMPT
@@ -135,7 +136,7 @@ async def _llm_temporal_patterns(
         client = get_completion_client(model)
         response = await client.completion(
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": Role.USER, "content": prompt}],
             response_format=TemporalResponse,
             temperature=CONSOLIDATION_TEMPERATURE,
         )

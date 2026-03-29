@@ -23,6 +23,7 @@ from ntrp.constants import (
     DREAM_TEMPERATURE,
 )
 from ntrp.llm.router import get_completion_client
+from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact
 from ntrp.memory.prompts import DREAM_EVALUATOR_PROMPT, DREAM_PROMPT
@@ -162,7 +163,7 @@ async def _generate_dream(
         client = get_completion_client(model)
         resp = await client.completion(
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": Role.USER, "content": prompt}],
             response_format=DreamGeneration,
             temperature=DREAM_TEMPERATURE,
         )
@@ -195,7 +196,7 @@ async def _evaluate_batch(
         client = get_completion_client(model)
         resp = await client.completion(
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": Role.USER, "content": prompt}],
             response_format=DreamEvaluation,
             temperature=DREAM_EVAL_TEMPERATURE,
         )
