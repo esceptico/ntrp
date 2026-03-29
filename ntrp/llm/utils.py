@@ -1,5 +1,7 @@
 import json
 
+from ntrp.core.content import blocks_to_text as blocks_to_text
+
 
 def parse_args(raw: str | dict) -> dict:
     if isinstance(raw, dict):
@@ -8,17 +10,3 @@ def parse_args(raw: str | dict) -> dict:
         return json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         return {}
-
-
-def blocks_to_text(content: str | list | None) -> str:
-    if content is None:
-        return ""
-    if isinstance(content, str):
-        return content
-    parts = []
-    for block in content:
-        if isinstance(block, dict) and block.get("type") == "text":
-            parts.append(block["text"])
-        elif isinstance(block, str):
-            parts.append(block)
-    return "\n\n".join(parts)

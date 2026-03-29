@@ -7,6 +7,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
+from ntrp.core.content import render_context
 from ntrp.llm.base import CompletionClient, EmbeddingClient
 from ntrp.llm.types import (
     Choice,
@@ -123,6 +124,8 @@ class GeminiClient(CompletionClient, EmbeddingClient):
                             mime_type=block["media_type"],
                         )
                     )
+                case "context":
+                    parts.append(types.Part(text=render_context(block)))
         return types.Content(role="user", parts=parts or [types.Part(text="")])
 
     def _convert_assistant(self, msg: dict) -> types.Content | None:

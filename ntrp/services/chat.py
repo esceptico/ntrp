@@ -1,5 +1,4 @@
 import asyncio
-import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -7,6 +6,7 @@ from ntrp.channel import Channel
 from ntrp.constants import CONVERSATION_GAP_THRESHOLD
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.agent import Agent
+from ntrp.core.content import ContextContent, ImageContent, TextContent
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import INIT_INSTRUCTION, build_system_blocks
 from ntrp.events.internal import RunCompleted, RunStarted
@@ -78,20 +78,27 @@ async def _resolve_session(runtime: Runtime) -> SessionData:
     return SessionData(runtime.session_service.create(), [])
 
 
-def build_user_content(text: str, images: list[dict] | None = None) -> str | list[dict]:
-    if not images:
+def build_user_content(
+    text: str,
+    images: list[dict] | None = None,
+    context: list[dict] | None = None,
+) -> str | list[dict]:
+    if not images and not context:
         return text
-    blocks: list[dict] = []
+    blocks = []
+    if context:
+        blocks.extend(ContextContent(**ctx).model_dump(exclude_none=True) for ctx in context)
     if text:
-        blocks.append({"type": "text", "text": text})
-    blocks.extend({"type": "image", "media_type": img["media_type"], "data": img["data"]} for img in images)
+        blocks.append(TextContent(text=text).model_dump())
+    if images:
+        blocks.extend(ImageContent(**img).model_dump() for img in images)
     return blocks
 
 
-def _time_gap_note(last_activity: datetime) -> str:
+def _time_gap_note(last_activity: datetime) -> dict | None:
     gap = (datetime.now(UTC) - last_activity).total_seconds()
     if gap < CONVERSATION_GAP_THRESHOLD:
-        return ""
+        return None
     hours = gap / 3600
     if hours < 1:
         elapsed = f"{int(gap / 60)} minutes"
@@ -99,16 +106,16 @@ def _time_gap_note(last_activity: datetime) -> str:
         elapsed = f"{hours:.1f} hours"
     else:
         elapsed = f"{hours / 24:.1f} days"
-    return f"<time_since_last_message>{elapsed}</time_since_last_message>"
+    return {"content_type": "time_since_last_message", "content": elapsed}
 
 
-_TIME_GAP_RE = re.compile(r"\n*<time_since_last_message>.*?</time_since_last_message>", re.DOTALL)
-
-
-def _strip_time_gaps(messages: list[dict]) -> None:
+def _retain_user_content(messages: list[dict]) -> list[dict]:
+    result = []
     for msg in messages:
-        if msg.get("role") == "user" and isinstance(msg.get("content"), str):
-            msg["content"] = _TIME_GAP_RE.sub("", msg["content"])
+        if msg.get("role") == "user" and isinstance(msg.get("content"), list):
+            msg = {**msg, "content": [b for b in msg["content"] if b.get("type") != "context"]}
+        result.append(msg)
+    return result
 
 
 async def _prepare_messages(
@@ -117,6 +124,7 @@ async def _prepare_messages(
     user_message: str,
     last_activity: datetime | None = None,
     images: list[dict] | None = None,
+    context: list[dict] | None = None,
 ) -> list[dict]:
     memory_context = None
     if runtime.memory:
@@ -137,7 +145,7 @@ async def _prepare_messages(
         use_cache_control=_is_anthropic(runtime.config.chat_model),
     )
 
-    _strip_time_gaps(messages)
+    messages = _retain_user_content(messages)
 
     if not messages:
         messages = [{"role": "system", "content": system_blocks}]
@@ -146,12 +154,13 @@ async def _prepare_messages(
     else:
         messages.insert(0, {"role": "system", "content": system_blocks})
 
+    ctx_blocks = list(context or [])
     if last_activity:
-        gap_note = _time_gap_note(last_activity)
-        if gap_note:
-            user_message = f"{user_message}\n\n{gap_note}"
+        time_gap = _time_gap_note(last_activity)
+        if time_gap:
+            ctx_blocks.append(time_gap)
 
-    messages.append({"role": "user", "content": build_user_content(user_message, images)})
+    messages.append({"role": "user", "content": build_user_content(user_message, images, ctx_blocks or None)})
 
     return messages
 
@@ -162,6 +171,7 @@ async def prepare_chat(
     skip_approvals: bool = False,
     session_id: str | None = None,
     images: list[dict] | None = None,
+    context: list[dict] | None = None,
 ) -> ChatContext:
     registry = runtime.run_registry
 
@@ -187,7 +197,7 @@ async def prepare_chat(
         session_state.name = name_candidate[:50]
 
     messages = await _prepare_messages(
-        runtime, messages, user_message, last_activity=session_state.last_activity, images=images
+        runtime, messages, user_message, last_activity=session_state.last_activity, images=images, context=context
     )
 
     run = registry.create_run(session_state.session_id)

@@ -218,15 +218,20 @@ async def chat_message(
         raise HTTPException(status_code=400, detail="session_id required")
 
     images = [img.model_dump() for img in request.images] if request.images else None
+    context = request.context or None
 
     # If agent is already running, queue message for safe injection
     active_run = runtime.run_registry.get_active_run(session_id)
     if active_run:
-        active_run.inject_queue.append({"role": "user", "content": build_user_content(request.message, images)})
+        active_run.inject_queue.append(
+            {"role": "user", "content": build_user_content(request.message, images, context)}
+        )
         return {"run_id": active_run.run_id, "session_id": session_id}
 
     try:
-        ctx = await prepare_chat(runtime, request.message, request.skip_approvals, session_id=session_id, images=images)
+        ctx = await prepare_chat(
+            runtime, request.message, request.skip_approvals, session_id=session_id, images=images, context=context
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

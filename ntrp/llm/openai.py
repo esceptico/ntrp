@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 import openai
 from pydantic import BaseModel
 
+from ntrp.core.content import render_context
 from ntrp.llm.base import CompletionClient, EmbeddingClient
 from ntrp.llm.types import (
     Choice,
@@ -229,6 +230,8 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
                             "image_url": {"url": f"data:{block['media_type']};base64,{block['data']}"},
                         }
                     )
+                case "context":
+                    result.append({"type": "text", "text": render_context(block)})
         return result
 
     def _parse_response(self, response, model: str) -> CompletionResponse:
