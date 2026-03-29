@@ -7,12 +7,13 @@ from pydantic import BaseModel, Field
 
 class ImageBlock(BaseModel):
     media_type: str
-    data: str  # base64-encoded
+    data: str
 
 
 class ChatRequest(BaseModel):
     message: str = Field("", max_length=100_000)
     images: list[ImageBlock] = Field(default_factory=list)
+    context: list[dict] = Field(default_factory=list)
     skip_approvals: bool = False
     session_id: str | None = None
 

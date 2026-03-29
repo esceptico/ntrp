@@ -12,7 +12,7 @@ from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
 from ntrp.core.agent import Agent
-from ntrp.services.chat import _strip_time_gaps, _time_gap_note
+from ntrp.services.chat import _retain_user_content, _time_gap_note
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
@@ -42,50 +42,47 @@ def _make_ctx(executor: ToolExecutor) -> ToolContext:
     )
 
 
-# --- Time gap tag stripping ---
+# --- Context block stripping ---
 
 
-def test_strip_time_gaps_removes_tag():
+def test_retain_user_content():
     messages = [
-        {"role": "user", "content": "hello\n\n<time_since_last_message>30 minutes</time_since_last_message>"},
-        {"role": "assistant", "content": "hi there"},
-        {"role": "user", "content": "bye\n\n<time_since_last_message>2.5 hours</time_since_last_message>"},
+        {
+            "role": "user",
+            "content": [
+                {"type": "context", "content_type": "page_content", "content": "some page"},
+                {"type": "text", "text": "hi"},
+                {"type": "image", "media_type": "image/png", "data": "..."},
+                {"type": "context", "content_type": "time_since_last_message", "content": "5 minutes"},
+            ],
+        },
+        {"role": "assistant", "content": "hello"},
     ]
-    _strip_time_gaps(messages)
-    assert "<time_since_last_message>" not in messages[0]["content"]
-    assert messages[0]["content"] == "hello"
-    assert messages[2]["content"] == "bye"
+    result = _retain_user_content(messages)
+    content = result[0]["content"]
+    assert isinstance(content, list)
+    assert len(content) == 2
+    assert content[0]["type"] == "text"
+    assert content[1]["type"] == "image"
+    # original unchanged
+    assert len(messages[0]["content"]) == 4
 
 
-def test_strip_time_gaps_ignores_non_user():
-    messages = [
-        {"role": "assistant", "content": "text with <time_since_last_message>fake</time_since_last_message>"},
-    ]
-    _strip_time_gaps(messages)
-    # Should NOT strip from assistant messages
-    assert "<time_since_last_message>" in messages[0]["content"]
-
-
-def test_strip_time_gaps_handles_no_tag():
+def test_retain_user_content_ignores_string_content():
     messages = [{"role": "user", "content": "just a normal message"}]
-    _strip_time_gaps(messages)
-    assert messages[0]["content"] == "just a normal message"
+    result = _retain_user_content(messages)
+    assert result[0]["content"] == "just a normal message"
 
 
-def test_strip_time_gaps_handles_multipart_content():
-    """Messages with list content (image blocks) should be skipped, not crash."""
-    messages = [
-        {"role": "user", "content": [{"type": "text", "text": "hi"}, {"type": "image", "data": "..."}]},
-    ]
-    _strip_time_gaps(messages)
-    assert isinstance(messages[0]["content"], list)
+def test_retain_user_content_ignores_non_user():
+    messages = [{"role": "assistant", "content": [{"type": "text", "text": "hi"}]}]
+    result = _retain_user_content(messages)
+    assert len(result[0]["content"]) == 1
 
 
 def test_time_gap_note_short_gap():
-    """Gaps under threshold produce empty string."""
     recent = datetime.now(UTC)
-    result = _time_gap_note(recent)
-    assert result == ""
+    assert _time_gap_note(recent) is None
 
 
 def test_time_gap_note_long_gap():
@@ -93,8 +90,9 @@ def test_time_gap_note_long_gap():
 
     old = datetime.now(UTC) - timedelta(hours=2)
     result = _time_gap_note(old)
-    assert "<time_since_last_message>" in result
-    assert "hour" in result
+    assert result is not None
+    assert result["content_type"] == "time_since_last_message"
+    assert "hour" in result["content"]
 
 
 # --- Read connection sees committed writes ---
