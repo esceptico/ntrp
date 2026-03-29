@@ -34,42 +34,88 @@ _INTERVAL_RE = re.compile(r"^(?:(\d+)h)?(?:(\d+)m?)?$")
 _TIME_RE = re.compile(r"^(\d{1,2}):(\d{2})$")
 
 
-def parse_days(raw: str) -> frozenset[int]:
-    days: set[int] = set()
+@dataclass(frozen=True)
+class TimeOfDay:
+    hour: int
+    minute: int
 
-    for part in raw.split(","):
-        token = part.strip().lower()
-        if not token:
-            continue
+    def __post_init__(self) -> None:
+        if not (0 <= self.hour <= 23 and 0 <= self.minute <= 59):
+            raise ValueError(f"Invalid time: {self.hour:02d}:{self.minute:02d}")
 
-        if token in DAY_KEYWORDS:
-            days.update(DAY_KEYWORDS[token])
-        elif token in DAY_NAMES:
-            days.add(DAY_NAMES[token])
-        else:
-            raise ValueError(f"Invalid day: '{token}'. Use: {', '.join(DAY_NAMES)} / daily / weekdays")
+    @classmethod
+    def parse(cls, raw: str) -> "TimeOfDay":
+        match = _TIME_RE.match(raw.strip())
+        if not match:
+            raise ValueError(f"Invalid time format '{raw}'. Use HH:MM (24h)")
+        return cls(hour=int(match.group(1)), minute=int(match.group(2)))
 
-    return frozenset(days) if days else ALL_DAYS
+    def to_time(self) -> time:
+        return time(self.hour, self.minute)
+
+    def __str__(self) -> str:
+        return f"{self.hour:02d}:{self.minute:02d}"
 
 
-def resolve_days(days: str) -> frozenset[int]:
-    return parse_days(days)
+@dataclass(frozen=True)
+class Interval:
+    delta: timedelta
+
+    def __post_init__(self) -> None:
+        if self.delta < timedelta(minutes=1):
+            raise ValueError("Interval must be at least 1 minute")
+
+    @classmethod
+    def parse(cls, raw: str) -> "Interval":
+        if not (match := _INTERVAL_RE.match(raw.strip().lower())) or not (match.group(1) or match.group(2)):
+            raise ValueError(f"Invalid interval: '{raw}'. Use e.g. '30m', '2h', '1h30m'")
+        hours = int(match.group(1) or 0)
+        minutes = int(match.group(2) or 0)
+        return cls(delta=timedelta(hours=hours, minutes=minutes))
+
+    def __str__(self) -> str:
+        total_minutes = int(self.delta.total_seconds() / 60)
+        h, m = divmod(total_minutes, 60)
+        if h and m:
+            return f"{h}h{m}m"
+        if h:
+            return f"{h}h"
+        return f"{m}m"
 
 
-def validate_days(days: str) -> str:
-    parse_days(days)
-    return days.strip().lower()
+@dataclass(frozen=True)
+class DaySpec:
+    days: frozenset[int]
+
+    @classmethod
+    def parse(cls, raw: str) -> "DaySpec":
+        days: set[int] = set()
+        for part in raw.split(","):
+            token = part.strip().lower()
+            if not token:
+                continue
+            if token in DAY_KEYWORDS:
+                days.update(DAY_KEYWORDS[token])
+            elif token in DAY_NAMES:
+                days.add(DAY_NAMES[token])
+            else:
+                raise ValueError(f"Invalid day: '{token}'. Use: {', '.join(DAY_NAMES)} / daily / weekdays")
+        return cls(days=frozenset(days) if days else ALL_DAYS)
+
+    def __str__(self) -> str:
+        if self.days == ALL_DAYS:
+            return "daily"
+        if self.days == WEEKDAY_SET:
+            return "weekdays"
+        reverse = {v: k for k, v in DAY_NAMES.items()}
+        return ",".join(reverse[d] for d in sorted(self.days))
+
+    def __contains__(self, weekday: int) -> bool:
+        return weekday in self.days
 
 
 def parse_interval(raw: str) -> timedelta:
-    if not (match := _INTERVAL_RE.match(raw.strip().lower())) or not (match.group(1) or match.group(2)):
-        raise ValueError(f"Invalid interval: '{raw}'. Use e.g. '30m', '2h', '1h30m'")
-    hours = int(match.group(1) or 0)
-    minutes = int(match.group(2) or 0)
-    total = timedelta(hours=hours, minutes=minutes)
-    if total < timedelta(minutes=1):
-        raise ValueError("Interval must be at least 1 minute")
-    return total
+    return Interval.parse(raw).delta
 
 
 def normalize_lead_minutes(raw: int | str | None) -> int | None:
@@ -81,63 +127,59 @@ def normalize_lead_minutes(raw: int | str | None) -> int | None:
     return int(raw)
 
 
-def _advance_to_days(candidate: datetime, target_days: frozenset[int]) -> datetime:
+def _advance_to_days(candidate: datetime, day_spec: DaySpec) -> datetime:
     for _ in range(DAYS_IN_WEEK):
-        if candidate.weekday() in target_days:
+        if candidate.weekday() in day_spec:
             return candidate
         candidate += timedelta(days=1)
     return candidate
 
 
-def compute_next_schedule(at: str, days: str, after: datetime) -> datetime:
+def compute_next_schedule(at: TimeOfDay | str, days: DaySpec | str | None, after: datetime) -> datetime:
+    if isinstance(at, str):
+        at = TimeOfDay.parse(at)
+    day_spec = DaySpec.parse(days) if isinstance(days, str) else (days or DaySpec(ALL_DAYS))
     local_now = after.astimezone()
-    hour, minute = (int(x) for x in at.split(":"))
-    target_days = resolve_days(days)
 
-    candidate = local_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    candidate = local_now.replace(hour=at.hour, minute=at.minute, second=0, microsecond=0)
     if candidate <= local_now:
         candidate += timedelta(days=1)
 
-    candidate = _advance_to_days(candidate, target_days)
+    candidate = _advance_to_days(candidate, day_spec)
     return candidate.astimezone(UTC)
 
 
 def compute_next_interval(
-    every: str,
-    days: str | None,
+    every: Interval | str,
+    days: DaySpec | str | None,
     after: datetime,
-    start: str | None = None,
-    end: str | None = None,
+    start: TimeOfDay | str | None = None,
+    end: TimeOfDay | str | None = None,
 ) -> datetime:
-    delta = parse_interval(every)
+    if isinstance(every, str):
+        every = Interval.parse(every)
+    if isinstance(start, str):
+        start = TimeOfDay.parse(start)
+    if isinstance(end, str):
+        end = TimeOfDay.parse(end)
+
     local_now = after.astimezone()
-    candidate = local_now + delta
+    candidate = local_now + every.delta
 
-    if start:
-        h, m = (int(x) for x in start.split(":"))
-        window_start = time(h, m)
-    else:
-        window_start = None
+    if start and candidate.time() < start.to_time():
+        candidate = candidate.replace(hour=start.hour, minute=start.minute, second=0, microsecond=0)
 
-    if end:
-        h, m = (int(x) for x in end.split(":"))
-        window_end = time(h, m)
-    else:
-        window_end = None
-
-    if window_start and candidate.time() < window_start:
-        candidate = candidate.replace(hour=window_start.hour, minute=window_start.minute, second=0, microsecond=0)
-
-    if window_end and candidate.time() >= window_end:
+    if end and candidate.time() >= end.to_time():
         candidate = (candidate + timedelta(days=1)).replace(
-            hour=window_start.hour if window_start else 0,
-            minute=window_start.minute if window_start else 0,
+            hour=start.hour if start else 0,
+            minute=start.minute if start else 0,
             second=0,
             microsecond=0,
         )
 
     if days:
-        candidate = _advance_to_days(candidate, resolve_days(days))
+        day_spec = DaySpec.parse(days) if isinstance(days, str) else days
+        candidate = _advance_to_days(candidate, day_spec)
 
     return candidate.astimezone(UTC)
 
@@ -145,47 +187,45 @@ def compute_next_interval(
 @dataclass
 class TimeTrigger:
     type: Literal["time"] = "time"
-    at: str | None = None
-    days: str | None = None
-    every: str | None = None
-    start: str | None = None
-    end: str | None = None
+    at: TimeOfDay | None = None
+    days: DaySpec | None = None
+    every: Interval | None = None
+    start: TimeOfDay | None = None
+    end: TimeOfDay | None = None
 
     def __post_init__(self) -> None:
-        if self.at:
-            self.at = _validate_time(self.at, "at")
-        if self.days:
-            self.days = validate_days(self.days)
-        if self.start:
-            self.start = _validate_time(self.start, "start")
-        if self.end:
-            self.end = _validate_time(self.end, "end")
-        if self.every:
-            parse_interval(self.every)
+        if isinstance(self.at, str):
+            self.at = TimeOfDay.parse(self.at)
+        if isinstance(self.days, str):
+            self.days = DaySpec.parse(self.days)
+        if isinstance(self.every, str):
+            self.every = Interval.parse(self.every)
+        if isinstance(self.start, str):
+            self.start = TimeOfDay.parse(self.start)
+        if isinstance(self.end, str):
+            self.end = TimeOfDay.parse(self.end)
 
         if not self.at and not self.every:
             raise ValueError("Either 'at' (specific time) or 'every' (interval) is required")
         if self.at and self.every:
             raise ValueError("'at' and 'every' are mutually exclusive")
-        if self.every and not self.days and not self.start and not self.end:
-            pass  # Pure interval, runs continuously
         if (self.start or self.end) and not self.every:
             raise ValueError("'start'/'end' time windows require 'every' (interval mode)")
-        if self.start and self.end and self.start >= self.end:
+        if self.start and self.end and self.start.to_time() >= self.end.to_time():
             raise ValueError(f"'start' ({self.start}) must be before 'end' ({self.end})")
 
     def params(self) -> dict:
         d: dict = {}
         if self.at:
-            d["at"] = self.at
+            d["at"] = str(self.at)
         if self.days:
-            d["days"] = self.days
+            d["days"] = str(self.days)
         if self.every:
-            d["every"] = self.every
+            d["every"] = str(self.every)
         if self.start:
-            d["start"] = self.start
+            d["start"] = str(self.start)
         if self.end:
-            d["end"] = self.end
+            d["end"] = str(self.end)
         return d
 
     @property
@@ -199,7 +239,7 @@ class TimeTrigger:
             if self.start and self.end:
                 base += f" ({self.start}\u2013{self.end})"
         else:
-            base = self.at or ""
+            base = str(self.at) if self.at else ""
         if self.days:
             base += f"  {self.days}"
         return base
@@ -293,19 +333,10 @@ class CountTrigger:
 Trigger = TimeTrigger | EventTrigger | IdleTrigger | CountTrigger
 
 
-def _validate_time(value: str, label: str) -> str:
-    match = _TIME_RE.match(value.strip())
-    if not match or not (0 <= int(match.group(1)) <= 23 and 0 <= int(match.group(2)) <= 59):
-        raise ValueError(f"Invalid {label} format '{value}'. Use HH:MM (24h)")
-    return f"{int(match.group(1)):02d}:{int(match.group(2)):02d}"
-
-
 def _next_run_for_time(trigger: TimeTrigger, now: datetime) -> datetime:
     if trigger.every:
         return compute_next_interval(trigger.every, trigger.days, now, trigger.start, trigger.end)
-    if trigger.days:
-        return compute_next_schedule(trigger.at, trigger.days, now)
-    return compute_next_schedule(trigger.at, "daily", now)
+    return compute_next_schedule(trigger.at, trigger.days, now)
 
 
 BuildHandler = Callable[..., tuple[Trigger, datetime | None]]
