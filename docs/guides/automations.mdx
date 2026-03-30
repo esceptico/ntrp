@@ -52,7 +52,7 @@ After 5 minutes idle → "Extract facts from recent conversation"
 Fire every N user messages in a session. The counter resets per session.
 
 ```
-Every 3 turns → "Extract durable facts from the conversation"
+Every 10 turns → "Extract durable facts from the conversation"
 ```
 
 ## Multi-trigger
@@ -60,8 +60,8 @@ Every 3 turns → "Extract durable facts from the conversation"
 Automations accept multiple triggers (OR logic). This is useful for combining time-based and activity-based conditions:
 
 ```
-[every 30m + idle 10m] → "Consolidate and merge memory"
-[every 3 turns + idle 5m] → "Extract facts from conversation"
+[every 30m + idle 5m] → "Consolidate and merge memory"
+[every 10 turns + idle 5m] → "Extract facts from conversation"
 ```
 
 ## Builtin automations
@@ -70,8 +70,8 @@ ntrp ships with two internal automations that run automatically:
 
 | Automation | Triggers | Purpose |
 |------------|----------|---------|
-| **Chat Extraction** | Every 3 turns + idle 5m | Extract durable facts from conversations |
-| **Memory Consolidation** | Every 30m + idle 10m | Merge, archive, and consolidate memory |
+| **Chat Extraction** | Every 10 turns + idle 5m | Extract durable facts from conversations |
+| **Memory Consolidation** | Every 30m + idle 5m | Merge, archive, and consolidate memory |
 
 Builtin automations are visible in the automations viewer (internal tab) and can be toggled on/off, but cannot be deleted. They use handler functions instead of full agent loops.
 
@@ -117,8 +117,7 @@ curl -X POST http://localhost:6877/automations \
     "description": "Summarize unread emails and today's calendar events",
     "trigger_type": "time",
     "at": "09:00",
-    "days": "weekdays",
-    "notifiers": ["telegram"]
+    "days": "weekdays"
   }'
 ```
 
@@ -142,11 +141,6 @@ curl -X POST http://localhost:6877/automations \
 
 By default, automations run with **read-only** tools. Toggle `writable` to allow an automation to modify memory, send emails, or create calendar events.
 
-## Notifiers
+## Notifications
 
-Automations can send results to:
-
-- **Telegram** — requires `TELEGRAM_BOT_TOKEN` and a configured user ID
-- **Email** — sends via your connected Gmail account
-
-Configure notifiers in settings or via `/automations`.
+Automations with `writable` enabled can use the `notify` tool to send results to configured notifier channels (Telegram, email, bash). Configure notifiers in **Settings > Notifications**.
