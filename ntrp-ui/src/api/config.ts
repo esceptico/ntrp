@@ -7,7 +7,6 @@ export interface SourceInfo {
   error?: string;
   accounts?: string[];
   path?: string;
-  type?: string;
   mode?: "auto" | "exa" | "ddgs" | "none";
   provider?: "exa" | "ddgs" | "none" | "unknown";
   dreams?: boolean;
@@ -21,9 +20,7 @@ export interface ServerConfig {
   web_search: "auto" | "exa" | "ddgs" | "none";
   web_search_provider: "exa" | "ddgs" | "none" | "unknown";
   vault_path: string;
-  browser: string | null;
   google_enabled: boolean;
-  has_browser: boolean;
   has_notes: boolean;
   max_depth: number;
   compression_threshold: number;
@@ -93,16 +90,6 @@ export async function updateVaultPath(
   vaultPath: string
 ): Promise<{ vault_path: string }> {
   return api.patch(`${config.serverUrl}/config`, { vault_path: vaultPath });
-}
-
-export async function updateBrowser(
-  config: Config,
-  browser: string | null,
-  browserDays?: number
-): Promise<{ browser: string | null; browser_days?: number }> {
-  const body: { browser: string | null; browser_days?: number } = { browser };
-  if (browserDays !== undefined) body.browser_days = browserDays;
-  return api.patch(`${config.serverUrl}/config`, body);
 }
 
 export async function getDirectives(config: Config): Promise<{ content: string }> {

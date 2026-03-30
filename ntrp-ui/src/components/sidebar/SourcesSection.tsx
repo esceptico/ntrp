@@ -10,7 +10,6 @@ function getSourceEntries(cfg: ServerConfig): SourceEntry[] {
   return [
     { key: "vault", label: "notes", on: !!cfg.has_notes },
     { key: "google", label: "google", on: !!sources?.google?.enabled && !!sources?.google?.connected, error: !!sources?.google?.error },
-    { key: "browser", label: "browser", on: !!cfg.has_browser },
     { key: "memory", label: "memory", on: !!sources?.memory?.enabled },
     { key: "web", label: "web", on: !!sources?.web?.connected },
   ];

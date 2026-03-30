@@ -42,7 +42,6 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
         embedding_model="test-embedding",
         memory_model="gemini-3-flash-preview",
         chat_model="gemini-3-flash-preview",
-        browser=None,
         exa_api_key=None,
     )
 
@@ -314,7 +313,6 @@ class TestMemoryDisabled:
             chat_model="gemini-3-flash-preview",
             memory_model="gemini-3-flash-preview",
             embedding_model="text-embedding-3-small",
-            browser=None,
             exa_api_key=None,
         )
         test_config.db_dir.mkdir(parents=True, exist_ok=True)

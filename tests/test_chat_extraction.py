@@ -60,7 +60,6 @@ async def memory(tmp_path: Path, monkeypatch) -> AsyncGenerator[FactMemory]:
         embedding_model="test-embedding",
         memory_model="gemini-3-flash-preview",
         chat_model="gemini-3-flash-preview",
-        browser=None,
         exa_api_key=None,
     )
     config.db_dir.mkdir(parents=True, exist_ok=True)

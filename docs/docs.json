@@ -36,8 +36,7 @@
               "integrations/models",
               "integrations/gmail",
               "integrations/calendar",
-              "integrations/obsidian",
-              "integrations/browser"
+              "integrations/obsidian"
             ]
           },
           {

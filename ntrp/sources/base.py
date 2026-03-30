@@ -117,17 +117,6 @@ class CalendarSource(Protocol):
 
 
 @runtime_checkable
-class BrowserSource(Protocol):
-    name: str
-
-    def read(self, source_id: str) -> str | None: ...
-
-    def search(self, query: str) -> list[str]: ...
-
-    def list_recent(self, days: int, limit: int) -> list[SourceItem]: ...
-
-
-@runtime_checkable
 class WebSearchSource(Protocol):
     name: str
 

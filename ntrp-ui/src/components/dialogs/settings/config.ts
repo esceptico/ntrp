@@ -39,13 +39,12 @@ export const MEMORY_NUMBER_ITEMS: NumberItem[] = [
   { key: "consolidationInterval", label: "Interval", description: "Minutes between consolidation runs", min: 5, max: 120, step: 5 },
 ];
 
-export const SOURCE_ITEMS = ["vault", "google", "browser", "web"] as const;
+export const SOURCE_ITEMS = ["vault", "google", "web"] as const;
 export type SourceItem = (typeof SOURCE_ITEMS)[number];
 
 export const SOURCE_LABELS = {
   vault: "Notes",
   google: "Google",
-  browser: "Browser",
   web: "Web Search",
 } satisfies Record<SourceItem, string>;
 

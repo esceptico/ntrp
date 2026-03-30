@@ -63,11 +63,9 @@ OFFLOAD_PREVIEW_LINES = 30  # lines kept in compact reference (structural summar
 
 # --- Display Truncation ---
 
-BROWSER_TITLE_TRUNCATE = 50
 EMAIL_SUBJECT_TRUNCATE = 40
 EMAIL_FROM_TRUNCATE = 30
 SNIPPET_TRUNCATE = 120
-URL_TRUNCATE = 60
 
 
 # --- Chat Extraction ---
