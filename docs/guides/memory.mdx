@@ -56,7 +56,7 @@ When ntrp learns something new:
 
 ## Consolidation
 
-Consolidation now runs as a builtin automation with dual triggers: every 30 minutes and after 10 minutes of idle time (configurable in **Settings > Memory**).
+Consolidation now runs as a builtin automation with dual triggers: every 30 minutes and after 5 minutes of idle time (configurable in **Settings > Memory**).
 
 1. **Per-fact** — search for similar observations, decide whether to update existing or create new
 2. **Temporal pass** — find trends and transitions across an entity's facts
@@ -67,7 +67,7 @@ Consolidation now runs as a builtin automation with dual triggers: every 30 minu
 
 ### Extraction
 
-Fact extraction from conversations is also a builtin automation. It fires every 3 user messages or after 5 minutes of idle time, extracting durable facts from the conversation without running a full agent loop.
+Fact extraction from conversations is also a builtin automation. It fires every 10 user messages or after 5 minutes of idle time, extracting durable facts from the conversation without running a full agent loop.
 
 Both builtin automations are visible in the automations viewer under the **Internal** tab.
 
