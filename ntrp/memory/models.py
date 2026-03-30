@@ -15,6 +15,10 @@ class SourceType(StrEnum):
     CHAT = "chat"
     EXPLICIT = "explicit"
 
+    @classmethod
+    def _missing_(cls, value: object) -> "SourceType":
+        return cls.EXPLICIT
+
 
 def _parse_datetime(value: Any) -> datetime | None:
     if value is None:
