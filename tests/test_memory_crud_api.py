@@ -313,7 +313,7 @@ class TestMemoryDisabled:
             chat_model="gemini-3-flash-preview",
             memory_model="gemini-3-flash-preview",
             embedding_model="text-embedding-3-small",
-                exa_api_key=None,
+            exa_api_key=None,
         )
         test_config.db_dir.mkdir(parents=True, exist_ok=True)
 

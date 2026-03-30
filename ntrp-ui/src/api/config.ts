@@ -7,7 +7,6 @@ export interface SourceInfo {
   error?: string;
   accounts?: string[];
   path?: string;
-  type?: string;
   mode?: "auto" | "exa" | "ddgs" | "none";
   provider?: "exa" | "ddgs" | "none" | "unknown";
   dreams?: boolean;
