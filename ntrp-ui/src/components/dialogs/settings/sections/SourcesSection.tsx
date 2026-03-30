@@ -56,21 +56,6 @@ export function SourcesSection({ sources: c, serverConfig, accent, width }: Sour
         <AccountList accounts={c.googleAccounts} selectedIndex={c.selectedGoogleIndex} accent={accent} valueWidth={valueWidth} />
       )}
 
-      <Row item="browser" selected={c.sourceItem === "browser"} accent={accent}>
-        {c.updatingBrowser ? (
-          <text><span fg={colors.status.warning}>Updating...</span></text>
-        ) : serverConfig?.has_browser ? (
-          <text><span fg={colors.text.primary}>{serverConfig.browser}</span></text>
-        ) : (
-          <text><span fg={colors.text.muted}>Not configured</span></text>
-        )}
-      </Row>
-      {c.browserError && (
-        <box marginLeft={4}>
-          <text><span fg={colors.status.error}>{c.browserError}</span></text>
-        </box>
-      )}
-
       <Row item="web" selected={c.sourceItem === "web"} accent={accent}>
         <text>
           {c.sourceItem === "web" && <span fg={colors.text.muted}>◂ </span>}

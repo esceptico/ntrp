@@ -6,7 +6,6 @@ import {
   addGoogleAccount,
   removeGoogleAccount,
   updateConfig,
-  updateBrowser,
   getServerConfig,
 } from "../../api/client.js";
 import type { SourceItem } from "../../components/dialogs/settings/config.js";
@@ -21,12 +20,6 @@ export interface UseConnectionsResult {
   actionInProgress: string | null;
 
   vault: UseVaultPathResult;
-
-  showingBrowserDropdown: boolean;
-  setShowingBrowserDropdown: React.Dispatch<React.SetStateAction<boolean>>;
-  updatingBrowser: boolean;
-  browserError: string | null;
-  handleSelectBrowser: (browser: string | null) => Promise<void>;
 
   handleKeypress: (key: Key) => void;
   isEditing: boolean;
@@ -44,10 +37,6 @@ export function useConnections(
   const [googleAccounts, setGoogleAccounts] = useState<GoogleAccount[]>([]);
   const [selectedGoogleIndex, setSelectedGoogleIndex] = useState(0);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
-
-  const [showingBrowserDropdown, setShowingBrowserDropdown] = useState(false);
-  const [updatingBrowser, setUpdatingBrowser] = useState(false);
-  const [browserError, setBrowserError] = useState<string | null>(null);
 
   useEffect(() => {
     getGoogleAccounts(config)
@@ -123,22 +112,6 @@ export function useConnections(
     }
   }, [config, serverConfig, onServerConfigChange]);
 
-  const handleSelectBrowser = useCallback(async (browser: string | null) => {
-    setShowingBrowserDropdown(false);
-    if (browser === serverConfig?.browser) return;
-    setBrowserError(null);
-    setUpdatingBrowser(true);
-    try {
-      await updateBrowser(config, browser);
-      const updatedConfig = await getServerConfig(config);
-      onServerConfigChange(updatedConfig);
-    } catch (err) {
-      setBrowserError(err instanceof Error ? err.message : "Failed to update browser");
-    } finally {
-      setUpdatingBrowser(false);
-    }
-  }, [config, serverConfig?.browser, onServerConfigChange]);
-
   const isEditing = vault.editingVault;
   const cancelEdit = vault.handleCancelVaultEdit;
 
@@ -176,8 +149,6 @@ export function useConnections(
     } else if (key.name === "return" || key.name === "space") {
       if (sourceItem === "vault") {
         vault.handleStartVaultEdit();
-      } else if (sourceItem === "browser") {
-        setShowingBrowserDropdown(true);
       } else if (TOGGLEABLE_SOURCES.includes(sourceItem)) {
         handleToggleSource(sourceItem);
       }
@@ -202,11 +173,6 @@ export function useConnections(
     selectedGoogleIndex,
     actionInProgress,
     vault,
-    showingBrowserDropdown,
-    setShowingBrowserDropdown,
-    updatingBrowser,
-    browserError,
-    handleSelectBrowser,
     handleKeypress,
     isEditing,
     cancelEdit,

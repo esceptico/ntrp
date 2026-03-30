@@ -47,8 +47,6 @@ PERSIST_KEYS = frozenset(
         "research_model",
         "memory_model",
         "embedding_model",
-        "browser",
-        "browser_days",
         "vault_path",
         "memory",
         "dreams",
@@ -110,10 +108,6 @@ class Config(BaseSettings):
 
     # Obsidian vault
     vault_path: Path | None = None
-
-    # Browser history
-    browser: str | None = None
-    browser_days: int = 30
 
     # MCP servers
     mcp_servers: dict[str, dict] | None = None
@@ -193,13 +187,6 @@ class Config(BaseSettings):
             return None
         return v
 
-    @field_validator("browser", mode="before")
-    @classmethod
-    def _normalize_browser(cls, v: str | None) -> str | None:
-        if v in ("", "none"):
-            return None
-        return v
-
     @field_validator("web_search", mode="before")
     @classmethod
     def _normalize_web_search(cls, v: str | None) -> str:
@@ -211,13 +198,6 @@ class Config(BaseSettings):
         if normalized in ("exa", "ddgs", "none"):
             return normalized
         raise ValueError("web_search must be one of: auto, exa, ddgs, none")
-
-    @field_validator("browser_days")
-    @classmethod
-    def _validate_browser_days(cls, v: int) -> int:
-        if not 1 <= v <= 365:
-            raise ValueError(f"browser_days must be 1-365, got {v}")
-        return v
 
     # --- Derived properties ---
 

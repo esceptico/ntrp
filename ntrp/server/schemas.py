@@ -81,8 +81,6 @@ class UpdateConfigRequest(BaseModel):
     summary_max_tokens: int | None = None
     consolidation_interval: int | None = None
     vault_path: str | None = None
-    browser: str | None = None
-    browser_days: int | None = None
     web_search: Literal["auto", "exa", "ddgs", "none"] | None = None
     sources: SourceToggles | None = None
 

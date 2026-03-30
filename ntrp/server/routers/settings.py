@@ -62,9 +62,7 @@ def _config_response(rt: Runtime) -> dict:
         "web_search": config.web_search,
         "web_search_provider": web_provider,
         "vault_path": config.vault_path,
-        "browser": config.browser,
         "google_enabled": config.google,
-        "has_browser": config.browser is not None,
         "has_notes": config.vault_path is not None and rt.source_mgr.sources.get("notes") is not None,
         "max_depth": config.max_depth,
         "compression_threshold": config.compression_threshold,
@@ -98,10 +96,6 @@ def _config_response(rt: Runtime) -> dict:
             "notes": {
                 "connected": "notes" in rt.source_mgr.sources,
                 "path": str(config.vault_path) if config.vault_path else None,
-            },
-            "browser": {
-                "connected": "browser" in rt.source_mgr.sources,
-                "type": config.browser,
             },
         },
     }

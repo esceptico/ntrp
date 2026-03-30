@@ -5,7 +5,6 @@ import { Dialog, colors, Hints } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import type { ServerConfig } from "../../../api/client.js";
 import { SectionId, SECTION_IDS, SECTION_LABELS } from "./config.js";
-import { DialogSelect, type SelectOption } from "../../ui/index.js";
 import {
   ConnectionSection, ApiKeysSection, SourcesSection, MemorySection,
   DirectivesSection, ContextSection, AgentSection,
@@ -58,25 +57,6 @@ export function SettingsDialog({
     setActiveSection,
     onClose,
   });
-
-  const browserOptions: SelectOption<string | null>[] = [
-    { value: "chrome", title: "Chrome", indicator: serverConfig?.browser === "chrome" ? "●" : undefined },
-    { value: "safari", title: "Safari", indicator: serverConfig?.browser === "safari" ? "●" : undefined },
-    { value: "arc", title: "Arc", indicator: serverConfig?.browser === "arc" ? "●" : undefined },
-    { value: null, title: "None (disable)", indicator: serverConfig?.browser == null ? "●" : undefined },
-  ];
-
-  if (state.sources.showingBrowserDropdown) {
-    return (
-      <DialogSelect<string | null>
-        title="Browser"
-        options={browserOptions}
-        initialIndex={Math.max(0, browserOptions.findIndex(o => o.value === (serverConfig?.browser || null)))}
-        onSelect={(opt) => state.sources.handleSelectBrowser(opt.value)}
-        onClose={() => state.sources.setShowingBrowserDropdown(false)}
-      />
-    );
-  }
 
   const footerHints = !drilled
     ? [["↑↓", "section"], ["enter", "open"], ["esc", "close"]] as [string, string][]

@@ -14,7 +14,6 @@ from ntrp.tools.background import (
     ListBackgroundTasksTool,
 )
 from ntrp.tools.bash import BashTool
-from ntrp.tools.browser import BrowserTool
 from ntrp.tools.calendar import (
     CalendarTool,
     CreateCalendarEventTool,
@@ -51,7 +50,6 @@ ALL_TOOLS: list[type[Tool]] = [
     CurrentTimeTool,
     WebSearchTool,
     WebFetchTool,
-    BrowserTool,
     RememberTool,
     RecallTool,
     ForgetTool,

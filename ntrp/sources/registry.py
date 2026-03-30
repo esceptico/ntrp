@@ -1,7 +1,6 @@
 from collections.abc import Callable
 
 from ntrp.config import Config
-from ntrp.sources.browser import BrowserHistorySource
 from ntrp.sources.google.auth import discover_calendar_tokens, discover_gmail_tokens
 from ntrp.sources.google.calendar import MultiCalendarSource
 from ntrp.sources.google.gmail import MultiGmailSource
@@ -34,12 +33,6 @@ def _create_calendar(config: Config) -> object | None:
     return source if source.sources else None
 
 
-def _create_browser(config: Config) -> object | None:
-    if config.browser is None:
-        return None
-    return BrowserHistorySource(browser_name=config.browser, days_back=config.browser_days)
-
-
 def _create_web(config: Config) -> object | None:
     mode = config.web_search
     if mode == "none":
@@ -69,6 +62,5 @@ SOURCES: dict[str, Callable[[Config], object | None]] = {
     "notes": _create_notes,
     "gmail": _create_gmail,
     "calendar": _create_calendar,
-    "browser": _create_browser,
     "web": _create_web,
 }

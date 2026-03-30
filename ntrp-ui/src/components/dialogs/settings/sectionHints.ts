@@ -99,9 +99,6 @@ function getSourcesHints(state: UseSettingsStateResult, serverConfig: ServerConf
     }
     return [["↑↓", "navigate"], ["enter", "enable"], ["esc", "back"]];
   }
-  if (item === "browser") {
-    return [["↑↓", "navigate"], ["enter", "change browser"], ["esc", "back"]];
-  }
   if (item === "web") {
     return [["↑↓", "navigate"], ["←→", "change mode"], ["esc", "back"]];
   }
