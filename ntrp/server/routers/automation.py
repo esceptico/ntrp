@@ -1,5 +1,3 @@
-from dataclasses import asdict
-
 from fastapi import APIRouter, Depends, HTTPException
 
 from ntrp.automation.models import Automation
@@ -23,7 +21,7 @@ def _automation_to_dict(a: Automation) -> dict:
         "name": a.name,
         "description": a.description,
         "model": a.model,
-        "triggers": [asdict(t) for t in a.triggers],
+        "triggers": [{"type": t.type, **t.params()} for t in a.triggers],
         "enabled": a.enabled,
         "created_at": a.created_at.isoformat(),
         "last_run_at": a.last_run_at.isoformat() if a.last_run_at else None,
