@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from ntrp.constants import CONSOLIDATION_TEMPERATURE
+from ntrp.constants import CONSOLIDATION_TEMPERATURE, SESSION_HANDOFF_MARKER
 from ntrp.core.prompts import env
 from ntrp.llm.router import get_completion_client
 from ntrp.llm.types import Role
@@ -52,7 +52,7 @@ def _format_messages(messages: tuple[dict, ...]) -> str:
         content = msg["content"]
         if not content or not isinstance(content, str):
             continue
-        if content.startswith("[Session State Handoff]"):
+        if content.startswith(SESSION_HANDOFF_MARKER):
             continue
         parts.append(f"{role}: {content}")
     return "\n\n".join(parts)
