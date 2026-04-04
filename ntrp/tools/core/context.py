@@ -141,7 +141,7 @@ class BackgroundTaskRegistry:
         self._write_result_file(task_id, result)
         summary = self._build_result_summary(result, task_id)
 
-        notification = f"[Background task {status}: {label}]\n\n{summary}"
+        notification = f"[background task {task_id} {status}]\n\n{summary}"
         messages = [{"role": Role.USER, "content": notification}]
 
         if emit:

@@ -48,7 +48,7 @@ export interface SessionStreamState {
   messageIdCounter: number;
   notification: SessionNotification | null;
   backgroundTaskCount: number;
-  completedBackgroundTasks: string[];
+  completedBackgroundTasks: { id: string; status: string }[];
   backgroundTasks: Map<string, BackgroundTask>;
 }
 
