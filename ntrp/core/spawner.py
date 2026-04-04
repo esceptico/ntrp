@@ -1,5 +1,4 @@
 import asyncio
-import time
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -130,8 +129,11 @@ def create_spawn_fn(
             except TimeoutError:
                 return f"Error: Sub-agent timed out after {timeout}s"
 
+        # Capture emit now — calling_ctx.io.emit may be nulled if the run
+        # is backgrounded before the sub-agent finishes.
+        captured_emit = calling_ctx.io.emit
+
         async def _run_background():
-            start = time.monotonic()
             try:
                 result = await asyncio.wait_for(sub_agent.run(task), timeout=timeout)
                 status = "completed"
@@ -144,19 +146,13 @@ def create_spawn_fn(
                 result = f"Error: {e}"
                 status = "failed"
                 _logger.warning("Background task %s failed: %s", task_id, e)
-            duration_ms = int((time.monotonic() - start) * 1000)
-
             try:
                 await registry.deliver_result(
                     task_id=task_id,
                     result=result,
                     label=label,
                     status=status,
-                    duration_ms=duration_ms,
-                    tool_name="background",
-                    tool_args={"task": task},
-                    display_name="Background",
-                    emit=calling_ctx.io.emit,
+                    emit=captured_emit,
                 )
             except Exception:
                 _logger.exception("Background task %s delivery failed", task_id)

@@ -226,9 +226,9 @@ async def _drain_backgrounded(
 ) -> None:
     """Continue draining an agent stream silently after the run was backgrounded."""
     # No UI connected — restrict to read-only tools so nothing mutates unattended.
+    # emit is already nulled by run_chat before this task is created.
     read_only = {t["function"]["name"] for t in ctx.executor.get_tools(mutates=False)}
     agent.tools = [t for t in agent.tools if t["function"]["name"] in read_only]
-    agent.ctx.io.emit = None
     try:
         async for _ in gen:
             pass
@@ -324,12 +324,12 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         result, bg_gen = await run_agent_loop(ctx, agent, bus)
 
         if bg_gen is not None:
-            # Backgrounded: unlock UI, drain agent silently
+            # Backgrounded: unlock UI, drain agent silently.
+            # Null emit immediately to close the race window between
+            # returning gen and _drain_backgrounded restricting the agent.
+            agent.ctx.io.emit = None
             await bus.emit(RunBackgroundedEvent(run_id=run.run_id))
             ctx.run_registry.complete_run(run.run_id)
-            # Don't set run_finished — agent is still draining, results
-            # should flow through inject_queue so the agent can process them.
-            # _drain_backgrounded swaps on_result to direct-save when done.
             run.drain_task = asyncio.create_task(_drain_backgrounded(bg_gen, agent, ctx))
             return
 
