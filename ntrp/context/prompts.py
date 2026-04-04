@@ -33,3 +33,20 @@ List of identifiers that may need retrieval:
 - Do NOT restate general preferences unless relevant to current objective
 - Focus on CONTINUING work, not documenting history
 - Be terse. State, not story.""")
+
+MERGE_SUMMARY_PROMPT_TEMPLATE = env.from_string("""You are continuing an active personal assistant session.
+An existing state handoff exists. Merge new conversation into it. Target length: ~{{ budget }} words.
+
+## Instructions:
+Update each section by merging new information into the existing summary:
+- **Active Objective**: Replace if the goal has changed, keep if unchanged.
+- **Open Loops**: Add new loops, remove resolved ones, keep unresolved ones.
+- **Next Actions**: Rewrite to reflect current state — drop completed items, add new ones.
+- **Key Facts**: Add new facts, keep existing facts still relevant to next actions, drop stale ones.
+- **Pointers**: Update with current set of identifiers needing retrieval.
+
+## Rules:
+- Preserve detail from the existing summary that is still relevant — do not re-summarize it lossy.
+- If a fact cannot be traced to a source, mark (unverified).
+- Focus on CONTINUING work, not documenting history.
+- Be terse. State, not story.""")

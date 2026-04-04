@@ -6,9 +6,10 @@ from ntrp.constants import (
     COMPRESSION_KEEP_RATIO,
     COMPRESSION_THRESHOLD,
     MAX_MESSAGES,
+    SESSION_HANDOFF_MARKER,
     SUMMARY_MAX_TOKENS,
 )
-from ntrp.context.prompts import SUMMARIZE_PROMPT_TEMPLATE
+from ntrp.context.prompts import MERGE_SUMMARY_PROMPT_TEMPLATE, SUMMARIZE_PROMPT_TEMPLATE
 from ntrp.llm.models import get_model
 from ntrp.llm.router import get_completion_client
 from ntrp.llm.types import Role
@@ -68,7 +69,17 @@ def compactable_range(
     return (1, tail_start)
 
 
-def _build_conversation_text(messages: list, start: int, end: int) -> str:
+def _extract_prior_summary(messages: list, start: int, end: int) -> str | None:
+    """If the compactable range starts with a prior handoff, extract and return it."""
+    if start >= end:
+        return None
+    content = blocks_to_text(messages[start].get("content", ""))
+    if content.startswith(SESSION_HANDOFF_MARKER):
+        return content.removeprefix(SESSION_HANDOFF_MARKER).strip()
+    return None
+
+
+def _build_conversation_text(messages: list, start: int, end: int, *, skip_handoff: bool = False) -> str:
     text_parts = []
     for msg in messages[start:end]:
         if (role := msg["role"]) == Role.TOOL:
@@ -76,7 +87,9 @@ def _build_conversation_text(messages: list, start: int, end: int) -> str:
         content = blocks_to_text(msg["content"])
         if not content:
             continue
-        if content.startswith("[Session State Handoff]"):
+        if content.startswith(SESSION_HANDOFF_MARKER):
+            if skip_handoff:
+                continue
             text_parts.append(f"[PRIOR SUMMARY — preserve key points]\n{content}")
         else:
             text_parts.append(f"{role}: {content}")
@@ -97,6 +110,26 @@ def _build_summarize_request(conversation_text: str, model: str, summary_max_tok
     }
 
 
+def _build_merge_request(
+    existing_summary: str,
+    new_conversation: str,
+    model: str,
+    summary_max_tokens: int = SUMMARY_MAX_TOKENS,
+) -> dict:
+    word_budget = int(summary_max_tokens * 0.75)
+    prompt = MERGE_SUMMARY_PROMPT_TEMPLATE.render(budget=word_budget)
+    user_content = f"## Existing Summary:\n{existing_summary}\n\n## New Conversation:\n{new_conversation}"
+    return {
+        "model": model,
+        "messages": [
+            {"role": Role.SYSTEM, "content": prompt},
+            {"role": Role.USER, "content": user_content},
+        ],
+        "temperature": 0.3,
+        "max_tokens": summary_max_tokens,
+    }
+
+
 async def compact_summarize(
     messages: list,
     start: int,
@@ -104,10 +137,19 @@ async def compact_summarize(
     model: str,
     summary_max_tokens: int = SUMMARY_MAX_TOKENS,
 ) -> str:
-    conversation_text = _build_conversation_text(messages, start, end)
+    prior_summary = _extract_prior_summary(messages, start, end)
+
+    if prior_summary:
+        new_start = start + 1
+        new_conversation = _build_conversation_text(messages, new_start, end, skip_handoff=True)
+        request = _build_merge_request(prior_summary, new_conversation, model, summary_max_tokens)
+    else:
+        conversation_text = _build_conversation_text(messages, start, end)
+        request = _build_summarize_request(conversation_text, model, summary_max_tokens)
+
     client = get_completion_client(model)
     response = await asyncio.wait_for(
-        client.completion(**_build_summarize_request(conversation_text, model, summary_max_tokens)),
+        client.completion(**request),
         timeout=COMPACTION_TIMEOUT,
     )
     content = response.choices[0].message.content
@@ -119,7 +161,7 @@ async def compact_summarize(
 def _build_compacted_messages(messages: list[dict], end: int, summary: str) -> list[dict]:
     return [
         messages[0],
-        {"role": Role.ASSISTANT, "content": f"[Session State Handoff]\n{summary}"},
+        {"role": Role.ASSISTANT, "content": f"{SESSION_HANDOFF_MARKER}\n{summary}"},
         *messages[end:],
     ]
 
