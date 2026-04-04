@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 import pytest_asyncio
 
-from ntrp.memory.models import SourceType
 from ntrp.memory.dreams import (
     _centroid_nearest,
     _get_supporters,
@@ -16,6 +15,7 @@ from ntrp.memory.dreams import (
     _kmeans,
     run_dream_pass,
 )
+from ntrp.memory.models import SourceType
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
