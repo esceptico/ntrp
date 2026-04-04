@@ -230,10 +230,6 @@ async def test_registry_deliver_result_with_no_callback(tmp_path):
         result="test result",
         label="test",
         status="completed",
-        duration_ms=100,
-        tool_name="test",
-        tool_args={},
-        display_name="Test",
         emit=None,
     )
     # Verify result file was still written

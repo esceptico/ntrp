@@ -273,7 +273,7 @@ export function useStreaming({
           } else {
             s.backgroundTaskCount = Math.max(0, s.backgroundTaskCount - 1);
             if (event.status === "completed" || event.status === "failed") {
-              s.completedBackgroundTasks.push(event.command);
+              s.completedBackgroundTasks.push({ id: event.task_id, status: event.status });
             }
             s.backgroundTasks.delete(event.task_id);
           }
@@ -570,11 +570,9 @@ export function useStreaming({
     const completed = s?.completedBackgroundTasks ?? [];
     if (completed.length === 0) return;
 
-    const labels = completed.map((c) => `• ${c}`).join("\n");
+    const lines = completed.map((c) => `[background task ${c.id} ${c.status}]`).join("\n");
     mutateSession(id, (s) => { s.completedBackgroundTasks = []; });
-    sendMessage(
-      `[background tasks completed — use get_background_result for each]\n${labels}`
-    );
+    sendMessage(lines);
   }, [backgroundTaskCount, isStreaming, sendMessage, store, mutateSession]);
 
   // Cleanup

@@ -1,5 +1,4 @@
 import asyncio
-import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -121,15 +120,15 @@ class BackgroundTaskRegistry:
         return path
 
     @staticmethod
-    def _build_result_summary(content: str, task_id: str, label: str) -> str:
+    def _build_result_summary(content: str, task_id: str) -> str:
         lines = content.split("\n")
         preview = "\n".join(lines[:OFFLOAD_PREVIEW_LINES])
-        truncated = "...\n" if len(lines) > OFFLOAD_PREVIEW_LINES else ""
-        return (
-            f"Background task completed: {label}\n"
-            f"{len(lines)} lines — use get_background_result(task_id='{task_id}') for full output.\n\n"
-            f"{preview}\n{truncated}"
+        truncated = (
+            f"\n... ({len(lines) - OFFLOAD_PREVIEW_LINES} more lines, task_id={task_id})"
+            if len(lines) > OFFLOAD_PREVIEW_LINES
+            else ""
         )
+        return f"{preview}{truncated}"
 
     async def deliver_result(
         self,
@@ -137,37 +136,13 @@ class BackgroundTaskRegistry:
         result: str,
         label: str,
         status: str,
-        duration_ms: int,
-        tool_name: str,
-        tool_args: dict,
-        display_name: str,
         emit: Callable[[Any], Awaitable[None]] | None,
     ) -> None:
         self._write_result_file(task_id, result)
-        summary = self._build_result_summary(result, task_id, label)
+        summary = self._build_result_summary(result, task_id)
 
-        synthetic_call_id = f"bg_{task_id}"
-        messages = [
-            {
-                "role": Role.ASSISTANT,
-                "content": None,
-                "tool_calls": [
-                    {
-                        "id": synthetic_call_id,
-                        "type": "function",
-                        "function": {
-                            "name": tool_name,
-                            "arguments": json.dumps(tool_args),
-                        },
-                    }
-                ],
-            },
-            {
-                "role": Role.TOOL,
-                "tool_call_id": synthetic_call_id,
-                "content": summary,
-            },
-        ]
+        notification = f"[background task {task_id} {status}]\n\n{summary}"
+        messages = [{"role": Role.USER, "content": notification}]
 
         if emit:
             await emit(BackgroundTaskEvent(task_id=task_id, command=label, status=status))
