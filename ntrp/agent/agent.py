@@ -146,6 +146,9 @@ class Agent:
                 await self.hooks.on_error(exc)
             raise
 
+        if response is None:
+            raise RuntimeError("LLM stream ended without a CompletionResponse")
+
         self._last_response = response
         self._usage += response.usage
         messages.append(normalize_assistant_message(response.choices[0].message))
