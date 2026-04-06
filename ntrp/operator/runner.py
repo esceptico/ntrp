@@ -66,7 +66,7 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
     if request.model:
         agent_config = replace(deps.config, model=request.model)
 
-    agent, callbacks = create_agent(
+    agent, callbacks, _ = create_agent(
         executor=executor,
         config=agent_config,
         tools=tools,

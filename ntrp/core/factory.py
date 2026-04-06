@@ -47,7 +47,7 @@ def create_agent(
     io: IOBridge | None = None,
     extra_auto_approve: set[str] | None = None,
     background_tasks: BackgroundTaskRegistry | None = None,
-) -> tuple[Agent, NtrpAgentCallbacks]:
+) -> tuple[Agent, NtrpAgentCallbacks, ToolContext]:
     run_ctx = RunContext(
         run_id=run_id,
         max_depth=config.max_depth,
@@ -95,4 +95,4 @@ def create_agent(
         ),
     )
 
-    return agent, callbacks
+    return agent, callbacks, tool_ctx

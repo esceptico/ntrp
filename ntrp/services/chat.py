@@ -294,7 +294,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
     result: str | None = None
     try:
         bg_registry = ctx.run_registry.get_background_registry(session_state.session_id)
-        agent, callbacks = create_agent(
+        agent, callbacks, tool_ctx = create_agent(
             executor=ctx.executor,
             config=ctx.config,
             tools=ctx.tools,
@@ -307,6 +307,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             extra_auto_approve=INIT_AUTO_APPROVE if ctx.is_init else None,
             background_tasks=bg_registry,
         )
+        tool_ctx.io.emit = bus.emit
 
         pending_messages: list[dict] = []
         run.inject_queue = pending_messages
@@ -334,6 +335,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         result, bg_gen = await run_agent_loop(ctx, agent, bus)
 
         if bg_gen is not None:
+            tool_ctx.io.emit = None
             await bus.emit(RunBackgroundedEvent(run_id=run.run_id))
             ctx.run_registry.complete_run(run.run_id)
             run.drain_task = asyncio.create_task(_drain_backgrounded(bg_gen, agent, ctx, bg_registry, callbacks))

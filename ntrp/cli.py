@@ -120,7 +120,7 @@ async def _run_headless(prompt: str):
 
         config = AgentConfig.from_config(runtime.config)
 
-        agent, callbacks = create_agent(
+        agent, callbacks, _ = create_agent(
             executor=runtime.executor,
             config=config,
             tools=runtime.executor.get_tools(),
