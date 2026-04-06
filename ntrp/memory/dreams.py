@@ -14,6 +14,7 @@ from contextlib import AbstractAsyncContextManager, nullcontext
 import numpy as np
 from pydantic import BaseModel
 
+from ntrp.agent import Role
 from ntrp.constants import (
     DREAM_CLUSTER_FACTOR,
     DREAM_DEDUP_THRESHOLD,
@@ -23,7 +24,6 @@ from ntrp.constants import (
     DREAM_TEMPERATURE,
 )
 from ntrp.llm.router import get_completion_client
-from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact
 from ntrp.memory.prompts import DREAM_EVALUATOR_PROMPT, DREAM_PROMPT

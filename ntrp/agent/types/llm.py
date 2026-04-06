@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
-from ntrp.usage import Usage
+from ntrp.agent.types.tool_call import ToolCall
+from ntrp.agent.types.usage import Usage
 
 
 class Role(StrEnum):
@@ -16,20 +17,6 @@ class FinishReason(StrEnum):
     TOOL_CALLS = "tool_calls"
     LENGTH = "length"
     CONTENT_FILTER = "content_filter"
-
-
-@dataclass(frozen=True)
-class FunctionCall:
-    name: str
-    arguments: str
-
-
-@dataclass(frozen=True)
-class ToolCall:
-    id: str
-    type: str  # always "function"
-    function: FunctionCall
-    thought_signature: bytes | None = None
 
 
 @dataclass(frozen=True)

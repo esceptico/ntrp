@@ -1,8 +1,8 @@
 from pydantic import BaseModel
 
+from ntrp.agent import Role
 from ntrp.constants import EXTRACTION_TEMPERATURE
 from ntrp.llm.router import get_completion_client
-from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 from ntrp.memory.models import ExtractedEntity, ExtractionResult
 from ntrp.memory.prompts import EXTRACTION_PROMPT

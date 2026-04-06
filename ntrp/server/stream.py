@@ -2,43 +2,60 @@ import asyncio
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from ntrp.events.sse import RunCancelledEvent, SSEEvent
+from ntrp.agent import Result, TextBlock, TextDelta, ToolCompleted, ToolStarted
+from ntrp.events.sse import RunCancelledEvent, TextDeltaEvent, TextEvent, ToolCallEvent, ToolResultEvent
 
 if TYPE_CHECKING:
-    from ntrp.core.agent import Agent
+    from ntrp.agent import Agent
     from ntrp.server.bus import SessionBus
     from ntrp.services.chat import ChatContext
+
+
+def _to_sse(event: TextDelta | TextBlock | ToolStarted | ToolCompleted):
+    match event:
+        case TextDelta(content=content):
+            return TextDeltaEvent(content=content)
+        case TextBlock(content=content):
+            return TextEvent(content=content)
+        case ToolStarted():
+            return ToolCallEvent(
+                tool_id=event.tool_id,
+                name=event.name,
+                args=event.args,
+                display_name=event.display_name,
+            )
+        case ToolCompleted():
+            return ToolResultEvent(
+                tool_id=event.tool_id,
+                name=event.name,
+                result=event.result,
+                preview=event.preview,
+                duration_ms=event.duration_ms,
+                data=event.data,
+                display_name=event.display_name,
+            )
 
 
 async def run_agent_loop(
     ctx: "ChatContext", agent: "Agent", bus: "SessionBus"
 ) -> tuple[str | None, AsyncGenerator | None]:
-    """Run agent loop, push events to bus.
-
-    Returns (result_text, None) on normal completion,
-    (None, None) on cancellation,
-    (None, generator) when backgrounded (caller should drain the generator).
-    """
     messages = ctx.run.messages
-    user_message = messages[-1]["content"]
-    history = messages[:-1] if len(messages) > 1 else None
-
-    agent.ctx.io.emit = bus.emit
-    ctx.run.messages = agent.messages
 
     result = ""
-    gen = agent.stream(user_message, history=history)
+    gen = agent.stream(messages)
     try:
         async for item in gen:
             if ctx.run.cancelled:
                 break
             if ctx.run.backgrounded:
                 return None, gen
-            if isinstance(item, str):
-                result = item
-            elif isinstance(item, SSEEvent):
-                await bus.emit(item)
-                await asyncio.sleep(0)
+            if isinstance(item, Result):
+                result = item.text
+            else:
+                sse = _to_sse(item)
+                if sse:
+                    await bus.emit(sse)
+                    await asyncio.sleep(0)
     except asyncio.CancelledError:
         result = ""
 

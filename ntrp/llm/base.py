@@ -3,8 +3,8 @@ from collections.abc import AsyncGenerator
 
 from pydantic import BaseModel
 
+from ntrp.agent import CompletionResponse
 from ntrp.llm.retry import with_retry
-from ntrp.llm.types import CompletionResponse
 
 
 class CompletionClient(ABC):

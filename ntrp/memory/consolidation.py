@@ -5,12 +5,12 @@ from typing import Literal
 from pydantic import BaseModel
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
+from ntrp.agent import Role
 from ntrp.constants import (
     CONSOLIDATION_SEARCH_LIMIT,
     CONSOLIDATION_TEMPERATURE,
 )
 from ntrp.llm.router import get_completion_client
-from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact, Observation
 from ntrp.memory.prompts import CONSOLIDATION_PROMPT

@@ -2,10 +2,13 @@ import asyncio
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from ntrp.agent import Agent, AgentHooks, Role
 from ntrp.constants import SUBAGENT_DEFAULT_TIMEOUT
 from ntrp.context.models import SessionState
-from ntrp.core.agent import Agent
+from ntrp.core.agent_callbacks import NtrpAgentCallbacks
 from ntrp.core.isolation import IsolationLevel
+from ntrp.core.llm_client import llm_client
+from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.events.sse import BackgroundTaskEvent, ToolCallEvent, ToolResultEvent
 from ntrp.logging import get_logger
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
@@ -48,6 +51,7 @@ def create_spawn_fn(
     ) -> str:
         filtered_tools = tools or executor.get_tools()
         child_state = _create_session_state(calling_ctx, isolation)
+        child_model = model_override or model
 
         child_run = RunContext(
             run_id=calling_ctx.run.run_id,
@@ -57,7 +61,6 @@ def create_spawn_fn(
             research_model=calling_ctx.run.research_model,
         )
 
-        # Pre-generate IDs for background so the emit wrapper can reference them
         if background:
             registry = calling_ctx.background_tasks
             task_id = registry.generate_id()
@@ -104,38 +107,48 @@ def create_spawn_fn(
         )
         child_ctx.spawn_fn = create_spawn_fn(
             executor=executor,
-            model=model_override or model,
+            model=child_model,
             max_depth=max_depth,
             current_depth=current_depth + 1,
+        )
+
+        child_executor = NtrpToolExecutor(executor, child_ctx, ledger=calling_ctx.ledger)
+
+        child_callbacks = NtrpAgentCallbacks(
+            channel=calling_ctx.channel,
+            session_id=child_state.session_id,
+            model=child_model,
+            is_root=False,
         )
 
         sub_agent = Agent(
             tools=filtered_tools,
-            tool_executor=executor,
-            model=model_override or model,
-            system_prompt=system_prompt,
-            ctx=child_ctx,
+            client=llm_client,
+            executor=child_executor,
+            model=child_model,
             max_depth=max_depth,
             current_depth=current_depth + 1,
-            parent_id=parent_id,
+            hooks=AgentHooks(on_response=child_callbacks.on_response),
         )
+
+        child_messages = [
+            {"role": Role.SYSTEM, "content": system_prompt},
+            {"role": Role.USER, "content": task},
+        ]
 
         if not background:
             try:
-                return await asyncio.wait_for(
-                    sub_agent.run(task),
-                    timeout=timeout,
-                )
+                run_result = await asyncio.wait_for(sub_agent.run(child_messages), timeout=timeout)
+                return run_result.text
             except TimeoutError:
                 return f"Error: Sub-agent timed out after {timeout}s"
 
-        # Capture emit now — calling_ctx.io.emit may be nulled if the run
-        # is backgrounded before the sub-agent finishes.
         captured_emit = calling_ctx.io.emit
 
         async def _run_background():
             try:
-                result = await asyncio.wait_for(sub_agent.run(task), timeout=timeout)
+                run_result = await asyncio.wait_for(sub_agent.run(child_messages), timeout=timeout)
+                result = run_result.text
                 status = "completed"
             except asyncio.CancelledError:
                 return

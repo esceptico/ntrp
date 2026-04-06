@@ -2,10 +2,10 @@ import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from ntrp.agent import Agent, Role
 from ntrp.channel import Channel
 from ntrp.constants import CONVERSATION_GAP_THRESHOLD
 from ntrp.context.models import SessionData, SessionState
-from ntrp.core.agent import Agent
 from ntrp.core.content import ContextContent, ImageContent, TextContent
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import INIT_INSTRUCTION, build_system_blocks
@@ -19,7 +19,6 @@ from ntrp.events.sse import (
     ThinkingEvent,
 )
 from ntrp.llm.models import Provider, get_model
-from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 from ntrp.memory.formatting import format_session_memory
 from ntrp.server.bus import SessionBus
@@ -223,12 +222,18 @@ async def _drain_backgrounded(
     gen,
     agent: Agent,
     ctx: ChatContext,
+    bg_registry,
+    callbacks,
 ) -> None:
     """Continue draining an agent stream silently after the run was backgrounded."""
-    # No UI connected — restrict to read-only tools so nothing mutates unattended.
-    # emit is already nulled by run_chat before this task is created.
-    read_only = {t["function"]["name"] for t in ctx.executor.get_tools(mutates=False)}
+    read_only = set()
+    for t in ctx.tools:
+        name = t["function"]["name"]
+        tool = ctx.executor.registry.get(name)
+        if tool and not tool.mutates:
+            read_only.add(name)
     agent.tools = [t for t in agent.tools if t["function"]["name"] in read_only]
+    messages = ctx.run.messages
     try:
         async for _ in gen:
             pass
@@ -237,32 +242,28 @@ async def _drain_backgrounded(
     except Exception:
         _logger.exception("Backgrounded drain failed (run_id=%s)", ctx.run.run_id)
     finally:
-        ctx.run.messages = agent.messages
-        ctx.run.usage = agent.usage
-        last_tokens = getattr(agent, "_last_input_tokens", None)
-        metadata = {"last_input_tokens": last_tokens} if last_tokens is not None else None
+        if callbacks:
+            ctx.run.usage = callbacks.usage
 
-        # Swap on_result FIRST so no messages land in inject_queue after
-        # this point. Then flush any remaining inject_queue into messages.
         save_lock = asyncio.Lock()
 
-        async def _save_directly(messages: list[dict]) -> None:
+        async def _save_directly(injected: list[dict]) -> None:
             async with save_lock:
-                agent.messages.extend(messages)
+                messages.extend(injected)
                 try:
-                    await ctx.session_service.save(ctx.session_state, agent.messages, metadata=metadata)
+                    await ctx.session_service.save(ctx.session_state, messages)
                 except Exception:
                     _logger.exception("Background direct-save failed (run_id=%s)", ctx.run.run_id)
 
-        agent.ctx.background_tasks.on_result = _save_directly
+        bg_registry.on_result = _save_directly
 
-        if agent.inject_queue:
-            agent.messages.extend(agent.inject_queue)
-            agent.inject_queue.clear()
+        if ctx.run.inject_queue:
+            messages.extend(ctx.run.inject_queue)
+            ctx.run.inject_queue.clear()
 
         try:
             async with save_lock:
-                await ctx.session_service.save(ctx.session_state, agent.messages, metadata=metadata)
+                await ctx.session_service.save(ctx.session_state, messages)
         except Exception:
             _logger.exception("Backgrounded final save failed (run_id=%s)", ctx.run.run_id)
 
@@ -289,14 +290,14 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
     ctx.channel.publish(RunStarted(run_id=run.run_id, session_id=session_state.session_id))
 
     agent: Agent | None = None
+    callbacks = None
     result: str | None = None
     try:
         bg_registry = ctx.run_registry.get_background_registry(session_state.session_id)
-        agent = create_agent(
+        agent, callbacks = create_agent(
             executor=ctx.executor,
             config=ctx.config,
             tools=ctx.tools,
-            system_prompt=ctx.run.messages[0]["content"] if ctx.run.messages else [],
             session_state=session_state,
             channel=ctx.channel,
             run_id=run.run_id,
@@ -307,62 +308,72 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             background_tasks=bg_registry,
         )
 
-        # Share inject_queue and mark running only after wiring is complete
-        run.inject_queue = agent.inject_queue
+        pending_messages: list[dict] = []
+        run.inject_queue = pending_messages
         run.status = RunStatus.RUNNING
         run_finished = False
 
+        async def _get_pending() -> list[dict]:
+            if not pending_messages:
+                return []
+            batch = list(pending_messages)
+            pending_messages.clear()
+            return batch
+
+        agent.hooks.get_pending_messages = _get_pending
+
         async def _on_bg_result(messages: list[dict]) -> None:
             if not run_finished:
-                agent.inject_queue.extend(messages)
+                pending_messages.extend(messages)
             else:
                 run.messages.extend(messages)
                 await ctx.session_service.save(session_state, run.messages)
 
-        agent.ctx.background_tasks.on_result = _on_bg_result
+        bg_registry.on_result = _on_bg_result
 
         result, bg_gen = await run_agent_loop(ctx, agent, bus)
 
         if bg_gen is not None:
-            # Backgrounded: unlock UI, drain agent silently.
-            # Null emit immediately to close the race window between
-            # returning gen and _drain_backgrounded restricting the agent.
-            agent.ctx.io.emit = None
             await bus.emit(RunBackgroundedEvent(run_id=run.run_id))
             ctx.run_registry.complete_run(run.run_id)
-            run.drain_task = asyncio.create_task(_drain_backgrounded(bg_gen, agent, ctx))
+            run.drain_task = asyncio.create_task(_drain_backgrounded(bg_gen, agent, ctx, bg_registry, callbacks))
             return
 
         if result is None:
             return  # Cancelled
 
-        if agent:
-            run.usage = agent.usage
-            run.messages = agent.messages
+        if callbacks:
+            run.usage = callbacks.usage
 
         if result:
             await bus.emit(TextEvent(content=result))
 
-        await bus.emit(RunFinishedEvent(run_id=run.run_id, usage=run.usage.to_dict()))
+        usage_dict = run.usage.to_dict()
+        if callbacks:
+            usage_dict["cost"] = callbacks.total_cost
+        await bus.emit(RunFinishedEvent(run_id=run.run_id, usage=usage_dict))
         ctx.run_registry.complete_run(run.run_id)
 
     except Exception as e:
         _logger.exception("Chat failed (run_id=%s, session_id=%s)", run.run_id, session_state.session_id)
         await bus.emit(RunErrorEvent(message=str(e), recoverable=False))
-        run.status = RunStatus.ERROR
-        ctx.run_registry.cleanup_old_runs()
+        ctx.run_registry.error_run(run.run_id)
 
     finally:
         if not run.backgrounded:
-            if agent:
-                if agent.inject_queue:
-                    agent.messages.extend(agent.inject_queue)
-                    agent.inject_queue.clear()
-                run.usage = agent.usage
-                run.messages = agent.messages
+            if pending_messages:
+                run.messages.extend(pending_messages)
+                pending_messages.clear()
+            if callbacks:
+                run.usage = callbacks.usage
             run_finished = True
-            last_tokens = getattr(agent, "_last_input_tokens", None) if agent else None
-            metadata = {"last_input_tokens": last_tokens} if last_tokens is not None else None
+            last_tokens = getattr(agent, "_last_response", None)
+            if last_tokens and last_tokens.usage:
+                u = last_tokens.usage
+                input_tokens = u.prompt_tokens + u.cache_read_tokens + u.cache_write_tokens
+            else:
+                input_tokens = None
+            metadata = {"last_input_tokens": input_tokens} if input_tokens is not None else None
             await ctx.session_service.save(session_state, run.messages, metadata=metadata)
             ctx.channel.publish(
                 RunCompleted(

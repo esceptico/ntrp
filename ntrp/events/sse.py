@@ -66,8 +66,8 @@ class ToolCallEvent(SSEEvent):
     tool_id: str
     name: str
     args: dict
-    depth: int = 0  # 0 = top-level, >0 = subagent
-    parent_id: str = ""  # Parent tool_call_id for grouping subagent calls
+    depth: int = 0
+    parent_id: str = ""
     display_name: str = ""
 
     def to_sse(self) -> dict:

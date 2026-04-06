@@ -3,6 +3,7 @@ from dataclasses import dataclass, replace
 
 from coolname import generate_slug
 
+from ntrp.agent import Role, Usage
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.core.factory import AgentConfig, create_agent
@@ -12,7 +13,6 @@ from ntrp.memory.facts import FactMemory
 from ntrp.memory.formatting import format_session_memory
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
-from ntrp.usage import Usage
 
 
 @dataclass(frozen=True)
@@ -66,29 +66,34 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
     if request.model:
         agent_config = replace(deps.config, model=request.model)
 
-    agent = create_agent(
+    agent, callbacks = create_agent(
         executor=executor,
         config=agent_config,
         tools=tools,
-        system_prompt=system_prompt,
         session_state=session_state,
         channel=deps.channel,
         run_id=run_id,
     )
 
+    messages = [
+        {"role": Role.SYSTEM, "content": system_prompt},
+        {"role": Role.USER, "content": request.prompt},
+    ]
+
     deps.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
     output: str | None = None
     try:
-        output = await agent.run(request.prompt)
+        run_result = await agent.run(messages)
+        output = run_result.text
     finally:
         deps.channel.publish(
             RunCompleted(
                 run_id=run_id,
                 session_id=session_state.session_id,
-                messages=tuple(agent.messages),
-                usage=agent.usage,
+                messages=tuple(messages),
+                usage=callbacks.usage,
                 result=output,
             )
         )
 
-    return RunResult(run_id=run_id, output=output, usage=agent.usage)
+    return RunResult(run_id=run_id, output=output, usage=callbacks.usage)

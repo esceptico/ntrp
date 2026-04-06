@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 
+from ntrp.agent import Role
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
 from ntrp.core.content import blocks_to_text
-from ntrp.llm.types import Role
 from ntrp.server.deps import require_session_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (

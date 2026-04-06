@@ -3,21 +3,24 @@
 import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
 
 import ntrp.database as database
-from ntrp.channel import Channel
+from ntrp.agent import Agent
 from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
-from ntrp.core.agent import Agent
 from ntrp.tools.core.base import Tool, ToolResult
-from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
-from ntrp.tools.core.registry import ToolRegistry
-from ntrp.tools.executor import ToolExecutor
-from tests.helpers import MockCompletionClient, make_text_response, make_tool_response
+from ntrp.tools.core.context import BackgroundTaskRegistry, ToolExecution
+from tests.helpers import (
+    MockCompletionClient,
+    MockLLMClient,
+    make_executor,
+    make_test_executor,
+    make_text_response,
+    make_tool_response,
+)
 
 # --- Helpers ---
 
@@ -41,36 +44,14 @@ class CrashTool(Tool):
         raise ValueError("unexpected crash")
 
 
-def _make_executor(*tools: Tool) -> ToolExecutor:
-    executor = ToolExecutor.__new__(ToolExecutor)
-    executor._get_services = dict
-    executor.registry = ToolRegistry()
-    for tool in tools:
-        executor.registry.register(tool)
-    return executor
-
-
-def _make_ctx(executor: ToolExecutor) -> ToolContext:
-    return ToolContext(
-        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
-        registry=executor.registry,
-        run=RunContext(run_id="run-1"),
-        io=IOBridge(),
-        channel=Channel(),
-        background_tasks=BackgroundTaskRegistry(session_id="test"),
-    )
-
-
-def _make_agent(client, executor, ctx) -> Agent:
-    agent = Agent(
+def _make_agent(client, *tools) -> Agent:
+    executor = make_executor(*tools)
+    return Agent(
         tools=executor.get_tools(),
-        tool_executor=executor,
+        client=MockLLMClient(client),
+        executor=make_test_executor(executor),
         model="test-model",
-        system_prompt="test",
-        ctx=ctx,
     )
-    agent._track_usage = lambda r: None
-    return agent
 
 
 # --- Agent edge cases ---
@@ -80,8 +61,7 @@ def _make_agent(client, executor, ctx) -> Agent:
 async def test_agent_multiple_tool_calls_in_one_turn():
     """LLM returns multiple tool calls in a single response."""
 
-    from ntrp.llm.types import Choice, CompletionResponse, FunctionCall, Message, ToolCall
-    from ntrp.usage import Usage
+    from ntrp.agent import Choice, CompletionResponse, FunctionCall, Message, ToolCall, Usage
 
     multi_tool = CompletionResponse(
         choices=[
@@ -103,15 +83,13 @@ async def test_agent_multiple_tool_calls_in_one_turn():
     )
 
     client = MockCompletionClient([multi_tool, make_text_response("Both done")])
-    executor = _make_executor(SlowTool())
-    ctx = _make_ctx(executor)
-    agent = _make_agent(client, executor, ctx)
+    agent = _make_agent(client, SlowTool())
+    messages = [{"role": "system", "content": "test"}, {"role": "user", "content": "Do two things"}]
 
-    with patch("ntrp.core.agent.get_completion_client", return_value=client):
-        result = await agent.run("Do two things")
+    result = await agent.run(messages)
 
-    assert result == "Both done"
-    tool_msgs = [m for m in agent.messages if m["role"] == "tool"]
+    assert result.text == "Both done"
+    tool_msgs = [m for m in messages if m["role"] == "tool"]
     assert len(tool_msgs) == 2
 
 
@@ -119,14 +97,11 @@ async def test_agent_multiple_tool_calls_in_one_turn():
 async def test_agent_empty_text_response():
     """LLM returns empty content."""
     client = MockCompletionClient([make_text_response("")])
-    executor = _make_executor()
-    ctx = _make_ctx(executor)
-    agent = _make_agent(client, executor, ctx)
+    agent = _make_agent(client)
 
-    with patch("ntrp.core.agent.get_completion_client", return_value=client):
-        result = await agent.run("Hi")
+    result = await agent.run([{"role": "system", "content": "test"}, {"role": "user", "content": "Hi"}])
 
-    assert result == ""
+    assert result.text == ""
 
 
 @pytest.mark.asyncio
@@ -138,19 +113,15 @@ async def test_agent_cancellation():
             make_text_response("Never reached"),
         ]
     )
-    executor = _make_executor(SlowTool())
-    ctx = _make_ctx(executor)
-    agent = _make_agent(client, executor, ctx)
+    agent = _make_agent(client, SlowTool())
+    messages = [{"role": "system", "content": "test"}, {"role": "user", "content": "Start"}]
 
-    with patch("ntrp.core.agent.get_completion_client", return_value=client):
-        gen = agent.stream("Start")
-        # Get first event then cancel
-        first = await gen.__anext__()
-        assert first is not None
-        await gen.aclose()
+    gen = agent.stream(messages)
+    first = await gen.__anext__()
+    assert first is not None
+    await gen.aclose()
 
-    # Agent should not be in a broken state
-    assert agent.messages  # has at least the system + user message
+    assert messages  # has at least the system + user message
 
 
 # --- Session edge cases ---

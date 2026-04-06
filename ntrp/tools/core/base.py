@@ -3,8 +3,9 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel
 
+from ntrp.agent import ToolResult
 from ntrp.tools.core.context import ToolExecution
-from ntrp.tools.core.types import ApprovalInfo, ToolResult
+from ntrp.tools.core.types import ApprovalInfo
 
 
 def _inline_refs(schema: dict) -> dict:

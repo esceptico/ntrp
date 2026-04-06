@@ -43,7 +43,7 @@ class Model:
     provider: Provider
     max_context_tokens: int
     max_output_tokens: int = 8192
-    pricing: Pricing = field(default_factory=Pricing)
+    pricing: Pricing = field(default_factory=lambda: Pricing(0, 0))
     base_url: str | None = None
     api_key_env: str | None = None
 

@@ -2,45 +2,20 @@
 
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
 
 import ntrp.database as database
+from ntrp.agent import Agent
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
-from ntrp.core.agent import Agent
 from ntrp.services.chat import _retain_user_content, _time_gap_note
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
-from ntrp.tools.executor import ToolExecutor
-from tests.helpers import MockCompletionClient, make_text_response
-
-# --- Helpers ---
-
-
-def _make_executor(*tools: Tool) -> ToolExecutor:
-    executor = ToolExecutor.__new__(ToolExecutor)
-    executor._get_services = dict
-    executor.registry = ToolRegistry()
-    for tool in tools:
-        executor.registry.register(tool)
-    return executor
-
-
-def _make_ctx(executor: ToolExecutor) -> ToolContext:
-    return ToolContext(
-        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
-        registry=executor.registry,
-        run=RunContext(run_id="run-1"),
-        io=IOBridge(),
-        channel=Channel(),
-        background_tasks=BackgroundTaskRegistry(session_id="test"),
-    )
-
+from tests.helpers import MockCompletionClient, MockLLMClient, make_executor, make_test_executor, make_text_response
 
 # --- Context block stripping ---
 
@@ -147,8 +122,7 @@ class EchoTool(Tool):
 @pytest.mark.asyncio
 async def test_agent_text_and_tool_calls():
     """Some models return both content and tool_calls. Agent should handle both."""
-    from ntrp.llm.types import Choice, CompletionResponse, FunctionCall, Message, ToolCall
-    from ntrp.usage import Usage
+    from ntrp.agent import Choice, CompletionResponse, FunctionCall, Message, ToolCall, Usage
 
     mixed = CompletionResponse(
         choices=[
@@ -171,23 +145,19 @@ async def test_agent_text_and_tool_calls():
     )
 
     client = MockCompletionClient([mixed, make_text_response("Here's the result")])
-    executor = _make_executor(EchoTool())
-    ctx = _make_ctx(executor)
+    executor = make_executor(EchoTool())
     agent = Agent(
         tools=executor.get_tools(),
-        tool_executor=executor,
+        client=MockLLMClient(client),
+        executor=make_test_executor(executor),
         model="test-model",
-        system_prompt="test",
-        ctx=ctx,
     )
-    agent._track_usage = lambda r: None
 
-    with patch("ntrp.core.agent.get_completion_client", return_value=client):
-        result = await agent.run("Check something")
+    messages = [{"role": "system", "content": "test"}, {"role": "user", "content": "Check something"}]
+    result = await agent.run(messages)
 
-    assert result == "Here's the result"
-    # The "Let me check" text should be in messages as part of the assistant turn
-    assistant_msgs = [m for m in agent.messages if m["role"] == "assistant"]
+    assert result.text == "Here's the result"
+    assistant_msgs = [m for m in messages if m["role"] == "assistant"]
     assert any("Let me check" in (m.get("content") or "") for m in assistant_msgs)
 
 

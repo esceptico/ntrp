@@ -4,10 +4,7 @@ from collections.abc import AsyncGenerator
 import anthropic
 from pydantic import BaseModel
 
-from ntrp.core.content import render_context
-from ntrp.llm.base import CompletionClient
-from ntrp.llm.models import get_model
-from ntrp.llm.types import (
+from ntrp.agent import (
     Choice,
     CompletionResponse,
     FinishReason,
@@ -17,6 +14,9 @@ from ntrp.llm.types import (
     ToolCall,
     Usage,
 )
+from ntrp.core.content import render_context
+from ntrp.llm.base import CompletionClient
+from ntrp.llm.models import get_model
 from ntrp.llm.utils import blocks_to_text, parse_args
 
 _FINISH_REASONS: dict[str, FinishReason] = {

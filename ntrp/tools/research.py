@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 
+from ntrp.agent.ledger import SharedLedger
 from ntrp.constants import RESEARCH_TIMEOUT, USER_ENTITY_NAME
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.prompts import RESEARCH_PROMPTS, current_date_formatted, env
@@ -8,6 +9,30 @@ from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
 _logger = get_logger(__name__)
+
+
+LEDGER_TEMPLATE = env.from_string("""\
+RESEARCH CONTEXT (shared across all agents in this run):
+{% if active %}Active:
+{% for item in active %}- "{{ item.label }}" ({{ item.metadata.depth }})
+{% endfor %}{% endif %}\
+{% if done %}Done:
+{% for item in done %}- "{{ item.label }}" ({{ item.metadata.depth }})
+{% endfor %}{% endif %}\
+{% if accessed %}Documents already read: {{ accessed }}
+{% endif %}\
+Do not re-research topics already covered. Focus on your specific scope.""")
+
+
+def _format_ledger(ledger: SharedLedger, exclude_id: str | None = None) -> str:
+    items = ledger.get_items(exclude_id=exclude_id)
+    if not items and not ledger.accessed_count:
+        return ""
+
+    active = [item for item in items if not item.done]
+    done = [item for item in items if item.done]
+    return LEDGER_TEMPLATE.render(active=active, done=done, accessed=ledger.accessed_count)
+
 
 RESEARCH_SYSTEM_PROMPT = env.from_string("""{{ base_prompt }}
 
@@ -61,7 +86,7 @@ class ResearchTool(Tool):
     async def _build_prompt(self, ctx, depth: str, remaining_depth: int, tool_id: str) -> str:
         ledger_summary = None
         if ctx.ledger:
-            ledger_summary = await ctx.ledger.summary(exclude_id=tool_id)
+            ledger_summary = _format_ledger(ctx.ledger, exclude_id=tool_id)
 
         user_facts = []
         memory = ctx.services.get("memory")
@@ -83,7 +108,7 @@ class ResearchTool(Tool):
             return ToolResult(content="Error: spawn capability not available", preview="Error", is_error=True)
 
         if ctx.ledger:
-            await ctx.ledger.register(execution.tool_id, task, depth)
+            await ctx.ledger.register(execution.tool_id, task, depth=depth)
 
         remaining = ctx.run.max_depth - ctx.run.current_depth - 1
         exclude = {"background", "cancel_background_task", "list_background_tasks", "get_background_result"}

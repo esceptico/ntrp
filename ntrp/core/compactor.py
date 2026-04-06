@@ -1,6 +1,7 @@
 import asyncio
 from typing import Protocol
 
+from ntrp.agent import Role
 from ntrp.constants import (
     COMPACTION_TIMEOUT,
     COMPRESSION_KEEP_RATIO,
@@ -12,7 +13,6 @@ from ntrp.constants import (
 from ntrp.context.prompts import MERGE_SUMMARY_PROMPT_TEMPLATE, SUMMARIZE_PROMPT_TEMPLATE
 from ntrp.llm.models import get_model
 from ntrp.llm.router import get_completion_client
-from ntrp.llm.types import Role
 from ntrp.llm.utils import blocks_to_text
 
 

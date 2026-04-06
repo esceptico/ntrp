@@ -6,6 +6,7 @@ import uvicorn
 from coolname import generate_slug
 from rich.console import Console
 
+from ntrp.agent import Role
 from ntrp.config import get_config
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
@@ -119,31 +120,36 @@ async def _run_headless(prompt: str):
 
         config = AgentConfig.from_config(runtime.config)
 
-        agent = create_agent(
+        agent, callbacks = create_agent(
             executor=runtime.executor,
             config=config,
             tools=runtime.executor.get_tools(),
-            system_prompt=system_prompt,
             session_state=session_state,
             channel=runtime.channel,
             run_id=run_id,
             io=IOBridge(),
         )
 
+        messages = [
+            {"role": Role.SYSTEM, "content": system_prompt},
+            {"role": Role.USER, "content": prompt},
+        ]
+
         console.print(f"[dim]Running: {prompt}[/dim]\n")
         runtime.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
-        result: str | None = None
+        output: str | None = None
         try:
-            result = await agent.run(task=prompt, history=None)
-            console.print(result)
+            run_result = await agent.run(messages)
+            output = run_result.text
+            console.print(output)
         finally:
             runtime.channel.publish(
                 RunCompleted(
                     run_id=run_id,
                     session_id=session_state.session_id,
-                    messages=tuple(agent.messages),
-                    usage=agent.usage,
-                    result=result,
+                    messages=tuple(messages),
+                    usage=callbacks.usage,
+                    result=output,
                 )
             )
     finally:

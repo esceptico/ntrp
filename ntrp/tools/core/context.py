@@ -6,14 +6,13 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 from coolname import generate_slug
 
+from ntrp.agent import Role, ToolResult
+from ntrp.agent.ledger import SharedLedger
 from ntrp.channel import Channel
 from ntrp.constants import NTRP_TMP_BASE, OFFLOAD_PREVIEW_LINES
 from ntrp.context.models import SessionState
-from ntrp.core.ledger import ResearchLedger
 from ntrp.events.sse import ApprovalNeededEvent, BackgroundTaskEvent
-from ntrp.llm.types import Role
 from ntrp.logging import get_logger
-from ntrp.tools.core.types import ToolResult
 
 _logger = get_logger(__name__)
 
@@ -160,7 +159,7 @@ class ToolContext:
     io: IOBridge
     services: dict[str, Any] = field(default_factory=dict)
     channel: Channel = field(default_factory=Channel)
-    ledger: ResearchLedger | None = None
+    ledger: SharedLedger | None = None
     spawn_fn: Callable[..., Awaitable[str]] | None = None
     background_tasks: BackgroundTaskRegistry = field(default_factory=BackgroundTaskRegistry)
 
