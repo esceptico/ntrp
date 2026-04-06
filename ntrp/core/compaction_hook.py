@@ -1,11 +1,10 @@
-from ntrp.agent import CompletionResponse, StepConfig, Usage
+from ntrp.agent import CompletionResponse, StepConfig
 from ntrp.channel import Channel
 from ntrp.core.compactor import Compactor
 from ntrp.events.internal import ContextCompressed
-from ntrp.llm.models import get_model
 
 
-class NtrpAgentCallbacks:
+class NtrpCompactionHook:
     def __init__(
         self,
         channel: Channel,
@@ -19,13 +18,6 @@ class NtrpAgentCallbacks:
         self.model = model
         self.compactor = compactor
         self.is_root = is_root
-        self.usage = Usage()
-        self.total_cost: float = 0.0
-
-    async def on_response(self, response: CompletionResponse) -> None:
-        model_def = get_model(response.model)
-        self.usage += response.usage
-        self.total_cost += model_def.pricing.cost(response.usage)
 
     async def prepare_step(
         self,

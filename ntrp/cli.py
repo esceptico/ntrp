@@ -120,7 +120,7 @@ async def _run_headless(prompt: str):
 
         config = AgentConfig.from_config(runtime.config)
 
-        agent, callbacks, _ = create_agent(
+        agent = create_agent(
             executor=runtime.executor,
             config=config,
             tools=runtime.executor.get_tools(),
@@ -137,21 +137,17 @@ async def _run_headless(prompt: str):
 
         console.print(f"[dim]Running: {prompt}[/dim]\n")
         runtime.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
-        output: str | None = None
-        try:
-            run_result = await agent.run(messages)
-            output = run_result.text
-            console.print(output)
-        finally:
-            runtime.channel.publish(
-                RunCompleted(
-                    run_id=run_id,
-                    session_id=session_state.session_id,
-                    messages=tuple(messages),
-                    usage=callbacks.usage,
-                    result=output,
-                )
+        run_result = await agent.run(messages)
+        console.print(run_result.text)
+        runtime.channel.publish(
+            RunCompleted(
+                run_id=run_id,
+                session_id=session_state.session_id,
+                messages=tuple(messages),
+                usage=run_result.usage,
+                result=run_result.text,
             )
+        )
     finally:
         await runtime.close()
 

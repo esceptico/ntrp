@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from uuid import uuid4
 
 from ntrp.agent import ToolMeta, ToolResult
 from ntrp.agent.ledger import SharedLedger
@@ -17,7 +16,7 @@ class NtrpToolExecutor:
         self._offload_counter = 0
         self._meta_cache: dict[str, ToolMeta | None] = {}
 
-    async def execute(self, name: str, args: dict) -> ToolResult:
+    async def execute(self, name: str, args: dict, tool_call_id: str) -> ToolResult:
         tool = self._executor.registry.get(name)
         if not tool:
             return ToolResult(
@@ -31,7 +30,7 @@ class NtrpToolExecutor:
         else:
             already_read = False
 
-        execution = ToolExecution(tool_id=uuid4().hex[:8], tool_name=name, ctx=self._ctx)
+        execution = ToolExecution(tool_id=tool_call_id, tool_name=name, ctx=self._ctx)
         result = await self._executor.registry.execute(name, execution, args)
         result = self._maybe_offload(name, result)
 

@@ -26,6 +26,7 @@ class Agent:
         max_iterations: int | None = None,
         max_depth: int = 3,
         current_depth: int = 0,
+        parent_id: str | None = None,
         tool_choice: ToolChoice = ToolChoiceMode.AUTO,
         hooks: AgentHooks | None = None,
     ):
@@ -35,9 +36,10 @@ class Agent:
         self.max_iterations = max_iterations
         self.max_depth = max_depth
         self.current_depth = current_depth
+        self.parent_id = parent_id
         self.tool_choice = tool_choice
         self.hooks = hooks or AgentHooks()
-        self._runner = ToolRunner(executor=executor)
+        self._runner = ToolRunner(executor=executor, depth=current_depth, parent_id=parent_id)
         self._last_response: CompletionResponse | None = None
         self._usage = Usage()
 
@@ -68,7 +70,7 @@ class Agent:
                     return
 
                 if text := (response_message.content or "").strip():
-                    yield TextBlock(content=text)
+                    yield TextBlock(depth=self.current_depth, parent_id=self.parent_id, content=text)
 
                 calls = parse_tool_calls(response_message.tool_calls)
                 async for event in dispatch_tools(self._runner, messages, calls, response_message.tool_calls):
@@ -88,7 +90,6 @@ class Agent:
                 await self.hooks.on_finish(result_text, step, messages)
 
     async def run(self, messages: list[dict]) -> Result:
-        """Run the agent loop and return the final Result."""
         result = self._result("", StopReason.END_TURN, 0)
         async for event in self.stream(messages):
             if isinstance(event, Result):
@@ -138,7 +139,7 @@ class Agent:
             response = None
             async for item in self.client.stream(messages, model, tools, tool_choice):
                 if isinstance(item, str):
-                    yield TextDelta(content=item)
+                    yield TextDelta(depth=self.current_depth, parent_id=self.parent_id, content=item)
                 elif isinstance(item, CompletionResponse):
                     response = item
         except Exception as exc:

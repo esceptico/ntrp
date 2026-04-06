@@ -85,7 +85,7 @@ class FakeExecutor:
         self._meta = meta or {}
         self.call_log: list[tuple[str, dict]] = []
 
-    async def execute(self, name: str, args: dict) -> ToolResult:
+    async def execute(self, name: str, args: dict, tool_call_id: str) -> ToolResult:
         self.call_log.append((name, args))
         handler = self._handlers.get(name)
         if handler is None:

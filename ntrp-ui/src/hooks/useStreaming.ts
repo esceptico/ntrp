@@ -81,14 +81,18 @@ export function useStreaming({
   handleEventRef.current = async (targetId: string, event: ServerEvent) => {
     const viewedId = store.getState().viewedId;
 
-    // These events update pendingText without triggering re-render
-    if (event.type === "text") {
-      getSession(targetId).pendingText = event.content;
-      return;
-    }
-    if (event.type === "text_delta") {
+    if (event.type === "text" || event.type === "text_delta") {
+      const isDelta = event.type === "text_delta";
+      if ((event.depth ?? 0) > 0 && event.parent_id) {
+        mutateSession(targetId, (s) => {
+          const item = s.toolChain.find((i) => i.id === event.parent_id);
+          if (!item) return;
+          item.nestedText = isDelta ? (item.nestedText ?? "") + event.content : event.content;
+        });
+        return;
+      }
       mutateSession(targetId, (s) => {
-        s.pendingText += event.content;
+        s.pendingText = isDelta ? s.pendingText + event.content : event.content;
       });
       return;
     }

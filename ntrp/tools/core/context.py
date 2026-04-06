@@ -9,7 +9,7 @@ from coolname import generate_slug
 from ntrp.agent import Role, ToolResult
 from ntrp.agent.ledger import SharedLedger
 from ntrp.channel import Channel
-from ntrp.constants import NTRP_TMP_BASE, OFFLOAD_PREVIEW_LINES
+from ntrp.constants import NTRP_TMP_BASE
 from ntrp.context.models import SessionState
 from ntrp.events.sse import ApprovalNeededEvent, BackgroundTaskEvent
 from ntrp.logging import get_logger
@@ -118,17 +118,6 @@ class BackgroundTaskRegistry:
         path.write_text(content, encoding="utf-8")
         return path
 
-    @staticmethod
-    def _build_result_summary(content: str, task_id: str) -> str:
-        lines = content.split("\n")
-        preview = "\n".join(lines[:OFFLOAD_PREVIEW_LINES])
-        truncated = (
-            f"\n... ({len(lines) - OFFLOAD_PREVIEW_LINES} more lines, task_id={task_id})"
-            if len(lines) > OFFLOAD_PREVIEW_LINES
-            else ""
-        )
-        return f"{preview}{truncated}"
-
     async def deliver_result(
         self,
         task_id: str,
@@ -138,9 +127,8 @@ class BackgroundTaskRegistry:
         emit: Callable[[Any], Awaitable[None]] | None,
     ) -> None:
         self._write_result_file(task_id, result)
-        summary = self._build_result_summary(result, task_id)
 
-        notification = f"[background task {task_id} {status}]\n\n{summary}"
+        notification = f"[background task {task_id} {status}]"
         messages = [{"role": Role.USER, "content": notification}]
 
         if emit:

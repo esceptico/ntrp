@@ -4,8 +4,6 @@ from typing import Self
 
 @dataclass
 class Usage:
-    """Token usage counters."""
-
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cache_read_tokens: int = 0

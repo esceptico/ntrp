@@ -9,6 +9,7 @@ from ntrp.context.models import SessionData, SessionState
 from ntrp.core.content import ContextContent, ImageContent, TextContent
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import INIT_INSTRUCTION, build_system_blocks
+from ntrp.core.usage_tracker import UsageTracker
 from ntrp.events.internal import RunCompleted, RunStarted
 from ntrp.events.sse import (
     RunBackgroundedEvent,
@@ -223,7 +224,7 @@ async def _drain_backgrounded(
     agent: Agent,
     ctx: ChatContext,
     bg_registry,
-    callbacks,
+    tracker: UsageTracker,
 ) -> None:
     """Continue draining an agent stream silently after the run was backgrounded."""
     read_only = set()
@@ -242,8 +243,7 @@ async def _drain_backgrounded(
     except Exception:
         _logger.exception("Backgrounded drain failed (run_id=%s)", ctx.run.run_id)
     finally:
-        if callbacks:
-            ctx.run.usage = callbacks.usage
+        ctx.run.usage = tracker.usage
 
         save_lock = asyncio.Lock()
 
@@ -290,24 +290,23 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
     ctx.channel.publish(RunStarted(run_id=run.run_id, session_id=session_state.session_id))
 
     agent: Agent | None = None
-    callbacks = None
+    tracker = UsageTracker()
     result: str | None = None
     try:
         bg_registry = ctx.run_registry.get_background_registry(session_state.session_id)
-        agent, callbacks, tool_ctx = create_agent(
+        io = IOBridge(approval_queue=run.approval_queue, emit=bus.emit)
+        agent = create_agent(
             executor=ctx.executor,
             config=ctx.config,
             tools=ctx.tools,
             session_state=session_state,
             channel=ctx.channel,
             run_id=run.run_id,
-            io=IOBridge(
-                approval_queue=run.approval_queue,
-            ),
+            io=io,
             extra_auto_approve=INIT_AUTO_APPROVE if ctx.is_init else None,
             background_tasks=bg_registry,
         )
-        tool_ctx.io.emit = bus.emit
+        agent.hooks.on_response = tracker.track
 
         pending_messages: list[dict] = []
         run.inject_queue = pending_messages
@@ -326,33 +325,28 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         async def _on_bg_result(messages: list[dict]) -> None:
             if not run_finished:
                 pending_messages.extend(messages)
-            else:
-                run.messages.extend(messages)
-                await ctx.session_service.save(session_state, run.messages)
 
         bg_registry.on_result = _on_bg_result
 
         result, bg_gen = await run_agent_loop(ctx, agent, bus)
 
         if bg_gen is not None:
-            tool_ctx.io.emit = None
+            io.emit = None
             await bus.emit(RunBackgroundedEvent(run_id=run.run_id))
             ctx.run_registry.complete_run(run.run_id)
-            run.drain_task = asyncio.create_task(_drain_backgrounded(bg_gen, agent, ctx, bg_registry, callbacks))
+            run.drain_task = asyncio.create_task(_drain_backgrounded(bg_gen, agent, ctx, bg_registry, tracker))
             return
 
         if result is None:
             return  # Cancelled
 
-        if callbacks:
-            run.usage = callbacks.usage
+        run.usage = tracker.usage
 
         if result:
             await bus.emit(TextEvent(content=result))
 
         usage_dict = run.usage.to_dict()
-        if callbacks:
-            usage_dict["cost"] = callbacks.total_cost
+        usage_dict["cost"] = tracker.cost
         await bus.emit(RunFinishedEvent(run_id=run.run_id, usage=usage_dict))
         ctx.run_registry.complete_run(run.run_id)
 
@@ -366,8 +360,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             if pending_messages:
                 run.messages.extend(pending_messages)
                 pending_messages.clear()
-            if callbacks:
-                run.usage = callbacks.usage
+            run.usage = tracker.usage
             run_finished = True
             last_tokens = getattr(agent, "_last_response", None)
             if last_tokens and last_tokens.usage:

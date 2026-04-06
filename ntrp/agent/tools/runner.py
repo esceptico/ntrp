@@ -31,8 +31,10 @@ def _ms_now() -> int:
 
 
 class ToolRunner:
-    def __init__(self, executor: AgentToolExecutor):
+    def __init__(self, executor: AgentToolExecutor, depth: int, parent_id: str | None):
         self._executor = executor
+        self._depth = depth
+        self._parent_id = parent_id
 
     def _resolve(self, call: PendingToolCall) -> _ResolvedCall:
         meta = self._executor.get_meta(call.name)
@@ -45,7 +47,7 @@ class ToolRunner:
     async def _run_one(self, rc: _ResolvedCall) -> tuple[ToolResult, int]:
         start_ms = _ms_now()
         try:
-            result = await self._executor.execute(rc.call.name, rc.call.args)
+            result = await self._executor.execute(rc.call.name, rc.call.args, rc.call.tool_call.id)
             return result, _ms_now() - start_ms
         except Exception as e:
             return (
@@ -57,22 +59,24 @@ class ToolRunner:
                 _ms_now() - start_ms,
             )
 
-    @staticmethod
-    def _started(rc: _ResolvedCall) -> ToolStarted:
+    def _started(self, rc: _ResolvedCall) -> ToolStarted:
         return ToolStarted(
             tool_id=rc.call.tool_call.id,
             name=rc.call.name,
             args=rc.call.args,
+            depth=self._depth,
+            parent_id=self._parent_id,
             display_name=rc.display_name,
         )
 
-    @staticmethod
-    def _completed(rc: _ResolvedCall, result: ToolResult, duration_ms: int) -> ToolCompleted:
+    def _completed(self, rc: _ResolvedCall, result: ToolResult, duration_ms: int) -> ToolCompleted:
         return ToolCompleted(
             tool_id=rc.call.tool_call.id,
             name=rc.call.name,
             result=result.content,
             preview=result.preview,
+            depth=self._depth,
+            parent_id=self._parent_id,
             duration_ms=duration_ms,
             is_error=result.is_error,
             data=result.data,

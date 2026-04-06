@@ -2,6 +2,8 @@ import json
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
+from ntrp.agent import TextBlock, TextDelta, ToolCompleted, ToolStarted
+
 
 class EventType(StrEnum):
     THINKING = "thinking"
@@ -45,12 +47,16 @@ class ThinkingEvent(SSEEvent):
 class TextEvent(SSEEvent):
     type: EventType = field(default=EventType.TEXT, init=False)
     content: str
+    depth: int = 0
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
 class TextDeltaEvent(SSEEvent):
     type: EventType = field(default=EventType.TEXT_DELTA, init=False)
     content: str
+    depth: int = 0
+    parent_id: str | None = None
 
 
 def _format_call(name: str, args: dict) -> str:
@@ -67,7 +73,7 @@ class ToolCallEvent(SSEEvent):
     name: str
     args: dict
     depth: int = 0
-    parent_id: str = ""
+    parent_id: str | None = None
     display_name: str = ""
 
     def to_sse(self) -> dict:
@@ -85,7 +91,7 @@ class ToolResultEvent(SSEEvent):
     result: str
     preview: str
     depth: int = 0
-    parent_id: str = ""
+    parent_id: str | None = None
     duration_ms: int = 0
     data: dict | None = None
     display_name: str = ""
@@ -168,6 +174,31 @@ class TextMessageEndEvent(SSEEvent):
     message_id: str
 
 
-@dataclass(frozen=True)
-class AgentResult:
-    text: str
+def agent_event_to_sse(event) -> "SSEEvent | None":
+    """Convert an ntrp.agent event to an SSEEvent."""
+    base = {"depth": event.depth, "parent_id": event.parent_id}
+    match event:
+        case TextDelta():
+            return TextDeltaEvent(content=event.content, **base)
+        case TextBlock():
+            return TextEvent(content=event.content, **base)
+        case ToolStarted():
+            return ToolCallEvent(
+                tool_id=event.tool_id,
+                name=event.name,
+                args=event.args,
+                display_name=event.display_name,
+                **base,
+            )
+        case ToolCompleted():
+            return ToolResultEvent(
+                tool_id=event.tool_id,
+                name=event.name,
+                result=event.result,
+                preview=event.preview,
+                duration_ms=event.duration_ms,
+                data=event.data,
+                display_name=event.display_name,
+                **base,
+            )
+    return None

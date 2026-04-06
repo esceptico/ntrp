@@ -66,7 +66,7 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
     if request.model:
         agent_config = replace(deps.config, model=request.model)
 
-    agent, callbacks, _ = create_agent(
+    agent = create_agent(
         executor=executor,
         config=agent_config,
         tools=tools,
@@ -81,19 +81,15 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
     ]
 
     deps.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
-    output: str | None = None
-    try:
-        run_result = await agent.run(messages)
-        output = run_result.text
-    finally:
-        deps.channel.publish(
-            RunCompleted(
-                run_id=run_id,
-                session_id=session_state.session_id,
-                messages=tuple(messages),
-                usage=callbacks.usage,
-                result=output,
-            )
+    agent_result = await agent.run(messages)
+    deps.channel.publish(
+        RunCompleted(
+            run_id=run_id,
+            session_id=session_state.session_id,
+            messages=tuple(messages),
+            usage=agent_result.usage,
+            result=agent_result.text,
         )
+    )
 
-    return RunResult(run_id=run_id, output=output, usage=callbacks.usage)
+    return RunResult(run_id=run_id, output=agent_result.text, usage=agent_result.usage)

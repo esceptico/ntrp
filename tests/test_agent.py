@@ -146,3 +146,32 @@ async def test_pending_messages_hook():
     assert result.text == "Final answer"
     contents = [m.get("content") for m in messages]
     assert "injected message" in contents
+
+
+@pytest.mark.asyncio
+async def test_create_agent_returns_agent_with_hooks():
+    """Smoke test: create_agent should return an Agent instance with working hooks attribute."""
+    from datetime import UTC, datetime
+
+    from ntrp.channel import Channel
+    from ntrp.context.models import SessionState
+    from ntrp.core.factory import AgentConfig, create_agent
+    from ntrp.tools.executor import ToolExecutor
+
+    executor = ToolExecutor(get_services=dict)
+    config = AgentConfig(model="claude-sonnet-4-6", research_model=None, max_depth=3)
+    session_state = SessionState(session_id="test", started_at=datetime.now(UTC))
+
+    agent = create_agent(
+        executor=executor,
+        config=config,
+        tools=[],
+        session_state=session_state,
+        channel=Channel(),
+        run_id="test-run",
+    )
+
+    assert isinstance(agent, Agent)
+    assert hasattr(agent, "hooks")
+    assert isinstance(agent.hooks, AgentHooks)
+    assert agent.hooks.prepare_step is not None

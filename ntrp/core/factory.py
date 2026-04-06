@@ -5,7 +5,7 @@ from ntrp.agent import Agent, AgentHooks
 from ntrp.agent.ledger import SharedLedger
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
-from ntrp.core.agent_callbacks import NtrpAgentCallbacks
+from ntrp.core.compaction_hook import NtrpCompactionHook
 from ntrp.core.compactor import Compactor, SummaryCompactor
 from ntrp.core.llm_client import llm_client
 from ntrp.core.spawner import create_spawn_fn
@@ -47,7 +47,7 @@ def create_agent(
     io: IOBridge | None = None,
     extra_auto_approve: set[str] | None = None,
     background_tasks: BackgroundTaskRegistry | None = None,
-) -> tuple[Agent, NtrpAgentCallbacks, ToolContext]:
+) -> Agent:
     run_ctx = RunContext(
         run_id=run_id,
         max_depth=config.max_depth,
@@ -76,23 +76,18 @@ def create_agent(
 
     ntrp_executor = NtrpToolExecutor(executor, tool_ctx, ledger=tool_ctx.ledger)
 
-    callbacks = NtrpAgentCallbacks(
+    compaction_hook = NtrpCompactionHook(
         channel=channel,
         session_id=session_state.session_id,
         model=config.model,
         compactor=config.compactor,
     )
 
-    agent = Agent(
+    return Agent(
         tools=tools,
         client=llm_client,
         executor=ntrp_executor,
         model=config.model,
         max_depth=config.max_depth,
-        hooks=AgentHooks(
-            prepare_step=callbacks.prepare_step,
-            on_response=callbacks.on_response,
-        ),
+        hooks=AgentHooks(prepare_step=compaction_hook.prepare_step),
     )
-
-    return agent, callbacks, tool_ctx

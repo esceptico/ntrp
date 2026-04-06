@@ -142,6 +142,11 @@ export function TreeItem({ node, indent, expanded, width }: TreeItemProps) {
         <span fg={labelColor}>{truncateText(label, contentWidth - 15)}</span>
         {stats && <span fg={colors.text.muted}>{stats}</span>}
       </text>
+      {node.nestedText && (
+        <text>
+          <span fg={colors.text.muted}>{prefix}  ⎿ {truncateText(node.nestedText.split("\n").pop() || "", contentWidth - 4)}</span>
+        </text>
+      )}
       {node.children.map((child) => (
         <TreeItem key={child.id} node={child} indent={indent + 1} expanded={true} width={width} />
       ))}
