@@ -8,13 +8,12 @@ from ntrp.integrations import ALL_INTEGRATIONS
 from ntrp.notifiers.bash import BashNotifier
 from ntrp.notifiers.models import NotifierConfig
 from ntrp.notifiers.store import NotifierStore
-from ntrp.notifiers.telegram import TelegramNotifier
 
 _logger = get_logger(__name__)
 NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
 
 # Builtin notifiers not yet migrated to integrations
-_BUILTIN_NOTIFIERS: list[type[Notifier]] = [TelegramNotifier, BashNotifier]
+_BUILTIN_NOTIFIERS: list[type[Notifier]] = [BashNotifier]
 
 _NOTIFIER_CLASSES: dict[str, type[Notifier]] = {
     cls.channel: cls
