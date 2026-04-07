@@ -176,6 +176,10 @@ class ToolContext:
                 return s
         return None
 
+    def get_client[T](self, id: str, client_type: type[T]) -> T | None:
+        s = self.services.get(id)
+        return s if isinstance(s, client_type) else None
+
 
 @dataclass
 class ToolExecution:
