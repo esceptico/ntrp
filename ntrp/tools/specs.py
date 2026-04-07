@@ -37,7 +37,6 @@ from ntrp.tools.notes import (
 from ntrp.tools.notify import NotifyTool
 from ntrp.tools.research import ResearchTool
 from ntrp.tools.time import CurrentTimeTool
-from ntrp.tools.web import WebFetchTool, WebSearchTool
 
 _BUILTIN_TOOLS: list[type[Tool]] = [
     BackgroundTool,
@@ -49,8 +48,6 @@ _BUILTIN_TOOLS: list[type[Tool]] = [
     ResearchTool,
     SetDirectivesTool,
     CurrentTimeTool,
-    WebSearchTool,
-    WebFetchTool,
     RememberTool,
     RecallTool,
     ForgetTool,

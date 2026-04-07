@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ntrp.constants import EMBEDDING_TEXT_LIMIT, WEB_SEARCH_MAX_RESULTS
-from ntrp.sources.base import WebSearchSource
+from ntrp.integrations.web.types import WebClient
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
@@ -54,7 +54,7 @@ class WebSearchTool(Tool):
         category: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
-        source = execution.ctx.get_source(WebSearchSource, "web")
+        source = execution.ctx.get_client("web", WebClient)
         try:
             results = await asyncio.to_thread(
                 source.search_with_details,
@@ -103,7 +103,7 @@ class WebFetchTool(Tool):
                 is_error=True,
             )
 
-        source = execution.ctx.get_source(WebSearchSource, "web")
+        source = execution.ctx.get_client("web", WebClient)
         try:
             results = await asyncio.to_thread(source.get_contents, [url])
 

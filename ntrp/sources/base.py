@@ -21,24 +21,6 @@ class SourceItem:
     preview: str | None = None
 
 
-@dataclass(frozen=True)
-class WebSearchResult:
-    title: str
-    url: str
-    published_date: str | None = None
-    summary: str | None = None
-    highlights: list[str] | None = None
-
-
-@dataclass(frozen=True)
-class WebContentResult:
-    title: str | None
-    url: str
-    text: str | None = None
-    published_date: str | None = None
-    author: str | None = None
-
-
 @runtime_checkable
 class NotesSource(Protocol):
     name: str
@@ -114,12 +96,3 @@ class CalendarSource(Protocol):
         attendees: list[str] | None,
         all_day: bool | None,
     ) -> str: ...
-
-
-@runtime_checkable
-class WebSearchSource(Protocol):
-    name: str
-
-    def search_with_details(self, query: str, num_results: int, category: str | None) -> list[WebSearchResult]: ...
-
-    def get_contents(self, urls: list[str]) -> list[WebContentResult]: ...

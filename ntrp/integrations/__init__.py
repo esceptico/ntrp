@@ -6,8 +6,9 @@ from ntrp.integrations.base import (
 )
 from ntrp.integrations.registry import IntegrationRegistry
 from ntrp.integrations.slack import SLACK
+from ntrp.integrations.web import WEB
 
-ALL_INTEGRATIONS: list[Integration] = [SLACK]
+ALL_INTEGRATIONS: list[Integration] = [WEB, SLACK]
 
 __all__ = [
     "ALL_INTEGRATIONS",
