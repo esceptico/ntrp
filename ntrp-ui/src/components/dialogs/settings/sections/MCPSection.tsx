@@ -186,9 +186,30 @@ function ServerList({ mcp: m, accent, width }: MCPSectionProps) {
                     </FormField>
                     <FormField label="Client Secret" active={m.mcpAddField === "clientSecret"}>
                       {m.mcpAddField === "clientSecret" ? (
-                        <TextInput value={m.mcpClientSecret} cursor={m.mcpClientSecretCursor} placeholder="(optional)" />
+                        <TextInput value={m.mcpClientSecret} cursor={m.mcpClientSecretCursor} placeholder="(optional, omit for PKCE)" />
                       ) : (
                         <text><span fg={m.mcpClientSecret ? colors.text.primary : colors.text.muted}>{m.mcpClientSecret ? "\u2022".repeat(8) : "(optional)"}</span></text>
+                      )}
+                    </FormField>
+                    <FormField label="Redirect Port" active={m.mcpAddField === "redirectPort"}>
+                      {m.mcpAddField === "redirectPort" ? (
+                        <TextInput value={m.mcpRedirectPort} cursor={m.mcpRedirectPortCursor} placeholder="(optional, fixed port for hardcoded redirect URIs)" />
+                      ) : (
+                        <text><span fg={m.mcpRedirectPort ? colors.text.primary : colors.text.muted}>{m.mcpRedirectPort || "(auto)"}</span></text>
+                      )}
+                    </FormField>
+                    <FormField label="Scope" active={m.mcpAddField === "scope"}>
+                      {m.mcpAddField === "scope" ? (
+                        <TextInput value={m.mcpScope} cursor={m.mcpScopeCursor} placeholder="(optional, space-separated)" />
+                      ) : (
+                        <text><span fg={m.mcpScope ? colors.text.primary : colors.text.muted}>{m.mcpScope || "(optional)"}</span></text>
+                      )}
+                    </FormField>
+                    <FormField label="Client Name" active={m.mcpAddField === "clientName"}>
+                      {m.mcpAddField === "clientName" ? (
+                        <TextInput value={m.mcpClientName} cursor={m.mcpClientNameCursor} placeholder="NTRP" />
+                      ) : (
+                        <text><span fg={m.mcpClientName ? colors.text.primary : colors.text.muted}>{m.mcpClientName || "NTRP"}</span></text>
                       )}
                     </FormField>
                   </>

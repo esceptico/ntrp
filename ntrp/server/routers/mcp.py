@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ntrp.mcp.models import parse_server_config
-from ntrp.mcp.oauth import clear_tokens, run_mcp_oauth
+from ntrp.mcp.oauth import OAuthOptions, clear_tokens, run_mcp_oauth
 from ntrp.server.deps import require_config_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.services.config import ConfigService
@@ -157,10 +157,15 @@ async def mcp_oauth(
     if not url:
         raise HTTPException(status_code=400, detail="Server has no URL configured")
 
+    opts = OAuthOptions(
+        client_id=raw.get("client_id"),
+        client_secret=raw.get("client_secret"),
+        redirect_port=raw.get("redirect_port"),
+        scope=raw.get("scope"),
+        client_name=raw.get("client_name") or "NTRP",
+    )
     try:
-        await asyncio.to_thread(
-            run_mcp_oauth, name, url, raw.get("client_id"), raw.get("client_secret")
-        )
+        await asyncio.to_thread(run_mcp_oauth, name, url, opts)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

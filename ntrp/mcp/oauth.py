@@ -4,6 +4,7 @@ import json
 import time
 import urllib.parse
 import webbrowser
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from threading import Event
@@ -74,27 +75,57 @@ class MCPTokenStorage:
             self._path.unlink()
 
 
-def _seed_client_info(storage: "MCPTokenStorage", client_id: str | None, client_secret: str | None) -> None:
+@dataclass(frozen=True)
+class OAuthOptions:
+    client_id: str | None = None
+    client_secret: str | None = None
+    redirect_port: int | None = None
+    scope: str | None = None
+    client_name: str = "NTRP"
+
+
+def _discovery_base_url(server_url: str) -> str:
+    parsed = urllib.parse.urlparse(server_url)
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _build_client_metadata(redirect_uri: str, opts: OAuthOptions) -> OAuthClientMetadata:
+    auth_method = "client_secret_post" if opts.client_secret else "none"
+    kwargs: dict[str, Any] = {
+        "client_name": opts.client_name,
+        "redirect_uris": [redirect_uri],
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "token_endpoint_auth_method": auth_method,
+    }
+    if opts.scope:
+        kwargs["scope"] = opts.scope
+    return OAuthClientMetadata.model_validate(kwargs)
+
+
+def _seed_client_info(storage: "MCPTokenStorage", redirect_uri: str, opts: OAuthOptions) -> None:
     """For providers without dynamic client registration (e.g. Slack), seed
     the storage with pre-registered credentials so the SDK skips DCR."""
-    if not client_id:
+    if not opts.client_id:
         return
-    if storage._read().get("client_info"):
-        return
-    info = OAuthClientInformationFull(
-        client_id=client_id,
-        client_secret=client_secret,
-        redirect_uris=["http://localhost:0/callback"],
-    )
-    storage._write({**storage._read(), "client_info": info.model_dump(mode="json", exclude_none=True)})
+    info_dict: dict[str, Any] = {
+        "client_id": opts.client_id,
+        "redirect_uris": [redirect_uri],
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "token_endpoint_auth_method": "client_secret_post" if opts.client_secret else "none",
+    }
+    if opts.client_secret:
+        info_dict["client_secret"] = opts.client_secret
+    if opts.scope:
+        info_dict["scope"] = opts.scope
+    info = OAuthClientInformationFull.model_validate(info_dict)
+    data = storage._read()
+    data["client_info"] = info.model_dump(mode="json", exclude_none=True)
+    storage._write(data)
 
 
-def create_oauth_provider(
-    server_name: str,
-    server_url: str,
-    client_id: str | None = None,
-    client_secret: str | None = None,
-) -> OAuthClientProvider:
+def create_oauth_provider(server_name: str, server_url: str, opts: OAuthOptions) -> OAuthClientProvider:
     """Create a provider that reuses stored tokens but cannot start a new OAuth flow.
 
     Used during session connect — if tokens are valid, they're attached
@@ -102,25 +133,18 @@ def create_oauth_provider(
     must re-authenticate via the /mcp/servers/{name}/oauth endpoint.
     """
     storage = MCPTokenStorage(server_name)
-    _seed_client_info(storage, client_id, client_secret)
+    redirect_uri = f"http://127.0.0.1:{opts.redirect_port or 0}/callback"
+    _seed_client_info(storage, redirect_uri, opts)
     return OAuthClientProvider(
-        server_url=server_url,
-        client_metadata=OAuthClientMetadata(
-            redirect_uris=["http://localhost:0/callback"],
-            client_name="NTRP",
-        ),
+        server_url=_discovery_base_url(server_url),
+        client_metadata=_build_client_metadata(redirect_uri, opts),
         storage=storage,
         redirect_handler=None,
         callback_handler=None,
     )
 
 
-def run_mcp_oauth(
-    server_name: str,
-    server_url: str,
-    client_id: str | None = None,
-    client_secret: str | None = None,
-) -> None:
+def run_mcp_oauth(server_name: str, server_url: str, opts: OAuthOptions) -> None:
     """Run a full interactive OAuth flow: clear old tokens, open browser, wait for callback."""
     code_result: dict[str, Any] = {}
     done = Event()
@@ -153,9 +177,9 @@ def run_mcp_oauth(
         def log_message(self, format, *args):
             pass
 
-    server = HTTPServer(("127.0.0.1", 0), CallbackHandler)
+    server = HTTPServer(("127.0.0.1", opts.redirect_port or 0), CallbackHandler)
     port = server.server_address[1]
-    redirect_uri = f"http://localhost:{port}/callback"
+    redirect_uri = f"http://127.0.0.1:{port}/callback"
 
     async def redirect_handler(url: str) -> None:
         _logger.info("Opening browser for MCP OAuth (server=%r, port=%d)", server_name, port)
@@ -179,14 +203,11 @@ def run_mcp_oauth(
 
     storage = MCPTokenStorage(server_name)
     storage.clear()
-    _seed_client_info(storage, client_id, client_secret)
+    _seed_client_info(storage, redirect_uri, opts)
 
     provider = OAuthClientProvider(
-        server_url=server_url,
-        client_metadata=OAuthClientMetadata(
-            redirect_uris=[redirect_uri],
-            client_name="NTRP",
-        ),
+        server_url=_discovery_base_url(server_url),
+        client_metadata=_build_client_metadata(redirect_uri, opts),
         storage=storage,
         redirect_handler=redirect_handler,
         callback_handler=callback_handler,

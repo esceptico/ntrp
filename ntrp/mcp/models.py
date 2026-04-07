@@ -15,6 +15,9 @@ class HttpTransport:
     auth: str | None = None
     client_id: str | None = None
     client_secret: str | None = None
+    redirect_port: int | None = None
+    scope: str | None = None
+    client_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,9 @@ def parse_server_config(name: str, raw: dict) -> MCPServerConfig:
             auth=raw.get("auth"),
             client_id=raw.get("client_id"),
             client_secret=raw.get("client_secret"),
+            redirect_port=raw.get("redirect_port"),
+            scope=raw.get("scope"),
+            client_name=raw.get("client_name"),
         )
     else:
         raise ValueError(f"MCP server {name!r}: unknown transport {transport_type!r} (expected 'stdio' or 'http')")
