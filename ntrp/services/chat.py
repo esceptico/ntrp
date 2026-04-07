@@ -138,7 +138,7 @@ async def _prepare_messages(
     notifiers = runtime.notifier_service.list_summary() if runtime.notifier_service else None
 
     system_blocks = build_system_blocks(
-        source_details=runtime.source_mgr.get_details(),
+        source_details={},
         memory_context=memory_context,
         skills_context=skills_context,
         directives=directives,

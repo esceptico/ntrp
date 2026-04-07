@@ -3,7 +3,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
 
-from ntrp.config import PROVIDER_KEY_FIELDS, SERVICE_KEY_FIELDS
+from ntrp.config import PROVIDER_KEY_FIELDS
 from ntrp.llm.models import (
     Provider,
     add_custom_model,
@@ -47,6 +47,8 @@ def _config_response(rt: Runtime) -> dict:
 
     sources: dict[str, dict] = {}
     for integration in rt.integrations.integrations.values():
+        if integration.build is None:
+            continue  # notifier-only, not a "source"
         entry: dict = {"connected": integration.id in rt.integrations.clients}
         if integration.id in rt.integrations.errors:
             entry["error"] = rt.integrations.errors[integration.id]
@@ -236,31 +238,23 @@ async def disconnect_provider(
 # --- Services ---
 
 
-SERVICE_META = {
-    "exa": {"name": "Exa (Web Search)", "env_var": "EXA_API_KEY"},
-    "telegram": {"name": "Telegram", "env_var": "TELEGRAM_BOT_TOKEN"},
-    "slack": {"name": "Slack (bot, xoxb-)", "env_var": "SLACK_BOT_TOKEN"},
-    "slack-user": {"name": "Slack (user, xoxp-)", "env_var": "SLACK_USER_TOKEN"},
-}
-
-
 @router.get("/services")
 async def get_services(runtime: Runtime = Depends(get_runtime)):
     config = runtime.config
     services = []
-    for sid, meta in SERVICE_META.items():
-        field = SERVICE_KEY_FIELDS[sid]
-        key = getattr(config, field, None)
-        from_env = bool(os.environ.get(meta["env_var"]))
-        services.append(
-            {
-                "id": sid,
-                "name": meta["name"],
-                "connected": bool(key),
-                "key_hint": mask_api_key(key),
-                "from_env": from_env,
-            }
-        )
+    for integration in runtime.integrations.integrations.values():
+        for f in integration.service_fields:
+            key = getattr(config, f.key, None)
+            from_env = bool(f.env_var and os.environ.get(f.env_var))
+            services.append(
+                {
+                    "id": f.key,
+                    "name": f.label,
+                    "connected": bool(key),
+                    "key_hint": mask_api_key(key),
+                    "from_env": from_env,
+                }
+            )
     return {"services": services}
 
 
