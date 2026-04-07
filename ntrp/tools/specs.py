@@ -35,6 +35,14 @@ from ntrp.tools.notes import (
 )
 from ntrp.tools.notify import NotifyTool
 from ntrp.tools.research import ResearchTool
+from ntrp.tools.slack import (
+    SlackChannelTool,
+    SlackChannelsTool,
+    SlackSearchTool,
+    SlackThreadTool,
+    SlackUserTool,
+    SlackUsersTool,
+)
 from ntrp.tools.time import CurrentTimeTool
 from ntrp.tools.web import WebFetchTool, WebSearchTool
 
@@ -63,6 +71,12 @@ ALL_TOOLS: list[type[Tool]] = [
     SendEmailTool,
     ReadEmailTool,
     EmailsTool,
+    SlackSearchTool,
+    SlackChannelTool,
+    SlackThreadTool,
+    SlackChannelsTool,
+    SlackUsersTool,
+    SlackUserTool,
     CalendarTool,
     CreateCalendarEventTool,
     EditCalendarEventTool,

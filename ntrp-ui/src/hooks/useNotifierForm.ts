@@ -17,6 +17,8 @@ export interface FormFields {
   toAddressCursor: number;
   userId: string;
   userIdCursor: number;
+  channel: string;
+  channelCursor: number;
   command: string;
   commandCursor: number;
 }
@@ -26,13 +28,13 @@ export function emptyForm(): FormFields {
     name: "", nameCursor: 0,
     fromAccount: "", toAddress: "", toAddressCursor: 0,
     userId: "", userIdCursor: 0,
+    channel: "", channelCursor: 0,
     command: "", commandCursor: 0,
   };
 }
 
 function fieldCountForType(type: string): number {
   if (type === "email") return 3;
-  if (type === "telegram") return 2;
   return 2;
 }
 
@@ -92,6 +94,13 @@ export function useNotifierForm({
     setCursorPos: (v) => setForm((f) => ({ ...f, userIdCursor: typeof v === "function" ? v(f.userIdCursor) : v })),
   });
 
+  const channelInput = useTextInput({
+    text: form.channel,
+    cursorPos: form.channelCursor,
+    setText: (v) => setForm((f) => ({ ...f, channel: typeof v === "function" ? v(f.channel) : v })),
+    setCursorPos: (v) => setForm((f) => ({ ...f, channelCursor: typeof v === "function" ? v(f.channelCursor) : v })),
+  });
+
   const commandInput = useTextInput({
     text: form.command,
     cursorPos: form.commandCursor,
@@ -106,16 +115,20 @@ export function useNotifierForm({
     } else if (formType === "telegram") {
       if (activeField === 0) return nameInput;
       if (activeField === 1) return userIdInput;
+    } else if (formType === "slack") {
+      if (activeField === 0) return nameInput;
+      if (activeField === 1) return channelInput;
     } else {
       if (activeField === 0) return nameInput;
       if (activeField === 1) return commandInput;
     }
     return null;
-  }, [formType, activeField, nameInput, toAddressInput, userIdInput, commandInput]);
+  }, [formType, activeField, nameInput, toAddressInput, userIdInput, channelInput, commandInput]);
 
   const buildConfig = useCallback((): Record<string, string> => {
     if (formType === "email") return { from_account: form.fromAccount, to_address: form.toAddress };
     if (formType === "telegram") return { user_id: form.userId };
+    if (formType === "slack") return { channel: form.channel };
     return { command: form.command };
   }, [formType, form]);
 

@@ -97,6 +97,12 @@ def _config_response(rt: Runtime) -> dict:
                 "connected": "notes" in rt.source_mgr.sources,
                 "path": str(config.vault_path) if config.vault_path else None,
             },
+            "slack": {
+                "connected": "slack" in rt.source_mgr.sources,
+                "has_user_token": bool(config.slack_user_token),
+                "has_bot_token": bool(config.slack_bot_token),
+                **({"error": rt.source_mgr.errors["slack"]} if "slack" in rt.source_mgr.errors else {}),
+            },
         },
     }
 
@@ -239,6 +245,8 @@ async def disconnect_provider(
 SERVICE_META = {
     "exa": {"name": "Exa (Web Search)", "env_var": "EXA_API_KEY"},
     "telegram": {"name": "Telegram", "env_var": "TELEGRAM_BOT_TOKEN"},
+    "slack": {"name": "Slack (bot, xoxb-)", "env_var": "SLACK_BOT_TOKEN"},
+    "slack-user": {"name": "Slack (user, xoxp-)", "env_var": "SLACK_USER_TOKEN"},
 }
 
 
@@ -273,6 +281,16 @@ async def connect_service(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"status": "connected", "service": service_id}
+
+
+@router.post("/reload")
+async def reload_runtime(runtime: Runtime = Depends(get_runtime)):
+    """Re-read config from disk and rebuild sources, memory, MCP, etc.
+
+    Use after editing .env or settings.json directly outside the UI.
+    """
+    await runtime.reload_config()
+    return {"status": "reloaded"}
 
 
 @router.delete("/services/{service_id}")

@@ -138,6 +138,18 @@ function FormMode({ notifiers, accent }: NotifiersSectionProps) {
         />
       ),
     });
+  } else if (formType === "slack") {
+    fields.push({
+      label: "Channel",
+      content: (
+        <TextInputField
+          value={form.channel}
+          cursorPos={form.channelCursor}
+          placeholder="#general or C0123456789"
+          showCursor={activeField === 1}
+        />
+      ),
+    });
   } else {
     fields.push({
       label: "Cmd",
