@@ -39,20 +39,46 @@ from ntrp.tools.directives import load_directives, save_directives
 router = APIRouter(tags=["settings"])
 
 
-def _google_errors(rt: Runtime) -> dict[str, str]:
-    errors = []
-    for key in ("gmail", "calendar"):
-        if key in rt.source_mgr.errors:
-            errors.append(rt.source_mgr.errors[key])
-    return {"error": "; ".join(errors)} if errors else {}
-
-
 def _config_response(rt: Runtime) -> dict:
     config = rt.config
-    has_google = rt.source_mgr.has_google_auth()
     memory_connected = rt.memory is not None
-    web_source = rt.source_mgr.sources.get("web")
-    web_provider = getattr(web_source, "provider", "unknown") if web_source else "none"
+    web_client = rt.integrations.get_client("web")
+    web_provider = getattr(web_client, "provider", "unknown") if web_client else "none"
+
+    sources: dict[str, dict] = {}
+    for integration in rt.integrations.integrations.values():
+        entry: dict = {"connected": integration.id in rt.integrations.clients}
+        if integration.id in rt.integrations.errors:
+            entry["error"] = rt.integrations.errors[integration.id]
+        sources[integration.id] = entry
+
+    # Integration-specific extras the UI needs
+    sources.setdefault("web", {}).update({
+        "mode": config.web_search,
+        "provider": web_provider,
+    })
+    sources.setdefault("notes", {})["path"] = str(config.vault_path) if config.vault_path else None
+    sources.setdefault("slack", {}).update({
+        "has_user_token": bool(config.slack_user_token),
+        "has_bot_token": bool(config.slack_bot_token),
+    })
+
+    # Non-integration sources (google umbrella, memory)
+    sources["google"] = {
+        "enabled": config.google,
+        "connected": "gmail" in rt.integrations.clients or "calendar" in rt.integrations.clients,
+        **({"error": "; ".join(e for e in (rt.integrations.errors.get("gmail"), rt.integrations.errors.get("calendar")) if e)} if (rt.integrations.errors.get("gmail") or rt.integrations.errors.get("calendar")) else {}),
+    }
+    sources["memory"] = {
+        "enabled": config.memory,
+        "connected": memory_connected,
+        "dreams": config.dreams,
+        **(
+            {"error": "Embedding model required — configure an OpenAI or Google embedding model"}
+            if config.memory and not memory_connected
+            else {}
+        ),
+    }
 
     return {
         "chat_model": config.chat_model,
@@ -63,7 +89,7 @@ def _config_response(rt: Runtime) -> dict:
         "web_search_provider": web_provider,
         "vault_path": config.vault_path,
         "google_enabled": config.google,
-        "has_notes": config.vault_path is not None and rt.source_mgr.sources.get("notes") is not None,
+        "has_notes": "notes" in rt.integrations.clients,
         "max_depth": config.max_depth,
         "compression_threshold": config.compression_threshold,
         "max_messages": config.max_messages,
@@ -71,39 +97,7 @@ def _config_response(rt: Runtime) -> dict:
         "summary_max_tokens": config.summary_max_tokens,
         "consolidation_interval": config.consolidation_interval,
         "memory_enabled": memory_connected,
-        "sources": {
-            "google": {
-                "enabled": config.google,
-                "connected": has_google,
-                **(_google_errors(rt) or {}),
-            },
-            "memory": {
-                "enabled": config.memory,
-                "connected": memory_connected,
-                "dreams": config.dreams,
-                **(
-                    {"error": "Embedding model required — configure an OpenAI or Google embedding model"}
-                    if config.memory and not memory_connected
-                    else {}
-                ),
-            },
-            "web": {
-                "connected": web_source is not None,
-                "mode": config.web_search,
-                "provider": web_provider,
-                **({"error": rt.source_mgr.errors["web"]} if "web" in rt.source_mgr.errors else {}),
-            },
-            "notes": {
-                "connected": "notes" in rt.source_mgr.sources,
-                "path": str(config.vault_path) if config.vault_path else None,
-            },
-            "slack": {
-                "connected": "slack" in rt.integrations.clients,
-                "has_user_token": bool(config.slack_user_token),
-                "has_bot_token": bool(config.slack_bot_token),
-                **({"error": rt.integrations.errors["slack"]} if "slack" in rt.integrations.errors else {}),
-            },
-        },
+        "sources": sources,
     }
 
 
@@ -281,6 +275,26 @@ async def connect_service(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"status": "connected", "service": service_id}
+
+
+@router.get("/providers")
+async def list_providers(runtime: Runtime = Depends(get_runtime)):
+    """Unified list of tool providers — native integrations + MCP servers."""
+    native = runtime.integrations.list_providers()
+    mcp = runtime.mcp_manager.list_providers() if runtime.mcp_manager else []
+    return {
+        "providers": [
+            {
+                "id": p.id,
+                "label": p.label,
+                "kind": p.kind,
+                "status": p.health.status,
+                "detail": p.health.detail,
+                "tool_count": p.tool_count,
+            }
+            for p in [*native, *mcp]
+        ]
+    }
 
 
 @router.post("/reload")
