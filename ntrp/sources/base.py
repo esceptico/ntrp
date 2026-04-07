@@ -117,6 +117,23 @@ class CalendarSource(Protocol):
 
 
 @runtime_checkable
+class SlackSource(Protocol):
+    name: str
+
+    async def search_messages(self, query: str, limit: int = 20) -> list[RawItem]: ...
+
+    async def search_channels(self, query: str | None = None, limit: int = 50) -> list[dict[str, str]]: ...
+
+    async def search_users(self, query: str | None = None, limit: int = 50) -> list[dict[str, str]]: ...
+
+    async def read_channel(self, channel: str, limit: int = 50) -> list[RawItem]: ...
+
+    async def read_thread(self, source_id: str) -> str | None: ...
+
+    async def read_user(self, user_id: str) -> dict | None: ...
+
+
+@runtime_checkable
 class WebSearchSource(Protocol):
     name: str
 

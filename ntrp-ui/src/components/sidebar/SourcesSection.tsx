@@ -12,6 +12,7 @@ function getSourceEntries(cfg: ServerConfig): SourceEntry[] {
     { key: "google", label: "google", on: !!sources?.google?.enabled && !!sources?.google?.connected, error: !!sources?.google?.error },
     { key: "memory", label: "memory", on: !!sources?.memory?.enabled },
     { key: "web", label: "web", on: !!sources?.web?.connected },
+    { key: "slack", label: "slack", on: !!sources?.slack?.connected, error: !!sources?.slack?.error },
   ];
 }
 

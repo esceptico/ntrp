@@ -32,6 +32,8 @@ PROVIDER_KEY_FIELDS = {
 SERVICE_KEY_FIELDS = {
     "exa": "exa_api_key",
     "telegram": "telegram_bot_token",
+    "slack": "slack_bot_token",
+    "slack-user": "slack_user_token",
 }
 
 # provider_field → (default_chat, default_memory, default_embedding)
@@ -105,6 +107,10 @@ class Config(BaseSettings):
 
     # Telegram
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
+
+    # Slack
+    slack_bot_token: str | None = Field(default=None, alias="SLACK_BOT_TOKEN")
+    slack_user_token: str | None = Field(default=None, alias="SLACK_USER_TOKEN")
 
     # Obsidian vault
     vault_path: Path | None = None

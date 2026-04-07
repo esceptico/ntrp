@@ -50,14 +50,16 @@ export const SOURCE_LABELS = {
 
 export const TOGGLEABLE_SOURCES: SourceItem[] = ["google"];
 
-export const NOTIFIER_TYPE_ORDER = ["email", "telegram", "bash"] as const;
+export const NOTIFIER_TYPE_ORDER = ["email", "telegram", "slack", "bash"] as const;
 export const NOTIFIER_TYPE_LABELS: Record<string, string> = {
   email: "Email",
   telegram: "Telegram",
+  slack: "Slack",
   bash: "Bash",
 };
 export const NOTIFIER_TYPE_DESCRIPTIONS: Record<string, string> = {
   email: "Send via connected Gmail",
   telegram: "Send via Telegram bot",
+  slack: "Send via Slack bot",
   bash: "Run shell command",
 };

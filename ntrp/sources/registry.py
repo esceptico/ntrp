@@ -5,6 +5,7 @@ from ntrp.sources.google.auth import discover_calendar_tokens, discover_gmail_to
 from ntrp.sources.google.calendar import MultiCalendarSource
 from ntrp.sources.google.gmail import MultiGmailSource
 from ntrp.sources.obsidian import ObsidianSource
+from ntrp.sources.slack import SlackSource
 
 
 def _create_notes(config: Config) -> object | None:
@@ -58,9 +59,16 @@ def _create_web(config: Config) -> object | None:
     return DDGSWebSource()
 
 
+def _create_slack(config: Config) -> object | None:
+    if not config.slack_bot_token and not config.slack_user_token:
+        return None
+    return SlackSource(bot_token=config.slack_bot_token, user_token=config.slack_user_token)
+
+
 SOURCES: dict[str, Callable[[Config], object | None]] = {
     "notes": _create_notes,
     "gmail": _create_gmail,
     "calendar": _create_calendar,
     "web": _create_web,
+    "slack": _create_slack,
 }

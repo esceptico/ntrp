@@ -123,6 +123,7 @@ export function useNotifiers(config: Config): UseNotifiersResult {
             fromAccount: cfg.config.from_account || (accounts?.[0] ?? ""),
             toAddress: cfg.config.to_address || "", toAddressCursor: (cfg.config.to_address || "").length,
             userId: cfg.config.user_id || "", userIdCursor: (cfg.config.user_id || "").length,
+            channel: cfg.config.channel || "", channelCursor: (cfg.config.channel || "").length,
             command: cfg.config.command || "", commandCursor: (cfg.config.command || "").length,
           }, cfg.name);
           setMode("edit-form");
