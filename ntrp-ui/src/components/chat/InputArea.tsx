@@ -4,7 +4,7 @@ import type { SlashCommand } from "../../types.js";
 import type { Status as StatusType } from "../../lib/constants.js";
 import type { ImageBlock } from "../../api/chat.js";
 import type { BackgroundTask } from "../../stores/streamingStore.js";
-import { colors } from "../ui/colors.js";
+import { colors, useThemeVersion } from "../ui/colors.js";
 import { useAccentColor } from "../../hooks/index.js";
 import { useAutocomplete } from "../../hooks/useAutocomplete.js";
 import { EmptyBorder } from "../ui/border.js";
@@ -66,6 +66,7 @@ export const InputArea = memo(function InputArea({
 }: InputAreaProps) {
   const { accentValue } = useAccentColor();
 
+  useThemeVersion();
   const inputRef = useRef<TextareaRenderable>(null);
   const [value, setValue] = useState("");
   const [escHint, setEscHint] = useState(false);

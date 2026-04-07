@@ -37,7 +37,7 @@ function buildSyntaxStyle(dimmed: boolean) {
     "markup.italic": { fg: hex(fg), italic: true },
     "markup.strikethrough": { fg: hex(muted), dim: true },
     "markup.raw": { fg: hex(secondary), bg: elementBg ? hex(elementBg) : undefined },
-    "markup.raw.block": { fg: hex(fg) },
+    "markup.raw.block": { fg: hex(fg), bg: elementBg ? hex(elementBg) : undefined },
 
     // -- Links --
     "markup.link": { fg: hex(muted), dim: true },
