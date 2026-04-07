@@ -15,15 +15,8 @@ from ntrp.tools.background import (
     ListBackgroundTasksTool,
 )
 from ntrp.tools.bash import BashTool
-from ntrp.tools.calendar import (
-    CalendarTool,
-    CreateCalendarEventTool,
-    DeleteCalendarEventTool,
-    EditCalendarEventTool,
-)
 from ntrp.tools.core.base import Tool
 from ntrp.tools.directives import SetDirectivesTool
-from ntrp.tools.email import EmailsTool, ReadEmailTool, SendEmailTool
 from ntrp.tools.files import ReadFileTool
 from ntrp.tools.memory import ForgetTool, RecallTool, RememberTool
 from ntrp.tools.notify import NotifyTool
@@ -44,13 +37,6 @@ _BUILTIN_TOOLS: list[type[Tool]] = [
     RecallTool,
     ForgetTool,
     NotifyTool,
-    SendEmailTool,
-    ReadEmailTool,
-    EmailsTool,
-    CalendarTool,
-    CreateCalendarEventTool,
-    EditCalendarEventTool,
-    DeleteCalendarEventTool,
     CreateAutomationTool,
     ListAutomationsTool,
     UpdateAutomationTool,

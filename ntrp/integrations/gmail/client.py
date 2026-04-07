@@ -16,8 +16,8 @@ from ntrp.constants import CONTENT_READ_LIMIT
 from ntrp.core.prompts import env
 from ntrp.logging import get_logger
 from ntrp.settings import NTRP_DIR
-from ntrp.sources.base import EmailSource, SourceItem
-from ntrp.sources.google.auth import (
+from ntrp.sources.base import SourceItem
+from ntrp.integrations.google_auth.auth import (
     SCOPES_ALL,
     SCOPES_GMAIL_SEND,
     get_google_credentials,
@@ -486,7 +486,7 @@ class GmailSource:
 _logger = get_logger(__name__)
 
 
-class MultiGmailSource(EmailSource):
+class MultiGmailSource:
     """Wrapper for multiple Gmail accounts."""
 
     name = "gmail"

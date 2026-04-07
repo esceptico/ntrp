@@ -8,8 +8,7 @@ from googleapiclient.discovery import build
 
 from ntrp.logging import get_logger
 from ntrp.settings import NTRP_DIR
-from ntrp.sources.base import CalendarSource
-from ntrp.sources.google.auth import (
+from ntrp.integrations.google_auth.auth import (
     SCOPES_CALENDAR,
     get_google_credentials,
     has_scope,
@@ -371,7 +370,7 @@ class GoogleCalendar:
 _logger = get_logger(__name__)
 
 
-class MultiCalendarSource(CalendarSource):
+class MultiCalendarSource:
     name = "calendar"
 
     def __init__(self, token_paths: list[Path], days_back: int, days_ahead: int):

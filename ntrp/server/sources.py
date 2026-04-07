@@ -2,7 +2,7 @@ from ntrp.channel import Channel
 from ntrp.config import Config
 from ntrp.events.internal import SourceChanged
 from ntrp.logging import get_logger
-from ntrp.sources.google.auth import discover_gmail_tokens
+from ntrp.integrations.google_auth.auth import discover_gmail_tokens
 from ntrp.sources.registry import SOURCES
 
 _logger = get_logger(__name__)

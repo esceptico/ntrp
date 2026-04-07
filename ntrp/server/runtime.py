@@ -33,7 +33,8 @@ from ntrp.services.config import ConfigService
 from ntrp.services.session import SessionService
 from ntrp.skills.registry import SkillRegistry
 from ntrp.skills.service import SkillService, get_skills_dirs
-from ntrp.sources.base import CalendarSource, Indexable
+from ntrp.integrations.calendar.client import MultiCalendarSource
+from ntrp.sources.base import Indexable
 from ntrp.tools.executor import ToolExecutor
 
 _logger = get_logger(__name__)
@@ -243,7 +244,7 @@ class Runtime:
         self.notifier_service = NotifierService(
             store=self.stores.notifiers,
             ctx=NotifierContext(
-                get_source=lambda name: self.source_mgr.sources.get(name),
+                get_source=lambda name: self.tool_services.get(name),
                 get_config_value=lambda key: getattr(self.config, key, None),
             ),
         )
@@ -399,15 +400,14 @@ class Runtime:
             raise RuntimeError("Monitor state store is not initialized")
 
         self.monitor = Monitor(self.channel)
-        calendar_source = self.source_mgr.sources.get("calendar")
-        if calendar_source and isinstance(calendar_source, CalendarSource):
+        calendar_source = self.integrations.get_client("calendar")
+        if calendar_source and isinstance(calendar_source, MultiCalendarSource):
             self.monitor.register(CalendarMonitor(calendar_source, state_store=self.stores.monitor))
 
         self.monitor.start()
 
     async def sync_google_sources(self) -> None:
-        await self.source_mgr.reinit("gmail", self.config)
-        await self.source_mgr.reinit("calendar", self.config)
+        self.integrations.sync(self.config)
         await self.restart_monitor()
 
     async def restart_monitor(self) -> None:
