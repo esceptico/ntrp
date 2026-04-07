@@ -4,7 +4,7 @@ from typing import Any
 import aiohttp
 
 from ntrp.logging import get_logger
-from ntrp.sources.models import RawItem
+from ntrp.integrations.types import RawItem
 
 _logger = get_logger(__name__)
 _API = "https://slack.com/api"

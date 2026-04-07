@@ -1,19 +1,25 @@
 import React from "react";
 import { colors } from "../ui/colors.js";
 import type { ServerConfig } from "../../api/client.js";
-import { SectionHeader, D, S } from "./shared.js";
+import { SectionHeader, D } from "./shared.js";
 
 interface SourceEntry { key: string; label: string; on: boolean; error?: boolean }
 
 function getSourceEntries(cfg: ServerConfig): SourceEntry[] {
-  const sources = cfg.sources;
-  return [
-    { key: "vault", label: "notes", on: !!cfg.has_notes },
-    { key: "google", label: "google", on: !!sources?.google?.enabled && !!sources?.google?.connected, error: !!sources?.google?.error },
-    { key: "memory", label: "memory", on: !!sources?.memory?.enabled },
-    { key: "web", label: "web", on: !!sources?.web?.connected },
-    { key: "slack", label: "slack", on: !!sources?.slack?.connected, error: !!sources?.slack?.error },
-  ];
+  const sources = cfg.sources ?? {};
+  const entries: SourceEntry[] = [];
+  for (const [id, source] of Object.entries(sources)) {
+    if (!source || typeof source !== "object") continue;
+    const s = source as unknown as Record<string, unknown>;
+    const connected = id === "memory" || id === "google" ? !!s.enabled && !!s.connected : !!s.connected;
+    entries.push({
+      key: id,
+      label: id,
+      on: connected,
+      error: !!s.error,
+    });
+  }
+  return entries;
 }
 
 export function SourcesSection({ cfg }: { cfg: ServerConfig }) {

@@ -1,12 +1,12 @@
 from collections.abc import Callable
 from typing import Any, Self
 
+from ntrp.integrations import ALL_INTEGRATIONS
 from ntrp.logging import get_logger
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.discover import discover_user_tools
-from ntrp.tools.specs import ALL_TOOLS
 
 _logger = get_logger(__name__)
 
@@ -19,8 +19,9 @@ class ToolExecutor:
     ):
         self._get_services = get_services
         self.registry = ToolRegistry()
-        for cls in ALL_TOOLS:
-            self.registry.register(cls())
+        for integration in ALL_INTEGRATIONS:
+            for cls in integration.tools:
+                self.registry.register(cls())
         for cls in discover_user_tools():
             if cls.name in self.registry:
                 _logger.warning("User tool %r skipped — conflicts with built-in", cls.name)

@@ -47,8 +47,8 @@ def _config_response(rt: Runtime) -> dict:
 
     sources: dict[str, dict] = {}
     for integration in rt.integrations.integrations.values():
-        if integration.build is None:
-            continue  # notifier-only, not a "source"
+        if integration.id.startswith("_") or integration.build is None:
+            continue  # core builtins / notifier-only
         entry: dict = {"connected": integration.id in rt.integrations.clients}
         if integration.id in rt.integrations.errors:
             entry["error"] = rt.integrations.errors[integration.id]

@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ntrp.sources.models import RawItem
+from ntrp.integrations.types import RawItem
 
 _logger = logging.getLogger(__name__)
 

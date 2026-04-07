@@ -71,7 +71,7 @@ class IntegrationRegistry:
     def list_providers(self) -> list[ToolProviderStatus]:
         out: list[ToolProviderStatus] = []
         for id, integration in self._integrations.items():
-            if integration.build is None:
+            if id.startswith("_") or integration.build is None:
                 continue
             if id in self._clients:
                 health = IntegrationHealth(status="connected")

@@ -13,7 +13,7 @@ from ntrp.integrations.google_auth.auth import (
     get_google_credentials,
     has_scope,
 )
-from ntrp.sources.models import RawItem
+from ntrp.integrations.types import RawItem
 
 
 def parse_event_datetime(dt_obj: dict) -> datetime | None:

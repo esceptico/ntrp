@@ -9,8 +9,10 @@ from ntrp.channel import Channel
 from ntrp.config import Config, get_config
 from ntrp.core.factory import AgentConfig
 from ntrp.events.internal import FactCreated, FactDeleted, FactUpdated, MemoryCleared, RunCompleted, SourceChanged
-from ntrp.integrations import ALL_INTEGRATIONS, IntegrationRegistry
 from ntrp.events.triggers import TRIGGER_EVENT_TYPES, TriggerEvent
+from ntrp.integrations import ALL_INTEGRATIONS, IntegrationRegistry
+from ntrp.integrations.calendar.client import MultiCalendarSource
+from ntrp.integrations.types import Indexable
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import init as llm_init
 from ntrp.llm.router import reset as llm_reset
@@ -32,8 +34,6 @@ from ntrp.services.config import ConfigService
 from ntrp.services.session import SessionService
 from ntrp.skills.registry import SkillRegistry
 from ntrp.skills.service import SkillService, get_skills_dirs
-from ntrp.integrations.calendar.client import MultiCalendarSource
-from ntrp.sources.base import Indexable
 from ntrp.tools.executor import ToolExecutor
 
 _logger = get_logger(__name__)

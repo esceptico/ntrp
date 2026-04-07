@@ -1,6 +1,6 @@
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
-from ntrp.sources.models import RawItem
+from ntrp.integrations.types import RawItem
 
 
 class MemoryIndexable:
