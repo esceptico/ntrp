@@ -98,10 +98,10 @@ def _config_response(rt: Runtime) -> dict:
                 "path": str(config.vault_path) if config.vault_path else None,
             },
             "slack": {
-                "connected": "slack" in rt.source_mgr.sources,
+                "connected": "slack" in rt.integrations.clients,
                 "has_user_token": bool(config.slack_user_token),
                 "has_bot_token": bool(config.slack_bot_token),
-                **({"error": rt.source_mgr.errors["slack"]} if "slack" in rt.source_mgr.errors else {}),
+                **({"error": rt.integrations.errors["slack"]} if "slack" in rt.integrations.errors else {}),
             },
         },
     }

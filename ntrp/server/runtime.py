@@ -9,6 +9,7 @@ from ntrp.channel import Channel
 from ntrp.config import Config, get_config
 from ntrp.core.factory import AgentConfig
 from ntrp.events.internal import FactCreated, FactDeleted, FactUpdated, MemoryCleared, RunCompleted, SourceChanged
+from ntrp.integrations import ALL_INTEGRATIONS, IntegrationRegistry
 from ntrp.events.triggers import TRIGGER_EVENT_TYPES, TriggerEvent
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import init as llm_init
@@ -43,6 +44,8 @@ class Runtime:
         self.config = config or get_config()
         self.channel = Channel()
         self.source_mgr = SourceManager(self.config, self.channel)
+        self.integrations = IntegrationRegistry(ALL_INTEGRATIONS)
+        self.integrations.sync(self.config)
         self.run_registry = RunRegistry()
 
         self.embedding = self.config.embedding
@@ -82,6 +85,7 @@ class Runtime:
     @property
     def tool_services(self) -> dict[str, object]:
         services = dict(self.source_mgr.sources)
+        services.update(self.integrations.clients)
         if self.memory:
             services["memory"] = self.memory
         if self.search_index:
@@ -113,6 +117,7 @@ class Runtime:
             await llm_reset()
             llm_init(self.config)
             self.source_mgr.sync(self.config)
+            self.integrations.sync(self.config)
             await self._sync_embedding()
             await self._sync_memory()
             self._sync_indexables()
