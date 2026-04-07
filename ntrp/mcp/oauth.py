@@ -74,26 +74,53 @@ class MCPTokenStorage:
             self._path.unlink()
 
 
-def create_oauth_provider(server_name: str, server_url: str) -> OAuthClientProvider:
+def _seed_client_info(storage: "MCPTokenStorage", client_id: str | None, client_secret: str | None) -> None:
+    """For providers without dynamic client registration (e.g. Slack), seed
+    the storage with pre-registered credentials so the SDK skips DCR."""
+    if not client_id:
+        return
+    if storage._read().get("client_info"):
+        return
+    info = OAuthClientInformationFull(
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uris=["http://localhost:0/callback"],
+    )
+    storage._write({**storage._read(), "client_info": info.model_dump(mode="json", exclude_none=True)})
+
+
+def create_oauth_provider(
+    server_name: str,
+    server_url: str,
+    client_id: str | None = None,
+    client_secret: str | None = None,
+) -> OAuthClientProvider:
     """Create a provider that reuses stored tokens but cannot start a new OAuth flow.
 
     Used during session connect — if tokens are valid, they're attached
     automatically. If re-auth is needed, the connection fails and the user
     must re-authenticate via the /mcp/servers/{name}/oauth endpoint.
     """
+    storage = MCPTokenStorage(server_name)
+    _seed_client_info(storage, client_id, client_secret)
     return OAuthClientProvider(
         server_url=server_url,
         client_metadata=OAuthClientMetadata(
             redirect_uris=["http://localhost:0/callback"],
             client_name="NTRP",
         ),
-        storage=MCPTokenStorage(server_name),
+        storage=storage,
         redirect_handler=None,
         callback_handler=None,
     )
 
 
-def run_mcp_oauth(server_name: str, server_url: str) -> None:
+def run_mcp_oauth(
+    server_name: str,
+    server_url: str,
+    client_id: str | None = None,
+    client_secret: str | None = None,
+) -> None:
     """Run a full interactive OAuth flow: clear old tokens, open browser, wait for callback."""
     code_result: dict[str, Any] = {}
     done = Event()
@@ -152,6 +179,7 @@ def run_mcp_oauth(server_name: str, server_url: str) -> None:
 
     storage = MCPTokenStorage(server_name)
     storage.clear()
+    _seed_client_info(storage, client_id, client_secret)
 
     provider = OAuthClientProvider(
         server_url=server_url,

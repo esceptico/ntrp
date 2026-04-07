@@ -45,6 +45,7 @@ async def list_mcp_servers(runtime: Runtime = Depends(get_runtime)):
                 "tools": tools,
                 "enabled": raw.get("enabled", True),
                 "auth": raw.get("auth"),
+                "has_client_credentials": bool(raw.get("client_id")),
             }
         )
     return {"servers": servers}
@@ -157,7 +158,9 @@ async def mcp_oauth(
         raise HTTPException(status_code=400, detail="Server has no URL configured")
 
     try:
-        await asyncio.to_thread(run_mcp_oauth, name, url)
+        await asyncio.to_thread(
+            run_mcp_oauth, name, url, raw.get("client_id"), raw.get("client_secret")
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

@@ -175,6 +175,24 @@ function ServerList({ mcp: m, accent, width }: MCPSectionProps) {
                     {m.mcpAddField === "auth" && <span fg={colors.text.muted}>{" (\u2190 \u2192 to switch)"}</span>}
                   </text>
                 </FormField>
+                {m.mcpAuth === "oauth" && (
+                  <>
+                    <FormField label="Client ID" active={m.mcpAddField === "clientId"}>
+                      {m.mcpAddField === "clientId" ? (
+                        <TextInput value={m.mcpClientId} cursor={m.mcpClientIdCursor} placeholder="(optional, for non-DCR servers)" />
+                      ) : (
+                        <text><span fg={m.mcpClientId ? colors.text.primary : colors.text.muted}>{m.mcpClientId || "(optional)"}</span></text>
+                      )}
+                    </FormField>
+                    <FormField label="Client Secret" active={m.mcpAddField === "clientSecret"}>
+                      {m.mcpAddField === "clientSecret" ? (
+                        <TextInput value={m.mcpClientSecret} cursor={m.mcpClientSecretCursor} placeholder="(optional)" />
+                      ) : (
+                        <text><span fg={m.mcpClientSecret ? colors.text.primary : colors.text.muted}>{m.mcpClientSecret ? "\u2022".repeat(8) : "(optional)"}</span></text>
+                      )}
+                    </FormField>
+                  </>
+                )}
                 {m.mcpAuth !== "oauth" && (
                   <FormField label="Headers" active={m.mcpAddField === "headers"}>
                     {m.mcpAddField === "headers" ? (

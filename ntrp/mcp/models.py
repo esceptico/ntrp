@@ -13,6 +13,8 @@ class HttpTransport:
     url: str
     headers: dict[str, str] = field(default_factory=dict)
     auth: str | None = None
+    client_id: str | None = None
+    client_secret: str | None = None
 
 
 @dataclass(frozen=True)
@@ -37,7 +39,13 @@ def parse_server_config(name: str, raw: dict) -> MCPServerConfig:
         url = raw.get("url")
         if not url:
             raise ValueError(f"MCP server {name!r}: http transport requires 'url'")
-        transport = HttpTransport(url=url, headers=raw.get("headers", {}), auth=raw.get("auth"))
+        transport = HttpTransport(
+            url=url,
+            headers=raw.get("headers", {}),
+            auth=raw.get("auth"),
+            client_id=raw.get("client_id"),
+            client_secret=raw.get("client_secret"),
+        )
     else:
         raise ValueError(f"MCP server {name!r}: unknown transport {transport_type!r} (expected 'stdio' or 'http')")
     tools = raw.get("tools")

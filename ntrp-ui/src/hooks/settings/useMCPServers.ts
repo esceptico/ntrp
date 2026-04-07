@@ -6,7 +6,7 @@ import { useTextInput } from "../useTextInput.js";
 import type { Key } from "../useKeypress.js";
 import { handleListNav } from "../keyUtils.js";
 
-export type MCPAddField = "name" | "transport" | "command" | "url" | "auth" | "headers";
+export type MCPAddField = "name" | "transport" | "command" | "url" | "auth" | "headers" | "clientId" | "clientSecret";
 export type MCPAuth = "none" | "oauth";
 export type MCPMode = "list" | "add" | "confirm-remove" | "tools" | "oauth";
 
@@ -25,6 +25,10 @@ export interface UseMCPServersResult {
   mcpUrlCursor: number;
   mcpHeaders: string;
   mcpHeadersCursor: number;
+  mcpClientId: string;
+  mcpClientIdCursor: number;
+  mcpClientSecret: string;
+  mcpClientSecretCursor: number;
   mcpSaving: boolean;
   mcpError: string | null;
   mcpToolIndex: number;
@@ -52,6 +56,10 @@ export function useMCPServers(config: Config): UseMCPServersResult {
   const [mcpUrlCursor, setMcpUrlCursor] = useState(0);
   const [mcpHeaders, setMcpHeaders] = useState("");
   const [mcpHeadersCursor, setMcpHeadersCursor] = useState(0);
+  const [mcpClientId, setMcpClientId] = useState("");
+  const [mcpClientIdCursor, setMcpClientIdCursor] = useState(0);
+  const [mcpClientSecret, setMcpClientSecret] = useState("");
+  const [mcpClientSecretCursor, setMcpClientSecretCursor] = useState(0);
 
   const [mcpSaving, setMcpSaving] = useState(false);
   const [mcpError, setMcpError] = useState<string | null>(null);
@@ -77,6 +85,14 @@ export function useMCPServers(config: Config): UseMCPServersResult {
     text: mcpHeaders, cursorPos: mcpHeadersCursor,
     setText: setMcpHeaders, setCursorPos: setMcpHeadersCursor,
   });
+  const { handleKey: handleMcpClientIdKey } = useTextInput({
+    text: mcpClientId, cursorPos: mcpClientIdCursor,
+    setText: setMcpClientId, setCursorPos: setMcpClientIdCursor,
+  });
+  const { handleKey: handleMcpClientSecretKey } = useTextInput({
+    text: mcpClientSecret, cursorPos: mcpClientSecretCursor,
+    setText: setMcpClientSecret, setCursorPos: setMcpClientSecretCursor,
+  });
 
   const refreshMcpServers = useCallback(() => {
     getMCPServers(config).then(r => setMcpServers(r.servers)).catch(() => {});
@@ -89,6 +105,8 @@ export function useMCPServers(config: Config): UseMCPServersResult {
     setMcpCommand(""); setMcpCommandCursor(0);
     setMcpUrl(""); setMcpUrlCursor(0);
     setMcpHeaders(""); setMcpHeadersCursor(0);
+    setMcpClientId(""); setMcpClientIdCursor(0);
+    setMcpClientSecret(""); setMcpClientSecretCursor(0);
     setMcpError(null);
   }, []);
 
@@ -113,6 +131,10 @@ export function useMCPServers(config: Config): UseMCPServersResult {
       serverConfig = { transport: "http", url } as Record<string, unknown>;
       if (mcpAuth === "oauth") {
         serverConfig.auth = "oauth";
+        const clientId = mcpClientId.trim();
+        const clientSecret = mcpClientSecret.trim();
+        if (clientId) serverConfig.client_id = clientId;
+        if (clientSecret) serverConfig.client_secret = clientSecret;
       } else {
         const rawHeaders = mcpHeaders.trim();
         if (rawHeaders) {
@@ -140,7 +162,7 @@ export function useMCPServers(config: Config): UseMCPServersResult {
     } finally {
       setMcpSaving(false);
     }
-  }, [mcpSaving, mcpName, mcpTransport, mcpAuth, mcpCommand, mcpUrl, mcpHeaders, config, refreshMcpServers]);
+  }, [mcpSaving, mcpName, mcpTransport, mcpAuth, mcpCommand, mcpUrl, mcpHeaders, mcpClientId, mcpClientSecret, config, refreshMcpServers]);
 
   const handleMcpRemove = useCallback(async () => {
     if (mcpSaving) return;
@@ -261,7 +283,7 @@ export function useMCPServers(config: Config): UseMCPServersResult {
         const fields: MCPAddField[] = mcpTransport === "stdio"
           ? ["name", "transport", "command"]
           : mcpAuth === "oauth"
-            ? ["name", "transport", "url", "auth"]
+            ? ["name", "transport", "url", "auth", "clientId", "clientSecret"]
             : ["name", "transport", "url", "auth", "headers"];
         const idx = fields.indexOf(mcpAddField);
         setMcpAddField(fields[(idx + 1) % fields.length]);
@@ -281,6 +303,10 @@ export function useMCPServers(config: Config): UseMCPServersResult {
         handleMcpUrlKey(key);
       } else if (mcpAddField === "headers") {
         handleMcpHeadersKey(key);
+      } else if (mcpAddField === "clientId") {
+        handleMcpClientIdKey(key);
+      } else if (mcpAddField === "clientSecret") {
+        handleMcpClientSecretKey(key);
       }
       return;
     }
@@ -312,6 +338,7 @@ export function useMCPServers(config: Config): UseMCPServersResult {
     mcpMode, mcpTransport, mcpAuth, mcpAddField, mcpServers, mcpIndex, mcpToolIndex,
     handleMcpRemove, handleMcpAdd, handleSaveTools, handleToggleEnabled, handleOAuth, resetForm,
     handleMcpNameKey, handleMcpCommandKey, handleMcpUrlKey, handleMcpHeadersKey,
+    handleMcpClientIdKey, handleMcpClientSecretKey,
   ]);
 
   return {
@@ -320,6 +347,8 @@ export function useMCPServers(config: Config): UseMCPServersResult {
     mcpCommand, mcpCommandCursor,
     mcpUrl, mcpUrlCursor,
     mcpHeaders, mcpHeadersCursor,
+    mcpClientId, mcpClientIdCursor,
+    mcpClientSecret, mcpClientSecretCursor,
     mcpSaving, mcpError,
     mcpToolIndex, mcpToolEnabled, mcpOAuthInProgress,
     refreshMcpServers, handleKeypress, isEditing, cancelEdit,

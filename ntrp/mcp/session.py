@@ -84,7 +84,9 @@ class MCPServerSession:
         if transport.auth == "oauth":
             from ntrp.mcp.oauth import create_oauth_provider
 
-            oauth = create_oauth_provider(self.name, transport.url)
+            oauth = create_oauth_provider(
+                self.name, transport.url, transport.client_id, transport.client_secret
+            )
             http_client = create_mcp_http_client(auth=oauth)
         else:
             http_client = create_mcp_http_client(headers=transport.headers or None)

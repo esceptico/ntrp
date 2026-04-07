@@ -19,6 +19,7 @@ export interface MCPServerInfo {
   tools?: MCPToolInfo[];
   enabled: boolean;
   auth?: string | null;
+  has_client_credentials?: boolean;
 }
 
 export async function getMCPServers(config: Config): Promise<{ servers: MCPServerInfo[] }> {
