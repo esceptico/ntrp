@@ -26,14 +26,6 @@ from ntrp.tools.directives import SetDirectivesTool
 from ntrp.tools.email import EmailsTool, ReadEmailTool, SendEmailTool
 from ntrp.tools.files import ReadFileTool
 from ntrp.tools.memory import ForgetTool, RecallTool, RememberTool
-from ntrp.tools.notes import (
-    CreateNoteTool,
-    DeleteNoteTool,
-    EditNoteTool,
-    MoveNoteTool,
-    NotesTool,
-    ReadNoteTool,
-)
 from ntrp.tools.notify import NotifyTool
 from ntrp.tools.research import ResearchTool
 from ntrp.tools.time import CurrentTimeTool
@@ -51,12 +43,6 @@ _BUILTIN_TOOLS: list[type[Tool]] = [
     RememberTool,
     RecallTool,
     ForgetTool,
-    NotesTool,
-    ReadNoteTool,
-    EditNoteTool,
-    CreateNoteTool,
-    DeleteNoteTool,
-    MoveNoteTool,
     NotifyTool,
     SendEmailTool,
     ReadEmailTool,

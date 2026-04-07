@@ -4,13 +4,6 @@ from ntrp.config import Config
 from ntrp.sources.google.auth import discover_calendar_tokens, discover_gmail_tokens
 from ntrp.sources.google.calendar import MultiCalendarSource
 from ntrp.sources.google.gmail import MultiGmailSource
-from ntrp.sources.obsidian import ObsidianSource
-
-
-def _create_notes(config: Config) -> object | None:
-    if config.vault_path is None:
-        return None
-    return ObsidianSource(vault_path=config.vault_path)
 
 
 def _create_gmail(config: Config) -> object | None:
@@ -34,7 +27,6 @@ def _create_calendar(config: Config) -> object | None:
 
 
 SOURCES: dict[str, Callable[[Config], object | None]] = {
-    "notes": _create_notes,
     "gmail": _create_gmail,
     "calendar": _create_calendar,
 }

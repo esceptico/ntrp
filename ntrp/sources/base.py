@@ -22,29 +22,6 @@ class SourceItem:
 
 
 @runtime_checkable
-class NotesSource(Protocol):
-    name: str
-
-    def read(self, source_id: str) -> str | None: ...
-
-    def write(self, source_id: str, content: str) -> bool: ...
-
-    def delete(self, source_id: str) -> bool: ...
-
-    def exists(self, source_id: str) -> bool: ...
-
-    def move(self, source_id: str, dest_id: str) -> bool: ...
-
-    def search(self, query: str) -> list[str]: ...
-
-    def scan(self) -> list[RawItem]: ...
-
-    def scan_item(self, source_id: str) -> RawItem | None: ...
-
-    def get_all_with_mtime(self) -> dict[str, datetime]: ...
-
-
-@runtime_checkable
 class EmailSource(Protocol):
     name: str
 

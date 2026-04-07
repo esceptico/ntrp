@@ -14,7 +14,7 @@ from ntrp.constants import (
 )
 from ntrp.logging import get_logger
 from ntrp.search.index import SearchIndex
-from ntrp.sources.base import NotesSource
+from ntrp.integrations.obsidian.client import ObsidianClient
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.formatting import format_lines_with_pagination
@@ -93,14 +93,14 @@ class NotesTool(Tool):
         limit: int | None = None,
         **kwargs: Any,
     ) -> ToolResult:
-        source = execution.ctx.get_source(NotesSource, "notes")
+        source = execution.ctx.get_client("notes", ObsidianClient)
         limit = limit or DEFAULT_LIST_LIMIT
         if query:
             search_index = execution.ctx.services.get("search_index")
             return await self._search(source, query, limit, search_index)
         return await self._list(source, limit)
 
-    async def _list(self, source: NotesSource, limit: int) -> ToolResult:
+    async def _list(self, source: ObsidianClient, limit: int) -> ToolResult:
         files_by_mtime = await asyncio.to_thread(source.get_all_with_mtime)
 
         sorted_files = sorted(
@@ -120,7 +120,7 @@ class NotesTool(Tool):
         return ToolResult(content=content, preview=f"{showing} notes")
 
     async def _search(
-        self, source: NotesSource, query: str, limit: int, search_index: SearchIndex | None = None
+        self, source: ObsidianClient, query: str, limit: int, search_index: SearchIndex | None = None
     ) -> ToolResult:
         query = simplify_query(query)
 
@@ -184,7 +184,7 @@ class ReadNoteTool(Tool):
     async def execute(
         self, execution: ToolExecution, path: str, offset: int | None = None, limit: int | None = None, **kwargs: Any
     ) -> ToolResult:
-        source = execution.ctx.get_source(NotesSource, "notes")
+        source = execution.ctx.get_client("notes", ObsidianClient)
         offset = offset or 1
         limit = limit or DEFAULT_READ_LINES
         content = await asyncio.to_thread(source.read, path)
@@ -217,7 +217,7 @@ class EditNoteTool(Tool):
     async def approval_info(
         self, execution: ToolExecution, path: str, find: str, replace: str = "", **kwargs: Any
     ) -> ApprovalInfo | None:
-        source = execution.ctx.get_source(NotesSource, "notes")
+        source = execution.ctx.get_client("notes", ObsidianClient)
         original = source.read(path)
         if original is None or find not in original:
             return None
@@ -232,7 +232,7 @@ class EditNoteTool(Tool):
     async def execute(
         self, execution: ToolExecution, path: str, find: str, replace: str = "", **kwargs: Any
     ) -> ToolResult:
-        source = execution.ctx.get_source(NotesSource, "notes")
+        source = execution.ctx.get_client("notes", ObsidianClient)
         original = source.read(path)
         if original is None:
             return ToolResult(
@@ -279,7 +279,7 @@ class CreateNoteTool(Tool):
     async def approval_info(
         self, execution: ToolExecution, path: str, content: str, **kwargs: Any
     ) -> ApprovalInfo | None:
-        source = execution.ctx.get_source(NotesSource, "notes")
+        source = execution.ctx.get_client("notes", ObsidianClient)
         if not path.endswith(".md"):
             path = path + ".md"
         if source.exists(path):
@@ -290,7 +290,7 @@ class CreateNoteTool(Tool):
         return ApprovalInfo(description=path, preview=preview_content, diff=None)
 
     async def execute(self, execution: ToolExecution, path: str, content: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(NotesSource, "notes")
+        source = execution.ctx.get_client("notes", ObsidianClient)
         if not path.endswith(".md"):
             path = path + ".md"
 
@@ -319,13 +319,13 @@ class DeleteNoteTool(Tool):
     input_model = DeleteNoteInput
 
     async def approval_info(self, execution: ToolExecution, path: str, **kwargs: Any) -> ApprovalInfo | None:
-        source = execution.ctx.get_source(NotesSource, "notes")
+        source = execution.ctx.get_client("notes", ObsidianClient)
         if source.read(path) is None:
             return None
         return ApprovalInfo(description=path, preview=None, diff=None)
 
     async def execute(self, execution: ToolExecution, path: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(NotesSource, "notes")
+        source = execution.ctx.get_client("notes", ObsidianClient)
         original = source.read(path)
         if original is None:
             return ToolResult(
@@ -355,13 +355,13 @@ class MoveNoteTool(Tool):
     async def approval_info(
         self, execution: ToolExecution, path: str, new_path: str, **kwargs: Any
     ) -> ApprovalInfo | None:
-        source = execution.ctx.get_source(NotesSource, "notes")
+        source = execution.ctx.get_client("notes", ObsidianClient)
         if not source.exists(path):
             return None
         return ApprovalInfo(description=f"{path} → {new_path}", preview=None, diff=None)
 
     async def execute(self, execution: ToolExecution, path: str, new_path: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(NotesSource, "notes")
+        source = execution.ctx.get_client("notes", ObsidianClient)
         if not new_path.endswith(".md"):
             new_path = new_path + ".md"
 
