@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ntrp.sources.base import SlackSource
+from ntrp.integrations.slack.client import SlackClient
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.utils import truncate
@@ -47,7 +47,7 @@ class SlackSearchTool(Tool):
     input_model = SlackSearchInput
 
     async def execute(self, execution: ToolExecution, query: str, limit: int = _DEFAULT_LIMIT, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(SlackSource, "slack")
+        source = execution.ctx.get_client("slack", SlackClient)
         results = await source.search_messages(query, limit=limit)
         if not results:
             return ToolResult(content=f"No Slack messages found for {query!r}", preview="0 results")
@@ -67,7 +67,7 @@ class SlackChannelTool(Tool):
     input_model = SlackChannelInput
 
     async def execute(self, execution: ToolExecution, channel: str, limit: int = 50, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(SlackSource, "slack")
+        source = execution.ctx.get_client("slack", SlackClient)
         results = await source.read_channel(channel, limit=limit)
         if not results:
             return ToolResult(content=f"No messages in #{channel}", preview="0 messages")
@@ -86,7 +86,7 @@ class SlackThreadTool(Tool):
     input_model = SlackThreadInput
 
     async def execute(self, execution: ToolExecution, message_id: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(SlackSource, "slack")
+        source = execution.ctx.get_client("slack", SlackClient)
         content = await source.read_thread(message_id)
         if not content:
             return ToolResult(content=f"Message not found: {message_id}", preview="Not found")
@@ -107,7 +107,7 @@ class SlackChannelsTool(Tool):
     input_model = SlackChannelsInput
 
     async def execute(self, execution: ToolExecution, query: str | None = None, limit: int = 50, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(SlackSource, "slack")
+        source = execution.ctx.get_client("slack", SlackClient)
         results = await source.search_channels(query, limit=limit)
         if not results:
             return ToolResult(content="No matching channels", preview="0 channels")
@@ -128,7 +128,7 @@ class SlackUsersTool(Tool):
     input_model = SlackUsersInput
 
     async def execute(self, execution: ToolExecution, query: str | None = None, limit: int = 50, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(SlackSource, "slack")
+        source = execution.ctx.get_client("slack", SlackClient)
         results = await source.search_users(query, limit=limit)
         if not results:
             return ToolResult(content="No matching users", preview="0 users")
@@ -158,7 +158,7 @@ class SlackUserTool(Tool):
     input_model = SlackUserInput
 
     async def execute(self, execution: ToolExecution, user_id: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(SlackSource, "slack")
+        source = execution.ctx.get_client("slack", SlackClient)
         profile = await source.read_user(user_id)
         if not profile:
             return ToolResult(content=f"User not found: {user_id}", preview="Not found")

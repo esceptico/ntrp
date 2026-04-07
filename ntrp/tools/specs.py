@@ -1,3 +1,4 @@
+from ntrp.integrations import ALL_INTEGRATIONS
 from ntrp.skills.tool import UseSkillTool
 from ntrp.tools.automation import (
     CreateAutomationTool,
@@ -35,18 +36,10 @@ from ntrp.tools.notes import (
 )
 from ntrp.tools.notify import NotifyTool
 from ntrp.tools.research import ResearchTool
-from ntrp.tools.slack import (
-    SlackChannelTool,
-    SlackChannelsTool,
-    SlackSearchTool,
-    SlackThreadTool,
-    SlackUserTool,
-    SlackUsersTool,
-)
 from ntrp.tools.time import CurrentTimeTool
 from ntrp.tools.web import WebFetchTool, WebSearchTool
 
-ALL_TOOLS: list[type[Tool]] = [
+_BUILTIN_TOOLS: list[type[Tool]] = [
     BackgroundTool,
     BashTool,
     CancelBackgroundTaskTool,
@@ -71,12 +64,6 @@ ALL_TOOLS: list[type[Tool]] = [
     SendEmailTool,
     ReadEmailTool,
     EmailsTool,
-    SlackSearchTool,
-    SlackChannelTool,
-    SlackThreadTool,
-    SlackChannelsTool,
-    SlackUsersTool,
-    SlackUserTool,
     CalendarTool,
     CreateCalendarEventTool,
     EditCalendarEventTool,
@@ -88,4 +75,9 @@ ALL_TOOLS: list[type[Tool]] = [
     GetAutomationResultTool,
     RunAutomationTool,
     UseSkillTool,
+]
+
+ALL_TOOLS: list[type[Tool]] = [
+    *_BUILTIN_TOOLS,
+    *(tool for integration in ALL_INTEGRATIONS for tool in integration.tools),
 ]

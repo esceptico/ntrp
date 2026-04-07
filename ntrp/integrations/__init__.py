@@ -5,8 +5,9 @@ from ntrp.integrations.base import (
     ToolProviderStatus,
 )
 from ntrp.integrations.registry import IntegrationRegistry
+from ntrp.integrations.slack import SLACK
 
-ALL_INTEGRATIONS: list[Integration] = []
+ALL_INTEGRATIONS: list[Integration] = [SLACK]
 
 __all__ = [
     "ALL_INTEGRATIONS",
