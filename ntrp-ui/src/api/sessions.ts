@@ -49,6 +49,11 @@ export async function createSession(config: Config, name?: string): Promise<Sess
   return api.post<SessionListItem>(`${config.serverUrl}/sessions`, body);
 }
 
+export async function branchSession(config: Config, sessionId: string, name?: string): Promise<SessionListItem> {
+  const body = name ? { name } : {};
+  return api.post<SessionListItem>(`${config.serverUrl}/sessions/${sessionId}/branch`, body);
+}
+
 export async function renameSession(config: Config, sessionId: string, name: string): Promise<{ session_id: string; name: string }> {
   return api.patch<{ session_id: string; name: string }>(`${config.serverUrl}/sessions/${sessionId}`, { name });
 }

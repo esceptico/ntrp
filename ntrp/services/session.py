@@ -92,6 +92,18 @@ class SessionService:
     async def permanently_delete(self, session_id: str) -> bool:
         return await self.store.permanently_delete_session(session_id)
 
+    async def branch(self, session_id: str, name: str | None = None) -> SessionState | None:
+        """Clone a session's messages into a new session, preserving context."""
+        data = await self.load(session_id)
+        if not data:
+            return None
+        new_state = self.create(name=name or (f"{data.state.name} (branch)" if data.state.name else None))
+        new_state.auto_approve = set(data.state.auto_approve)
+        new_state.skip_approvals = data.state.skip_approvals
+        metadata = {"last_input_tokens": data.last_input_tokens} if data.last_input_tokens else None
+        await self.save(new_state, list(data.messages), metadata=metadata)
+        return new_state
+
 
 async def compact_session(
     svc: SessionService,

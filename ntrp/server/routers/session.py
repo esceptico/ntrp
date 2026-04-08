@@ -118,6 +118,24 @@ async def revert_session(svc: SessionService = Depends(require_session_service),
 # --- Multi-session ---
 
 
+@router.post("/sessions/{session_id}/branch")
+async def branch_session(
+    session_id: str,
+    req: CreateSessionRequest | None = None,
+    svc: SessionService = Depends(require_session_service),
+):
+    name = req.name if req else None
+    state = await svc.branch(session_id, name=name)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {
+        "session_id": state.session_id,
+        "name": state.name,
+        "started_at": state.started_at.isoformat(),
+        "last_activity": state.last_activity.isoformat(),
+    }
+
+
 @router.post("/sessions")
 async def create_session(
     svc: SessionService = Depends(require_session_service), req: CreateSessionRequest | None = None
