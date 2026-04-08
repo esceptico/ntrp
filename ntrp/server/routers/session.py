@@ -82,8 +82,8 @@ async def get_session(
 
     return SessionResponse(
         session_id=session_state.session_id,
-        sources=runtime.get_available_sources(),
-        source_errors=runtime.get_source_errors(),
+        integrations=runtime.get_available_integrations(),
+        integration_errors=runtime.get_integration_errors(),
         name=session_state.name,
     )
 

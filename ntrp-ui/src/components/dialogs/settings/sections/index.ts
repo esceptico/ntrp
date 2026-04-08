@@ -1,6 +1,6 @@
 export { ConnectionSection } from "./ConnectionSection.js";
 export { ApiKeysSection } from "./ApiKeysSection.js";
-export { SourcesSection } from "./SourcesSection.js";
+export { IntegrationsSection } from "./IntegrationsSection.js";
 export { MemorySection } from "./MemorySection.js";
 export { DirectivesSection } from "./DirectivesSection.js";
 export { ContextSection } from "./ContextSection.js";

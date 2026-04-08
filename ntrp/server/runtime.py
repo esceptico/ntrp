@@ -295,13 +295,13 @@ class Runtime:
 
     # --- Queries ---
 
-    def get_available_sources(self) -> list[str]:
-        sources = list(self.integrations.clients.keys())
+    def get_available_integrations(self) -> list[str]:
+        ids = list(self.integrations.clients.keys())
         if self.memory:
-            sources.append("memory")
-        return sources
+            ids.append("memory")
+        return ids
 
-    def get_source_errors(self) -> dict[str, str]:
+    def get_integration_errors(self) -> dict[str, str]:
         errors = dict(self.integrations.errors)
         if self.indexer and self.indexer.error:
             errors["index"] = self.indexer.error

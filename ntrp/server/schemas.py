@@ -38,8 +38,8 @@ class BackgroundRequest(BaseModel):
 
 class SessionResponse(BaseModel):
     session_id: str
-    sources: list[str]
-    source_errors: dict[str, str]
+    integrations: list[str]
+    integration_errors: dict[str, str]
     name: str | None = None
 
 
@@ -64,7 +64,7 @@ class RevertRequest(BaseModel):
     turns: int = Field(1, ge=1)
 
 
-class SourceToggles(BaseModel):
+class IntegrationToggles(BaseModel):
     google: bool | None = None
     memory: bool | None = None
     dreams: bool | None = None
@@ -82,7 +82,7 @@ class UpdateConfigRequest(BaseModel):
     consolidation_interval: int | None = None
     vault_path: str | None = None
     web_search: Literal["auto", "exa", "ddgs", "none"] | None = None
-    sources: SourceToggles | None = None
+    integrations: IntegrationToggles | None = None
 
 
 class UpdateEmbeddingRequest(BaseModel):

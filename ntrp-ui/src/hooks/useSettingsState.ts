@@ -30,7 +30,7 @@ export interface UseSettingsStateResult {
   services: UseServicesResult;
   server: UseServerConnectionResult;
   directives: UseDirectivesResult;
-  sources: UseConnectionsResult;
+  connections: UseConnectionsResult;
   notifiers: UseNotifiersResult;
   skills: UseSkillsResult;
   mcp: UseMCPServersResult;
@@ -53,7 +53,7 @@ export function useSettingsState({
   const services = useServices(config);
   const server = useServerConnection(config, onServerCredentialsChange);
   const directives = useDirectives(config);
-  const sources = useConnections(config, serverConfig, onServerConfigChange);
+  const connections = useConnections(config, serverConfig, onServerConfigChange);
   const mcp = useMCPServers(config);
   const notifiers = useNotifiers(config);
   const skills = useSkills(config);
@@ -76,7 +76,7 @@ export function useSettingsState({
     services,
     server,
     directives,
-    sources,
+    connections,
     notifiers,
     skills,
     mcp,

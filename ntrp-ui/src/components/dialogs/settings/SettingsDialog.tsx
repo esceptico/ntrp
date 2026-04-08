@@ -6,7 +6,7 @@ import { useAccentColor } from "../../../hooks/index.js";
 import type { ServerConfig } from "../../../api/client.js";
 import { SectionId, SECTION_IDS, SECTION_LABELS } from "./config.js";
 import {
-  ConnectionSection, ApiKeysSection, SourcesSection, MemorySection,
+  ConnectionSection, ApiKeysSection, IntegrationsSection, MemorySection,
   DirectivesSection, ContextSection, AgentSection,
   NotifiersSection, SkillsSection, MCPSection, InterfaceSection,
 } from "./sections/index.js";
@@ -105,7 +105,7 @@ export function SettingsDialog({
               <box flexDirection="column" width={detailWidth} height={contentHeight} overflow="hidden">
                 {activeSection === "connection" && <ConnectionSection server={state.server} accent={accent} />}
                 {activeSection === "apiKeys" && <ApiKeysSection providers={state.providers} services={state.services} activeList={state.apiKeys.activeList} accent={accent} />}
-                {activeSection === "sources" && <SourcesSection sources={state.sources} serverConfig={serverConfig} accent={accent} width={detailWidth} />}
+                {activeSection === "integrations" && <IntegrationsSection connections={state.connections} serverConfig={serverConfig} accent={accent} width={detailWidth} />}
                 {activeSection === "memory" && <MemorySection memory={state.memory} serverConfig={serverConfig} agentSettings={settings.agent} accent={accent} />}
                 {activeSection === "instructions" && <DirectivesSection directives={state.directives} accent={accent} height={contentHeight} />}
                 {activeSection === "context" && <ContextSection settings={settings.agent} selectedIndex={state.context.contextIndex} accent={accent} />}
@@ -117,9 +117,9 @@ export function SettingsDialog({
               </box>
             </box>
 
-            {(state.sources.actionInProgress || state.memory.actionInProgress) && (
+            {(state.connections.actionInProgress || state.memory.actionInProgress) && (
               <box marginTop={1}>
-                <text><span fg={colors.status.warning}>{state.sources.actionInProgress || state.memory.actionInProgress}</span></text>
+                <text><span fg={colors.status.warning}>{state.connections.actionInProgress || state.memory.actionInProgress}</span></text>
               </box>
             )}
           </>

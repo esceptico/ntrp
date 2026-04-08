@@ -1,7 +1,7 @@
 import type { Config } from "../types.js";
 import { api } from "./fetch.js";
 
-export interface SourceInfo {
+export interface IntegrationInfo {
   enabled?: boolean;
   connected: boolean;
   error?: string;
@@ -29,7 +29,7 @@ export interface ServerConfig {
   summary_max_tokens: number;
   consolidation_interval: number;
   memory_enabled: boolean;
-  sources?: Record<string, SourceInfo>;
+  integrations?: Record<string, IntegrationInfo>;
 }
 
 export interface ModelGroup {
@@ -44,7 +44,7 @@ export async function getServerConfig(config: Config): Promise<ServerConfig> {
 export async function updateConfig(
   config: Config,
   patch: Partial<Pick<ServerConfig, "chat_model" | "research_model" | "memory_model" | "max_depth" | "web_search" | "compression_threshold" | "max_messages" | "compression_keep_ratio" | "summary_max_tokens" | "consolidation_interval">> & {
-    sources?: Record<string, boolean>;
+    integrations?: Record<string, boolean>;
   }
 ): Promise<Record<string, unknown>> {
   return api.patch(`${config.serverUrl}/config`, patch);

@@ -20,7 +20,7 @@ interface UseStreamingOptions {
   sessionId: string | null;
   skipApprovals: boolean;
   streaming?: boolean;
-  onSessionInfo?: (info: { session_id: string; sources: string[]; session_name?: string }) => void;
+  onSessionInfo?: (info: { session_id: string; integrations: string[]; session_name?: string }) => void;
   initialMessages?: Message[];
 }
 
@@ -114,7 +114,7 @@ export function useStreaming({
           if (targetId === viewedId) {
             onSessionInfoRef.current?.({
               session_id: event.session_id,
-              sources: event.sources,
+              integrations: event.integrations,
               session_name: event.session_name,
             });
           }

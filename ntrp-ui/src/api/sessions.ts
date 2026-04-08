@@ -3,8 +3,8 @@ import { api } from "./fetch.js";
 
 export async function getSession(config: Config, sessionId?: string): Promise<{
   session_id: string;
-  sources: string[];
-  source_errors: Record<string, string>;
+  integrations: string[];
+  integration_errors: Record<string, string>;
   skip_approvals: boolean;
   name?: string | null;
 }> {

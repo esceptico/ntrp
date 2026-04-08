@@ -3,14 +3,14 @@ import { colors } from "../ui/colors.js";
 import type { ServerConfig } from "../../api/client.js";
 import { SectionHeader, D } from "./shared.js";
 
-interface SourceEntry { key: string; label: string; on: boolean; error?: boolean }
+interface IntegrationEntry { key: string; label: string; on: boolean; error?: boolean }
 
-function getSourceEntries(cfg: ServerConfig): SourceEntry[] {
-  const sources = cfg.sources ?? {};
-  const entries: SourceEntry[] = [];
-  for (const [id, source] of Object.entries(sources)) {
-    if (!source || typeof source !== "object") continue;
-    const s = source as unknown as Record<string, unknown>;
+function getIntegrationEntries(cfg: ServerConfig): IntegrationEntry[] {
+  const integrations = cfg.integrations ?? {};
+  const entries: IntegrationEntry[] = [];
+  for (const [id, integration] of Object.entries(integrations)) {
+    if (!integration || typeof integration !== "object") continue;
+    const s = integration as unknown as Record<string, unknown>;
     const connected = id === "memory" || id === "google" ? !!s.enabled && !!s.connected : !!s.connected;
     entries.push({
       key: id,
@@ -22,11 +22,11 @@ function getSourceEntries(cfg: ServerConfig): SourceEntry[] {
   return entries;
 }
 
-export function SourcesSection({ cfg }: { cfg: ServerConfig }) {
-  const entries = getSourceEntries(cfg);
+export function IntegrationsSection({ cfg }: { cfg: ServerConfig }) {
+  const entries = getIntegrationEntries(cfg);
   return (
     <box flexDirection="column">
-      <SectionHeader label="SOURCES" />
+      <SectionHeader label="INTEGRATIONS" />
       {entries.map(({ key, label, on, error }) => {
         const color = error ? colors.status.error : on ? colors.status.success : D();
         return (

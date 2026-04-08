@@ -46,8 +46,8 @@ class ChatContext:
     tools: list[dict]
     config: AgentConfig
     channel: Channel
-    available_sources: list[str]
-    source_errors: dict[str, str]
+    available_integrations: list[str]
+    integration_errors: dict[str, str]
     session_service: SessionService
     run_registry: RunRegistry
 
@@ -212,8 +212,8 @@ async def prepare_chat(
         tools=runtime.executor.get_tools(),
         config=AgentConfig.from_config(runtime.config),
         channel=runtime.channel,
-        available_sources=runtime.get_available_sources(),
-        source_errors=runtime.get_source_errors(),
+        available_integrations=runtime.get_available_integrations(),
+        integration_errors=runtime.get_integration_errors(),
         session_service=runtime.session_service,
         run_registry=runtime.run_registry,
     )
@@ -279,8 +279,8 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         RunStartedEvent(
             session_id=session_state.session_id,
             run_id=run.run_id,
-            sources=ctx.available_sources,
-            source_errors=ctx.source_errors,
+            integrations=ctx.available_integrations,
+            integration_errors=ctx.integration_errors,
             skip_approvals=session_state.skip_approvals,
             session_name=session_state.name or "",
         )

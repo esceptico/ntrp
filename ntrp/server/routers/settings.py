@@ -45,33 +45,33 @@ def _config_response(rt: Runtime) -> dict:
     web_client = rt.integrations.get_client("web")
     web_provider = getattr(web_client, "provider", "unknown") if web_client else "none"
 
-    sources: dict[str, dict] = {}
+    integrations: dict[str, dict] = {}
     for integration in rt.integrations.integrations.values():
         if integration.id.startswith("_") or integration.build is None:
             continue  # core builtins / notifier-only
         entry: dict = {"connected": integration.id in rt.integrations.clients}
         if integration.id in rt.integrations.errors:
             entry["error"] = rt.integrations.errors[integration.id]
-        sources[integration.id] = entry
+        integrations[integration.id] = entry
 
     # Integration-specific extras the UI needs
-    sources.setdefault("web", {}).update({
+    integrations.setdefault("web", {}).update({
         "mode": config.web_search,
         "provider": web_provider,
     })
-    sources.setdefault("notes", {})["path"] = str(config.vault_path) if config.vault_path else None
-    sources.setdefault("slack", {}).update({
+    integrations.setdefault("notes", {})["path"] = str(config.vault_path) if config.vault_path else None
+    integrations.setdefault("slack", {}).update({
         "has_user_token": bool(config.slack_user_token),
         "has_bot_token": bool(config.slack_bot_token),
     })
 
-    # Non-integration sources (google umbrella, memory)
-    sources["google"] = {
+    # Umbrella + memory (not direct integrations)
+    integrations["google"] = {
         "enabled": config.google,
         "connected": "gmail" in rt.integrations.clients or "calendar" in rt.integrations.clients,
         **({"error": "; ".join(e for e in (rt.integrations.errors.get("gmail"), rt.integrations.errors.get("calendar")) if e)} if (rt.integrations.errors.get("gmail") or rt.integrations.errors.get("calendar")) else {}),
     }
-    sources["memory"] = {
+    integrations["memory"] = {
         "enabled": config.memory,
         "connected": memory_connected,
         "dreams": config.dreams,
@@ -99,7 +99,7 @@ def _config_response(rt: Runtime) -> dict:
         "summary_max_tokens": config.summary_max_tokens,
         "consolidation_interval": config.consolidation_interval,
         "memory_enabled": memory_connected,
-        "sources": sources,
+        "integrations": integrations,
     }
 
 
@@ -136,8 +136,8 @@ async def update_config(
     cfg_svc: ConfigService = Depends(require_config_service),
 ):
     fields = req.model_dump(exclude_unset=True)
-    if sources := fields.pop("sources", None):
-        fields.update({k: v for k, v in sources.items() if v is not None})
+    if toggles := fields.pop("integrations", None):
+        fields.update({k: v for k, v in toggles.items() if v is not None})
     try:
         await cfg_svc.update(**fields)
     except (ValueError, ValidationError) as e:
@@ -293,7 +293,7 @@ async def list_providers(runtime: Runtime = Depends(get_runtime)):
 
 @router.post("/reload")
 async def reload_runtime(runtime: Runtime = Depends(get_runtime)):
-    """Re-read config from disk and rebuild sources, memory, MCP, etc.
+    """Re-read config from disk and rebuild integrations, memory, MCP, etc.
 
     Use after editing .env or settings.json directly outside the UI.
     """

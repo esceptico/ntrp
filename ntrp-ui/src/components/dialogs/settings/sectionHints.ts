@@ -10,8 +10,8 @@ export function getSectionHints(section: SectionId, state: UseSettingsStateResul
       return getConnectionHints(state);
     case "apiKeys":
       return getApiKeysHints(state);
-    case "sources":
-      return getSourcesHints(state, serverConfig);
+    case "integrations":
+      return getIntegrationsHints(state, serverConfig);
     case "instructions":
       return getDirectivesHints(state);
     case "notifications":
@@ -82,8 +82,8 @@ function getApiKeysHints(state: UseSettingsStateResult): HintPair[] {
   return [["↑↓", "navigate"], ["esc", "back"]];
 }
 
-function getSourcesHints(state: UseSettingsStateResult, serverConfig: ServerConfig | null): HintPair[] {
-  const c = state.sources;
+function getIntegrationsHints(state: UseSettingsStateResult, serverConfig: ServerConfig | null): HintPair[] {
+  const c = state.connections;
   const item = c.sourceItem;
 
   if (item === "vault") {
@@ -93,8 +93,8 @@ function getSourcesHints(state: UseSettingsStateResult, serverConfig: ServerConf
     return [["↑↓", "navigate"], ["enter", "edit path"], ["esc", "back"]];
   }
   if (item === "google") {
-    const sourceEnabled = serverConfig?.sources?.google?.enabled;
-    if (sourceEnabled) {
+    const googleEnabled = serverConfig?.integrations?.google?.enabled;
+    if (googleEnabled) {
       return [["↑↓", "navigate"], ["enter", "toggle"], ["a", "add account"], ["d", "remove account"], ["esc", "back"]];
     }
     return [["↑↓", "navigate"], ["enter", "enable"], ["esc", "back"]];
