@@ -4,12 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.settings import NTRP_DIR
-from ntrp.sources.google.auth import (
+from ntrp.integrations.google_auth.auth import (
     CREDENTIALS_PATH,
     add_gmail_account,
     discover_gmail_tokens,
 )
-from ntrp.sources.google.gmail import GmailSource
+from ntrp.integrations.gmail.client import GmailSource
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
 

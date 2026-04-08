@@ -22,7 +22,7 @@ interface IndexStatus {
 export function useSession(config: Config) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionName, setSessionName] = useState<string | null>(null);
-  const [sources, setSources] = useState<string[]>([]);
+  const [integrations, setIntegrations] = useState<string[]>([]);
   const [skipApprovals, setSkipApprovals] = useState(false);
   const [serverConnected, setServerConnected] = useState(false);
   const [serverVersion, setServerVersion] = useState<string | null>(null);
@@ -45,7 +45,7 @@ export function useSession(config: Config) {
 
       setSessionId(session.session_id);
       setSessionName(session.name ?? null);
-      setSources(session.sources);
+      setIntegrations(session.integrations);
       setServerConfig(configData);
       setHistory(historyData.messages);
       setServerConnected(true);
@@ -134,10 +134,10 @@ export function useSession(config: Config) {
     }
   };
 
-  const updateSessionInfo = (info: { session_id: string; sources?: string[]; session_name?: string }) => {
+  const updateSessionInfo = (info: { session_id: string; integrations?: string[]; session_name?: string }) => {
     setSessionId(info.session_id);
-    if (info.sources !== undefined) {
-      setSources(info.sources);
+    if (info.integrations !== undefined) {
+      setIntegrations(info.integrations);
     }
     if (info.session_name !== undefined) {
       setSessionName(info.session_name || null);
@@ -168,7 +168,7 @@ export function useSession(config: Config) {
       ]);
       setSessionId(session.session_id);
       setSessionName(session.name ?? null);
-      setSources(session.sources);
+      setIntegrations(session.integrations);
       setHistory(historyData.messages);
       return { history: historyData.messages };
     } catch {
@@ -183,7 +183,7 @@ export function useSession(config: Config) {
       const result = await createSession(config, name);
       setSessionId(result.session_id);
       setSessionName(result.name ?? null);
-      setSources([]);
+      setIntegrations([]);
       setHistory([]);
       return result.session_id;
     } catch {
@@ -194,7 +194,7 @@ export function useSession(config: Config) {
   return {
     sessionId,
     sessionName,
-    sources,
+    integrations,
     skipApprovals,
     serverConnected,
     serverVersion,

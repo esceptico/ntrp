@@ -10,8 +10,8 @@ export function getSectionHints(section: SectionId, state: UseSettingsStateResul
       return getConnectionHints(state);
     case "apiKeys":
       return getApiKeysHints(state);
-    case "sources":
-      return getSourcesHints(state, serverConfig);
+    case "integrations":
+      return getIntegrationsHints(state, serverConfig);
     case "instructions":
       return getDirectivesHints(state);
     case "notifications":
@@ -37,31 +37,33 @@ function getConnectionHints(state: UseSettingsStateResult): HintPair[] {
 }
 
 function getApiKeysHints(state: UseSettingsStateResult): HintPair[] {
-  const { activeList } = state.apiKeys;
   const providers = state.providers;
-  const services = state.services;
 
-  if (activeList === "providers") {
-    if (providers.editing) {
-      return [["enter", "save"], ["esc", "cancel"]];
+  if (providers.editing) {
+    return [["enter", "save"], ["esc", "cancel"]];
+  }
+  const current = providers.items[providers.selectedIndex];
+  if (current) {
+    if (current.id === "custom") {
+      return [["↑↓", "navigate"], ["esc", "back"]];
     }
-    const current = providers.items[providers.selectedIndex];
-    if (current) {
-      if (current.id === "custom") {
-        return [["↑↓", "navigate"], ["esc", "back"]];
-      }
-      const hints: HintPair[] = [["↑↓", "navigate"]];
-      if (current.connected && !current.from_env) {
-        hints.push(["enter", "edit"], ["d", "disconnect"]);
-      } else if (current.from_env) {
-        // no action hints - set via env
-      } else {
-        hints.push(["enter", "add key"]);
-      }
-      hints.push(["esc", "back"]);
-      return hints;
+    const hints: HintPair[] = [["↑↓", "navigate"]];
+    if (current.connected && !current.from_env) {
+      hints.push(["enter", "edit"], ["d", "disconnect"]);
+    } else if (current.from_env) {
+      // no action hints - set via env
+    } else {
+      hints.push(["enter", "add key"]);
     }
-  } else {
+    hints.push(["esc", "back"]);
+    return hints;
+  }
+  return [["↑↓", "navigate"], ["esc", "back"]];
+}
+
+function getIntegrationsHints(state: UseSettingsStateResult, serverConfig: ServerConfig | null): HintPair[] {
+  if (state.integrationsNav.activeList === "services") {
+    const services = state.services;
     if (services.editing) {
       return [["enter", "save"], ["esc", "cancel"]];
     }
@@ -70,20 +72,15 @@ function getApiKeysHints(state: UseSettingsStateResult): HintPair[] {
       const hints: HintPair[] = [["↑↓", "navigate"]];
       if (current.connected && !current.from_env) {
         hints.push(["enter", "edit"], ["d", "disconnect"]);
-      } else if (current.from_env) {
-        // no action hints
-      } else {
+      } else if (!current.from_env) {
         hints.push(["enter", "add key"]);
       }
       hints.push(["esc", "back"]);
       return hints;
     }
+    return [["↑↓", "navigate"], ["esc", "back"]];
   }
-  return [["↑↓", "navigate"], ["esc", "back"]];
-}
-
-function getSourcesHints(state: UseSettingsStateResult, serverConfig: ServerConfig | null): HintPair[] {
-  const c = state.sources;
+  const c = state.connections;
   const item = c.sourceItem;
 
   if (item === "vault") {
@@ -93,8 +90,8 @@ function getSourcesHints(state: UseSettingsStateResult, serverConfig: ServerConf
     return [["↑↓", "navigate"], ["enter", "edit path"], ["esc", "back"]];
   }
   if (item === "google") {
-    const sourceEnabled = serverConfig?.sources?.google?.enabled;
-    if (sourceEnabled) {
+    const googleEnabled = serverConfig?.integrations?.google?.enabled;
+    if (googleEnabled) {
       return [["↑↓", "navigate"], ["enter", "toggle"], ["a", "add account"], ["d", "remove account"], ["esc", "back"]];
     }
     return [["↑↓", "navigate"], ["enter", "enable"], ["esc", "back"]];

@@ -1,3 +1,4 @@
+from ntrp.integrations.base import IntegrationHealth, ToolProviderStatus
 from ntrp.logging import get_logger
 from ntrp.mcp.models import parse_server_config
 from ntrp.mcp.session import MCPServerSession
@@ -49,6 +50,32 @@ class MCPManager:
                     await session.close()
                 except BaseException:
                     pass
+
+    def list_providers(self) -> list[ToolProviderStatus]:
+        out: list[ToolProviderStatus] = []
+        for name, session in self._sessions.items():
+            out.append(
+                ToolProviderStatus(
+                    id=f"mcp:{name}",
+                    label=name,
+                    kind="mcp",
+                    health=IntegrationHealth(status="connected"),
+                    tool_count=len(session.tools),
+                )
+            )
+        for name, error in self._errors.items():
+            if name in self._sessions:
+                continue
+            out.append(
+                ToolProviderStatus(
+                    id=f"mcp:{name}",
+                    label=name,
+                    kind="mcp",
+                    health=IntegrationHealth(status="error", detail=error),
+                    tool_count=0,
+                )
+            )
+        return out
 
     async def close(self) -> None:
         for name, session in self._sessions.items():

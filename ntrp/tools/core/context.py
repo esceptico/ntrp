@@ -167,14 +167,9 @@ class ToolContext:
     def capabilities(self) -> frozenset[str]:
         return frozenset(self.services)
 
-    def get_source[T](self, source_type: type[T], name: str | None = None) -> T | None:
-        if name is not None:
-            s = self.services.get(name)
-            return s if isinstance(s, source_type) else None
-        for s in self.services.values():
-            if isinstance(s, source_type):
-                return s
-        return None
+    def get_client[T](self, id: str, client_type: type[T]) -> T | None:
+        s = self.services.get(id)
+        return s if isinstance(s, client_type) else None
 
 
 @dataclass

@@ -4,7 +4,7 @@ from typing import Any
 import aiohttp
 
 from ntrp.logging import get_logger
-from ntrp.sources.models import RawItem
+from ntrp.integrations.types import RawItem
 
 _logger = get_logger(__name__)
 _API = "https://slack.com/api"
@@ -28,12 +28,12 @@ def _format_message(user_name: str, text: str, ts: str, channel_name: str | None
 _USER_TOKEN_METHODS = frozenset({"assistant.search.context"})
 
 
-class SlackSource:
+class SlackClient:
     name = "slack"
 
     def __init__(self, bot_token: str | None = None, user_token: str | None = None):
         if not bot_token and not user_token:
-            raise ValueError("SlackSource requires at least one of bot_token or user_token")
+            raise ValueError("SlackClient requires at least one of bot_token or user_token")
         self._bot_token = bot_token
         self._user_token = user_token
         # User token sees more (all the user's channels, search) — prefer it for reads.

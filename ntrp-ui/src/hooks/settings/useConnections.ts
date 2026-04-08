@@ -8,13 +8,13 @@ import {
   updateConfig,
   getServerConfig,
 } from "../../api/client.js";
-import type { SourceItem } from "../../components/dialogs/settings/config.js";
-import { SOURCE_ITEMS, TOGGLEABLE_SOURCES } from "../../components/dialogs/settings/config.js";
+import type { IntegrationItem } from "../../components/dialogs/settings/config.js";
+import { INTEGRATION_ITEMS, TOGGLEABLE_INTEGRATIONS } from "../../components/dialogs/settings/config.js";
 import { useVaultPath, type UseVaultPathResult } from "./useVaultPath.js";
 import type { Key } from "../useKeypress.js";
 
 export interface UseConnectionsResult {
-  sourceItem: SourceItem;
+  sourceItem: IntegrationItem;
   googleAccounts: GoogleAccount[];
   selectedGoogleIndex: number;
   actionInProgress: string | null;
@@ -33,7 +33,7 @@ export function useConnections(
 ): UseConnectionsResult {
   const vault = useVaultPath(config, serverConfig, onServerConfigChange);
 
-  const [sourceItem, setSourceItem] = useState<SourceItem>("vault");
+  const [sourceItem, setIntegrationItem] = useState<IntegrationItem>("vault");
   const [googleAccounts, setGoogleAccounts] = useState<GoogleAccount[]>([]);
   const [selectedGoogleIndex, setSelectedGoogleIndex] = useState(0);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
@@ -79,11 +79,11 @@ export function useConnections(
   }, [config, googleAccounts, selectedGoogleIndex, actionInProgress, onServerConfigChange]);
 
   const handleToggleSource = useCallback(async (source: string) => {
-    if (actionInProgress || !serverConfig?.sources) return;
-    const current = serverConfig.sources[source]?.enabled ?? false;
+    if (actionInProgress || !serverConfig?.integrations) return;
+    const current = serverConfig.integrations[source]?.enabled ?? false;
     setActionInProgress("Updating...");
     try {
-      await updateConfig(config, { sources: { [source]: !current } });
+      await updateConfig(config, { integrations: { [source]: !current } });
       const updatedConfig = await getServerConfig(config);
       onServerConfigChange(updatedConfig);
     } catch {
@@ -127,29 +127,29 @@ export function useConnections(
       return;
     }
 
-    const connIdx = SOURCE_ITEMS.indexOf(sourceItem);
+    const connIdx = INTEGRATION_ITEMS.indexOf(sourceItem);
     const isGoogleSource = sourceItem === "google";
-    const sourceEnabled = isGoogleSource && serverConfig?.sources?.google?.enabled;
+    const sourceEnabled = isGoogleSource && serverConfig?.integrations?.google?.enabled;
     const hasAccountList = sourceEnabled && googleAccounts.length > 0;
 
     if (key.name === "up" || key.name === "k") {
       if (hasAccountList && selectedGoogleIndex > 0) {
         setSelectedGoogleIndex(i => i - 1);
       } else if (connIdx > 0) {
-        setSourceItem(SOURCE_ITEMS[connIdx - 1]);
+        setIntegrationItem(INTEGRATION_ITEMS[connIdx - 1]);
         setSelectedGoogleIndex(0);
       }
     } else if (key.name === "down" || key.name === "j") {
       if (hasAccountList && selectedGoogleIndex < googleAccounts.length - 1) {
         setSelectedGoogleIndex(i => i + 1);
-      } else if (connIdx < SOURCE_ITEMS.length - 1) {
-        setSourceItem(SOURCE_ITEMS[connIdx + 1]);
+      } else if (connIdx < INTEGRATION_ITEMS.length - 1) {
+        setIntegrationItem(INTEGRATION_ITEMS[connIdx + 1]);
         setSelectedGoogleIndex(0);
       }
     } else if (key.name === "return" || key.name === "space") {
       if (sourceItem === "vault") {
         vault.handleStartVaultEdit();
-      } else if (TOGGLEABLE_SOURCES.includes(sourceItem)) {
+      } else if (TOGGLEABLE_INTEGRATIONS.includes(sourceItem)) {
         handleToggleSource(sourceItem);
       }
     } else if ((key.name === "right" || key.name === "l") && sourceItem === "web") {

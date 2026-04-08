@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ntrp.sources.base import CalendarSource
+from ntrp.integrations.calendar.client import MultiCalendarSource
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 
@@ -100,12 +100,12 @@ class CalendarTool(Tool):
         limit: int = _DEFAULT_CALENDAR_LIMIT,
         **kwargs: Any,
     ) -> ToolResult:
-        source = execution.ctx.get_source(CalendarSource, "calendar")
+        source = execution.ctx.get_client("calendar", MultiCalendarSource)
         if query:
             return self._search(source, query, limit)
         return self._list(source, days_forward, days_back, limit)
 
-    def _search(self, source: CalendarSource, query: str, limit: int) -> ToolResult:
+    def _search(self, source: MultiCalendarSource, query: str, limit: int) -> ToolResult:
         try:
             events = source.search(query, limit=limit)
 
@@ -120,7 +120,7 @@ class CalendarTool(Tool):
         except Exception as e:
             return ToolResult(content=f"Error searching events: {e}", preview="Search failed", is_error=True)
 
-    def _list(self, source: CalendarSource, days_forward: int, days_back: int, limit: int) -> ToolResult:
+    def _list(self, source: MultiCalendarSource, days_forward: int, days_back: int, limit: int) -> ToolResult:
         events = []
 
         if days_back > 0:
@@ -204,7 +204,7 @@ class CreateCalendarEventTool(Tool):
         end_dt = _parse_datetime(end) if end else None
         attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
 
-        source = execution.ctx.get_source(CalendarSource, "calendar")
+        source = execution.ctx.get_client("calendar", MultiCalendarSource)
         result = source.create_event(
             account=account or "",
             summary=summary,
@@ -289,7 +289,7 @@ class EditCalendarEventTool(Tool):
 
         attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
 
-        source = execution.ctx.get_source(CalendarSource, "calendar")
+        source = execution.ctx.get_client("calendar", MultiCalendarSource)
         result = source.update_event(
             event_id=event_id,
             summary=summary,
@@ -318,6 +318,6 @@ class DeleteCalendarEventTool(Tool):
         return ApprovalInfo(description=event_id, preview=None, diff=None)
 
     async def execute(self, execution: ToolExecution, event_id: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(CalendarSource, "calendar")
+        source = execution.ctx.get_client("calendar", MultiCalendarSource)
         result = source.delete_event(event_id)
         return ToolResult(content=result, preview="Deleted")

@@ -120,8 +120,8 @@ class RunStartedEvent(SSEEvent):
     type: EventType = field(default=EventType.RUN_STARTED, init=False)
     session_id: str
     run_id: str
-    sources: list[str] = field(default_factory=list)
-    source_errors: dict[str, str] = field(default_factory=dict)
+    integrations: list[str] = field(default_factory=list)
+    integration_errors: dict[str, str] = field(default_factory=dict)
     skip_approvals: bool = False
     session_name: str = ""
 

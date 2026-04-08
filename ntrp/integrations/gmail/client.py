@@ -1,5 +1,6 @@
 import base64
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.header import decode_header as decode_rfc2047
 from email.mime.multipart import MIMEMultipart
@@ -14,16 +15,24 @@ from googleapiclient.discovery import build
 
 from ntrp.constants import CONTENT_READ_LIMIT
 from ntrp.core.prompts import env
-from ntrp.logging import get_logger
-from ntrp.settings import NTRP_DIR
-from ntrp.sources.base import EmailSource, SourceItem
-from ntrp.sources.google.auth import (
+from ntrp.integrations.google_auth.auth import (
     SCOPES_ALL,
     SCOPES_GMAIL_SEND,
     get_google_credentials,
     has_scope,
 )
-from ntrp.sources.models import RawItem
+from ntrp.integrations.types import RawItem
+from ntrp.logging import get_logger
+from ntrp.settings import NTRP_DIR
+
+
+@dataclass(frozen=True)
+class SourceItem:
+    identity: str
+    title: str
+    source: str
+    timestamp: datetime | None = None
+    preview: str | None = None
 
 EMAIL_HTML_TEMPLATE = env.from_string("""<!DOCTYPE html>
 <html>
@@ -486,7 +495,7 @@ class GmailSource:
 _logger = get_logger(__name__)
 
 
-class MultiGmailSource(EmailSource):
+class MultiGmailSource:
     """Wrapper for multiple Gmail accounts."""
 
     name = "gmail"

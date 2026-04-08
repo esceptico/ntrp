@@ -10,7 +10,7 @@ from ntrp.events.internal import IndexingCompleted, IndexingStarted
 from ntrp.logging import get_logger
 from ntrp.search.index import SearchIndex
 from ntrp.search.store import SearchStore
-from ntrp.sources.base import Indexable
+from ntrp.integrations.types import Indexable
 
 _logger = get_logger(__name__)
 

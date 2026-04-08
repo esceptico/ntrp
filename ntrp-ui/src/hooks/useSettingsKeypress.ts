@@ -31,7 +31,7 @@ export function useSettingsKeypress({
   const sectionHandlers: Record<SectionId, SectionHandler> = useMemo(() => ({
     connection: state.server,
     apiKeys: state.apiKeys,
-    sources: state.sources,
+    integrations: state.integrationsNav,
     memory: state.memory,
     instructions: state.directives,
     context: state.context,
@@ -43,7 +43,7 @@ export function useSettingsKeypress({
   }), [state]);
 
   const handleKeypress = useCallback((key: Key) => {
-    if (state.sources.actionInProgress || state.memory.actionInProgress) return;
+    if (state.connections.actionInProgress || state.memory.actionInProgress) return;
 
     if (key.name === "escape" || key.name === "q") {
       if (drilled) {
@@ -74,11 +74,9 @@ export function useSettingsKeypress({
     sectionHandlers[activeSection].handleKeypress(key);
   }, [
     drilled, activeSection, sectionHandlers,
-    state.sources.actionInProgress, state.memory.actionInProgress,
+    state.connections.actionInProgress, state.memory.actionInProgress,
     onClose, setDrilled, setActiveSection,
   ]);
 
-  useKeypress(handleKeypress, {
-    isActive: !state.sources.showingBrowserDropdown,
-  });
+  useKeypress(handleKeypress, { isActive: true });
 }

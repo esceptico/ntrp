@@ -6,7 +6,7 @@ from ddgs import DDGS
 from trafilatura import bare_extraction
 from trafilatura.settings import use_config
 
-from ntrp.sources.base import WebContentResult, WebSearchResult, WebSearchSource
+from ntrp.integrations.web.types import WebContentResult, WebSearchResult
 
 _logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ def _guess_title(url: str) -> str:
     return parsed.netloc or url
 
 
-class DDGSWebSource(WebSearchSource):
+class DDGSWebSource:
     name = "web"
     provider = "ddgs"
 

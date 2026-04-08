@@ -1,14 +1,10 @@
 import { colors } from "../../../ui/index.js";
 import type { ProviderInfo } from "../../../../api/client.js";
 import type { UseProvidersResult } from "../../../../hooks/settings/useProviders.js";
-import type { UseServicesResult } from "../../../../hooks/settings/useServices.js";
 import { CredentialSection } from "./CredentialSection.js";
-import { Header } from "../SettingsRows.js";
 
 interface ApiKeysSectionProps {
   providers: UseProvidersResult;
-  services: UseServicesResult;
-  activeList: "providers" | "services";
   accent: string;
 }
 
@@ -34,24 +30,15 @@ function renderProviderStatus(provider: ProviderInfo, _selected: boolean) {
   return <text><span fg={colors.text.disabled}>not connected</span></text>;
 }
 
-export function ApiKeysSection({ providers, services, activeList, accent }: ApiKeysSectionProps) {
-  const inactiveAccent = colors.text.disabled;
-
+export function ApiKeysSection({ providers, accent }: ApiKeysSectionProps) {
   return (
     <box flexDirection="column">
-      <Header first>Providers</Header>
       <CredentialSection
         state={providers}
-        accent={activeList === "providers" ? accent : inactiveAccent}
+        accent={accent}
         labelWidth={28}
         renderStatus={renderProviderStatus}
         isEditable={(p) => p.id !== "custom"}
-      />
-
-      <Header>Services</Header>
-      <CredentialSection
-        state={services}
-        accent={activeList === "services" ? accent : inactiveAccent}
       />
     </box>
   );

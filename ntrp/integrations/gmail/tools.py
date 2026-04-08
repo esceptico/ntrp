@@ -3,7 +3,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ntrp.constants import EMAIL_FROM_TRUNCATE, EMAIL_SUBJECT_TRUNCATE
-from ntrp.sources.base import EmailSource
+from ntrp.integrations.gmail.client import MultiGmailSource
 from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
 from ntrp.utils import truncate
@@ -51,7 +51,7 @@ class SendEmailTool(Tool):
         body: str,
         **kwargs: Any,
     ) -> ToolResult:
-        source = execution.ctx.get_source(EmailSource, "gmail")
+        source = execution.ctx.get_client("gmail", MultiGmailSource)
         result = source.send_email(account=account, to=to, subject=subject, body=body)
         return ToolResult(content=result, preview="Sent")
 
@@ -68,7 +68,7 @@ class ReadEmailTool(Tool):
     input_model = ReadEmailInput
 
     async def execute(self, execution: ToolExecution, email_id: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(EmailSource, "gmail")
+        source = execution.ctx.get_client("gmail", MultiGmailSource)
         content = source.read(email_id)
         if not content:
             return ToolResult(
@@ -131,12 +131,12 @@ class EmailsTool(Tool):
         limit: int = _DEFAULT_EMAIL_LIMIT,
         **kwargs: Any,
     ) -> ToolResult:
-        source = execution.ctx.get_source(EmailSource, "gmail")
+        source = execution.ctx.get_client("gmail", MultiGmailSource)
         if query:
             return self._search(source, query, limit)
         return self._list(source, days, limit)
 
-    def _list(self, source: EmailSource, days: int, limit: int) -> ToolResult:
+    def _list(self, source: MultiGmailSource, days: int, limit: int) -> ToolResult:
         accounts = source.list_accounts()
         emails = source.list_recent(days=days, limit=limit)
 
@@ -152,7 +152,7 @@ class EmailsTool(Tool):
         content = _format_email_list(trimmed)
         return ToolResult(content=content, preview=f"{len(emails)} emails")
 
-    def _search(self, source: EmailSource, query: str, limit: int) -> ToolResult:
+    def _search(self, source: MultiGmailSource, query: str, limit: int) -> ToolResult:
         results = source.search(query, limit=limit)
         if not results:
             return ToolResult(content=f"No emails found for '{query}'", preview="0 emails")

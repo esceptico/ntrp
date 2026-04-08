@@ -12,7 +12,7 @@ interface MemorySectionProps {
 }
 
 export function MemorySection({ memory, serverConfig, agentSettings, accent }: MemorySectionProps) {
-  const sources = serverConfig?.sources;
+  const sources = serverConfig?.integrations;
   const memoryEnabled = sources?.memory?.enabled ?? false;
   const dreamsEnabled = sources?.memory?.dreams ?? false;
 
