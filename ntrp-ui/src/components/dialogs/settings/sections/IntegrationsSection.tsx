@@ -3,25 +3,34 @@ import { TextInputField } from "../../../ui/input/TextInputField.js";
 import { SelectionIndicator } from "../../../ui/index.js";
 import type { ServerConfig, GoogleAccount } from "../../../../api/client.js";
 import { INTEGRATION_LABELS, type IntegrationItem } from "../config.js";
-import { Row as SettingsRow } from "../SettingsRows.js";
+import { Header, Row as SettingsRow } from "../SettingsRows.js";
 import type { UseConnectionsResult } from "../../../../hooks/settings/useConnections.js";
+import type { UseServicesResult } from "../../../../hooks/settings/useServices.js";
+import { CredentialSection } from "./CredentialSection.js";
 
 interface IntegrationsSectionProps {
   connections: UseConnectionsResult;
+  services: UseServicesResult;
+  activeList: "connections" | "services";
   serverConfig: ServerConfig | null;
   accent: string;
   width: number;
 }
 
-export function IntegrationsSection({ connections: c, serverConfig, accent, width }: IntegrationsSectionProps) {
+export function IntegrationsSection({ connections: c, services, activeList, serverConfig, accent, width }: IntegrationsSectionProps) {
+  const inactiveAccent = colors.text.disabled;
   const valueWidth = Math.max(0, width - 20);
   const integrations = serverConfig?.integrations;
   const isGoogleItem = c.sourceItem === "google";
   const googleEnabled = isGoogleItem && integrations?.google?.enabled;
 
+  const connectionsAccent = activeList === "connections" ? accent : inactiveAccent;
+  const servicesAccent = activeList === "services" ? accent : inactiveAccent;
+
   return (
     <box flexDirection="column">
-      <Row item="vault" selected={c.sourceItem === "vault"} accent={accent}>
+      <Header first>Connections</Header>
+      <Row item="vault" selected={c.sourceItem === "vault"} accent={connectionsAccent}>
         {c.vault.editingVault ? (
           <box flexDirection="row">
             <text><span fg={colors.text.muted}>[</span></text>
@@ -50,13 +59,13 @@ export function IntegrationsSection({ connections: c, serverConfig, accent, widt
         </box>
       )}
 
-      <GoogleRow item="google" selectedItem={c.sourceItem} integrations={integrations} accounts={c.googleAccounts} accent={accent} />
+      <GoogleRow item="google" selectedItem={c.sourceItem} integrations={integrations} accounts={c.googleAccounts} accent={connectionsAccent} />
 
       {isGoogleItem && googleEnabled && c.googleAccounts.length > 0 && (
-        <AccountList accounts={c.googleAccounts} selectedIndex={c.selectedGoogleIndex} accent={accent} valueWidth={valueWidth} />
+        <AccountList accounts={c.googleAccounts} selectedIndex={c.selectedGoogleIndex} accent={connectionsAccent} valueWidth={valueWidth} />
       )}
 
-      <Row item="web" selected={c.sourceItem === "web"} accent={accent}>
+      <Row item="web" selected={c.sourceItem === "web"} accent={connectionsAccent}>
         <text>
           {c.sourceItem === "web" && <span fg={colors.text.muted}>◂ </span>}
           <span fg={integrations?.web?.connected ? colors.text.primary : colors.text.muted}>
@@ -65,6 +74,9 @@ export function IntegrationsSection({ connections: c, serverConfig, accent, widt
           {c.sourceItem === "web" && <span fg={colors.text.muted}> ▸</span>}
         </text>
       </Row>
+
+      <Header>Credentials</Header>
+      <CredentialSection state={services} accent={servicesAccent} />
 
     </box>
   );

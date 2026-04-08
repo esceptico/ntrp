@@ -11,6 +11,7 @@ import { useDirectives, type UseDirectivesResult } from "./settings/useDirective
 import { useConnections, type UseConnectionsResult } from "./settings/useConnections.js";
 import { useMCPServers, type UseMCPServersResult } from "./settings/useMCPServers.js";
 import { useApiKeys, type UseApiKeysResult } from "./settings/useApiKeys.js";
+import { useIntegrationsNav, type UseIntegrationsNavResult } from "./settings/useIntegrationsNav.js";
 import { useMemorySettings, type UseMemorySettingsResult } from "./settings/useMemorySettings.js";
 import { useContextSettings, type UseContextSettingsResult } from "./settings/useContextSettings.js";
 import { useAgentSettings, type UseAgentSettingsResult } from "./settings/useAgentSettings.js";
@@ -31,6 +32,7 @@ export interface UseSettingsStateResult {
   server: UseServerConnectionResult;
   directives: UseDirectivesResult;
   connections: UseConnectionsResult;
+  integrationsNav: UseIntegrationsNavResult;
   notifiers: UseNotifiersResult;
   skills: UseSkillsResult;
   mcp: UseMCPServersResult;
@@ -58,7 +60,8 @@ export function useSettingsState({
   const notifiers = useNotifiers(config);
   const skills = useSkills(config);
 
-  const apiKeys = useApiKeys(providers, services);
+  const apiKeys = useApiKeys(providers);
+  const integrationsNav = useIntegrationsNav(connections, services);
   const memory = useMemorySettings(config, serverConfig, onServerConfigChange, settings, onUpdate);
   const context = useContextSettings(settings, onUpdate);
   const agent = useAgentSettings(settings, onUpdate);
@@ -77,6 +80,7 @@ export function useSettingsState({
     server,
     directives,
     connections,
+    integrationsNav,
     notifiers,
     skills,
     mcp,

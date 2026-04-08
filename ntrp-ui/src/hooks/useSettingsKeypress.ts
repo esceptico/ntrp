@@ -31,7 +31,7 @@ export function useSettingsKeypress({
   const sectionHandlers: Record<SectionId, SectionHandler> = useMemo(() => ({
     connection: state.server,
     apiKeys: state.apiKeys,
-    integrations: state.connections,
+    integrations: state.integrationsNav,
     memory: state.memory,
     instructions: state.directives,
     context: state.context,
@@ -78,7 +78,5 @@ export function useSettingsKeypress({
     onClose, setDrilled, setActiveSection,
   ]);
 
-  useKeypress(handleKeypress, {
-    isActive: !state.connections.showingBrowserDropdown,
-  });
+  useKeypress(handleKeypress, { isActive: true });
 }

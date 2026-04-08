@@ -3,7 +3,7 @@ export type SectionId = (typeof SECTION_IDS)[number];
 
 export const SECTION_LABELS = {
   connection: "Connection",
-  apiKeys: "API Keys",
+  apiKeys: "Providers",
   integrations: "Integrations",
   memory: "Memory",
   instructions: "Instructions",

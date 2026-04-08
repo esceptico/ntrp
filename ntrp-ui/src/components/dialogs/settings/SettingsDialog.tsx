@@ -104,8 +104,8 @@ export function SettingsDialog({
               {/* Detail pane */}
               <box flexDirection="column" width={detailWidth} height={contentHeight} overflow="hidden">
                 {activeSection === "connection" && <ConnectionSection server={state.server} accent={accent} />}
-                {activeSection === "apiKeys" && <ApiKeysSection providers={state.providers} services={state.services} activeList={state.apiKeys.activeList} accent={accent} />}
-                {activeSection === "integrations" && <IntegrationsSection connections={state.connections} serverConfig={serverConfig} accent={accent} width={detailWidth} />}
+                {activeSection === "apiKeys" && <ApiKeysSection providers={state.providers} accent={accent} />}
+                {activeSection === "integrations" && <IntegrationsSection connections={state.connections} services={state.services} activeList={state.integrationsNav.activeList} serverConfig={serverConfig} accent={accent} width={detailWidth} />}
                 {activeSection === "memory" && <MemorySection memory={state.memory} serverConfig={serverConfig} agentSettings={settings.agent} accent={accent} />}
                 {activeSection === "instructions" && <DirectivesSection directives={state.directives} accent={accent} height={contentHeight} />}
                 {activeSection === "context" && <ContextSection settings={settings.agent} selectedIndex={state.context.contextIndex} accent={accent} />}
