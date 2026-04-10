@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from ntrp.automation.models import Automation
 from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
@@ -19,6 +22,9 @@ from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, TriggerEve
 from ntrp.logging import get_logger
 from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent, run_agent_streaming
 
+if TYPE_CHECKING:
+    from ntrp.server.bus import BusRegistry, SessionBus
+
 _logger = get_logger(__name__)
 
 
@@ -26,7 +32,7 @@ class Scheduler:
     def __init__(self, store: AutomationStore, build_deps: Callable[[], OperatorDeps]):
         self.store = store
         self._build_deps = build_deps
-        self._bus_registry = None
+        self._bus_registry: BusRegistry | None = None
         self._task: asyncio.Task | None = None
         self._running: set[asyncio.Task] = set()
         self._handlers: dict[str, Callable[[dict | None], Awaitable[str | None]]] = {}
@@ -34,7 +40,7 @@ class Scheduler:
         self._last_activity_at: datetime = datetime.now(UTC)
         self._idle_fired: set[str] = set()  # task_ids that already fired this idle period
 
-    def set_bus_registry(self, registry) -> None:
+    def set_bus_registry(self, registry: BusRegistry) -> None:
         self._bus_registry = registry
 
     def register_handler(self, name: str, handler: Callable[[dict | None], Awaitable[str | None]]) -> None:
@@ -187,6 +193,16 @@ class Scheduler:
         execution = asyncio.create_task(self._run_and_finalize(automation, context))
         self._track(execution)
 
+    def _create_bus(self, task_id: str) -> SessionBus | None:
+        if not self._bus_registry:
+            return None
+        return self._bus_registry.get_or_create(f"automation:{task_id}")
+
+    async def _cleanup_bus(self, task_id: str, bus: SessionBus | None) -> None:
+        if bus:
+            await bus.emit(None)
+            self._bus_registry.remove(f"automation:{task_id}")
+
     async def _run_and_finalize(
         self,
         automation: Automation,
@@ -194,6 +210,7 @@ class Scheduler:
         event_queue_id: int | None = None,
         event_attempt_count: int = 0,
     ) -> None:
+        bus = self._create_bus(automation.task_id)
         result: str | None = None
         success = False
         error_message = ""
@@ -201,12 +218,13 @@ class Scheduler:
             if automation.handler:
                 result = await self._run_handler(automation, context)
             else:
-                result = await self._run_agent(automation, context)
+                result = await self._run_agent(automation, context, bus)
             success = True
         except Exception as e:
             error_message = f"{type(e).__name__}: {e}"
             _logger.exception("Failed to execute automation %s", automation.task_id)
         finally:
+            await self._cleanup_bus(automation.task_id, bus)
             now = datetime.now(UTC)
             next_run = self._advance_to_future(automation, now)
             await self.store.update_last_run(automation.task_id, now, next_run, result=result)
@@ -235,7 +253,9 @@ class Scheduler:
         ctx = context if isinstance(context, dict) else (json.loads(context) if context else None)
         return await handler(ctx)
 
-    async def _run_agent(self, automation: Automation, context: str | dict | None = None) -> str | None:
+    async def _run_agent(
+        self, automation: Automation, context: str | dict | None = None, bus: SessionBus | None = None,
+    ) -> str | None:
         ctx_str = json.dumps(context) if isinstance(context, dict) else context
         prompt = AUTOMATION_PROMPT.render(description=automation.description, context=ctx_str)
 
@@ -249,14 +269,8 @@ class Scheduler:
             skip_approvals=automation.writable,
         )
 
-        bus_key = f"automation:{automation.task_id}"
-        if self._bus_registry:
-            bus = self._bus_registry.get_or_create(bus_key)
-            try:
-                result = await run_agent_streaming(self._build_deps(), request, bus)
-            finally:
-                await bus.emit(None)
-                self._bus_registry.remove(bus_key)
+        if bus:
+            result = await run_agent_streaming(self._build_deps(), request, bus)
         else:
             result = await run_agent(self._build_deps(), request)
 
