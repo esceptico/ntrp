@@ -51,7 +51,7 @@ export const Sidebar = React.memo(function Sidebar({ serverConfig, serverVersion
         {sections.context && data.context && <ContextSection context={data.context} width={contentWidth} />}
         {sections.usage && <UsageSection usage={usage} />}
         {sections.integrations && serverConfig && <IntegrationsSection cfg={serverConfig} />}
-        {sections.automations && data.nextAutomations.length > 0 && <AutomationsSection automations={data.nextAutomations} width={contentWidth} />}
+        {sections.automations && data.nextAutomations.length > 0 && <AutomationsSection automations={data.nextAutomations} width={contentWidth} serverUrl={serverUrl} />}
         {sections.memory_stats && data.memoryStats && <MemorySection stats={data.memoryStats} />}
 
         {sections.sessions && data.sessions.length > 0 && (

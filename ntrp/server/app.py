@@ -54,11 +54,13 @@ async def lifespan(app: FastAPI):
     runtime = Runtime()
     await runtime.connect()
     runtime.start_indexing()
+    bus_registry = BusRegistry()
+    runtime.scheduler.set_bus_registry(bus_registry)
     await runtime.start_scheduler()
     runtime.start_monitor()
     app.state.runtime = runtime
-    app.state.bus_registry = BusRegistry()
-    _install_shutdown_handlers(runtime, app.state.bus_registry)
+    app.state.bus_registry = bus_registry
+    _install_shutdown_handlers(runtime, bus_registry)
 
     try:
         yield

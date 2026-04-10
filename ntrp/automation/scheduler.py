@@ -17,7 +17,7 @@ from ntrp.constants import (
 from ntrp.events.internal import RunCompleted
 from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, TriggerEvent
 from ntrp.logging import get_logger
-from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent
+from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent, run_agent_streaming
 
 _logger = get_logger(__name__)
 
@@ -26,12 +26,16 @@ class Scheduler:
     def __init__(self, store: AutomationStore, build_deps: Callable[[], OperatorDeps]):
         self.store = store
         self._build_deps = build_deps
+        self._bus_registry = None
         self._task: asyncio.Task | None = None
         self._running: set[asyncio.Task] = set()
         self._handlers: dict[str, Callable[[dict | None], Awaitable[str | None]]] = {}
         self._count_state: dict[str, dict[str, int]] = {}
         self._last_activity_at: datetime = datetime.now(UTC)
         self._idle_fired: set[str] = set()  # task_ids that already fired this idle period
+
+    def set_bus_registry(self, registry) -> None:
+        self._bus_registry = registry
 
     def register_handler(self, name: str, handler: Callable[[dict | None], Awaitable[str | None]]) -> None:
         self._handlers[name] = handler
@@ -243,7 +247,18 @@ class Scheduler:
             source_id=automation.task_id,
             model=automation.model,
         )
-        result = await run_agent(self._build_deps(), request)
+
+        bus_key = f"automation:{automation.task_id}"
+        if self._bus_registry:
+            bus = self._bus_registry.get_or_create(bus_key)
+            try:
+                result = await run_agent_streaming(self._build_deps(), request, bus)
+            finally:
+                await bus.emit(None)
+                self._bus_registry.remove(bus_key)
+        else:
+            result = await run_agent(self._build_deps(), request)
+
         return result.output
 
     async def fire_event(self, event: TriggerEvent) -> None:
