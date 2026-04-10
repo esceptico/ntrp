@@ -21,10 +21,10 @@ DAY_NAMES: dict[str, int] = {
     "sat": 5,
     "sun": 6,
 }
-WEEKDAY_SET = frozenset(range(5))
-ALL_DAYS = frozenset(range(7))
+WEEKDAY_SET = tuple(range(5))
+ALL_DAYS = tuple(range(7))
 
-DAY_KEYWORDS: dict[str, frozenset[int]] = {
+DAY_KEYWORDS: dict[str, tuple[int, ...]] = {
     "daily": ALL_DAYS,
     "weekdays": WEEKDAY_SET,
 }
@@ -85,7 +85,7 @@ class Interval:
 
 @dataclass(frozen=True)
 class DaySpec:
-    days: frozenset[int]
+    days: tuple[int, ...]
 
     @classmethod
     def parse(cls, raw: str) -> "DaySpec":
@@ -100,7 +100,7 @@ class DaySpec:
                 days.add(DAY_NAMES[token])
             else:
                 raise ValueError(f"Invalid day: '{token}'. Use: {', '.join(DAY_NAMES)} / daily / weekdays")
-        return cls(days=frozenset(days) if days else ALL_DAYS)
+        return cls(days=tuple(sorted(days)) if days else ALL_DAYS)
 
     def __str__(self) -> str:
         if self.days == ALL_DAYS:
@@ -347,10 +347,9 @@ def _build_time_trigger(
     at: str | None,
     days: str | None,
     every: str | None,
-    event_type: str | None,
-    lead_minutes: int | str | None,
     start: str | None,
     end: str | None,
+    **_kwargs: Any,
 ) -> tuple[Trigger, datetime | None]:
     trigger = TimeTrigger(at=at, days=days, every=every, start=start, end=end)
     return trigger, _next_run_for_time(trigger, datetime.now(UTC))
@@ -358,13 +357,9 @@ def _build_time_trigger(
 
 def _build_event_trigger(
     *,
-    at: str | None,
-    days: str | None,
-    every: str | None,
     event_type: str | None,
     lead_minutes: int | str | None,
-    start: str | None,
-    end: str | None,
+    **_kwargs: Any,
 ) -> tuple[Trigger, datetime | None]:
     if not event_type:
         raise ValueError("'event_type' is required for event trigger")
@@ -430,20 +425,13 @@ ParseHandler = Callable[[dict], Trigger]
 
 
 def _parse_time_trigger(payload: dict) -> Trigger:
-    if "at" in payload or "every" in payload:
-        return TimeTrigger(
-            at=payload.get("at"),
-            days=payload.get("days"),
-            every=payload.get("every"),
-            start=payload.get("start"),
-            end=payload.get("end"),
-        )
-    # Legacy format
-    time_of_day = payload["time_of_day"]
-    recurrence = payload.get("recurrence") or payload.get("repeat", "once")
-    if recurrence == "once":
-        return TimeTrigger(at=time_of_day)
-    return TimeTrigger(at=time_of_day, days=recurrence)
+    return TimeTrigger(
+        at=payload.get("at"),
+        days=payload.get("days"),
+        every=payload.get("every"),
+        start=payload.get("start"),
+        end=payload.get("end"),
+    )
 
 
 def _parse_event_trigger(payload: dict) -> Trigger:
@@ -470,11 +458,6 @@ def parse_one(payload: dict) -> Trigger:
     if (handler := PARSE_DISPATCH.get(payload["type"])) is None:
         raise ValueError(f"Unknown trigger type: {payload['type']}")
     return handler(payload)
-
-
-def parse_trigger(raw: str) -> Trigger:
-    payload = json.loads(raw)
-    return parse_one(payload)
 
 
 def parse_triggers(raw: str) -> list[Trigger]:
