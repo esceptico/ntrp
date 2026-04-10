@@ -246,6 +246,7 @@ class Scheduler:
             writable=automation.writable,
             source_id=automation.task_id,
             model=automation.model,
+            skip_approvals=automation.writable,
         )
 
         bus_key = f"automation:{automation.task_id}"

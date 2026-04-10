@@ -41,6 +41,7 @@ class RunRequest:
     source_id: str
     prompt_suffix: str = ""
     model: str | None = None
+    skip_approvals: bool = False
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,7 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
     system_prompt += request.prompt_suffix
 
     session_state = deps.create_session()
+    session_state.skip_approvals = request.skip_approvals
     executor = deps.executor
     tools = executor.get_tools() if request.writable else executor.get_tools(mutates=False)
 
@@ -120,6 +122,7 @@ async def run_agent_streaming(deps: OperatorDeps, request: RunRequest, bus: Sess
     system_prompt += request.prompt_suffix
 
     session_state = deps.create_session()
+    session_state.skip_approvals = request.skip_approvals
     executor = deps.executor
     tools = executor.get_tools() if request.writable else executor.get_tools(mutates=False)
 
