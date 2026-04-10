@@ -1,10 +1,7 @@
-from __future__ import annotations
-
 import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
 
 from ntrp.automation.models import Automation
 from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
@@ -21,9 +18,7 @@ from ntrp.events.internal import RunCompleted
 from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, TriggerEvent
 from ntrp.logging import get_logger
 from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent, run_agent_streaming
-
-if TYPE_CHECKING:
-    from ntrp.server.bus import BusRegistry, SessionBus
+from ntrp.server.bus import BusRegistry, SessionBus
 
 _logger = get_logger(__name__)
 

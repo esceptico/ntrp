@@ -1,13 +1,10 @@
-from __future__ import annotations
-
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING
 
 from coolname import generate_slug
 
-from ntrp.agent import Result, Role, Usage
+from ntrp.agent import Agent, Result, Role, Usage
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.core.factory import AgentConfig, create_agent
@@ -16,12 +13,9 @@ from ntrp.events.internal import RunCompleted, RunStarted
 from ntrp.events.sse import agent_event_to_sse
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.formatting import format_session_memory
+from ntrp.server.bus import SessionBus
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
-
-if TYPE_CHECKING:
-    from ntrp.agent import Agent
-    from ntrp.server.bus import SessionBus
 
 
 @dataclass(frozen=True)
