@@ -5,6 +5,7 @@ import { getStats, type Stats } from "../api/memory.js";
 import type { SidebarSettings } from "./useSettings.js";
 
 const POLL_INTERVAL = 60_000;
+const POLL_INTERVAL_FAST = 5_000;
 
 export interface SidebarData {
   context: {
@@ -59,9 +60,13 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
       if (!activeRef.current) return;
 
       const nextAutomations = automationsResult.automations
-        .filter(s => s.enabled && s.next_run_at)
-        .sort((a, b) => new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime())
-        .slice(0, 3);
+        .filter(s => s.enabled && (s.next_run_at || s.running_since))
+        .sort((a, b) => {
+          if (a.running_since && !b.running_since) return -1;
+          if (!a.running_since && b.running_since) return 1;
+          return new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime();
+        })
+        .slice(0, 5);
 
       setData({ context, nextAutomations, sessions: sessionsResult.sessions, memoryStats });
     } catch {
@@ -79,9 +84,13 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
       wantMemory ? getStats(config).catch(() => null) : null,
     ]).then(([sessionsResult, automationsResult, memoryStats]) => {
       const nextAutomations = automationsResult.automations
-        .filter(s => s.enabled && s.next_run_at)
-        .sort((a, b) => new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime())
-        .slice(0, 3);
+        .filter(s => s.enabled && (s.next_run_at || s.running_since))
+        .sort((a, b) => {
+          if (a.running_since && !b.running_since) return -1;
+          if (!a.running_since && b.running_since) return 1;
+          return new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime();
+        })
+        .slice(0, 5);
       setData(prev => ({ ...prev, sessions: sessionsResult.sessions, nextAutomations, memoryStats }));
     });
   }, [config]);
@@ -102,16 +111,17 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
     getStats(config).then(stats => setData(prev => ({ ...prev, memoryStats: stats }))).catch(() => {});
   }, [wantMemory, active, config]);
 
-  // Fallback poll for all data including global
+  // Fallback poll — faster when an automation is running
+  const hasRunning = data.nextAutomations.some(a => !!a.running_since);
   useEffect(() => {
     if (!active) return;
     activeRef.current = true;
-    const interval = setInterval(refresh, POLL_INTERVAL);
+    const interval = setInterval(refresh, hasRunning ? POLL_INTERVAL_FAST : POLL_INTERVAL);
     return () => {
       activeRef.current = false;
       clearInterval(interval);
     };
-  }, [refresh, active]);
+  }, [refresh, active, hasRunning]);
 
   return { data, refresh };
 }
