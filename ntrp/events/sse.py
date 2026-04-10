@@ -21,6 +21,8 @@ class EventType(StrEnum):
     RUN_ERROR = "run_error"
     RUN_CANCELLED = "run_cancelled"
     RUN_BACKGROUNDED = "run_backgrounded"
+    AUTOMATION_PROGRESS = "automation_progress"
+    AUTOMATION_FINISHED = "automation_finished"
 
 
 @dataclass(frozen=True)
@@ -172,6 +174,20 @@ class TextMessageStartEvent(SSEEvent):
 class TextMessageEndEvent(SSEEvent):
     type: EventType = field(default=EventType.TEXT_MESSAGE_END, init=False)
     message_id: str
+
+
+@dataclass(frozen=True)
+class AutomationProgressEvent(SSEEvent):
+    type: EventType = field(default=EventType.AUTOMATION_PROGRESS, init=False)
+    task_id: str
+    status: str
+
+
+@dataclass(frozen=True)
+class AutomationFinishedEvent(SSEEvent):
+    type: EventType = field(default=EventType.AUTOMATION_FINISHED, init=False)
+    task_id: str
+    result: str | None = None
 
 
 def agent_event_to_sse(event) -> "SSEEvent | None":

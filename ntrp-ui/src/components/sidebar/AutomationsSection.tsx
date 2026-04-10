@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { truncateText } from "../../lib/utils.js";
 import type { Automation } from "../../api/client.js";
 import { connectAutomationEvents, type AutomationEvent } from "../../api/automations.js";
@@ -11,91 +11,54 @@ interface Progress {
   done?: boolean;
 }
 
-function useAutomationProgress(automations: Automation[], serverUrl: string) {
+function useAutomationProgress(serverUrl: string) {
   const [progress, setProgress] = useState<Map<string, Progress>>(new Map());
-  const disconnects = useRef<Map<string, () => void>>(new Map());
-
-  const runningIds = useMemo(
-    () => automations.filter(a => a.running_since && !a.builtin).map(a => a.task_id).sort().join(","),
-    [automations],
-  );
+  const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
-    const running = new Set(runningIds ? runningIds.split(",") : []);
-
-    // Connect to newly running automations
-    for (const taskId of running) {
-      if (disconnects.current.has(taskId)) continue;
-
-      setProgress(prev => {
-        const next = new Map(prev);
-        next.set(taskId, { status: "starting..." });
-        return next;
-      });
-
-      const disconnect = connectAutomationEvents(
-        taskId,
-        { serverUrl },
-        (event: AutomationEvent) => {
-          if (event.type === "tool_call") {
-            const label = event.display_name || event.name || "working";
-            setProgress(prev => {
-              const next = new Map(prev);
-              next.set(taskId, { status: `${label}...` });
-              return next;
-            });
-          } else if (event.type === "tool_result") {
-            const label = event.display_name || event.name || "";
-            const preview = event.preview || "";
-            setProgress(prev => {
-              const next = new Map(prev);
-              next.set(taskId, { status: preview ? `${label}: ${preview}` : label });
-              return next;
-            });
-          } else if (event.type === "text") {
-            setProgress(prev => {
-              const next = new Map(prev);
-              next.set(taskId, { status: event.content || "", done: true });
-              return next;
-            });
-          }
-        },
-      );
-      disconnects.current.set(taskId, disconnect);
-    }
-
-    // Cleanup automations that stopped running
-    for (const [taskId, disconnect] of disconnects.current) {
-      if (!running.has(taskId)) {
-        disconnect();
-        disconnects.current.delete(taskId);
-        setProgress(prev => {
-          const entry = prev.get(taskId);
-          if (!entry?.done) {
-            const next = new Map(prev);
-            next.set(taskId, { ...entry, status: entry?.status || "done", done: true });
-            return next;
-          }
-          return prev;
-        });
-        setTimeout(() => {
+    const disconnect = connectAutomationEvents(
+      { serverUrl },
+      (event: AutomationEvent) => {
+        if (event.type === "automation_progress") {
           setProgress(prev => {
             const next = new Map(prev);
-            next.delete(taskId);
+            next.set(event.task_id, { status: event.status || "working..." });
             return next;
           });
-        }, 5000);
-      }
-    }
-  }, [runningIds, serverUrl]);
+        } else if (event.type === "automation_finished") {
+          // Clear any existing done timer
+          const existing = timers.current.get(event.task_id);
+          if (existing) clearTimeout(existing);
 
-  // Cleanup on unmount only
-  useEffect(() => {
+          const result = event.result;
+          setProgress(prev => {
+            const next = new Map(prev);
+            next.set(event.task_id, {
+              status: result ? truncateText(result, 60) : "done",
+              done: true,
+            });
+            return next;
+          });
+
+          const timer = setTimeout(() => {
+            timers.current.delete(event.task_id);
+            setProgress(prev => {
+              const next = new Map(prev);
+              next.delete(event.task_id);
+              return next;
+            });
+          }, 5000);
+          timers.current.set(event.task_id, timer);
+        }
+      },
+    );
+
     return () => {
-      for (const disconnect of disconnects.current.values()) disconnect();
-      disconnects.current.clear();
+      disconnect();
+      for (const timer of timers.current.values()) clearTimeout(timer);
+      timers.current.clear();
     };
-  }, []);
+  }, [serverUrl]);
 
   return progress;
 }
@@ -154,7 +117,7 @@ export function AutomationsSection({
   serverUrl: string;
 }) {
   const userAutomations = automations.filter(a => !a.builtin);
-  const progress = useAutomationProgress(userAutomations, serverUrl);
+  const progress = useAutomationProgress(serverUrl);
 
   if (userAutomations.length === 0) return null;
 

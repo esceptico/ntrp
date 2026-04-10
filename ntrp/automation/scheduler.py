@@ -15,10 +15,13 @@ from ntrp.constants import (
     SCHEDULER_POLL_INTERVAL,
 )
 from ntrp.events.internal import RunCompleted
+from ntrp.events.sse import AutomationFinishedEvent, AutomationProgressEvent, SSEEvent
 from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, TriggerEvent
 from ntrp.logging import get_logger
 from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent, run_agent_streaming
 from ntrp.server.bus import BusRegistry, SessionBus
+
+AUTOMATION_BUS_KEY = "automation:events"
 
 _logger = get_logger(__name__)
 
@@ -188,15 +191,10 @@ class Scheduler:
         execution = asyncio.create_task(self._run_and_finalize(automation, context))
         self._track(execution)
 
-    def _create_bus(self, task_id: str) -> SessionBus | None:
-        if not self._bus_registry:
-            return None
-        return self._bus_registry.get_or_create(f"automation:{task_id}")
-
-    async def _cleanup_bus(self, task_id: str, bus: SessionBus | None) -> None:
-        if bus:
-            await bus.emit(None)
-            self._bus_registry.remove(f"automation:{task_id}")
+    async def _emit_automation_event(self, event: SSEEvent) -> None:
+        if self._bus_registry:
+            bus = self._bus_registry.get_or_create(AUTOMATION_BUS_KEY)
+            await bus.emit(event)
 
     async def _run_and_finalize(
         self,
@@ -205,7 +203,9 @@ class Scheduler:
         event_queue_id: int | None = None,
         event_attempt_count: int = 0,
     ) -> None:
-        bus = self._create_bus(automation.task_id)
+        await self._emit_automation_event(
+            AutomationProgressEvent(task_id=automation.task_id, status="starting..."),
+        )
         result: str | None = None
         success = False
         error_message = ""
@@ -213,13 +213,15 @@ class Scheduler:
             if automation.handler:
                 result = await self._run_handler(automation, context)
             else:
-                result = await self._run_agent(automation, context, bus)
+                result = await self._run_agent(automation, context)
             success = True
         except Exception as e:
             error_message = f"{type(e).__name__}: {e}"
             _logger.exception("Failed to execute automation %s", automation.task_id)
         finally:
-            await self._cleanup_bus(automation.task_id, bus)
+            await self._emit_automation_event(
+                AutomationFinishedEvent(task_id=automation.task_id, result=result),
+            )
             now = datetime.now(UTC)
             next_run = self._advance_to_future(automation, now)
             await self.store.update_last_run(automation.task_id, now, next_run, result=result)
@@ -248,9 +250,7 @@ class Scheduler:
         ctx = context if isinstance(context, dict) else (json.loads(context) if context else None)
         return await handler(ctx)
 
-    async def _run_agent(
-        self, automation: Automation, context: str | dict | None = None, bus: SessionBus | None = None,
-    ) -> str | None:
+    async def _run_agent(self, automation: Automation, context: str | dict | None = None) -> str | None:
         ctx_str = json.dumps(context) if isinstance(context, dict) else context
         prompt = AUTOMATION_PROMPT.render(description=automation.description, context=ctx_str)
 
@@ -264,8 +264,9 @@ class Scheduler:
             skip_approvals=automation.writable,
         )
 
-        if bus:
-            result = await run_agent_streaming(self._build_deps(), request, bus)
+        if self._bus_registry:
+            bus = self._bus_registry.get_or_create(AUTOMATION_BUS_KEY)
+            result = await run_agent_streaming(self._build_deps(), request, bus, automation.task_id)
         else:
             result = await run_agent(self._build_deps(), request)
 

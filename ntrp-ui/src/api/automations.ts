@@ -114,57 +114,69 @@ export async function runAutomation(config: Config, taskId: string): Promise<{ s
 
 export interface AutomationEvent {
   type: string;
-  name?: string;
-  display_name?: string;
-  description?: string;
-  preview?: string;
-  content?: string;
+  task_id: string;
+  status?: string;
+  result?: string | null;
 }
 
+const SSE_RECONNECT_BASE_MS = 1000;
+const SSE_RECONNECT_MAX_MS = 10000;
+
 export function connectAutomationEvents(
-  taskId: string,
   config: Config,
   onEvent: (event: AutomationEvent) => void,
 ): () => void {
   const controller = new AbortController();
 
   (async () => {
-    const headers: Record<string, string> = {};
-    const apiKey = getApiKey();
-    if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+    let retries = 0;
 
-    try {
-      const response = await fetch(`${config.serverUrl}/automations/${taskId}/events`, {
-        headers,
-        signal: controller.signal,
-      });
-      if (!response.ok) return;
+    while (!controller.signal.aborted) {
+      const headers: Record<string, string> = {};
+      const apiKey = getApiKey();
+      if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
-      const reader = response.body?.getReader();
-      if (!reader) return;
+      try {
+        const response = await fetch(`${config.serverUrl}/automations/events`, {
+          headers,
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`SSE connect failed: ${response.status}`);
 
-      const decoder = new TextDecoder();
-      let buffer = "";
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No response body");
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        retries = 0;
+        const decoder = new TextDecoder();
+        let buffer = "";
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const parsed = JSON.parse(line.slice(6));
-              if (parsed?.type) onEvent(parsed);
-            } catch { /* keepalive */ }
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const parsed = JSON.parse(line.slice(6));
+                if (parsed?.type) onEvent(parsed);
+              } catch { /* keepalive */ }
+            }
           }
         }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
       }
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
+
+      const delay = Math.min(SSE_RECONNECT_BASE_MS * 2 ** retries, SSE_RECONNECT_MAX_MS);
+      retries++;
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(resolve, delay);
+        controller.signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+      });
     }
   })();
 

@@ -10,7 +10,7 @@ from ntrp.context.models import SessionState
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted, RunStarted
-from ntrp.events.sse import agent_event_to_sse
+from ntrp.events.sse import AutomationProgressEvent, ToolCallEvent, ToolResultEvent, agent_event_to_sse
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.formatting import format_session_memory
 from ntrp.server.bus import SessionBus
@@ -110,7 +110,9 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
     return RunResult(run_id=run_id, output=agent_result.text, usage=agent_result.usage)
 
 
-async def run_agent_streaming(deps: OperatorDeps, request: RunRequest, bus: SessionBus) -> RunResult:
+async def run_agent_streaming(
+    deps: OperatorDeps, request: RunRequest, bus: SessionBus, task_id: str,
+) -> RunResult:
     agent, messages, run_id, session_id = await _prepare(deps, request)
 
     deps.channel.publish(RunStarted(run_id=run_id, session_id=session_id))
@@ -125,8 +127,13 @@ async def run_agent_streaming(deps: OperatorDeps, request: RunRequest, bus: Sess
                 usage = item.usage
             else:
                 sse = agent_event_to_sse(item)
-                if sse:
-                    await bus.emit(sse)
+                if isinstance(sse, ToolCallEvent):
+                    label = sse.display_name or sse.name
+                    await bus.emit(AutomationProgressEvent(task_id=task_id, status=f"{label}..."))
+                elif isinstance(sse, ToolResultEvent):
+                    label = sse.display_name or sse.name
+                    status = f"{label}: {sse.preview}" if sse.preview else label
+                    await bus.emit(AutomationProgressEvent(task_id=task_id, status=status))
     except asyncio.CancelledError:
         pass
 

@@ -1,7 +1,7 @@
 import asyncio
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ntrp.automation.models import Automation
 from ntrp.automation.service import AutomationService
@@ -72,6 +72,50 @@ async def list_automations(svc: AutomationService = Depends(require_automation_s
     return {"automations": [_automation_to_dict(a) for a in automations]}
 
 
+KEEPALIVE_INTERVAL = 5
+SSE_KEEPALIVE = ": keepalive\n\n"
+AUTOMATION_BUS_KEY = "automation:events"
+
+
+async def _automation_event_stream(bus_registry: BusRegistry):
+    bus = bus_registry.get_or_create(AUTOMATION_BUS_KEY)
+    queue = bus.subscribe()
+    last_event_at = time.monotonic()
+    try:
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=0.5)
+            except TimeoutError:
+                if time.monotonic() - last_event_at >= KEEPALIVE_INTERVAL:
+                    last_event_at = time.monotonic()
+                    yield SSE_KEEPALIVE
+                continue
+
+            if event is None:
+                break
+
+            last_event_at = time.monotonic()
+            yield event.to_sse_string()
+    except asyncio.CancelledError:
+        pass
+    finally:
+        bus.unsubscribe(queue)
+
+
+@router.get("/automations/events")
+async def automation_events(request: Request):
+    bus_registry: BusRegistry = request.app.state.bus_registry
+    return SSEStreamingResponse(
+        _automation_event_stream(bus_registry),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.get("/automations/{task_id}")
 async def get_automation(task_id: str, svc: AutomationService = Depends(require_automation_service)):
     try:
@@ -109,57 +153,6 @@ async def run_automation(task_id: str, svc: AutomationService = Depends(require_
     except RuntimeError:
         raise HTTPException(status_code=503, detail="Scheduler not available")
     return {"status": "started"}
-
-
-KEEPALIVE_INTERVAL = 5
-SSE_KEEPALIVE = ": keepalive\n\n"
-
-
-async def _automation_event_stream(task_id: str, bus_registry: BusRegistry):
-    bus_key = f"automation:{task_id}"
-    bus = bus_registry.get(bus_key)
-    if not bus:
-        return
-
-    queue = bus.subscribe()
-    last_event_at = time.monotonic()
-    try:
-        while True:
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=0.5)
-            except TimeoutError:
-                if time.monotonic() - last_event_at >= KEEPALIVE_INTERVAL:
-                    last_event_at = time.monotonic()
-                    yield SSE_KEEPALIVE
-                continue
-
-            if event is None:
-                break
-
-            last_event_at = time.monotonic()
-            yield event.to_sse_string()
-            await asyncio.sleep(0)
-    except asyncio.CancelledError:
-        pass
-    finally:
-        bus.unsubscribe(queue)
-
-
-@router.get("/automations/{task_id}/events", status_code=200)
-async def automation_events(task_id: str, request: Request):
-    bus_registry: BusRegistry = request.app.state.bus_registry
-    bus_key = f"automation:{task_id}"
-    if not bus_registry.get(bus_key):
-        return Response(status_code=204)
-    return SSEStreamingResponse(
-        _automation_event_stream(task_id, bus_registry),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
 
 
 @router.patch("/automations/{task_id}")
