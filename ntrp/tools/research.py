@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
 from ntrp.agent.ledger import SharedLedger
-from ntrp.constants import RESEARCH_TIMEOUT, USER_ENTITY_NAME
+from ntrp.constants import USER_ENTITY_NAME
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.prompts import RESEARCH_PROMPTS, current_date_formatted, env
 from ntrp.logging import get_logger
@@ -62,11 +62,6 @@ RESEARCH_DESCRIPTION = (
     "Use depth='deep' for thorough research, 'quick' for fast lookups."
 )
 
-DEPTH_TIMEOUTS = {
-    "quick": 120,
-    "normal": RESEARCH_TIMEOUT,
-    "deep": 600,
-}
 
 
 class ResearchInput(BaseModel):
@@ -118,15 +113,12 @@ class ResearchTool(Tool):
         tools = ctx.registry.get_schemas(mutates=False, capabilities=ctx.capabilities)
         tools = [t for t in tools if t["function"]["name"] not in exclude]
         prompt = await self._build_prompt(ctx, depth, remaining, execution.tool_id)
-        timeout = DEPTH_TIMEOUTS[depth]
-
         try:
             result = await ctx.spawn_fn(
                 ctx,
                 task=task,
                 system_prompt=prompt,
                 tools=tools,
-                timeout=timeout,
                 model_override=ctx.run.research_model,
                 parent_id=execution.tool_id,
                 isolation=IsolationLevel.FULL,

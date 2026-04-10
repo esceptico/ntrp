@@ -92,7 +92,7 @@ USE bash FOR:
 - File operations: mkdir, cp, mv (with permission)
 - Checking system state: pwd, whoami, date
 
-Commands time out after {BASH_TIMEOUT}s. Destructive commands (rm -rf) are blocked. Non-safe commands require approval."""
+Destructive commands (rm -rf) are blocked. Non-safe commands require approval."""
 
 
 def is_safe_command(command: str) -> bool:
