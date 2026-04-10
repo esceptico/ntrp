@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { truncateText } from "../../lib/utils.js";
 import type { Automation } from "../../api/client.js";
 import { connectAutomationEvents, type AutomationEvent } from "../../api/automations.js";
@@ -15,10 +15,13 @@ function useAutomationProgress(automations: Automation[], serverUrl: string) {
   const [progress, setProgress] = useState<Map<string, Progress>>(new Map());
   const disconnects = useRef<Map<string, () => void>>(new Map());
 
+  const runningIds = useMemo(
+    () => automations.filter(a => a.running_since && !a.builtin).map(a => a.task_id).sort().join(","),
+    [automations],
+  );
+
   useEffect(() => {
-    const running = new Set(
-      automations.filter(a => a.running_since && !a.builtin).map(a => a.task_id),
-    );
+    const running = new Set(runningIds ? runningIds.split(",") : []);
 
     // Connect to newly running automations
     for (const taskId of running) {
@@ -66,7 +69,6 @@ function useAutomationProgress(automations: Automation[], serverUrl: string) {
       if (!running.has(taskId)) {
         disconnect();
         disconnects.current.delete(taskId);
-        // Show "done" briefly, then clear
         setProgress(prev => {
           const entry = prev.get(taskId);
           if (!entry?.done) {
@@ -85,12 +87,15 @@ function useAutomationProgress(automations: Automation[], serverUrl: string) {
         }, 5000);
       }
     }
+  }, [runningIds, serverUrl]);
 
+  // Cleanup on unmount only
+  useEffect(() => {
     return () => {
       for (const disconnect of disconnects.current.values()) disconnect();
       disconnects.current.clear();
     };
-  }, [automations, serverUrl]);
+  }, []);
 
   return progress;
 }
@@ -106,28 +111,14 @@ function AutomationRow({
 }) {
   const name = automation.name || automation.description;
 
-  if (progress?.done) {
-    const statusWidth = Math.max(4, width - 2 - 2);
-    return (
-      <box flexDirection="column">
-        <text>
-          <span fg={colors.status.success}>{"✓ "}</span>
-          <span fg={S()}>{truncateText(name, width - 2)}</span>
-        </text>
-        <text>
-          <span fg={D()}>{"  ┊ "}</span>
-          <span fg={D()}>{truncateText(progress.status, statusWidth)}</span>
-        </text>
-      </box>
-    );
-  }
-
   if (progress) {
-    const statusWidth = Math.max(4, width - 2 - 2);
+    const icon = progress.done ? "✓ " : "▶ ";
+    const iconColor = progress.done ? colors.status.success : colors.tool.running;
+    const statusWidth = Math.max(4, width - 4);
     return (
       <box flexDirection="column">
         <text>
-          <span fg={colors.tool.running}>{"▶ "}</span>
+          <span fg={iconColor}>{icon}</span>
           <span fg={S()}>{truncateText(name, width - 2)}</span>
         </text>
         <text>

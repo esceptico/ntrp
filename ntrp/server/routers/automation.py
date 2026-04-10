@@ -1,7 +1,7 @@
 import asyncio
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from ntrp.automation.models import Automation
 from ntrp.automation.service import AutomationService
@@ -145,9 +145,12 @@ async def _automation_event_stream(task_id: str, bus_registry: BusRegistry):
         bus.unsubscribe(queue)
 
 
-@router.get("/automations/{task_id}/events")
+@router.get("/automations/{task_id}/events", status_code=200)
 async def automation_events(task_id: str, request: Request):
     bus_registry: BusRegistry = request.app.state.bus_registry
+    bus_key = f"automation:{task_id}"
+    if not bus_registry.get(bus_key):
+        return Response(status_code=204)
     return SSEStreamingResponse(
         _automation_event_stream(task_id, bus_registry),
         media_type="text/event-stream",
