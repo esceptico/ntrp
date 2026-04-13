@@ -193,8 +193,11 @@ class Scheduler:
 
     async def _emit_automation_event(self, event: SSEEvent) -> None:
         if self._bus_registry:
-            bus = self._bus_registry.get_or_create(AUTOMATION_BUS_KEY)
-            await bus.emit(event)
+            try:
+                bus = self._bus_registry.get_or_create(AUTOMATION_BUS_KEY)
+                await bus.emit(event)
+            except Exception:
+                _logger.debug("Failed to emit automation event", exc_info=True)
 
     async def _run_and_finalize(
         self,
