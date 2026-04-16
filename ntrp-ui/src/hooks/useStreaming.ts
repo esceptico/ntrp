@@ -41,7 +41,7 @@ export function useStreaming({
   onSessionInfoRef.current = onSessionInfo;
   const configRef = useRef(config);
   configRef.current = config;
-  const disconnectRef = useRef<(() => void) | null>(null);
+  const connectionsRef = useRef<Map<string, { disconnect: () => void; stream: boolean }>>(new Map());
   const prevBgCountRef = useRef(0);
   const prevIsStreamingRef = useRef(false);
 
@@ -307,19 +307,41 @@ export function useStreaming({
         });
       }
     }
+
+    // Disconnect SSE for non-viewed sessions whose run just ended
+    const isTerminal = event.type === "run_finished" || event.type === "run_error"
+      || event.type === "run_cancelled" || event.type === "run_backgrounded";
+    if (isTerminal && store.getState().viewedId !== targetId) {
+      const conn = connectionsRef.current.get(targetId);
+      if (conn) {
+        conn.disconnect();
+        connectionsRef.current.delete(targetId);
+      }
+    }
   };
 
-  // Persistent SSE connection — stable deps, handler accessed via ref
-  const streamingRef = useRef(streaming);
-  streamingRef.current = streaming;
+  // Multi-connection SSE manager — keeps connections alive for sessions with active runs
+  // so events are not lost when switching between sessions.
 
   useEffect(() => {
     if (!sessionId) return;
 
     const targetId = sessionId;
+    const connections = connectionsRef.current;
+
+    // Already connected with same streaming mode — nothing to do
+    const existing = connections.get(targetId);
+    if (existing && existing.stream === streaming) return;
+
+    // Streaming mode changed — tear down old connection first
+    if (existing) {
+      existing.disconnect();
+      connections.delete(targetId);
+    }
+
     getSession(targetId); // ensure session exists
 
-    // Restore background task state from server on (re)connect
+    // Restore background task state from server on first connect
     getBackgroundTasks(targetId, configRef.current).then((res) => {
       if (res.tasks.length === 0) return;
       mutateSession(targetId, (s) => {
@@ -345,13 +367,19 @@ export function useStreaming({
       { stream: streaming },
     );
 
-    disconnectRef.current = disconnect;
+    connections.set(targetId, { disconnect, stream: streaming });
 
+    // On cleanup (sessionId changed), only disconnect if session is idle
     return () => {
-      disconnect();
-      disconnectRef.current = null;
+      const s = store.getState().sessions.get(targetId);
+      if (s?.isStreaming) return; // keep alive — run still active
+      const conn = connections.get(targetId);
+      if (conn) {
+        conn.disconnect();
+        connections.delete(targetId);
+      }
     };
-  }, [sessionId, streaming, getSession]);
+  }, [sessionId, streaming, getSession, store]);
 
   const addMessage = useCallback((msg: MessageInput) => {
     const id = store.getState().viewedId;
@@ -537,6 +565,11 @@ export function useStreaming({
   }, [store, mutateSession, sendMessage]);
 
   const deleteSessionState = useCallback((targetId: string) => {
+    const conn = connectionsRef.current.get(targetId);
+    if (conn) {
+      conn.disconnect();
+      connectionsRef.current.delete(targetId);
+    }
     deleteSession(targetId);
   }, [deleteSession]);
 
@@ -579,9 +612,12 @@ export function useStreaming({
     sendMessage(lines);
   }, [backgroundTaskCount, isStreaming, sendMessage, store, mutateSession]);
 
-  // Cleanup
+  // Cleanup all connections on unmount
   useEffect(() => {
-    return () => { disconnectRef.current?.(); };
+    return () => {
+      for (const { disconnect } of connectionsRef.current.values()) disconnect();
+      connectionsRef.current.clear();
+    };
   }, []);
 
   return {

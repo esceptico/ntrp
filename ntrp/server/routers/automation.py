@@ -96,6 +96,7 @@ async def _automation_event_stream(bus_registry: BusRegistry):
 
             last_event_at = time.monotonic()
             yield event.to_sse_string()
+            await asyncio.sleep(0)
     except asyncio.CancelledError:
         pass
     finally:
