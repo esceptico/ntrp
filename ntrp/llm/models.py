@@ -52,6 +52,13 @@ class Model:
 DEFAULTS = [
     # --- Anthropic ---
     Model(
+        "claude-opus-4-7",
+        provider=Provider.ANTHROPIC,
+        max_context_tokens=200_000,
+        max_output_tokens=128_000,
+        pricing=Pricing(price_in=5, price_out=25, price_cache_read=0.50, price_cache_write=6.25),
+    ),
+    Model(
         "claude-opus-4-6",
         provider=Provider.ANTHROPIC,
         max_context_tokens=200_000,
