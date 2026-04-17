@@ -158,10 +158,11 @@ class AnthropicClient(CompletionClient):
         }
         optional = {
             "system": system,
-            "temperature": temperature,
             "tools": tools,
             "tool_choice": tool_choice,
         }
+        if temperature is not None and "opus-4-7" not in model:
+            optional["temperature"] = temperature
         request.update({k: v for k, v in optional.items() if v is not None})
         if extra := kwargs.get("extra_body"):
             request.update(extra)
