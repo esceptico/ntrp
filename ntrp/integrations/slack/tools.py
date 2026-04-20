@@ -33,6 +33,17 @@ def _format_messages(items: list, *, show_thread_hint: bool = True) -> str:
 class SlackSearchInput(BaseModel):
     query: str = Field(description="Slack search query. Supports operators: from:@user in:#channel before:2024-01-01")
     limit: int = Field(default=_DEFAULT_LIMIT, description="Max results")
+    scope: str | None = Field(
+        default=None,
+        description="Optional scope: 'dms' (DMs + group DMs only), 'channels' (public/private only), or None for all.",
+    )
+
+
+_SCOPE_MAP = {
+    "dms": ["im", "mpim"],
+    "channels": ["public_channel", "private_channel"],
+    "all": None,
+}
 
 
 class SlackSearchTool(Tool):
@@ -41,14 +52,23 @@ class SlackSearchTool(Tool):
     description = (
         "Search Slack messages across the workspace using the Real-time Search API. "
         "Supports natural-language queries (semantic search) or keywords. "
+        "Use scope='dms' to search only direct messages. "
         "Requires a Slack user token with granular search:read.* scopes."
     )
     requires = frozenset({"slack"})
     input_model = SlackSearchInput
 
-    async def execute(self, execution: ToolExecution, query: str, limit: int = _DEFAULT_LIMIT, **kwargs: Any) -> ToolResult:
+    async def execute(
+        self,
+        execution: ToolExecution,
+        query: str,
+        limit: int = _DEFAULT_LIMIT,
+        scope: str | None = None,
+        **kwargs: Any,
+    ) -> ToolResult:
         source = execution.ctx.get_client("slack", SlackClient)
-        results = await source.search_messages(query, limit=limit)
+        channel_types = _SCOPE_MAP.get(scope.lower()) if scope else None
+        results = await source.search_messages(query, limit=limit, channel_types=channel_types)
         if not results:
             return ToolResult(content=f"No Slack messages found for {query!r}", preview="0 results")
         return ToolResult(content=_format_messages(results), preview=f"{len(results)} messages")
@@ -164,3 +184,65 @@ class SlackUserTool(Tool):
             return ToolResult(content=f"User not found: {user_id}", preview="Not found")
         lines = [f"{k}: {v}" for k, v in profile.items() if v]
         return ToolResult(content="\n".join(lines), preview=profile.get("name", user_id))
+
+
+class SlackDmsInput(BaseModel):
+    query: str | None = Field(default=None, description="Optional substring to filter by peer name or user id")
+    limit: int = Field(default=50, description="Max DMs to return")
+
+
+class SlackDmsTool(Tool):
+    name = "slack_dms"
+    display_name = "SlackDMs"
+    description = "List open Slack direct messages (1-on-1). Shows peer name and DM channel id."
+    requires = frozenset({"slack"})
+    input_model = SlackDmsInput
+
+    async def execute(
+        self,
+        execution: ToolExecution,
+        query: str | None = None,
+        limit: int = 50,
+        **kwargs: Any,
+    ) -> ToolResult:
+        source = execution.ctx.get_client("slack", SlackClient)
+        dms = await source.list_dms(query, limit=limit)
+        if not dms:
+            return ToolResult(content="No open DMs", preview="0 DMs")
+        lines = [f"• {d['peer']}  (dm: {d['channel_id']}, user: {d['user_id']})" for d in dms]
+        return ToolResult(content="\n".join(lines), preview=f"{len(dms)} DMs")
+
+
+class SlackDmInput(BaseModel):
+    target: str = Field(
+        description="DM channel id (D*), user id (U*/W*), or a name/handle to resolve to a DM."
+    )
+    limit: int = Field(default=50, description="Max messages to fetch")
+
+
+class SlackDmTool(Tool):
+    name = "slack_dm"
+    display_name = "SlackDM"
+    description = (
+        "Read recent messages from a direct message conversation. "
+        "Target can be a DM channel id, user id, or a name (fuzzy match via users.list)."
+    )
+    requires = frozenset({"slack"})
+    input_model = SlackDmInput
+
+    async def execute(
+        self,
+        execution: ToolExecution,
+        target: str,
+        limit: int = 50,
+        **kwargs: Any,
+    ) -> ToolResult:
+        source = execution.ctx.get_client("slack", SlackClient)
+        try:
+            channel_id = await source.resolve_dm_target(target)
+        except RuntimeError as e:
+            return ToolResult(content=str(e), preview="Not found")
+        results = await source.read_channel(channel_id, limit=limit)
+        if not results:
+            return ToolResult(content=f"No messages in DM with {target!r}", preview="0 messages")
+        return ToolResult(content=_format_messages(results), preview=f"{len(results)} messages")

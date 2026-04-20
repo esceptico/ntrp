@@ -41,6 +41,11 @@ class SlackClient:
         self._user_cache: dict[str, str] = {}
         self._channel_name_cache: dict[str, str] = {}
         self._channel_id_by_name: dict[str, str] = {}
+        # DM channels: channel_id (D*) -> peer user_id; reverse by username + real_name.
+        self._dm_peer_by_channel: dict[str, str] = {}
+        self._dm_channel_by_user: dict[str, str] = {}
+        # Whether we've refreshed the DM/MPIM index yet.
+        self._dm_index_loaded = False
 
     def _token_for(self, method: str) -> str:
         if method in _USER_TOKEN_METHODS:
@@ -120,13 +125,18 @@ class SlackClient:
             return cid, channel
         raise RuntimeError(f"Slack channel not found: {channel}")
 
-    async def _refresh_channel_index(self, session: aiohttp.ClientSession) -> None:
+    async def _refresh_channel_index(
+        self,
+        session: aiohttp.ClientSession,
+        *,
+        types: str = "public_channel,private_channel",
+    ) -> None:
         cursor = ""
         while True:
             params: dict[str, Any] = {
                 "limit": "1000",
                 "exclude_archived": "true",
-                "types": "public_channel,private_channel",
+                "types": types,
             }
             if cursor:
                 params["cursor"] = cursor
@@ -134,12 +144,19 @@ class SlackClient:
             for ch in data.get("channels", []):
                 cid = ch["id"]
                 cname = ch.get("name", "")
-                self._channel_name_cache[cid] = cname
+                # Regular (public/private) channels have a name
                 if cname:
+                    self._channel_name_cache[cid] = cname
                     self._channel_id_by_name[cname] = cid
+                # Direct messages (1-on-1): `is_im` + `user` field = peer user id
+                if ch.get("is_im") and (peer := ch.get("user")):
+                    self._dm_peer_by_channel[cid] = peer
+                    self._dm_channel_by_user[peer] = cid
             cursor = data.get("response_metadata", {}).get("next_cursor", "")
             if not cursor:
                 break
+        if "im" in types:
+            self._dm_index_loaded = True
 
     # -- public read methods --
 
@@ -209,6 +226,60 @@ class SlackClient:
                 if len(results) >= limit:
                     break
             return results
+
+    async def list_dms(self, query: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        """List open DMs (1-on-1) with resolved peer names.
+
+        Requires `im:read` scope on the read token. Does NOT include group DMs (mpim).
+        """
+        async with aiohttp.ClientSession() as session:
+            if not self._dm_index_loaded:
+                await self._refresh_channel_index(session, types="im")
+            results: list[dict[str, Any]] = []
+            q = query.lower() if query else None
+            for cid, peer_id in self._dm_peer_by_channel.items():
+                peer_name = await self._resolve_user(session, peer_id)
+                if q and q not in peer_name.lower() and q not in peer_id.lower():
+                    continue
+                results.append({"channel_id": cid, "user_id": peer_id, "peer": peer_name})
+                if len(results) >= limit:
+                    break
+            return results
+
+    async def open_dm(self, user_id: str) -> str:
+        """Open (or fetch existing) DM channel with a user. Returns the DM channel id."""
+        async with aiohttp.ClientSession() as session:
+            # Check cache first to avoid an API call
+            if cid := self._dm_channel_by_user.get(user_id):
+                return cid
+            data = await self._post(session, "conversations.open", users=user_id)
+            cid = data.get("channel", {}).get("id", "")
+            if cid:
+                self._dm_peer_by_channel[cid] = user_id
+                self._dm_channel_by_user[user_id] = cid
+            return cid
+
+    async def resolve_dm_target(self, target: str) -> str:
+        """Resolve a DM target to a channel_id.
+
+        Accepts:
+          - DM channel id (D*)
+          - user id (U*/W*)
+          - @username or username (real_name or handle, case-insensitive)
+        """
+        # Already a DM channel id
+        if target and target[0] == "D" and target.isalnum():
+            return target
+        # User id -> open DM
+        stripped = target.lstrip("@")
+        if stripped and stripped[0] in ("U", "W") and stripped.isalnum() and stripped.isupper():
+            return await self.open_dm(stripped)
+        # Name -> search users, then open DM with best match
+        users = await self.search_users(stripped, limit=5)
+        if not users:
+            raise RuntimeError(f"No Slack user found matching {target!r}")
+        user_id = users[0]["id"]
+        return await self.open_dm(user_id)
 
     async def search_users(self, query: str | None = None, limit: int = 50) -> list[dict[str, str]]:
         async with aiohttp.ClientSession() as session:

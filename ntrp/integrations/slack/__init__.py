@@ -5,6 +5,8 @@ from ntrp.integrations.slack.notifier import SlackNotifier
 from ntrp.integrations.slack.tools import (
     SlackChannelTool,
     SlackChannelsTool,
+    SlackDmsTool,
+    SlackDmTool,
     SlackSearchTool,
     SlackThreadTool,
     SlackUserTool,
@@ -30,6 +32,8 @@ SLACK = Integration(
         SlackChannelTool,
         SlackThreadTool,
         SlackChannelsTool,
+        SlackDmsTool,
+        SlackDmTool,
         SlackUsersTool,
         SlackUserTool,
     ],
