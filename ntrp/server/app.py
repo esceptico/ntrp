@@ -249,6 +249,24 @@ async def chat_message(
     return {"run_id": ctx.run.run_id, "session_id": ctx.session_state.session_id}
 
 
+@app.delete("/chat/inject/{client_id}")
+async def cancel_inject(
+    client_id: str,
+    session_id: str,
+    runtime: Runtime = Depends(get_runtime),
+):
+    active_run = runtime.run_registry.get_active_run(session_id)
+    if active_run is None:
+        raise HTTPException(status_code=404, detail="No active run")
+
+    for i, entry in enumerate(active_run.inject_queue):
+        if entry.get("client_id") == client_id:
+            active_run.inject_queue.pop(i)
+            return {"status": "cancelled", "client_id": client_id}
+
+    raise HTTPException(status_code=409, detail="Already ingested")
+
+
 # --- Existing endpoints ---
 
 

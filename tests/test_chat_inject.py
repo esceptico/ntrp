@@ -122,3 +122,48 @@ async def test_drain_no_events_when_queue_empty():
 
     assert drained == []
     assert queue.empty()
+
+
+# --- DELETE /chat/inject/{client_id} ---
+
+
+@pytest.fixture
+def client_no_active_run():
+    """Spin up the FastAPI app with a stub Runtime that has no active run."""
+    runtime = Runtime.__new__(Runtime)
+    runtime.run_registry = RunRegistry()
+    runtime.config = type("C", (), {"has_any_model": True, "api_key_hash": None})()
+    # No run created → get_active_run always returns None
+
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    app.dependency_overrides[_get_bus_registry] = lambda: BusRegistry()
+
+    yield TestClient(app)
+
+    app.dependency_overrides.pop(get_runtime, None)
+    app.dependency_overrides.pop(_get_bus_registry, None)
+
+
+def test_delete_inject_returns_200_when_entry_present(client_with_active_run):
+    c, run = client_with_active_run
+    run.inject_queue.append({"role": "user", "content": "x", "client_id": "cid-1"})
+
+    resp = c.delete("/chat/inject/cid-1?session_id=sess-1")
+
+    assert resp.status_code == 200
+    assert run.inject_queue == []
+
+
+def test_delete_inject_returns_409_when_already_drained(client_with_active_run):
+    c, run = client_with_active_run
+    # Active run, but the client_id was already drained → not in queue
+    assert run.inject_queue == []
+
+    resp = c.delete("/chat/inject/cid-missing?session_id=sess-1")
+
+    assert resp.status_code == 409
+
+
+def test_delete_inject_returns_404_when_no_active_run(client_no_active_run):
+    resp = client_no_active_run.delete("/chat/inject/cid-x?session_id=sess-none")
+    assert resp.status_code == 404
