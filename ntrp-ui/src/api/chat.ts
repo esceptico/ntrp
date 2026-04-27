@@ -88,6 +88,7 @@ export async function sendChatMessage(
   config: Config,
   skipApprovals: boolean = false,
   images?: ImageBlock[],
+  clientId?: string,
 ): Promise<{ run_id: string; session_id: string }> {
   const body: Record<string, unknown> = {
     message,
@@ -95,7 +96,25 @@ export async function sendChatMessage(
     skip_approvals: skipApprovals,
   };
   if (images?.length) body.images = images;
+  if (clientId) body.client_id = clientId;
   return api.post(`${config.serverUrl}/chat/message`, body) as Promise<{ run_id: string; session_id: string }>;
+}
+
+export async function cancelQueuedMessage(
+  clientId: string,
+  sessionId: string,
+  config: Config,
+): Promise<"cancelled" | "already_ingested" | "no_run"> {
+  const url = `${config.serverUrl}/chat/inject/${encodeURIComponent(clientId)}?session_id=${encodeURIComponent(sessionId)}`;
+  const headers: Record<string, string> = {};
+  const apiKey = getApiKey();
+  if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+
+  const res = await fetch(url, { method: "DELETE", headers });
+  if (res.status === 200) return "cancelled";
+  if (res.status === 409) return "already_ingested";
+  if (res.status === 404) return "no_run";
+  throw new Error(`cancelQueuedMessage: unexpected status ${res.status}`);
 }
 
 export async function cancelRun(runId: string, config: Config): Promise<void> {
