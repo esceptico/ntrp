@@ -24,6 +24,16 @@ export interface BackgroundTask {
   activity: string[];
 }
 
+export type QueuedMessageStatus = "pending" | "cancelling" | "sent" | "failed";
+
+export interface QueuedMessage {
+  clientId: string;
+  text: string;
+  images?: { media_type: string; data: string }[];
+  status: QueuedMessageStatus;
+  enqueuedAt: number;
+}
+
 export interface ToolTracker {
   descriptions: Map<string, string>;
   startTimes: Map<string, number>;
@@ -50,6 +60,7 @@ export interface SessionStreamState {
   backgroundTaskCount: number;
   completedBackgroundTasks: { id: string; status: string }[];
   backgroundTasks: Map<string, BackgroundTask>;
+  queuedMessages: QueuedMessage[];
 }
 
 function createSessionState(): SessionStreamState {
@@ -73,6 +84,7 @@ function createSessionState(): SessionStreamState {
     backgroundTaskCount: 0,
     completedBackgroundTasks: [],
     backgroundTasks: new Map(),
+    queuedMessages: [],
   };
 }
 
@@ -119,6 +131,7 @@ export function createStreamingStore() {
         alwaysAllowedTools: new Set(s.alwaysAllowedTools),
         autoApprovedIds: new Set(s.autoApprovedIds),
         backgroundTasks: new Map(s.backgroundTasks),
+        queuedMessages: [...s.queuedMessages],
       });
       set({ sessions });
     }
