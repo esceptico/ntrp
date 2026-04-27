@@ -29,7 +29,6 @@ interface InputAreaProps {
   commands: readonly SlashCommand[];
   messages?: readonly { role: string; content: string; id?: string }[];
   onEditingChange?: (messageId: string | null) => void;
-  queueCount?: number;
   skipApprovals?: boolean;
   chatModel?: string;
   sessionName?: string | null;
@@ -52,7 +51,6 @@ export const InputArea = memo(function InputArea({
   commands,
   messages = [],
   onEditingChange,
-  queueCount = 0,
   skipApprovals = false,
   chatModel,
   sessionName,
@@ -337,9 +335,6 @@ export const InputArea = memo(function InputArea({
               ) : null}
               {skipApprovals ? (
                 <text><span fg={colors.status.warning}><strong>skip approvals</strong></span></text>
-              ) : null}
-              {queueCount > 0 ? (
-                <text><span fg={colors.status.warning}>{queueCount} queued</span></text>
               ) : null}
             </box>
           </box>

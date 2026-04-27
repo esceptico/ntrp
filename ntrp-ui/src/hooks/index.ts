@@ -7,6 +7,5 @@ export { AccentColorProvider, useAccentColor } from "./useAccentColor.js";
 export { useInlineTextInput } from "./useInlineTextInput.js";
 export { useTextInput } from "./useTextInput.js";
 export { useSidebar } from "./useSidebar.js";
-export { useMessageQueue } from "./useMessageQueue.js";
 export { useAppDialogs } from "./useAppDialogs.js";
 export { useAutocomplete } from "./useAutocomplete.js";

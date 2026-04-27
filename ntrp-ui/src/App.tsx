@@ -14,7 +14,6 @@ import {
   useSession,
   useStreaming,
   useSidebar,
-  useMessageQueue,
   useAppDialogs,
   AccentColorProvider,
   type Key,
@@ -31,6 +30,7 @@ import {
   ApprovalDialog,
   ErrorBoundary,
 } from "./components/index.js";
+import { QueuedMessages } from "./components/chat/QueuedMessages.js";
 import { Setup } from "./components/Setup.js";
 import { ProviderOnboarding } from "./components/ProviderOnboarding.js";
 import { Sidebar } from "./components/sidebar/index.js";
@@ -130,9 +130,10 @@ function AppContent({
     backgroundTaskCount,
     backgroundTasks,
     pendingText,
+    enqueueMessage,
+    cancelQueued,
+    queuedMessages,
   } = streaming;
-
-  const { messageQueue, enqueue, clearQueue } = useMessageQueue(isStreaming, pendingApproval, sendMessage);
 
   const [prefill, setPrefill] = useState<string | null>(null);
 
@@ -169,11 +170,10 @@ function AppContent({
     const newId = await createNewSession();
     if (newId) {
       cycleIdRef.current = null;
-      clearQueue();
       switchToSession(newId, []);
       refreshSidebar();
     }
-  }, [createNewSession, switchToSession, refreshSidebar, clearQueue]);
+  }, [createNewSession, switchToSession, refreshSidebar]);
 
   const { openDialog } = useAppDialogs({
     config,
@@ -234,7 +234,7 @@ function AppContent({
       if (!trimmed && !images?.length) return;
 
       if (trimmed.startsWith("/")) {
-        if (pendingApproval) return;
+        if (pendingApproval || isStreaming) return;
         const handled = await handleCommand(trimmed);
         if (handled) return;
         const cmdName = trimmed.slice(1).split(" ")[0];
@@ -246,14 +246,14 @@ function AppContent({
         return;
       }
 
-      if (pendingApproval) {
-        enqueue(trimmed, images);
+      if (isStreaming || pendingApproval) {
+        enqueueMessage(trimmed, images);
         return;
       }
 
       sendMessage(trimmed, images);
     },
-    [pendingApproval, sendMessage, handleCommand, addMessage, skills, enqueue]
+    [pendingApproval, isStreaming, sendMessage, handleCommand, addMessage, skills, enqueueMessage]
   );
 
   const handleEditSubmit = useCallback(
@@ -295,7 +295,6 @@ function AppContent({
     if (!target) return;
 
     cycleIdRef.current = target.session_id;
-    clearQueue();
     switchToSession(target.session_id);
 
     switchSession(target.session_id).then((result) => {
@@ -304,18 +303,17 @@ function AppContent({
         switchToSession(target.session_id, convertHistoryToMessages(result.history));
       }
     });
-  }, [sessionId, sidebarData.sessions, switchSession, switchToSession, clearQueue]);
+  }, [sessionId, sidebarData.sessions, switchSession, switchToSession]);
 
   const handleSessionClick = useCallback((targetId: string) => {
     if (targetId === sessionId) return;
-    clearQueue();
     switchToSession(targetId);
     switchSession(targetId).then((result) => {
       if (result) {
         switchToSession(targetId, convertHistoryToMessages(result.history));
       }
     });
-  }, [sessionId, switchSession, switchToSession, clearQueue]);
+  }, [sessionId, switchSession, switchToSession]);
 
   const tabPendingRef = useRef(false);
   const tabTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -460,6 +458,11 @@ function AppContent({
           </box>
         )}
 
+        {/* Queued messages — pinned above input */}
+        <box flexShrink={0}>
+          <QueuedMessages items={queuedMessages} onCancel={cancelQueued} />
+        </box>
+
         {/* Input — pinned to bottom */}
         <box flexShrink={0}>
           <InputArea
@@ -472,7 +475,6 @@ function AppContent({
             commands={allCommands}
             messages={messages}
             onEditingChange={setEditingMessageId}
-            queueCount={messageQueue.length}
             skipApprovals={skipApprovals}
             chatModel={serverConfig?.chat_model}
             sessionName={sessionName}
