@@ -371,6 +371,15 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
     finally:
         if not run.backgrounded:
             if pending_messages:
+                # Emit ingestion events for any client-stamped entries so the
+                # frontend queue UI clears, then absorb them into history.
+                for entry in pending_messages:
+                    client_id = entry.pop("client_id", None)
+                    if client_id:
+                        try:
+                            await bus.emit(MessageIngestedEvent(client_id=client_id, run_id=run.run_id))
+                        except Exception:
+                            _logger.exception("Failed to emit message_ingested in finally")
                 run.messages.extend(pending_messages)
                 pending_messages.clear()
             run.usage = tracker.usage

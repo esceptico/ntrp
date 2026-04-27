@@ -65,6 +65,13 @@ class Agent:
 
                 response_message = self._last_response.choices[0].message
                 if not response_message.tool_calls:
+                    # A user message may have arrived during this LLM turn.
+                    # Drain it before declaring the run finished so the agent
+                    # can respond to it instead of stranding it.
+                    before = len(messages)
+                    await self._drain_pending(messages)
+                    if len(messages) > before:
+                        continue
                     result_text = (response_message.content or "").strip()
                     yield self._result(result_text, StopReason.END_TURN, step)
                     return

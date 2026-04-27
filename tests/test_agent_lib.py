@@ -454,6 +454,45 @@ async def test_get_pending_messages_injects_between_steps():
     assert any(m.get("content") == "injected" for m in messages)
 
 
+@pytest.mark.asyncio
+async def test_pending_arrived_during_final_turn_continues_loop():
+    """User queues a message while the LLM is producing its end-turn response.
+
+    The agent must drain pending before exiting and respond to it instead
+    of stranding it as an orphaned queue entry.
+    """
+    injected = [{"role": "user", "content": "follow-up"}]
+    calls = 0
+
+    async def get_pending():
+        nonlocal calls
+        calls += 1
+        # First drain (top of iter 1) — empty
+        # Second drain (after end-turn check on iter 1) — return follow-up
+        # Third drain (top of iter 2) — empty
+        # Fourth drain (after end-turn check on iter 2) — empty, stop
+        if calls == 2:
+            batch = list(injected)
+            injected.clear()
+            return batch
+        return []
+
+    llm = FakeLLM(
+        [
+            _response(text="first answer"),   # iter 1: would end, but pending arrives
+            _response(text="second answer"),  # iter 2: ends cleanly
+        ]
+    )
+    agent = _make_agent(llm, FakeExecutor({}), hooks=AgentHooks(get_pending_messages=get_pending))
+    messages = _msgs()
+    result = await agent.run(messages)
+
+    assert any(m.get("content") == "follow-up" for m in messages), \
+        "queued message must land in conversation context"
+    assert result.text == "second answer", \
+        "agent must produce a fresh response after consuming the queued message"
+
+
 # ============================================================
 # Cancellation
 # ============================================================
