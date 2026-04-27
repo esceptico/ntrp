@@ -3,7 +3,7 @@ import { useStore } from "zustand";
 import type { Message, ServerEvent, Config, PendingApproval, TokenUsage } from "../types.js";
 import { ZERO_USAGE } from "../types.js";
 import type { ToolChainItem } from "../components/toolchain/types.js";
-import { connectEvents, sendChatMessage, submitToolResult, cancelRun, backgroundRun, getBackgroundTasks, revertSession, type ImageBlock } from "../api/client.js";
+import { connectEvents, sendChatMessage, submitToolResult, cancelRun, backgroundRun, getBackgroundTasks, revertSession, cancelQueuedMessage, type ImageBlock } from "../api/client.js";
 import {
   MAX_TOOL_DESCRIPTION_CHARS,
   MAX_ASSISTANT_CHARS,
@@ -11,7 +11,7 @@ import {
   type Status as StatusType,
 } from "../lib/constants.js";
 import { truncateText } from "../lib/utils.js";
-import { createStreamingStore, type SessionNotification, type SessionStreamState, type MessageInput } from "../stores/streamingStore.js";
+import { createStreamingStore, type SessionNotification, type SessionStreamState, type MessageInput, type QueuedMessage } from "../stores/streamingStore.js";
 
 export type { SessionNotification };
 
@@ -63,6 +63,7 @@ export function useStreaming({
   const backgroundTaskCount = viewed?.backgroundTaskCount ?? 0;
   const backgroundTasks = viewed?.backgroundTasks ?? new Map();
   const pendingText = viewed?.pendingText ?? "";
+  const queuedMessages = viewed?.queuedMessages ?? [];
 
   const sessions = useStore(store, (state) => state.sessions);
   const viewedId = useStore(store, (state) => state.viewedId);
@@ -215,6 +216,10 @@ export function useStreaming({
           if (targetId !== viewedId && !s.notification) {
             s.notification = "done";
           }
+          // Reset orphaned cancelling items so the user can retry cancel
+          s.queuedMessages = s.queuedMessages.map((q) =>
+            q.status === "cancelling" ? { ...q, status: "pending" } : q
+          );
           break;
 
         case "run_error":
@@ -225,6 +230,10 @@ export function useStreaming({
           if (targetId !== viewedId) {
             s.notification = "error";
           }
+          // Reset orphaned cancelling items so the user can retry cancel
+          s.queuedMessages = s.queuedMessages.map((q) =>
+            q.status === "cancelling" ? { ...q, status: "pending" } : q
+          );
           break;
 
         case "run_cancelled": {
@@ -243,6 +252,10 @@ export function useStreaming({
           s.status = Status.IDLE;
           s.isStreaming = false;
           s.pendingText = "";
+          // Reset orphaned cancelling items so the user can retry cancel
+          s.queuedMessages = s.queuedMessages.map((q) =>
+            q.status === "cancelling" ? { ...q, status: "pending" } : q
+          );
           break;
         }
 
@@ -257,6 +270,10 @@ export function useStreaming({
           if (targetId !== viewedId && !s.notification) {
             s.notification = "done";
           }
+          // Reset orphaned cancelling items so the user can retry cancel
+          s.queuedMessages = s.queuedMessages.map((q) =>
+            q.status === "cancelling" ? { ...q, status: "pending" } : q
+          );
           break;
 
         case "background_task":
@@ -288,6 +305,23 @@ export function useStreaming({
           s.pendingText = "";
           s.pendingMessageId = null;
           if (content) addMessageToSession(s, { role: "assistant", content });
+          break;
+        }
+
+        case "message_ingested": {
+          const idx = s.queuedMessages.findIndex((q) => q.clientId === event.client_id);
+          if (idx === -1) break; // already removed (cancel raced); idempotent
+          const queued = s.queuedMessages[idx];
+          s.queuedMessages = [
+            ...s.queuedMessages.slice(0, idx),
+            ...s.queuedMessages.slice(idx + 1),
+          ];
+          addMessageToSession(s, {
+            role: "user",
+            content: queued.text,
+            imageCount: queued.images?.length ?? 0,
+            images: queued.images,
+          });
           break;
         }
 
@@ -402,17 +436,6 @@ export function useStreaming({
 
     const imageCount = images?.length || 0;
 
-    const s = getSession(id);
-    if (s.isStreaming) {
-      mutateSession(id, (s) => addMessageToSession(s, { role: "user", content: message, imageCount, images }));
-      try {
-        await sendChatMessage(message, id, configRef.current, skipApprovalsRef.current, images);
-      } catch (error) {
-        mutateSession(id, (s) => addMessageToSession(s, { role: "error", content: `Inject failed: ${error}` }));
-      }
-      return;
-    }
-
     mutateSession(id, (s) => {
       addMessageToSession(s, { role: "user", content: message, imageCount, images });
       s.isStreaming = true;
@@ -434,7 +457,76 @@ export function useStreaming({
         s.status = Status.IDLE;
       });
     }
-  }, [store, getSession, addMessageToSession, mutateSession]);
+  }, [store, addMessageToSession, mutateSession]);
+
+  const enqueueMessage = useCallback(async (message: string, images?: ImageBlock[]) => {
+    const id = store.getState().viewedId;
+    if (!id) return;
+    const clientId = `cid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    mutateSession(id, (s) => {
+      s.queuedMessages = [
+        ...s.queuedMessages,
+        {
+          clientId,
+          text: message,
+          images,
+          status: "pending",
+          enqueuedAt: Date.now(),
+        },
+      ];
+    });
+
+    try {
+      await sendChatMessage(message, id, configRef.current, skipApprovalsRef.current, images, clientId);
+    } catch (error) {
+      mutateSession(id, (s) => {
+        s.queuedMessages = s.queuedMessages.map((q) =>
+          q.clientId === clientId ? { ...q, status: "failed" } : q
+        );
+      });
+    }
+  }, [store, mutateSession]);
+
+  const cancelQueued = useCallback(async (clientId: string) => {
+    const id = store.getState().viewedId;
+    if (!id) return;
+
+    // Optimistic mark
+    mutateSession(id, (s) => {
+      s.queuedMessages = s.queuedMessages.map((q) =>
+        q.clientId === clientId ? { ...q, status: "cancelling" } : q
+      );
+    });
+
+    let result: "cancelled" | "already_ingested" | "no_run";
+    try {
+      result = await cancelQueuedMessage(clientId, id, configRef.current);
+    } catch {
+      // Revert on network error
+      mutateSession(id, (s) => {
+        s.queuedMessages = s.queuedMessages.map((q) =>
+          q.clientId === clientId ? { ...q, status: "pending" } : q
+        );
+      });
+      return;
+    }
+
+    if (result === "cancelled" || result === "no_run") {
+      mutateSession(id, (s) => {
+        s.queuedMessages = s.queuedMessages.filter((q) => q.clientId !== clientId);
+      });
+    } else {
+      // already_ingested: leave the bubble; the imminent message_ingested
+      // event will move it into the conversation. If the event already arrived,
+      // the bubble is already gone and this is a no-op.
+      mutateSession(id, (s) => {
+        s.queuedMessages = s.queuedMessages.map((q) =>
+          q.clientId === clientId ? { ...q, status: "sent" } : q
+        );
+      });
+    }
+  }, [store, mutateSession]);
 
   const handleApproval = useCallback(async (
     result: "once" | "always" | "reject",
@@ -631,9 +723,12 @@ export function useStreaming({
     backgroundTasks,
     pendingText,
     sessionStates,
+    queuedMessages,
     addMessage,
     clearMessages,
     sendMessage,
+    enqueueMessage,
+    cancelQueued,
     setStatus: setStatusPublic,
     handleApproval,
     cancel,
