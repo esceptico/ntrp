@@ -216,7 +216,6 @@ export function useStreaming({
           if (targetId !== viewedId && !s.notification) {
             s.notification = "done";
           }
-          // Reset orphaned cancelling items so the user can retry cancel
           s.queuedMessages = s.queuedMessages.map((q) =>
             q.status === "cancelling" ? { ...q, status: "pending" } : q
           );
@@ -230,7 +229,6 @@ export function useStreaming({
           if (targetId !== viewedId) {
             s.notification = "error";
           }
-          // Reset orphaned cancelling items so the user can retry cancel
           s.queuedMessages = s.queuedMessages.map((q) =>
             q.status === "cancelling" ? { ...q, status: "pending" } : q
           );
@@ -252,7 +250,6 @@ export function useStreaming({
           s.status = Status.IDLE;
           s.isStreaming = false;
           s.pendingText = "";
-          // Reset orphaned cancelling items so the user can retry cancel
           s.queuedMessages = s.queuedMessages.map((q) =>
             q.status === "cancelling" ? { ...q, status: "pending" } : q
           );
@@ -270,7 +267,6 @@ export function useStreaming({
           if (targetId !== viewedId && !s.notification) {
             s.notification = "done";
           }
-          // Reset orphaned cancelling items so the user can retry cancel
           s.queuedMessages = s.queuedMessages.map((q) =>
             q.status === "cancelling" ? { ...q, status: "pending" } : q
           );
@@ -310,7 +306,7 @@ export function useStreaming({
 
         case "message_ingested": {
           const idx = s.queuedMessages.findIndex((q) => q.clientId === event.client_id);
-          if (idx === -1) break; // already removed (cancel raced); idempotent
+          if (idx === -1) break;
           const queued = s.queuedMessages[idx];
           s.queuedMessages = [
             ...s.queuedMessages.slice(0, idx),
@@ -492,7 +488,6 @@ export function useStreaming({
     const id = store.getState().viewedId;
     if (!id) return;
 
-    // Optimistic mark
     mutateSession(id, (s) => {
       s.queuedMessages = s.queuedMessages.map((q) =>
         q.clientId === clientId ? { ...q, status: "cancelling" } : q
@@ -503,7 +498,6 @@ export function useStreaming({
     try {
       result = await cancelQueuedMessage(clientId, id, configRef.current);
     } catch {
-      // Revert on network error
       mutateSession(id, (s) => {
         s.queuedMessages = s.queuedMessages.map((q) =>
           q.clientId === clientId ? { ...q, status: "pending" } : q
@@ -519,7 +513,7 @@ export function useStreaming({
     } else {
       // already_ingested: leave the bubble; the imminent message_ingested
       // event will move it into the conversation. If the event already arrived,
-      // the bubble is already gone and this is a no-op.
+      // the bubble is already gone and the map below is a no-op.
       mutateSession(id, (s) => {
         s.queuedMessages = s.queuedMessages.map((q) =>
           q.clientId === clientId ? { ...q, status: "sent" } : q
