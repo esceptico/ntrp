@@ -12,9 +12,9 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from ntrp.agent import Role
 from ntrp.constants import FACT_MERGE_SIMILARITY_THRESHOLD, FACT_MERGE_TEMPERATURE
 from ntrp.llm.router import get_completion_client
-from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact
 from ntrp.memory.prompts import FACT_MERGE_PROMPT

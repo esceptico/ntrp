@@ -11,6 +11,7 @@ import { useDirectives, type UseDirectivesResult } from "./settings/useDirective
 import { useConnections, type UseConnectionsResult } from "./settings/useConnections.js";
 import { useMCPServers, type UseMCPServersResult } from "./settings/useMCPServers.js";
 import { useApiKeys, type UseApiKeysResult } from "./settings/useApiKeys.js";
+import { useIntegrationsNav, type UseIntegrationsNavResult } from "./settings/useIntegrationsNav.js";
 import { useMemorySettings, type UseMemorySettingsResult } from "./settings/useMemorySettings.js";
 import { useContextSettings, type UseContextSettingsResult } from "./settings/useContextSettings.js";
 import { useAgentSettings, type UseAgentSettingsResult } from "./settings/useAgentSettings.js";
@@ -30,7 +31,8 @@ export interface UseSettingsStateResult {
   services: UseServicesResult;
   server: UseServerConnectionResult;
   directives: UseDirectivesResult;
-  sources: UseConnectionsResult;
+  connections: UseConnectionsResult;
+  integrationsNav: UseIntegrationsNavResult;
   notifiers: UseNotifiersResult;
   skills: UseSkillsResult;
   mcp: UseMCPServersResult;
@@ -53,12 +55,13 @@ export function useSettingsState({
   const services = useServices(config);
   const server = useServerConnection(config, onServerCredentialsChange);
   const directives = useDirectives(config);
-  const sources = useConnections(config, serverConfig, onServerConfigChange);
+  const connections = useConnections(config, serverConfig, onServerConfigChange);
   const mcp = useMCPServers(config);
   const notifiers = useNotifiers(config);
   const skills = useSkills(config);
 
-  const apiKeys = useApiKeys(providers, services);
+  const apiKeys = useApiKeys(providers);
+  const integrationsNav = useIntegrationsNav(connections, services);
   const memory = useMemorySettings(config, serverConfig, onServerConfigChange, settings, onUpdate);
   const context = useContextSettings(settings, onUpdate);
   const agent = useAgentSettings(settings, onUpdate);
@@ -76,7 +79,8 @@ export function useSettingsState({
     services,
     server,
     directives,
-    sources,
+    connections,
+    integrationsNav,
     notifiers,
     skills,
     mcp,

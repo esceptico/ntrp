@@ -6,14 +6,13 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 from coolname import generate_slug
 
+from ntrp.agent import Role, ToolResult
+from ntrp.agent.ledger import SharedLedger
 from ntrp.channel import Channel
-from ntrp.constants import NTRP_TMP_BASE, OFFLOAD_PREVIEW_LINES
+from ntrp.constants import NTRP_TMP_BASE
 from ntrp.context.models import SessionState
-from ntrp.core.ledger import ResearchLedger
 from ntrp.events.sse import ApprovalNeededEvent, BackgroundTaskEvent
-from ntrp.llm.types import Role
 from ntrp.logging import get_logger
-from ntrp.tools.core.types import ToolResult
 
 _logger = get_logger(__name__)
 
@@ -119,17 +118,6 @@ class BackgroundTaskRegistry:
         path.write_text(content, encoding="utf-8")
         return path
 
-    @staticmethod
-    def _build_result_summary(content: str, task_id: str) -> str:
-        lines = content.split("\n")
-        preview = "\n".join(lines[:OFFLOAD_PREVIEW_LINES])
-        truncated = (
-            f"\n... ({len(lines) - OFFLOAD_PREVIEW_LINES} more lines, task_id={task_id})"
-            if len(lines) > OFFLOAD_PREVIEW_LINES
-            else ""
-        )
-        return f"{preview}{truncated}"
-
     async def deliver_result(
         self,
         task_id: str,
@@ -139,9 +127,8 @@ class BackgroundTaskRegistry:
         emit: Callable[[Any], Awaitable[None]] | None,
     ) -> None:
         self._write_result_file(task_id, result)
-        summary = self._build_result_summary(result, task_id)
 
-        notification = f"[background task {task_id} {status}]\n\n{summary}"
+        notification = f"[background task {task_id} {status}]"
         messages = [{"role": Role.USER, "content": notification}]
 
         if emit:
@@ -160,7 +147,7 @@ class ToolContext:
     io: IOBridge
     services: dict[str, Any] = field(default_factory=dict)
     channel: Channel = field(default_factory=Channel)
-    ledger: ResearchLedger | None = None
+    ledger: SharedLedger | None = None
     spawn_fn: Callable[..., Awaitable[str]] | None = None
     background_tasks: BackgroundTaskRegistry = field(default_factory=BackgroundTaskRegistry)
 
@@ -180,14 +167,9 @@ class ToolContext:
     def capabilities(self) -> frozenset[str]:
         return frozenset(self.services)
 
-    def get_source[T](self, source_type: type[T], name: str | None = None) -> T | None:
-        if name is not None:
-            s = self.services.get(name)
-            return s if isinstance(s, source_type) else None
-        for s in self.services.values():
-            if isinstance(s, source_type):
-                return s
-        return None
+    def get_client[T](self, id: str, client_type: type[T]) -> T | None:
+        s = self.services.get(id)
+        return s if isinstance(s, client_type) else None
 
 
 @dataclass

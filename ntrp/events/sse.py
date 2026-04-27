@@ -2,6 +2,8 @@ import json
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
+from ntrp.agent import TextBlock, TextDelta, ToolCompleted, ToolStarted
+
 
 class EventType(StrEnum):
     THINKING = "thinking"
@@ -19,6 +21,8 @@ class EventType(StrEnum):
     RUN_ERROR = "run_error"
     RUN_CANCELLED = "run_cancelled"
     RUN_BACKGROUNDED = "run_backgrounded"
+    AUTOMATION_PROGRESS = "automation_progress"
+    AUTOMATION_FINISHED = "automation_finished"
 
 
 @dataclass(frozen=True)
@@ -45,12 +49,16 @@ class ThinkingEvent(SSEEvent):
 class TextEvent(SSEEvent):
     type: EventType = field(default=EventType.TEXT, init=False)
     content: str
+    depth: int = 0
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
 class TextDeltaEvent(SSEEvent):
     type: EventType = field(default=EventType.TEXT_DELTA, init=False)
     content: str
+    depth: int = 0
+    parent_id: str | None = None
 
 
 def _format_call(name: str, args: dict) -> str:
@@ -66,8 +74,8 @@ class ToolCallEvent(SSEEvent):
     tool_id: str
     name: str
     args: dict
-    depth: int = 0  # 0 = top-level, >0 = subagent
-    parent_id: str = ""  # Parent tool_call_id for grouping subagent calls
+    depth: int = 0
+    parent_id: str | None = None
     display_name: str = ""
 
     def to_sse(self) -> dict:
@@ -85,7 +93,7 @@ class ToolResultEvent(SSEEvent):
     result: str
     preview: str
     depth: int = 0
-    parent_id: str = ""
+    parent_id: str | None = None
     duration_ms: int = 0
     data: dict | None = None
     display_name: str = ""
@@ -114,8 +122,8 @@ class RunStartedEvent(SSEEvent):
     type: EventType = field(default=EventType.RUN_STARTED, init=False)
     session_id: str
     run_id: str
-    sources: list[str] = field(default_factory=list)
-    source_errors: dict[str, str] = field(default_factory=dict)
+    integrations: list[str] = field(default_factory=list)
+    integration_errors: dict[str, str] = field(default_factory=dict)
     skip_approvals: bool = False
     session_name: str = ""
 
@@ -169,5 +177,44 @@ class TextMessageEndEvent(SSEEvent):
 
 
 @dataclass(frozen=True)
-class AgentResult:
-    text: str
+class AutomationProgressEvent(SSEEvent):
+    type: EventType = field(default=EventType.AUTOMATION_PROGRESS, init=False)
+    task_id: str
+    status: str
+
+
+@dataclass(frozen=True)
+class AutomationFinishedEvent(SSEEvent):
+    type: EventType = field(default=EventType.AUTOMATION_FINISHED, init=False)
+    task_id: str
+    result: str | None = None
+
+
+def agent_event_to_sse(event) -> "SSEEvent | None":
+    """Convert an ntrp.agent event to an SSEEvent."""
+    base = {"depth": event.depth, "parent_id": event.parent_id}
+    match event:
+        case TextDelta():
+            return TextDeltaEvent(content=event.content, **base)
+        case TextBlock():
+            return TextEvent(content=event.content, **base)
+        case ToolStarted():
+            return ToolCallEvent(
+                tool_id=event.tool_id,
+                name=event.name,
+                args=event.args,
+                display_name=event.display_name,
+                **base,
+            )
+        case ToolCompleted():
+            return ToolResultEvent(
+                tool_id=event.tool_id,
+                name=event.name,
+                result=event.result,
+                preview=event.preview,
+                duration_ms=event.duration_ms,
+                data=event.data,
+                display_name=event.display_name,
+                **base,
+            )
+    return None

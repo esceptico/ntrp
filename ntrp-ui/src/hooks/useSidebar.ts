@@ -59,9 +59,13 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
       if (!activeRef.current) return;
 
       const nextAutomations = automationsResult.automations
-        .filter(s => s.enabled && s.next_run_at)
-        .sort((a, b) => new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime())
-        .slice(0, 3);
+        .filter(s => s.enabled && (s.next_run_at || s.running_since))
+        .sort((a, b) => {
+          if (a.running_since && !b.running_since) return -1;
+          if (!a.running_since && b.running_since) return 1;
+          return new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime();
+        })
+        .slice(0, 5);
 
       setData({ context, nextAutomations, sessions: sessionsResult.sessions, memoryStats });
     } catch {
@@ -79,9 +83,13 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
       wantMemory ? getStats(config).catch(() => null) : null,
     ]).then(([sessionsResult, automationsResult, memoryStats]) => {
       const nextAutomations = automationsResult.automations
-        .filter(s => s.enabled && s.next_run_at)
-        .sort((a, b) => new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime())
-        .slice(0, 3);
+        .filter(s => s.enabled && (s.next_run_at || s.running_since))
+        .sort((a, b) => {
+          if (a.running_since && !b.running_since) return -1;
+          if (!a.running_since && b.running_since) return 1;
+          return new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime();
+        })
+        .slice(0, 5);
       setData(prev => ({ ...prev, sessions: sessionsResult.sessions, nextAutomations, memoryStats }));
     });
   }, [config]);

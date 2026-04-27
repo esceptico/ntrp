@@ -6,9 +6,9 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from ntrp.agent import Role
 from ntrp.constants import CONSOLIDATION_TEMPERATURE, OBSERVATION_MERGE_SIMILARITY_THRESHOLD
 from ntrp.llm.router import get_completion_client
-from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding
 from ntrp.memory.prompts import TEMPORAL_PATTERN_PROMPT

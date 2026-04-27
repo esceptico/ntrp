@@ -1,5 +1,4 @@
 import json
-from dataclasses import asdict
 from datetime import datetime
 
 import aiosqlite
@@ -36,7 +35,7 @@ def _row_to_automation(row: dict) -> Automation:
 
 
 def _serialize_triggers(triggers: list) -> str:
-    return json.dumps([asdict(t) for t in triggers])
+    return json.dumps([{"type": t.type, **t.params()} for t in triggers])
 
 
 _SCHEMA = """
@@ -271,7 +270,89 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
 """
 
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 2
+
+_DAY_INT_TO_NAME = {0: "mon", 1: "tue", 2: "wed", 3: "thu", 4: "fri", 5: "sat", 6: "sun"}
+
+
+def _normalize_trigger(t: dict) -> dict:
+    """Convert any legacy trigger format to the canonical string-based format.
+
+    Handles:
+    - asdict() dicts: {"hour":16,"minute":0}, {"days":[0,1,2,...]}, {"delta":{"seconds":...}}
+    - Pre-v1 keys: "time_of_day"/"recurrence"/"repeat"
+    - Stray null values from old params() serialization
+    """
+    typ = t.get("type", "time")
+
+    if typ == "time":
+        # Pre-v1 legacy: time_of_day / recurrence / repeat
+        if "time_of_day" in t:
+            at = t["time_of_day"]
+            recurrence = t.get("recurrence") or t.get("repeat", "once")
+            out = {"type": "time", "at": at}
+            if recurrence != "once":
+                out["days"] = recurrence
+            return out
+
+        out: dict = {"type": "time"}
+        for key in ("at", "start", "end"):
+            val = t.get(key)
+            if isinstance(val, dict) and "hour" in val:
+                out[key] = f"{val['hour']:02d}:{val['minute']:02d}"
+            elif isinstance(val, str):
+                out[key] = val
+
+        val = t.get("days")
+        if isinstance(val, dict) and "days" in val:
+            days = sorted(val["days"])
+            if days == list(range(7)):
+                out["days"] = "daily"
+            elif days == list(range(5)):
+                out["days"] = "weekdays"
+            else:
+                out["days"] = ",".join(_DAY_INT_TO_NAME[d] for d in days)
+        elif isinstance(val, str):
+            out["days"] = val
+
+        val = t.get("every")
+        if isinstance(val, dict) and "delta" in val:
+            td = val["delta"]
+            secs = int(td.get("seconds", 0)) + int(td.get("hours", 0)) * 3600 + int(td.get("minutes", 0)) * 60
+            h, m = divmod(secs // 60, 60)
+            out["every"] = f"{h}h{m}m" if h and m else (f"{h}h" if h else f"{m}m")
+        elif isinstance(val, str):
+            out["every"] = val
+
+        return out
+
+    if typ == "event":
+        out = {"type": "event", "event_type": t["event_type"]}
+        if t.get("lead_minutes") is not None:
+            out["lead_minutes"] = t["lead_minutes"]
+        return out
+
+    if typ == "idle":
+        return {"type": "idle", "idle_minutes": t["idle_minutes"]}
+
+    if typ == "count":
+        return {"type": "count", "every_n": t["every_n"]}
+
+    return t
+
+
+async def _migrate_v2(conn: aiosqlite.Connection) -> None:
+    rows = await conn.execute_fetchall("SELECT task_id, triggers FROM scheduled_tasks")
+    for row in rows:
+        items = json.loads(row["triggers"])
+        normalized = [_normalize_trigger(t) for t in items]
+        new_json = json.dumps(normalized)
+        if new_json != row["triggers"]:
+            await conn.execute(
+                "UPDATE scheduled_tasks SET triggers = ? WHERE task_id = ?",
+                (new_json, row["task_id"]),
+            )
+    _logger.info("Migrated triggers to v2 (canonical string format)")
 
 
 async def _get_schema_version(conn: aiosqlite.Connection) -> int:
@@ -312,10 +393,16 @@ async def _migrate(conn: aiosqlite.Connection) -> None:
                 await _set_schema_version(conn, 1)
                 await conn.commit()
             else:
-                # No scheduled_tasks table yet — fresh install, schema will be created
                 pass
         except Exception:
-            # Table doesn't exist yet
+            pass
+
+    if version < 2:
+        try:
+            await _migrate_v2(conn)
+            await _set_schema_version(conn, 2)
+            await conn.commit()
+        except Exception:
             pass
 
 

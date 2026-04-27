@@ -6,6 +6,7 @@ import uvicorn
 from coolname import generate_slug
 from rich.console import Console
 
+from ntrp.agent import Role
 from ntrp.config import get_config
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
@@ -110,7 +111,7 @@ async def _run_headless(prompt: str):
 
     try:
         system_prompt = build_system_prompt(
-            source_details=runtime.source_mgr.get_details(),
+            source_details={},
             memory_context=None,
         )
 
@@ -123,29 +124,30 @@ async def _run_headless(prompt: str):
             executor=runtime.executor,
             config=config,
             tools=runtime.executor.get_tools(),
-            system_prompt=system_prompt,
             session_state=session_state,
             channel=runtime.channel,
             run_id=run_id,
             io=IOBridge(),
         )
 
+        messages = [
+            {"role": Role.SYSTEM, "content": system_prompt},
+            {"role": Role.USER, "content": prompt},
+        ]
+
         console.print(f"[dim]Running: {prompt}[/dim]\n")
         runtime.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
-        result: str | None = None
-        try:
-            result = await agent.run(task=prompt, history=None)
-            console.print(result)
-        finally:
-            runtime.channel.publish(
-                RunCompleted(
-                    run_id=run_id,
-                    session_id=session_state.session_id,
-                    messages=tuple(agent.messages),
-                    usage=agent.usage,
-                    result=result,
-                )
+        run_result = await agent.run(messages)
+        console.print(run_result.text)
+        runtime.channel.publish(
+            RunCompleted(
+                run_id=run_id,
+                session_id=session_state.session_id,
+                messages=tuple(messages),
+                usage=run_result.usage,
+                result=run_result.text,
             )
+        )
     finally:
         await runtime.close()
 

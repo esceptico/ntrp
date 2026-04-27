@@ -1,12 +1,15 @@
 from dataclasses import dataclass
 from typing import Self
 
+from ntrp.agent import Agent, AgentHooks
+from ntrp.agent.ledger import SharedLedger
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
-from ntrp.core.agent import Agent
+from ntrp.core.compaction_hook import NtrpCompactionHook
 from ntrp.core.compactor import Compactor, SummaryCompactor
-from ntrp.core.ledger import ResearchLedger
+from ntrp.core.llm_client import llm_client
 from ntrp.core.spawner import create_spawn_fn
+from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from ntrp.tools.executor import ToolExecutor
 
@@ -38,7 +41,6 @@ def create_agent(
     executor: ToolExecutor,
     config: AgentConfig,
     tools: list[dict],
-    system_prompt: str | list[dict],
     session_state: SessionState,
     channel: Channel,
     run_id: str,
@@ -53,6 +55,8 @@ def create_agent(
         research_model=config.research_model,
     )
 
+    bg_tasks = background_tasks or BackgroundTaskRegistry(session_id=session_state.session_id)
+
     tool_ctx = ToolContext(
         session_state=session_state,
         registry=executor.registry,
@@ -60,8 +64,8 @@ def create_agent(
         io=io or IOBridge(),
         services=executor.tool_services,
         channel=channel,
-        ledger=ResearchLedger(),
-        background_tasks=background_tasks or BackgroundTaskRegistry(session_id=session_state.session_id),
+        ledger=SharedLedger(),
+        background_tasks=bg_tasks,
     )
     tool_ctx.spawn_fn = create_spawn_fn(
         executor=executor,
@@ -70,13 +74,20 @@ def create_agent(
         current_depth=0,
     )
 
+    ntrp_executor = NtrpToolExecutor(executor, tool_ctx, ledger=tool_ctx.ledger)
+
+    compaction_hook = NtrpCompactionHook(
+        channel=channel,
+        session_id=session_state.session_id,
+        model=config.model,
+        compactor=config.compactor,
+    )
+
     return Agent(
         tools=tools,
-        tool_executor=executor,
+        client=llm_client,
+        executor=ntrp_executor,
         model=config.model,
-        system_prompt=system_prompt,
-        ctx=tool_ctx,
         max_depth=config.max_depth,
-        current_depth=0,
-        compactor=config.compactor,
+        hooks=AgentHooks(prepare_step=compaction_hook.prepare_step),
     )

@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 
+from ntrp.agent import Role
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
 from ntrp.core.content import blocks_to_text
-from ntrp.llm.types import Role
 from ntrp.server.deps import require_session_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
@@ -82,8 +82,8 @@ async def get_session(
 
     return SessionResponse(
         session_id=session_state.session_id,
-        sources=runtime.get_available_sources(),
-        source_errors=runtime.get_source_errors(),
+        integrations=runtime.get_available_integrations(),
+        integration_errors=runtime.get_integration_errors(),
         name=session_state.name,
     )
 
@@ -116,6 +116,24 @@ async def revert_session(svc: SessionService = Depends(require_session_service),
 
 
 # --- Multi-session ---
+
+
+@router.post("/sessions/{session_id}/branch")
+async def branch_session(
+    session_id: str,
+    req: CreateSessionRequest | None = None,
+    svc: SessionService = Depends(require_session_service),
+):
+    name = req.name if req else None
+    state = await svc.branch(session_id, name=name)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {
+        "session_id": state.session_id,
+        "name": state.name,
+        "started_at": state.started_at.isoformat(),
+        "last_activity": state.last_activity.isoformat(),
+    }
 
 
 @router.post("/sessions")

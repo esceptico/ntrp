@@ -11,7 +11,7 @@ from ntrp.constants import (
 from ntrp.events.triggers import EventApproaching
 from ntrp.logging import get_logger
 from ntrp.monitor.store import MonitorStateStore
-from ntrp.sources.base import CalendarSource
+from ntrp.integrations.calendar.client import MultiCalendarSource
 
 _logger = get_logger(__name__)
 
@@ -19,7 +19,7 @@ _logger = get_logger(__name__)
 class CalendarMonitor:
     """Polls calendar data and publishes EventApproaching trigger events."""
 
-    def __init__(self, source: CalendarSource, state_store: MonitorStateStore):
+    def __init__(self, source: MultiCalendarSource, state_store: MonitorStateStore):
         self._source = source
         self._state_store = state_store
         self._channel: Channel | None = None

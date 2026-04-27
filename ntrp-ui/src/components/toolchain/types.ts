@@ -12,4 +12,5 @@ export interface ToolChainItem {
   parentId?: string;
   startTime?: number;
   endTime?: number;
+  nestedText?: string;
 }

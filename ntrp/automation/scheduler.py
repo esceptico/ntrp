@@ -15,9 +15,13 @@ from ntrp.constants import (
     SCHEDULER_POLL_INTERVAL,
 )
 from ntrp.events.internal import RunCompleted
+from ntrp.events.sse import AutomationFinishedEvent, AutomationProgressEvent, SSEEvent
 from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, TriggerEvent
 from ntrp.logging import get_logger
-from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent
+from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent, run_agent_streaming
+from ntrp.server.bus import BusRegistry, SessionBus
+
+AUTOMATION_BUS_KEY = "automation:events"
 
 _logger = get_logger(__name__)
 
@@ -26,12 +30,16 @@ class Scheduler:
     def __init__(self, store: AutomationStore, build_deps: Callable[[], OperatorDeps]):
         self.store = store
         self._build_deps = build_deps
+        self._bus_registry: BusRegistry | None = None
         self._task: asyncio.Task | None = None
         self._running: set[asyncio.Task] = set()
         self._handlers: dict[str, Callable[[dict | None], Awaitable[str | None]]] = {}
         self._count_state: dict[str, dict[str, int]] = {}
         self._last_activity_at: datetime = datetime.now(UTC)
         self._idle_fired: set[str] = set()  # task_ids that already fired this idle period
+
+    def set_bus_registry(self, registry: BusRegistry) -> None:
+        self._bus_registry = registry
 
     def register_handler(self, name: str, handler: Callable[[dict | None], Awaitable[str | None]]) -> None:
         self._handlers[name] = handler
@@ -183,6 +191,14 @@ class Scheduler:
         execution = asyncio.create_task(self._run_and_finalize(automation, context))
         self._track(execution)
 
+    async def _emit_automation_event(self, event: SSEEvent) -> None:
+        if self._bus_registry:
+            try:
+                bus = self._bus_registry.get_or_create(AUTOMATION_BUS_KEY)
+                await bus.emit(event)
+            except Exception:
+                _logger.debug("Failed to emit automation event", exc_info=True)
+
     async def _run_and_finalize(
         self,
         automation: Automation,
@@ -190,6 +206,9 @@ class Scheduler:
         event_queue_id: int | None = None,
         event_attempt_count: int = 0,
     ) -> None:
+        await self._emit_automation_event(
+            AutomationProgressEvent(task_id=automation.task_id, status="starting..."),
+        )
         result: str | None = None
         success = False
         error_message = ""
@@ -203,6 +222,9 @@ class Scheduler:
             error_message = f"{type(e).__name__}: {e}"
             _logger.exception("Failed to execute automation %s", automation.task_id)
         finally:
+            await self._emit_automation_event(
+                AutomationFinishedEvent(task_id=automation.task_id, result=result),
+            )
             now = datetime.now(UTC)
             next_run = self._advance_to_future(automation, now)
             await self.store.update_last_run(automation.task_id, now, next_run, result=result)
@@ -242,8 +264,15 @@ class Scheduler:
             writable=automation.writable,
             source_id=automation.task_id,
             model=automation.model,
+            skip_approvals=automation.writable,
         )
-        result = await run_agent(self._build_deps(), request)
+
+        if self._bus_registry:
+            bus = self._bus_registry.get_or_create(AUTOMATION_BUS_KEY)
+            result = await run_agent_streaming(self._build_deps(), request, bus, automation.task_id)
+        else:
+            result = await run_agent(self._build_deps(), request)
+
         return result.output
 
     async def fire_event(self, event: TriggerEvent) -> None:

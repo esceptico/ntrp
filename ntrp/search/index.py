@@ -8,7 +8,7 @@ from ntrp.logging import get_logger
 from ntrp.search.retrieval import HybridRetriever
 from ntrp.search.store import SearchStore
 from ntrp.search.types import SearchResult
-from ntrp.sources.models import RawItem
+from ntrp.integrations.types import RawItem
 
 _logger = get_logger(__name__)
 

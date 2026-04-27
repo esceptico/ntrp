@@ -8,6 +8,7 @@ import pytest
 import pytest_asyncio
 
 import ntrp.llm.models as llm_models
+from ntrp.agent import Usage
 from ntrp.channel import Channel
 from ntrp.config import Config
 from ntrp.events.internal import RunCompleted
@@ -15,7 +16,6 @@ from ntrp.llm.models import EmbeddingModel, Provider
 from ntrp.memory.extraction_handler import create_chat_extraction_handler
 from ntrp.memory.facts import FactMemory
 from ntrp.settings import hash_api_key
-from ntrp.usage import Usage
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
 
 

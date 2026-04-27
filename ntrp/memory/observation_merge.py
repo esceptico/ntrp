@@ -10,12 +10,12 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from ntrp.agent import Role
 from ntrp.constants import (
     OBSERVATION_MERGE_SIMILARITY_THRESHOLD,
     OBSERVATION_MERGE_TEMPERATURE,
 )
 from ntrp.llm.router import get_completion_client
-from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Observation
 from ntrp.memory.prompts import OBSERVATION_MERGE_PROMPT

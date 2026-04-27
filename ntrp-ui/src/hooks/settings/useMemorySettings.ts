@@ -24,17 +24,17 @@ export function useMemorySettings(
   const [memoryIndex, setMemoryIndex] = useState(0);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
-  const memoryEnabled = serverConfig?.sources?.memory?.enabled ?? false;
+  const memoryEnabled = serverConfig?.integrations?.memory?.enabled ?? false;
   const itemCount = memoryEnabled ? 3 : 1; // memory toggle, dreams toggle, consolidation
 
   const handleToggle = useCallback(async (source: string) => {
-    if (actionInProgress || !serverConfig?.sources) return;
+    if (actionInProgress || !serverConfig?.integrations) return;
     const current = source === "dreams"
-      ? serverConfig.sources.memory?.dreams ?? false
-      : serverConfig.sources[source]?.enabled ?? false;
+      ? serverConfig.integrations.memory?.dreams ?? false
+      : serverConfig.integrations[source]?.enabled ?? false;
     setActionInProgress("Updating...");
     try {
-      await updateConfig(config, { sources: { [source]: !current } });
+      await updateConfig(config, { integrations: { [source]: !current } });
       const updatedConfig = await getServerConfig(config);
       onServerConfigChange(updatedConfig);
     } catch {

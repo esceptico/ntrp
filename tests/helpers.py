@@ -1,10 +1,17 @@
 """Shared test helpers for building mock LLM responses and test fixtures."""
 
 import json
+from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 
+from ntrp.agent import Choice, CompletionResponse, FunctionCall, Message, ToolCall, Usage
+from ntrp.channel import Channel
+from ntrp.context.models import SessionState
+from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.llm.base import CompletionClient
-from ntrp.llm.types import Choice, CompletionResponse, FunctionCall, Message, ToolCall
-from ntrp.usage import Usage
+from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
+from ntrp.tools.core.registry import ToolRegistry
+from ntrp.tools.executor import ToolExecutor
 
 
 def make_text_response(content: str, model: str = "test-model") -> CompletionResponse:
@@ -62,3 +69,50 @@ class MockCompletionClient(CompletionClient):
 
     async def close(self) -> None:
         pass
+
+
+def make_executor(*tools) -> ToolExecutor:
+    executor = ToolExecutor.__new__(ToolExecutor)
+    executor._get_services = dict
+    executor.registry = ToolRegistry()
+    for tool in tools:
+        executor.registry.register(tool)
+    return executor
+
+
+def make_tool_context(executor: ToolExecutor) -> ToolContext:
+    return ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1"),
+        io=IOBridge(),
+        channel=Channel(),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+    )
+
+
+class MockLLMClient:
+    """Wraps MockCompletionClient to match the LLMClient protocol."""
+
+    def __init__(self, client: MockCompletionClient):
+        self._client = client
+
+    @property
+    def calls(self):
+        return self._client.calls
+
+    async def stream(
+        self, messages: list[dict], model: str, tools: list[dict], tool_choice=None
+    ) -> AsyncGenerator[str | CompletionResponse]:
+        async for item in self._client.stream_completion(
+            model=model, messages=messages, tools=tools, tool_choice="auto"
+        ):
+            yield item
+
+    async def complete(self, model: str, messages: list[dict], **kwargs) -> CompletionResponse:
+        return await self._client.completion(model=model, messages=messages, **kwargs)
+
+
+def make_test_executor(executor: ToolExecutor) -> NtrpToolExecutor:
+    ctx = make_tool_context(executor)
+    return NtrpToolExecutor(executor, ctx)

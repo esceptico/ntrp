@@ -8,7 +8,7 @@ import { D, type UsageData } from "./shared.js";
 import { ModelsSection } from "./ModelsSection.js";
 import { ContextSection } from "./ContextSection.js";
 import { UsageSection } from "./UsageSection.js";
-import { SourcesSection } from "./SourcesSection.js";
+import { IntegrationsSection } from "./IntegrationsSection.js";
 import { AutomationsSection } from "./AutomationsSection.js";
 import { SessionsList } from "./SessionsList.js";
 import { MemorySection } from "./MemorySection.js";
@@ -50,8 +50,8 @@ export const Sidebar = React.memo(function Sidebar({ serverConfig, serverVersion
         {sections.models && serverConfig && <ModelsSection cfg={serverConfig} width={contentWidth} />}
         {sections.context && data.context && <ContextSection context={data.context} width={contentWidth} />}
         {sections.usage && <UsageSection usage={usage} />}
-        {sections.sources && serverConfig && <SourcesSection cfg={serverConfig} />}
-        {sections.automations && data.nextAutomations.length > 0 && <AutomationsSection automations={data.nextAutomations} width={contentWidth} />}
+        {sections.integrations && serverConfig && <IntegrationsSection cfg={serverConfig} />}
+        {sections.automations && data.nextAutomations.length > 0 && <AutomationsSection automations={data.nextAutomations} width={contentWidth} serverUrl={serverUrl} />}
         {sections.memory_stats && data.memoryStats && <MemorySection stats={data.memoryStats} />}
 
         {sections.sessions && data.sessions.length > 0 && (

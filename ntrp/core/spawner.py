@@ -2,11 +2,13 @@ import asyncio
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from ntrp.agent import Agent, Result, Role, ToolCompleted, ToolStarted
 from ntrp.constants import SUBAGENT_DEFAULT_TIMEOUT
 from ntrp.context.models import SessionState
-from ntrp.core.agent import Agent
 from ntrp.core.isolation import IsolationLevel
-from ntrp.events.sse import BackgroundTaskEvent, ToolCallEvent, ToolResultEvent
+from ntrp.core.llm_client import llm_client
+from ntrp.core.tool_executor import NtrpToolExecutor
+from ntrp.events.sse import BackgroundTaskEvent, agent_event_to_sse
 from ntrp.logging import get_logger
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 from ntrp.tools.executor import ToolExecutor
@@ -48,6 +50,7 @@ def create_spawn_fn(
     ) -> str:
         filtered_tools = tools or executor.get_tools()
         child_state = _create_session_state(calling_ctx, isolation)
+        child_model = model_override or model
 
         child_run = RunContext(
             run_id=calling_ctx.run.run_id,
@@ -57,37 +60,7 @@ def create_spawn_fn(
             research_model=calling_ctx.run.research_model,
         )
 
-        # Pre-generate IDs for background so the emit wrapper can reference them
-        if background:
-            registry = calling_ctx.background_tasks
-            task_id = registry.generate_id()
-            label = task[:80]
-
-        if background and calling_ctx.io.emit:
-            parent_emit = calling_ctx.io.emit
-
-            async def _bg_emit(event):
-                if isinstance(event, ToolCallEvent):
-                    await parent_emit(
-                        BackgroundTaskEvent(
-                            task_id=task_id,
-                            command=label,
-                            status="activity",
-                            detail=event.display_name or event.name,
-                        )
-                    )
-                elif isinstance(event, ToolResultEvent):
-                    await parent_emit(
-                        BackgroundTaskEvent(
-                            task_id=task_id,
-                            command=label,
-                            status="activity",
-                            detail=f"{event.display_name or event.name}: {event.preview}",
-                        )
-                    )
-
-            bg_io = IOBridge(emit=_bg_emit)
-        elif silent or background:
+        if background or silent:
             bg_io = IOBridge()
         else:
             bg_io = calling_ctx.io
@@ -104,38 +77,61 @@ def create_spawn_fn(
         )
         child_ctx.spawn_fn = create_spawn_fn(
             executor=executor,
-            model=model_override or model,
+            model=child_model,
             max_depth=max_depth,
             current_depth=current_depth + 1,
         )
 
+        child_executor = NtrpToolExecutor(executor, child_ctx, ledger=calling_ctx.ledger)
+
         sub_agent = Agent(
             tools=filtered_tools,
-            tool_executor=executor,
-            model=model_override or model,
-            system_prompt=system_prompt,
-            ctx=child_ctx,
+            client=llm_client,
+            executor=child_executor,
+            model=child_model,
             max_depth=max_depth,
             current_depth=current_depth + 1,
             parent_id=parent_id,
         )
 
+        child_messages = [
+            {"role": Role.SYSTEM, "content": system_prompt},
+            {"role": Role.USER, "content": task},
+        ]
+
+        parent_emit = calling_ctx.io.emit if not silent else None
+
+        async def _stream_to(to_event) -> str:
+            text = ""
+            async for event in sub_agent.stream(child_messages):
+                if isinstance(event, Result):
+                    text = event.text
+                elif parent_emit and (out := to_event(event)):
+                    await parent_emit(out)
+            return text
+
         if not background:
             try:
-                return await asyncio.wait_for(
-                    sub_agent.run(task),
-                    timeout=timeout,
-                )
+                return await asyncio.wait_for(_stream_to(agent_event_to_sse), timeout=timeout)
             except TimeoutError:
                 return f"Error: Sub-agent timed out after {timeout}s"
 
-        # Capture emit now — calling_ctx.io.emit may be nulled if the run
-        # is backgrounded before the sub-agent finishes.
-        captured_emit = calling_ctx.io.emit
+        registry = calling_ctx.background_tasks
+        task_id = registry.generate_id()
+        label = task[:80]
+
+        def _to_bg_event(event):
+            if isinstance(event, ToolStarted):
+                detail = event.display_name or event.name
+            elif isinstance(event, ToolCompleted):
+                detail = f"{event.display_name or event.name}: {event.preview}"
+            else:
+                return None
+            return BackgroundTaskEvent(task_id=task_id, command=label, status="activity", detail=detail)
 
         async def _run_background():
             try:
-                result = await asyncio.wait_for(sub_agent.run(task), timeout=timeout)
+                result = await asyncio.wait_for(_stream_to(_to_bg_event), timeout=timeout)
                 status = "completed"
             except asyncio.CancelledError:
                 return
@@ -152,7 +148,7 @@ def create_spawn_fn(
                     result=result,
                     label=label,
                     status=status,
-                    emit=captured_emit,
+                    emit=parent_emit,
                 )
             except Exception:
                 _logger.exception("Background task %s delivery failed", task_id)

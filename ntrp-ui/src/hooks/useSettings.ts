@@ -22,7 +22,7 @@ export interface AgentSettings {
   consolidationInterval: number;
 }
 
-export const SIDEBAR_SECTION_IDS = ["models", "context", "usage", "sources", "automations", "sessions", "memory_stats"] as const;
+export const SIDEBAR_SECTION_IDS = ["models", "context", "usage", "integrations", "automations", "sessions", "memory_stats"] as const;
 export type SidebarSectionId = (typeof SIDEBAR_SECTION_IDS)[number];
 
 export type SidebarSettings = Record<SidebarSectionId, boolean>;
@@ -52,7 +52,7 @@ const defaultSettings: Settings = {
     models: true,
     context: true,
     usage: true,
-    sources: true,
+    integrations: true,
     automations: true,
     sessions: true,
     memory_stats: false,
@@ -78,10 +78,15 @@ function loadSettings(): Settings {
 
       if (!themeNames.includes(ui.theme)) ui.theme = defaultSettings.ui.theme;
       if (!(accentNames as readonly string[]).includes(ui.accentColor)) ui.accentColor = defaultSettings.ui.accentColor;
+      const sidebar = { ...defaultSettings.sidebar, ...parsed.sidebar };
+      // Legacy key migration
+      if (parsed.sidebar && "sources" in parsed.sidebar && !("integrations" in parsed.sidebar)) {
+        sidebar.integrations = parsed.sidebar.sources;
+      }
       return {
         ui,
         agent: { ...defaultSettings.agent, ...parsed.agent },
-        sidebar: { ...defaultSettings.sidebar, ...parsed.sidebar },
+        sidebar,
       };
     }
   } catch {

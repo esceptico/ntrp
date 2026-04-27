@@ -10,6 +10,9 @@ from ntrp.config import Config, get_config
 from ntrp.core.factory import AgentConfig
 from ntrp.events.internal import FactCreated, FactDeleted, FactUpdated, MemoryCleared, RunCompleted, SourceChanged
 from ntrp.events.triggers import TRIGGER_EVENT_TYPES, TriggerEvent
+from ntrp.integrations import ALL_INTEGRATIONS, IntegrationRegistry
+from ntrp.integrations.calendar.client import MultiCalendarSource
+from ntrp.integrations.types import Indexable
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import init as llm_init
 from ntrp.llm.router import reset as llm_reset
@@ -25,14 +28,12 @@ from ntrp.notifiers.base import NotifierContext
 from ntrp.notifiers.service import NotifierService
 from ntrp.operator.runner import OperatorDeps
 from ntrp.server.indexer import Indexer
-from ntrp.server.sources import SourceManager
 from ntrp.server.state import RunRegistry
 from ntrp.server.stores import Stores
 from ntrp.services.config import ConfigService
 from ntrp.services.session import SessionService
 from ntrp.skills.registry import SkillRegistry
 from ntrp.skills.service import SkillService, get_skills_dirs
-from ntrp.sources.base import CalendarSource, Indexable
 from ntrp.tools.executor import ToolExecutor
 
 _logger = get_logger(__name__)
@@ -42,7 +43,8 @@ class Runtime:
     def __init__(self, config: Config | None = None):
         self.config = config or get_config()
         self.channel = Channel()
-        self.source_mgr = SourceManager(self.config, self.channel)
+        self.integrations = IntegrationRegistry(ALL_INTEGRATIONS)
+        self.integrations.sync(self.config)
         self.run_registry = RunRegistry()
 
         self.embedding = self.config.embedding
@@ -81,7 +83,7 @@ class Runtime:
 
     @property
     def tool_services(self) -> dict[str, object]:
-        services = dict(self.source_mgr.sources)
+        services: dict[str, object] = dict(self.integrations.clients)
         if self.memory:
             services["memory"] = self.memory
         if self.search_index:
@@ -112,7 +114,7 @@ class Runtime:
             self.config = get_config()
             await llm_reset()
             llm_init(self.config)
-            self.source_mgr.sync(self.config)
+            self.integrations.sync(self.config)
             await self._sync_embedding()
             await self._sync_memory()
             self._sync_indexables()
@@ -179,9 +181,9 @@ class Runtime:
     def _sync_indexables(self) -> None:
         prev = set(self.indexables.keys())
         self.indexables.clear()
-        for name, source in self.source_mgr.sources.items():
-            if isinstance(source, Indexable):
-                self.indexables[name] = source
+        for name, client in self.integrations.clients.items():
+            if isinstance(client, Indexable):
+                self.indexables[name] = client
         if self.memory:
             self.indexables["memory"] = MemoryIndexable(self.memory.db)
         if set(self.indexables.keys()) != prev:
@@ -208,7 +210,7 @@ class Runtime:
         self._connected = True
         _logger.info(
             "Runtime ready",
-            sources=len(self.source_mgr.sources),
+            integrations=len(self.integrations.clients),
             tools=len(self.executor.registry),
         )
 
@@ -218,9 +220,9 @@ class Runtime:
             self.search_index = self.indexer.index
 
     def _init_indexables(self) -> None:
-        for name, source in self.source_mgr.sources.items():
-            if isinstance(source, Indexable):
-                self.indexables[name] = source
+        for name, client in self.integrations.clients.items():
+            if isinstance(client, Indexable):
+                self.indexables[name] = client
 
     async def _init_memory(self) -> None:
         if self._memory_ready:
@@ -238,7 +240,7 @@ class Runtime:
         self.notifier_service = NotifierService(
             store=self.stores.notifiers,
             ctx=NotifierContext(
-                get_source=lambda name: self.source_mgr.sources.get(name),
+                get_source=lambda name: self.tool_services.get(name),
                 get_config_value=lambda key: getattr(self.config, key, None),
             ),
         )
@@ -293,14 +295,14 @@ class Runtime:
 
     # --- Queries ---
 
-    def get_available_sources(self) -> list[str]:
-        sources = self.source_mgr.get_available()
+    def get_available_integrations(self) -> list[str]:
+        ids = list(self.integrations.clients.keys())
         if self.memory:
-            sources.append("memory")
-        return sources
+            ids.append("memory")
+        return ids
 
-    def get_source_errors(self) -> dict[str, str]:
-        errors = dict(self.source_mgr.errors)
+    def get_integration_errors(self) -> dict[str, str]:
+        errors = dict(self.integrations.errors)
         if self.indexer and self.indexer.error:
             errors["index"] = self.indexer.error
         return errors
@@ -313,7 +315,7 @@ class Runtime:
             memory=self.memory,
             config=AgentConfig.from_config(self.config),
             channel=self.channel,
-            source_details=self.source_mgr.get_details(),
+            source_details={},
             create_session=self.stores.sessions.create,
             notifiers=self.notifier_service.list_summary() if self.notifier_service else [],
         )
@@ -353,11 +355,11 @@ class Runtime:
 
         async def on_source_changed(event: SourceChanged) -> None:
             name = event.source_name
-            source = self.source_mgr.sources.get(name)
-            if source and isinstance(source, Indexable):
-                self.indexables[name] = source
+            client = self.integrations.get_client(name)
+            if client and isinstance(client, Indexable):
+                self.indexables[name] = client
                 self.start_indexing()
-            elif source is None:
+            elif client is None:
                 self.indexables.pop(name, None)
                 await self.indexer.index.clear_source(name)
 
@@ -394,15 +396,14 @@ class Runtime:
             raise RuntimeError("Monitor state store is not initialized")
 
         self.monitor = Monitor(self.channel)
-        calendar_source = self.source_mgr.sources.get("calendar")
-        if calendar_source and isinstance(calendar_source, CalendarSource):
+        calendar_source = self.integrations.get_client("calendar")
+        if calendar_source and isinstance(calendar_source, MultiCalendarSource):
             self.monitor.register(CalendarMonitor(calendar_source, state_store=self.stores.monitor))
 
         self.monitor.start()
 
     async def sync_google_sources(self) -> None:
-        await self.source_mgr.reinit("gmail", self.config)
-        await self.source_mgr.reinit("calendar", self.config)
+        self.integrations.sync(self.config)
         await self.restart_monitor()
 
     async def restart_monitor(self) -> None:

@@ -6,7 +6,7 @@ const SIDEBAR_LABELS: Record<SidebarSectionId, string> = {
   models: "Models",
   context: "Context",
   usage: "Usage",
-  sources: "Sources",
+  integrations: "Integrations",
   automations: "Automations",
   sessions: "Sessions",
   memory_stats: "Memory",

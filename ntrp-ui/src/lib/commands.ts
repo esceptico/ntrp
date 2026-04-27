@@ -2,6 +2,7 @@ import type { SlashCommand } from "../types.js";
 
 export const COMMANDS = [
   { name: "new", description: "Start a new session" },
+  { name: "branch", description: "Fork current session into a new one with the same context" },
   { name: "sessions", description: "Switch, create, or delete sessions" },
   { name: "name", description: "Rename current session" },
   { name: "delete", description: "Delete a session" },

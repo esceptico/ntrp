@@ -4,6 +4,7 @@ import type { HistoryMessage, ImageBlock } from "../api/client.js";
 import { Status, type Status as StatusType } from "../lib/constants.js";
 import { convertHistoryToMessages } from "../lib/history.js";
 import {
+  branchSession,
   clearSession,
   purgeMemory,
   compactContext,
@@ -147,6 +148,27 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
       refreshSidebar();
     } else {
       addMessage({ role: "error", content: "Failed to create session" });
+    }
+    return true;
+  },
+
+  branch: async ({ config, sessionId, addMessage, switchSession, switchToSession, refreshSidebar }, args) => {
+    if (!sessionId) {
+      addMessage({ role: "error", content: "No active session to branch from" });
+      return true;
+    }
+    try {
+      const name = args.join(" ").trim() || undefined;
+      const branched = await branchSession(config, sessionId, name);
+      refreshSidebar();
+      const result = await switchSession(branched.session_id);
+      if (result) {
+        switchToSession(branched.session_id, convertHistoryToMessages(result.history));
+      } else {
+        switchToSession(branched.session_id);
+      }
+    } catch (error) {
+      addMessage({ role: "error", content: `Failed to branch session: ${error}` });
     }
     return true;
   },

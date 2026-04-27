@@ -8,11 +8,15 @@ export interface ThinkingEvent {
 export interface TextEvent {
   type: "text";
   content: string;
+  depth?: number;
+  parent_id?: string;
 }
 
 export interface TextDeltaEvent {
   type: "text_delta";
   content: string;
+  depth?: number;
+  parent_id?: string;
 }
 
 export interface SlashCommand {
@@ -55,8 +59,8 @@ export interface RunStartedEvent {
   type: "run_started";
   session_id: string;
   run_id: string;
-  sources: string[];
-  source_errors: Record<string, string>;
+  integrations: string[];
+  integration_errors: Record<string, string>;
   skip_approvals?: boolean;
   session_name?: string;
 }

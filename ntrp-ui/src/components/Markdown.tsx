@@ -37,7 +37,7 @@ function buildSyntaxStyle(dimmed: boolean) {
     "markup.italic": { fg: hex(fg), italic: true },
     "markup.strikethrough": { fg: hex(muted), dim: true },
     "markup.raw": { fg: hex(secondary), bg: elementBg ? hex(elementBg) : undefined },
-    "markup.raw.block": { fg: hex(fg) },
+    "markup.raw.block": { fg: hex(fg), bg: elementBg ? hex(elementBg) : undefined },
 
     // -- Links --
     "markup.link": { fg: hex(muted), dim: true },
@@ -130,6 +130,17 @@ export function Markdown({ children, dimmed, streaming }: MarkdownProps) {
     return () => { prev.destroy(); };
   }, [dimmed, tv]);
 
+  // OpenTUI's CodeRenderable defaults its text buffer fg to white, which
+  // leaks through for unstyled code (no filetype, tree-sitter miss, etc.)
+  // and renders invisibly on light themes. Override via renderNode.
+  const codeFg = dimmed ? colors.text.muted : colors.text.primary;
+  const renderNode = (token: { type: string }, context: { defaultRender: () => unknown }) => {
+    if (token.type !== "code") return null;
+    const renderable = context.defaultRender() as { fg?: unknown } | null;
+    if (renderable) renderable.fg = hex(codeFg);
+    return renderable as never;
+  };
+
   if (!content) return null;
 
   return (
@@ -138,6 +149,7 @@ export function Markdown({ children, dimmed, streaming }: MarkdownProps) {
       syntaxStyle={syntaxStyle}
       conceal
       streaming={streaming}
+      renderNode={renderNode}
     />
   );
 }

@@ -4,22 +4,29 @@ from datetime import UTC, datetime
 
 from ntrp.logging import get_logger
 from ntrp.notifiers.base import Notifier, NotifierContext
+from ntrp.integrations import ALL_INTEGRATIONS
 from ntrp.notifiers.bash import BashNotifier
-from ntrp.notifiers.email import EmailNotifier
 from ntrp.notifiers.models import NotifierConfig
 from ntrp.notifiers.store import NotifierStore
-from ntrp.notifiers.telegram import TelegramNotifier
 
 _logger = get_logger(__name__)
 NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
 
+# Builtin notifiers not yet migrated to integrations
+_BUILTIN_NOTIFIERS: list[type[Notifier]] = [BashNotifier]
+
 _NOTIFIER_CLASSES: dict[str, type[Notifier]] = {
-    cls.channel: cls for cls in [EmailNotifier, TelegramNotifier, BashNotifier]
+    cls.channel: cls
+    for cls in [
+        *_BUILTIN_NOTIFIERS,
+        *(i.notifier_class for i in ALL_INTEGRATIONS if i.notifier_class is not None),
+    ]
 }
 
 NOTIFIER_FIELDS: dict[str, list[str]] = {
     "email": ["from_account", "to_address"],
     "telegram": ["user_id"],
+    "slack": ["channel"],
     "bash": ["command"],
 }
 

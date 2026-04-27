@@ -8,8 +8,8 @@ from importlib.metadata import version
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from ntrp.agent import Role
 from ntrp.events.sse import BackgroundTaskEvent, TextDeltaEvent, TextEvent, TextMessageEndEvent, TextMessageStartEvent
-from ntrp.llm.types import Role
 from ntrp.server.bus import BusRegistry
 from ntrp.server.middleware import AuthMiddleware, SSEStreamingResponse, _extract_bearer_token
 from ntrp.server.routers.automation import router as automation_router
@@ -54,11 +54,13 @@ async def lifespan(app: FastAPI):
     runtime = Runtime()
     await runtime.connect()
     runtime.start_indexing()
+    bus_registry = BusRegistry()
+    runtime.scheduler.set_bus_registry(bus_registry)
     await runtime.start_scheduler()
     runtime.start_monitor()
     app.state.runtime = runtime
-    app.state.bus_registry = BusRegistry()
-    _install_shutdown_handlers(runtime, app.state.bus_registry)
+    app.state.bus_registry = bus_registry
+    _install_shutdown_handlers(runtime, bus_registry)
 
     try:
         yield

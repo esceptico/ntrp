@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from dataclasses import replace as dc_replace
 from datetime import UTC, datetime
 
@@ -64,8 +64,8 @@ async def seed_builtins(store: AutomationStore) -> None:
             changes: dict = {}
             if existing.cooldown_minutes is None and spec.cooldown_minutes is not None:
                 changes["cooldown_minutes"] = spec.cooldown_minutes
-            spec_triggers = [asdict(t) for t in spec.triggers]
-            existing_triggers = [asdict(t) for t in existing.triggers]
+            spec_triggers = [{"type": t.type, **t.params()} for t in spec.triggers]
+            existing_triggers = [{"type": t.type, **t.params()} for t in existing.triggers]
             if existing_triggers != spec_triggers:
                 changes["triggers"] = spec.triggers
                 time_triggers = [t for t in spec.triggers if isinstance(t, TimeTrigger)]

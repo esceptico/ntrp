@@ -1,10 +1,10 @@
-export const SECTION_IDS = ["connection", "apiKeys", "sources", "memory", "instructions", "context", "agent", "notifications", "skills", "mcp", "interface"] as const;
+export const SECTION_IDS = ["connection", "apiKeys", "integrations", "memory", "instructions", "context", "agent", "notifications", "skills", "mcp", "interface"] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 
 export const SECTION_LABELS = {
   connection: "Connection",
-  apiKeys: "API Keys",
-  sources: "Sources",
+  apiKeys: "Providers",
+  integrations: "Integrations",
   memory: "Memory",
   instructions: "Instructions",
   context: "Context",
@@ -39,25 +39,27 @@ export const MEMORY_NUMBER_ITEMS: NumberItem[] = [
   { key: "consolidationInterval", label: "Interval", description: "Minutes between consolidation runs", min: 5, max: 120, step: 5 },
 ];
 
-export const SOURCE_ITEMS = ["vault", "google", "web"] as const;
-export type SourceItem = (typeof SOURCE_ITEMS)[number];
+export const INTEGRATION_ITEMS = ["vault", "google", "web"] as const;
+export type IntegrationItem = (typeof INTEGRATION_ITEMS)[number];
 
-export const SOURCE_LABELS = {
+export const INTEGRATION_LABELS = {
   vault: "Notes",
   google: "Google",
   web: "Web Search",
-} satisfies Record<SourceItem, string>;
+} satisfies Record<IntegrationItem, string>;
 
-export const TOGGLEABLE_SOURCES: SourceItem[] = ["google"];
+export const TOGGLEABLE_INTEGRATIONS: IntegrationItem[] = ["google"];
 
-export const NOTIFIER_TYPE_ORDER = ["email", "telegram", "bash"] as const;
+export const NOTIFIER_TYPE_ORDER = ["email", "telegram", "slack", "bash"] as const;
 export const NOTIFIER_TYPE_LABELS: Record<string, string> = {
   email: "Email",
   telegram: "Telegram",
+  slack: "Slack",
   bash: "Bash",
 };
 export const NOTIFIER_TYPE_DESCRIPTIONS: Record<string, string> = {
   email: "Send via connected Gmail",
   telegram: "Send via Telegram bot",
+  slack: "Send via Slack bot",
   bash: "Run shell command",
 };

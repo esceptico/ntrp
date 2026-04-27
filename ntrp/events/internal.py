@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from ntrp.usage import Usage
+from ntrp.agent import Usage
 
 # --- Run lifecycle ---
 

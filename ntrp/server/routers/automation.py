@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+import asyncio
+import time
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ntrp.automation.models import Automation
 from ntrp.automation.service import AutomationService
 from ntrp.notifiers.service import NotifierService
+from ntrp.server.bus import BusRegistry
 from ntrp.server.deps import require_automation_service, require_notifier_service
+from ntrp.server.middleware import SSEStreamingResponse
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
     CreateAutomationRequest,
@@ -65,6 +70,51 @@ async def create_automation(
 async def list_automations(svc: AutomationService = Depends(require_automation_service)):
     automations = await svc.list_all()
     return {"automations": [_automation_to_dict(a) for a in automations]}
+
+
+KEEPALIVE_INTERVAL = 5
+SSE_KEEPALIVE = ": keepalive\n\n"
+AUTOMATION_BUS_KEY = "automation:events"
+
+
+async def _automation_event_stream(bus_registry: BusRegistry):
+    bus = bus_registry.get_or_create(AUTOMATION_BUS_KEY)
+    queue = bus.subscribe()
+    last_event_at = time.monotonic()
+    try:
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=0.5)
+            except TimeoutError:
+                if time.monotonic() - last_event_at >= KEEPALIVE_INTERVAL:
+                    last_event_at = time.monotonic()
+                    yield SSE_KEEPALIVE
+                continue
+
+            if event is None:
+                break
+
+            last_event_at = time.monotonic()
+            yield event.to_sse_string()
+            await asyncio.sleep(0)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        bus.unsubscribe(queue)
+
+
+@router.get("/automations/events")
+async def automation_events(request: Request):
+    bus_registry: BusRegistry = request.app.state.bus_registry
+    return SSEStreamingResponse(
+        _automation_event_stream(bus_registry),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/automations/{task_id}")

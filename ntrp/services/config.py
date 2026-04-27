@@ -1,7 +1,7 @@
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from ntrp.config import PERSIST_KEYS, PROVIDER_KEY_FIELDS, SERVICE_KEY_FIELDS
+from ntrp.config import PERSIST_KEYS, PROVIDER_KEY_FIELDS
 from ntrp.llm.models import Provider, get_models_by_provider
 from ntrp.settings import load_user_settings, save_user_settings
 
@@ -74,9 +74,15 @@ class ConfigService:
 
         await self._with_rollback(mutate)
 
+    def _valid_service_ids(self) -> set[str]:
+        from ntrp.integrations import ALL_INTEGRATIONS
+
+        return {f.key for i in ALL_INTEGRATIONS for f in i.service_fields}
+
     async def connect_service(self, service_id: str, api_key: str) -> None:
-        if service_id not in SERVICE_KEY_FIELDS:
-            raise ValueError(f"Unknown service: {service_id}. Available: {', '.join(SERVICE_KEY_FIELDS)}")
+        valid = self._valid_service_ids()
+        if service_id not in valid:
+            raise ValueError(f"Unknown service: {service_id}. Available: {', '.join(sorted(valid))}")
 
         def mutate(settings: dict) -> None:
             settings.setdefault("service_keys", {})[service_id] = api_key
@@ -84,8 +90,9 @@ class ConfigService:
         await self._with_rollback(mutate)
 
     async def disconnect_service(self, service_id: str) -> None:
-        if service_id not in SERVICE_KEY_FIELDS:
-            raise ValueError(f"Unknown service: {service_id}. Available: {', '.join(SERVICE_KEY_FIELDS)}")
+        valid = self._valid_service_ids()
+        if service_id not in valid:
+            raise ValueError(f"Unknown service: {service_id}. Available: {', '.join(sorted(valid))}")
 
         def mutate(settings: dict) -> None:
             service_keys = settings.get("service_keys", {})

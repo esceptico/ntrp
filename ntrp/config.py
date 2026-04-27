@@ -29,11 +29,6 @@ PROVIDER_KEY_FIELDS = {
     "openrouter": "openrouter_api_key",
 }
 
-SERVICE_KEY_FIELDS = {
-    "exa": "exa_api_key",
-    "telegram": "telegram_bot_token",
-}
-
 # provider_field → (default_chat, default_memory, default_embedding)
 MODEL_DEFAULTS = {
     "anthropic_api_key": ("claude-sonnet-4-6", "claude-sonnet-4-6", None),
@@ -105,6 +100,10 @@ class Config(BaseSettings):
 
     # Telegram
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
+
+    # Slack
+    slack_bot_token: str | None = Field(default=None, alias="SLACK_BOT_TOKEN")
+    slack_user_token: str | None = Field(default=None, alias="SLACK_USER_TOKEN")
 
     # Obsidian vault
     vault_path: Path | None = None
@@ -266,8 +265,19 @@ def get_config() -> Config:
         if getattr(config, field) is None and provider_id in settings.get("provider_keys", {}):
             setattr(config, field, settings["provider_keys"][provider_id])
 
-    for service_id, field in SERVICE_KEY_FIELDS.items():
-        if getattr(config, field) is None and service_id in settings.get("service_keys", {}):
-            setattr(config, field, settings["service_keys"][service_id])
+    # service_keys are keyed by Config attr name (e.g. "slack_bot_token").
+    # Legacy keys ("slack", "slack-user", "telegram", "exa") are migrated to
+    # their Config attr names on read.
+    _LEGACY_SERVICE_ID_MAP = {
+        "slack": "slack_bot_token",
+        "slack-user": "slack_user_token",
+        "telegram": "telegram_bot_token",
+        "exa": "exa_api_key",
+    }
+    stored_keys = settings.get("service_keys", {})
+    for stored_id, api_key in stored_keys.items():
+        attr = _LEGACY_SERVICE_ID_MAP.get(stored_id, stored_id)
+        if hasattr(config, attr) and getattr(config, attr) is None:
+            setattr(config, attr, api_key)
 
     return config

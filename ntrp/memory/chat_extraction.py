@@ -1,9 +1,9 @@
 from pydantic import BaseModel
 
+from ntrp.agent import Role
 from ntrp.constants import CONSOLIDATION_TEMPERATURE, SESSION_HANDOFF_MARKER
 from ntrp.core.prompts import env
 from ntrp.llm.router import get_completion_client
-from ntrp.llm.types import Role
 from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)

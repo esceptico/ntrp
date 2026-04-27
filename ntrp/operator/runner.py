@@ -1,18 +1,21 @@
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from coolname import generate_slug
 
+from ntrp.agent import Agent, Result, Role, Usage
 from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted, RunStarted
+from ntrp.events.sse import AutomationProgressEvent, ToolCallEvent, ToolResultEvent, agent_event_to_sse
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.formatting import format_session_memory
+from ntrp.server.bus import SessionBus
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
-from ntrp.usage import Usage
 
 
 @dataclass(frozen=True)
@@ -33,6 +36,7 @@ class RunRequest:
     source_id: str
     prompt_suffix: str = ""
     model: str | None = None
+    skip_approvals: bool = False
 
 
 @dataclass(frozen=True)
@@ -42,7 +46,7 @@ class RunResult:
     usage: Usage
 
 
-async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
+async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list[dict], str, str]:
     run_id = generate_slug(2)
 
     memory_context = None
@@ -59,6 +63,7 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
     system_prompt += request.prompt_suffix
 
     session_state = deps.create_session()
+    session_state.skip_approvals = request.skip_approvals
     executor = deps.executor
     tools = executor.get_tools() if request.writable else executor.get_tools(mutates=False)
 
@@ -70,25 +75,68 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
         executor=executor,
         config=agent_config,
         tools=tools,
-        system_prompt=system_prompt,
         session_state=session_state,
         channel=deps.channel,
         run_id=run_id,
     )
 
-    deps.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
-    output: str | None = None
-    try:
-        output = await agent.run(request.prompt)
-    finally:
-        deps.channel.publish(
-            RunCompleted(
-                run_id=run_id,
-                session_id=session_state.session_id,
-                messages=tuple(agent.messages),
-                usage=agent.usage,
-                result=output,
-            )
-        )
+    messages = [
+        {"role": Role.SYSTEM, "content": system_prompt},
+        {"role": Role.USER, "content": request.prompt},
+    ]
 
-    return RunResult(run_id=run_id, output=output, usage=agent.usage)
+    return agent, messages, run_id, session_state.session_id
+
+
+def _publish_completed(deps: OperatorDeps, run_id: str, session_id: str, messages: list, usage: Usage, result: str | None) -> None:
+    deps.channel.publish(
+        RunCompleted(
+            run_id=run_id,
+            session_id=session_id,
+            messages=tuple(messages),
+            usage=usage,
+            result=result,
+        )
+    )
+
+
+async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
+    agent, messages, run_id, session_id = await _prepare(deps, request)
+
+    deps.channel.publish(RunStarted(run_id=run_id, session_id=session_id))
+    agent_result = await agent.run(messages)
+    _publish_completed(deps, run_id, session_id, messages, agent_result.usage, agent_result.text)
+
+    return RunResult(run_id=run_id, output=agent_result.text, usage=agent_result.usage)
+
+
+async def run_agent_streaming(
+    deps: OperatorDeps, request: RunRequest, bus: SessionBus, task_id: str,
+) -> RunResult:
+    agent, messages, run_id, session_id = await _prepare(deps, request)
+
+    deps.channel.publish(RunStarted(run_id=run_id, session_id=session_id))
+
+    result_text: str | None = None
+    usage = Usage()
+    gen = agent.stream(messages)
+    try:
+        async for item in gen:
+            if isinstance(item, Result):
+                result_text = item.text
+                usage = item.usage
+            else:
+                sse = agent_event_to_sse(item)
+                if isinstance(sse, ToolCallEvent):
+                    label = sse.display_name or sse.name
+                    await bus.emit(AutomationProgressEvent(task_id=task_id, status=f"{label}..."))
+                elif isinstance(sse, ToolResultEvent):
+                    label = sse.display_name or sse.name
+                    status = f"{label}: {sse.preview}" if sse.preview else label
+                    await bus.emit(AutomationProgressEvent(task_id=task_id, status=status))
+    except asyncio.CancelledError:
+        pass
+
+    _publish_completed(deps, run_id, session_id, messages, usage, result_text)
+
+    return RunResult(run_id=run_id, output=result_text, usage=usage)

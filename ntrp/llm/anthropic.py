@@ -4,10 +4,7 @@ from collections.abc import AsyncGenerator
 import anthropic
 from pydantic import BaseModel
 
-from ntrp.core.content import render_context
-from ntrp.llm.base import CompletionClient
-from ntrp.llm.models import get_model
-from ntrp.llm.types import (
+from ntrp.agent import (
     Choice,
     CompletionResponse,
     FinishReason,
@@ -17,6 +14,9 @@ from ntrp.llm.types import (
     ToolCall,
     Usage,
 )
+from ntrp.core.content import render_context
+from ntrp.llm.base import CompletionClient
+from ntrp.llm.models import get_model
 from ntrp.llm.utils import blocks_to_text, parse_args
 
 _FINISH_REASONS: dict[str, FinishReason] = {
@@ -158,10 +158,11 @@ class AnthropicClient(CompletionClient):
         }
         optional = {
             "system": system,
-            "temperature": temperature,
             "tools": tools,
             "tool_choice": tool_choice,
         }
+        if temperature is not None and "opus-4-7" not in model:
+            optional["temperature"] = temperature
         request.update({k: v for k, v in optional.items() if v is not None})
         if extra := kwargs.get("extra_body"):
             request.update(extra)
