@@ -16,6 +16,7 @@ class ChatRequest(BaseModel):
     context: list[dict] = Field(default_factory=list)
     skip_approvals: bool = False
     session_id: str | None = None
+    client_id: str | None = None
 
 
 class ToolResultRequest(BaseModel):
