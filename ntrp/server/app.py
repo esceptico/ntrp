@@ -226,9 +226,13 @@ async def chat_message(
     # If agent is already running, queue message for safe injection
     active_run = runtime.run_registry.get_active_run(session_id)
     if active_run:
-        active_run.inject_queue.append(
-            {"role": Role.USER, "content": build_user_content(request.message, images, context)}
-        )
+        entry: dict = {
+            "role": Role.USER,
+            "content": build_user_content(request.message, images, context),
+        }
+        if request.client_id:
+            entry["client_id"] = request.client_id
+        active_run.inject_queue.append(entry)
         return {"run_id": active_run.run_id, "session_id": session_id}
 
     try:
