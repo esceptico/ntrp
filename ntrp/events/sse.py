@@ -21,6 +21,7 @@ class EventType(StrEnum):
     RUN_ERROR = "run_error"
     RUN_CANCELLED = "run_cancelled"
     RUN_BACKGROUNDED = "run_backgrounded"
+    MESSAGE_INGESTED = "message_ingested"
     AUTOMATION_PROGRESS = "automation_progress"
     AUTOMATION_FINISHED = "automation_finished"
 
@@ -160,6 +161,13 @@ class RunCancelledEvent(SSEEvent):
 @dataclass(frozen=True)
 class RunBackgroundedEvent(SSEEvent):
     type: EventType = field(default=EventType.RUN_BACKGROUNDED, init=False)
+    run_id: str
+
+
+@dataclass(frozen=True)
+class MessageIngestedEvent(SSEEvent):
+    type: EventType = field(default=EventType.MESSAGE_INGESTED, init=False)
+    client_id: str
     run_id: str
 
 
