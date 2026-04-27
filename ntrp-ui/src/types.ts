@@ -119,6 +119,11 @@ export interface TextMessageEndEvent {
   message_id: string;
 }
 
+export interface MessageIngestedEvent {
+  type: "message_ingested";
+  client_id: string;
+  run_id: string;
+}
 
 export type ServerEvent =
   | ThinkingEvent
@@ -135,7 +140,8 @@ export type ServerEvent =
   | RunFinishedEvent
   | RunErrorEvent
   | RunCancelledEvent
-  | RunBackgroundedEvent;
+  | RunBackgroundedEvent
+  | MessageIngestedEvent;
 
 export interface Message {
   id?: string;
