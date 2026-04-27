@@ -65,3 +65,60 @@ def test_post_chat_message_stores_client_id_when_run_active(client_with_active_r
     assert entry["role"] == "user"
     assert entry["client_id"] == "cid-1"
     assert entry["content"] == "follow-up"
+
+
+import asyncio
+
+from ntrp.events.sse import MessageIngestedEvent
+from ntrp.server.bus import SessionBus
+from ntrp.server.state import RunState
+
+
+def _drain_factory(bus: SessionBus, run: RunState):
+    """Mirror the closure built inside services.chat.run_chat for testing."""
+    pending_messages: list[dict] = []
+    run.inject_queue = pending_messages
+
+    from ntrp.services.chat import _build_get_pending  # to be added in Step 3
+
+    return pending_messages, _build_get_pending(pending_messages, bus, run)
+
+
+@pytest.mark.asyncio
+async def test_drain_emits_ingested_for_entries_with_client_id():
+    bus = SessionBus(session_id="sess-1")
+    run = RunState(run_id="cool-otter", session_id="sess-1")
+    pending, get_pending = _drain_factory(bus, run)
+    queue = bus.subscribe()
+
+    pending.append({"role": "user", "content": "first", "client_id": "cid-1"})
+    pending.append({"role": "user", "content": "second"})  # background task, no client_id
+    pending.append({"role": "user", "content": "third", "client_id": "cid-3"})
+
+    drained = await get_pending()
+
+    # client_id is stripped before delivery to the LLM
+    assert drained == [
+        {"role": "user", "content": "first"},
+        {"role": "user", "content": "second"},
+        {"role": "user", "content": "third"},
+    ]
+    # Two ingestion events emitted, in order
+    events = [queue.get_nowait() for _ in range(2)]
+    assert all(isinstance(e, MessageIngestedEvent) for e in events)
+    assert [e.client_id for e in events] == ["cid-1", "cid-3"]
+    assert all(e.run_id == "cool-otter" for e in events)
+    assert queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_drain_no_events_when_queue_empty():
+    bus = SessionBus(session_id="sess-1")
+    run = RunState(run_id="cool-otter", session_id="sess-1")
+    _, get_pending = _drain_factory(bus, run)
+    queue = bus.subscribe()
+
+    drained = await get_pending()
+
+    assert drained == []
+    assert queue.empty()

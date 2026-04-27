@@ -12,6 +12,7 @@ from ntrp.core.prompts import INIT_INSTRUCTION, build_system_blocks
 from ntrp.core.usage_tracker import UsageTracker
 from ntrp.events.internal import RunCompleted, RunStarted
 from ntrp.events.sse import (
+    MessageIngestedEvent,
     RunBackgroundedEvent,
     RunErrorEvent,
     RunFinishedEvent,
@@ -268,6 +269,25 @@ async def _drain_backgrounded(
             _logger.exception("Backgrounded final save failed (run_id=%s)", ctx.run.run_id)
 
 
+def _build_get_pending(pending: list[dict], bus: SessionBus, run: RunState):
+    """Closure that drains pending injects and emits message_ingested per client entry."""
+
+    async def _get_pending() -> list[dict]:
+        if not pending:
+            return []
+        batch = list(pending)
+        pending.clear()
+        for entry in batch:
+            client_id = entry.pop("client_id", None)
+            if client_id:
+                await bus.emit(
+                    MessageIngestedEvent(client_id=client_id, run_id=run.run_id)
+                )
+        return batch
+
+    return _get_pending
+
+
 async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
     """Run agent loop, push all events to bus. Fire-and-forget."""
     run = ctx.run
@@ -313,14 +333,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         run.status = RunStatus.RUNNING
         run_finished = False
 
-        async def _get_pending() -> list[dict]:
-            if not pending_messages:
-                return []
-            batch = list(pending_messages)
-            pending_messages.clear()
-            return batch
-
-        agent.hooks.get_pending_messages = _get_pending
+        agent.hooks.get_pending_messages = _build_get_pending(pending_messages, bus, run)
 
         async def _on_bg_result(messages: list[dict]) -> None:
             if not run_finished:
