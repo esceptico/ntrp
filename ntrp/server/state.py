@@ -63,6 +63,28 @@ class RunState:
         self.updated_at = datetime.now(UTC)
         return batch
 
+    def get_status(self, now: datetime) -> dict:
+        age_seconds = max(0, int((now - self.created_at).total_seconds()))
+        idle_seconds = max(0, int((now - self.updated_at).total_seconds()))
+        approval_responses_pending = self.approval_queue.qsize() if self.approval_queue else 0
+        return {
+            "run_id": self.run_id,
+            "session_id": self.session_id,
+            "status": self.status.value,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "age_seconds": age_seconds,
+            "idle_seconds": idle_seconds,
+            "message_count": len(self.messages),
+            "pending_injections": self.pending_injection_count,
+            "approval_queue_open": self.approval_queue is not None,
+            "approval_responses_pending": approval_responses_pending,
+            "task_running": self.task is not None and not self.task.done(),
+            "drain_task_running": self.drain_task is not None and not self.drain_task.done(),
+            "cancelled": self.cancelled,
+            "backgrounded": self.backgrounded,
+        }
+
 
 class RunRegistry:
     def __init__(self):
@@ -84,7 +106,15 @@ class RunRegistry:
 
     @property
     def active_run_count(self) -> int:
-        return len(self._active_by_session)
+        return len(self.list_active_runs())
+
+    def list_active_runs(self) -> list[RunState]:
+        active = []
+        for session_id in list(self._active_by_session):
+            run = self.get_active_run(session_id)
+            if run:
+                active.append(run)
+        return active
 
     def get_run(self, run_id: str) -> RunState | None:
         return self._runs.get(run_id)
@@ -163,3 +193,19 @@ class RunRegistry:
                 self._bg_registries.pop(session_id, None)
 
         return len(to_remove)
+
+    def get_status(self, now: datetime | None = None) -> dict:
+        observed_at = now or datetime.now(UTC)
+        active_runs = self.list_active_runs()
+        background_task_sessions = [
+            {"session_id": session_id, "pending_tasks": registry.pending_count}
+            for session_id, registry in sorted(self._bg_registries.items())
+            if registry.pending_count
+        ]
+        return {
+            "observed_at": observed_at.isoformat(),
+            "total_retained": len(self._runs),
+            "active_count": len(active_runs),
+            "active_runs": [run.get_status(observed_at) for run in active_runs],
+            "background_task_sessions": background_task_sessions,
+        }

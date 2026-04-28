@@ -41,8 +41,12 @@ This notebook tracks the backend architecture cleanup that replaces the old in-p
   - `RunState` now owns queue, cancel, and drain operations for same-run user input injection.
   - Chat API and chat service no longer scan or clear the raw queue list directly.
   - The backend protocol docs now describe the injection queue as part of the session SSE/run lifecycle, not as a generic bus.
+- Stage 15: active run lifecycle visibility.
+  - `RunRegistry` exposes a content-free status snapshot for retained and active runs.
+  - `/chat/runs/status` reports active run lifecycle flags, injection counts, and background task session counts without leaking messages.
+  - Run observability now follows the same pattern as outbox and scheduler status endpoints.
 
 ## Next candidates
 
 - Consider UI or CLI exposure now that the backend endpoint fields are stable.
-- Consider operational visibility for active runs if debugging run lifecycle state remains painful.
+- Consider extracting stronger typed internal models for run-side protocol entries if raw message dictionaries keep spreading.

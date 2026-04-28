@@ -433,6 +433,9 @@ class Runtime:
             return {"status": "disabled", "running_tasks": 0, "registered_handlers": []}
         return await self.scheduler.get_status()
 
+    async def get_chat_runs_status(self) -> dict:
+        return self.run_registry.get_status()
+
     async def get_outbox_status(self) -> dict:
         if not self.stores:
             return {"status": "disabled"}

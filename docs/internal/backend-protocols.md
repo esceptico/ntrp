@@ -68,6 +68,10 @@ Agent input injection:
 - `AgentHooks.get_pending_messages` drains queued injections through `RunState.drain_injections()` at agent loop boundaries.
 - Client-stamped entries emit `message_ingested` before delivery to the LLM; `client_id` is stripped from the message passed to the agent.
 
+Operational endpoint:
+
+- `GET /chat/runs/status`: content-free run lifecycle visibility. It reports retained/active run counts, active run timestamps, pending injection counts, approval channel state, task/drain flags, and background task session counts. It does not return prompt text, message bodies, tool arguments, or injection contents.
+
 Properties:
 
 - In-memory only.

@@ -34,6 +34,37 @@ class BackgroundRequest(BaseModel):
     run_id: str
 
 
+class ChatRunStatusResponse(BaseModel):
+    run_id: str
+    session_id: str
+    status: Literal["pending", "running", "completed", "cancelled", "error"]
+    created_at: str
+    updated_at: str
+    age_seconds: int
+    idle_seconds: int
+    message_count: int
+    pending_injections: int
+    approval_queue_open: bool
+    approval_responses_pending: int
+    task_running: bool
+    drain_task_running: bool
+    cancelled: bool
+    backgrounded: bool
+
+
+class BackgroundTaskSessionStatusResponse(BaseModel):
+    session_id: str
+    pending_tasks: int
+
+
+class ChatRunsStatusResponse(BaseModel):
+    observed_at: str
+    total_retained: int
+    active_count: int
+    active_runs: list[ChatRunStatusResponse] = Field(default_factory=list)
+    background_task_sessions: list[BackgroundTaskSessionStatusResponse] = Field(default_factory=list)
+
+
 OutboxEventId = Annotated[int, Field(gt=0)]
 
 

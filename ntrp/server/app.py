@@ -25,6 +25,7 @@ from ntrp.server.schemas import (
     BackgroundRequest,
     CancelRequest,
     ChatRequest,
+    ChatRunsStatusResponse,
     HealthResponse,
     OutboxPruneResponse,
     OutboxReplayResponse,
@@ -157,6 +158,11 @@ async def get_index_status(runtime: Runtime = Depends(get_runtime)):
 @app.get("/scheduler/status", response_model=SchedulerStatusResponse, response_model_exclude_none=True)
 async def get_scheduler_status(runtime: Runtime = Depends(get_runtime)):
     return await runtime.get_scheduler_status()
+
+
+@app.get("/chat/runs/status", response_model=ChatRunsStatusResponse)
+async def get_chat_runs_status(runtime: Runtime = Depends(get_runtime)):
+    return await runtime.get_chat_runs_status()
 
 
 @app.post("/index/start")
