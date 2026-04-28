@@ -14,6 +14,22 @@ This document describes the backend wiring after the generic in-process channel 
 
 The rule is simple: UI streaming is transient, cross-workflow side effects go through the outbox, and automation triggering is owned by the scheduler.
 
+## Persistence ownership
+
+The tables below are implementation details of their owning store. Other modules should depend on the store methods, not on the table names or SQL shape.
+
+| Table | Owner module | Public protocol |
+| --- | --- | --- |
+| `outbox_events` | `ntrp.outbox.store` | `OutboxStore` enqueue, claim, status, replay, prune methods |
+| `scheduled_tasks` | `ntrp.automation.store` | `AutomationStore` task CRUD and scheduler state methods |
+| `automation_event_dedupe` | `ntrp.automation.store` | `AutomationStore.claim_event()` and event dedupe helpers |
+| `automation_event_queue` | `ntrp.automation.store` | `AutomationStore` event queue methods |
+| `automation_count_state` | `ntrp.automation.store` | `AutomationStore` count trigger methods |
+| `chat_extraction_state` | `ntrp.automation.store` | Chat extraction cursor methods |
+| `monitor_state` | `ntrp.monitor.store` | `MonitorStateStore` namespace state methods |
+
+There is an architecture test that checks these table names do not appear in production modules outside their owner files. Tests may still inspect tables directly when they are exercising a store as a persistence adapter.
+
 ## Startup wiring
 
 `ntrp.server.app.lifespan` is the composition root for backend runtime protocols:

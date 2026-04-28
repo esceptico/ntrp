@@ -28,6 +28,9 @@ This notebook tracks the backend architecture cleanup that replaces the old in-p
 - Stage 10: stabilized outbox API response contracts.
   - `/health`, `/outbox/status`, `/outbox/dead/replay`, and `/outbox/completed` now have explicit response schemas.
   - OpenAPI exposes stable outbox endpoint response models for future clients.
+- Stage 11: guarded persistence ownership boundaries.
+  - Backend protocol docs now map tables to their owner stores.
+  - Architecture test prevents production modules from directly referencing owned protocol tables.
 
 ## Next candidates
 
