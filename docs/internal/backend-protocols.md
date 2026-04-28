@@ -6,9 +6,9 @@ This document describes the backend wiring after the generic in-process channel 
 
 | Protocol | Owner | Transport | Durable | Main producers | Main consumers |
 | --- | --- | --- | --- | --- | --- |
-| Session SSE stream | `ntrp.server.bus` and `ntrp.server.app` | In-process `asyncio.Queue` | No | Chat and agent run loop | `/chat/events/{session_id}` clients |
+| Session SSE stream | `ntrp.server.bus` and `ntrp.server.routers.chat` | In-process `asyncio.Queue` | No | Chat and agent run loop | `/chat/events/{session_id}` clients |
 | Automation SSE stream | `ntrp.automation.scheduler` | In-process `asyncio.Queue` under `automation:events` | No | Scheduler run progress | `/automations/events` clients |
-| Outbox | `ntrp.outbox` | SQLite table `outbox_events` | Yes | Chat, operator, CLI, memory service | `OutboxWorker` handlers in `Runtime` |
+| Outbox | `ntrp.outbox` | SQLite table `outbox_events` | Yes | Chat, operator, CLI, memory service | `OutboxWorker` handlers in `RuntimeOutbox` |
 | Scheduler triggers | `ntrp.automation` | Scheduler methods and SQLite state | Mixed | Time tick, run completion, monitor events, manual run | Automation runner and built-in handlers |
 | Monitor events | `ntrp.monitor` | Direct async callback | No, then scheduler-owned persistence | Calendar monitor | `Scheduler.fire_event` |
 
@@ -47,7 +47,7 @@ Shutdown is the reverse ownership order: active runs are cancelled, monitor/outb
 Source files:
 
 - `ntrp/server/bus.py`
-- `ntrp/server/app.py`
+- `ntrp/server/routers/chat.py`
 - `ntrp/services/chat.py`
 
 The session stream exists only to deliver live UI events to connected clients. It is not a backend event bus.
@@ -55,7 +55,7 @@ The session stream exists only to deliver live UI events to connected clients. I
 Data flow:
 
 1. `POST /chat/message` creates or finds a session run.
-2. The app gets a `SessionBus` from `BusRegistry` for that session.
+2. The chat router gets a `SessionBus` from `BusRegistry` for that session.
 3. `run_chat(ctx, bus)` publishes `SSEEvent` objects while the agent runs.
 4. `GET /chat/events/{session_id}` subscribes to the same `SessionBus` and serializes events as SSE.
 5. When the stream closes and no active run remains, the bus is removed.

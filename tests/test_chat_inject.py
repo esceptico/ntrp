@@ -4,8 +4,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ntrp.events.sse import MessageIngestedEvent
-from ntrp.server.app import _get_bus_registry, app
+from ntrp.server.app import app
 from ntrp.server.bus import BusRegistry, SessionBus
+from ntrp.server.deps import get_bus_registry
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import ChatRequest
 from ntrp.server.state import RunRegistry, RunState, RunStatus
@@ -43,12 +44,12 @@ def client_with_active_run():
     run.status = RunStatus.RUNNING
 
     app.dependency_overrides[get_runtime] = lambda: runtime
-    app.dependency_overrides[_get_bus_registry] = lambda: BusRegistry()
+    app.dependency_overrides[get_bus_registry] = lambda: BusRegistry()
 
     yield TestClient(app), run
 
     app.dependency_overrides.pop(get_runtime, None)
-    app.dependency_overrides.pop(_get_bus_registry, None)
+    app.dependency_overrides.pop(get_bus_registry, None)
 
 
 def test_post_chat_message_stores_client_id_when_run_active(client_with_active_run):
@@ -124,12 +125,12 @@ def client_no_active_run():
     # No run created → get_active_run always returns None
 
     app.dependency_overrides[get_runtime] = lambda: runtime
-    app.dependency_overrides[_get_bus_registry] = lambda: BusRegistry()
+    app.dependency_overrides[get_bus_registry] = lambda: BusRegistry()
 
     yield TestClient(app)
 
     app.dependency_overrides.pop(get_runtime, None)
-    app.dependency_overrides.pop(_get_bus_registry, None)
+    app.dependency_overrides.pop(get_bus_registry, None)
 
 
 def test_delete_inject_returns_200_when_entry_present(client_with_active_run):

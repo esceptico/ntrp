@@ -1,5 +1,6 @@
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 
+from ntrp.server.bus import BusRegistry
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.runtime.automation import AutomationRuntime
 from ntrp.server.runtime.knowledge import KnowledgeRuntime
@@ -49,6 +50,10 @@ def require_skill_service(runtime: Runtime = Depends(get_runtime)):
 
 def require_run_registry(runtime: Runtime = Depends(get_runtime)) -> RunRegistry:
     return runtime.run_registry
+
+
+def get_bus_registry(request: Request) -> BusRegistry:
+    return request.app.state.bus_registry
 
 
 def require_knowledge_runtime(runtime: Runtime = Depends(get_runtime)) -> KnowledgeRuntime:
