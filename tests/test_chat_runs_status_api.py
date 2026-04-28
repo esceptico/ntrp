@@ -5,7 +5,11 @@ from ntrp.server.runtime import get_runtime
 
 
 class _Runtime:
-    async def get_chat_runs_status(self):
+    @property
+    def run_registry(self):
+        return self
+
+    def get_status(self):
         return {
             "observed_at": "2026-04-28T00:00:00+00:00",
             "total_retained": 3,

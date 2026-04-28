@@ -1,6 +1,10 @@
 from fastapi import Depends, HTTPException
 
 from ntrp.server.runtime import Runtime, get_runtime
+from ntrp.server.runtime.automation import AutomationRuntime
+from ntrp.server.runtime.knowledge import KnowledgeRuntime
+from ntrp.server.state import RunRegistry
+from ntrp.tools.executor import ToolExecutor
 
 
 def require_memory(runtime: Runtime = Depends(get_runtime)):
@@ -41,3 +45,25 @@ def require_skill_service(runtime: Runtime = Depends(get_runtime)):
     if not runtime.skill_service:
         raise HTTPException(status_code=503, detail="Skill service not available")
     return runtime.skill_service
+
+
+def require_run_registry(runtime: Runtime = Depends(get_runtime)) -> RunRegistry:
+    return runtime.run_registry
+
+
+def require_knowledge_runtime(runtime: Runtime = Depends(get_runtime)) -> KnowledgeRuntime:
+    if not runtime.knowledge:
+        raise HTTPException(status_code=503, detail="Knowledge runtime not available")
+    return runtime.knowledge
+
+
+def require_automation_runtime(runtime: Runtime = Depends(get_runtime)) -> AutomationRuntime:
+    if not runtime.automation:
+        raise HTTPException(status_code=503, detail="Automation runtime not available")
+    return runtime.automation
+
+
+def require_tool_executor(runtime: Runtime = Depends(get_runtime)) -> ToolExecutor:
+    if not runtime.executor:
+        raise HTTPException(status_code=503, detail="Tool executor not available")
+    return runtime.executor

@@ -5,6 +5,10 @@ from ntrp.server.runtime import get_runtime
 
 
 class _Runtime:
+    @property
+    def automation(self):
+        return self
+
     async def get_scheduler_status(self):
         return {
             "status": "running",

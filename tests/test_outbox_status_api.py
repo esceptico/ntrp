@@ -15,6 +15,10 @@ class _Runtime:
     replayed_event_ids = None
     pruned = None
 
+    @property
+    def automation(self):
+        return self
+
     async def get_outbox_health(self):
         return {
             "worker_running": True,

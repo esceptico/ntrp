@@ -12,6 +12,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from ntrp.agent import Role
 from ntrp.events.sse import BackgroundTaskEvent, TextDeltaEvent, TextEvent, TextMessageEndEvent, TextMessageStartEvent
 from ntrp.server.bus import BusRegistry
+from ntrp.server.deps import (
+    require_automation_runtime,
+    require_knowledge_runtime,
+    require_run_registry,
+    require_tool_executor,
+)
 from ntrp.server.middleware import AuthMiddleware, SSEStreamingResponse, _extract_bearer_token
 from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.data import router as data_router
@@ -21,6 +27,8 @@ from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.settings import router as settings_router
 from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.runtime import Runtime, get_runtime
+from ntrp.server.runtime.automation import AutomationRuntime
+from ntrp.server.runtime.knowledge import KnowledgeRuntime
 from ntrp.server.schemas import (
     BackgroundRequest,
     CancelRequest,
@@ -37,6 +45,7 @@ from ntrp.server.schemas import (
 from ntrp.server.state import RunRegistry, RunStatus
 from ntrp.services.chat import build_user_content, prepare_chat, run_chat
 from ntrp.settings import verify_api_key
+from ntrp.tools.executor import ToolExecutor
 
 SSE_KEEPALIVE = ":\n\n"
 KEEPALIVE_INTERVAL = 5
@@ -130,50 +139,53 @@ async def health(request: Request, runtime: Runtime = Depends(get_runtime)):
 
 
 @app.get("/outbox/status", response_model=OutboxStatusResponse)
-async def get_outbox_status(runtime: Runtime = Depends(get_runtime)):
-    return await runtime.get_outbox_status()
+async def get_outbox_status(automation: AutomationRuntime = Depends(require_automation_runtime)):
+    return await automation.get_outbox_status()
 
 
 @app.post("/outbox/dead/replay", response_model=OutboxReplayResponse)
-async def replay_outbox_dead_events(request: ReplayOutboxRequest, runtime: Runtime = Depends(get_runtime)):
-    return await runtime.replay_outbox_dead_events(request.event_ids)
+async def replay_outbox_dead_events(
+    request: ReplayOutboxRequest,
+    automation: AutomationRuntime = Depends(require_automation_runtime),
+):
+    return await automation.replay_outbox_dead_events(request.event_ids)
 
 
 @app.delete("/outbox/completed", response_model=OutboxPruneResponse)
 async def prune_outbox_completed(
     older_than_days: int = Query(default=7, ge=1, le=3650),
     limit: int = Query(default=1000, ge=1, le=10000),
-    runtime: Runtime = Depends(get_runtime),
+    automation: AutomationRuntime = Depends(require_automation_runtime),
 ):
     before = datetime.now(UTC) - timedelta(days=older_than_days)
-    result = await runtime.prune_outbox_completed(before=before, limit=limit)
+    result = await automation.prune_outbox_completed(before=before, limit=limit)
     return {**result, "older_than_days": older_than_days}
 
 
 @app.get("/index/status")
-async def get_index_status(runtime: Runtime = Depends(get_runtime)):
-    return await runtime.get_index_status()
+async def get_index_status(knowledge: KnowledgeRuntime = Depends(require_knowledge_runtime)):
+    return await knowledge.get_index_status()
 
 
 @app.get("/scheduler/status", response_model=SchedulerStatusResponse, response_model_exclude_none=True)
-async def get_scheduler_status(runtime: Runtime = Depends(get_runtime)):
-    return await runtime.get_scheduler_status()
+async def get_scheduler_status(automation: AutomationRuntime = Depends(require_automation_runtime)):
+    return await automation.get_scheduler_status()
 
 
 @app.get("/chat/runs/status", response_model=ChatRunsStatusResponse)
-async def get_chat_runs_status(runtime: Runtime = Depends(get_runtime)):
-    return await runtime.get_chat_runs_status()
+async def get_chat_runs_status(run_registry: RunRegistry = Depends(require_run_registry)):
+    return run_registry.get_status()
 
 
 @app.post("/index/start")
-async def start_indexing(runtime: Runtime = Depends(get_runtime)):
-    runtime.start_indexing()
+async def start_indexing(knowledge: KnowledgeRuntime = Depends(require_knowledge_runtime)):
+    knowledge.start_indexing()
     return {"status": "started"}
 
 
 @app.get("/tools")
-async def list_tools(runtime: Runtime = Depends(get_runtime)):
-    return {"tools": runtime.executor.get_tool_metadata()}
+async def list_tools(executor: ToolExecutor = Depends(require_tool_executor)):
+    return {"tools": executor.get_tool_metadata()}
 
 
 async def _event_stream(
@@ -239,10 +251,10 @@ async def chat_events(
     session_id: str,
     stream: bool = False,
     buses: BusRegistry = Depends(_get_bus_registry),
-    runtime: Runtime = Depends(get_runtime),
+    run_registry: RunRegistry = Depends(require_run_registry),
 ):
     return SSEStreamingResponse(
-        _event_stream(session_id, buses, runtime.run_registry, stream=stream),
+        _event_stream(session_id, buses, run_registry, stream=stream),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -303,9 +315,9 @@ async def chat_message(
 async def cancel_inject(
     client_id: str,
     session_id: str,
-    runtime: Runtime = Depends(get_runtime),
+    run_registry: RunRegistry = Depends(require_run_registry),
 ):
-    active_run = runtime.run_registry.get_active_run(session_id)
+    active_run = run_registry.get_active_run(session_id)
     if active_run is None:
         raise HTTPException(status_code=404, detail="No active run")
 
@@ -319,8 +331,8 @@ async def cancel_inject(
 
 
 @app.post("/tools/result")
-async def submit_tool_result(request: ToolResultRequest, runtime: Runtime = Depends(get_runtime)):
-    run = runtime.run_registry.get_run(request.run_id)
+async def submit_tool_result(request: ToolResultRequest, run_registry: RunRegistry = Depends(require_run_registry)):
+    run = run_registry.get_run(request.run_id)
 
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -341,14 +353,14 @@ async def submit_tool_result(request: ToolResultRequest, runtime: Runtime = Depe
 
 
 @app.post("/cancel")
-async def cancel_run(request: CancelRequest, runtime: Runtime = Depends(get_runtime)):
-    runtime.run_registry.cancel_run(request.run_id)
+async def cancel_run(request: CancelRequest, run_registry: RunRegistry = Depends(require_run_registry)):
+    run_registry.cancel_run(request.run_id)
     return {"status": "cancelled"}
 
 
 @app.post("/chat/background")
-async def background_run(request: BackgroundRequest, runtime: Runtime = Depends(get_runtime)):
-    run = runtime.run_registry.get_run(request.run_id)
+async def background_run(request: BackgroundRequest, run_registry: RunRegistry = Depends(require_run_registry)):
+    run = run_registry.get_run(request.run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     if run.status != RunStatus.RUNNING:
@@ -358,15 +370,19 @@ async def background_run(request: BackgroundRequest, runtime: Runtime = Depends(
 
 
 @app.get("/chat/background-tasks")
-async def list_background_tasks(session_id: str, runtime: Runtime = Depends(get_runtime)):
-    registry = runtime.run_registry.get_background_registry(session_id)
+async def list_background_tasks(session_id: str, run_registry: RunRegistry = Depends(require_run_registry)):
+    registry = run_registry.get_background_registry(session_id)
     pending = registry.list_pending()
     return {"tasks": [{"task_id": tid, "command": cmd} for tid, cmd in pending]}
 
 
 @app.post("/chat/background-tasks/{task_id}/cancel")
-async def cancel_background_task(task_id: str, session_id: str, runtime: Runtime = Depends(get_runtime)):
-    registry = runtime.run_registry.get_background_registry(session_id)
+async def cancel_background_task(
+    task_id: str,
+    session_id: str,
+    run_registry: RunRegistry = Depends(require_run_registry),
+):
+    registry = run_registry.get_background_registry(session_id)
     command = registry.cancel(task_id)
     if command is None:
         raise HTTPException(status_code=404, detail="Task not found or already done")
