@@ -1,17 +1,17 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-from ntrp.channel import Channel
 from ntrp.constants import (
     MONITOR_CALENDAR_DAYS,
     MONITOR_CALENDAR_LIMIT,
     MONITOR_EVENT_APPROACHING_HORIZON_MINUTES,
     MONITOR_POLL_INTERVAL,
 )
-from ntrp.events.triggers import EventApproaching
-from ntrp.logging import get_logger
-from ntrp.monitor.store import MonitorStateStore
+from ntrp.events.triggers import EventApproaching, TriggerEvent
 from ntrp.integrations.calendar.client import MultiCalendarSource
+from ntrp.logging import get_logger
+from ntrp.monitor.service import MonitorEventSink
+from ntrp.monitor.store import MonitorStateStore
 
 _logger = get_logger(__name__)
 
@@ -22,13 +22,13 @@ class CalendarMonitor:
     def __init__(self, source: MultiCalendarSource, state_store: MonitorStateStore):
         self._source = source
         self._state_store = state_store
-        self._channel: Channel | None = None
+        self._emit_event: MonitorEventSink | None = None
         self._task: asyncio.Task | None = None
 
-    def start(self, channel: Channel) -> None:
+    def start(self, emit_event: MonitorEventSink) -> None:
         if self._task is not None and not self._task.done():
             return
-        self._channel = channel
+        self._emit_event = emit_event
         self._task = asyncio.create_task(self._run())
 
     async def stop(self) -> None:
@@ -48,10 +48,17 @@ class CalendarMonitor:
     async def _loop(self) -> None:
         while True:
             events = await asyncio.to_thread(self._poll)
-            if self._channel:
-                for event in events:
-                    self._channel.publish(event)
+            await self._emit_events(events)
             await asyncio.sleep(MONITOR_POLL_INTERVAL)
+
+    async def _emit_events(self, events: list[TriggerEvent]) -> None:
+        if not self._emit_event:
+            return
+        for event in events:
+            try:
+                await self._emit_event(event)
+            except Exception:
+                _logger.exception("Failed to emit monitor event")
 
     def _poll(self) -> list[EventApproaching]:
         now = datetime.now(UTC)

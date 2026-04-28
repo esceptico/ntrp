@@ -10,7 +10,6 @@ from ntrp.channel import Channel
 from ntrp.config import Config, get_config
 from ntrp.core.factory import AgentConfig
 from ntrp.events.internal import SourceChanged
-from ntrp.events.triggers import TRIGGER_EVENT_TYPES, TriggerEvent
 from ntrp.integrations import ALL_INTEGRATIONS, IntegrationRegistry
 from ntrp.integrations.calendar.client import MultiCalendarSource
 from ntrp.integrations.types import Indexable
@@ -394,7 +393,6 @@ class Runtime:
 
         await seed_builtins(self.stores.automations)
         self.scheduler.start()
-        self._wire_event_triggers()
         if self.outbox_worker:
             self.outbox_worker.start()
 
@@ -422,19 +420,13 @@ class Runtime:
 
         return handler
 
-    def _wire_event_triggers(self) -> None:
-        async def on_trigger(event: TriggerEvent) -> None:
-            if self.scheduler:
-                await self.scheduler.fire_event(event)
-
-        for event_cls in TRIGGER_EVENT_TYPES:
-            self.channel.subscribe(event_cls, on_trigger)
-
     def start_monitor(self) -> None:
         if self.stores.monitor is None:
             raise RuntimeError("Monitor state store is not initialized")
+        if self.scheduler is None:
+            raise RuntimeError("Scheduler is not initialized")
 
-        self.monitor = Monitor(self.channel)
+        self.monitor = Monitor(self.scheduler.fire_event)
         calendar_source = self.integrations.get_client("calendar")
         if calendar_source and isinstance(calendar_source, MultiCalendarSource):
             self.monitor.register(CalendarMonitor(calendar_source, state_store=self.stores.monitor))
