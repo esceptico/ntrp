@@ -116,6 +116,7 @@ Source files:
 - `ntrp/outbox/store.py`
 - `ntrp/outbox/worker.py`
 - `ntrp/outbox/events.py`
+- `ntrp/server/runtime_outbox.py`
 - `ntrp/server/runtime.py`
 
 The outbox owns side effects that should survive a process crash or should not run inline with the producer.
@@ -161,6 +162,8 @@ Guarantees:
 Handler design requirement: every handler must be idempotent or safe under retry. `run.completed` is deduped at enqueue by run ID; memory index operations are naturally overwrite/delete/clear operations.
 
 Use the outbox when a side effect crosses subsystem boundaries and losing it would leave durable state inconsistent.
+
+`RuntimeOutbox` is the server composition component for the outbox protocol. It owns the `OutboxWorker`, handler registration, outbox health/status, replay, and prune controls. `Runtime` constructs it and starts/stops it, but no longer embeds outbox handler logic directly.
 
 ## Scheduler triggers
 

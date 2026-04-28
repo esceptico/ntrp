@@ -45,8 +45,13 @@ This notebook tracks the backend architecture cleanup that replaces the old in-p
   - `RunRegistry` exposes a content-free status snapshot for retained and active runs.
   - `/chat/runs/status` reports active run lifecycle flags, injection counts, and background task session counts without leaking messages.
   - Run observability now follows the same pattern as outbox and scheduler status endpoints.
+- Stage 16: runtime outbox extraction.
+  - `RuntimeOutbox` now owns the outbox worker, handler registration, health/status, replay, and pruning controls.
+  - `Runtime` still composes the subsystem but no longer embeds durable event handler logic directly.
+  - This is the first runtime decomposition step; the composition root is thinner without changing endpoint behavior.
 
 ## Next candidates
 
 - Consider UI or CLI exposure now that the backend endpoint fields are stable.
 - Consider extracting stronger typed internal models for run-side protocol entries if raw message dictionaries keep spreading.
+- Continue runtime decomposition with monitor or MCP/config reload wiring once the outbox extraction has settled.

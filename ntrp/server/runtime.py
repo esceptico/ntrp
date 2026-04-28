@@ -1,5 +1,5 @@
 import asyncio
-from datetime import UTC, datetime
+from datetime import datetime
 
 from fastapi import HTTPException, Request
 
@@ -25,18 +25,8 @@ from ntrp.monitor.service import Monitor
 from ntrp.notifiers.base import NotifierContext
 from ntrp.notifiers.service import NotifierService
 from ntrp.operator.runner import OperatorDeps
-from ntrp.outbox import (
-    OUTBOX_FACT_INDEX_DELETE,
-    OUTBOX_FACT_INDEX_UPSERT,
-    OUTBOX_MEMORY_INDEX_CLEAR,
-    OUTBOX_RUN_COMPLETED,
-    OutboxEvent,
-    OutboxWorker,
-    fact_deleted_from_payload,
-    fact_updated_from_payload,
-    run_completed_from_payload,
-)
 from ntrp.server.indexer import Indexer
+from ntrp.server.runtime_outbox import RuntimeOutbox
 from ntrp.server.state import RunRegistry
 from ntrp.server.stores import Stores
 from ntrp.services.config import ConfigService
@@ -72,7 +62,7 @@ class Runtime:
         self.notifier_service: NotifierService | None = None
         self.monitor: Monitor | None = None
         self.config_service: ConfigService | None = None
-        self.outbox_worker: OutboxWorker | None = None
+        self.outbox_runtime: RuntimeOutbox | None = None
 
         self._connected = False
         self._closing = False
@@ -85,6 +75,11 @@ class Runtime:
     @property
     def session_service(self) -> SessionService | None:
         return self.stores.sessions if self.stores else None
+
+    @property
+    def outbox_worker(self):
+        outbox_runtime = getattr(self, "outbox_runtime", None)
+        return outbox_runtime.worker if outbox_runtime else None
 
     @property
     def tool_services(self) -> dict[str, object]:
@@ -266,44 +261,12 @@ class Runtime:
             store=self.stores.automations,
             scheduler=self.scheduler,
         )
-        self.outbox_worker = OutboxWorker(self.stores.outbox)
-
-        async def on_run_completed(event: OutboxEvent) -> None:
-            run_completed = run_completed_from_payload(event.payload)
-            if run_completed.messages:
-                await self.stores.automations.record_chat_extraction_activity(
-                    run_completed.session_id,
-                    run_completed.messages,
-                    datetime.now(UTC),
-                )
-            if self.scheduler:
-                await self.scheduler.handle_run_completed(run_completed)
-
-        async def on_fact_upserted(event: OutboxEvent) -> None:
-            if not self.indexer:
-                return
-            fact = fact_updated_from_payload(event.payload)
-            await self.indexer.index.upsert(
-                source="memory",
-                source_id=f"fact:{fact.fact_id}",
-                title=fact.text[:50],
-                content=fact.text,
-            )
-
-        async def on_fact_deleted(event: OutboxEvent) -> None:
-            if not self.indexer:
-                return
-            fact = fact_deleted_from_payload(event.payload)
-            await self.indexer.index.delete("memory", f"fact:{fact.fact_id}")
-
-        async def on_memory_cleared(_event: OutboxEvent) -> None:
-            if self.indexer:
-                await self.indexer.index.clear_source("memory")
-
-        self.outbox_worker.register_handler(OUTBOX_RUN_COMPLETED, on_run_completed)
-        self.outbox_worker.register_handler(OUTBOX_FACT_INDEX_UPSERT, on_fact_upserted)
-        self.outbox_worker.register_handler(OUTBOX_FACT_INDEX_DELETE, on_fact_deleted)
-        self.outbox_worker.register_handler(OUTBOX_MEMORY_INDEX_CLEAR, on_memory_cleared)
+        self.outbox_runtime = RuntimeOutbox(
+            outbox_store=self.stores.outbox,
+            automation_store=self.stores.automations,
+            scheduler=self.scheduler,
+            indexer=self.indexer,
+        )
 
     async def _init_mcp(self) -> None:
         if self.config.mcp_servers:
@@ -325,8 +288,8 @@ class Runtime:
         # Phase 2: stop background services
         if self.monitor:
             await self.monitor.stop()
-        if self.outbox_worker:
-            await self.outbox_worker.stop()
+        if self.outbox_runtime:
+            await self.outbox_runtime.stop()
         if self.scheduler:
             await self.scheduler.stop()
         if self.indexer:
@@ -382,8 +345,8 @@ class Runtime:
 
         await seed_builtins(self.stores.automations)
         self.scheduler.start()
-        if self.outbox_worker:
-            self.outbox_worker.start()
+        if self.outbox_runtime:
+            self.outbox_runtime.start()
 
     def _build_consolidation_handler(self):
         async def handler(context: dict | None) -> str | None:
@@ -437,47 +400,24 @@ class Runtime:
         return self.run_registry.get_status()
 
     async def get_outbox_status(self) -> dict:
-        if not self.stores:
+        if not self.outbox_runtime:
             return {"status": "disabled"}
-
-        worker_running = self.outbox_worker.is_running if self.outbox_worker else False
-        return {
-            "status": "running" if worker_running else "stopped",
-            "worker": {
-                "running": worker_running,
-                "worker_id": self.outbox_worker.worker_id if self.outbox_worker else None,
-            },
-            "events": await self.stores.outbox.get_status(),
-        }
+        return await self.outbox_runtime.get_status()
 
     async def get_outbox_health(self) -> dict:
-        status = await self.get_outbox_status()
-        events = status.get("events", {})
-        by_status = events.get("by_status", {})
-        return {
-            "worker_running": status.get("worker", {}).get("running", False),
-            "pending": by_status.get("pending", 0),
-            "ready": events.get("ready", 0),
-            "running": by_status.get("running", 0),
-            "dead": by_status.get("dead", 0),
-        }
+        if not self.outbox_runtime:
+            return {"worker_running": False, "pending": 0, "ready": 0, "running": 0, "dead": 0}
+        return await self.outbox_runtime.get_health()
 
     async def replay_outbox_dead_events(self, event_ids: list[int]) -> dict:
-        if not self.stores:
+        if not self.outbox_runtime:
             return {"status": "disabled", "requested": event_ids, "replayed": [], "missing": event_ids, "skipped": []}
-        result = await self.stores.outbox.replay_dead(event_ids)
-        return {"status": "queued" if result["replayed"] else "unchanged", **result}
+        return await self.outbox_runtime.replay_dead_events(event_ids)
 
     async def prune_outbox_completed(self, *, before: datetime, limit: int) -> dict:
-        if not self.stores:
+        if not self.outbox_runtime:
             return {"status": "disabled", "deleted": 0, "before": before.isoformat(), "limit": limit}
-        deleted = await self.stores.outbox.prune_completed(before=before, limit=limit)
-        return {
-            "status": "deleted",
-            "deleted": deleted,
-            "before": before.isoformat(),
-            "limit": limit,
-        }
+        return await self.outbox_runtime.prune_completed(before=before, limit=limit)
 
 
 def get_runtime(request: Request) -> Runtime:
