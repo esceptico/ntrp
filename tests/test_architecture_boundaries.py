@@ -23,3 +23,14 @@ def test_backend_persistence_tables_are_only_referenced_by_owner_modules():
                 violations.append(f"{table} referenced from {rel}")
 
     assert violations == []
+
+
+def test_services_do_not_import_runtime_composition_root():
+    violations: list[str] = []
+    for path in ROOT.joinpath("ntrp/services").rglob("*.py"):
+        rel = path.relative_to(ROOT)
+        source = path.read_text()
+        if "ntrp.server.runtime" in source:
+            violations.append(f"runtime imported from {rel}")
+
+    assert violations == []
