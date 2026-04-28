@@ -37,7 +37,12 @@ This notebook tracks the backend architecture cleanup that replaces the old in-p
 - Stage 13: scheduler status visibility.
   - Scheduler exposes runtime liveness without leaking table access.
   - AutomationStore owns persisted task, queue, count, and chat extraction status summaries.
+- Stage 14: agent injection queue ownership.
+  - `RunState` now owns queue, cancel, and drain operations for same-run user input injection.
+  - Chat API and chat service no longer scan or clear the raw queue list directly.
+  - The backend protocol docs now describe the injection queue as part of the session SSE/run lifecycle, not as a generic bus.
 
 ## Next candidates
 
 - Consider UI or CLI exposure now that the backend endpoint fields are stable.
+- Consider operational visibility for active runs if debugging run lifecycle state remains painful.

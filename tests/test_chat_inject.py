@@ -1,7 +1,14 @@
 import json
 
+import pytest
+from fastapi.testclient import TestClient
+
 from ntrp.events.sse import MessageIngestedEvent
+from ntrp.server.app import _get_bus_registry, app
+from ntrp.server.bus import BusRegistry, SessionBus
+from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import ChatRequest
+from ntrp.server.state import RunRegistry, RunState, RunStatus
 
 
 def test_message_ingested_event_serialization():
@@ -24,15 +31,6 @@ def test_chat_request_accepts_client_id():
 def test_chat_request_client_id_optional():
     req = ChatRequest(message="hi")
     assert req.client_id is None
-
-
-import pytest
-from fastapi.testclient import TestClient
-
-from ntrp.server.app import app, _get_bus_registry
-from ntrp.server.bus import BusRegistry
-from ntrp.server.runtime import Runtime, get_runtime
-from ntrp.server.state import RunRegistry, RunStatus
 
 
 @pytest.fixture
@@ -67,33 +65,23 @@ def test_post_chat_message_stores_client_id_when_run_active(client_with_active_r
     assert entry["content"] == "follow-up"
 
 
-import asyncio
-
-from ntrp.events.sse import MessageIngestedEvent
-from ntrp.server.bus import SessionBus
-from ntrp.server.state import RunState
-
-
 def _drain_factory(bus: SessionBus, run: RunState):
     """Mirror the closure built inside services.chat.run_chat for testing."""
-    pending_messages: list[dict] = []
-    run.inject_queue = pending_messages
+    from ntrp.services.chat import _build_get_pending
 
-    from ntrp.services.chat import _build_get_pending  # to be added in Step 3
-
-    return pending_messages, _build_get_pending(pending_messages, bus, run)
+    return _build_get_pending(bus, run)
 
 
 @pytest.mark.asyncio
 async def test_drain_emits_ingested_for_entries_with_client_id():
     bus = SessionBus(session_id="sess-1")
     run = RunState(run_id="cool-otter", session_id="sess-1")
-    pending, get_pending = _drain_factory(bus, run)
+    get_pending = _drain_factory(bus, run)
     queue = bus.subscribe()
 
-    pending.append({"role": "user", "content": "first", "client_id": "cid-1"})
-    pending.append({"role": "user", "content": "second"})  # background task, no client_id
-    pending.append({"role": "user", "content": "third", "client_id": "cid-3"})
+    run.queue_injection({"role": "user", "content": "first", "client_id": "cid-1"})
+    run.queue_injection({"role": "user", "content": "second"})  # background task, no client_id
+    run.queue_injection({"role": "user", "content": "third", "client_id": "cid-3"})
 
     drained = await get_pending()
 
@@ -115,7 +103,7 @@ async def test_drain_emits_ingested_for_entries_with_client_id():
 async def test_drain_no_events_when_queue_empty():
     bus = SessionBus(session_id="sess-1")
     run = RunState(run_id="cool-otter", session_id="sess-1")
-    _, get_pending = _drain_factory(bus, run)
+    get_pending = _drain_factory(bus, run)
     queue = bus.subscribe()
 
     drained = await get_pending()
@@ -146,18 +134,18 @@ def client_no_active_run():
 
 def test_delete_inject_returns_200_when_entry_present(client_with_active_run):
     c, run = client_with_active_run
-    run.inject_queue.append({"role": "user", "content": "x", "client_id": "cid-1"})
+    run.queue_injection({"role": "user", "content": "x", "client_id": "cid-1"})
 
     resp = c.delete("/chat/inject/cid-1?session_id=sess-1")
 
     assert resp.status_code == 200
-    assert run.inject_queue == []
+    assert run.pending_injection_count == 0
 
 
 def test_delete_inject_returns_409_when_already_drained(client_with_active_run):
     c, run = client_with_active_run
     # Active run, but the client_id was already drained → not in queue
-    assert run.inject_queue == []
+    assert run.pending_injection_count == 0
 
     resp = c.delete("/chat/inject/cid-missing?session_id=sess-1")
 
@@ -184,8 +172,6 @@ async def test_full_chain_inject_during_run_emits_ingested_and_lands_in_messages
 
     bus = SessionBus(session_id="sess-inj")
     run = RunState(run_id="cool-otter", session_id="sess-inj")
-    pending: list[dict] = []
-    run.inject_queue = pending
 
     sub = bus.subscribe()
 
@@ -201,7 +187,7 @@ async def test_full_chain_inject_during_run_emits_ingested_and_lands_in_messages
     agent = _make_agent(
         llm,
         executor,
-        hooks=AgentHooks(get_pending_messages=_build_get_pending(pending, bus, run)),
+        hooks=AgentHooks(get_pending_messages=_build_get_pending(bus, run)),
     )
 
     messages = _msgs()
@@ -209,7 +195,7 @@ async def test_full_chain_inject_during_run_emits_ingested_and_lands_in_messages
     # Append BEFORE running so the drain at top of iter 2 sees it.
     # (In production, POST runs concurrently with the agent loop; appending
     # before iter 2's drain is the same observable state.)
-    pending.append({"role": "user", "content": "follow-up", "client_id": "cid-XYZ"})
+    run.queue_injection({"role": "user", "content": "follow-up", "client_id": "cid-XYZ"})
 
     result = await agent.run(messages)
 
@@ -242,8 +228,6 @@ async def test_full_chain_inject_during_final_response_continues_loop():
 
     bus = SessionBus(session_id="sess-inj2")
     run = RunState(run_id="cool-otter", session_id="sess-inj2")
-    pending: list[dict] = []
-    run.inject_queue = pending
 
     sub = bus.subscribe()
 
@@ -255,7 +239,7 @@ async def test_full_chain_inject_during_final_response_continues_loop():
             _response(text="second answer"),
         ]
     )
-    closure = _build_get_pending(pending, bus, run)
+    closure = _build_get_pending(bus, run)
 
     # Wrap the closure so we can inject between calls.
     call_count = 0
@@ -266,7 +250,7 @@ async def test_full_chain_inject_during_final_response_continues_loop():
         # On the 2nd call (which is the post-LLM drain check before declaring end-turn),
         # there's nothing pending yet — append now to simulate user submit during stream.
         if call_count == 2:
-            pending.append({"role": "user", "content": "wait!", "client_id": "cid-LATE"})
+            run.queue_injection({"role": "user", "content": "wait!", "client_id": "cid-LATE"})
         return await closure()
 
     agent = _make_agent(llm, FakeExecutor({}), hooks=AgentHooks(get_pending_messages=hook))

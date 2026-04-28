@@ -271,7 +271,7 @@ async def chat_message(
         }
         if request.client_id:
             entry["client_id"] = request.client_id
-        active_run.inject_queue.append(entry)
+        active_run.queue_injection(entry)
         return {"run_id": active_run.run_id, "session_id": session_id}
 
     try:
@@ -298,10 +298,8 @@ async def cancel_inject(
     if active_run is None:
         raise HTTPException(status_code=404, detail="No active run")
 
-    for i, entry in enumerate(active_run.inject_queue):
-        if entry.get("client_id") == client_id:
-            active_run.inject_queue.pop(i)
-            return {"status": "cancelled", "client_id": client_id}
+    if active_run.cancel_injection(client_id):
+        return {"status": "cancelled", "client_id": client_id}
 
     raise HTTPException(status_code=409, detail="Already ingested")
 

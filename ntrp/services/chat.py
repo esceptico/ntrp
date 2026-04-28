@@ -258,9 +258,8 @@ async def _drain_backgrounded(
 
         bg_registry.on_result = _save_directly
 
-        if ctx.run.inject_queue:
-            messages.extend(ctx.run.inject_queue)
-            ctx.run.inject_queue.clear()
+        if injected := ctx.run.drain_injections():
+            messages.extend(injected)
 
         try:
             async with save_lock:
@@ -269,18 +268,21 @@ async def _drain_backgrounded(
             _logger.exception("Backgrounded final save failed (run_id=%s)", ctx.run.run_id)
 
 
-def _build_get_pending(pending: list[dict], bus: SessionBus, run: RunState):
+async def _emit_ingested_for_client_entries(batch: list[dict], bus: SessionBus, run: RunState) -> None:
+    for entry in batch:
+        client_id = entry.pop("client_id", None)
+        if client_id:
+            await bus.emit(MessageIngestedEvent(client_id=client_id, run_id=run.run_id))
+
+
+def _build_get_pending(bus: SessionBus, run: RunState):
     """Closure that drains pending injects and emits message_ingested per client entry."""
 
     async def _get_pending() -> list[dict]:
-        if not pending:
+        batch = run.drain_injections()
+        if not batch:
             return []
-        batch = list(pending)
-        pending.clear()
-        for entry in batch:
-            client_id = entry.pop("client_id", None)
-            if client_id:
-                await bus.emit(MessageIngestedEvent(client_id=client_id, run_id=run.run_id))
+        await _emit_ingested_for_client_entries(batch, bus, run)
         return batch
 
     return _get_pending
@@ -323,16 +325,14 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         )
         agent.hooks.on_response = tracker.track
 
-        pending_messages: list[dict] = []
-        run.inject_queue = pending_messages
         run.status = RunStatus.RUNNING
         run_finished = False
 
-        agent.hooks.get_pending_messages = _build_get_pending(pending_messages, bus, run)
+        agent.hooks.get_pending_messages = _build_get_pending(bus, run)
 
         async def _on_bg_result(messages: list[dict]) -> None:
             if not run_finished:
-                pending_messages.extend(messages)
+                run.queue_injections(messages)
 
         bg_registry.on_result = _on_bg_result
 
@@ -365,18 +365,15 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
 
     finally:
         if not run.backgrounded:
+            pending_messages = run.drain_injections()
             if pending_messages:
                 # Emit ingestion events for any client-stamped entries so the
                 # frontend queue UI clears, then absorb them into history.
-                for entry in pending_messages:
-                    client_id = entry.pop("client_id", None)
-                    if client_id:
-                        try:
-                            await bus.emit(MessageIngestedEvent(client_id=client_id, run_id=run.run_id))
-                        except Exception:
-                            _logger.exception("Failed to emit message_ingested in finally")
+                try:
+                    await _emit_ingested_for_client_entries(pending_messages, bus, run)
+                except Exception:
+                    _logger.exception("Failed to emit message_ingested in finally")
                 run.messages.extend(pending_messages)
-                pending_messages.clear()
             run.usage = tracker.usage
             run_finished = True
             last_tokens = getattr(agent, "_last_response", None)

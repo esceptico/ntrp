@@ -60,6 +60,14 @@ Data flow:
 4. `GET /chat/events/{session_id}` subscribes to the same `SessionBus` and serializes events as SSE.
 5. When the stream closes and no active run remains, the bus is removed.
 
+Agent input injection:
+
+- `RunState` owns the in-memory injection queue for a run.
+- `POST /chat/message` queues an injection on the active `RunState` when a session already has a running agent.
+- `DELETE /chat/inject/{client_id}` asks the active `RunState` to cancel a queued client-stamped injection.
+- `AgentHooks.get_pending_messages` drains queued injections through `RunState.drain_injections()` at agent loop boundaries.
+- Client-stamped entries emit `message_ingested` before delivery to the LLM; `client_id` is stripped from the message passed to the agent.
+
 Properties:
 
 - In-memory only.

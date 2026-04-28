@@ -33,6 +33,36 @@ class RunState:
     backgrounded: bool = False
     drain_task: asyncio.Task | None = None
 
+    @property
+    def pending_injection_count(self) -> int:
+        return len(self.inject_queue)
+
+    def queue_injection(self, message: dict) -> None:
+        self.inject_queue.append(message)
+        self.updated_at = datetime.now(UTC)
+
+    def queue_injections(self, messages: list[dict]) -> None:
+        if not messages:
+            return
+        self.inject_queue.extend(messages)
+        self.updated_at = datetime.now(UTC)
+
+    def cancel_injection(self, client_id: str) -> bool:
+        for i, entry in enumerate(self.inject_queue):
+            if entry.get("client_id") == client_id:
+                self.inject_queue.pop(i)
+                self.updated_at = datetime.now(UTC)
+                return True
+        return False
+
+    def drain_injections(self) -> list[dict]:
+        if not self.inject_queue:
+            return []
+        batch = list(self.inject_queue)
+        self.inject_queue.clear()
+        self.updated_at = datetime.now(UTC)
+        return batch
+
 
 class RunRegistry:
     def __init__(self):

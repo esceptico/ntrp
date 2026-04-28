@@ -10,6 +10,11 @@
 
 **Spec:** `docs/superpowers/specs/2026-04-28-input-injection-queue-design.md`
 
+**Backend status note:** The backend portion is implemented and now has `RunState`
+as the owner of the injection queue lifecycle. API handlers queue/cancel through
+`RunState`, and the agent hook drains through `RunState.drain_injections()` so the
+raw list is not treated as a shared protocol by callers.
+
 ---
 
 ## File Map
