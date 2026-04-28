@@ -97,6 +97,18 @@ CREATE TABLE IF NOT EXISTS automation_count_state (
 CREATE INDEX IF NOT EXISTS idx_automation_count_state_updated_at
 ON automation_count_state(updated_at);
 
+CREATE TABLE IF NOT EXISTS chat_extraction_state (
+    session_id TEXT PRIMARY KEY,
+    cursor INTEGER NOT NULL DEFAULT 0,
+    messages TEXT NOT NULL,
+    message_count INTEGER NOT NULL,
+    pending INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_extraction_state_pending
+ON chat_extraction_state(pending, updated_at);
+
 CREATE TABLE IF NOT EXISTS automation_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -248,6 +260,46 @@ _SQL_GET_COUNT = "SELECT count FROM automation_count_state WHERE task_id = ? AND
 _SQL_CLEAR_COUNT = "DELETE FROM automation_count_state WHERE task_id = ? AND session_id = ?"
 
 _SQL_DELETE_COUNTS_BY_TASK = "DELETE FROM automation_count_state WHERE task_id = ?"
+
+_SQL_RECORD_CHAT_EXTRACTION_ACTIVITY = """
+INSERT INTO chat_extraction_state (session_id, cursor, messages, message_count, pending, updated_at)
+VALUES (?, 0, ?, ?, 1, ?)
+ON CONFLICT(session_id) DO UPDATE SET
+    cursor = CASE
+        WHEN chat_extraction_state.cursor > excluded.message_count THEN excluded.message_count
+        ELSE chat_extraction_state.cursor
+    END,
+    messages = excluded.messages,
+    message_count = excluded.message_count,
+    pending = CASE
+        WHEN (
+            CASE
+                WHEN chat_extraction_state.cursor > excluded.message_count THEN excluded.message_count
+                ELSE chat_extraction_state.cursor
+            END
+        ) < excluded.message_count THEN 1
+        ELSE 0
+    END,
+    updated_at = excluded.updated_at
+"""
+
+_SQL_LIST_PENDING_CHAT_EXTRACTION = """
+SELECT session_id, cursor, messages, message_count
+FROM chat_extraction_state
+WHERE pending = 1
+ORDER BY updated_at
+LIMIT ?
+"""
+
+_SQL_GET_CHAT_EXTRACTION_CURSOR = "SELECT cursor FROM chat_extraction_state WHERE session_id = ?"
+
+_SQL_MARK_CHAT_EXTRACTION_EXTRACTED = """
+UPDATE chat_extraction_state
+SET cursor = ?,
+    pending = CASE WHEN message_count > ? THEN 1 ELSE 0 END,
+    updated_at = ?
+WHERE session_id = ?
+"""
 
 
 # --- Migration ---
@@ -618,4 +670,43 @@ class AutomationStore:
 
     async def clear_count(self, task_id: str, session_id: str) -> None:
         await self.conn.execute(_SQL_CLEAR_COUNT, (task_id, session_id))
+        await self.conn.commit()
+
+    async def record_chat_extraction_activity(
+        self,
+        session_id: str,
+        messages: tuple[dict, ...],
+        updated_at: datetime,
+    ) -> None:
+        await self.conn.execute(
+            _SQL_RECORD_CHAT_EXTRACTION_ACTIVITY,
+            (
+                session_id,
+                json.dumps(list(messages), default=str),
+                len(messages),
+                updated_at.isoformat(),
+            ),
+        )
+        await self.conn.commit()
+
+    async def list_pending_chat_extractions(self, limit: int = 100) -> list[tuple[str, int, tuple[dict, ...]]]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_PENDING_CHAT_EXTRACTION, (limit,))
+        return [
+            (
+                row["session_id"],
+                int(row["cursor"]),
+                tuple(json.loads(row["messages"])),
+            )
+            for row in rows
+        ]
+
+    async def get_chat_extraction_cursor(self, session_id: str) -> int:
+        rows = await self.conn.execute_fetchall(_SQL_GET_CHAT_EXTRACTION_CURSOR, (session_id,))
+        return int(rows[0]["cursor"]) if rows else 0
+
+    async def mark_chat_extraction_extracted(self, session_id: str, cursor: int, updated_at: datetime) -> None:
+        await self.conn.execute(
+            _SQL_MARK_CHAT_EXTRACTION_EXTRACTED,
+            (cursor, cursor, updated_at.isoformat(), session_id),
+        )
         await self.conn.commit()

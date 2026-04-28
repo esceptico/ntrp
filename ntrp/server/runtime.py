@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request
 
@@ -261,8 +262,15 @@ class Runtime:
         self.outbox_worker = OutboxWorker(self.stores.outbox)
 
         async def on_run_completed(event: OutboxEvent) -> None:
+            run_completed = run_completed_from_payload(event.payload)
+            if run_completed.messages:
+                await self.stores.automations.record_chat_extraction_activity(
+                    run_completed.session_id,
+                    run_completed.messages,
+                    datetime.now(UTC),
+                )
             if self.scheduler:
-                await self.scheduler.handle_run_completed(run_completed_from_payload(event.payload))
+                await self.scheduler.handle_run_completed(run_completed)
 
         self.outbox_worker.register_handler(OUTBOX_RUN_COMPLETED, on_run_completed)
 
@@ -336,7 +344,7 @@ class Runtime:
         if self.memory:
             self.scheduler.register_handler(
                 "chat_extraction",
-                create_chat_extraction_handler(self.memory, self.channel),
+                create_chat_extraction_handler(self.memory, self.stores.automations),
             )
             self.scheduler.register_handler(
                 "consolidation",
