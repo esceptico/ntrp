@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 
 from coolname import generate_slug
@@ -27,6 +27,7 @@ class OperatorDeps:
     source_details: dict[str, dict]
     create_session: Callable[[], SessionState]
     notifiers: list[dict[str, str]]
+    enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
 
 
 @dataclass(frozen=True)
@@ -88,16 +89,24 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
     return agent, messages, run_id, session_state.session_id
 
 
-def _publish_completed(deps: OperatorDeps, run_id: str, session_id: str, messages: list, usage: Usage, result: str | None) -> None:
-    deps.channel.publish(
-        RunCompleted(
-            run_id=run_id,
-            session_id=session_id,
-            messages=tuple(messages),
-            usage=usage,
-            result=result,
-        )
+async def _publish_completed(
+    deps: OperatorDeps,
+    run_id: str,
+    session_id: str,
+    messages: list,
+    usage: Usage,
+    result: str | None,
+) -> None:
+    event = RunCompleted(
+        run_id=run_id,
+        session_id=session_id,
+        messages=tuple(messages),
+        usage=usage,
+        result=result,
     )
+    deps.channel.publish(event)
+    if deps.enqueue_run_completed:
+        await deps.enqueue_run_completed(event)
 
 
 async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
@@ -105,13 +114,16 @@ async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
 
     deps.channel.publish(RunStarted(run_id=run_id, session_id=session_id))
     agent_result = await agent.run(messages)
-    _publish_completed(deps, run_id, session_id, messages, agent_result.usage, agent_result.text)
+    await _publish_completed(deps, run_id, session_id, messages, agent_result.usage, agent_result.text)
 
     return RunResult(run_id=run_id, output=agent_result.text, usage=agent_result.usage)
 
 
 async def run_agent_streaming(
-    deps: OperatorDeps, request: RunRequest, bus: SessionBus, task_id: str,
+    deps: OperatorDeps,
+    request: RunRequest,
+    bus: SessionBus,
+    task_id: str,
 ) -> RunResult:
     agent, messages, run_id, session_id = await _prepare(deps, request)
 
@@ -137,6 +149,6 @@ async def run_agent_streaming(
     except asyncio.CancelledError:
         pass
 
-    _publish_completed(deps, run_id, session_id, messages, usage, result_text)
+    await _publish_completed(deps, run_id, session_id, messages, usage, result_text)
 
     return RunResult(run_id=run_id, output=result_text, usage=usage)

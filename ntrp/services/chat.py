@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -51,6 +52,7 @@ class ChatContext:
     integration_errors: dict[str, str]
     session_service: SessionService
     run_registry: RunRegistry
+    enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
 
 
 def expand_skill_command(message: str, registry: SkillRegistry) -> tuple[str, bool]:
@@ -217,6 +219,7 @@ async def prepare_chat(
         integration_errors=runtime.get_integration_errors(),
         session_service=runtime.session_service,
         run_registry=runtime.run_registry,
+        enqueue_run_completed=runtime.stores.outbox.enqueue_run_completed,
     )
 
 
@@ -280,9 +283,7 @@ def _build_get_pending(pending: list[dict], bus: SessionBus, run: RunState):
         for entry in batch:
             client_id = entry.pop("client_id", None)
             if client_id:
-                await bus.emit(
-                    MessageIngestedEvent(client_id=client_id, run_id=run.run_id)
-                )
+                await bus.emit(MessageIngestedEvent(client_id=client_id, run_id=run.run_id))
         return batch
 
     return _get_pending
@@ -392,12 +393,13 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 input_tokens = None
             metadata = {"last_input_tokens": input_tokens} if input_tokens is not None else None
             await ctx.session_service.save(session_state, run.messages, metadata=metadata)
-            ctx.channel.publish(
-                RunCompleted(
-                    run_id=run.run_id,
-                    session_id=session_state.session_id,
-                    messages=tuple(run.messages),
-                    usage=run.usage,
-                    result=result,
-                )
+            event = RunCompleted(
+                run_id=run.run_id,
+                session_id=session_state.session_id,
+                messages=tuple(run.messages),
+                usage=run.usage,
+                result=result,
             )
+            ctx.channel.publish(event)
+            if ctx.enqueue_run_completed:
+                await ctx.enqueue_run_completed(event)

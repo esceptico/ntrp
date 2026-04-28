@@ -86,6 +86,17 @@ CREATE TABLE IF NOT EXISTS automation_event_queue (
 CREATE INDEX IF NOT EXISTS idx_automation_event_queue_task_claimed_id
 ON automation_event_queue(task_id, claimed_at, id);
 
+CREATE TABLE IF NOT EXISTS automation_count_state (
+    task_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (task_id, session_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_count_state_updated_at
+ON automation_count_state(updated_at);
+
 CREATE TABLE IF NOT EXISTS automation_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -223,6 +234,20 @@ _SQL_DELETE_DEDUPE_BY_TASK = "DELETE FROM automation_event_dedupe WHERE task_id 
 _SQL_DELETE_QUEUE_BY_TASK = "DELETE FROM automation_event_queue WHERE task_id = ?"
 
 _SQL_RELEASE_ALL_CLAIMED_EVENTS = "UPDATE automation_event_queue SET claimed_at = NULL WHERE claimed_at IS NOT NULL"
+
+_SQL_INCREMENT_COUNT = """
+INSERT INTO automation_count_state (task_id, session_id, count, updated_at)
+VALUES (?, ?, 1, ?)
+ON CONFLICT(task_id, session_id) DO UPDATE SET
+    count = count + 1,
+    updated_at = excluded.updated_at
+"""
+
+_SQL_GET_COUNT = "SELECT count FROM automation_count_state WHERE task_id = ? AND session_id = ?"
+
+_SQL_CLEAR_COUNT = "DELETE FROM automation_count_state WHERE task_id = ? AND session_id = ?"
+
+_SQL_DELETE_COUNTS_BY_TASK = "DELETE FROM automation_count_state WHERE task_id = ?"
 
 
 # --- Migration ---
@@ -483,6 +508,7 @@ class AutomationStore:
         cursor = await self.conn.execute(_SQL_DELETE, (task_id,))
         await self.conn.execute(_SQL_DELETE_DEDUPE_BY_TASK, (task_id,))
         await self.conn.execute(_SQL_DELETE_QUEUE_BY_TASK, (task_id,))
+        await self.conn.execute(_SQL_DELETE_COUNTS_BY_TASK, (task_id,))
         await self.conn.commit()
         return cursor.rowcount > 0
 
@@ -583,3 +609,13 @@ class AutomationStore:
         cursor = await self.conn.execute(_SQL_RELEASE_ALL_CLAIMED_EVENTS)
         await self.conn.commit()
         return cursor.rowcount
+
+    async def increment_count(self, task_id: str, session_id: str, updated_at: datetime) -> int:
+        await self.conn.execute(_SQL_INCREMENT_COUNT, (task_id, session_id, updated_at.isoformat()))
+        rows = await self.conn.execute_fetchall(_SQL_GET_COUNT, (task_id, session_id))
+        await self.conn.commit()
+        return int(rows[0]["count"])
+
+    async def clear_count(self, task_id: str, session_id: str) -> None:
+        await self.conn.execute(_SQL_CLEAR_COUNT, (task_id, session_id))
+        await self.conn.commit()

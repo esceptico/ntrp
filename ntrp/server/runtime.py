@@ -8,7 +8,7 @@ from ntrp.automation.service import AutomationService
 from ntrp.channel import Channel
 from ntrp.config import Config, get_config
 from ntrp.core.factory import AgentConfig
-from ntrp.events.internal import FactCreated, FactDeleted, FactUpdated, MemoryCleared, RunCompleted, SourceChanged
+from ntrp.events.internal import FactCreated, FactDeleted, FactUpdated, MemoryCleared, SourceChanged
 from ntrp.events.triggers import TRIGGER_EVENT_TYPES, TriggerEvent
 from ntrp.integrations import ALL_INTEGRATIONS, IntegrationRegistry
 from ntrp.integrations.calendar.client import MultiCalendarSource
@@ -27,6 +27,7 @@ from ntrp.monitor.service import Monitor
 from ntrp.notifiers.base import NotifierContext
 from ntrp.notifiers.service import NotifierService
 from ntrp.operator.runner import OperatorDeps
+from ntrp.outbox import OUTBOX_RUN_COMPLETED, OutboxEvent, OutboxWorker, run_completed_from_payload
 from ntrp.server.indexer import Indexer
 from ntrp.server.state import RunRegistry
 from ntrp.server.stores import Stores
@@ -68,6 +69,7 @@ class Runtime:
         self.notifier_service: NotifierService | None = None
         self.monitor: Monitor | None = None
         self.config_service: ConfigService | None = None
+        self.outbox_worker: OutboxWorker | None = None
 
         self._connected = False
         self._closing = False
@@ -256,6 +258,13 @@ class Runtime:
             store=self.stores.automations,
             scheduler=self.scheduler,
         )
+        self.outbox_worker = OutboxWorker(self.stores.outbox)
+
+        async def on_run_completed(event: OutboxEvent) -> None:
+            if self.scheduler:
+                await self.scheduler.handle_run_completed(run_completed_from_payload(event.payload))
+
+        self.outbox_worker.register_handler(OUTBOX_RUN_COMPLETED, on_run_completed)
 
     async def _init_mcp(self) -> None:
         if self.config.mcp_servers:
@@ -277,6 +286,8 @@ class Runtime:
         # Phase 2: stop background services
         if self.monitor:
             await self.monitor.stop()
+        if self.outbox_worker:
+            await self.outbox_worker.stop()
         if self.scheduler:
             await self.scheduler.stop()
         if self.indexer:
@@ -318,6 +329,7 @@ class Runtime:
             source_details={},
             create_session=self.stores.sessions.create,
             notifiers=self.notifier_service.list_summary() if self.notifier_service else [],
+            enqueue_run_completed=self.stores.outbox.enqueue_run_completed,
         )
 
     async def start_scheduler(self) -> None:
@@ -334,6 +346,8 @@ class Runtime:
         await seed_builtins(self.stores.automations)
         self.scheduler.start()
         self._wire_event_triggers()
+        if self.outbox_worker:
+            self.outbox_worker.start()
 
     def _wire_events(self) -> None:
         if not self.indexer:
@@ -384,12 +398,6 @@ class Runtime:
 
         for event_cls in TRIGGER_EVENT_TYPES:
             self.channel.subscribe(event_cls, on_trigger)
-
-        async def on_run_completed(event: RunCompleted) -> None:
-            if self.scheduler:
-                await self.scheduler.handle_run_completed(event)
-
-        self.channel.subscribe(RunCompleted, on_run_completed)
 
     def start_monitor(self) -> None:
         if self.stores.monitor is None:

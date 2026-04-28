@@ -42,6 +42,16 @@ CONVERSATION_GAP_THRESHOLD = 1800  # seconds (30 min) - show time gap note if ex
 CHANNEL_DISPATCH_WORKERS = 32
 
 
+# --- Outbox ---
+
+OUTBOX_BATCH_SIZE = 20
+OUTBOX_MAX_RETRIES = 5
+OUTBOX_POLL_INTERVAL = 1.0
+OUTBOX_RETRY_BASE_SECONDS = 5
+OUTBOX_RETRY_MAX_SECONDS = 300
+OUTBOX_STALE_LOCK_SECONDS = 300
+
+
 # --- Session ---
 
 HISTORY_MESSAGE_LIMIT = 50  # max user/assistant messages returned for UI history

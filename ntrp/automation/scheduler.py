@@ -19,7 +19,7 @@ from ntrp.events.sse import AutomationFinishedEvent, AutomationProgressEvent, SS
 from ntrp.events.triggers import EVENT_APPROACHING, EventApproaching, TriggerEvent
 from ntrp.logging import get_logger
 from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent, run_agent_streaming
-from ntrp.server.bus import BusRegistry, SessionBus
+from ntrp.server.bus import BusRegistry
 
 AUTOMATION_BUS_KEY = "automation:events"
 
@@ -34,7 +34,6 @@ class Scheduler:
         self._task: asyncio.Task | None = None
         self._running: set[asyncio.Task] = set()
         self._handlers: dict[str, Callable[[dict | None], Awaitable[str | None]]] = {}
-        self._count_state: dict[str, dict[str, int]] = {}
         self._last_activity_at: datetime = datetime.now(UTC)
         self._idle_fired: set[str] = set()  # task_ids that already fired this idle period
 
@@ -161,18 +160,18 @@ class Scheduler:
 
     async def handle_run_completed(self, event: RunCompleted) -> None:
         self.update_activity()
+        now = datetime.now(UTC)
 
         for auto in await self.store.list_by_trigger_type("count"):
-            if auto.in_cooldown(datetime.now(UTC)):
+            if auto.in_cooldown(now):
                 continue
             for trigger in auto.triggers:
                 if not isinstance(trigger, CountTrigger):
                     continue
-                counts = self._count_state.setdefault(auto.task_id, {})
                 sid = event.session_id
-                counts[sid] = counts.get(sid, 0) + 1
-                if counts[sid] >= trigger.every_n:
-                    del counts[sid]
+                count = await self.store.increment_count(auto.task_id, sid, now)
+                if count >= trigger.every_n:
+                    await self.store.clear_count(auto.task_id, sid)
                     ctx = {
                         "trigger_type": "count",
                         "session_id": event.session_id,

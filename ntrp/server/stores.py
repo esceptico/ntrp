@@ -6,6 +6,7 @@ from ntrp.config import Config
 from ntrp.context.store import SessionStore
 from ntrp.monitor.store import MonitorStateStore
 from ntrp.notifiers.store import NotifierStore
+from ntrp.outbox.store import OutboxStore
 from ntrp.services.session import SessionService
 
 
@@ -25,6 +26,7 @@ class Stores:
         automations: AutomationStore,
         notifiers: NotifierStore,
         monitor: MonitorStateStore,
+        outbox: OutboxStore,
     ):
         self.conn = conn
         self.read_conn = read_conn
@@ -32,6 +34,7 @@ class Stores:
         self.automations = automations
         self.notifiers = notifiers
         self.monitor = monitor
+        self.outbox = outbox
 
     @classmethod
     async def connect(cls, config: Config) -> Self:
@@ -51,6 +54,9 @@ class Stores:
         monitor = MonitorStateStore(conn)
         await monitor.init_schema()
 
+        outbox = OutboxStore(conn)
+        await outbox.init_schema()
+
         return cls(
             conn=conn,
             read_conn=read_conn,
@@ -58,6 +64,7 @@ class Stores:
             automations=automations,
             notifiers=notifiers,
             monitor=monitor,
+            outbox=outbox,
         )
 
     async def close(self) -> None:
