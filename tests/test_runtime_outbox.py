@@ -14,7 +14,7 @@ from ntrp.outbox import (
     fact_index_upsert_payload,
     run_completed_payload,
 )
-from ntrp.server.runtime_outbox import RuntimeOutbox
+from ntrp.server.runtime.outbox import RuntimeOutbox
 
 
 def _event(event_type: str, payload: dict) -> OutboxEvent:

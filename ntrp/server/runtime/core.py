@@ -3,30 +3,19 @@ from datetime import datetime
 
 from fastapi import HTTPException, Request
 
-from ntrp.automation.builtins import seed_builtins
-from ntrp.automation.scheduler import Scheduler
-from ntrp.automation.service import AutomationService
 from ntrp.config import Config, get_config
 from ntrp.core.factory import AgentConfig
 from ntrp.integrations import ALL_INTEGRATIONS, IntegrationRegistry
-from ntrp.integrations.calendar.client import MultiCalendarSource
-from ntrp.integrations.types import Indexable
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import init as llm_init
 from ntrp.llm.router import reset as llm_reset
 from ntrp.logging import get_logger
 from ntrp.mcp.manager import MCPManager
-from ntrp.memory.extraction_handler import create_chat_extraction_handler
-from ntrp.memory.facts import FactMemory
-from ntrp.memory.indexable import MemoryIndexable
-from ntrp.memory.service import MemoryService
-from ntrp.monitor.calendar import CalendarMonitor
-from ntrp.monitor.service import Monitor
 from ntrp.notifiers.base import NotifierContext
 from ntrp.notifiers.service import NotifierService
 from ntrp.operator.runner import OperatorDeps
-from ntrp.server.indexer import Indexer
-from ntrp.server.runtime_outbox import RuntimeOutbox
+from ntrp.server.runtime.automation import AutomationRuntime
+from ntrp.server.runtime.knowledge import KnowledgeRuntime
 from ntrp.server.state import RunRegistry
 from ntrp.server.stores import Stores
 from ntrp.services.config import ConfigService
@@ -44,25 +33,16 @@ class Runtime:
         self.integrations = IntegrationRegistry(ALL_INTEGRATIONS)
         self.integrations.sync(self.config)
         self.run_registry = RunRegistry()
-
-        self.embedding = self.config.embedding
-        self.indexer = Indexer(db_path=self.config.search_db_path, embedding=self.embedding) if self.embedding else None
+        self.knowledge = KnowledgeRuntime(self.config)
 
         self.stores: Stores | None = None
-        self.memory: FactMemory | None = None
-        self.memory_service: MemoryService | None = None
-        self.search_index = None
-        self.indexables: dict[str, Indexable] = {}
+        self.automation: AutomationRuntime | None = None
         self.mcp_manager: MCPManager | None = None
         self.executor: ToolExecutor | None = None
-        self.automation_service: AutomationService | None = None
-        self.scheduler: Scheduler | None = None
         self.skill_registry: SkillRegistry | None = None
         self.skill_service: SkillService | None = None
         self.notifier_service: NotifierService | None = None
-        self.monitor: Monitor | None = None
         self.config_service: ConfigService | None = None
-        self.outbox_runtime: RuntimeOutbox | None = None
 
         self._connected = False
         self._closing = False
@@ -77,6 +57,46 @@ class Runtime:
         return self.stores.sessions if self.stores else None
 
     @property
+    def embedding(self):
+        return self.knowledge.embedding
+
+    @property
+    def indexer(self):
+        return self.knowledge.indexer
+
+    @property
+    def memory(self):
+        return self.knowledge.memory
+
+    @property
+    def memory_service(self):
+        return self.knowledge.memory_service
+
+    @property
+    def search_index(self):
+        return self.knowledge.search_index
+
+    @property
+    def indexables(self):
+        return self.knowledge.indexables
+
+    @property
+    def scheduler(self):
+        return self.automation.scheduler if self.automation else None
+
+    @property
+    def automation_service(self):
+        return self.automation.automation_service if self.automation else None
+
+    @property
+    def monitor(self):
+        return self.automation.monitor if self.automation else None
+
+    @property
+    def outbox_runtime(self):
+        return self.automation.outbox_runtime if self.automation else None
+
+    @property
     def outbox_worker(self):
         outbox_runtime = getattr(self, "outbox_runtime", None)
         return outbox_runtime.worker if outbox_runtime else None
@@ -84,10 +104,7 @@ class Runtime:
     @property
     def tool_services(self) -> dict[str, object]:
         services: dict[str, object] = dict(self.integrations.clients)
-        if self.memory:
-            services["memory"] = self.memory
-        if self.search_index:
-            services["search_index"] = self.search_index
+        services.update(self.knowledge.tool_services())
         if self.automation_service:
             services["automation"] = self.automation_service
         if self.skill_registry:
@@ -115,9 +132,7 @@ class Runtime:
             await llm_reset()
             llm_init(self.config)
             self.integrations.sync(self.config)
-            await self._sync_embedding()
-            await self._sync_memory()
-            self._sync_indexables()
+            await self.knowledge.reload_config(self.config, self.stores, self.integrations)
             await self.sync_mcp()
 
     async def sync_mcp(self) -> None:
@@ -132,69 +147,6 @@ class Runtime:
         if self.executor:
             self.executor = self._create_executor()
 
-    @property
-    def _memory_ready(self) -> bool:
-        return bool(self.config.memory and self.embedding and self.config.memory_model)
-
-    async def _create_memory(self) -> None:
-        self.memory = await FactMemory.create(
-            db_path=self.config.memory_db_path,
-            embedding=self.embedding,
-            model=self.config.memory_model,
-            enqueue_fact_index_upsert=self.stores.outbox.enqueue_fact_index_upsert,
-            enqueue_fact_index_delete=self.stores.outbox.enqueue_fact_index_delete,
-        )
-        self.memory.dreams_enabled = self.config.dreams
-        self.memory_service = MemoryService(
-            self.memory,
-            enqueue_fact_index_upsert=self.stores.outbox.enqueue_fact_index_upsert,
-            enqueue_fact_index_delete=self.stores.outbox.enqueue_fact_index_delete,
-            enqueue_memory_index_clear=self.stores.outbox.enqueue_memory_index_clear,
-        )
-
-    async def _close_memory(self) -> None:
-        if self.memory:
-            await self.memory.close()
-        self.memory = None
-        self.memory_service = None
-
-    async def _sync_memory(self) -> None:
-        if self._memory_ready and not self.memory:
-            await self._create_memory()
-        elif self.config.memory and self.memory:
-            if not self._memory_ready:
-                await self._close_memory()
-                if not self.embedding:
-                    _logger.warning("Memory disabled — no embedding model configured")
-                else:
-                    _logger.warning("Memory disabled — no memory model configured")
-                return
-            if self.memory.model != self.config.memory_model:
-                self.memory.update_model(self.config.memory_model)
-            self.memory.dreams_enabled = self.config.dreams
-        elif not self.config.memory and self.memory:
-            await self._close_memory()
-
-    async def _sync_embedding(self) -> None:
-        new_embedding = self.config.embedding
-        if new_embedding != self.embedding:
-            self.embedding = new_embedding
-            if self.indexer:
-                await self.indexer.update_embedding(new_embedding)
-            if self.memory:
-                self.memory.start_reembed(new_embedding, rebuild=True)
-
-    def _sync_indexables(self) -> None:
-        prev = set(self.indexables.keys())
-        self.indexables.clear()
-        for name, client in self.integrations.clients.items():
-            if isinstance(client, Indexable):
-                self.indexables[name] = client
-        if self.memory:
-            self.indexables["memory"] = MemoryIndexable(self.memory.db)
-        if set(self.indexables.keys()) != prev:
-            self.start_indexing()
-
     # --- Connect / close ---
 
     async def connect(self) -> None:
@@ -203,9 +155,7 @@ class Runtime:
 
         llm_init(self.config)
         self.stores = await Stores.connect(self.config)
-        await self._init_search()
-        self._init_indexables()
-        await self._init_memory()
+        await self.knowledge.connect(self.stores, self.integrations)
         self._init_skills()
         await self._init_notifiers()
         self._init_automation()
@@ -218,23 +168,6 @@ class Runtime:
             integrations=len(self.integrations.clients),
             tools=len(self.executor.registry),
         )
-
-    async def _init_search(self) -> None:
-        if self.indexer:
-            await self.indexer.connect()
-            self.search_index = self.indexer.index
-
-    def _init_indexables(self) -> None:
-        for name, client in self.integrations.clients.items():
-            if isinstance(client, Indexable):
-                self.indexables[name] = client
-
-    async def _init_memory(self) -> None:
-        if self._memory_ready:
-            await self._create_memory()
-            self.indexables["memory"] = MemoryIndexable(self.memory.db)
-        elif self.config.memory:
-            _logger.warning("Memory enabled but no embedding model configured — skipping")
 
     def _init_skills(self) -> None:
         self.skill_registry = SkillRegistry()
@@ -253,18 +186,11 @@ class Runtime:
         await self.notifier_service.rebuild()
 
     def _init_automation(self) -> None:
-        self.scheduler = Scheduler(
-            store=self.stores.automations,
-            build_deps=self.build_operator_deps,
-        )
-        self.automation_service = AutomationService(
-            store=self.stores.automations,
-            scheduler=self.scheduler,
-        )
-        self.outbox_runtime = RuntimeOutbox(
-            outbox_store=self.stores.outbox,
-            automation_store=self.stores.automations,
-            scheduler=self.scheduler,
+        self.automation = AutomationRuntime(
+            stores=self.stores,
+            build_operator_deps=self.build_operator_deps,
+            get_memory=lambda: self.memory,
+            get_calendar_source=lambda: self.integrations.get_client("calendar"),
             indexer=self.indexer,
         )
 
@@ -286,23 +212,16 @@ class Runtime:
             _logger.info("Cancelled %d active run(s)", cancelled)
 
         # Phase 2: stop background services
-        if self.monitor:
-            await self.monitor.stop()
-        if self.outbox_runtime:
-            await self.outbox_runtime.stop()
-        if self.scheduler:
-            await self.scheduler.stop()
-        if self.indexer:
-            await self.indexer.stop()
+        if self.automation:
+            await self.automation.stop()
+        await self.knowledge.stop()
 
         # Phase 3: close resources
         if self.mcp_manager:
             await self.mcp_manager.close()
-        await self._close_memory()
+        await self.knowledge.close()
         if self.stores:
             await self.stores.close()
-        if self.indexer:
-            await self.indexer.close()
         await llm_close()
 
     # --- Queries ---
@@ -319,6 +238,25 @@ class Runtime:
             errors["index"] = self.indexer.error
         return errors
 
+    def build_chat_deps(self):
+        if not self.executor or not self.session_service:
+            raise RuntimeError("Chat dependencies are not initialized")
+        from ntrp.services.chat import ChatDeps
+
+        return ChatDeps(
+            chat_model=self.config.chat_model,
+            agent_config=AgentConfig.from_config(self.config),
+            executor=self.executor,
+            session_service=self.session_service,
+            run_registry=self.run_registry,
+            available_integrations=self.get_available_integrations(),
+            integration_errors=self.get_integration_errors(),
+            enqueue_run_completed=self.stores.outbox.enqueue_run_completed if self.stores else None,
+            memory=self.memory,
+            skill_registry=self.skill_registry,
+            notifier_service=self.notifier_service,
+        )
+
     # --- Background tasks ---
 
     def build_operator_deps(self) -> OperatorDeps:
@@ -333,91 +271,57 @@ class Runtime:
         )
 
     async def start_scheduler(self) -> None:
-        if self.memory:
-            self.scheduler.register_handler(
-                "chat_extraction",
-                create_chat_extraction_handler(self.memory, self.stores.automations),
-            )
-            self.scheduler.register_handler(
-                "consolidation",
-                self._build_consolidation_handler(),
-            )
-
-        await seed_builtins(self.stores.automations)
-        self.scheduler.start()
-        if self.outbox_runtime:
-            self.outbox_runtime.start()
-
-    def _build_consolidation_handler(self):
-        async def handler(context: dict | None) -> str | None:
-            if not self.memory:
-                return None
-            return await self.memory.run_consolidation()
-
-        return handler
+        if not self.automation:
+            raise RuntimeError("Automation runtime is not initialized")
+        await self.automation.start_scheduler()
 
     def start_monitor(self) -> None:
-        if self.stores.monitor is None:
-            raise RuntimeError("Monitor state store is not initialized")
-        if self.scheduler is None:
-            raise RuntimeError("Scheduler is not initialized")
-
-        self.monitor = Monitor(self.scheduler.fire_event)
-        calendar_source = self.integrations.get_client("calendar")
-        if calendar_source and isinstance(calendar_source, MultiCalendarSource):
-            self.monitor.register(CalendarMonitor(calendar_source, state_store=self.stores.monitor))
-
-        self.monitor.start()
+        if not self.automation:
+            raise RuntimeError("Automation runtime is not initialized")
+        self.automation.start_monitor()
 
     async def sync_google_sources(self) -> None:
         self.integrations.sync(self.config)
         await self.restart_monitor()
 
     async def restart_monitor(self) -> None:
-        if self.stores.monitor is None:
+        if not self.automation:
             return
-        if self.monitor:
-            await self.monitor.stop()
-        self.start_monitor()
+        await self.automation.restart_monitor()
 
     def start_indexing(self) -> None:
-        if self.indexer:
-            self.indexer.start(list(self.indexables.values()))
+        self.knowledge.start_indexing()
 
     async def get_index_status(self) -> dict:
-        status = await self.indexer.get_status() if self.indexer else {"status": "disabled"}
-        if self.memory:
-            status["reembedding"] = self.memory.reembed_running
-            status["reembed_progress"] = self.memory.reembed_progress
-        return status
+        return await self.knowledge.get_index_status()
 
     async def get_scheduler_status(self) -> dict:
-        if not self.scheduler:
+        if not self.automation:
             return {"status": "disabled", "running_tasks": 0, "registered_handlers": []}
-        return await self.scheduler.get_status()
+        return await self.automation.get_scheduler_status()
 
     async def get_chat_runs_status(self) -> dict:
         return self.run_registry.get_status()
 
     async def get_outbox_status(self) -> dict:
-        if not self.outbox_runtime:
+        if not self.automation:
             return {"status": "disabled"}
-        return await self.outbox_runtime.get_status()
+        return await self.automation.get_outbox_status()
 
     async def get_outbox_health(self) -> dict:
-        if not self.outbox_runtime:
+        if not self.automation:
             return {"worker_running": False, "pending": 0, "ready": 0, "running": 0, "dead": 0}
-        return await self.outbox_runtime.get_health()
+        return await self.automation.get_outbox_health()
 
     async def replay_outbox_dead_events(self, event_ids: list[int]) -> dict:
-        if not self.outbox_runtime:
+        if not self.automation:
             return {"status": "disabled", "requested": event_ids, "replayed": [], "missing": event_ids, "skipped": []}
-        return await self.outbox_runtime.replay_dead_events(event_ids)
+        return await self.automation.replay_outbox_dead_events(event_ids)
 
     async def prune_outbox_completed(self, *, before: datetime, limit: int) -> dict:
-        if not self.outbox_runtime:
+        if not self.automation:
             return {"status": "disabled", "deleted": 0, "before": before.isoformat(), "limit": limit}
-        return await self.outbox_runtime.prune_completed(before=before, limit=limit)
+        return await self.automation.prune_outbox_completed(before=before, limit=limit)
 
 
 def get_runtime(request: Request) -> Runtime:

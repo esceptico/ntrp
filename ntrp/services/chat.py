@@ -22,9 +22,10 @@ from ntrp.events.sse import (
 )
 from ntrp.llm.models import Provider, get_model
 from ntrp.logging import get_logger
+from ntrp.memory.facts import FactMemory
 from ntrp.memory.formatting import format_session_memory
+from ntrp.notifiers.service import NotifierService
 from ntrp.server.bus import SessionBus
-from ntrp.server.runtime import Runtime
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 from ntrp.server.stream import run_agent_loop
 from ntrp.services.session import SessionService
@@ -36,6 +37,21 @@ from ntrp.tools.executor import ToolExecutor
 _logger = get_logger(__name__)
 
 INIT_AUTO_APPROVE = {"remember", "forget"}
+
+
+@dataclass(frozen=True)
+class ChatDeps:
+    chat_model: str
+    agent_config: AgentConfig
+    executor: ToolExecutor
+    session_service: SessionService
+    run_registry: RunRegistry
+    available_integrations: list[str]
+    integration_errors: dict[str, str]
+    enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
+    memory: FactMemory | None = None
+    skill_registry: SkillRegistry | None = None
+    notifier_service: NotifierService | None = None
 
 
 @dataclass
@@ -73,11 +89,11 @@ def _is_anthropic(model: str) -> bool:
     return get_model(model).provider == Provider.ANTHROPIC
 
 
-async def _resolve_session(runtime: Runtime) -> SessionData:
-    data = await runtime.session_service.load()
+async def _resolve_session(deps: ChatDeps) -> SessionData:
+    data = await deps.session_service.load()
     if data and data.messages and len(data.messages) >= 2:
         return data
-    return SessionData(runtime.session_service.create(), [])
+    return SessionData(deps.session_service.create(), [])
 
 
 def build_user_content(
@@ -121,7 +137,7 @@ def _retain_user_content(messages: list[dict]) -> list[dict]:
 
 
 async def _prepare_messages(
-    runtime: Runtime,
+    deps: ChatDeps,
     messages: list[dict],
     user_message: str,
     last_activity: datetime | None = None,
@@ -129,14 +145,14 @@ async def _prepare_messages(
     context: list[dict] | None = None,
 ) -> list[dict]:
     memory_context = None
-    if runtime.memory:
-        observations, user_facts = await runtime.memory.get_context()
+    if deps.memory:
+        observations, user_facts = await deps.memory.get_context()
         memory_context = format_session_memory(observations=observations, user_facts=user_facts)
 
-    skills_context = runtime.skill_registry.to_prompt_xml() if runtime.skill_registry else None
+    skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None
     directives = load_directives()
 
-    notifiers = runtime.notifier_service.list_summary() if runtime.notifier_service else None
+    notifiers = deps.notifier_service.list_summary() if deps.notifier_service else None
 
     system_blocks = build_system_blocks(
         source_details={},
@@ -144,7 +160,7 @@ async def _prepare_messages(
         skills_context=skills_context,
         directives=directives,
         notifiers=notifiers,
-        use_cache_control=_is_anthropic(runtime.config.chat_model),
+        use_cache_control=_is_anthropic(deps.chat_model),
     )
 
     messages = _retain_user_content(messages)
@@ -168,21 +184,21 @@ async def _prepare_messages(
 
 
 async def prepare_chat(
-    runtime: Runtime,
+    deps: ChatDeps,
     message: str,
     skip_approvals: bool = False,
     session_id: str | None = None,
     images: list[dict] | None = None,
     context: list[dict] | None = None,
 ) -> ChatContext:
-    registry = runtime.run_registry
+    registry = deps.run_registry
 
     if session_id:
-        session_data = await runtime.session_service.load(session_id)
+        session_data = await deps.session_service.load(session_id)
         if not session_data:
-            session_data = SessionData(runtime.session_service.create(), [])
+            session_data = SessionData(deps.session_service.create(), [])
     else:
-        session_data = await _resolve_session(runtime)
+        session_data = await _resolve_session(deps)
     session_state = session_data.state
     session_state.skip_approvals = skip_approvals
     messages = session_data.messages
@@ -191,15 +207,15 @@ async def prepare_chat(
     is_init = user_message.strip().lower() == "/init"
     if is_init:
         user_message = INIT_INSTRUCTION
-    elif runtime.skill_registry:
-        user_message, _ = expand_skill_command(user_message, runtime.skill_registry)
+    elif deps.skill_registry:
+        user_message, _ = expand_skill_command(user_message, deps.skill_registry)
 
     name_candidate = message.strip() or ("[image]" if images else "")
     if not session_state.name and not is_init and name_candidate and not name_candidate.startswith("/"):
         session_state.name = name_candidate[:50]
 
     messages = await _prepare_messages(
-        runtime, messages, user_message, last_activity=session_state.last_activity, images=images, context=context
+        deps, messages, user_message, last_activity=session_state.last_activity, images=images, context=context
     )
 
     run = registry.create_run(session_state.session_id)
@@ -209,14 +225,14 @@ async def prepare_chat(
         run=run,
         session_state=session_state,
         is_init=is_init,
-        executor=runtime.executor,
-        tools=runtime.executor.get_tools(),
-        config=AgentConfig.from_config(runtime.config),
-        available_integrations=runtime.get_available_integrations(),
-        integration_errors=runtime.get_integration_errors(),
-        session_service=runtime.session_service,
-        run_registry=runtime.run_registry,
-        enqueue_run_completed=runtime.stores.outbox.enqueue_run_completed,
+        executor=deps.executor,
+        tools=deps.executor.get_tools(),
+        config=deps.agent_config,
+        available_integrations=deps.available_integrations,
+        integration_errors=deps.integration_errors,
+        session_service=deps.session_service,
+        run_registry=deps.run_registry,
+        enqueue_run_completed=deps.enqueue_run_completed,
     )
 
 

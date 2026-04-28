@@ -282,7 +282,12 @@ async def chat_message(
 
     try:
         ctx = await prepare_chat(
-            runtime, request.message, request.skip_approvals, session_id=session_id, images=images, context=context
+            runtime.build_chat_deps(),
+            request.message,
+            request.skip_approvals,
+            session_id=session_id,
+            images=images,
+            context=context,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
