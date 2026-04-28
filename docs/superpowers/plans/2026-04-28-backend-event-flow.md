@@ -66,10 +66,14 @@ This notebook tracks the backend architecture cleanup that replaces the old in-p
   - Chat SSE, message submission, injection cancel, run status, background-task, cancel, and tool-result endpoints now live in `ntrp.server.routers.chat`.
   - `ntrp.server.app` is back to process lifecycle, middleware, router registration, and remaining top-level endpoints.
   - Protocol docs now point session streaming ownership at the chat router instead of the application composition module.
+- Stage 22: operational HTTP router extraction.
+  - `/health`, `/outbox/*`, `/index/*`, `/scheduler/status`, and `/tools` now live in `ntrp.server.routers.ops`.
+  - `ntrp.server.app` owns only lifecycle, middleware, and router registration.
+  - Automation SSE now uses the shared bus-registry dependency instead of reading `request.app.state` directly.
 
 ## Next candidates
 
 - Consider UI or CLI exposure now that the backend endpoint fields are stable.
 - Consider extracting stronger typed internal models for run-side protocol entries if raw message dictionaries keep spreading.
-- Move remaining top-level operational endpoints (`/outbox/*`, `/index/*`, `/scheduler/status`, `/tools`) into small protocol routers if they keep growing.
+- Tighten router-boundary tests further if direct `app.state` access starts spreading through routers.
 - Continue runtime decomposition with monitor or MCP/config reload wiring once the HTTP composition surface has settled.

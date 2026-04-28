@@ -32,7 +32,7 @@ There is an architecture test that checks these table names do not appear in pro
 
 ## Startup wiring
 
-`ntrp.server.app.lifespan` is the composition root for backend runtime protocols:
+`ntrp.server.app.lifespan` is the composition root for backend runtime protocols. HTTP endpoint behavior lives in routers; `ntrp.server.app` owns process lifecycle, middleware, and router registration.
 
 1. `Runtime.connect()` initializes stores, search, memory, skills, notifiers, automation, MCP, and tools.
 2. `BusRegistry()` is created for SSE streams only.
@@ -146,6 +146,8 @@ Operational endpoints:
 - `POST /outbox/dead/replay`: moves explicit dead row IDs back to `pending`.
 - `DELETE /outbox/completed`: deletes old completed rows with an age cutoff and limit.
 
+These endpoints live in `ntrp/server/routers/ops.py`.
+
 Retention:
 
 - `OutboxWorker` automatically prunes completed rows older than 30 days.
@@ -200,6 +202,8 @@ Event-triggered automations have their own queue because external monitor events
 Operational endpoint:
 
 - `GET /scheduler/status`: scheduler liveness, registered built-in handlers, running task count, automation task summary, event queue summary, count trigger state count, and pending chat extraction count.
+
+This endpoint lives in `ntrp/server/routers/ops.py`.
 
 ## Monitor events
 

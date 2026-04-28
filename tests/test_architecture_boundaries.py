@@ -34,3 +34,10 @@ def test_services_do_not_import_runtime_composition_root():
             violations.append(f"runtime imported from {rel}")
 
     assert violations == []
+
+
+def test_server_app_does_not_own_http_route_handlers():
+    source = ROOT.joinpath("ntrp/server/app.py").read_text()
+    route_decorators = ("@app.get(", "@app.post(", "@app.put(", "@app.patch(", "@app.delete(")
+
+    assert not any(decorator in source for decorator in route_decorators)

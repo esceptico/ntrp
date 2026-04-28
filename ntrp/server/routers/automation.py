@@ -1,13 +1,13 @@
 import asyncio
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 
 from ntrp.automation.models import Automation
 from ntrp.automation.service import AutomationService
 from ntrp.notifiers.service import NotifierService
 from ntrp.server.bus import BusRegistry
-from ntrp.server.deps import require_automation_service, require_notifier_service
+from ntrp.server.deps import get_bus_registry, require_automation_service, require_notifier_service
 from ntrp.server.middleware import SSEStreamingResponse
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
@@ -104,8 +104,7 @@ async def _automation_event_stream(bus_registry: BusRegistry):
 
 
 @router.get("/automations/events")
-async def automation_events(request: Request):
-    bus_registry: BusRegistry = request.app.state.bus_registry
+async def automation_events(bus_registry: BusRegistry = Depends(get_bus_registry)):
     return SSEStreamingResponse(
         _automation_event_stream(bus_registry),
         media_type="text/event-stream",
