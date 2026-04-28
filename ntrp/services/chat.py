@@ -25,7 +25,7 @@ from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.formatting import format_session_memory
 from ntrp.notifiers.service import NotifierService
-from ntrp.server.bus import SessionBus
+from ntrp.server.bus import BusRegistry, SessionBus
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 from ntrp.server.stream import run_agent_loop
 from ntrp.services.session import SessionService
@@ -234,6 +234,45 @@ async def prepare_chat(
         run_registry=deps.run_registry,
         enqueue_run_completed=deps.enqueue_run_completed,
     )
+
+
+async def submit_chat_message(
+    run_registry: RunRegistry,
+    build_deps: Callable[[], ChatDeps],
+    buses: BusRegistry,
+    *,
+    message: str,
+    session_id: str,
+    skip_approvals: bool = False,
+    images: list[dict] | None = None,
+    context: list[dict] | None = None,
+    client_id: str | None = None,
+) -> dict[str, str]:
+    active_run = run_registry.get_active_run(session_id)
+    if active_run:
+        entry: dict = {
+            "role": Role.USER,
+            "content": build_user_content(message, images, context),
+        }
+        if client_id:
+            entry["client_id"] = client_id
+        active_run.queue_injection(entry)
+        return {"run_id": active_run.run_id, "session_id": session_id}
+
+    deps = build_deps()
+    ctx = await prepare_chat(
+        deps,
+        message,
+        skip_approvals,
+        session_id=session_id,
+        images=images,
+        context=context,
+    )
+    bus = buses.get_or_create(session_id)
+    task = asyncio.create_task(run_chat(ctx, bus))
+    ctx.run.task = task
+
+    return {"run_id": ctx.run.run_id, "session_id": ctx.session_state.session_id}
 
 
 async def _drain_backgrounded(

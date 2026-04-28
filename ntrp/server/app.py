@@ -9,7 +9,6 @@ from importlib.metadata import version
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from ntrp.agent import Role
 from ntrp.events.sse import BackgroundTaskEvent, TextDeltaEvent, TextEvent, TextMessageEndEvent, TextMessageStartEvent
 from ntrp.server.bus import BusRegistry
 from ntrp.server.deps import (
@@ -43,7 +42,7 @@ from ntrp.server.schemas import (
     ToolResultRequest,
 )
 from ntrp.server.state import RunRegistry, RunStatus
-from ntrp.services.chat import build_user_content, prepare_chat, run_chat
+from ntrp.services.chat import submit_chat_message
 from ntrp.settings import verify_api_key
 from ntrp.tools.executor import ToolExecutor
 
@@ -280,35 +279,20 @@ async def chat_message(
     images = [img.model_dump() for img in request.images] if request.images else None
     context = request.context or None
 
-    # If agent is already running, queue message for safe injection
-    active_run = runtime.run_registry.get_active_run(session_id)
-    if active_run:
-        entry: dict = {
-            "role": Role.USER,
-            "content": build_user_content(request.message, images, context),
-        }
-        if request.client_id:
-            entry["client_id"] = request.client_id
-        active_run.queue_injection(entry)
-        return {"run_id": active_run.run_id, "session_id": session_id}
-
     try:
-        ctx = await prepare_chat(
-            runtime.build_chat_deps(),
-            request.message,
-            request.skip_approvals,
+        return await submit_chat_message(
+            runtime.run_registry,
+            lambda: runtime.build_chat_deps(),
+            buses,
+            message=request.message,
+            skip_approvals=request.skip_approvals,
             session_id=session_id,
             images=images,
             context=context,
+            client_id=request.client_id,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-    bus = buses.get_or_create(session_id)
-    task = asyncio.create_task(run_chat(ctx, bus))
-    ctx.run.task = task
-
-    return {"run_id": ctx.run.run_id, "session_id": ctx.session_state.session_id}
 
 
 @app.delete("/chat/inject/{client_id}")
