@@ -104,7 +104,6 @@ async def _publish_completed(
         usage=usage,
         result=result,
     )
-    deps.channel.publish(event)
     if deps.enqueue_run_completed:
         await deps.enqueue_run_completed(event)
 

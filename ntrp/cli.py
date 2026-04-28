@@ -139,7 +139,7 @@ async def _run_headless(prompt: str):
         runtime.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
         run_result = await agent.run(messages)
         console.print(run_result.text)
-        runtime.channel.publish(
+        await runtime.stores.outbox.enqueue_run_completed(
             RunCompleted(
                 run_id=run_id,
                 session_id=session_state.session_id,

@@ -400,6 +400,5 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 usage=run.usage,
                 result=result,
             )
-            ctx.channel.publish(event)
             if ctx.enqueue_run_completed:
                 await ctx.enqueue_run_completed(event)
