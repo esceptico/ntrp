@@ -3,9 +3,10 @@ import signal
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from importlib.metadata import version
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from ntrp.agent import Role
@@ -20,7 +21,7 @@ from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.settings import router as settings_router
 from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.runtime import Runtime, get_runtime
-from ntrp.server.schemas import BackgroundRequest, CancelRequest, ChatRequest, ToolResultRequest
+from ntrp.server.schemas import BackgroundRequest, CancelRequest, ChatRequest, ReplayOutboxRequest, ToolResultRequest
 from ntrp.server.state import RunRegistry, RunStatus
 from ntrp.services.chat import build_user_content, prepare_chat, run_chat
 from ntrp.settings import verify_api_key
@@ -119,6 +120,22 @@ async def health(request: Request, runtime: Runtime = Depends(get_runtime)):
 @app.get("/outbox/status")
 async def get_outbox_status(runtime: Runtime = Depends(get_runtime)):
     return await runtime.get_outbox_status()
+
+
+@app.post("/outbox/dead/replay")
+async def replay_outbox_dead_events(request: ReplayOutboxRequest, runtime: Runtime = Depends(get_runtime)):
+    return await runtime.replay_outbox_dead_events(request.event_ids)
+
+
+@app.delete("/outbox/completed")
+async def prune_outbox_completed(
+    older_than_days: int = Query(default=7, ge=1, le=3650),
+    limit: int = Query(default=1000, ge=1, le=10000),
+    runtime: Runtime = Depends(get_runtime),
+):
+    before = datetime.now(UTC) - timedelta(days=older_than_days)
+    result = await runtime.prune_outbox_completed(before=before, limit=limit)
+    return {**result, "older_than_days": older_than_days}
 
 
 @app.get("/index/status")

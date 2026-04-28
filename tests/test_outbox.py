@@ -122,6 +122,75 @@ async def test_status_reports_backlog_and_dead_letters(outbox_store: OutboxStore
 
 
 @pytest.mark.asyncio
+async def test_replay_dead_resets_event_for_processing(outbox_store: OutboxStore):
+    await outbox_store.enqueue_run_completed(_run_completed())
+    claimed = await outbox_store.claim_batch(worker_id="test-worker", limit=1)
+    await outbox_store.mark_failed(claimed[0].id, error="bad payload", retry_at=None, dead=True)
+
+    result = await outbox_store.replay_dead([claimed[0].id, 999])
+
+    assert result == {
+        "requested": [claimed[0].id, 999],
+        "replayed": [claimed[0].id],
+        "missing": [999],
+        "skipped": [],
+    }
+
+    replayed = await outbox_store.claim_batch(worker_id="test-worker", limit=1)
+    assert len(replayed) == 1
+    assert replayed[0].id == claimed[0].id
+    assert replayed[0].status == "running"
+    assert replayed[0].attempts == 1
+    assert replayed[0].last_error is None
+
+
+@pytest.mark.asyncio
+async def test_replay_dead_skips_non_dead_events(outbox_store: OutboxStore):
+    await outbox_store.enqueue_run_completed(_run_completed())
+    row = (await outbox_store.conn.execute_fetchall("SELECT id FROM outbox_events"))[0]
+
+    result = await outbox_store.replay_dead([row["id"]])
+
+    assert result == {
+        "requested": [row["id"]],
+        "replayed": [],
+        "missing": [],
+        "skipped": [{"id": row["id"], "status": "pending"}],
+    }
+
+
+@pytest.mark.asyncio
+async def test_prune_completed_deletes_only_old_completed_rows_up_to_limit(outbox_store: OutboxStore):
+    for run_id in ("old-1", "old-2", "new-1"):
+        await outbox_store.enqueue_run_completed(_run_completed(run_id))
+        claimed = await outbox_store.claim_batch(worker_id="test-worker", limit=1)
+        await outbox_store.mark_completed(claimed[0].id)
+
+    old = datetime.now(UTC) - timedelta(days=30)
+    new = datetime.now(UTC)
+    await outbox_store.conn.execute(
+        "UPDATE outbox_events SET updated_at = ? WHERE aggregate_id IN ('old-1', 'old-2')",
+        (old.isoformat(),),
+    )
+    await outbox_store.conn.execute(
+        "UPDATE outbox_events SET updated_at = ? WHERE aggregate_id = 'new-1'",
+        (new.isoformat(),),
+    )
+    await outbox_store.conn.commit()
+
+    cutoff = datetime.now(UTC) - timedelta(days=7)
+
+    assert await outbox_store.prune_completed(before=cutoff, limit=1) == 1
+
+    rows = await outbox_store.conn.execute_fetchall("SELECT aggregate_id FROM outbox_events ORDER BY aggregate_id")
+    assert [row["aggregate_id"] for row in rows] == ["new-1", "old-2"]
+
+    assert await outbox_store.prune_completed(before=cutoff, limit=10) == 1
+    rows = await outbox_store.conn.execute_fetchall("SELECT aggregate_id FROM outbox_events ORDER BY aggregate_id")
+    assert [row["aggregate_id"] for row in rows] == ["new-1"]
+
+
+@pytest.mark.asyncio
 async def test_worker_dispatches_and_marks_completed(outbox_store: OutboxStore):
     event = _run_completed()
     await outbox_store.enqueue_run_completed(event)

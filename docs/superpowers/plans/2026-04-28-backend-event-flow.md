@@ -19,10 +19,11 @@ This notebook tracks the backend architecture cleanup that replaces the old in-p
 - Stage 5: monitor events routed directly to the scheduler.
 - Stage 6: obsolete generic channel bus removed.
 - Stage 7: outbox operational visibility.
+- Stage 8: authenticated outbox repair controls.
+  - Replay dead-letter rows only by explicit event IDs.
+  - Prune completed outbox rows only with an age cutoff and bounded limit.
 
 ## Next candidates
 
-- Add an admin-only dead-letter replay path with explicit event IDs.
-- Add bounded pruning for completed outbox rows.
 - Document the remaining backend protocols: SSE stream bus, scheduler triggers, outbox events, monitor events.
 - Consider UI exposure only after the backend endpoint has stable fields.

@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -32,6 +32,13 @@ class CancelRequest(BaseModel):
 
 class BackgroundRequest(BaseModel):
     run_id: str
+
+
+OutboxEventId = Annotated[int, Field(gt=0)]
+
+
+class ReplayOutboxRequest(BaseModel):
+    event_ids: list[OutboxEventId] = Field(..., min_length=1, max_length=100)
 
 
 # --- Session / config ---

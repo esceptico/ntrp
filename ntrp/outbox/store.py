@@ -107,6 +107,31 @@ WHERE status = 'running'
   AND locked_at < ?
 """
 
+_SQL_REPLAY_DEAD = """
+UPDATE outbox_events
+SET status = 'pending',
+    attempts = 0,
+    available_at = ?,
+    locked_at = NULL,
+    locked_by = NULL,
+    last_error = NULL,
+    updated_at = ?
+WHERE status = 'dead'
+  AND id IN ({placeholders})
+"""
+
+_SQL_PRUNE_COMPLETED = """
+DELETE FROM outbox_events
+WHERE id IN (
+    SELECT id
+    FROM outbox_events
+    WHERE status = 'completed'
+      AND updated_at < ?
+    ORDER BY updated_at ASC, id ASC
+    LIMIT ?
+)
+"""
+
 _SQL_STATUS_COUNTS = """
 SELECT status, COUNT(*) AS count
 FROM outbox_events
@@ -159,6 +184,10 @@ def _parse_dt(raw: str | None) -> datetime | None:
 
 def _row_data(row: aiosqlite.Row) -> dict:
     return dict(row)
+
+
+def _placeholders(count: int) -> str:
+    return ",".join("?" for _ in range(count))
 
 
 def _event_from_data(data: dict) -> OutboxEvent:
@@ -316,6 +345,48 @@ class OutboxStore:
         cursor = await self.conn.execute(
             _SQL_RELEASE_STALE,
             (_format_dt(now), _format_dt(locked_before)),
+        )
+        await self.conn.commit()
+        return cursor.rowcount
+
+    async def replay_dead(self, event_ids: list[int], *, now: datetime | None = None) -> dict:
+        ids = list(dict.fromkeys(event_ids))
+        if not ids:
+            return {"requested": [], "replayed": [], "missing": [], "skipped": []}
+
+        rows = await self.conn.execute_fetchall(
+            f"SELECT id, status FROM outbox_events WHERE id IN ({_placeholders(len(ids))})",
+            tuple(ids),
+        )
+        statuses = {int(row["id"]): row["status"] for row in rows}
+        replay_ids = [event_id for event_id in ids if statuses.get(event_id) == "dead"]
+        if replay_ids:
+            replayed_at = now or _now()
+            await self.conn.execute(
+                _SQL_REPLAY_DEAD.format(placeholders=_placeholders(len(replay_ids))),
+                (
+                    _format_dt(replayed_at),
+                    _format_dt(replayed_at),
+                    *replay_ids,
+                ),
+            )
+            await self.conn.commit()
+
+        return {
+            "requested": ids,
+            "replayed": replay_ids,
+            "missing": [event_id for event_id in ids if event_id not in statuses],
+            "skipped": [
+                {"id": event_id, "status": statuses[event_id]}
+                for event_id in ids
+                if event_id in statuses and statuses[event_id] != "dead"
+            ],
+        }
+
+    async def prune_completed(self, *, before: datetime, limit: int) -> int:
+        cursor = await self.conn.execute(
+            _SQL_PRUNE_COMPLETED,
+            (_format_dt(before), limit),
         )
         await self.conn.commit()
         return cursor.rowcount

@@ -454,6 +454,23 @@ class Runtime:
             "dead": by_status.get("dead", 0),
         }
 
+    async def replay_outbox_dead_events(self, event_ids: list[int]) -> dict:
+        if not self.stores:
+            return {"status": "disabled", "requested": event_ids, "replayed": [], "missing": event_ids, "skipped": []}
+        result = await self.stores.outbox.replay_dead(event_ids)
+        return {"status": "queued" if result["replayed"] else "unchanged", **result}
+
+    async def prune_outbox_completed(self, *, before: datetime, limit: int) -> dict:
+        if not self.stores:
+            return {"status": "disabled", "deleted": 0, "before": before.isoformat(), "limit": limit}
+        deleted = await self.stores.outbox.prune_completed(before=before, limit=limit)
+        return {
+            "status": "deleted",
+            "deleted": deleted,
+            "before": before.isoformat(),
+            "limit": limit,
+        }
+
 
 def get_runtime(request: Request) -> Runtime:
     runtime: Runtime | None = getattr(request.app.state, "runtime", None)
