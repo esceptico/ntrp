@@ -428,6 +428,32 @@ class Runtime:
             status["reembed_progress"] = self.memory.reembed_progress
         return status
 
+    async def get_outbox_status(self) -> dict:
+        if not self.stores:
+            return {"status": "disabled"}
+
+        worker_running = self.outbox_worker.is_running if self.outbox_worker else False
+        return {
+            "status": "running" if worker_running else "stopped",
+            "worker": {
+                "running": worker_running,
+                "worker_id": self.outbox_worker.worker_id if self.outbox_worker else None,
+            },
+            "events": await self.stores.outbox.get_status(),
+        }
+
+    async def get_outbox_health(self) -> dict:
+        status = await self.get_outbox_status()
+        events = status.get("events", {})
+        by_status = events.get("by_status", {})
+        return {
+            "worker_running": status.get("worker", {}).get("running", False),
+            "pending": by_status.get("pending", 0),
+            "ready": events.get("ready", 0),
+            "running": by_status.get("running", 0),
+            "dead": by_status.get("dead", 0),
+        }
+
 
 def get_runtime(request: Request) -> Runtime:
     runtime: Runtime | None = getattr(request.app.state, "runtime", None)

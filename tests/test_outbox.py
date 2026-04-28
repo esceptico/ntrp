@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -77,6 +78,47 @@ async def test_enqueue_memory_index_events_allow_repeated_updates(outbox_store: 
     assert claimed[1].payload == {"fact_id": 10, "text": "second"}
     assert claimed[2].payload == {"fact_id": 10}
     assert claimed[3].payload == {}
+
+
+@pytest.mark.asyncio
+async def test_status_reports_backlog_and_dead_letters(outbox_store: OutboxStore):
+    await outbox_store.enqueue_run_completed(_run_completed())
+    await outbox_store.enqueue(
+        event_type="custom.scheduled",
+        payload={"value": 1},
+        idempotency_key="custom.scheduled:1",
+        available_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+
+    claimed = await outbox_store.claim_batch(worker_id="test-worker", limit=1)
+    await outbox_store.mark_failed(claimed[0].id, error="bad payload", retry_at=None, dead=True)
+
+    status = await outbox_store.get_status(now=datetime.now(UTC))
+
+    assert status["total"] == 2
+    assert status["ready"] == 0
+    assert status["scheduled"] == 1
+    assert status["by_status"] == {
+        "pending": 1,
+        "running": 0,
+        "completed": 0,
+        "dead": 1,
+    }
+    assert status["by_event_type"][OUTBOX_RUN_COMPLETED]["dead"] == 1
+    assert status["by_event_type"]["custom.scheduled"]["pending"] == 1
+    assert status["next_pending_available_at"] is not None
+    assert status["newest_dead_updated_at"] is not None
+    assert len(status["recent_dead"]) == 1
+
+    dead = status["recent_dead"][0]
+    assert dead["id"] == claimed[0].id
+    assert dead["event_type"] == OUTBOX_RUN_COMPLETED
+    assert dead["aggregate_type"] == "run"
+    assert dead["aggregate_id"] == "run-1"
+    assert dead["attempts"] == 1
+    assert dead["last_error"] == "bad payload"
+    assert dead["created_at"] is not None
+    assert dead["updated_at"] is not None
 
 
 @pytest.mark.asyncio

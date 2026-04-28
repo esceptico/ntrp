@@ -108,11 +108,17 @@ async def health(request: Request, runtime: Runtime = Depends(get_runtime)):
         "status": "ok" if runtime.connected else "unavailable",
         "version": app.version,
         "has_providers": runtime.config.has_any_model,
+        "outbox": await runtime.get_outbox_health(),
     }
     token = _extract_bearer_token(request)
     if token and runtime.config.api_key_hash:
         result["auth"] = verify_api_key(token, runtime.config.api_key_hash)
     return result
+
+
+@app.get("/outbox/status")
+async def get_outbox_status(runtime: Runtime = Depends(get_runtime)):
+    return await runtime.get_outbox_status()
 
 
 @app.get("/index/status")

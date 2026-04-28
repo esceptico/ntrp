@@ -47,6 +47,10 @@ class OutboxWorker:
     def register_handler(self, event_type: str, handler: OutboxHandler) -> None:
         self._handlers[event_type] = handler
 
+    @property
+    def is_running(self) -> bool:
+        return self._task is not None and not self._task.done()
+
     def start(self) -> None:
         if self._task is not None:
             return

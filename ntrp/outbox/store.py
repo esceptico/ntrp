@@ -107,6 +107,41 @@ WHERE status = 'running'
   AND locked_at < ?
 """
 
+_SQL_STATUS_COUNTS = """
+SELECT status, COUNT(*) AS count
+FROM outbox_events
+GROUP BY status
+"""
+
+_SQL_STATUS_COUNTS_BY_TYPE = """
+SELECT event_type, status, COUNT(*) AS count
+FROM outbox_events
+GROUP BY event_type, status
+ORDER BY event_type, status
+"""
+
+_SQL_STATUS_SUMMARY = """
+SELECT
+    COUNT(*) AS total,
+    SUM(CASE WHEN status = 'pending' AND available_at <= ? THEN 1 ELSE 0 END) AS ready,
+    SUM(CASE WHEN status = 'pending' AND available_at > ? THEN 1 ELSE 0 END) AS scheduled,
+    MIN(CASE WHEN status = 'pending' THEN created_at END) AS oldest_pending_created_at,
+    MIN(CASE WHEN status = 'pending' THEN available_at END) AS next_pending_available_at,
+    MIN(CASE WHEN status = 'running' THEN locked_at END) AS oldest_running_locked_at,
+    MAX(CASE WHEN status = 'dead' THEN updated_at END) AS newest_dead_updated_at
+FROM outbox_events
+"""
+
+_SQL_RECENT_DEAD = """
+SELECT id, event_type, aggregate_type, aggregate_id, attempts, last_error, created_at, updated_at
+FROM outbox_events
+WHERE status = 'dead'
+ORDER BY updated_at DESC, id DESC
+LIMIT ?
+"""
+
+_STATUS_KEYS = ("pending", "running", "completed", "dead")
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -284,3 +319,50 @@ class OutboxStore:
         )
         await self.conn.commit()
         return cursor.rowcount
+
+    async def get_status(self, *, now: datetime | None = None, recent_dead_limit: int = 10) -> dict:
+        observed_at = now or _now()
+        status_rows = await self.conn.execute_fetchall(_SQL_STATUS_COUNTS)
+        type_rows = await self.conn.execute_fetchall(_SQL_STATUS_COUNTS_BY_TYPE)
+        summary_row = (
+            await self.conn.execute_fetchall(
+                _SQL_STATUS_SUMMARY,
+                (_format_dt(observed_at), _format_dt(observed_at)),
+            )
+        )[0]
+        dead_rows = await self.conn.execute_fetchall(_SQL_RECENT_DEAD, (recent_dead_limit,))
+
+        by_status = dict.fromkeys(_STATUS_KEYS, 0)
+        for row in status_rows:
+            by_status[row["status"]] = int(row["count"])
+
+        by_event_type: dict[str, dict[str, int]] = {}
+        for row in type_rows:
+            event_counts = by_event_type.setdefault(row["event_type"], dict.fromkeys(_STATUS_KEYS, 0))
+            event_counts[row["status"]] = int(row["count"])
+
+        return {
+            "observed_at": _format_dt(observed_at),
+            "total": int(summary_row["total"] or 0),
+            "ready": int(summary_row["ready"] or 0),
+            "scheduled": int(summary_row["scheduled"] or 0),
+            "by_status": by_status,
+            "by_event_type": by_event_type,
+            "oldest_pending_created_at": summary_row["oldest_pending_created_at"],
+            "next_pending_available_at": summary_row["next_pending_available_at"],
+            "oldest_running_locked_at": summary_row["oldest_running_locked_at"],
+            "newest_dead_updated_at": summary_row["newest_dead_updated_at"],
+            "recent_dead": [
+                {
+                    "id": int(row["id"]),
+                    "event_type": row["event_type"],
+                    "aggregate_type": row["aggregate_type"],
+                    "aggregate_id": row["aggregate_id"],
+                    "attempts": int(row["attempts"]),
+                    "last_error": row["last_error"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                }
+                for row in dead_rows
+            ],
+        }
