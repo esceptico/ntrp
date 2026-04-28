@@ -35,6 +35,9 @@ class Scheduler:
         self._running: set[asyncio.Task] = set()
         self._handlers: dict[str, Callable[[dict | None], Awaitable[str | None]]] = {}
         self._last_activity_at: datetime = datetime.now(UTC)
+        self._started_at: datetime | None = None
+        self._last_tick_at: datetime | None = None
+        self._last_tick_error: str | None = None
         self._idle_fired: set[str] = set()  # task_ids that already fired this idle period
 
     def set_bus_registry(self, registry: BusRegistry) -> None:
@@ -50,6 +53,7 @@ class Scheduler:
     def start(self) -> None:
         if self._task is not None:
             return
+        self._started_at = datetime.now(UTC)
         self._task = asyncio.create_task(self._startup_and_loop())
         _logger.info("Scheduler started (polling every %ds)", SCHEDULER_POLL_INTERVAL)
 
@@ -125,9 +129,13 @@ class Scheduler:
         while True:
             try:
                 await self._tick()
+                self._last_tick_at = datetime.now(UTC)
+                self._last_tick_error = None
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as exc:
+                self._last_tick_at = datetime.now(UTC)
+                self._last_tick_error = f"{type(exc).__name__}: {exc}"
                 _logger.exception("Scheduler tick failed")
             await asyncio.sleep(SCHEDULER_POLL_INTERVAL)
 
@@ -376,3 +384,16 @@ class Scheduler:
     def _retry_delay_seconds(attempt_count: int) -> int:
         backoff = SCHEDULER_EVENT_RETRY_BASE_SECONDS * (2 ** max(attempt_count, 0))
         return min(SCHEDULER_EVENT_RETRY_MAX_SECONDS, backoff)
+
+    async def get_status(self) -> dict:
+        now = datetime.now(UTC)
+        return {
+            "status": "running" if self.is_running else "stopped",
+            "started_at": self._started_at.isoformat() if self._started_at else None,
+            "last_tick_at": self._last_tick_at.isoformat() if self._last_tick_at else None,
+            "last_tick_error": self._last_tick_error,
+            "last_activity_at": self._last_activity_at.isoformat(),
+            "running_tasks": len(self._running),
+            "registered_handlers": sorted(self._handlers),
+            "store": await self.store.get_status(now),
+        }

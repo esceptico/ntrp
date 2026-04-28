@@ -34,6 +34,9 @@ This notebook tracks the backend architecture cleanup that replaces the old in-p
 - Stage 12: automatic completed outbox retention.
   - Outbox worker prunes completed rows older than 30 days.
   - Pruning is interval-gated and bounded, and never touches pending/running/dead rows.
+- Stage 13: scheduler status visibility.
+  - Scheduler exposes runtime liveness without leaking table access.
+  - AutomationStore owns persisted task, queue, count, and chat extraction status summaries.
 
 ## Next candidates
 

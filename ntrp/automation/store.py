@@ -301,6 +301,72 @@ SET cursor = ?,
 WHERE session_id = ?
 """
 
+_SQL_STATUS_TASKS = """
+SELECT
+    COUNT(*) AS total,
+    SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) AS enabled,
+    SUM(CASE WHEN enabled = 0 THEN 1 ELSE 0 END) AS disabled,
+    SUM(CASE WHEN running_since IS NOT NULL THEN 1 ELSE 0 END) AS running,
+    SUM(
+        CASE
+            WHEN enabled = 1
+              AND running_since IS NULL
+              AND next_run_at IS NOT NULL
+              AND next_run_at <= ?
+            THEN 1 ELSE 0
+        END
+    ) AS due,
+    MIN(
+        CASE
+            WHEN enabled = 1
+              AND running_since IS NULL
+              AND next_run_at IS NOT NULL
+            THEN next_run_at
+        END
+    ) AS next_run_at,
+    MIN(CASE WHEN running_since IS NOT NULL THEN running_since END) AS oldest_running_since
+FROM scheduled_tasks
+"""
+
+_SQL_STATUS_EVENT_QUEUE = """
+SELECT
+    COUNT(*) AS total,
+    SUM(
+        CASE
+            WHEN claimed_at IS NULL
+              AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+            THEN 1 ELSE 0
+        END
+    ) AS ready,
+    SUM(
+        CASE
+            WHEN claimed_at IS NULL
+              AND next_attempt_at > ?
+            THEN 1 ELSE 0
+        END
+    ) AS scheduled,
+    SUM(CASE WHEN claimed_at IS NOT NULL THEN 1 ELSE 0 END) AS claimed,
+    MIN(CASE WHEN claimed_at IS NULL THEN created_at END) AS oldest_pending_created_at,
+    MIN(CASE WHEN claimed_at IS NULL AND next_attempt_at > ? THEN next_attempt_at END) AS next_attempt_at,
+    MIN(CASE WHEN claimed_at IS NOT NULL THEN claimed_at END) AS oldest_claimed_at
+FROM automation_event_queue
+"""
+
+_SQL_STATUS_COUNT_STATE = """
+SELECT
+    COUNT(*) AS total,
+    MIN(updated_at) AS oldest_updated_at
+FROM automation_count_state
+"""
+
+_SQL_STATUS_CHAT_EXTRACTION = """
+SELECT
+    COUNT(*) AS total,
+    SUM(CASE WHEN pending = 1 THEN 1 ELSE 0 END) AS pending,
+    MIN(CASE WHEN pending = 1 THEN updated_at END) AS oldest_pending_updated_at
+FROM chat_extraction_state
+"""
+
 
 # --- Migration ---
 
@@ -710,3 +776,41 @@ class AutomationStore:
             (cursor, cursor, updated_at.isoformat(), session_id),
         )
         await self.conn.commit()
+
+    async def get_status(self, now: datetime) -> dict:
+        now_iso = now.isoformat()
+        task_row = (await self.conn.execute_fetchall(_SQL_STATUS_TASKS, (now_iso,)))[0]
+        queue_row = (await self.conn.execute_fetchall(_SQL_STATUS_EVENT_QUEUE, (now_iso, now_iso, now_iso)))[0]
+        count_row = (await self.conn.execute_fetchall(_SQL_STATUS_COUNT_STATE))[0]
+        chat_row = (await self.conn.execute_fetchall(_SQL_STATUS_CHAT_EXTRACTION))[0]
+
+        return {
+            "observed_at": now_iso,
+            "tasks": {
+                "total": int(task_row["total"] or 0),
+                "enabled": int(task_row["enabled"] or 0),
+                "disabled": int(task_row["disabled"] or 0),
+                "running": int(task_row["running"] or 0),
+                "due": int(task_row["due"] or 0),
+                "next_run_at": task_row["next_run_at"],
+                "oldest_running_since": task_row["oldest_running_since"],
+            },
+            "event_queue": {
+                "total": int(queue_row["total"] or 0),
+                "ready": int(queue_row["ready"] or 0),
+                "scheduled": int(queue_row["scheduled"] or 0),
+                "claimed": int(queue_row["claimed"] or 0),
+                "oldest_pending_created_at": queue_row["oldest_pending_created_at"],
+                "next_attempt_at": queue_row["next_attempt_at"],
+                "oldest_claimed_at": queue_row["oldest_claimed_at"],
+            },
+            "count_state": {
+                "total": int(count_row["total"] or 0),
+                "oldest_updated_at": count_row["oldest_updated_at"],
+            },
+            "chat_extraction": {
+                "total": int(chat_row["total"] or 0),
+                "pending": int(chat_row["pending"] or 0),
+                "oldest_pending_updated_at": chat_row["oldest_pending_updated_at"],
+            },
+        }

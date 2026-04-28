@@ -1,11 +1,13 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
 
 import ntrp.database as database
+from ntrp.automation.models import Automation
 from ntrp.automation.store import AutomationStore
+from ntrp.automation.triggers import TimeTrigger
 
 
 @pytest_asyncio.fixture
@@ -15,6 +17,29 @@ async def automation_store(tmp_path: Path):
     await store.init_schema()
     yield store
     await conn.close()
+
+
+def _automation(
+    task_id: str,
+    *,
+    enabled: bool = True,
+    next_run_at: datetime | None = None,
+    running_since: datetime | None = None,
+) -> Automation:
+    return Automation(
+        task_id=task_id,
+        name=task_id,
+        description=f"{task_id} description",
+        model=None,
+        triggers=[TimeTrigger(at="09:00")],
+        enabled=enabled,
+        created_at=datetime.now(UTC),
+        next_run_at=next_run_at,
+        last_run_at=None,
+        last_result=None,
+        running_since=running_since,
+        writable=False,
+    )
 
 
 @pytest.mark.asyncio
@@ -52,3 +77,44 @@ async def test_chat_extraction_state_tracks_pending_and_cursor(automation_store:
 
     assert await automation_store.get_chat_extraction_cursor("session-1") == 2
     assert await automation_store.list_pending_chat_extractions() == [("session-1", 2, next_messages)]
+
+
+@pytest.mark.asyncio
+async def test_status_summarizes_scheduler_owned_state(automation_store: AutomationStore):
+    now = datetime.now(UTC)
+    await automation_store.save(_automation("due", next_run_at=now - timedelta(minutes=5)))
+    await automation_store.save(_automation("future", next_run_at=now + timedelta(hours=1)))
+    await automation_store.save(_automation("disabled", enabled=False, next_run_at=now - timedelta(minutes=5)))
+    await automation_store.save(
+        _automation("running", next_run_at=now - timedelta(minutes=5), running_since=now - timedelta(minutes=10))
+    )
+
+    await automation_store.enqueue_event("event-task", "event-1", "{}", now - timedelta(minutes=3))
+    await automation_store.enqueue_event("event-task", "event-2", "{}", now - timedelta(minutes=2))
+    claimed = await automation_store.claim_next_event("event-task", now)
+    await automation_store.fail_event(claimed[0], "try later", now + timedelta(minutes=30))
+    await automation_store.claim_next_event("event-task", now)
+
+    await automation_store.increment_count("count-task", "session-1", now - timedelta(minutes=20))
+    await automation_store.record_chat_extraction_activity(
+        "session-1",
+        ({"role": "user", "content": "hello"},),
+        now - timedelta(minutes=15),
+    )
+
+    status = await automation_store.get_status(now)
+
+    assert status["tasks"]["total"] == 4
+    assert status["tasks"]["enabled"] == 3
+    assert status["tasks"]["disabled"] == 1
+    assert status["tasks"]["running"] == 1
+    assert status["tasks"]["due"] == 1
+    assert status["tasks"]["next_run_at"] is not None
+    assert status["tasks"]["oldest_running_since"] is not None
+    assert status["event_queue"]["total"] == 2
+    assert status["event_queue"]["ready"] == 0
+    assert status["event_queue"]["scheduled"] == 1
+    assert status["event_queue"]["claimed"] == 1
+    assert status["count_state"]["total"] == 1
+    assert status["chat_extraction"]["total"] == 1
+    assert status["chat_extraction"]["pending"] == 1

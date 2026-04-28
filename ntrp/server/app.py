@@ -30,6 +30,7 @@ from ntrp.server.schemas import (
     OutboxReplayResponse,
     OutboxStatusResponse,
     ReplayOutboxRequest,
+    SchedulerStatusResponse,
     ToolResultRequest,
 )
 from ntrp.server.state import RunRegistry, RunStatus
@@ -151,6 +152,11 @@ async def prune_outbox_completed(
 @app.get("/index/status")
 async def get_index_status(runtime: Runtime = Depends(get_runtime)):
     return await runtime.get_index_status()
+
+
+@app.get("/scheduler/status", response_model=SchedulerStatusResponse, response_model_exclude_none=True)
+async def get_scheduler_status(runtime: Runtime = Depends(get_runtime)):
+    return await runtime.get_scheduler_status()
 
 
 @app.post("/index/start")

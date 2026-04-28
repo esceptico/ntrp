@@ -182,6 +182,10 @@ Event-triggered automations have their own queue because external monitor events
 
 `run.completed` count triggers intentionally enter the scheduler through the outbox. That keeps chat/operator completion durable before count state and chat extraction state are updated.
 
+Operational endpoint:
+
+- `GET /scheduler/status`: scheduler liveness, registered built-in handlers, running task count, automation task summary, event queue summary, count trigger state count, and pending chat extraction count.
+
 ## Monitor events
 
 Source files:

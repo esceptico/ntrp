@@ -121,6 +121,56 @@ class OutboxPruneResponse(BaseModel):
     older_than_days: int
 
 
+class SchedulerTaskStatusResponse(BaseModel):
+    total: int
+    enabled: int
+    disabled: int
+    running: int
+    due: int
+    next_run_at: str | None = None
+    oldest_running_since: str | None = None
+
+
+class SchedulerEventQueueStatusResponse(BaseModel):
+    total: int
+    ready: int
+    scheduled: int
+    claimed: int
+    oldest_pending_created_at: str | None = None
+    next_attempt_at: str | None = None
+    oldest_claimed_at: str | None = None
+
+
+class SchedulerCountStateStatusResponse(BaseModel):
+    total: int
+    oldest_updated_at: str | None = None
+
+
+class SchedulerChatExtractionStatusResponse(BaseModel):
+    total: int
+    pending: int
+    oldest_pending_updated_at: str | None = None
+
+
+class SchedulerStoreStatusResponse(BaseModel):
+    observed_at: str
+    tasks: SchedulerTaskStatusResponse
+    event_queue: SchedulerEventQueueStatusResponse
+    count_state: SchedulerCountStateStatusResponse
+    chat_extraction: SchedulerChatExtractionStatusResponse
+
+
+class SchedulerStatusResponse(BaseModel):
+    status: Literal["running", "stopped", "disabled"]
+    started_at: str | None = None
+    last_tick_at: str | None = None
+    last_tick_error: str | None = None
+    last_activity_at: str | None = None
+    running_tasks: int = 0
+    registered_handlers: list[str] = Field(default_factory=list)
+    store: SchedulerStoreStatusResponse | None = None
+
+
 # --- Session / config ---
 
 
