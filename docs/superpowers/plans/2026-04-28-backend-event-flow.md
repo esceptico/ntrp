@@ -25,7 +25,10 @@ This notebook tracks the backend architecture cleanup that replaces the old in-p
 - Stage 9: documented remaining backend protocols.
   - SSE stream bus is documented as transient UI transport.
   - Outbox, scheduler triggers, and monitor events are documented as separate owned protocols.
+- Stage 10: stabilized outbox API response contracts.
+  - `/health`, `/outbox/status`, `/outbox/dead/replay`, and `/outbox/completed` now have explicit response schemas.
+  - OpenAPI exposes stable outbox endpoint response models for future clients.
 
 ## Next candidates
 
-- Consider UI exposure only after the backend endpoint has stable fields.
+- Consider UI or CLI exposure now that the backend endpoint fields are stable.

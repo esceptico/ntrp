@@ -21,7 +21,17 @@ from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.settings import router as settings_router
 from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.runtime import Runtime, get_runtime
-from ntrp.server.schemas import BackgroundRequest, CancelRequest, ChatRequest, ReplayOutboxRequest, ToolResultRequest
+from ntrp.server.schemas import (
+    BackgroundRequest,
+    CancelRequest,
+    ChatRequest,
+    HealthResponse,
+    OutboxPruneResponse,
+    OutboxReplayResponse,
+    OutboxStatusResponse,
+    ReplayOutboxRequest,
+    ToolResultRequest,
+)
 from ntrp.server.state import RunRegistry, RunStatus
 from ntrp.services.chat import build_user_content, prepare_chat, run_chat
 from ntrp.settings import verify_api_key
@@ -103,7 +113,7 @@ def _get_bus_registry(request: Request) -> BusRegistry:
     return request.app.state.bus_registry
 
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse, response_model_exclude_none=True)
 async def health(request: Request, runtime: Runtime = Depends(get_runtime)):
     result: dict = {
         "status": "ok" if runtime.connected else "unavailable",
@@ -117,17 +127,17 @@ async def health(request: Request, runtime: Runtime = Depends(get_runtime)):
     return result
 
 
-@app.get("/outbox/status")
+@app.get("/outbox/status", response_model=OutboxStatusResponse)
 async def get_outbox_status(runtime: Runtime = Depends(get_runtime)):
     return await runtime.get_outbox_status()
 
 
-@app.post("/outbox/dead/replay")
+@app.post("/outbox/dead/replay", response_model=OutboxReplayResponse)
 async def replay_outbox_dead_events(request: ReplayOutboxRequest, runtime: Runtime = Depends(get_runtime)):
     return await runtime.replay_outbox_dead_events(request.event_ids)
 
 
-@app.delete("/outbox/completed")
+@app.delete("/outbox/completed", response_model=OutboxPruneResponse)
 async def prune_outbox_completed(
     older_than_days: int = Query(default=7, ge=1, le=3650),
     limit: int = Query(default=1000, ge=1, le=10000),

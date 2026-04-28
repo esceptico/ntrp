@@ -41,6 +41,86 @@ class ReplayOutboxRequest(BaseModel):
     event_ids: list[OutboxEventId] = Field(..., min_length=1, max_length=100)
 
 
+class OutboxHealthResponse(BaseModel):
+    worker_running: bool
+    pending: int
+    ready: int
+    running: int
+    dead: int
+
+
+class HealthResponse(BaseModel):
+    status: str
+    version: str
+    has_providers: bool
+    outbox: OutboxHealthResponse
+    auth: bool | None = None
+
+
+class OutboxWorkerResponse(BaseModel):
+    running: bool
+    worker_id: str | None = None
+
+
+class OutboxStatusCountsResponse(BaseModel):
+    pending: int = 0
+    running: int = 0
+    completed: int = 0
+    dead: int = 0
+
+
+class OutboxDeadEventResponse(BaseModel):
+    id: int
+    event_type: str
+    aggregate_type: str | None = None
+    aggregate_id: str | None = None
+    attempts: int
+    last_error: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class OutboxEventsStatusResponse(BaseModel):
+    observed_at: str
+    total: int
+    ready: int
+    scheduled: int
+    by_status: OutboxStatusCountsResponse
+    by_event_type: dict[str, OutboxStatusCountsResponse]
+    oldest_pending_created_at: str | None = None
+    next_pending_available_at: str | None = None
+    oldest_running_locked_at: str | None = None
+    newest_dead_updated_at: str | None = None
+    recent_dead: list[OutboxDeadEventResponse]
+
+
+class OutboxStatusResponse(BaseModel):
+    status: Literal["running", "stopped", "disabled"]
+    worker: OutboxWorkerResponse | None = None
+    events: OutboxEventsStatusResponse | None = None
+
+
+class OutboxReplaySkippedResponse(BaseModel):
+    id: int
+    status: str
+
+
+class OutboxReplayResponse(BaseModel):
+    status: Literal["queued", "unchanged", "disabled"]
+    requested: list[int]
+    replayed: list[int]
+    missing: list[int]
+    skipped: list[OutboxReplaySkippedResponse]
+
+
+class OutboxPruneResponse(BaseModel):
+    status: Literal["deleted", "disabled"]
+    deleted: int
+    before: str
+    limit: int
+    older_than_days: int
+
+
 # --- Session / config ---
 
 

@@ -32,6 +32,7 @@ class _Runtime:
                 "worker_id": "test-worker",
             },
             "events": {
+                "observed_at": "2026-04-28T00:00:00+00:00",
                 "total": 3,
                 "ready": 1,
                 "scheduled": 1,
@@ -41,6 +42,18 @@ class _Runtime:
                     "completed": 0,
                     "dead": 1,
                 },
+                "by_event_type": {
+                    "run.completed": {
+                        "pending": 2,
+                        "running": 0,
+                        "completed": 0,
+                        "dead": 1,
+                    }
+                },
+                "oldest_pending_created_at": "2026-04-28T00:00:00+00:00",
+                "next_pending_available_at": "2026-04-28T00:00:00+00:00",
+                "oldest_running_locked_at": None,
+                "newest_dead_updated_at": "2026-04-28T00:00:00+00:00",
                 "recent_dead": [],
             },
         }
@@ -94,6 +107,20 @@ def test_outbox_status_endpoint_returns_detailed_state():
     assert response.status_code == 200
     assert response.json()["events"]["by_status"]["dead"] == 1
     assert response.json()["worker"]["worker_id"] == "test-worker"
+
+
+def test_outbox_endpoints_have_response_models_in_openapi():
+    schema = TestClient(app).get("/openapi.json").json()
+
+    assert schema["paths"]["/outbox/status"]["get"]["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/OutboxStatusResponse"
+    }
+    assert schema["paths"]["/outbox/dead/replay"]["post"]["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ] == {"$ref": "#/components/schemas/OutboxReplayResponse"}
+    assert schema["paths"]["/outbox/completed"]["delete"]["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ] == {"$ref": "#/components/schemas/OutboxPruneResponse"}
 
 
 def test_replay_outbox_dead_events_requires_explicit_ids():
