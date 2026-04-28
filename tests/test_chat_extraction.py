@@ -11,7 +11,6 @@ import pytest_asyncio
 import ntrp.database as database
 import ntrp.llm.models as llm_models
 from ntrp.automation.store import AutomationStore
-from ntrp.channel import Channel
 from ntrp.config import Config
 from ntrp.llm.models import EmbeddingModel, Provider
 from ntrp.memory.extraction_handler import create_chat_extraction_handler
@@ -59,7 +58,6 @@ async def memory(tmp_path: Path, monkeypatch) -> AsyncGenerator[FactMemory]:
         db_path=config.memory_db_path,
         embedding=config.embedding,
         model=config.memory_model,
-        channel=Channel(),
     )
     mem.embedder.embed_one = _mock_embed_one
     yield mem

@@ -4,14 +4,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from ntrp.agent import Agent, Role
-from ntrp.channel import Channel
 from ntrp.constants import CONVERSATION_GAP_THRESHOLD
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.content import ContextContent, ImageContent, TextContent
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import INIT_INSTRUCTION, build_system_blocks
 from ntrp.core.usage_tracker import UsageTracker
-from ntrp.events.internal import RunCompleted, RunStarted
+from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import (
     MessageIngestedEvent,
     RunBackgroundedEvent,
@@ -47,7 +46,6 @@ class ChatContext:
     executor: ToolExecutor
     tools: list[dict]
     config: AgentConfig
-    channel: Channel
     available_integrations: list[str]
     integration_errors: dict[str, str]
     session_service: SessionService
@@ -214,7 +212,6 @@ async def prepare_chat(
         executor=runtime.executor,
         tools=runtime.executor.get_tools(),
         config=AgentConfig.from_config(runtime.config),
-        channel=runtime.channel,
         available_integrations=runtime.get_available_integrations(),
         integration_errors=runtime.get_integration_errors(),
         session_service=runtime.session_service,
@@ -308,8 +305,6 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
     )
 
     await bus.emit(ThinkingEvent(status="processing..."))
-    ctx.channel.publish(RunStarted(run_id=run.run_id, session_id=session_state.session_id))
-
     agent: Agent | None = None
     tracker = UsageTracker()
     result: str | None = None
@@ -321,7 +316,6 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             config=ctx.config,
             tools=ctx.tools,
             session_state=session_state,
-            channel=ctx.channel,
             run_id=run.run_id,
             io=io,
             extra_auto_approve=INIT_AUTO_APPROVE if ctx.is_init else None,

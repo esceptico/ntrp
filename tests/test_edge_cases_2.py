@@ -8,7 +8,6 @@ import pytest_asyncio
 
 import ntrp.database as database
 from ntrp.agent import Agent
-from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
 from ntrp.services.chat import _retain_user_content, _time_gap_note
@@ -220,7 +219,6 @@ async def test_approval_rejected_when_no_ui():
         registry=ToolRegistry(),
         run=RunContext(run_id="run-1"),
         io=IOBridge(),  # no emit, no approval_queue
-        channel=Channel(),
         background_tasks=BackgroundTaskRegistry(session_id="test"),
     )
     execution = ToolExecution(tool_id="t1", tool_name="bash", ctx=ctx)

@@ -8,7 +8,6 @@ from coolname import generate_slug
 
 from ntrp.agent import Role, ToolResult
 from ntrp.agent.ledger import SharedLedger
-from ntrp.channel import Channel
 from ntrp.constants import NTRP_TMP_BASE
 from ntrp.context.models import SessionState
 from ntrp.events.sse import ApprovalNeededEvent, BackgroundTaskEvent
@@ -146,7 +145,6 @@ class ToolContext:
     run: RunContext
     io: IOBridge
     services: dict[str, Any] = field(default_factory=dict)
-    channel: Channel = field(default_factory=Channel)
     ledger: SharedLedger | None = None
     spawn_fn: Callable[..., Awaitable[str]] | None = None
     background_tasks: BackgroundTaskRegistry = field(default_factory=BackgroundTaskRegistry)

@@ -6,10 +6,8 @@ from fastapi import HTTPException, Request
 from ntrp.automation.builtins import seed_builtins
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
-from ntrp.channel import Channel
 from ntrp.config import Config, get_config
 from ntrp.core.factory import AgentConfig
-from ntrp.events.internal import SourceChanged
 from ntrp.integrations import ALL_INTEGRATIONS, IntegrationRegistry
 from ntrp.integrations.calendar.client import MultiCalendarSource
 from ntrp.integrations.types import Indexable
@@ -53,17 +51,12 @@ _logger = get_logger(__name__)
 class Runtime:
     def __init__(self, config: Config | None = None):
         self.config = config or get_config()
-        self.channel = Channel()
         self.integrations = IntegrationRegistry(ALL_INTEGRATIONS)
         self.integrations.sync(self.config)
         self.run_registry = RunRegistry()
 
         self.embedding = self.config.embedding
-        self.indexer = (
-            Indexer(db_path=self.config.search_db_path, embedding=self.embedding, channel=self.channel)
-            if self.embedding
-            else None
-        )
+        self.indexer = Indexer(db_path=self.config.search_db_path, embedding=self.embedding) if self.embedding else None
 
         self.stores: Stores | None = None
         self.memory: FactMemory | None = None
@@ -153,7 +146,6 @@ class Runtime:
             db_path=self.config.memory_db_path,
             embedding=self.embedding,
             model=self.config.memory_model,
-            channel=self.channel,
             enqueue_fact_index_upsert=self.stores.outbox.enqueue_fact_index_upsert,
             enqueue_fact_index_delete=self.stores.outbox.enqueue_fact_index_delete,
         )
@@ -217,7 +209,6 @@ class Runtime:
         llm_init(self.config)
         self.stores = await Stores.connect(self.config)
         await self._init_search()
-        self._wire_events()
         self._init_indexables()
         await self._init_memory()
         self._init_skills()
@@ -350,7 +341,6 @@ class Runtime:
         if self.indexer:
             await self.indexer.close()
         await llm_close()
-        await self.channel.stop()
 
     # --- Queries ---
 
@@ -373,7 +363,6 @@ class Runtime:
             executor=self.executor,
             memory=self.memory,
             config=AgentConfig.from_config(self.config),
-            channel=self.channel,
             source_details={},
             create_session=self.stores.sessions.create,
             notifiers=self.notifier_service.list_summary() if self.notifier_service else [],
@@ -395,22 +384,6 @@ class Runtime:
         self.scheduler.start()
         if self.outbox_worker:
             self.outbox_worker.start()
-
-    def _wire_events(self) -> None:
-        if not self.indexer:
-            return
-
-        async def on_source_changed(event: SourceChanged) -> None:
-            name = event.source_name
-            client = self.integrations.get_client(name)
-            if client and isinstance(client, Indexable):
-                self.indexables[name] = client
-                self.start_indexing()
-            elif client is None:
-                self.indexables.pop(name, None)
-                await self.indexer.index.clear_source(name)
-
-        self.channel.subscribe(SourceChanged, on_source_changed)
 
     def _build_consolidation_handler(self):
         async def handler(context: dict | None) -> str | None:

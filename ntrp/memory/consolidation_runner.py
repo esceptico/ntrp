@@ -6,7 +6,6 @@ from typing import Any
 
 from ntrp.constants import CONSOLIDATION_PASS_TIMEOUT
 from ntrp.embedder import Embedder
-from ntrp.events.internal import ConsolidationCompleted
 from ntrp.logging import get_logger
 from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decisions
 from ntrp.memory.decay import should_archive_fact, should_archive_observation
@@ -31,7 +30,6 @@ class ConsolidationRunner:
         dreams: DreamRepository,
         embedder: Embedder,
         model_fn: Callable[[], str],
-        publish: Callable[[Any], None],
         transaction: Callable[..., Any],
         db_lock: asyncio.Lock,
         db_conn: Any,
@@ -41,7 +39,6 @@ class ConsolidationRunner:
         self.dreams = dreams
         self.embedder = embedder
         self._model_fn = model_fn
-        self._publish = publish
         self._transaction = transaction
         self._db_lock = db_lock
         self._db_conn = db_conn
@@ -124,7 +121,6 @@ class ConsolidationRunner:
 
         if count > 0:
             _logger.info("Consolidated %d facts", count)
-            self._publish(ConsolidationCompleted(facts_processed=count, observations_created=obs_created))
         return count
 
     async def _maybe_run_temporal_pass(self) -> None:

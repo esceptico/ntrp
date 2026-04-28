@@ -10,7 +10,6 @@ import aiosqlite
 from pydantic import BaseModel, ConfigDict
 
 import ntrp.database as database
-from ntrp.channel import Channel
 from ntrp.constants import (
     FACT_DEDUP_EMBEDDING_SIMILARITY,
     FACT_DEDUP_TEXT_RATIO,
@@ -53,7 +52,6 @@ class FactMemory:
         conn: aiosqlite.Connection,
         embedding: EmbeddingConfig,
         model: str,
-        channel: Channel,
         embedder: Embedder | None = None,
         extractor: Extractor | None = None,
         read_conn: aiosqlite.Connection | None = None,
@@ -66,7 +64,6 @@ class FactMemory:
         self.dreams = DreamRepository(conn, read_conn)
         self.embedder = embedder or Embedder(embedding)
         self.extractor = extractor or Extractor(model)
-        self.channel = channel
         self._enqueue_fact_index_upsert = enqueue_fact_index_upsert
         self._enqueue_fact_index_delete = enqueue_fact_index_delete
         self._db_lock = asyncio.Lock()
@@ -79,7 +76,6 @@ class FactMemory:
             dreams=self.dreams,
             embedder=self.embedder,
             model_fn=lambda: self.model,
-            publish=self.channel.publish,
             transaction=self.transaction,
             db_lock=self._db_lock,
             db_conn=conn,
@@ -105,7 +101,6 @@ class FactMemory:
         db_path: Path,
         embedding: EmbeddingConfig,
         model: str,
-        channel: Channel,
         enqueue_fact_index_upsert: Callable[[int, str], Awaitable[bool]] | None = None,
         enqueue_fact_index_delete: Callable[[int], Awaitable[bool]] | None = None,
     ) -> Self:
@@ -115,7 +110,6 @@ class FactMemory:
             conn,
             embedding,
             model,
-            channel=channel,
             read_conn=read_conn,
             enqueue_fact_index_upsert=enqueue_fact_index_upsert,
             enqueue_fact_index_delete=enqueue_fact_index_delete,

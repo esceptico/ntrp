@@ -153,7 +153,6 @@ async def test_create_agent_returns_agent_with_hooks():
     """Smoke test: create_agent should return an Agent instance with working hooks attribute."""
     from datetime import UTC, datetime
 
-    from ntrp.channel import Channel
     from ntrp.context.models import SessionState
     from ntrp.core.factory import AgentConfig, create_agent
     from ntrp.tools.executor import ToolExecutor
@@ -167,7 +166,6 @@ async def test_create_agent_returns_agent_with_hooks():
         config=config,
         tools=[],
         session_state=session_state,
-        channel=Channel(),
         run_id="test-run",
     )
 

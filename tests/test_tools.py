@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 
 import pytest
 
-from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.tools.bash import BashTool, execute_bash, is_blocked_command, is_safe_command
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
@@ -17,7 +16,6 @@ def _make_execution(tool_name: str = "test") -> ToolExecution:
         registry=ToolRegistry(),
         run=RunContext(run_id="run-1"),
         io=IOBridge(),
-        channel=Channel(),
         background_tasks=BackgroundTaskRegistry(session_id="test"),
     )
     return ToolExecution(tool_id="t1", tool_name=tool_name, ctx=ctx)

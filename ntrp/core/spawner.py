@@ -71,7 +71,6 @@ def create_spawn_fn(
             run=child_run,
             io=bg_io,
             services=calling_ctx.services,
-            channel=calling_ctx.channel,
             ledger=calling_ctx.ledger,
             background_tasks=calling_ctx.background_tasks,
         )

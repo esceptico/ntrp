@@ -5,7 +5,6 @@ from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 
 from ntrp.agent import Choice, CompletionResponse, FunctionCall, Message, ToolCall, Usage
-from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.llm.base import CompletionClient
@@ -86,7 +85,6 @@ def make_tool_context(executor: ToolExecutor) -> ToolContext:
         registry=executor.registry,
         run=RunContext(run_id="run-1"),
         io=IOBridge(),
-        channel=Channel(),
         background_tasks=BackgroundTaskRegistry(session_id="test"),
     )
 

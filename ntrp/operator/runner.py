@@ -5,11 +5,10 @@ from dataclasses import dataclass, replace
 from coolname import generate_slug
 
 from ntrp.agent import Agent, Result, Role, Usage
-from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
-from ntrp.events.internal import RunCompleted, RunStarted
+from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationProgressEvent, ToolCallEvent, ToolResultEvent, agent_event_to_sse
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.formatting import format_session_memory
@@ -23,7 +22,6 @@ class OperatorDeps:
     executor: ToolExecutor
     memory: FactMemory | None
     config: AgentConfig
-    channel: Channel
     source_details: dict[str, dict]
     create_session: Callable[[], SessionState]
     notifiers: list[dict[str, str]]
@@ -77,7 +75,6 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
         config=agent_config,
         tools=tools,
         session_state=session_state,
-        channel=deps.channel,
         run_id=run_id,
     )
 
@@ -111,7 +108,6 @@ async def _publish_completed(
 async def run_agent(deps: OperatorDeps, request: RunRequest) -> RunResult:
     agent, messages, run_id, session_id = await _prepare(deps, request)
 
-    deps.channel.publish(RunStarted(run_id=run_id, session_id=session_id))
     agent_result = await agent.run(messages)
     await _publish_completed(deps, run_id, session_id, messages, agent_result.usage, agent_result.text)
 
@@ -125,8 +121,6 @@ async def run_agent_streaming(
     task_id: str,
 ) -> RunResult:
     agent, messages, run_id, session_id = await _prepare(deps, request)
-
-    deps.channel.publish(RunStarted(run_id=run_id, session_id=session_id))
 
     result_text: str | None = None
     usage = Usage()

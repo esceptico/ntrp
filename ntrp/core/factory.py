@@ -3,7 +3,6 @@ from typing import Self
 
 from ntrp.agent import Agent, AgentHooks
 from ntrp.agent.ledger import SharedLedger
-from ntrp.channel import Channel
 from ntrp.context.models import SessionState
 from ntrp.core.compaction_hook import NtrpCompactionHook
 from ntrp.core.compactor import Compactor, SummaryCompactor
@@ -42,7 +41,6 @@ def create_agent(
     config: AgentConfig,
     tools: list[dict],
     session_state: SessionState,
-    channel: Channel,
     run_id: str,
     io: IOBridge | None = None,
     extra_auto_approve: set[str] | None = None,
@@ -63,7 +61,6 @@ def create_agent(
         run=run_ctx,
         io=io or IOBridge(),
         services=executor.tool_services,
-        channel=channel,
         ledger=SharedLedger(),
         background_tasks=bg_tasks,
     )
@@ -77,8 +74,6 @@ def create_agent(
     ntrp_executor = NtrpToolExecutor(executor, tool_ctx, ledger=tool_ctx.ledger)
 
     compaction_hook = NtrpCompactionHook(
-        channel=channel,
-        session_id=session_state.session_id,
         model=config.model,
         compactor=config.compactor,
     )

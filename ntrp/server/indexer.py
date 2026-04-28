@@ -4,13 +4,11 @@ from enum import StrEnum
 from pathlib import Path
 
 import ntrp.database as database
-from ntrp.channel import Channel
 from ntrp.embedder import Embedder, EmbeddingConfig
-from ntrp.events.internal import IndexingCompleted, IndexingStarted
+from ntrp.integrations.types import Indexable
 from ntrp.logging import get_logger
 from ntrp.search.index import SearchIndex
 from ntrp.search.store import SearchStore
-from ntrp.integrations.types import Indexable
 
 _logger = get_logger(__name__)
 
@@ -33,10 +31,9 @@ class IndexProgress:
 
 
 class Indexer:
-    def __init__(self, db_path: Path, embedding: EmbeddingConfig, channel: Channel):
+    def __init__(self, db_path: Path, embedding: EmbeddingConfig):
         self.db_path = db_path
         self.embedding = embedding
-        self.channel = channel
         self.index: SearchIndex | None = None
         self._conn = None
         self._progress = IndexProgress()
@@ -100,7 +97,6 @@ class Indexer:
 
         try:
             self._progress.status = IndexStatus.INDEXING
-            self.channel.publish(IndexingStarted(sources=[s.name for s in sources]))
 
             for source in sources:
                 items = await source.scan()
@@ -109,7 +105,6 @@ class Indexer:
                 self._progress.deleted += d
 
             self._progress.status = IndexStatus.DONE
-            self.channel.publish(IndexingCompleted(updated=self._progress.updated, deleted=self._progress.deleted))
         except asyncio.CancelledError:
             self._progress.status = IndexStatus.ERROR
             raise

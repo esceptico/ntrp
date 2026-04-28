@@ -37,11 +37,6 @@ WEB_SEARCH_MAX_RESULTS = 20
 CONVERSATION_GAP_THRESHOLD = 1800  # seconds (30 min) - show time gap note if exceeded
 
 
-# --- Channel ---
-
-CHANNEL_DISPATCH_WORKERS = 32
-
-
 # --- Outbox ---
 
 OUTBOX_BATCH_SIZE = 20

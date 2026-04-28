@@ -10,7 +10,7 @@ from ntrp.agent import Role
 from ntrp.config import get_config
 from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
-from ntrp.events.internal import RunCompleted, RunStarted
+from ntrp.events.internal import RunCompleted
 from ntrp.logging import UVICORN_LOG_CONFIG
 from ntrp.server.runtime import Runtime
 from ntrp.settings import generate_api_key, load_user_settings, save_user_settings
@@ -125,7 +125,6 @@ async def _run_headless(prompt: str):
             config=config,
             tools=runtime.executor.get_tools(),
             session_state=session_state,
-            channel=runtime.channel,
             run_id=run_id,
             io=IOBridge(),
         )
@@ -136,7 +135,6 @@ async def _run_headless(prompt: str):
         ]
 
         console.print(f"[dim]Running: {prompt}[/dim]\n")
-        runtime.channel.publish(RunStarted(run_id=run_id, session_id=session_state.session_id))
         run_result = await agent.run(messages)
         console.print(run_result.text)
         await runtime.stores.outbox.enqueue_run_completed(
