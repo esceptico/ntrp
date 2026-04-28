@@ -133,6 +133,12 @@ Operational endpoints:
 - `POST /outbox/dead/replay`: moves explicit dead row IDs back to `pending`.
 - `DELETE /outbox/completed`: deletes old completed rows with an age cutoff and limit.
 
+Retention:
+
+- `OutboxWorker` automatically prunes completed rows older than 30 days.
+- Pruning runs opportunistically during worker polling, at most once per hour, in bounded batches.
+- Automatic pruning only deletes `completed` rows. `pending`, `running`, and `dead` rows remain until processed or explicitly repaired.
+
 Guarantees:
 
 - At-least-once delivery to handlers.

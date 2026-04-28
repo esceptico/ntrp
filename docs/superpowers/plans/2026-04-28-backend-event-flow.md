@@ -31,6 +31,9 @@ This notebook tracks the backend architecture cleanup that replaces the old in-p
 - Stage 11: guarded persistence ownership boundaries.
   - Backend protocol docs now map tables to their owner stores.
   - Architecture test prevents production modules from directly referencing owned protocol tables.
+- Stage 12: automatic completed outbox retention.
+  - Outbox worker prunes completed rows older than 30 days.
+  - Pruning is interval-gated and bounded, and never touches pending/running/dead rows.
 
 ## Next candidates
 

@@ -191,6 +191,48 @@ async def test_prune_completed_deletes_only_old_completed_rows_up_to_limit(outbo
 
 
 @pytest.mark.asyncio
+async def test_worker_prunes_old_completed_rows_automatically(outbox_store: OutboxStore):
+    for run_id in ("old-1", "new-1"):
+        await outbox_store.enqueue_run_completed(_run_completed(run_id))
+        claimed = await outbox_store.claim_batch(worker_id="test-worker", limit=1)
+        await outbox_store.mark_completed(claimed[0].id)
+
+    await outbox_store.enqueue_run_completed(_run_completed("dead-1"))
+    claimed = await outbox_store.claim_batch(worker_id="test-worker", limit=1)
+    await outbox_store.mark_failed(claimed[0].id, error="boom", retry_at=None, dead=True)
+
+    old = datetime.now(UTC) - timedelta(days=40)
+    new = datetime.now(UTC)
+    await outbox_store.conn.execute(
+        "UPDATE outbox_events SET updated_at = ? WHERE aggregate_id IN ('old-1', 'dead-1')",
+        (old.isoformat(),),
+    )
+    await outbox_store.conn.execute(
+        "UPDATE outbox_events SET updated_at = ? WHERE aggregate_id = 'new-1'",
+        (new.isoformat(),),
+    )
+    await outbox_store.conn.commit()
+
+    worker = OutboxWorker(
+        outbox_store,
+        worker_id="test-worker",
+        completed_retention_days=30,
+        prune_batch_size=10,
+        prune_interval_seconds=3600,
+    )
+
+    assert await worker.process_once() is False
+
+    rows = await outbox_store.conn.execute_fetchall(
+        "SELECT aggregate_id, status FROM outbox_events ORDER BY aggregate_id"
+    )
+    assert [(row["aggregate_id"], row["status"]) for row in rows] == [
+        ("dead-1", "dead"),
+        ("new-1", "completed"),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_worker_dispatches_and_marks_completed(outbox_store: OutboxStore):
     event = _run_completed()
     await outbox_store.enqueue_run_completed(event)

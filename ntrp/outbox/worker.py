@@ -5,8 +5,11 @@ from uuid import uuid4
 
 from ntrp.constants import (
     OUTBOX_BATCH_SIZE,
+    OUTBOX_COMPLETED_RETENTION_DAYS,
     OUTBOX_MAX_RETRIES,
     OUTBOX_POLL_INTERVAL,
+    OUTBOX_PRUNE_BATCH_SIZE,
+    OUTBOX_PRUNE_INTERVAL_SECONDS,
     OUTBOX_RETRY_BASE_SECONDS,
     OUTBOX_RETRY_MAX_SECONDS,
     OUTBOX_STALE_LOCK_SECONDS,
@@ -32,6 +35,9 @@ class OutboxWorker:
         retry_base_seconds: int = OUTBOX_RETRY_BASE_SECONDS,
         retry_max_seconds: int = OUTBOX_RETRY_MAX_SECONDS,
         stale_lock_seconds: int = OUTBOX_STALE_LOCK_SECONDS,
+        completed_retention_days: int = OUTBOX_COMPLETED_RETENTION_DAYS,
+        prune_batch_size: int = OUTBOX_PRUNE_BATCH_SIZE,
+        prune_interval_seconds: int = OUTBOX_PRUNE_INTERVAL_SECONDS,
     ):
         self.store = store
         self.worker_id = worker_id or f"outbox-{uuid4().hex[:8]}"
@@ -41,8 +47,12 @@ class OutboxWorker:
         self.retry_base_seconds = retry_base_seconds
         self.retry_max_seconds = retry_max_seconds
         self.stale_lock_seconds = stale_lock_seconds
+        self.completed_retention_days = completed_retention_days
+        self.prune_batch_size = prune_batch_size
+        self.prune_interval_seconds = prune_interval_seconds
         self._handlers: dict[str, OutboxHandler] = {}
         self._task: asyncio.Task | None = None
+        self._next_prune_at: datetime | None = None
 
     def register_handler(self, event_type: str, handler: OutboxHandler) -> None:
         self._handlers[event_type] = handler
@@ -89,10 +99,33 @@ class OutboxWorker:
                 await asyncio.sleep(self.poll_interval)
 
     async def process_once(self) -> bool:
+        await self._prune_completed_if_due()
         events = await self.store.claim_batch(worker_id=self.worker_id, limit=self.batch_size)
         for event in events:
             await self._dispatch(event)
         return bool(events)
+
+    async def _prune_completed_if_due(self, now: datetime | None = None) -> None:
+        now = now or datetime.now(UTC)
+        if self._next_prune_at is not None and now < self._next_prune_at:
+            return
+        self._next_prune_at = now + timedelta(seconds=self.prune_interval_seconds)
+
+        if self.completed_retention_days <= 0 or self.prune_batch_size <= 0:
+            return
+
+        cutoff = now - timedelta(days=self.completed_retention_days)
+        try:
+            deleted = await self.store.prune_completed(before=cutoff, limit=self.prune_batch_size)
+        except Exception:
+            _logger.exception("Failed to prune completed outbox rows")
+            return
+        if deleted:
+            _logger.info(
+                "Pruned completed outbox rows",
+                count=deleted,
+                retention_days=self.completed_retention_days,
+            )
 
     async def _dispatch(self, event: OutboxEvent) -> None:
         handler = self._handlers.get(event.event_type)
