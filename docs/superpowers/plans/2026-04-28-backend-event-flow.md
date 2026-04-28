@@ -22,8 +22,10 @@ This notebook tracks the backend architecture cleanup that replaces the old in-p
 - Stage 8: authenticated outbox repair controls.
   - Replay dead-letter rows only by explicit event IDs.
   - Prune completed outbox rows only with an age cutoff and bounded limit.
+- Stage 9: documented remaining backend protocols.
+  - SSE stream bus is documented as transient UI transport.
+  - Outbox, scheduler triggers, and monitor events are documented as separate owned protocols.
 
 ## Next candidates
 
-- Document the remaining backend protocols: SSE stream bus, scheduler triggers, outbox events, monitor events.
 - Consider UI exposure only after the backend endpoint has stable fields.
