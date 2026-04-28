@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime
 from difflib import SequenceMatcher
@@ -21,7 +21,6 @@ from ntrp.constants import (
     USER_ENTITY_NAME,
 )
 from ntrp.embedder import Embedder, EmbeddingConfig
-from ntrp.events.internal import FactCreated, FactDeleted
 from ntrp.logging import get_logger
 from ntrp.memory.consolidation_runner import ConsolidationRunner
 from ntrp.memory.decay import decay_score
@@ -58,6 +57,8 @@ class FactMemory:
         embedder: Embedder | None = None,
         extractor: Extractor | None = None,
         read_conn: aiosqlite.Connection | None = None,
+        enqueue_fact_index_upsert: Callable[[int, str], Awaitable[bool]] | None = None,
+        enqueue_fact_index_delete: Callable[[int], Awaitable[bool]] | None = None,
     ):
         self.db = GraphDatabase(conn, embedding.dim)
         self.facts = FactRepository(conn, read_conn)
@@ -66,6 +67,8 @@ class FactMemory:
         self.embedder = embedder or Embedder(embedding)
         self.extractor = extractor or Extractor(model)
         self.channel = channel
+        self._enqueue_fact_index_upsert = enqueue_fact_index_upsert
+        self._enqueue_fact_index_delete = enqueue_fact_index_delete
         self._db_lock = asyncio.Lock()
         self._reembed_task: asyncio.Task | None = None
         self._reembed_progress: ReembedProgress | None = None
@@ -103,10 +106,20 @@ class FactMemory:
         embedding: EmbeddingConfig,
         model: str,
         channel: Channel,
+        enqueue_fact_index_upsert: Callable[[int, str], Awaitable[bool]] | None = None,
+        enqueue_fact_index_delete: Callable[[int], Awaitable[bool]] | None = None,
     ) -> Self:
         conn = await database.connect(db_path, vec=True)
         read_conn = await database.connect(db_path, vec=True, readonly=True)
-        instance = cls(conn, embedding, model, channel=channel, read_conn=read_conn)
+        instance = cls(
+            conn,
+            embedding,
+            model,
+            channel=channel,
+            read_conn=read_conn,
+            enqueue_fact_index_upsert=enqueue_fact_index_upsert,
+            enqueue_fact_index_delete=enqueue_fact_index_delete,
+        )
         await instance.db.init_schema()
         if instance.db.dim_changed:
             _logger.info("Embedding dimension changed — starting background re-embed")
@@ -243,7 +256,8 @@ class FactMemory:
             )
             entities_extracted = await self._process_extraction(fact.id, extraction)
 
-        self.channel.publish(FactCreated(fact_id=fact.id, text=text))
+        if self._enqueue_fact_index_upsert:
+            await self._enqueue_fact_index_upsert(fact.id, text)
         return RememberFactResult(fact=fact, entities_extracted=entities_extracted)
 
     async def _process_extraction(self, fact_id: int, extraction: ExtractionResult) -> list[str]:
@@ -303,12 +317,14 @@ class FactMemory:
                     await self.facts.delete(fact.id)
                     deleted_ids.append(fact.id)
                     count += 1
-                    self.channel.publish(FactDeleted(fact_id=fact.id))
             if count > 0:
                 await self.observations.remove_source_facts(deleted_ids)
                 await self.dreams.remove_source_facts(deleted_ids)
                 await self.facts.cleanup_orphaned_entities()
-            return count
+        if self._enqueue_fact_index_delete:
+            for fact_id in deleted_ids:
+                await self._enqueue_fact_index_delete(fact_id)
+        return count
 
     async def merge_entities(self, names: list[str], canonical_name: str | None = None) -> int:
         if len(names) < 2:

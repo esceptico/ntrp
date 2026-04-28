@@ -1,10 +1,19 @@
 import json
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import aiosqlite
 
 from ntrp.events.internal import RunCompleted
-from ntrp.outbox.events import OUTBOX_RUN_COMPLETED, run_completed_payload
+from ntrp.outbox.events import (
+    OUTBOX_FACT_INDEX_DELETE,
+    OUTBOX_FACT_INDEX_UPSERT,
+    OUTBOX_MEMORY_INDEX_CLEAR,
+    OUTBOX_RUN_COMPLETED,
+    fact_index_delete_payload,
+    fact_index_upsert_payload,
+    run_completed_payload,
+)
 from ntrp.outbox.models import OutboxEvent
 
 _SCHEMA = """
@@ -179,6 +188,33 @@ class OutboxStore:
             aggregate_id=event.run_id,
             payload=run_completed_payload(event),
             idempotency_key=f"{OUTBOX_RUN_COMPLETED}:{event.run_id}",
+        )
+
+    async def enqueue_fact_index_upsert(self, fact_id: int, text: str) -> bool:
+        return await self.enqueue(
+            event_type=OUTBOX_FACT_INDEX_UPSERT,
+            aggregate_type="memory_fact",
+            aggregate_id=str(fact_id),
+            payload=fact_index_upsert_payload(fact_id, text),
+            idempotency_key=f"{OUTBOX_FACT_INDEX_UPSERT}:{fact_id}:{uuid4().hex}",
+        )
+
+    async def enqueue_fact_index_delete(self, fact_id: int) -> bool:
+        return await self.enqueue(
+            event_type=OUTBOX_FACT_INDEX_DELETE,
+            aggregate_type="memory_fact",
+            aggregate_id=str(fact_id),
+            payload=fact_index_delete_payload(fact_id),
+            idempotency_key=f"{OUTBOX_FACT_INDEX_DELETE}:{fact_id}:{uuid4().hex}",
+        )
+
+    async def enqueue_memory_index_clear(self) -> bool:
+        return await self.enqueue(
+            event_type=OUTBOX_MEMORY_INDEX_CLEAR,
+            aggregate_type="memory",
+            aggregate_id="memory",
+            payload={},
+            idempotency_key=f"{OUTBOX_MEMORY_INDEX_CLEAR}:{uuid4().hex}",
         )
 
     async def claim_batch(self, *, worker_id: str, limit: int, now: datetime | None = None) -> list[OutboxEvent]:

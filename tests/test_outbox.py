@@ -6,7 +6,15 @@ import pytest_asyncio
 import ntrp.database as database
 from ntrp.agent import Usage
 from ntrp.events.internal import RunCompleted
-from ntrp.outbox import OUTBOX_RUN_COMPLETED, OutboxStore, OutboxWorker, run_completed_from_payload
+from ntrp.outbox import (
+    OUTBOX_FACT_INDEX_DELETE,
+    OUTBOX_FACT_INDEX_UPSERT,
+    OUTBOX_MEMORY_INDEX_CLEAR,
+    OUTBOX_RUN_COMPLETED,
+    OutboxStore,
+    OutboxWorker,
+    run_completed_from_payload,
+)
 
 
 def _run_completed(run_id: str = "run-1") -> RunCompleted:
@@ -48,6 +56,27 @@ async def test_enqueue_run_completed_is_idempotent_and_claims_payload(outbox_sto
 
     await outbox_store.mark_completed(claimed[0].id)
     assert await outbox_store.claim_batch(worker_id="test-worker", limit=10) == []
+
+
+@pytest.mark.asyncio
+async def test_enqueue_memory_index_events_allow_repeated_updates(outbox_store: OutboxStore):
+    assert await outbox_store.enqueue_fact_index_upsert(10, "first") is True
+    assert await outbox_store.enqueue_fact_index_upsert(10, "second") is True
+    assert await outbox_store.enqueue_fact_index_delete(10) is True
+    assert await outbox_store.enqueue_memory_index_clear() is True
+
+    claimed = await outbox_store.claim_batch(worker_id="test-worker", limit=10)
+
+    assert [event.event_type for event in claimed] == [
+        OUTBOX_FACT_INDEX_UPSERT,
+        OUTBOX_FACT_INDEX_UPSERT,
+        OUTBOX_FACT_INDEX_DELETE,
+        OUTBOX_MEMORY_INDEX_CLEAR,
+    ]
+    assert claimed[0].payload == {"fact_id": 10, "text": "first"}
+    assert claimed[1].payload == {"fact_id": 10, "text": "second"}
+    assert claimed[2].payload == {"fact_id": 10}
+    assert claimed[3].payload == {}
 
 
 @pytest.mark.asyncio

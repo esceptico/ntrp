@@ -9,7 +9,7 @@ from ntrp.automation.service import AutomationService
 from ntrp.channel import Channel
 from ntrp.config import Config, get_config
 from ntrp.core.factory import AgentConfig
-from ntrp.events.internal import FactCreated, FactDeleted, FactUpdated, MemoryCleared, SourceChanged
+from ntrp.events.internal import SourceChanged
 from ntrp.events.triggers import TRIGGER_EVENT_TYPES, TriggerEvent
 from ntrp.integrations import ALL_INTEGRATIONS, IntegrationRegistry
 from ntrp.integrations.calendar.client import MultiCalendarSource
@@ -28,7 +28,17 @@ from ntrp.monitor.service import Monitor
 from ntrp.notifiers.base import NotifierContext
 from ntrp.notifiers.service import NotifierService
 from ntrp.operator.runner import OperatorDeps
-from ntrp.outbox import OUTBOX_RUN_COMPLETED, OutboxEvent, OutboxWorker, run_completed_from_payload
+from ntrp.outbox import (
+    OUTBOX_FACT_INDEX_DELETE,
+    OUTBOX_FACT_INDEX_UPSERT,
+    OUTBOX_MEMORY_INDEX_CLEAR,
+    OUTBOX_RUN_COMPLETED,
+    OutboxEvent,
+    OutboxWorker,
+    fact_deleted_from_payload,
+    fact_updated_from_payload,
+    run_completed_from_payload,
+)
 from ntrp.server.indexer import Indexer
 from ntrp.server.state import RunRegistry
 from ntrp.server.stores import Stores
@@ -145,9 +155,16 @@ class Runtime:
             embedding=self.embedding,
             model=self.config.memory_model,
             channel=self.channel,
+            enqueue_fact_index_upsert=self.stores.outbox.enqueue_fact_index_upsert,
+            enqueue_fact_index_delete=self.stores.outbox.enqueue_fact_index_delete,
         )
         self.memory.dreams_enabled = self.config.dreams
-        self.memory_service = MemoryService(self.memory, self.channel)
+        self.memory_service = MemoryService(
+            self.memory,
+            enqueue_fact_index_upsert=self.stores.outbox.enqueue_fact_index_upsert,
+            enqueue_fact_index_delete=self.stores.outbox.enqueue_fact_index_delete,
+            enqueue_memory_index_clear=self.stores.outbox.enqueue_memory_index_clear,
+        )
 
     async def _close_memory(self) -> None:
         if self.memory:
@@ -272,7 +289,31 @@ class Runtime:
             if self.scheduler:
                 await self.scheduler.handle_run_completed(run_completed)
 
+        async def on_fact_upserted(event: OutboxEvent) -> None:
+            if not self.indexer:
+                return
+            fact = fact_updated_from_payload(event.payload)
+            await self.indexer.index.upsert(
+                source="memory",
+                source_id=f"fact:{fact.fact_id}",
+                title=fact.text[:50],
+                content=fact.text,
+            )
+
+        async def on_fact_deleted(event: OutboxEvent) -> None:
+            if not self.indexer:
+                return
+            fact = fact_deleted_from_payload(event.payload)
+            await self.indexer.index.delete("memory", f"fact:{fact.fact_id}")
+
+        async def on_memory_cleared(_event: OutboxEvent) -> None:
+            if self.indexer:
+                await self.indexer.index.clear_source("memory")
+
         self.outbox_worker.register_handler(OUTBOX_RUN_COMPLETED, on_run_completed)
+        self.outbox_worker.register_handler(OUTBOX_FACT_INDEX_UPSERT, on_fact_upserted)
+        self.outbox_worker.register_handler(OUTBOX_FACT_INDEX_DELETE, on_fact_deleted)
+        self.outbox_worker.register_handler(OUTBOX_MEMORY_INDEX_CLEAR, on_memory_cleared)
 
     async def _init_mcp(self) -> None:
         if self.config.mcp_servers:
@@ -361,20 +402,6 @@ class Runtime:
         if not self.indexer:
             return
 
-        async def on_fact_upserted(event: FactCreated | FactUpdated) -> None:
-            await self.indexer.index.upsert(
-                source="memory",
-                source_id=f"fact:{event.fact_id}",
-                title=event.text[:50],
-                content=event.text,
-            )
-
-        async def on_fact_deleted(event: FactDeleted) -> None:
-            await self.indexer.index.delete("memory", f"fact:{event.fact_id}")
-
-        async def on_memory_cleared(_event: MemoryCleared) -> None:
-            await self.indexer.index.clear_source("memory")
-
         async def on_source_changed(event: SourceChanged) -> None:
             name = event.source_name
             client = self.integrations.get_client(name)
@@ -385,10 +412,6 @@ class Runtime:
                 self.indexables.pop(name, None)
                 await self.indexer.index.clear_source(name)
 
-        self.channel.subscribe(FactCreated, on_fact_upserted)
-        self.channel.subscribe(FactUpdated, on_fact_upserted)
-        self.channel.subscribe(FactDeleted, on_fact_deleted)
-        self.channel.subscribe(MemoryCleared, on_memory_cleared)
         self.channel.subscribe(SourceChanged, on_source_changed)
 
     def _build_consolidation_handler(self):

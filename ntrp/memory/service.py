@@ -1,5 +1,5 @@
-from ntrp.channel import Channel
-from ntrp.events.internal import FactDeleted, FactUpdated, MemoryCleared
+from collections.abc import Awaitable, Callable
+
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.models import Dream, EntityRef, Fact, Observation
@@ -8,9 +8,15 @@ _logger = get_logger(__name__)
 
 
 class FactService:
-    def __init__(self, memory: FactMemory, channel: Channel):
+    def __init__(
+        self,
+        memory: FactMemory,
+        enqueue_fact_index_upsert: Callable[[int, str], Awaitable[bool]] | None = None,
+        enqueue_fact_index_delete: Callable[[int], Awaitable[bool]] | None = None,
+    ):
         self._memory = memory
-        self._channel = channel
+        self._enqueue_fact_index_upsert = enqueue_fact_index_upsert
+        self._enqueue_fact_index_delete = enqueue_fact_index_delete
 
     async def list_recent(self, limit: int = 100, offset: int = 0) -> tuple[list[Fact], int]:
         total = await self._memory.facts.count_active()
@@ -39,7 +45,8 @@ class FactService:
 
             fact = await repo.get(fact_id)
 
-        self._channel.publish(FactUpdated(fact_id=fact_id, text=new_text))
+        if self._enqueue_fact_index_upsert:
+            await self._enqueue_fact_index_upsert(fact_id, new_text)
 
         entity_refs = await repo.get_entity_refs(fact_id)
         return fact, [{"name": e.name, "entity_id": e.entity_id} for e in entity_refs]
@@ -60,7 +67,8 @@ class FactService:
             await self._memory.dreams.remove_source_facts([fact_id])
             await repo.cleanup_orphaned_entities()
 
-        self._channel.publish(FactDeleted(fact_id=fact_id))
+        if self._enqueue_fact_index_delete:
+            await self._enqueue_fact_index_delete(fact_id)
         return {"entity_refs": entity_refs_count}
 
 
@@ -121,10 +129,16 @@ class DreamService:
 
 
 class MemoryService:
-    def __init__(self, memory: FactMemory, channel: Channel):
+    def __init__(
+        self,
+        memory: FactMemory,
+        enqueue_fact_index_upsert: Callable[[int, str], Awaitable[bool]] | None = None,
+        enqueue_fact_index_delete: Callable[[int], Awaitable[bool]] | None = None,
+        enqueue_memory_index_clear: Callable[[], Awaitable[bool]] | None = None,
+    ):
         self.memory = memory
-        self.channel = channel
-        self.facts = FactService(memory, channel)
+        self._enqueue_memory_index_clear = enqueue_memory_index_clear
+        self.facts = FactService(memory, enqueue_fact_index_upsert, enqueue_fact_index_delete)
         self.observations = ObservationService(memory)
         self.dreams = DreamService(memory)
 
@@ -146,7 +160,8 @@ class MemoryService:
 
     async def clear(self) -> dict[str, int]:
         deleted = await self.memory.clear()
-        self.channel.publish(MemoryCleared())
+        if self._enqueue_memory_index_clear:
+            await self._enqueue_memory_index_clear()
         return deleted
 
     async def clear_observations(self) -> dict[str, int]:
