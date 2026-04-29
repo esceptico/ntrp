@@ -7,7 +7,7 @@ from ntrp.events.sse import MessageIngestedEvent
 from ntrp.server.app import app
 from ntrp.server.bus import BusRegistry, SessionBus
 from ntrp.server.deps import get_bus_registry
-from ntrp.server.runtime import Runtime, get_runtime
+from ntrp.server.runtime import get_runtime
 from ntrp.server.schemas import ChatRequest
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 
@@ -34,12 +34,21 @@ def test_chat_request_client_id_optional():
     assert req.client_id is None
 
 
+class _Config:
+    has_any_model = True
+    api_key_hash = None
+
+
+class _Runtime:
+    def __init__(self):
+        self.run_registry = RunRegistry()
+        self.config = _Config()
+
+
 @pytest.fixture
 def client_with_active_run():
     """Spin up the FastAPI app with a stub Runtime that already has an active run."""
-    runtime = Runtime.__new__(Runtime)
-    runtime.run_registry = RunRegistry()
-    runtime.config = type("C", (), {"has_any_model": True, "api_key_hash": None})()
+    runtime = _Runtime()
     run = runtime.run_registry.create_run("sess-1")
     run.status = RunStatus.RUNNING
 
@@ -119,9 +128,7 @@ async def test_drain_no_events_when_queue_empty():
 @pytest.fixture
 def client_no_active_run():
     """Spin up the FastAPI app with a stub Runtime that has no active run."""
-    runtime = Runtime.__new__(Runtime)
-    runtime.run_registry = RunRegistry()
-    runtime.config = type("C", (), {"has_any_model": True, "api_key_hash": None})()
+    runtime = _Runtime()
     # No run created → get_active_run always returns None
 
     app.dependency_overrides[get_runtime] = lambda: runtime
@@ -201,8 +208,7 @@ async def test_full_chain_inject_during_run_emits_ingested_and_lands_in_messages
     result = await agent.run(messages)
 
     # The agent must have observed the injected user turn.
-    assert any(m.get("content") == "follow-up" for m in messages), \
-        f"injected message not in messages: {messages}"
+    assert any(m.get("content") == "follow-up" for m in messages), f"injected message not in messages: {messages}"
     assert result.text == "acknowledged"
 
     # The bus must have received a MessageIngestedEvent with the right client_id.

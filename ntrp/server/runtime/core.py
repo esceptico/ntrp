@@ -1,5 +1,4 @@
-import asyncio
-from datetime import UTC, datetime
+from datetime import datetime
 
 from fastapi import HTTPException, Request
 
@@ -8,17 +7,16 @@ from ntrp.core.factory import AgentConfig
 from ntrp.integrations import ALL_INTEGRATIONS, IntegrationRegistry
 from ntrp.llm.router import close as llm_close
 from ntrp.llm.router import init as llm_init
-from ntrp.llm.router import reset as llm_reset
 from ntrp.logging import get_logger
 from ntrp.mcp.manager import MCPManager
 from ntrp.notifiers.base import NotifierContext
 from ntrp.notifiers.service import NotifierService
 from ntrp.operator.runner import OperatorDeps
 from ntrp.server.runtime.automation import AutomationRuntime
+from ntrp.server.runtime.config import RuntimeConfig
 from ntrp.server.runtime.knowledge import KnowledgeRuntime
 from ntrp.server.state import RunRegistry
 from ntrp.server.stores import Stores
-from ntrp.services.config import ConfigService
 from ntrp.services.session import SessionService
 from ntrp.skills.registry import SkillRegistry
 from ntrp.skills.service import SkillService, get_skills_dirs
@@ -29,11 +27,11 @@ _logger = get_logger(__name__)
 
 class Runtime:
     def __init__(self, config: Config | None = None):
-        self.config = config or get_config()
+        initial_config = config or get_config()
         self.integrations = IntegrationRegistry(ALL_INTEGRATIONS)
-        self.integrations.sync(self.config)
+        self.integrations.sync(initial_config)
         self.run_registry = RunRegistry()
-        self.knowledge = KnowledgeRuntime(self.config)
+        self.knowledge = KnowledgeRuntime(initial_config)
 
         self.stores: Stores | None = None
         self.automation: AutomationRuntime | None = None
@@ -42,27 +40,33 @@ class Runtime:
         self.skill_registry: SkillRegistry | None = None
         self.skill_service: SkillService | None = None
         self.notifier_service: NotifierService | None = None
-        self.config_service: ConfigService | None = None
 
         self._connected = False
         self._closing = False
-        self._config_lock = asyncio.Lock()
-        self._config_version = 1
-        self._config_loaded_at = datetime.now(UTC)
+
+        self.config_runtime = RuntimeConfig(
+            initial_config,
+            get_integrations=lambda: self.integrations,
+            get_knowledge=lambda: self.knowledge,
+            get_stores=lambda: self.stores,
+            sync_mcp=lambda config: self.sync_mcp(config),
+            is_closing=lambda: self._closing,
+        )
 
     @property
     def connected(self) -> bool:
         return self._connected
 
-    def _mark_config_loaded(self) -> None:
-        self._config_version += 1
-        self._config_loaded_at = datetime.now(UTC)
+    @property
+    def config(self) -> Config:
+        return self.config_runtime.config
+
+    @property
+    def config_service(self):
+        return self.config_runtime.service
 
     def config_status(self) -> dict[str, int | str]:
-        return {
-            "config_version": self._config_version,
-            "config_loaded_at": self._config_loaded_at.isoformat(),
-        }
+        return self.config_runtime.status()
 
     @property
     def session_service(self) -> SessionService | None:
@@ -110,7 +114,7 @@ class Runtime:
 
     @property
     def outbox_worker(self):
-        outbox_runtime = getattr(self, "outbox_runtime", None)
+        outbox_runtime = self.outbox_runtime
         return outbox_runtime.worker if outbox_runtime else None
 
     @property
@@ -137,17 +141,7 @@ class Runtime:
     # --- Subsystem lifecycle ---
 
     async def reload_config(self) -> None:
-        if self._closing:
-            return
-        async with self._config_lock:
-            config = get_config()
-            await llm_reset()
-            llm_init(config)
-            self.integrations.sync(config)
-            await self.knowledge.reload_config(config, self.stores, self.integrations)
-            await self.sync_mcp(config)
-            self.config = config
-            self._mark_config_loaded()
+        await self.config_runtime.reload()
 
     async def sync_mcp(self, config: Config | None = None) -> None:
         config = config or self.config
@@ -194,7 +188,7 @@ class Runtime:
             store=self.stores.notifiers,
             ctx=NotifierContext(
                 get_source=lambda name: self.tool_services.get(name),
-                get_config_value=lambda key: getattr(self.config, key, None),
+                get_config_value=lambda key: self.config.model_dump().get(key),
             ),
         )
         await self.notifier_service.seed_defaults()
@@ -216,7 +210,6 @@ class Runtime:
 
     def _init_tools(self) -> None:
         self.executor = self._create_executor()
-        self.config_service = ConfigService(on_config_change=self.reload_config)
 
     async def close(self) -> None:
         self._closing = True
@@ -340,7 +333,10 @@ class Runtime:
 
 
 def get_runtime(request: Request) -> Runtime:
-    runtime: Runtime | None = getattr(request.app.state, "runtime", None)
+    try:
+        runtime: Runtime | None = request.app.state.runtime
+    except AttributeError:
+        runtime = None
     if runtime is None or not runtime.connected:
         raise HTTPException(status_code=503, detail="Server is initializing")
     return runtime

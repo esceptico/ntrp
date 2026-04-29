@@ -33,7 +33,7 @@ async def _noop_sync_mcp(_config=None):
 
 @pytest.mark.asyncio
 async def test_runtime_reload_advances_config_version_after_success(monkeypatch):
-    import ntrp.server.runtime.core as runtime_module
+    import ntrp.server.runtime.config as config_module
 
     original = Config(memory=False)
     runtime = Runtime(config=original)
@@ -45,9 +45,9 @@ async def test_runtime_reload_advances_config_version_after_success(monkeypatch)
     runtime.knowledge = knowledge
     runtime.sync_mcp = _noop_sync_mcp
 
-    monkeypatch.setattr(runtime_module, "get_config", lambda: updated)
-    monkeypatch.setattr(runtime_module, "llm_reset", _noop_reset)
-    monkeypatch.setattr(runtime_module, "llm_init", lambda _config: None)
+    monkeypatch.setattr(config_module, "get_config", lambda: updated)
+    monkeypatch.setattr(config_module, "llm_reset", _noop_reset)
+    monkeypatch.setattr(config_module, "llm_init", lambda _config: None)
 
     before = runtime.config_status()["config_version"]
 
@@ -61,7 +61,7 @@ async def test_runtime_reload_advances_config_version_after_success(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_runtime_reload_does_not_advance_config_version_after_failure(monkeypatch):
-    import ntrp.server.runtime.core as runtime_module
+    import ntrp.server.runtime.config as config_module
 
     original = Config(memory=False)
     runtime = Runtime(config=original)
@@ -69,9 +69,9 @@ async def test_runtime_reload_does_not_advance_config_version_after_failure(monk
     runtime.knowledge = _Knowledge(fail=True)
     runtime.sync_mcp = _noop_sync_mcp
 
-    monkeypatch.setattr(runtime_module, "get_config", lambda: Config(memory=False, max_depth=12))
-    monkeypatch.setattr(runtime_module, "llm_reset", _noop_reset)
-    monkeypatch.setattr(runtime_module, "llm_init", lambda _config: None)
+    monkeypatch.setattr(config_module, "get_config", lambda: Config(memory=False, max_depth=12))
+    monkeypatch.setattr(config_module, "llm_reset", _noop_reset)
+    monkeypatch.setattr(config_module, "llm_init", lambda _config: None)
 
     before = runtime.config_status()["config_version"]
 

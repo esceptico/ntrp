@@ -89,10 +89,17 @@ This notebook tracks the backend architecture cleanup that replaces the old in-p
   - Custom model creation/deletion now delegates file, settings, and reload decisions to `ConfigService`.
   - `settings.py` no longer mutates `models.json` or `settings.json` directly for custom models.
   - Service tests cover custom model API key storage and active model field cleanup.
+- Stage 28: reactive config versioning.
+  - Runtime config reloads now expose `config_version` and `config_loaded_at`.
+  - `/config` returns the full config snapshot plus revision metadata.
+  - `/health` exposes the cheap revision used by the UI heartbeat to detect backend-side config changes.
+  - UI-side provider, service, and MCP mutations refresh the full server config snapshot after successful backend edits.
+- Stage 29: runtime config extraction.
+  - `RuntimeConfig` now owns active config revision state, reload locking, reload sequencing, and `ConfigService` wiring.
+  - `Runtime` remains the composition root and delegates config reload/status work to the runtime config component.
+  - Runtime reload tests now target the extracted config component path while preserving previous endpoint behavior.
 
 ## Next candidates
 
-- Consider UI or CLI exposure now that the backend endpoint fields are stable.
 - Consider extracting stronger typed internal models for run-side protocol entries if raw message dictionaries keep spreading.
-- Review runtime reload sequencing before making deeper runtime decomposition changes.
-- Continue runtime decomposition with monitor or MCP/config reload wiring once the HTTP composition surface has settled.
+- Continue runtime decomposition with monitor wiring once the HTTP composition surface has settled.
