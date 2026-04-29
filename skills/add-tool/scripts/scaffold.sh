@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TOOL_NAME="${1:?Usage: scaffold.sh <tool_name>}"
-TOOLS_DIR="${HOME}/.ntrp/tools"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCAFFOLD="${SCRIPT_DIR}/../assets/scaffold.py"
-TARGET="${TOOLS_DIR}/${TOOL_NAME}.py"
+tool_name="${1:-}"
 
-if [[ -f "$TARGET" ]]; then
-  echo "ERROR: ${TARGET} already exists" >&2
+if [[ ! "$tool_name" =~ ^[a-z][a-z0-9_]*$ ]]; then
+  echo "Usage: scaffold.sh <snake_case_tool_name>" >&2
   exit 1
 fi
 
-mkdir -p "$TOOLS_DIR"
-cp "$SCAFFOLD" "$TARGET"
-echo "Created ${TARGET}"
+skill_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+target_dir="${NTRP_DIR:-$HOME/.ntrp}/tools"
+target="$target_dir/${tool_name}.py"
+
+if [[ -e "$target" ]]; then
+  echo "Error: $target already exists" >&2
+  exit 1
+fi
+
+mkdir -p "$target_dir"
+sed \
+  -e "s/__TOOL_NAME__/${tool_name}/g" \
+  -e "s/__DISPLAY_NAME__/${tool_name}/g" \
+  "$skill_dir/assets/scaffold.py" > "$target"
+
+echo "$target"

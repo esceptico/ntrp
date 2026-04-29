@@ -108,4 +108,31 @@ When a tool requires approval, the TUI shows a dialog with the tool name, argume
 
 ## User-defined tools
 
-Create custom tools in `~/.ntrp/tools/`. Each tool is a directory with a `TOOL.md` describing its interface and an executable script.
+Create custom tools in `~/.ntrp/tools/`. Each file is a Python module that exports a `tools` mapping:
+
+```python
+from pydantic import BaseModel, Field
+
+from ntrp.tools.core import ToolResult, tool
+from ntrp.tools.core.context import ToolExecution
+
+
+class EchoInput(BaseModel):
+    text: str = Field(description="Text to echo")
+
+
+async def echo(execution: ToolExecution, args: EchoInput) -> ToolResult:
+    return ToolResult(content=args.text, preview="Echoed")
+
+
+tools = {
+    "echo": tool(
+        display_name="Echo",
+        description="Echo text back to the user.",
+        input_model=EchoInput,
+        execute=echo,
+    )
+}
+```
+
+Use `mutates=True` plus an `approval=` function for tools that change external state. Use `requires={...}` to hide a tool unless a service is configured. Restart the server after adding or changing user tools.

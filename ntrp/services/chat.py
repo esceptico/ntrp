@@ -79,7 +79,10 @@ def expand_skill_command(message: str, registry: SkillRegistry) -> tuple[str, bo
     body = registry.load_body(skill_name)
     if body is None:
         return message, False
-    expanded = f'<skill name="{skill_name}">\n{body}\n</skill>'
+    meta = registry.get(skill_name)
+    body = body.replace("<skill_path>", str(meta.path)) if meta else body
+    path_attr = f' path="{meta.path}"' if meta else ""
+    expanded = f'<skill name="{skill_name}"{path_attr}>\n{body}\n</skill>'
     if args:
         expanded += f"\n\nUser request: {args}"
     return expanded, True

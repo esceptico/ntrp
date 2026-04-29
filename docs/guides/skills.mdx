@@ -12,8 +12,8 @@ Skills are user-facing commands that add new functionality to ntrp. They're dist
 | Skill | Description |
 |-------|-------------|
 | `/add-model` | Register a custom LLM endpoint interactively |
-| `/add-tool` | Install a user-defined tool |
-| `/init` | Initialize memory by scanning connected sources |
+| `/add-skill` | Create or remove a user skill |
+| `/add-tool` | Create a user-defined tool |
 
 ## Skill locations
 
@@ -51,6 +51,8 @@ my-skill/
 ```
 
 The `SKILL.md` tells the agent what the skill does and how to execute it. The agent follows these instructions when the user invokes `/my-skill`.
+
+Restart the server after creating a skill manually so the registry rescans `skills/`, `.skills/`, and `~/.ntrp/skills/`. Skills installed through the API are reloaded automatically.
 
 ## Managing skills
 

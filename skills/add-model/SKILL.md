@@ -41,7 +41,7 @@ Only include `api_key_env` if the user provided one. Only include `max_output_to
 ### After adding
 
 - The model is available as `model-id`
-- Set it in `.env` as `NTRP_CHAT_MODEL=model-id` (or `NTRP_MEMORY_MODEL`, `NTRP_EXPLORE_MODEL`)
+- Set it in `.env` as `NTRP_CHAT_MODEL=model-id` (or `NTRP_MEMORY_MODEL`, `NTRP_RESEARCH_MODEL`)
 - If they specified an `api_key_env`, remind them to set that environment variable
 
 ## Embedding models

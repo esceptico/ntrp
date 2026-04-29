@@ -10,6 +10,8 @@ from ntrp.server.deps import get_bus_registry
 from ntrp.server.runtime import get_runtime
 from ntrp.server.schemas import ChatRequest
 from ntrp.server.state import RunRegistry, RunState, RunStatus
+from ntrp.services.chat import expand_skill_command
+from ntrp.skills.registry import SkillRegistry
 
 
 def test_message_ingested_event_serialization():
@@ -32,6 +34,31 @@ def test_chat_request_accepts_client_id():
 def test_chat_request_client_id_optional():
     req = ChatRequest(message="hi")
     assert req.client_id is None
+
+
+def test_expand_skill_command_injects_skill_path(tmp_path):
+    skill_dir = tmp_path / "demo"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: demo
+description: Demo skill
+---
+
+Run <skill_path>/scripts/demo.sh
+""",
+        encoding="utf-8",
+    )
+
+    registry = SkillRegistry()
+    registry.load([(tmp_path, "global")])
+
+    expanded, changed = expand_skill_command("/demo now", registry)
+
+    assert changed is True
+    assert f'<skill name="demo" path="{skill_dir}">' in expanded
+    assert f"Run {skill_dir}/scripts/demo.sh" in expanded
+    assert "User request: now" in expanded
 
 
 class _Config:

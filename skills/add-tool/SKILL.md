@@ -1,20 +1,20 @@
 ---
 name: add-tool
-description: Create a custom user tool in ~/.ntrp/tools/ — auto-discovered at startup
+description: Create a custom user tool in ~/.ntrp/tools/ using the current tool(...) API.
 ---
 
 # Add User Tool
 
-Help the user create a custom tool. User tools live in `~/.ntrp/tools/` as Python files and are auto-discovered at startup.
+Help the user create a custom tool. User tools live in `~/.ntrp/tools/` as Python files and are discovered when the server starts.
 
-**Important**: Use `bash` to run scripts and apply edits. Use `read_file` to read and verify. Do not generate tool code from scratch — start from the scaffold.
+**Important**: Use `bash` to run the scaffold script and apply edits. Use `read_file` to read and verify. Do not create class-based tools. The only supported user-tool registration shape is a module-level `tools: dict[str, Tool]` built with `tool(...)`.
 
 ## Step 1: Gather requirements
 
 Ask the user:
 1. What should the tool do?
 2. What parameters does it need?
-3. Does it modify external state? (if yes → `mutates = True`, needs approval flow)
+3. Does it modify external state? (if yes -> `mutates=True`, needs an approval function)
 4. Does it need an existing source or service? (see available services below)
 
 ## Step 2: Scaffold the tool file
@@ -25,43 +25,80 @@ Run the scaffold script (path is relative to the `path` attribute from the `<ski
 bash <skill_path>/scripts/scaffold.sh <tool_name>
 ```
 
-This creates `~/.ntrp/tools/<tool_name>.py` from the template.
+This creates `~/.ntrp/tools/<tool_name>.py` from the current `tool(...)` template.
 
 ## Step 3: Customize
 
 Use `read_file` on `~/.ntrp/tools/<tool_name>.py`, then use `bash` to apply edits:
 
-- Rename classes (`ToolInput`, `UserTool`) to match the tool's purpose
-- Fill in `name`, `display_name`, `description`
+- Rename `ToolInput` and `execute_tool` if clearer
+- Fill in `display_name` and `description`
 - Update `ToolInput` fields to match the user's parameters
-- Implement the `execute()` method
-- If `mutates = True`, uncomment and implement `approval_info()`
-- If the tool needs a source, uncomment `requires` and add source access (see patterns below)
+- Implement the execute function
+- If `mutates=True`, uncomment and implement the approval function, then pass it as `approval=...`
+- If the tool needs a source/service, uncomment `requires={...}` and add service access (see patterns below)
+- Keep the module-level `tools = {"tool_name": tool(...)}` mapping
 
-## Source/service access patterns
-
-### Source-backed (protocol lookup)
+## Required shape
 
 ```python
-from ntrp.sources.base import NotesSource  # or EmailSource, CalendarSource, etc.
+from pydantic import BaseModel, Field
 
-class MyTool(Tool):
-    requires = frozenset({"notes"})
+from ntrp.tools.core import ToolResult, tool
+from ntrp.tools.core.context import ToolExecution
 
-    async def execute(self, execution: ToolExecution, query: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_source(NotesSource)
-        data = source.search(query)
-        return ToolResult(content="\n".join(data), preview=f"{len(data)} results")
+
+class MyInput(BaseModel):
+    query: str = Field(description="Search query")
+
+
+async def my_tool(execution: ToolExecution, args: MyInput) -> ToolResult:
+    return ToolResult(content=args.query, preview="Done")
+
+
+tools = {
+    "my_tool": tool(
+        display_name="MyTool",
+        description="Describe when the agent should use this tool.",
+        input_model=MyInput,
+        execute=my_tool,
+    )
+}
 ```
 
-### Service-backed (dict access)
+The execute function must return `ToolResult`. Returning a string, dict, or arbitrary object is invalid.
+
+## Service access patterns
+
+### Client-backed
 
 ```python
-class MyTool(Tool):
-    requires = frozenset({"memory"})
+from ntrp.integrations.obsidian.client import ObsidianClient
 
-    async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult:
-        memory = execution.ctx.services["memory"]
+
+async def search_notes(execution: ToolExecution, args: MyInput) -> ToolResult:
+    client = execution.ctx.get_client("notes", ObsidianClient)
+    if client is None:
+        return ToolResult(content="Obsidian is not configured.", preview="Missing service", is_error=True)
+    results = client.search(args.query)
+    return ToolResult(content="\n".join(results), preview=f"{len(results)} results")
+
+
+tools = {
+    "search_notes": tool(
+        description="Search Obsidian notes.",
+        input_model=MyInput,
+        requires={"notes"},
+        execute=search_notes,
+    )
+}
+```
+
+### Generic service lookup
+
+```python
+async def recall_memory(execution: ToolExecution, args: MyInput) -> ToolResult:
+    memory = execution.ctx.services["memory"]
 ```
 
 ## Available services
@@ -70,38 +107,42 @@ Keys for `requires` and `execution.ctx.services`:
 
 | Key | Type | What it provides |
 |-----|------|-----------------|
-| `notes` | `NotesSource` | Obsidian vault read/write/search |
-| `gmail` | `EmailSource` | Email read/search/send |
-| `calendar` | `CalendarSource` | Calendar events CRUD |
-| `browser` | `BrowserSource` | Browser history search |
-| `web` | `WebSearchSource` | Web search and content fetch |
+| `notes` | `ObsidianClient` | Obsidian vault read/write/search |
+| `gmail` | `MultiGmailSource` | Email read/search/send |
+| `calendar` | `MultiCalendarSource` | Calendar events CRUD |
+| `web` | `WebClient` | Web search and content fetch |
 | `memory` | `FactMemory` | Long-term memory store |
 | `automation` | `AutomationService` | Scheduled automation management |
 | `skill_registry` | `SkillRegistry` | Skill lookup and loading |
 | `search_index` | `SearchIndex` | Vector search across indexed sources |
+| `slack` | `SlackClient` | Slack search/read APIs |
+| `mcp` | `MCPManager` | Connected MCP tools |
+| `notifiers` | `NotifierService` | Configured notifiers |
 
-Source protocols: `ntrp/sources/base.py`. Use `execution.ctx.get_source(ProtocolType)` for type-safe access.
+Use `execution.ctx.get_client("service_id", ClientType)` for integration clients when you can import the concrete client type. Use `execution.ctx.services["key"]` for internal services such as `memory` and `automation`.
 
-## Tool class fields
+## `tool(...)` arguments
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | yes | Unique identifier, used in tool calls |
-| `display_name` | yes | Shown in the UI |
+| Argument | Required | Description |
+|----------|----------|-------------|
 | `description` | yes | The LLM reads this to decide when to call the tool |
-| `input_model` | no | Pydantic BaseModel — auto-generates JSON Schema for the LLM |
-| `requires` | no | `frozenset` of service keys — tool hidden when any is missing |
-| `mutates` | no | `True` → triggers user approval before `execute()` runs |
+| `execute` | yes | Async function receiving `(ToolExecution, args)` and returning `ToolResult` |
+| `display_name` | no | Shown in the UI |
+| `input_model` | no | Pydantic `BaseModel`; omitted means no parameters |
+| `requires` | no | Service keys; tool is hidden when any is missing |
+| `mutates` | no | `True` marks the tool as mutating and runs approval middleware |
+| `approval` | no | Async function returning `ApprovalInfo | None` before execution |
+| `volatile` | no | `True` disables result caching/offloading assumptions for changing data |
 
 ## Step 4: Verify and inform
 
 1. Use `read_file` to verify the final tool file
-2. Tell the user to restart the server (`ntrp serve`) for discovery
+2. Tell the user to restart the server (`ntrp-server serve`) for discovery
 3. Name conflicts with built-ins are skipped with a warning; import errors are logged and skipped
 
 ## Notes
 
-- User tools have the same API as built-in tools
+- User tools use the same `tool(...)` API as built-in tools
 - User tools can use existing sources/services but cannot define new ones
 - External packages must be installed in the environment (`uv pip install ...`)
-- Multiple Tool classes in one file are all registered
+- Multiple tools in one file are allowed: add more entries to the module-level `tools` mapping

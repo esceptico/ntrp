@@ -9,38 +9,41 @@ ntrp supports any OpenAI-compatible API endpoint. Register custom models via `~/
 
 ## models.json
 
-Create `~/.ntrp/models.json` with an array of model definitions:
+Create `~/.ntrp/models.json` with model IDs as top-level keys:
 
 ```json
-[
-  {
-    "id": "deepseek-r1",
-    "provider": "custom",
-    "api_base": "https://openrouter.ai/api/v1",
+{
+  "deepseek-r1": {
+    "base_url": "https://openrouter.ai/api/v1",
     "api_key_env": "OPENROUTER_API_KEY",
-    "max_output_tokens": 8192,
-    "max_context_tokens": 64000
+    "context_window": 64000,
+    "max_output_tokens": 8192
   },
-  {
-    "id": "llama-local",
-    "provider": "custom",
-    "api_base": "http://localhost:11434/v1",
-    "max_output_tokens": 4096,
-    "max_context_tokens": 32000
+  "llama-local": {
+    "base_url": "http://localhost:11434/v1",
+    "context_window": 128000,
+    "max_output_tokens": 4096
+  },
+  "embedding": {
+    "nomic-embed-text": {
+      "base_url": "http://localhost:11434/v1",
+      "dim": 768
+    }
   }
-]
+}
 ```
 
 ## Fields
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `id` | Yes | Model identifier (used in config) |
-| `provider` | Yes | Must be `"custom"` |
-| `api_base` | Yes | Base URL of the OpenAI-compatible API |
+| top-level key | Yes | Model identifier used in settings, e.g. `deepseek-r1` |
+| `base_url` | Yes | Base URL of the OpenAI-compatible API |
+| `context_window` | Yes | Maximum context window for chat/completion models |
+| `max_output_tokens` | No | Maximum output tokens, defaults to `8192` |
 | `api_key_env` | No | Env var name containing the API key |
-| `max_output_tokens` | Yes | Maximum output tokens |
-| `max_context_tokens` | Yes | Maximum context window |
+| `price_in` / `price_out` | No | Price per million tokens for usage estimates |
+| `embedding.<id>.dim` | Yes | Embedding vector dimension for custom embedding models |
 
 ## Using custom models
 
@@ -58,12 +61,12 @@ Or change it in the TUI via `/settings`.
 
 ```json
 {
-  "id": "openrouter/deepseek-r1",
-  "provider": "custom",
-  "api_base": "https://openrouter.ai/api/v1",
-  "api_key_env": "OPENROUTER_API_KEY",
-  "max_output_tokens": 8192,
-  "max_context_tokens": 64000
+  "openrouter/deepseek-r1": {
+    "base_url": "https://openrouter.ai/api/v1",
+    "api_key_env": "OPENROUTER_API_KEY",
+    "context_window": 64000,
+    "max_output_tokens": 8192
+  }
 }
 ```
 
@@ -71,11 +74,11 @@ Or change it in the TUI via `/settings`.
 
 ```json
 {
-  "id": "llama3",
-  "provider": "custom",
-  "api_base": "http://localhost:11434/v1",
-  "max_output_tokens": 4096,
-  "max_context_tokens": 128000
+  "llama3": {
+    "base_url": "http://localhost:11434/v1",
+    "context_window": 128000,
+    "max_output_tokens": 4096
+  }
 }
 ```
 
@@ -85,11 +88,11 @@ No `api_key_env` needed for local Ollama.
 
 ```json
 {
-  "id": "my-model",
-  "provider": "custom",
-  "api_base": "http://localhost:8080/v1",
-  "max_output_tokens": 4096,
-  "max_context_tokens": 32000
+  "my-model": {
+    "base_url": "http://localhost:8080/v1",
+    "context_window": 32000,
+    "max_output_tokens": 4096
+  }
 }
 ```
 

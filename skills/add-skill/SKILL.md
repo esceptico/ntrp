@@ -5,8 +5,9 @@ description: Use this skill when the user wants to create a new skill or remove 
 
 # Add / Remove a Skill
 
-Skills live in two places:
+Skills are discovered from three places:
 - **Builtin**: shipped with ntrp, don't touch
+- **Project**: `.skills/` under the server working directory
 - **Global**: `~/.ntrp/skills/` — user skills, create here
 
 A skill is a directory containing at minimum a `SKILL.md` file.
@@ -41,14 +42,15 @@ Step-by-step instructions...
 
 ## Creating a skill
 
-1. `mkdir -p ~/.ntrp/skills/<name>/scripts`
-2. Write `SKILL.md` with frontmatter + instructions
-3. Add any scripts to `scripts/` — reference them by relative path in SKILL.md
-4. No restart needed — skills are loaded on demand
+1. Ask whether the skill should be global (`~/.ntrp/skills/<name>/`) or project-local (`.skills/<name>/`). Default to global unless the user asks for project-local behavior.
+2. `mkdir -p <target>/<name>/scripts`
+3. Write `SKILL.md` with frontmatter + instructions
+4. Add any scripts/assets/references only when needed — reference them with `<skill_path>/...` in SKILL.md
+5. Restart the server after creating a skill manually so the registry rescans skills
 
 ## Removing a skill
 
-Delete the directory. Only global skills can be removed (not builtins).
+Delete the directory. Only project/global skills can be removed (not builtins).
 
 ## Listing installed skills
 
@@ -59,8 +61,8 @@ ls /Users/escept1co/src/ntrp/skills/
 
 ## After creating
 
-- Skills are discovered on demand via `use_skill` — no restart needed
-- Test by calling `use_skill(skill="<name>")`
+- Restart the server so the new skill appears in `<available_skills>`
+- Test by asking the agent to use the skill or by invoking `use_skill(skill="<name>")`
 
 ## Tips
 

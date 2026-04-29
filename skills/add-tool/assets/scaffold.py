@@ -1,32 +1,36 @@
-from typing import Any
-
 from pydantic import BaseModel, Field
 
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+
+# from ntrp.tools.core.types import ApprovalInfo
 
 
 class ToolInput(BaseModel):
     query: str = Field(description="TODO: describe this parameter")
 
 
-class UserTool(Tool):
-    name = "todo_tool_name"
-    display_name = "TodoDisplayName"
-    description = "TODO: what this tool does — the LLM reads this to decide when to use it"
-    # requires = frozenset({"notes"})  # uncomment if tool needs a source/service
-    # mutates = True                   # uncomment if tool modifies external state
-    input_model = ToolInput
+async def execute_tool(execution: ToolExecution, args: ToolInput) -> ToolResult:
+    result = f"You asked: {args.query}"
+    return ToolResult(content=result, preview="Done")
 
-    # async def approval_info(self, execution: ToolExecution, **kwargs: Any) -> ApprovalInfo | None:
-    #     """Uncomment if mutates = True. Describes the action before user approves."""
-    #     return ApprovalInfo(
-    #         description="what will be affected",
-    #         preview="human-readable summary",
-    #         diff=None,
-    #     )
 
-    async def execute(self, execution: ToolExecution, query: str, **kwargs: Any) -> ToolResult:
-        # TODO: implement tool logic
-        result = f"You asked: {query}"
-        return ToolResult(content=result, preview="Done")
+# async def approve_tool(execution: ToolExecution, args: ToolInput) -> ApprovalInfo | None:
+#     return ApprovalInfo(
+#         description="what will be affected",
+#         preview="human-readable summary",
+#         diff=None,
+#     )
+
+
+tools = {
+    "__TOOL_NAME__": tool(
+        display_name="__DISPLAY_NAME__",
+        description="TODO: what this tool does; the LLM reads this to decide when to use it",
+        input_model=ToolInput,
+        # requires={"memory"},  # uncomment if the tool needs a service
+        # mutates=True,         # uncomment if the tool modifies external state
+        # approval=approve_tool,
+        execute=execute_tool,
+    )
+}
