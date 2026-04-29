@@ -14,6 +14,7 @@ from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
 from ntrp.server.routers.mcp import router as mcp_router
 from ntrp.server.routers.ops import router as ops_router
+from ntrp.server.routers.providers import router as providers_router
 from ntrp.server.routers.session import router as session_router
 from ntrp.server.routers.settings import router as settings_router
 from ntrp.server.routers.skills import router as skills_router
@@ -85,6 +86,7 @@ app.include_router(gmail_router)
 app.include_router(automation_router)
 app.include_router(chat_router)
 app.include_router(ops_router)
+app.include_router(providers_router)
 app.include_router(session_router)
 app.include_router(settings_router)
 app.include_router(skills_router)

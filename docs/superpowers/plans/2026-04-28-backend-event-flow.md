@@ -77,10 +77,14 @@ This notebook tracks the backend architecture cleanup that replaces the old in-p
 - Stage 24: backgrounded-run save merge.
   - Backgrounded chat drains merge their non-overlapping tail into the latest saved session instead of overwriting newer same-session conversation state.
   - Tests cover preserving newer messages and avoiding duplicate background tails.
+- Stage 25: provider router extraction.
+  - LLM provider, service-key, and unified tool-provider endpoints moved from `ntrp.server.routers.settings` to `ntrp.server.routers.providers`.
+  - Public paths remain `/providers`, `/providers/{provider_id}`, `/services`, and `/tool-providers`.
+  - Route registration tests cover the extracted provider endpoints.
 
 ## Next candidates
 
 - Consider UI or CLI exposure now that the backend endpoint fields are stable.
 - Consider extracting stronger typed internal models for run-side protocol entries if raw message dictionaries keep spreading.
-- Continue splitting the settings control plane into smaller provider/config/context services.
+- Continue splitting the settings control plane into smaller config/model/context services.
 - Continue runtime decomposition with monitor or MCP/config reload wiring once the HTTP composition surface has settled.
