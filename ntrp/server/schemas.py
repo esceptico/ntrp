@@ -85,6 +85,8 @@ class HealthResponse(BaseModel):
     version: str
     has_providers: bool
     outbox: OutboxHealthResponse
+    config_version: int
+    config_loaded_at: str
     auth: bool | None = None
 
 

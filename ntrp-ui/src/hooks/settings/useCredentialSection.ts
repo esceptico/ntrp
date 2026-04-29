@@ -31,6 +31,7 @@ interface Options<T extends CredentialItem> {
   canEdit?: (item: T) => boolean;
   canDisconnect?: (item: T) => boolean;
   onEnter?: (item: T) => boolean;
+  onChanged?: () => Promise<void> | void;
 }
 
 export function useCredentialSection<T extends CredentialItem>({
@@ -40,6 +41,7 @@ export function useCredentialSection<T extends CredentialItem>({
   canEdit = (item) => !item.from_env,
   canDisconnect = (item) => item.connected && !item.from_env,
   onEnter,
+  onChanged,
 }: Options<T>): UseCredentialSectionResult<T> {
   const [items, setItems] = useState<T[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -59,6 +61,14 @@ export function useCredentialSection<T extends CredentialItem>({
     fetchItems().then(setItems).catch(() => {});
   }, [fetchItems]);
 
+  const notifyChanged = useCallback(async () => {
+    try {
+      await onChanged?.();
+    } catch {
+      // The edit succeeded; stale snapshots will refresh on the next heartbeat.
+    }
+  }, [onChanged]);
+
   const handleSave = useCallback(async () => {
     if (saving) return;
     const key = keyValue.trim();
@@ -69,6 +79,7 @@ export function useCredentialSection<T extends CredentialItem>({
     try {
       await connect(item.id, key);
       refresh();
+      await notifyChanged();
       setEditing(false);
       setKeyValue("");
       setKeyCursor(0);
@@ -77,7 +88,7 @@ export function useCredentialSection<T extends CredentialItem>({
     } finally {
       setSaving(false);
     }
-  }, [saving, keyValue, items, selectedIndex, connect, refresh]);
+  }, [saving, keyValue, items, selectedIndex, connect, refresh, notifyChanged]);
 
   const handleDisconnect = useCallback(async () => {
     if (saving) return;
@@ -88,13 +99,14 @@ export function useCredentialSection<T extends CredentialItem>({
     try {
       await disconnect(item.id);
       refresh();
+      await notifyChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to disconnect");
     } finally {
       setSaving(false);
       setConfirmDisconnect(false);
     }
-  }, [saving, items, selectedIndex, disconnect, refresh]);
+  }, [saving, items, selectedIndex, disconnect, refresh, notifyChanged]);
 
   const isEditing = editing || confirmDisconnect;
 

@@ -28,6 +28,7 @@ async def health(request: Request, runtime: Runtime = Depends(get_runtime)):
         "version": request.app.version,
         "has_providers": runtime.config.has_any_model,
         "outbox": await runtime.get_outbox_health(),
+        **runtime.config_status(),
     }
     token = _extract_bearer_token(request)
     if token and runtime.config.api_key_hash:

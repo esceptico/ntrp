@@ -19,6 +19,12 @@ class _Runtime:
     def automation(self):
         return self
 
+    def config_status(self):
+        return {
+            "config_version": 1,
+            "config_loaded_at": "2026-04-28T00:00:00+00:00",
+        }
+
     async def get_outbox_health(self):
         return {
             "worker_running": True,
@@ -91,7 +97,10 @@ def test_health_includes_outbox_summary():
         app.dependency_overrides.pop(get_runtime, None)
 
     assert response.status_code == 200
-    assert response.json()["outbox"] == {
+    data = response.json()
+    assert data["config_version"] == 1
+    assert data["config_loaded_at"] == "2026-04-28T00:00:00+00:00"
+    assert data["outbox"] == {
         "worker_running": True,
         "pending": 2,
         "ready": 1,

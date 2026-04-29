@@ -6,7 +6,7 @@ import { useCredentialSection, type UseCredentialSectionResult } from "./useCred
 
 export type UseProvidersResult = UseCredentialSectionResult<ProviderInfo>;
 
-export function useProviders(config: Config): UseProvidersResult {
+export function useProviders(config: Config, onChanged?: () => Promise<void> | void): UseProvidersResult {
   const fetchItems = useCallback(
     () => getProviders(config).then(r => r.providers),
     [config],
@@ -26,5 +26,6 @@ export function useProviders(config: Config): UseProvidersResult {
     disconnect: disconnectFn,
     canEdit: (p) => p.id !== "custom" && !p.from_env,
     canDisconnect: (p) => p.id !== "custom" && p.connected && !p.from_env,
+    onChanged,
   });
 }

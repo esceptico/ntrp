@@ -13,6 +13,8 @@ export interface IntegrationInfo {
 }
 
 export interface ServerConfig {
+  config_version: number;
+  config_loaded_at: string;
   chat_model: string;
   research_model: string;
   memory_model: string;
@@ -75,13 +77,32 @@ export async function updateEmbeddingModel(
   return api.post(`${config.serverUrl}/config/embedding`, { embedding_model: embeddingModel });
 }
 
-export async function checkHealth(config: Config): Promise<{ ok: boolean; version: string | null; hasProviders: boolean }> {
+export async function checkHealth(config: Config): Promise<{
+  ok: boolean;
+  version: string | null;
+  hasProviders: boolean;
+  configVersion: number | null;
+  configLoadedAt: string | null;
+}> {
   try {
-    const res = await api.get<{ status: string; version?: string; auth?: boolean; has_providers?: boolean }>(`${config.serverUrl}/health`, { timeout: 5000 });
+    const res = await api.get<{
+      status: string;
+      version?: string;
+      auth?: boolean;
+      has_providers?: boolean;
+      config_version?: number;
+      config_loaded_at?: string;
+    }>(`${config.serverUrl}/health`, { timeout: 5000 });
     const ok = res.auth !== false;
-    return { ok, version: res.version ?? null, hasProviders: res.has_providers ?? true };
+    return {
+      ok,
+      version: res.version ?? null,
+      hasProviders: res.has_providers ?? true,
+      configVersion: res.config_version ?? null,
+      configLoadedAt: res.config_loaded_at ?? null,
+    };
   } catch {
-    return { ok: false, version: null, hasProviders: true };
+    return { ok: false, version: null, hasProviders: true, configVersion: null, configLoadedAt: null };
   }
 }
 

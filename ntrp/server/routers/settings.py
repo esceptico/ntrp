@@ -36,21 +36,33 @@ def _config_response(rt: Runtime) -> dict:
         integrations[integration.id] = entry
 
     # Integration-specific extras the UI needs
-    integrations.setdefault("web", {}).update({
-        "mode": config.web_search,
-        "provider": web_provider,
-    })
+    integrations.setdefault("web", {}).update(
+        {
+            "mode": config.web_search,
+            "provider": web_provider,
+        }
+    )
     integrations.setdefault("notes", {})["path"] = str(config.vault_path) if config.vault_path else None
-    integrations.setdefault("slack", {}).update({
-        "has_user_token": bool(config.slack_user_token),
-        "has_bot_token": bool(config.slack_bot_token),
-    })
+    integrations.setdefault("slack", {}).update(
+        {
+            "has_user_token": bool(config.slack_user_token),
+            "has_bot_token": bool(config.slack_bot_token),
+        }
+    )
 
     # Umbrella + memory (not direct integrations)
     integrations["google"] = {
         "enabled": config.google,
         "connected": "gmail" in rt.integrations.clients or "calendar" in rt.integrations.clients,
-        **({"error": "; ".join(e for e in (rt.integrations.errors.get("gmail"), rt.integrations.errors.get("calendar")) if e)} if (rt.integrations.errors.get("gmail") or rt.integrations.errors.get("calendar")) else {}),
+        **(
+            {
+                "error": "; ".join(
+                    e for e in (rt.integrations.errors.get("gmail"), rt.integrations.errors.get("calendar")) if e
+                )
+            }
+            if (rt.integrations.errors.get("gmail") or rt.integrations.errors.get("calendar"))
+            else {}
+        ),
     }
     integrations["memory"] = {
         "enabled": config.memory,
@@ -64,6 +76,7 @@ def _config_response(rt: Runtime) -> dict:
     }
 
     return {
+        **rt.config_status(),
         "chat_model": config.chat_model,
         "research_model": config.research_model,
         "memory_model": config.memory_model,
@@ -133,7 +146,7 @@ async def reload_runtime(runtime: Runtime = Depends(get_runtime)):
     Use after editing .env or settings.json directly outside the UI.
     """
     await runtime.reload_config()
-    return {"status": "reloaded"}
+    return {"status": "reloaded", **runtime.config_status()}
 
 
 # --- Custom models ---

@@ -46,7 +46,7 @@ export interface UseMCPServersResult {
   cancelEdit: () => void;
 }
 
-export function useMCPServers(config: Config): UseMCPServersResult {
+export function useMCPServers(config: Config, onChanged?: () => Promise<void> | void): UseMCPServersResult {
   const [mcpServers, setMcpServers] = useState<MCPServerInfo[]>([]);
   const [mcpIndex, setMcpIndex] = useState(0);
   const [mcpMode, setMcpMode] = useState<MCPMode>("list");
@@ -137,6 +137,14 @@ export function useMCPServers(config: Config): UseMCPServersResult {
     setMcpError(null);
   }, []);
 
+  const notifyChanged = useCallback(async () => {
+    try {
+      await onChanged?.();
+    } catch {
+      // The edit succeeded; stale snapshots will refresh on the next heartbeat.
+    }
+  }, [onChanged]);
+
   const handleMcpAdd = useCallback(async () => {
     if (mcpSaving) return;
     const name = mcpName.trim();
@@ -192,13 +200,14 @@ export function useMCPServers(config: Config): UseMCPServersResult {
         setMcpError(result.error);
       }
       refreshMcpServers();
+      await notifyChanged();
       setMcpMode("list");
     } catch (e) {
       setMcpError(e instanceof Error ? e.message : "Failed to add server");
     } finally {
       setMcpSaving(false);
     }
-  }, [mcpSaving, mcpName, mcpTransport, mcpAuth, mcpCommand, mcpUrl, mcpHeaders, mcpClientId, mcpClientSecret, mcpRedirectPort, mcpScope, mcpClientName, config, refreshMcpServers]);
+  }, [mcpSaving, mcpName, mcpTransport, mcpAuth, mcpCommand, mcpUrl, mcpHeaders, mcpClientId, mcpClientSecret, mcpRedirectPort, mcpScope, mcpClientName, config, refreshMcpServers, notifyChanged]);
 
   const handleMcpRemove = useCallback(async () => {
     if (mcpSaving) return;
@@ -209,6 +218,7 @@ export function useMCPServers(config: Config): UseMCPServersResult {
     try {
       await removeMCPServer(config, server.name);
       refreshMcpServers();
+      await notifyChanged();
       setMcpIndex(i => Math.max(0, i - 1));
     } catch (e) {
       setMcpError(e instanceof Error ? e.message : "Failed to remove");
@@ -216,7 +226,7 @@ export function useMCPServers(config: Config): UseMCPServersResult {
       setMcpSaving(false);
       setMcpMode("list");
     }
-  }, [mcpSaving, mcpServers, mcpIndex, config, refreshMcpServers]);
+  }, [mcpSaving, mcpServers, mcpIndex, config, refreshMcpServers, notifyChanged]);
 
   const handleSaveTools = useCallback(async () => {
     const server = mcpServers[mcpIndex];
@@ -231,13 +241,14 @@ export function useMCPServers(config: Config): UseMCPServersResult {
     try {
       await updateMCPTools(config, server.name, tools);
       refreshMcpServers();
+      await notifyChanged();
       setMcpMode("list");
     } catch (e) {
       setMcpError(e instanceof Error ? e.message : "Failed to update tools");
     } finally {
       setMcpSaving(false);
     }
-  }, [mcpServers, mcpIndex, mcpToolEnabled, mcpSaving, config, refreshMcpServers]);
+  }, [mcpServers, mcpIndex, mcpToolEnabled, mcpSaving, config, refreshMcpServers, notifyChanged]);
 
   const handleToggleEnabled = useCallback(async () => {
     const server = mcpServers[mcpIndex];
@@ -247,12 +258,13 @@ export function useMCPServers(config: Config): UseMCPServersResult {
     try {
       await toggleMCPServer(config, server.name, !server.enabled);
       refreshMcpServers();
+      await notifyChanged();
     } catch (e) {
       setMcpError(e instanceof Error ? e.message : "Failed to toggle");
     } finally {
       setMcpSaving(false);
     }
-  }, [mcpServers, mcpIndex, mcpSaving, config, refreshMcpServers]);
+  }, [mcpServers, mcpIndex, mcpSaving, config, refreshMcpServers, notifyChanged]);
 
   const handleOAuth = useCallback(async () => {
     const server = mcpServers[mcpIndex];
@@ -265,13 +277,14 @@ export function useMCPServers(config: Config): UseMCPServersResult {
       const result = await triggerMCPOAuth(config, server.name);
       if (result.error) setMcpError(result.error);
       refreshMcpServers();
+      await notifyChanged();
     } catch (e) {
       setMcpError(e instanceof Error ? e.message : "OAuth failed");
     } finally {
       setMcpOAuthInProgress(false);
       setMcpMode("list");
     }
-  }, [mcpServers, mcpIndex, mcpOAuthInProgress, config, refreshMcpServers]);
+  }, [mcpServers, mcpIndex, mcpOAuthInProgress, config, refreshMcpServers, notifyChanged]);
 
   const isEditing = mcpMode !== "list";
 

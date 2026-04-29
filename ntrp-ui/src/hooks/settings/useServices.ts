@@ -6,7 +6,7 @@ import { useCredentialSection, type UseCredentialSectionResult } from "./useCred
 
 export type UseServicesResult = UseCredentialSectionResult<ServiceInfo>;
 
-export function useServices(config: Config): UseServicesResult {
+export function useServices(config: Config, onChanged?: () => Promise<void> | void): UseServicesResult {
   const fetchItems = useCallback(
     () => getServices(config).then(r => r.services),
     [config],
@@ -24,5 +24,6 @@ export function useServices(config: Config): UseServicesResult {
     fetchItems,
     connect: connectFn,
     disconnect: disconnectFn,
+    onChanged,
   });
 }

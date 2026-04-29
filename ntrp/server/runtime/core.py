@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request
 
@@ -47,10 +47,22 @@ class Runtime:
         self._connected = False
         self._closing = False
         self._config_lock = asyncio.Lock()
+        self._config_version = 1
+        self._config_loaded_at = datetime.now(UTC)
 
     @property
     def connected(self) -> bool:
         return self._connected
+
+    def _mark_config_loaded(self) -> None:
+        self._config_version += 1
+        self._config_loaded_at = datetime.now(UTC)
+
+    def config_status(self) -> dict[str, int | str]:
+        return {
+            "config_version": self._config_version,
+            "config_loaded_at": self._config_loaded_at.isoformat(),
+        }
 
     @property
     def session_service(self) -> SessionService | None:
@@ -128,21 +140,24 @@ class Runtime:
         if self._closing:
             return
         async with self._config_lock:
-            self.config = get_config()
+            config = get_config()
             await llm_reset()
-            llm_init(self.config)
-            self.integrations.sync(self.config)
-            await self.knowledge.reload_config(self.config, self.stores, self.integrations)
-            await self.sync_mcp()
+            llm_init(config)
+            self.integrations.sync(config)
+            await self.knowledge.reload_config(config, self.stores, self.integrations)
+            await self.sync_mcp(config)
+            self.config = config
+            self._mark_config_loaded()
 
-    async def sync_mcp(self) -> None:
+    async def sync_mcp(self, config: Config | None = None) -> None:
+        config = config or self.config
         if self.mcp_manager:
             await self.mcp_manager.close()
             self.mcp_manager = None
 
-        if self.config.mcp_servers:
+        if config.mcp_servers:
             self.mcp_manager = MCPManager()
-            await self.mcp_manager.connect(self.config.mcp_servers)
+            await self.mcp_manager.connect(config.mcp_servers)
 
         if self.executor:
             self.executor = self._create_executor()

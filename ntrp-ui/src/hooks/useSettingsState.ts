@@ -1,9 +1,9 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import type { Config } from "../types.js";
 import type { Settings } from "./useSettings.js";
 import { useNotifiers, type UseNotifiersResult } from "./useNotifiers.js";
 import { useSkills, type UseSkillsResult } from "./useSkills.js";
-import type { ServerConfig } from "../api/client.js";
+import { getServerConfig, type ServerConfig } from "../api/client.js";
 import { useProviders, type UseProvidersResult } from "./settings/useProviders.js";
 import { useServices, type UseServicesResult } from "./settings/useServices.js";
 import { useServerConnection, type UseServerConnectionResult } from "./settings/useServerConnection.js";
@@ -51,12 +51,16 @@ export function useSettingsState({
   onServerConfigChange,
   onServerCredentialsChange,
 }: UseSettingsStateOptions): UseSettingsStateResult {
-  const providers = useProviders(config);
-  const services = useServices(config);
+  const refreshServerConfig = useCallback(async () => {
+    onServerConfigChange(await getServerConfig(config));
+  }, [config, onServerConfigChange]);
+
+  const providers = useProviders(config, refreshServerConfig);
+  const services = useServices(config, refreshServerConfig);
   const server = useServerConnection(config, onServerCredentialsChange);
   const directives = useDirectives(config);
   const connections = useConnections(config, serverConfig, onServerConfigChange);
-  const mcp = useMCPServers(config);
+  const mcp = useMCPServers(config, refreshServerConfig);
   const notifiers = useNotifiers(config);
   const skills = useSkills(config);
 

@@ -30,6 +30,11 @@ export function useSession(config: Config) {
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
   const [history, setHistory] = useState<HistoryMessage[]>([]);
   const initRef = useRef(false);
+  const serverConfigVersionRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    serverConfigVersionRef.current = serverConfig?.config_version ?? null;
+  }, [serverConfig?.config_version]);
 
   const initializeSession = useCallback(async () => {
     try {
@@ -87,7 +92,19 @@ export function useSession(config: Config) {
       const health = await checkHealth(config);
       if (health.ok) {
         failCountRef.current = 0;
-        if (!serverConnected) await initializeSession();
+        setServerVersion(health.version);
+        if (!serverConnected) {
+          await initializeSession();
+        } else if (
+          health.configVersion !== null &&
+          serverConfigVersionRef.current !== health.configVersion
+        ) {
+          try {
+            setServerConfig(await getServerConfig(config));
+          } catch {
+            // Leave the current snapshot in place until the next heartbeat.
+          }
+        }
       } else {
         failCountRef.current++;
         if (serverConnected && failCountRef.current >= 3) {
