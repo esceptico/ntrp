@@ -1,10 +1,41 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BUMP="${1:-}"
+usage() {
+  cat <<'EOF'
+Usage:
+  ./release <patch|minor|major>     Stable release bump
+  ./release rc <patch|minor|major>  First release candidate for the next bump
+  ./release rc                      Next release candidate for the current RC
+  ./release final                   Promote the current RC to stable
+EOF
+}
 
-if [[ ! "$BUMP" =~ ^(patch|minor|major)$ ]]; then
-  echo "Usage: ./release <patch|minor|major>"
+bump_stable_version() {
+  local version="$1"
+  local bump="$2"
+
+  if [[ ! "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    echo "Error: $bump release requires a stable current version, got $version" >&2
+    exit 1
+  fi
+
+  local major="${BASH_REMATCH[1]}"
+  local minor="${BASH_REMATCH[2]}"
+  local patch="${BASH_REMATCH[3]}"
+
+  case "$bump" in
+    major) major=$((major + 1)); minor=0; patch=0 ;;
+    minor) minor=$((minor + 1)); patch=0 ;;
+    patch) patch=$((patch + 1)) ;;
+    *) usage; exit 1 ;;
+  esac
+
+  echo "${major}.${minor}.${patch}"
+}
+
+if [[ -n "${3:-}" ]]; then
+  usage
   exit 1
 fi
 
@@ -15,25 +46,65 @@ fi
 
 trap 'git checkout main 2>/dev/null' EXIT
 
-# Parse current version
-CURRENT=$(grep -m1 '^version' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
-IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+# Fresh main
+git checkout main
+git pull origin main
 
-case "$BUMP" in
-  major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-  minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-  patch) PATCH=$((PATCH + 1)) ;;
+CURRENT=$(grep -m1 '^version' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+UI_CURRENT=$(grep -m1 '"version":' ntrp-ui/package.json | sed 's/.*"version": "\(.*\)",/\1/')
+
+if [[ "$CURRENT" != "$UI_CURRENT" ]]; then
+  echo "Error: pyproject.toml version ($CURRENT) does not match ntrp-ui/package.json version ($UI_CURRENT)"
+  exit 1
+fi
+
+PRERELEASE=false
+
+case "${1:-}" in
+  patch|minor|major)
+    if [[ -n "${2:-}" ]]; then
+      usage
+      exit 1
+    fi
+    NEXT=$(bump_stable_version "$CURRENT" "$1")
+    ;;
+  rc)
+    if [[ -z "${2:-}" ]]; then
+      if [[ ! "$CURRENT" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-rc\.([0-9]+)$ ]]; then
+        echo "Error: ./release rc without a bump requires a current RC version, got $CURRENT"
+        exit 1
+      fi
+      NEXT="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}-rc.$((BASH_REMATCH[4] + 1))"
+    else
+      if [[ ! "${2:-}" =~ ^(patch|minor|major)$ ]]; then
+        usage
+        exit 1
+      fi
+      NEXT="$(bump_stable_version "$CURRENT" "$2")-rc.1"
+    fi
+    PRERELEASE=true
+    ;;
+  final)
+    if [[ -n "${2:-}" ]]; then
+      usage
+      exit 1
+    fi
+    if [[ ! "$CURRENT" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-rc\.[0-9]+$ ]]; then
+      echo "Error: ./release final requires a current RC version, got $CURRENT"
+      exit 1
+    fi
+    NEXT="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
 esac
 
-NEXT="${MAJOR}.${MINOR}.${PATCH}"
 TAG="v${NEXT}"
 BRANCH="release/${TAG}"
 
 echo "Releasing ${CURRENT} → ${NEXT}"
-
-# Fresh main
-git checkout main
-git pull origin main
 
 # Branch, bump, commit, push
 git checkout -b "$BRANCH"
@@ -53,7 +124,12 @@ git checkout main
 git pull origin main
 git tag "$TAG"
 git push origin "$TAG"
-RELEASE_URL=$(gh release create "$TAG" --generate-notes)
+
+RELEASE_FLAGS=(--generate-notes)
+if [[ "$PRERELEASE" == true ]]; then
+  RELEASE_FLAGS+=(--prerelease --latest=false)
+fi
+RELEASE_URL=$(gh release create "$TAG" "${RELEASE_FLAGS[@]}")
 
 echo ""
 echo "Done: ${TAG}"

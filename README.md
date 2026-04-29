@@ -53,9 +53,12 @@ Full setup guide, integrations, and API reference at **[docs.ntrp.io](https://do
 ./release patch   # 0.5.2 → 0.5.3
 ./release minor   # 0.5.2 → 0.6.0
 ./release major   # 0.5.2 → 1.0.0
+./release rc minor # 0.5.2 → 0.6.0-rc.1
+./release rc      # 0.6.0-rc.1 → 0.6.0-rc.2
+./release final   # 0.6.0-rc.2 → 0.6.0
 ```
 
-Bumps version, creates a PR, merges, tags, and publishes a GitHub release. PyPI and npm packages are published automatically via CI.
+Bumps version, creates a PR, merges, tags, and publishes a GitHub release. PyPI and npm packages are published automatically via CI. Release candidates are marked as GitHub prereleases and published to npm under the `rc` dist-tag.
 
 ## Inspired by
 

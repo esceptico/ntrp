@@ -35,4 +35,9 @@ jobs:
 
       - name: Publish
         working-directory: ntrp-ui
-        run: npm publish --provenance
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == *-rc.* ]]; then
+            npm publish --tag rc --provenance
+          else
+            npm publish --provenance
+          fi
