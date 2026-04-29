@@ -1208,7 +1208,7 @@ wheels = [
 
 [[package]]
 name = "ntrp"
-version = "0.20.0"
+version = "1.0.0rc1"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
