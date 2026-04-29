@@ -3,6 +3,7 @@
 import asyncio
 import json
 from collections.abc import AsyncGenerator
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -18,7 +19,6 @@ from ntrp.agent import (
     Role,
     SharedLedger,
     SpawnContext,
-    StepConfig,
     StopReason,
     TextBlock,
     TextDelta,
@@ -34,7 +34,9 @@ from ntrp.agent import (
 # ============================================================
 
 
-def _response(text: str | None = None, tool_calls: list[ToolCall] | None = None, usage: Usage | None = None) -> CompletionResponse:
+def _response(
+    text: str | None = None, tool_calls: list[ToolCall] | None = None, usage: Usage | None = None
+) -> CompletionResponse:
     return CompletionResponse(
         choices=[
             Choice(
@@ -321,17 +323,17 @@ async def test_max_depth_stops_before_calling_llm():
 
 
 # ============================================================
-# Hooks
+# Model request middleware
 # ============================================================
 
 
 @pytest.mark.asyncio
-async def test_prepare_step_can_override_model_and_tool_choice():
+async def test_model_request_middleware_can_override_model_and_tool_choice():
     llm = FakeLLM([_response(text="ok")])
     captured: dict = {}
 
-    async def prepare(step, messages, last_response):
-        return StepConfig(model="override-model", tool_choice=ToolChoiceMode.REQUIRED)
+    async def override_request(request, next_request):
+        return await next_request(replace(request, model="override-model", tool_choice=ToolChoiceMode.REQUIRED))
 
     class Capture(FakeLLM):
         async def stream(self, messages, model, tools, tool_choice=None):
@@ -341,23 +343,50 @@ async def test_prepare_step_can_override_model_and_tool_choice():
                 yield item
 
     llm = Capture([_response(text="ok")])
-    agent = _make_agent(llm, FakeExecutor({}), hooks=AgentHooks(prepare_step=prepare))
+    agent = _make_agent(llm, FakeExecutor({}), model_request_middlewares=(override_request,))
     await agent.run(_msgs())
     assert captured["model"] == "override-model"
     assert captured["tool_choice"] == ToolChoiceMode.REQUIRED
 
 
 @pytest.mark.asyncio
-async def test_prepare_step_can_replace_messages():
-    async def prepare(step, messages, last_response):
-        return StepConfig(messages=[{"role": "system", "content": "replaced"}])
+async def test_model_request_middleware_can_replace_messages():
+    async def replace_messages(request, next_request):
+        return await next_request(replace(request, messages=[{"role": "system", "content": "replaced"}]))
 
     llm = FakeLLM([_response(text="ok")])
-    agent = _make_agent(llm, FakeExecutor({}), hooks=AgentHooks(prepare_step=prepare))
+    agent = _make_agent(llm, FakeExecutor({}), model_request_middlewares=(replace_messages,))
     messages = _msgs()
     await agent.run(messages)
     # Caller's list was mutated to replaced content
     assert messages[0]["content"] == "replaced"
+
+
+@pytest.mark.asyncio
+async def test_model_request_middlewares_run_in_order():
+    calls: list[str] = []
+
+    async def outer(request, next_request):
+        calls.append("outer:before")
+        prepared = await next_request(request)
+        calls.append("outer:after")
+        return prepared
+
+    async def inner(request, next_request):
+        calls.append("inner:before")
+        prepared = await next_request(request)
+        calls.append("inner:after")
+        return prepared
+
+    llm = FakeLLM([_response(text="ok")])
+    agent = _make_agent(llm, FakeExecutor({}), model_request_middlewares=(outer, inner))
+    await agent.run(_msgs())
+    assert calls == ["outer:before", "inner:before", "inner:after", "outer:after"]
+
+
+# ============================================================
+# Hooks
+# ============================================================
 
 
 @pytest.mark.asyncio
@@ -479,7 +508,7 @@ async def test_pending_arrived_during_final_turn_continues_loop():
 
     llm = FakeLLM(
         [
-            _response(text="first answer"),   # iter 1: would end, but pending arrives
+            _response(text="first answer"),  # iter 1: would end, but pending arrives
             _response(text="second answer"),  # iter 2: ends cleanly
         ]
     )
@@ -487,10 +516,8 @@ async def test_pending_arrived_during_final_turn_continues_loop():
     messages = _msgs()
     result = await agent.run(messages)
 
-    assert any(m.get("content") == "follow-up" for m in messages), \
-        "queued message must land in conversation context"
-    assert result.text == "second answer", \
-        "agent must produce a fresh response after consuming the queued message"
+    assert any(m.get("content") == "follow-up" for m in messages), "queued message must land in conversation context"
+    assert result.text == "second answer", "agent must produce a fresh response after consuming the queued message"
 
 
 # ============================================================

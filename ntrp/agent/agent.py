@@ -1,9 +1,10 @@
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 
 from ntrp.agent.hooks import AgentHooks
 from ntrp.agent.llm.client import LLMClient
 from ntrp.agent.llm.parsing import normalize_assistant_message, parse_tool_calls
+from ntrp.agent.model_request import ModelRequest, ModelRequestMiddleware, apply_model_request_middlewares
 from ntrp.agent.tools.dispatch import dispatch_tools
 from ntrp.agent.tools.executor import AgentToolExecutor
 from ntrp.agent.tools.runner import ToolRunner
@@ -29,6 +30,7 @@ class Agent:
         parent_id: str | None = None,
         tool_choice: ToolChoice = ToolChoiceMode.AUTO,
         hooks: AgentHooks | None = None,
+        model_request_middlewares: Sequence[ModelRequestMiddleware] = (),
     ):
         self.tools = tools
         self.client = client
@@ -39,6 +41,7 @@ class Agent:
         self.parent_id = parent_id
         self.tool_choice = tool_choice
         self.hooks = hooks or AgentHooks()
+        self.model_request_middlewares = tuple(model_request_middlewares)
         self._runner = ToolRunner(executor=executor, depth=current_depth, parent_id=parent_id)
         self._last_response: CompletionResponse | None = None
         self._usage = Usage()
@@ -116,24 +119,23 @@ class Agent:
             messages.extend(pending)
 
     async def _prepare(self, step: int, messages: list[dict]) -> tuple[str, list[dict], ToolChoice]:
-        model = self.model
-        tools = self.tools
-        tool_choice = self.tool_choice
+        prepared = await apply_model_request_middlewares(
+            ModelRequest(
+                step=step,
+                messages=messages,
+                model=self.model,
+                tools=self.tools,
+                tool_choice=self.tool_choice,
+                previous_response=self._last_response,
+            ),
+            self.model_request_middlewares,
+        )
 
-        if self.hooks.prepare_step:
-            config = await self.hooks.prepare_step(step, messages, self._last_response)
-            if config:
-                if config.messages is not None:
-                    messages.clear()
-                    messages.extend(config.messages)
-                if config.model is not None:
-                    model = config.model
-                if config.tools is not None:
-                    tools = config.tools
-                if config.tool_choice is not None:
-                    tool_choice = config.tool_choice
+        if prepared.messages is not messages:
+            messages.clear()
+            messages.extend(prepared.messages)
 
-        return model, tools, tool_choice
+        return prepared.model, prepared.tools, prepared.tool_choice
 
     async def _call_llm(
         self,

@@ -6,10 +6,10 @@ from ntrp.agent.hooks import (
     OnFinishFn,
     OnResponseFn,
     OnStepFinishFn,
-    PrepareStepFn,
 )
 from ntrp.agent.ledger import SharedLedger
 from ntrp.agent.llm import LLMClient
+from ntrp.agent.model_request import ModelRequest, ModelRequestMiddleware, ModelRequestNext
 from ntrp.agent.spawn import SpawnContext
 from ntrp.agent.tools import AgentToolExecutor
 from ntrp.agent.types import (
@@ -22,7 +22,6 @@ from ntrp.agent.types import (
     Result,
     Role,
     SpecificTool,
-    StepConfig,
     StopReason,
     TextBlock,
     TextDelta,
@@ -48,18 +47,19 @@ __all__ = [
     "GetPendingMessagesFn",
     "LLMClient",
     "Message",
+    "ModelRequest",
+    "ModelRequestMiddleware",
+    "ModelRequestNext",
     "OnErrorFn",
     "OnFinishFn",
     "OnResponseFn",
     "OnStepFinishFn",
     "PendingToolCall",
-    "PrepareStepFn",
     "Result",
     "Role",
     "SharedLedger",
     "SpecificTool",
     "SpawnContext",
-    "StepConfig",
     "StopReason",
     "TextBlock",
     "TextDelta",

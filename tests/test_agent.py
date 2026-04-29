@@ -171,4 +171,4 @@ async def test_create_agent_returns_agent_with_hooks():
     assert isinstance(agent, Agent)
     assert hasattr(agent, "hooks")
     assert isinstance(agent.hooks, AgentHooks)
-    assert agent.hooks.prepare_step is not None
+    assert agent.model_request_middlewares

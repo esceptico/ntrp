@@ -1,4 +1,3 @@
-from ntrp.agent.types.config import StepConfig
 from ntrp.agent.types.events import Result, TextBlock, TextDelta, ToolCompleted, ToolStarted
 from ntrp.agent.types.llm import Choice, CompletionResponse, FinishReason, Message, Role
 from ntrp.agent.types.stop import StopReason
@@ -17,7 +16,6 @@ __all__ = [
     "Result",
     "Role",
     "SpecificTool",
-    "StepConfig",
     "StopReason",
     "TextBlock",
     "TextDelta",
