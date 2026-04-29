@@ -271,8 +271,8 @@ async def connect_service(
     return {"status": "connected", "service": service_id}
 
 
-@router.get("/providers")
-async def list_providers(runtime: Runtime = Depends(get_runtime)):
+@router.get("/tool-providers")
+async def list_tool_providers(runtime: Runtime = Depends(get_runtime)):
     """Unified list of tool providers — native integrations + MCP servers."""
     native = runtime.integrations.list_providers()
     mcp = runtime.mcp_manager.list_providers() if runtime.mcp_manager else []

@@ -303,11 +303,17 @@ async def _drain_backgrounded(
 
         save_lock = asyncio.Lock()
 
+        async def _save_snapshot() -> None:
+            latest = await ctx.session_service.load(ctx.session_state.session_id)
+            current_messages = list(latest.messages) if latest else []
+            state = latest.state if latest else ctx.session_state
+            await ctx.session_service.save(state, _merge_background_messages(current_messages, messages))
+
         async def _save_directly(injected: list[dict]) -> None:
             async with save_lock:
                 messages.extend(injected)
                 try:
-                    await ctx.session_service.save(ctx.session_state, messages)
+                    await _save_snapshot()
                 except Exception:
                     _logger.exception("Background direct-save failed (run_id=%s)", ctx.run.run_id)
 
@@ -318,7 +324,7 @@ async def _drain_backgrounded(
 
         try:
             async with save_lock:
-                await ctx.session_service.save(ctx.session_state, messages)
+                await _save_snapshot()
         except Exception:
             _logger.exception("Backgrounded final save failed (run_id=%s)", ctx.run.run_id)
 
@@ -328,6 +334,15 @@ async def _emit_ingested_for_client_entries(batch: list[dict], bus: SessionBus, 
         client_id = entry.pop("client_id", None)
         if client_id:
             await bus.emit(MessageIngestedEvent(client_id=client_id, run_id=run.run_id))
+
+
+def _merge_background_messages(current: list[dict], background: list[dict]) -> list[dict]:
+    prefix_len = 0
+    for current_msg, background_msg in zip(current, background, strict=False):
+        if current_msg != background_msg:
+            break
+        prefix_len += 1
+    return [*current, *background[prefix_len:]]
 
 
 def _build_get_pending(bus: SessionBus, run: RunState):

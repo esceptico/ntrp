@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from ntrp.server.app import app
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -41,3 +43,22 @@ def test_server_app_does_not_own_http_route_handlers():
     route_decorators = ("@app.get(", "@app.post(", "@app.put(", "@app.patch(", "@app.delete(")
 
     assert not any(decorator in source for decorator in route_decorators)
+
+
+def test_server_routes_are_unique_by_method_and_path():
+    seen: dict[tuple[tuple[str, ...], str], str] = {}
+    duplicates: list[str] = []
+
+    for route in app.routes:
+        methods = getattr(route, "methods", None)
+        path = getattr(route, "path", None)
+        if not methods or not path:
+            continue
+        key = (tuple(sorted(methods)), path)
+        name = getattr(route, "name", "<unnamed>")
+        if key in seen:
+            duplicates.append(f"{','.join(key[0])} {path}: {seen[key]} and {name}")
+        else:
+            seen[key] = name
+
+    assert duplicates == []

@@ -108,7 +108,7 @@ class LinearSearchTool(Tool):
 - You want tools without writing API client code
 - It's a quick experiment — you can promote to native later
 
-MCP servers appear alongside native integrations in `GET /settings/providers` with `kind="mcp"`.
+MCP servers appear alongside native integrations in `GET /tool-providers` with `kind="mcp"`.
 
 ## Indexable integrations
 

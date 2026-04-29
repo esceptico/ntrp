@@ -1,9 +1,13 @@
 from collections.abc import Awaitable, Callable
+from copy import deepcopy
 from pathlib import Path
 
 from ntrp.config import PERSIST_KEYS, PROVIDER_KEY_FIELDS
 from ntrp.llm.models import Provider, get_models_by_provider
+from ntrp.logging import get_logger
 from ntrp.settings import load_user_settings, save_user_settings
+
+_logger = get_logger(__name__)
 
 
 class ConfigService:
@@ -12,13 +16,17 @@ class ConfigService:
 
     async def _with_rollback(self, mutate: Callable[[dict], None]) -> None:
         settings = load_user_settings()
-        backup = dict(settings)
+        backup = deepcopy(settings)
         mutate(settings)
         save_user_settings(settings)
         try:
             await self._on_config_change()
         except Exception:
             save_user_settings(backup)
+            try:
+                await self._on_config_change()
+            except Exception:
+                _logger.exception("Failed to reload runtime after config rollback")
             raise
 
     async def update(self, **fields) -> None:
