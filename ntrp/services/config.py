@@ -1,9 +1,10 @@
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from copy import deepcopy
 from pathlib import Path
 
 from ntrp.config import PERSIST_KEYS, PROVIDER_KEY_FIELDS
-from ntrp.llm.models import Provider, get_models_by_provider
+from ntrp.llm.models import Model, Provider, add_custom_model, get_models_by_provider, remove_custom_model
 from ntrp.logging import get_logger
 from ntrp.settings import load_user_settings, save_user_settings
 
@@ -151,3 +152,85 @@ class ConfigService:
                 settings["mcp_servers"] = mcp_servers
 
         await self._with_rollback(mutate)
+
+    async def create_custom_model(
+        self,
+        *,
+        model_id: str,
+        base_url: str,
+        context_window: int,
+        max_output_tokens: int,
+        api_key: str | None = None,
+    ) -> Model:
+        existing_custom = model_id in get_models_by_provider(Provider.CUSTOM)
+        try:
+            model = add_custom_model(
+                model_id=model_id,
+                base_url=base_url,
+                context_window=context_window,
+                max_output_tokens=max_output_tokens,
+            )
+            if api_key:
+                await self._set_custom_model_key(model_id, api_key)
+            else:
+                await self._on_config_change()
+        except Exception:
+            if not existing_custom:
+                await self._remove_custom_model_after_failed_create(model_id)
+            raise
+        return model
+
+    async def _set_custom_model_key(self, model_id: str, api_key: str) -> None:
+        def mutate(settings: dict) -> None:
+            settings.setdefault("custom_model_keys", {})[model_id] = api_key
+
+        await self._with_rollback(mutate)
+
+    async def _remove_custom_model_after_failed_create(self, model_id: str) -> None:
+        with suppress(Exception):
+            remove_custom_model(model_id)
+        try:
+            await self._on_config_change()
+        except Exception:
+            _logger.exception("Failed to reload runtime after reverting custom model creation")
+
+    async def delete_custom_model(self, model_id: str, *, active_models: dict[str, str | None]) -> None:
+        existing = get_models_by_provider(Provider.CUSTOM).get(model_id)
+        if existing is None:
+            raise ValueError(f"Not a custom model: {model_id}")
+
+        remove_custom_model(model_id)
+        try:
+            await self._remove_custom_model_settings(model_id, active_models=active_models)
+        except Exception:
+            await self._restore_custom_model_after_failed_delete(existing)
+            raise
+
+    async def _remove_custom_model_settings(self, model_id: str, *, active_models: dict[str, str | None]) -> None:
+        def mutate(settings: dict) -> None:
+            custom_keys = settings.get("custom_model_keys", {})
+            custom_keys.pop(model_id, None)
+            if custom_keys:
+                settings["custom_model_keys"] = custom_keys
+            else:
+                settings.pop("custom_model_keys", None)
+
+            for key in ("chat_model", "research_model", "memory_model"):
+                if active_models.get(key) == model_id:
+                    settings.pop(key, None)
+
+        await self._with_rollback(mutate)
+
+    async def _restore_custom_model_after_failed_delete(self, model: Model) -> None:
+        with suppress(Exception):
+            add_custom_model(
+                model_id=model.id,
+                base_url=model.base_url or "",
+                context_window=model.max_context_tokens,
+                max_output_tokens=model.max_output_tokens,
+                api_key_env=model.api_key_env,
+            )
+        try:
+            await self._on_config_change()
+        except Exception:
+            _logger.exception("Failed to reload runtime after restoring custom model deletion")

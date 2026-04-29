@@ -2,17 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
 
 from ntrp.llm.models import (
-    add_custom_model,
-    list_embedding_models,
-    list_models,
-    remove_custom_model,
-)
-from ntrp.llm.models import (
     get_embedding_models as get_embedding_models_fn,
 )
 from ntrp.llm.models import (
     get_models as get_models_fn,
 )
+from ntrp.llm.models import list_embedding_models, list_models
 from ntrp.server.deps import require_config_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
@@ -21,7 +16,6 @@ from ntrp.server.schemas import (
     UpdateEmbeddingRequest,
 )
 from ntrp.services.config import ConfigService
-from ntrp.settings import load_user_settings, save_user_settings
 
 router = APIRouter(tags=["settings"])
 
@@ -148,28 +142,18 @@ async def reload_runtime(runtime: Runtime = Depends(get_runtime)):
 @router.post("/models/custom")
 async def create_custom_model(
     req: AddCustomModelRequest,
-    runtime: Runtime = Depends(get_runtime),
     cfg_svc: ConfigService = Depends(require_config_service),
 ):
     try:
-        model = add_custom_model(
+        model = await cfg_svc.create_custom_model(
             model_id=req.model_id,
             base_url=req.base_url,
             context_window=req.context_window,
             max_output_tokens=req.max_output_tokens,
+            api_key=req.api_key,
         )
-    except Exception as e:
+    except (RuntimeError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-    # Store API key in settings.json if provided
-    if req.api_key:
-        settings = load_user_settings()
-        custom_keys = settings.setdefault("custom_model_keys", {})
-        custom_keys[req.model_id] = req.api_key
-        save_user_settings(settings)
-
-    # Reinit router to pick up new key
-    await runtime.reload_config()
 
     return {"status": "created", "model_id": model.id}
 
@@ -180,31 +164,18 @@ async def delete_custom_model(
     runtime: Runtime = Depends(get_runtime),
     cfg_svc: ConfigService = Depends(require_config_service),
 ):
-    # Check if active model is being removed
     config = runtime.config
-    clear_fields = {}
-    for key in ("chat_model", "research_model", "memory_model"):
-        if getattr(config, key) == model_id:
-            clear_fields[key] = None
-
     try:
-        remove_custom_model(model_id)
+        await cfg_svc.delete_custom_model(
+            model_id,
+            active_models={
+                "chat_model": config.chat_model,
+                "research_model": config.research_model,
+                "memory_model": config.memory_model,
+            },
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-    # Remove stored API key
-    settings = load_user_settings()
-    custom_keys = settings.get("custom_model_keys", {})
-    if model_id in custom_keys:
-        del custom_keys[model_id]
-        if not custom_keys:
-            settings.pop("custom_model_keys", None)
-        save_user_settings(settings)
-
-    if clear_fields:
-        await cfg_svc.update(**clear_fields)
-    else:
-        await runtime.reload_config()
 
     return {"status": "deleted", "model_id": model_id}
 

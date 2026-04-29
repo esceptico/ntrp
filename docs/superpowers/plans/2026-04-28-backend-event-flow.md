@@ -85,10 +85,14 @@ This notebook tracks the backend architecture cleanup that replaces the old in-p
   - Context usage, compaction, and directive endpoints moved from `ntrp.server.routers.settings` to `ntrp.server.routers.context`.
   - Public paths remain `/context`, `/compact`, and `/directives`.
   - `settings.py` is now focused on config and model management.
+- Stage 27: custom model service boundary.
+  - Custom model creation/deletion now delegates file, settings, and reload decisions to `ConfigService`.
+  - `settings.py` no longer mutates `models.json` or `settings.json` directly for custom models.
+  - Service tests cover custom model API key storage and active model field cleanup.
 
 ## Next candidates
 
 - Consider UI or CLI exposure now that the backend endpoint fields are stable.
 - Consider extracting stronger typed internal models for run-side protocol entries if raw message dictionaries keep spreading.
-- Consider moving custom-model file mutation out of the settings router into `ConfigService` or a small model-management service.
+- Review runtime reload sequencing before making deeper runtime decomposition changes.
 - Continue runtime decomposition with monitor or MCP/config reload wiring once the HTTP composition surface has settled.
