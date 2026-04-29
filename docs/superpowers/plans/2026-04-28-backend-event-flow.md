@@ -81,10 +81,14 @@ This notebook tracks the backend architecture cleanup that replaces the old in-p
   - LLM provider, service-key, and unified tool-provider endpoints moved from `ntrp.server.routers.settings` to `ntrp.server.routers.providers`.
   - Public paths remain `/providers`, `/providers/{provider_id}`, `/services`, and `/tool-providers`.
   - Route registration tests cover the extracted provider endpoints.
+- Stage 26: context router extraction.
+  - Context usage, compaction, and directive endpoints moved from `ntrp.server.routers.settings` to `ntrp.server.routers.context`.
+  - Public paths remain `/context`, `/compact`, and `/directives`.
+  - `settings.py` is now focused on config and model management.
 
 ## Next candidates
 
 - Consider UI or CLI exposure now that the backend endpoint fields are stable.
 - Consider extracting stronger typed internal models for run-side protocol entries if raw message dictionaries keep spreading.
-- Continue splitting the settings control plane into smaller config/model/context services.
+- Consider moving custom-model file mutation out of the settings router into `ConfigService` or a small model-management service.
 - Continue runtime decomposition with monitor or MCP/config reload wiring once the HTTP composition surface has settled.
