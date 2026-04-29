@@ -11,7 +11,7 @@ import ntrp.database as database
 from ntrp.agent import Agent
 from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core import EmptyInput, Tool, ToolResult, tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, ToolExecution
 from tests.helpers import (
     MockCompletionClient,
@@ -25,27 +25,16 @@ from tests.helpers import (
 # --- Helpers ---
 
 
-class SlowTool(Tool):
-    name = "slow"
-    display_name = "Slow"
-    description = "Takes a while"
-
-    async def execute(self, execution: ToolExecution, **kwargs) -> ToolResult:
-        await asyncio.sleep(0.1)
-        return ToolResult(content="done", preview="done")
+async def slow(execution: ToolExecution, args: EmptyInput) -> ToolResult:
+    await asyncio.sleep(0.1)
+    return ToolResult(content="done", preview="done")
 
 
-class CrashTool(Tool):
-    name = "crash"
-    display_name = "Crash"
-    description = "Raises unexpected error"
-
-    async def execute(self, execution: ToolExecution, **kwargs) -> ToolResult:
-        raise ValueError("unexpected crash")
+SLOW_TOOL = tool(display_name="Slow", description="Takes a while", execute=slow)
 
 
-def _make_agent(client, *tools) -> Agent:
-    executor = make_executor(*tools)
+def _make_agent(client, tools: dict[str, Tool] | None = None) -> Agent:
+    executor = make_executor(tools)
     return Agent(
         tools=executor.get_tools(),
         client=MockLLMClient(client),
@@ -83,7 +72,7 @@ async def test_agent_multiple_tool_calls_in_one_turn():
     )
 
     client = MockCompletionClient([multi_tool, make_text_response("Both done")])
-    agent = _make_agent(client, SlowTool())
+    agent = _make_agent(client, {"slow": SLOW_TOOL})
     messages = [{"role": "system", "content": "test"}, {"role": "user", "content": "Do two things"}]
 
     result = await agent.run(messages)
@@ -113,7 +102,7 @@ async def test_agent_cancellation():
             make_text_response("Never reached"),
         ]
     )
-    agent = _make_agent(client, SlowTool())
+    agent = _make_agent(client, {"slow": SLOW_TOOL})
     messages = [{"role": "system", "content": "test"}, {"role": "user", "content": "Start"}]
 
     gen = agent.stream(messages)

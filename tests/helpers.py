@@ -8,6 +8,7 @@ from ntrp.agent import Choice, CompletionResponse, FunctionCall, Message, ToolCa
 from ntrp.context.models import SessionState
 from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.llm.base import CompletionClient
+from ntrp.tools.core import Tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.executor import ToolExecutor
@@ -70,12 +71,12 @@ class MockCompletionClient(CompletionClient):
         pass
 
 
-def make_executor(*tools) -> ToolExecutor:
+def make_executor(tools: dict[str, Tool] | None = None) -> ToolExecutor:
     executor = ToolExecutor.__new__(ToolExecutor)
     executor._get_services = dict
     executor.registry = ToolRegistry()
-    for tool in tools:
-        executor.registry.register(tool)
+    for name, tool in (tools or {}).items():
+        executor.registry.register(name, tool)
     return executor
 
 

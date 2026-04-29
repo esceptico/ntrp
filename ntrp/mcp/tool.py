@@ -53,8 +53,8 @@ class MCPTool(Tool):
                 is_error=True,
             )
 
-    def to_dict(self) -> dict:
-        schema: dict = {"name": self.name, "description": self.description}
+    def to_dict(self, name: str) -> dict:
+        schema: dict = {"name": name, "description": self.description}
         input_schema = self._mcp_tool.inputSchema
         if input_schema:
             schema["parameters"] = {

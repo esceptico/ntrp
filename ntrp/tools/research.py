@@ -5,7 +5,7 @@ from ntrp.constants import USER_ENTITY_NAME
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.prompts import RESEARCH_PROMPTS, current_date_formatted, env
 from ntrp.logging import get_logger
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 
 _logger = get_logger(__name__)
@@ -63,7 +63,6 @@ RESEARCH_DESCRIPTION = (
 )
 
 
-
 class ResearchInput(BaseModel):
     task: str = Field(description="What to research.")
     depth: str = Field(
@@ -72,59 +71,62 @@ class ResearchInput(BaseModel):
     )
 
 
-class ResearchTool(Tool):
-    name = "research"
-    display_name = "Research"
-    description = RESEARCH_DESCRIPTION
-    input_model = ResearchInput
+async def _build_research_prompt(ctx, depth: str, remaining_depth: int, tool_id: str) -> str:
+    ledger_summary = None
+    if ctx.ledger:
+        ledger_summary = _format_ledger(ctx.ledger, exclude_id=tool_id)
 
-    async def _build_prompt(self, ctx, depth: str, remaining_depth: int, tool_id: str) -> str:
-        ledger_summary = None
-        if ctx.ledger:
-            ledger_summary = _format_ledger(ctx.ledger, exclude_id=tool_id)
+    user_facts = []
+    memory = ctx.services.get("memory")
+    if memory:
+        user_facts = await memory.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=5)
 
-        user_facts = []
-        memory = ctx.services.get("memory")
-        if memory:
-            user_facts = await memory.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=5)
+    return RESEARCH_SYSTEM_PROMPT.render(
+        base_prompt=RESEARCH_PROMPTS[depth],
+        date=current_date_formatted(),
+        remaining_depth=remaining_depth,
+        ledger_summary=ledger_summary,
+        user_facts=user_facts,
+    )
 
-        return RESEARCH_SYSTEM_PROMPT.render(
-            base_prompt=RESEARCH_PROMPTS[depth],
-            date=current_date_formatted(),
-            remaining_depth=remaining_depth,
-            ledger_summary=ledger_summary,
-            user_facts=user_facts,
+
+async def research(execution: ToolExecution, args: ResearchInput) -> ToolResult:
+    ctx = execution.ctx
+
+    if not ctx.spawn_fn:
+        return ToolResult(content="Error: spawn capability not available", preview="Error", is_error=True)
+
+    if ctx.ledger:
+        await ctx.ledger.register(execution.tool_id, args.task, depth=args.depth)
+
+    remaining = ctx.run.max_depth - ctx.run.current_depth - 1
+    exclude = {"background", "cancel_background_task", "list_background_tasks", "get_background_result"}
+    if args.depth == "quick" or remaining <= 1:
+        exclude.add("research")
+
+    tools = ctx.registry.get_schemas(mutates=False, capabilities=ctx.capabilities)
+    tools = [t for t in tools if t["function"]["name"] not in exclude]
+    prompt = await _build_research_prompt(ctx, args.depth, remaining, execution.tool_id)
+    try:
+        result = await ctx.spawn_fn(
+            ctx,
+            task=args.task,
+            system_prompt=prompt,
+            tools=tools,
+            model_override=ctx.run.research_model,
+            parent_id=execution.tool_id,
+            isolation=IsolationLevel.FULL,
         )
-
-    async def execute(self, execution: ToolExecution, task: str, depth: str = "normal", **kwargs) -> ToolResult:
-        ctx = execution.ctx
-
-        if not ctx.spawn_fn:
-            return ToolResult(content="Error: spawn capability not available", preview="Error", is_error=True)
-
+    finally:
         if ctx.ledger:
-            await ctx.ledger.register(execution.tool_id, task, depth=depth)
+            await ctx.ledger.complete(execution.tool_id)
 
-        remaining = ctx.run.max_depth - ctx.run.current_depth - 1
-        exclude = {"background", "cancel_background_task", "list_background_tasks", "get_background_result"}
-        if depth == "quick" or remaining <= 1:
-            exclude.add("research")
+    return ToolResult(content=result, preview=f"Researched ({args.depth})")
 
-        tools = ctx.registry.get_schemas(mutates=False, capabilities=ctx.capabilities)
-        tools = [t for t in tools if t["function"]["name"] not in exclude]
-        prompt = await self._build_prompt(ctx, depth, remaining, execution.tool_id)
-        try:
-            result = await ctx.spawn_fn(
-                ctx,
-                task=task,
-                system_prompt=prompt,
-                tools=tools,
-                model_override=ctx.run.research_model,
-                parent_id=execution.tool_id,
-                isolation=IsolationLevel.FULL,
-            )
-        finally:
-            if ctx.ledger:
-                await ctx.ledger.complete(execution.tool_id)
 
-        return ToolResult(content=result, preview=f"Researched ({depth})")
+research_tool = tool(
+    display_name="Research",
+    description=RESEARCH_DESCRIPTION,
+    input_model=ResearchInput,
+    execute=research,
+)

@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, Field
 
 from ntrp.memory.formatting import format_memory_context
 from ntrp.memory.models import SourceType
-from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
+from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ApprovalInfo
 
 RECALL_DESCRIPTION = """Recall stored facts from memory about a topic or entity.
 
@@ -42,43 +42,29 @@ class RememberInput(BaseModel):
     )
 
 
-class RememberTool(Tool):
-    name = "remember"
-    display_name = "Remember"
-    description = REMEMBER_DESCRIPTION
-    mutates = True
-    requires = frozenset({"memory"})
-    input_model = RememberInput
+async def approve_remember(execution: ToolExecution, args: RememberInput) -> ApprovalInfo | None:
+    return ApprovalInfo(description=args.fact[:100], preview=None, diff=None)
 
-    async def approval_info(self, execution: ToolExecution, fact: str, **kwargs: Any) -> ApprovalInfo | None:
-        return ApprovalInfo(description=fact[:100], preview=None, diff=None)
 
-    async def execute(
-        self,
-        execution: ToolExecution,
-        fact: str,
-        source: str | None = None,
-        happened_at: str | None = None,
-        **kwargs: Any,
-    ) -> ToolResult:
-        memory = execution.ctx.services["memory"]
-        event_time = datetime.fromisoformat(happened_at) if happened_at else None
+async def remember(execution: ToolExecution, args: RememberInput) -> ToolResult:
+    memory = execution.ctx.services["memory"]
+    event_time = datetime.fromisoformat(args.happened_at) if args.happened_at else None
 
-        result = await memory.remember(
-            text=fact,
-            source_type=SourceType.CHAT,
-            source_ref=source,
-            happened_at=event_time,
-        )
+    result = await memory.remember(
+        text=args.fact,
+        source_type=SourceType.CHAT,
+        source_ref=args.source,
+        happened_at=event_time,
+    )
 
-        if not result:
-            return ToolResult(content="Already known — reinforced existing memory.", preview="Already known")
+    if not result:
+        return ToolResult(content="Already known — reinforced existing memory.", preview="Already known")
 
-        entities = ", ".join(result.entities_extracted) if result.entities_extracted else "none"
-        return ToolResult(
-            content=f"Remembered: {result.fact.text}\nEntities: {entities}",
-            preview="Remembered",
-        )
+    entities = ", ".join(result.entities_extracted) if result.entities_extracted else "none"
+    return ToolResult(
+        content=f"Remembered: {result.fact.text}\nEntities: {entities}",
+        preview="Remembered",
+    )
 
 
 _DEFAULT_RECALL_LIMIT = 5
@@ -91,49 +77,62 @@ class RecallInput(BaseModel):
     )
 
 
-class RecallTool(Tool):
-    name = "recall"
-    display_name = "Recall"
-    description = RECALL_DESCRIPTION
-    requires = frozenset({"memory"})
-    input_model = RecallInput
-
-    async def execute(
-        self, execution: ToolExecution, query: str, limit: int = _DEFAULT_RECALL_LIMIT, **kwargs: Any
-    ) -> ToolResult:
-        memory = execution.ctx.services["memory"]
-        context = await memory.recall(query=query, limit=limit)
-        formatted = format_memory_context(
-            query_facts=context.facts,
-            query_observations=context.observations,
-            bundled_sources=context.bundled_sources,
-        )
-        if formatted:
-            obs_count = len(context.observations)
-            fact_count = len(context.facts)
-            return ToolResult(content=formatted, preview=f"{obs_count} patterns, {fact_count} facts")
-        return ToolResult(
-            content="No memory found for this query. Try broader terms or use remember() to store facts first.",
-            preview="0 facts",
-        )
+async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
+    memory = execution.ctx.services["memory"]
+    context = await memory.recall(query=args.query, limit=args.limit)
+    formatted = format_memory_context(
+        query_facts=context.facts,
+        query_observations=context.observations,
+        bundled_sources=context.bundled_sources,
+    )
+    if formatted:
+        obs_count = len(context.observations)
+        fact_count = len(context.facts)
+        return ToolResult(content=formatted, preview=f"{obs_count} patterns, {fact_count} facts")
+    return ToolResult(
+        content="No memory found for this query. Try broader terms or use remember() to store facts first.",
+        preview="0 facts",
+    )
 
 
 class ForgetInput(BaseModel):
     query: str = Field(description="Description of facts to forget.")
 
 
-class ForgetTool(Tool):
-    name = "forget"
-    display_name = "Forget"
-    description = FORGET_DESCRIPTION
-    mutates = True
-    requires = frozenset({"memory"})
-    input_model = ForgetInput
+async def approve_forget(execution: ToolExecution, args: ForgetInput) -> ApprovalInfo | None:
+    return ApprovalInfo(description=args.query, preview=None, diff=None)
 
-    async def approval_info(self, execution: ToolExecution, query: str, **kwargs: Any) -> ApprovalInfo | None:
-        return ApprovalInfo(description=query, preview=None, diff=None)
 
-    async def execute(self, execution: ToolExecution, query: str, **kwargs: Any) -> ToolResult:
-        memory = execution.ctx.services["memory"]
-        count = await memory.forget(query=query)
-        return ToolResult(content=f"Forgot {count} fact(s) related to '{query}'.", preview=f"Forgot {count}")
+async def forget(execution: ToolExecution, args: ForgetInput) -> ToolResult:
+    memory = execution.ctx.services["memory"]
+    count = await memory.forget(query=args.query)
+    return ToolResult(content=f"Forgot {count} fact(s) related to '{args.query}'.", preview=f"Forgot {count}")
+
+
+remember_tool = tool(
+    display_name="Remember",
+    description=REMEMBER_DESCRIPTION,
+    input_model=RememberInput,
+    mutates=True,
+    requires={"memory"},
+    approval=approve_remember,
+    execute=remember,
+)
+
+recall_tool = tool(
+    display_name="Recall",
+    description=RECALL_DESCRIPTION,
+    input_model=RecallInput,
+    requires={"memory"},
+    execute=recall,
+)
+
+forget_tool = tool(
+    display_name="Forget",
+    description=FORGET_DESCRIPTION,
+    input_model=ForgetInput,
+    mutates=True,
+    requires={"memory"},
+    approval=approve_forget,
+    execute=forget,
+)

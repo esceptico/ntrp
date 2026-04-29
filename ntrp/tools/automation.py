@@ -1,12 +1,13 @@
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from ntrp.automation.models import Automation
 from ntrp.automation.triggers import build_trigger
 from ntrp.events.triggers import EVENT_APPROACHING
-from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
+from ntrp.tools.core import EmptyInput, ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ApprovalInfo
 
 # --- Descriptions ---
 
@@ -147,315 +148,261 @@ class RunAutomationInput(BaseModel):
 # --- Tools ---
 
 
-class CreateAutomationTool(Tool):
-    name = "create_automation"
-    display_name = "CreateAutomation"
-    description = CREATE_AUTOMATION_DESCRIPTION
-    mutates = True
-    requires = frozenset({"automation"})
-    input_model = CreateAutomationInput
-
-    async def approval_info(
-        self,
-        execution: ToolExecution,
-        name: str,
-        description: str,
-        trigger_type: str,
-        at: str | None = None,
-        days: str | None = None,
-        every: str | None = None,
-        model: str | None = None,
-        start: str | None = None,
-        end: str | None = None,
-        event_type: str | None = None,
-        lead_minutes: int | str | None = None,
-        writable: bool = False,
-        **kwargs: Any,
-    ) -> ApprovalInfo | None:
-        try:
-            trigger, next_run = build_trigger(
-                trigger_type,
-                at=at,
-                days=days,
-                every=every,
-                event_type=event_type,
-                lead_minutes=lead_minutes,
-                start=start,
-                end=end,
-            )
-        except ValueError:
-            return None
-
-        preview = f"Trigger: {_triggers_label([trigger])}"
-        if next_run:
-            preview += f"\nNext run: {next_run.strftime('%Y-%m-%d %H:%M')}"
-        if model:
-            preview += f"\nModel: {model}"
-        if writable:
-            preview += "\nWritable: yes"
-
-        return ApprovalInfo(description=description, preview=preview, diff=None)
-
-    async def execute(
-        self,
-        execution: ToolExecution,
-        name: str,
-        description: str,
-        trigger_type: str,
-        at: str | None = None,
-        days: str | None = None,
-        every: str | None = None,
-        model: str | None = None,
-        start: str | None = None,
-        end: str | None = None,
-        event_type: str | None = None,
-        lead_minutes: int | str | None = None,
-        writable: bool = False,
-        **kwargs: Any,
-    ) -> ToolResult:
-        try:
-            automation = await execution.ctx.services["automation"].create(
-                name=name,
-                description=description,
-                trigger_type=trigger_type,
-                at=at,
-                days=days,
-                every=every,
-                event_type=event_type,
-                lead_minutes=lead_minutes,
-                writable=writable,
-                start=start,
-                end=end,
-                model=model,
-            )
-        except ValueError as e:
-            return ToolResult(content=f"Error: {e}", preview="Failed", is_error=True)
-
-        lines = [
-            f"Created automation: {automation.description}",
-            f"ID: {automation.task_id}",
-            f"Trigger: {_triggers_label(automation.triggers)}",
-        ]
-        if automation.model:
-            lines.append(f"Model: {automation.model}")
-        if automation.next_run_at:
-            lines.append(f"Next run: {automation.next_run_at.strftime('%Y-%m-%d %H:%M')}")
-
-        return ToolResult(content="\n".join(lines), preview=f"Created ({automation.task_id})")
-
-
-class ListAutomationsTool(Tool):
-    name = "list_automations"
-    display_name = "ListAutomations"
-    description = LIST_AUTOMATIONS_DESCRIPTION
-    requires = frozenset({"automation"})
-    input_model = None
-
-    async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult:
-        automations = await execution.ctx.services["automation"].list_all()
-        if not automations:
-            return ToolResult(content="No automations.", preview="0 automations")
-
-        content = _format_automation_list(automations)
-        return ToolResult(content=content, preview=f"{len(automations)} automations")
-
-
-class UpdateAutomationTool(Tool):
-    name = "update_automation"
-    display_name = "UpdateAutomation"
-    description = UPDATE_AUTOMATION_DESCRIPTION
-    mutates = True
-    requires = frozenset({"automation"})
-    input_model = UpdateAutomationInput
-
-    async def approval_info(
-        self,
-        execution: ToolExecution,
-        task_id: str,
-        name: str | None = None,
-        description: str | None = None,
-        enabled: bool | None = None,
-        trigger_type: str | None = None,
-        writable: bool | None = None,
-        model: str | None = None,
-        at: str | None = None,
-        days: str | None = None,
-        every: str | None = None,
-        event_type: str | None = None,
-        lead_minutes: int | str | None = None,
-        start: str | None = None,
-        end: str | None = None,
-        **kwargs: Any,
-    ) -> ApprovalInfo | None:
-        try:
-            automation = await execution.ctx.services["automation"].get(task_id)
-        except KeyError:
-            return None
-
-        changes = []
-        fields = {
-            "name": name,
-            "description": description,
-            "enabled": enabled,
-            "writable": writable,
-            "model": model,
-            "trigger_type": trigger_type,
-            "at": at,
-            "days": days,
-            "every": every,
-            "event_type": event_type,
-            "lead_minutes": lead_minutes,
-            "start": start,
-            "end": end,
-        }
-        for key, value in fields.items():
-            if value is not None:
-                changes.append(f"{key}: {value}")
-
-        label = automation.name or automation.description[:60]
-        return ApprovalInfo(
-            description=f"Update: {label} ({task_id})",
-            preview="\n".join(changes) if changes else "No changes",
-            diff=None,
+async def approve_create_automation(execution: ToolExecution, args: CreateAutomationInput) -> ApprovalInfo | None:
+    try:
+        trigger, next_run = build_trigger(
+            args.trigger_type,
+            at=args.at,
+            days=args.days,
+            every=args.every,
+            event_type=args.event_type,
+            lead_minutes=args.lead_minutes,
+            start=args.start,
+            end=args.end,
         )
+    except ValueError:
+        return None
 
-    async def execute(
-        self,
-        execution: ToolExecution,
-        task_id: str,
-        name: str | None = None,
-        description: str | None = None,
-        model: str | None = None,
-        trigger_type: str | None = None,
-        at: str | None = None,
-        days: str | None = None,
-        every: str | None = None,
-        event_type: str | None = None,
-        lead_minutes: int | str | None = None,
-        start: str | None = None,
-        end: str | None = None,
-        writable: bool | None = None,
-        enabled: bool | None = None,
-        **kwargs: Any,
-    ) -> ToolResult:
-        try:
-            automation = await execution.ctx.services["automation"].update(
-                task_id,
-                name=name,
-                description=description,
-                model=model,
-                trigger_type=trigger_type,
-                at=at,
-                days=days,
-                every=every,
-                event_type=event_type,
-                lead_minutes=lead_minutes,
-                start=start,
-                end=end,
-                writable=writable,
-                enabled=enabled,
-            )
-        except KeyError:
-            return ToolResult(content=f"Error: automation '{task_id}' not found", preview="Not found", is_error=True)
-        except ValueError as e:
-            return ToolResult(content=f"Error: {e}", preview="Invalid update", is_error=True)
+    preview = f"Trigger: {_triggers_label([trigger])}"
+    if next_run:
+        preview += f"\nNext run: {next_run.strftime('%Y-%m-%d %H:%M')}"
+    if args.model:
+        preview += f"\nModel: {args.model}"
+    if args.writable:
+        preview += "\nWritable: yes"
 
-        label = automation.name or automation.description[:60]
-        lines = [
-            f"Updated automation: {label}",
-            f"ID: {automation.task_id}",
-            f"Trigger: {_triggers_label(automation.triggers)}",
-            f"Enabled: {automation.enabled}",
-        ]
-        if automation.next_run_at:
-            lines.append(f"Next run: {automation.next_run_at.strftime('%Y-%m-%d %H:%M')}")
-
-        return ToolResult(content="\n".join(lines), preview=f"Updated ({automation.task_id})")
+    return ApprovalInfo(description=args.description, preview=preview, diff=None)
 
 
-class DeleteAutomationTool(Tool):
-    name = "delete_automation"
-    display_name = "DeleteAutomation"
-    description = DELETE_AUTOMATION_DESCRIPTION
-    mutates = True
-    requires = frozenset({"automation"})
-    input_model = DeleteAutomationInput
-
-    async def approval_info(self, execution: ToolExecution, task_id: str, **kwargs: Any) -> ApprovalInfo | None:
-        try:
-            automation = await execution.ctx.services["automation"].get(task_id)
-        except KeyError:
-            return None
-        return ApprovalInfo(description=f"Delete: {automation.description}", preview=None, diff=None)
-
-    async def execute(self, execution: ToolExecution, task_id: str, **kwargs: Any) -> ToolResult:
-        try:
-            automation = await execution.ctx.services["automation"].get(task_id)
-            await execution.ctx.services["automation"].delete(task_id)
-        except KeyError:
-            return ToolResult(content=f"Error: automation '{task_id}' not found", preview="Not found", is_error=True)
-        except ValueError as e:
-            return ToolResult(content=f"Error: {e}", preview="Cannot delete", is_error=True)
-
-        return ToolResult(content=f"Deleted: {automation.description} ({task_id})", preview="Deleted")
-
-
-class GetAutomationResultTool(Tool):
-    name = "get_automation_result"
-    display_name = "AutomationResult"
-    description = GET_AUTOMATION_RESULT_DESCRIPTION
-    requires = frozenset({"automation"})
-    input_model = GetAutomationResultInput
-
-    async def execute(self, execution: ToolExecution, task_id: str, **kwargs: Any) -> ToolResult:
-        try:
-            automation = await execution.ctx.services["automation"].get(task_id)
-        except KeyError:
-            return ToolResult(content=f"Error: automation '{task_id}' not found", preview="Not found", is_error=True)
-
-        if not automation.last_result:
-            last_run = automation.last_run_at.strftime("%Y-%m-%d %H:%M") if automation.last_run_at else "never"
-            return ToolResult(
-                content=f"No result yet for '{automation.description}' (last run: {last_run})",
-                preview="No result",
-            )
-
-        header = (
-            f"Automation: {automation.description}\n"
-            f"Last run: {automation.last_run_at.strftime('%Y-%m-%d %H:%M') if automation.last_run_at else '—'}\n"
-            f"---\n"
+async def create_automation(execution: ToolExecution, args: CreateAutomationInput) -> ToolResult:
+    try:
+        automation = await execution.ctx.services["automation"].create(
+            name=args.name,
+            description=args.description,
+            trigger_type=args.trigger_type,
+            at=args.at,
+            days=args.days,
+            every=args.every,
+            event_type=args.event_type,
+            lead_minutes=args.lead_minutes,
+            writable=args.writable,
+            start=args.start,
+            end=args.end,
+            model=args.model,
         )
-        return ToolResult(content=header + automation.last_result, preview=f"Result ({automation.task_id})")
+    except ValueError as e:
+        return ToolResult(content=f"Error: {e}", preview="Failed", is_error=True)
+
+    lines = [
+        f"Created automation: {automation.description}",
+        f"ID: {automation.task_id}",
+        f"Trigger: {_triggers_label(automation.triggers)}",
+    ]
+    if automation.model:
+        lines.append(f"Model: {automation.model}")
+    if automation.next_run_at:
+        lines.append(f"Next run: {automation.next_run_at.strftime('%Y-%m-%d %H:%M')}")
+
+    return ToolResult(content="\n".join(lines), preview=f"Created ({automation.task_id})")
 
 
-class RunAutomationTool(Tool):
-    name = "run_automation"
-    display_name = "RunAutomation"
-    description = RUN_AUTOMATION_DESCRIPTION
-    mutates = True
-    requires = frozenset({"automation"})
-    input_model = RunAutomationInput
+async def list_automations(execution: ToolExecution, args: EmptyInput) -> ToolResult:
+    automations = await execution.ctx.services["automation"].list_all()
+    if not automations:
+        return ToolResult(content="No automations.", preview="0 automations")
 
-    async def approval_info(self, execution: ToolExecution, task_id: str, **kwargs: Any) -> ApprovalInfo | None:
-        try:
-            automation = await execution.ctx.services["automation"].get(task_id)
-        except KeyError:
-            return None
-        return ApprovalInfo(
-            description=f"Run now: {automation.name or automation.description[:60]}",
-            preview=None,
-            diff=None,
+    content = _format_automation_list(automations)
+    return ToolResult(content=content, preview=f"{len(automations)} automations")
+
+
+async def approve_update_automation(execution: ToolExecution, args: UpdateAutomationInput) -> ApprovalInfo | None:
+    try:
+        automation = await execution.ctx.services["automation"].get(args.task_id)
+    except KeyError:
+        return None
+
+    changes = []
+    fields = {
+        "name": args.name,
+        "description": args.description,
+        "enabled": args.enabled,
+        "writable": args.writable,
+        "model": args.model,
+        "trigger_type": args.trigger_type,
+        "at": args.at,
+        "days": args.days,
+        "every": args.every,
+        "event_type": args.event_type,
+        "lead_minutes": args.lead_minutes,
+        "start": args.start,
+        "end": args.end,
+    }
+    for key, value in fields.items():
+        if value is not None:
+            changes.append(f"{key}: {value}")
+
+    label = automation.name or automation.description[:60]
+    return ApprovalInfo(
+        description=f"Update: {label} ({args.task_id})",
+        preview="\n".join(changes) if changes else "No changes",
+        diff=None,
+    )
+
+
+async def update_automation(execution: ToolExecution, args: UpdateAutomationInput) -> ToolResult:
+    try:
+        automation = await execution.ctx.services["automation"].update(
+            args.task_id,
+            name=args.name,
+            description=args.description,
+            model=args.model,
+            trigger_type=args.trigger_type,
+            at=args.at,
+            days=args.days,
+            every=args.every,
+            event_type=args.event_type,
+            lead_minutes=args.lead_minutes,
+            start=args.start,
+            end=args.end,
+            writable=args.writable,
+            enabled=args.enabled,
         )
+    except KeyError:
+        return ToolResult(content=f"Error: automation '{args.task_id}' not found", preview="Not found", is_error=True)
+    except ValueError as e:
+        return ToolResult(content=f"Error: {e}", preview="Invalid update", is_error=True)
 
-    async def execute(self, execution: ToolExecution, task_id: str, **kwargs: Any) -> ToolResult:
-        try:
-            await execution.ctx.services["automation"].run_now(task_id)
-        except KeyError:
-            return ToolResult(content=f"Error: automation '{task_id}' not found", preview="Not found", is_error=True)
-        except RuntimeError as e:
-            return ToolResult(content=f"Error: {e}", preview="Unavailable", is_error=True)
+    label = automation.name or automation.description[:60]
+    lines = [
+        f"Updated automation: {label}",
+        f"ID: {automation.task_id}",
+        f"Trigger: {_triggers_label(automation.triggers)}",
+        f"Enabled: {automation.enabled}",
+    ]
+    if automation.next_run_at:
+        lines.append(f"Next run: {automation.next_run_at.strftime('%Y-%m-%d %H:%M')}")
 
+    return ToolResult(content="\n".join(lines), preview=f"Updated ({automation.task_id})")
+
+
+async def approve_delete_automation(execution: ToolExecution, args: DeleteAutomationInput) -> ApprovalInfo | None:
+    try:
+        automation = await execution.ctx.services["automation"].get(args.task_id)
+    except KeyError:
+        return None
+    return ApprovalInfo(description=f"Delete: {automation.description}", preview=None, diff=None)
+
+
+async def delete_automation(execution: ToolExecution, args: DeleteAutomationInput) -> ToolResult:
+    try:
+        automation = await execution.ctx.services["automation"].get(args.task_id)
+        await execution.ctx.services["automation"].delete(args.task_id)
+    except KeyError:
+        return ToolResult(content=f"Error: automation '{args.task_id}' not found", preview="Not found", is_error=True)
+    except ValueError as e:
+        return ToolResult(content=f"Error: {e}", preview="Cannot delete", is_error=True)
+
+    return ToolResult(content=f"Deleted: {automation.description} ({args.task_id})", preview="Deleted")
+
+
+async def get_automation_result(execution: ToolExecution, args: GetAutomationResultInput) -> ToolResult:
+    try:
+        automation = await execution.ctx.services["automation"].get(args.task_id)
+    except KeyError:
+        return ToolResult(content=f"Error: automation '{args.task_id}' not found", preview="Not found", is_error=True)
+
+    if not automation.last_result:
+        last_run = automation.last_run_at.strftime("%Y-%m-%d %H:%M") if automation.last_run_at else "never"
         return ToolResult(
-            content=f"Automation {task_id} started. Use get_automation_result to check the outcome.",
-            preview="Started",
+            content=f"No result yet for '{automation.description}' (last run: {last_run})",
+            preview="No result",
         )
+
+    header = (
+        f"Automation: {automation.description}\n"
+        f"Last run: {automation.last_run_at.strftime('%Y-%m-%d %H:%M') if automation.last_run_at else '—'}\n"
+        f"---\n"
+    )
+    return ToolResult(content=header + automation.last_result, preview=f"Result ({automation.task_id})")
+
+
+async def approve_run_automation(execution: ToolExecution, args: RunAutomationInput) -> ApprovalInfo | None:
+    try:
+        automation = await execution.ctx.services["automation"].get(args.task_id)
+    except KeyError:
+        return None
+    return ApprovalInfo(
+        description=f"Run now: {automation.name or automation.description[:60]}",
+        preview=None,
+        diff=None,
+    )
+
+
+async def run_automation(execution: ToolExecution, args: RunAutomationInput) -> ToolResult:
+    try:
+        await execution.ctx.services["automation"].run_now(args.task_id)
+    except KeyError:
+        return ToolResult(content=f"Error: automation '{args.task_id}' not found", preview="Not found", is_error=True)
+    except RuntimeError as e:
+        return ToolResult(content=f"Error: {e}", preview="Unavailable", is_error=True)
+
+    return ToolResult(
+        content=f"Automation {args.task_id} started. Use get_automation_result to check the outcome.",
+        preview="Started",
+    )
+
+
+create_automation_tool = tool(
+    display_name="CreateAutomation",
+    description=CREATE_AUTOMATION_DESCRIPTION,
+    input_model=CreateAutomationInput,
+    mutates=True,
+    requires={"automation"},
+    approval=approve_create_automation,
+    execute=create_automation,
+)
+
+list_automations_tool = tool(
+    display_name="ListAutomations",
+    description=LIST_AUTOMATIONS_DESCRIPTION,
+    requires={"automation"},
+    execute=list_automations,
+)
+
+update_automation_tool = tool(
+    display_name="UpdateAutomation",
+    description=UPDATE_AUTOMATION_DESCRIPTION,
+    input_model=UpdateAutomationInput,
+    mutates=True,
+    requires={"automation"},
+    approval=approve_update_automation,
+    execute=update_automation,
+)
+
+delete_automation_tool = tool(
+    display_name="DeleteAutomation",
+    description=DELETE_AUTOMATION_DESCRIPTION,
+    input_model=DeleteAutomationInput,
+    mutates=True,
+    requires={"automation"},
+    approval=approve_delete_automation,
+    execute=delete_automation,
+)
+
+get_automation_result_tool = tool(
+    display_name="AutomationResult",
+    description=GET_AUTOMATION_RESULT_DESCRIPTION,
+    input_model=GetAutomationResultInput,
+    requires={"automation"},
+    execute=get_automation_result,
+)
+
+run_automation_tool = tool(
+    display_name="RunAutomation",
+    description=RUN_AUTOMATION_DESCRIPTION,
+    input_model=RunAutomationInput,
+    mutates=True,
+    requires={"automation"},
+    approval=approve_run_automation,
+    execute=run_automation,
+)

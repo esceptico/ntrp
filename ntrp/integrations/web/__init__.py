@@ -1,6 +1,6 @@
 from ntrp.config import Config
 from ntrp.integrations.base import Integration, IntegrationField
-from ntrp.integrations.web.tools import WebFetchTool, WebSearchTool
+from ntrp.integrations.web.tools import web_fetch_tool, web_search_tool
 
 
 def _build(config: Config) -> object | None:
@@ -34,6 +34,6 @@ WEB = Integration(
     service_fields=[
         IntegrationField("exa_api_key", "Exa", secret=True, env_var="EXA_API_KEY"),
     ],
-    tools=[WebSearchTool, WebFetchTool],
+    tools={"web_search": web_search_tool, "web_fetch": web_fetch_tool},
     build=_build,
 )

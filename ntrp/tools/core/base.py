@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -34,13 +34,12 @@ __all__ = ["Tool", "ToolResult", "ApprovalInfo"]
 
 
 class Tool(ABC):
-    name: str
-    display_name: str
+    display_name: str | None = None
     description: str
     mutates: bool = False
     volatile: bool = False
-    requires: ClassVar[frozenset[str]] = frozenset()
-    input_model: ClassVar[type[BaseModel] | None] = None
+    requires: frozenset[str] = frozenset()
+    input_model: type[BaseModel] | None = None
 
     async def approval_info(self, execution: ToolExecution, **kwargs: Any) -> ApprovalInfo | None:
         return None
@@ -48,8 +47,8 @@ class Tool(ABC):
     @abstractmethod
     async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult: ...
 
-    def to_dict(self) -> dict:
-        schema: dict = {"name": self.name, "description": self.description}
+    def to_dict(self, name: str) -> dict:
+        schema: dict = {"name": name, "description": self.description}
         if self.input_model is not None:
             json_schema = _inline_refs(self.input_model.model_json_schema())
             schema["parameters"] = {
@@ -62,9 +61,10 @@ class Tool(ABC):
             "function": schema,
         }
 
-    def get_metadata(self) -> dict:
+    def get_metadata(self, name: str) -> dict:
         return {
-            "name": self.name,
+            "name": name,
+            "display_name": self.display_name or name.replace("_", " ").title(),
             "description": self.description,
             "mutates": self.mutates,
         }

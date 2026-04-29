@@ -2,10 +2,10 @@ from ntrp.config import Config
 from ntrp.integrations.base import Integration
 from ntrp.integrations.calendar.client import MultiCalendarSource
 from ntrp.integrations.calendar.tools import (
-    CalendarTool,
-    CreateCalendarEventTool,
-    DeleteCalendarEventTool,
-    EditCalendarEventTool,
+    calendar_tool,
+    create_calendar_event_tool,
+    delete_calendar_event_tool,
+    edit_calendar_event_tool,
 )
 from ntrp.integrations.google_auth.auth import discover_calendar_tokens
 
@@ -23,6 +23,11 @@ def _build(config: Config) -> MultiCalendarSource | None:
 CALENDAR = Integration(
     id="calendar",
     label="Google Calendar",
-    tools=[CalendarTool, CreateCalendarEventTool, EditCalendarEventTool, DeleteCalendarEventTool],
+    tools={
+        "calendar": calendar_tool,
+        "create_calendar_event": create_calendar_event_tool,
+        "edit_calendar_event": edit_calendar_event_tool,
+        "delete_calendar_event": delete_calendar_event_tool,
+    },
     build=_build,
 )

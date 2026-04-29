@@ -1,12 +1,12 @@
 import difflib
 import json
-from typing import Any
 
 from pydantic import BaseModel, Field
 
 from ntrp.settings import NTRP_DIR
-from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
+from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ApprovalInfo
 
 DIRECTIVES_PATH = NTRP_DIR / "directives.json"
 
@@ -23,31 +23,30 @@ class SetDirectivesInput(BaseModel):
     directives: str = Field(description="The full custom directives text.")
 
 
-class SetDirectivesTool(Tool):
-    name = "set_directives"
-    display_name = "Set Directives"
-    description = DESCRIPTION
-    mutates = True
-    input_model = SetDirectivesInput
+async def approve_set_directives(execution: ToolExecution, args: SetDirectivesInput) -> ApprovalInfo:
+    current = load_directives() or ""
+    diff = _diff(current, args.directives)
+    return ApprovalInfo(description="Update directives", preview=None, diff=diff)
 
-    async def approval_info(self, execution: ToolExecution, directives: str, **kwargs: Any) -> ApprovalInfo:
-        current = load_directives() or ""
-        diff = _diff(current, directives)
-        return ApprovalInfo(description="Update directives", preview=None, diff=diff)
 
-    async def execute(
-        self,
-        execution: ToolExecution,
-        directives: str,
-        **kwargs: Any,
-    ) -> ToolResult:
-        save_directives(directives)
-        if not directives.strip():
-            return ToolResult(content="Directives cleared.", preview="Cleared")
-        return ToolResult(
-            content=f"Directives updated:\n{directives}",
-            preview="Directives set",
-        )
+async def set_directives(execution: ToolExecution, args: SetDirectivesInput) -> ToolResult:
+    save_directives(args.directives)
+    if not args.directives.strip():
+        return ToolResult(content="Directives cleared.", preview="Cleared")
+    return ToolResult(
+        content=f"Directives updated:\n{args.directives}",
+        preview="Directives set",
+    )
+
+
+set_directives_tool = tool(
+    display_name="Set Directives",
+    description=DESCRIPTION,
+    input_model=SetDirectivesInput,
+    mutates=True,
+    approval=approve_set_directives,
+    execute=set_directives,
+)
 
 
 def _diff(old: str, new: str) -> str:

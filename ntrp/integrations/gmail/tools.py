@@ -1,11 +1,10 @@
-from typing import Any
-
 from pydantic import BaseModel, Field
 
 from ntrp.constants import EMAIL_FROM_TRUNCATE, EMAIL_SUBJECT_TRUNCATE
 from ntrp.integrations.gmail.client import MultiGmailSource
-from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
+from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ApprovalInfo
 from ntrp.utils import truncate
 
 SEND_EMAIL_DESCRIPTION = "Send an email from a specified Gmail account. Requires approval."
@@ -29,55 +28,31 @@ class SendEmailInput(BaseModel):
     body: str = Field(description="Email body (plain text)")
 
 
-class SendEmailTool(Tool):
-    name = "send_email"
-    display_name = "SendEmail"
-    description = SEND_EMAIL_DESCRIPTION
-    mutates = True
-    requires = frozenset({"gmail"})
-    input_model = SendEmailInput
+async def approve_send_email(execution: ToolExecution, args: SendEmailInput) -> ApprovalInfo | None:
+    return ApprovalInfo(description=args.to, preview=f"Subject: {args.subject}\nFrom: {args.account}", diff=None)
 
-    async def approval_info(
-        self, execution: ToolExecution, account: str, to: str, subject: str, **kwargs: Any
-    ) -> ApprovalInfo | None:
-        return ApprovalInfo(description=to, preview=f"Subject: {subject}\nFrom: {account}", diff=None)
 
-    async def execute(
-        self,
-        execution: ToolExecution,
-        account: str,
-        to: str,
-        subject: str,
-        body: str,
-        **kwargs: Any,
-    ) -> ToolResult:
-        source = execution.ctx.get_client("gmail", MultiGmailSource)
-        result = source.send_email(account=account, to=to, subject=subject, body=body)
-        return ToolResult(content=result, preview="Sent")
+async def send_email(execution: ToolExecution, args: SendEmailInput) -> ToolResult:
+    source = execution.ctx.get_client("gmail", MultiGmailSource)
+    result = source.send_email(account=args.account, to=args.to, subject=args.subject, body=args.body)
+    return ToolResult(content=result, preview="Sent")
 
 
 class ReadEmailInput(BaseModel):
     email_id: str = Field(description="The email ID (from search or list results)")
 
 
-class ReadEmailTool(Tool):
-    name = "read_email"
-    display_name = "ReadEmail"
-    description = READ_EMAIL_DESCRIPTION
-    requires = frozenset({"gmail"})
-    input_model = ReadEmailInput
+async def read_email(execution: ToolExecution, args: ReadEmailInput) -> ToolResult:
+    source = execution.ctx.get_client("gmail", MultiGmailSource)
+    content = source.read(args.email_id)
+    if not content:
+        return ToolResult(
+            content=f"Email not found: {args.email_id}. Use emails() or emails(query) to find valid email IDs.",
+            preview="Not found",
+        )
 
-    async def execute(self, execution: ToolExecution, email_id: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_client("gmail", MultiGmailSource)
-        content = source.read(email_id)
-        if not content:
-            return ToolResult(
-                content=f"Email not found: {email_id}. Use emails() or emails(query) to find valid email IDs.",
-                preview="Not found",
-            )
-
-        lines = content.count("\n") + 1
-        return ToolResult(content=content, preview=f"Read {lines} lines")
+    lines = content.count("\n") + 1
+    return ToolResult(content=content, preview=f"Read {lines} lines")
 
 
 def _format_email_list(emails: list) -> str:
@@ -116,47 +91,62 @@ class EmailsInput(BaseModel):
     limit: int = Field(default=_DEFAULT_EMAIL_LIMIT, description=f"Maximum results (default: {_DEFAULT_EMAIL_LIMIT})")
 
 
-class EmailsTool(Tool):
-    name = "emails"
-    display_name = "Emails"
-    description = EMAILS_DESCRIPTION
-    requires = frozenset({"gmail"})
-    input_model = EmailsInput
+def _list_emails(source: MultiGmailSource, days: int, limit: int) -> ToolResult:
+    accounts = source.list_accounts()
+    emails = source.list_recent(days=days, limit=limit)
 
-    async def execute(
-        self,
-        execution: ToolExecution,
-        query: str | None = None,
-        days: int = _DEFAULT_EMAIL_DAYS,
-        limit: int = _DEFAULT_EMAIL_LIMIT,
-        **kwargs: Any,
-    ) -> ToolResult:
-        source = execution.ctx.get_client("gmail", MultiGmailSource)
-        if query:
-            return self._search(source, query, limit)
-        return self._list(source, days, limit)
+    if not emails:
+        if accounts:
+            return ToolResult(
+                content=f"No emails in last {days} days from {len(accounts)} accounts",
+                preview="0 emails",
+            )
+        return ToolResult(content=f"No emails in last {days} days", preview="0 emails")
 
-    def _list(self, source: MultiGmailSource, days: int, limit: int) -> ToolResult:
-        accounts = source.list_accounts()
-        emails = source.list_recent(days=days, limit=limit)
+    trimmed = emails[:limit]
+    content = _format_email_list(trimmed)
+    return ToolResult(content=content, preview=f"{len(emails)} emails")
 
-        if not emails:
-            if accounts:
-                return ToolResult(
-                    content=f"No emails in last {days} days from {len(accounts)} accounts",
-                    preview="0 emails",
-                )
-            return ToolResult(content=f"No emails in last {days} days", preview="0 emails")
 
-        trimmed = emails[:limit]
-        content = _format_email_list(trimmed)
-        return ToolResult(content=content, preview=f"{len(emails)} emails")
+def _search_emails(source: MultiGmailSource, query: str, limit: int) -> ToolResult:
+    results = source.search(query, limit=limit)
+    if not results:
+        return ToolResult(content=f"No emails found for '{query}'", preview="0 emails")
 
-    def _search(self, source: MultiGmailSource, query: str, limit: int) -> ToolResult:
-        results = source.search(query, limit=limit)
-        if not results:
-            return ToolResult(content=f"No emails found for '{query}'", preview="0 emails")
+    trimmed = results[:limit]
+    content = _format_email_search(trimmed)
+    return ToolResult(content=content, preview=f"{len(results)} emails")
 
-        trimmed = results[:limit]
-        content = _format_email_search(trimmed)
-        return ToolResult(content=content, preview=f"{len(results)} emails")
+
+async def emails(execution: ToolExecution, args: EmailsInput) -> ToolResult:
+    source = execution.ctx.get_client("gmail", MultiGmailSource)
+    if args.query:
+        return _search_emails(source, args.query, args.limit)
+    return _list_emails(source, args.days, args.limit)
+
+
+emails_tool = tool(
+    display_name="Emails",
+    description=EMAILS_DESCRIPTION,
+    input_model=EmailsInput,
+    requires={"gmail"},
+    execute=emails,
+)
+
+read_email_tool = tool(
+    display_name="ReadEmail",
+    description=READ_EMAIL_DESCRIPTION,
+    input_model=ReadEmailInput,
+    requires={"gmail"},
+    execute=read_email,
+)
+
+send_email_tool = tool(
+    display_name="SendEmail",
+    description=SEND_EMAIL_DESCRIPTION,
+    input_model=SendEmailInput,
+    mutates=True,
+    requires={"gmail"},
+    approval=approve_send_email,
+    execute=send_email,
+)

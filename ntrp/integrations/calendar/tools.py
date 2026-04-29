@@ -1,11 +1,11 @@
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, Field
 
 from ntrp.integrations.calendar.client import MultiCalendarSource
-from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
+from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ApprovalInfo
 
 CALENDAR_DESCRIPTION = """Browse or search calendar events.
 
@@ -84,61 +84,48 @@ class CalendarInput(BaseModel):
     )
 
 
-class CalendarTool(Tool):
-    name = "calendar"
-    display_name = "Calendar"
-    description = CALENDAR_DESCRIPTION
-    requires = frozenset({"calendar"})
-    input_model = CalendarInput
-
-    async def execute(
-        self,
-        execution: ToolExecution,
-        query: str | None = None,
-        days_forward: int = _DEFAULT_DAYS_FORWARD,
-        days_back: int = _DEFAULT_DAYS_BACK,
-        limit: int = _DEFAULT_CALENDAR_LIMIT,
-        **kwargs: Any,
-    ) -> ToolResult:
-        source = execution.ctx.get_client("calendar", MultiCalendarSource)
-        if query:
-            return self._search(source, query, limit)
-        return self._list(source, days_forward, days_back, limit)
-
-    def _search(self, source: MultiCalendarSource, query: str, limit: int) -> ToolResult:
-        try:
-            events = source.search(query, limit=limit)
-
-            if not events:
-                return ToolResult(
-                    content=f"No events found matching '{query}'. Try different keywords or omit query to list upcoming.",
-                    preview="0 events",
-                )
-
-            content = _format_events(events)
-            return ToolResult(content=content, preview=f"{len(events)} events")
-        except Exception as e:
-            return ToolResult(content=f"Error searching events: {e}", preview="Search failed", is_error=True)
-
-    def _list(self, source: MultiCalendarSource, days_forward: int, days_back: int, limit: int) -> ToolResult:
-        events = []
-
-        if days_back > 0:
-            past = source.get_past(days=days_back, limit=limit)
-            events.extend(past)
-
-        if days_forward > 0:
-            upcoming = source.get_upcoming(days=days_forward, limit=limit)
-            events.extend(upcoming)
+def _calendar_search(source: MultiCalendarSource, query: str, limit: int) -> ToolResult:
+    try:
+        events = source.search(query, limit=limit)
 
         if not events:
-            return ToolResult(content="No calendar events in the specified range", preview="0 events")
+            return ToolResult(
+                content=f"No events found matching '{query}'. Try different keywords or omit query to list upcoming.",
+                preview="0 events",
+            )
 
-        events.sort(key=lambda e: e.metadata.get("start", ""))
-        trimmed = events[:limit]
-
-        content = _format_events(trimmed)
+        content = _format_events(events)
         return ToolResult(content=content, preview=f"{len(events)} events")
+    except Exception as e:
+        return ToolResult(content=f"Error searching events: {e}", preview="Search failed", is_error=True)
+
+
+def _calendar_list(source: MultiCalendarSource, days_forward: int, days_back: int, limit: int) -> ToolResult:
+    events = []
+
+    if days_back > 0:
+        past = source.get_past(days=days_back, limit=limit)
+        events.extend(past)
+
+    if days_forward > 0:
+        upcoming = source.get_upcoming(days=days_forward, limit=limit)
+        events.extend(upcoming)
+
+    if not events:
+        return ToolResult(content="No calendar events in the specified range", preview="0 events")
+
+    events.sort(key=lambda e: e.metadata.get("start", ""))
+    trimmed = events[:limit]
+
+    content = _format_events(trimmed)
+    return ToolResult(content=content, preview=f"{len(events)} events")
+
+
+async def calendar(execution: ToolExecution, args: CalendarInput) -> ToolResult:
+    source = execution.ctx.get_client("calendar", MultiCalendarSource)
+    if args.query:
+        return _calendar_search(source, args.query, args.limit)
+    return _calendar_list(source, args.days_forward, args.days_back, args.limit)
 
 
 class CreateCalendarEventInput(BaseModel):
@@ -154,68 +141,47 @@ class CreateCalendarEventInput(BaseModel):
     account: str | None = Field(default=None, description="Calendar account email (optional if only one account)")
 
 
-class CreateCalendarEventTool(Tool):
-    name = "create_calendar_event"
-    display_name = "CreateEvent"
-    description = CREATE_CALENDAR_EVENT_DESCRIPTION
-    mutates = True
-    requires = frozenset({"calendar"})
-    input_model = CreateCalendarEventInput
+async def approve_create_calendar_event(
+    execution: ToolExecution, args: CreateCalendarEventInput
+) -> ApprovalInfo | None:
+    start_dt = _parse_datetime(args.start)
+    if not start_dt:
+        return None
+    time_str = start_dt.strftime("%Y-%m-%d %H:%M")
+    end_dt = _parse_datetime(args.end)
+    if end_dt:
+        time_str += f" - {end_dt.strftime('%H:%M')}"
+    return ApprovalInfo(
+        description=args.summary,
+        preview=f"Time: {time_str}\nLocation: {args.location or 'N/A'}",
+        diff=None,
+    )
 
-    async def approval_info(
-        self,
-        execution: ToolExecution,
-        summary: str,
-        start: str,
-        end: str | None = None,
-        location: str | None = None,
-        **kwargs: Any,
-    ) -> ApprovalInfo | None:
-        start_dt = _parse_datetime(start)
-        if not start_dt:
-            return None
-        time_str = start_dt.strftime("%Y-%m-%d %H:%M")
-        end_dt = _parse_datetime(end)
-        if end_dt:
-            time_str += f" - {end_dt.strftime('%H:%M')}"
-        return ApprovalInfo(description=summary, preview=f"Time: {time_str}\nLocation: {location or 'N/A'}", diff=None)
 
-    async def execute(
-        self,
-        execution: ToolExecution,
-        summary: str,
-        start: str,
-        end: str | None = None,
-        description: str | None = None,
-        location: str | None = None,
-        attendees: str | None = None,
-        all_day: bool = False,
-        account: str | None = None,
-        **kwargs: Any,
-    ) -> ToolResult:
-        start_dt = _parse_datetime(start)
-        if not start_dt:
-            return ToolResult(
-                content=f"Invalid start time: {start}. Use ISO format: 2024-01-15T14:00:00",
-                preview="Invalid start",
-                is_error=True,
-            )
-
-        end_dt = _parse_datetime(end) if end else None
-        attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
-
-        source = execution.ctx.get_client("calendar", MultiCalendarSource)
-        result = source.create_event(
-            account=account or "",
-            summary=summary,
-            start=start_dt,
-            end=end_dt,
-            description=description or "",
-            location=location or "",
-            attendees=attendee_list,
-            all_day=all_day,
+async def create_calendar_event(execution: ToolExecution, args: CreateCalendarEventInput) -> ToolResult:
+    start_dt = _parse_datetime(args.start)
+    if not start_dt:
+        return ToolResult(
+            content=f"Invalid start time: {args.start}. Use ISO format: 2024-01-15T14:00:00",
+            preview="Invalid start",
+            is_error=True,
         )
-        return ToolResult(content=result, preview="Created")
+
+    end_dt = _parse_datetime(args.end) if args.end else None
+    attendee_list = [e.strip() for e in args.attendees.split(",") if e.strip()] if args.attendees else None
+
+    source = execution.ctx.get_client("calendar", MultiCalendarSource)
+    result = source.create_event(
+        account=args.account or "",
+        summary=args.summary,
+        start=start_dt,
+        end=end_dt,
+        description=args.description or "",
+        location=args.location or "",
+        attendees=attendee_list,
+        all_day=args.all_day,
+    )
+    return ToolResult(content=result, preview="Created")
 
 
 class EditCalendarEventInput(BaseModel):
@@ -230,94 +196,105 @@ class EditCalendarEventInput(BaseModel):
     )
 
 
-class EditCalendarEventTool(Tool):
-    name = "edit_calendar_event"
-    display_name = "EditEvent"
-    description = EDIT_CALENDAR_EVENT_DESCRIPTION
-    mutates = True
-    requires = frozenset({"calendar"})
-    input_model = EditCalendarEventInput
+async def approve_edit_calendar_event(execution: ToolExecution, args: EditCalendarEventInput) -> ApprovalInfo | None:
+    changes = []
+    if args.summary:
+        changes.append(f"Title: {args.summary}")
+    if args.start:
+        changes.append(f"Start: {args.start}")
+    if args.end:
+        changes.append(f"End: {args.end}")
+    if args.location:
+        changes.append(f"Location: {args.location}")
+    return ApprovalInfo(
+        description=args.event_id,
+        preview="\n".join(changes) if changes else "No changes",
+        diff=None,
+    )
 
-    async def approval_info(
-        self,
-        execution: ToolExecution,
-        event_id: str,
-        summary: str | None = None,
-        start: str | None = None,
-        end: str | None = None,
-        location: str | None = None,
-        **kwargs: Any,
-    ) -> ApprovalInfo | None:
-        changes = []
-        if summary:
-            changes.append(f"Title: {summary}")
-        if start:
-            changes.append(f"Start: {start}")
-        if end:
-            changes.append(f"End: {end}")
-        if location:
-            changes.append(f"Location: {location}")
-        return ApprovalInfo(description=event_id, preview="\n".join(changes) if changes else "No changes", diff=None)
 
-    async def execute(
-        self,
-        execution: ToolExecution,
-        event_id: str,
-        summary: str | None = None,
-        start: str | None = None,
-        end: str | None = None,
-        description: str | None = None,
-        location: str | None = None,
-        attendees: str | None = None,
-        **kwargs: Any,
-    ) -> ToolResult:
-        start_dt = _parse_datetime(start) if start else None
-        if start and not start_dt:
-            return ToolResult(
-                content=f"Invalid start time: {start}. Use ISO format: 2024-01-15T14:00:00",
-                preview="Invalid start",
-                is_error=True,
-            )
-
-        end_dt = _parse_datetime(end) if end else None
-        if end and not end_dt:
-            return ToolResult(
-                content=f"Invalid end time: {end}. Use ISO format: 2024-01-15T15:00:00",
-                preview="Invalid end",
-                is_error=True,
-            )
-
-        attendee_list = [e.strip() for e in attendees.split(",") if e.strip()] if attendees else None
-
-        source = execution.ctx.get_client("calendar", MultiCalendarSource)
-        result = source.update_event(
-            event_id=event_id,
-            summary=summary,
-            start=start_dt,
-            end=end_dt,
-            description=description,
-            location=location,
-            attendees=attendee_list,
+async def edit_calendar_event(execution: ToolExecution, args: EditCalendarEventInput) -> ToolResult:
+    start_dt = _parse_datetime(args.start) if args.start else None
+    if args.start and not start_dt:
+        return ToolResult(
+            content=f"Invalid start time: {args.start}. Use ISO format: 2024-01-15T14:00:00",
+            preview="Invalid start",
+            is_error=True,
         )
-        return ToolResult(content=result, preview="Updated")
+
+    end_dt = _parse_datetime(args.end) if args.end else None
+    if args.end and not end_dt:
+        return ToolResult(
+            content=f"Invalid end time: {args.end}. Use ISO format: 2024-01-15T15:00:00",
+            preview="Invalid end",
+            is_error=True,
+        )
+
+    attendee_list = [e.strip() for e in args.attendees.split(",") if e.strip()] if args.attendees else None
+
+    source = execution.ctx.get_client("calendar", MultiCalendarSource)
+    result = source.update_event(
+        event_id=args.event_id,
+        summary=args.summary,
+        start=start_dt,
+        end=end_dt,
+        description=args.description,
+        location=args.location,
+        attendees=attendee_list,
+    )
+    return ToolResult(content=result, preview="Updated")
 
 
 class DeleteCalendarEventInput(BaseModel):
     event_id: str = Field(description="The event ID to delete")
 
 
-class DeleteCalendarEventTool(Tool):
-    name = "delete_calendar_event"
-    display_name = "DeleteEvent"
-    description = DELETE_CALENDAR_EVENT_DESCRIPTION
-    mutates = True
-    requires = frozenset({"calendar"})
-    input_model = DeleteCalendarEventInput
+async def approve_delete_calendar_event(
+    execution: ToolExecution, args: DeleteCalendarEventInput
+) -> ApprovalInfo | None:
+    return ApprovalInfo(description=args.event_id, preview=None, diff=None)
 
-    async def approval_info(self, execution: ToolExecution, event_id: str, **kwargs: Any) -> ApprovalInfo | None:
-        return ApprovalInfo(description=event_id, preview=None, diff=None)
 
-    async def execute(self, execution: ToolExecution, event_id: str, **kwargs: Any) -> ToolResult:
-        source = execution.ctx.get_client("calendar", MultiCalendarSource)
-        result = source.delete_event(event_id)
-        return ToolResult(content=result, preview="Deleted")
+async def delete_calendar_event(execution: ToolExecution, args: DeleteCalendarEventInput) -> ToolResult:
+    source = execution.ctx.get_client("calendar", MultiCalendarSource)
+    result = source.delete_event(args.event_id)
+    return ToolResult(content=result, preview="Deleted")
+
+
+calendar_tool = tool(
+    display_name="Calendar",
+    description=CALENDAR_DESCRIPTION,
+    input_model=CalendarInput,
+    requires={"calendar"},
+    execute=calendar,
+)
+
+create_calendar_event_tool = tool(
+    display_name="CreateEvent",
+    description=CREATE_CALENDAR_EVENT_DESCRIPTION,
+    input_model=CreateCalendarEventInput,
+    mutates=True,
+    requires={"calendar"},
+    approval=approve_create_calendar_event,
+    execute=create_calendar_event,
+)
+
+edit_calendar_event_tool = tool(
+    display_name="EditEvent",
+    description=EDIT_CALENDAR_EVENT_DESCRIPTION,
+    input_model=EditCalendarEventInput,
+    mutates=True,
+    requires={"calendar"},
+    approval=approve_edit_calendar_event,
+    execute=edit_calendar_event,
+)
+
+delete_calendar_event_tool = tool(
+    display_name="DeleteEvent",
+    description=DELETE_CALENDAR_EVENT_DESCRIPTION,
+    input_model=DeleteCalendarEventInput,
+    mutates=True,
+    requires={"calendar"},
+    approval=approve_delete_calendar_event,
+    execute=delete_calendar_event,
+)

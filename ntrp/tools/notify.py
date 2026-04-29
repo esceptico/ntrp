@@ -1,13 +1,12 @@
 import logging
 from dataclasses import dataclass
-from typing import Any
 
 from pydantic import BaseModel, Field
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
 from ntrp.logging import get_logger
 from ntrp.notifiers.base import Notifier
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 
 _logger = get_logger(__name__)
@@ -44,57 +43,57 @@ class _ResolvedNotifiers:
     available: list[str]
 
 
-class NotifyTool(Tool):
-    name = "notify"
-    display_name = "Notify"
-    description = NOTIFY_DESCRIPTION
-    mutates = False
-    requires = frozenset({"notifiers"})
-    input_model = NotifyInput
+def _resolve_notifiers(execution: ToolExecution, names: list[str] | None = None) -> _ResolvedNotifiers:
+    all_notifiers: dict[str, Notifier] = execution.ctx.services[_SERVICE_NAME].notifiers
+    available = list(all_notifiers)
+    if not names:
+        return _ResolvedNotifiers(targets=list(all_notifiers.values()), unknown=[], available=available)
+    targets, unknown = [], []
+    for name in names:
+        if (notifier := all_notifiers.get(name)) is not None:
+            targets.append(notifier)
+        else:
+            unknown.append(name)
+    return _ResolvedNotifiers(targets=targets, unknown=unknown, available=available)
 
-    def _resolve_notifiers(self, execution: ToolExecution, names: list[str] | None = None) -> _ResolvedNotifiers:
-        all_notifiers: dict[str, Notifier] = execution.ctx.services[_SERVICE_NAME].notifiers
-        available = list(all_notifiers)
-        if not names:
-            return _ResolvedNotifiers(targets=list(all_notifiers.values()), unknown=[], available=available)
-        targets, unknown = [], []
-        for name in names:
-            if (notifier := all_notifiers.get(name)) is not None:
-                targets.append(notifier)
-            else:
-                unknown.append(name)
-        return _ResolvedNotifiers(targets=targets, unknown=unknown, available=available)
 
-    async def execute(
-        self, execution: ToolExecution, subject: str, body: str, names: list[str] | None = None, **kwargs: Any
-    ) -> ToolResult:
-        resolved = self._resolve_notifiers(execution, names)
+async def notify(execution: ToolExecution, args: NotifyInput) -> ToolResult:
+    resolved = _resolve_notifiers(execution, args.names)
 
-        if resolved.unknown:
-            msg = f"Unknown notifier(s): {', '.join(resolved.unknown)}. Available: {', '.join(resolved.available)}"
-            return ToolResult(content=msg, preview="Unknown notifier", is_error=True)
+    if resolved.unknown:
+        msg = f"Unknown notifier(s): {', '.join(resolved.unknown)}. Available: {', '.join(resolved.available)}"
+        return ToolResult(content=msg, preview="Unknown notifier", is_error=True)
 
-        if not resolved.targets:
-            return ToolResult(content="No notifiers configured.", preview="No notifiers", is_error=True)
+    if not resolved.targets:
+        return ToolResult(content="No notifiers configured.", preview="No notifiers", is_error=True)
 
-        sent: list[str] = []
-        failed: list[str] = []
+    sent: list[str] = []
+    failed: list[str] = []
 
-        for notifier in resolved.targets:
-            try:
-                await _send_with_retry(notifier, subject, body)
-                sent.append(notifier.channel)
-            except Exception:
-                _logger.exception("Notifier %s failed after retries", notifier.channel)
-                failed.append(notifier.channel)
+    for notifier in resolved.targets:
+        try:
+            await _send_with_retry(notifier, args.subject, args.body)
+            sent.append(notifier.channel)
+        except Exception:
+            _logger.exception("Notifier %s failed after retries", notifier.channel)
+            failed.append(notifier.channel)
 
-        if failed:
-            return ToolResult(
-                content=f"Sent to: {', '.join(sent)}. Failed: {', '.join(failed)}",
-                preview=f"Partial ({len(sent)}/{len(sent) + len(failed)})",
-            )
-
+    if failed:
         return ToolResult(
-            content=f"Notification sent to: {', '.join(sent)}",
-            preview=f"Sent ({len(sent)})",
+            content=f"Sent to: {', '.join(sent)}. Failed: {', '.join(failed)}",
+            preview=f"Partial ({len(sent)}/{len(sent) + len(failed)})",
         )
+
+    return ToolResult(
+        content=f"Notification sent to: {', '.join(sent)}",
+        preview=f"Sent ({len(sent)})",
+    )
+
+
+notify_tool = tool(
+    display_name="Notify",
+    description=NOTIFY_DESCRIPTION,
+    input_model=NotifyInput,
+    requires={"notifiers"},
+    execute=notify,
+)

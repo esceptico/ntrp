@@ -5,13 +5,14 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from pydantic import BaseModel
 
 import ntrp.database as database
 from ntrp.agent import Agent
 from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
 from ntrp.services.chat import _retain_user_content, _time_gap_note
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
 from tests.helpers import MockCompletionClient, MockLLMClient, make_executor, make_test_executor, make_text_response
@@ -109,13 +110,15 @@ async def test_read_conn_sees_updated_sessions_list(store: SessionStore):
 # --- Agent with text + tool_calls in same response ---
 
 
-class EchoTool(Tool):
-    name = "echo"
-    display_name = "Echo"
-    description = "Echoes"
+class EchoInput(BaseModel):
+    text: str = ""
 
-    async def execute(self, execution: ToolExecution, text: str = "", **kwargs) -> ToolResult:
-        return ToolResult(content=f"echo: {text}", preview="echo")
+
+async def echo(execution: ToolExecution, args: EchoInput) -> ToolResult:
+    return ToolResult(content=f"echo: {args.text}", preview="echo")
+
+
+ECHO_TOOL = tool(display_name="Echo", description="Echoes", input_model=EchoInput, execute=echo)
 
 
 @pytest.mark.asyncio
@@ -144,7 +147,7 @@ async def test_agent_text_and_tool_calls():
     )
 
     client = MockCompletionClient([mixed, make_text_response("Here's the result")])
-    executor = make_executor(EchoTool())
+    executor = make_executor({"echo": ECHO_TOOL})
     agent = Agent(
         tools=executor.get_tools(),
         client=MockLLMClient(client),

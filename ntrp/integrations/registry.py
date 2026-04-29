@@ -5,6 +5,7 @@ from ntrp.integrations.base import (
     ToolProviderStatus,
 )
 from ntrp.logging import get_logger
+from ntrp.tools.core import Tool
 
 _logger = get_logger(__name__)
 
@@ -50,20 +51,16 @@ class IntegrationRegistry:
     def get_integration(self, id: str) -> Integration | None:
         return self._integrations.get(id)
 
-    def active_tools(self) -> list[type]:
+    def active_tools(self) -> list[Tool]:
         """Tools from integrations whose client built successfully, or which have no build."""
-        out: list[type] = []
+        out: list[Tool] = []
         for id, integration in self._integrations.items():
             if integration.build is None or id in self._clients:
-                out.extend(integration.tools)
+                out.extend(integration.tools.values())
         return out
 
     def notifier_classes(self) -> dict[str, type]:
-        return {
-            i.id: i.notifier_class
-            for i in self._integrations.values()
-            if i.notifier_class is not None
-        }
+        return {i.id: i.notifier_class for i in self._integrations.values() if i.notifier_class is not None}
 
     def service_fields(self) -> dict[str, list]:
         return {i.id: list(i.service_fields) for i in self._integrations.values() if i.service_fields}

@@ -1,16 +1,13 @@
 import asyncio
 import shlex
 import subprocess
-from typing import Any
 
 from pydantic import BaseModel, Field
 
 from ntrp.constants import BASH_OUTPUT_LIMIT, BASH_TIMEOUT
-from ntrp.logging import get_logger
-from ntrp.tools.core.base import ApprovalInfo, Tool, ToolResult
+from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
-
-_logger = get_logger(__name__)
+from ntrp.tools.core.types import ApprovalInfo
 
 SAFE_COMMANDS = frozenset(
     {
@@ -78,7 +75,7 @@ BLOCKED_PATTERNS = frozenset(
     }
 )
 
-BASH_DESCRIPTION = f"""Execute a bash command in the user's shell.
+BASH_DESCRIPTION = """Execute a bash command in the user's shell.
 
 Each command runs in a fresh subprocess — no state (env vars, shell functions, cwd) persists between calls. Commands run in the server's working directory by default. Use the working_dir parameter to run in a different directory instead of 'cd'.
 
@@ -157,32 +154,26 @@ class BashInput(BaseModel):
     working_dir: str | None = Field(default=None, description="Working directory (optional, defaults to current)")
 
 
-class BashTool(Tool):
-    name = "bash"
-    display_name = "Bash"
-    description = BASH_DESCRIPTION
-    input_model = BashInput
+async def approve_bash(execution: ToolExecution, args: BashInput) -> ApprovalInfo | None:
+    if not is_safe_command(args.command) and not is_blocked_command(args.command):
+        return ApprovalInfo(description=args.command, preview=None, diff=None)
+    return None
 
-    mutates = True
 
-    def __init__(self, timeout: int = BASH_TIMEOUT):
-        self.timeout = timeout
+async def run_bash(execution: ToolExecution, args: BashInput) -> ToolResult:
+    if is_blocked_command(args.command):
+        return ToolResult(content=f"Blocked: {args.command}", preview="Blocked", is_error=True)
 
-    async def approval_info(self, execution: ToolExecution, command: str, **kwargs: Any) -> ApprovalInfo | None:
-        if not is_safe_command(command) and not is_blocked_command(command):
-            return ApprovalInfo(description=command, preview=None, diff=None)
-        return None
+    output = await asyncio.to_thread(execute_bash, args.command, args.working_dir, BASH_TIMEOUT)
+    lines = output.count("\n") + 1
+    return ToolResult(content=output, preview=f"{lines} lines")
 
-    async def execute(
-        self,
-        execution: ToolExecution,
-        command: str,
-        working_dir: str | None = None,
-        **kwargs: Any,
-    ) -> ToolResult:
-        if is_blocked_command(command):
-            return ToolResult(content=f"Blocked: {command}", preview="Blocked", is_error=True)
 
-        output = await asyncio.to_thread(execute_bash, command, working_dir, self.timeout)
-        lines = output.count("\n") + 1
-        return ToolResult(content=output, preview=f"{lines} lines")
+bash_tool = tool(
+    display_name="Bash",
+    description=BASH_DESCRIPTION,
+    input_model=BashInput,
+    mutates=True,
+    approval=approve_bash,
+    execute=run_bash,
+)

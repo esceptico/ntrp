@@ -1,7 +1,8 @@
 import pytest
+from pydantic import BaseModel
 
 from ntrp.agent import Agent, AgentHooks, Result, StopReason, ToolCompleted, ToolStarted
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core import EmptyInput, Tool, ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from tests.helpers import (
     MockCompletionClient,
@@ -13,26 +14,24 @@ from tests.helpers import (
 )
 
 
-class EchoTool(Tool):
-    name = "echo"
-    display_name = "Echo"
-    description = "Echoes input back"
-
-    async def execute(self, execution: ToolExecution, text: str = "", **kwargs) -> ToolResult:
-        return ToolResult(content=f"echo: {text}", preview="echo")
+class EchoInput(BaseModel):
+    text: str = ""
 
 
-class FailTool(Tool):
-    name = "fail"
-    display_name = "Fail"
-    description = "Always fails"
-
-    async def execute(self, execution: ToolExecution, **kwargs) -> ToolResult:
-        raise RuntimeError("tool crashed")
+async def echo(execution: ToolExecution, args: EchoInput) -> ToolResult:
+    return ToolResult(content=f"echo: {args.text}", preview="echo")
 
 
-def _make_agent(mock_client: MockCompletionClient, *tools: Tool) -> Agent:
-    executor = make_executor(*tools)
+async def fail(execution: ToolExecution, args: EmptyInput) -> ToolResult:
+    raise RuntimeError("tool crashed")
+
+
+ECHO_TOOL = tool(display_name="Echo", description="Echoes input back", input_model=EchoInput, execute=echo)
+FAIL_TOOL = tool(display_name="Fail", description="Always fails", execute=fail)
+
+
+def _make_agent(mock_client: MockCompletionClient, tools: dict[str, Tool] | None = None) -> Agent:
+    executor = make_executor(tools)
     return Agent(
         tools=executor.get_tools(),
         client=MockLLMClient(mock_client),
@@ -60,7 +59,7 @@ async def test_tool_call_then_response():
     client = MockCompletionClient(
         [make_tool_response("echo", {"text": "world"}), make_text_response("Got: echo: world")]
     )
-    agent = _make_agent(client, EchoTool())
+    agent = _make_agent(client, {"echo": ECHO_TOOL})
     messages = _msgs("Echo world")
     result = await agent.run(messages)
     assert result.text == "Got: echo: world"
@@ -73,7 +72,7 @@ async def test_tool_call_then_response():
 @pytest.mark.asyncio
 async def test_tool_error_handled():
     client = MockCompletionClient([make_tool_response("fail", {}), make_text_response("Tool failed, sorry.")])
-    agent = _make_agent(client, FailTool())
+    agent = _make_agent(client, {"fail": FAIL_TOOL})
     messages = _msgs("Do something")
     result = await agent.run(messages)
     assert result.text == "Tool failed, sorry."
@@ -95,7 +94,7 @@ async def test_unknown_tool_returns_error():
 @pytest.mark.asyncio
 async def test_stream_yields_events_in_order():
     client = MockCompletionClient([make_tool_response("echo", {"text": "hi"}), make_text_response("Done.")])
-    agent = _make_agent(client, EchoTool())
+    agent = _make_agent(client, {"echo": ECHO_TOOL})
     events = []
     async for item in agent.stream(_msgs("test")):
         events.append(item)
@@ -133,7 +132,7 @@ async def test_pending_messages_hook():
         pending.clear()
         return batch
 
-    executor = make_executor(EchoTool())
+    executor = make_executor({"echo": ECHO_TOOL})
     agent = Agent(
         tools=executor.get_tools(),
         client=MockLLMClient(client),

@@ -8,7 +8,7 @@ An **Integration** bundles everything ntrp needs to connect to an external servi
 ntrp/integrations/slack/
   __init__.py    # exports the SLACK Integration declaration
   client.py      # SlackClient — the HTTP/API wrapper
-  tools.py       # SlackSearchTool, SlackChannelTool, ... (classes)
+  tools.py       # tool(...) declarations and input models
   notifier.py    # SlackNotifier (optional)
 ```
 
@@ -20,7 +20,7 @@ class Integration:
     id: str                                             # "slack"
     label: str                                          # "Slack"
     service_fields: list[IntegrationField]              # user-facing config keys
-    tools: list[type[Tool]]                             # agent tools contributed
+    tools: dict[str, Tool]                              # name-to-tool map
     notifier_class: type[Notifier] | None               # optional notifier
     build: Callable[[Config], object | None] | None     # returns client, or None if unconfigured
 ```
@@ -31,7 +31,7 @@ class Integration:
 
 1. Create `ntrp/integrations/<name>/` with:
    - `client.py` — API wrapper, no inheritance from any protocol
-   - `tools.py` — `Tool` subclasses that look up the client via `execution.ctx.get_client("<name>", YourClient)`
+   - `tools.py` — a `dict[str, Tool]` built from `tool(...)` declarations
    - `notifier.py` — optional `Notifier` subclass
    - `__init__.py` — exports a module-level `<NAME>: Integration` constant
 2. Add `<NAME>` to `ALL_INTEGRATIONS` in `ntrp/integrations/__init__.py`
@@ -46,7 +46,7 @@ That's it. The registry handles tool registration, notifier class lookup, servic
 from ntrp.config import Config
 from ntrp.integrations.base import Integration, IntegrationField
 from ntrp.integrations.linear.client import LinearClient
-from ntrp.integrations.linear.tools import LinearIssuesTool, LinearSearchTool
+from ntrp.integrations.linear.tools import linear_tools
 
 
 def _build(config: Config) -> LinearClient | None:
@@ -61,19 +61,17 @@ LINEAR = Integration(
     service_fields=[
         IntegrationField("linear_api_key", "Linear API key", secret=True, env_var="LINEAR_API_KEY"),
     ],
-    tools=[LinearIssuesTool, LinearSearchTool],
+    tools=linear_tools,
     build=_build,
 )
 ```
 
 ```python
 # ntrp/integrations/linear/tools.py
-from typing import Any
-
 from pydantic import BaseModel, Field
 
 from ntrp.integrations.linear.client import LinearClient
-from ntrp.tools.core.base import Tool, ToolResult
+from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 
 
@@ -81,18 +79,28 @@ class LinearSearchInput(BaseModel):
     query: str = Field(description="Search query")
 
 
-class LinearSearchTool(Tool):
-    name = "linear_search"
-    display_name = "LinearSearch"
-    description = "Search Linear issues by text"
-    requires = frozenset({"linear"})
-    input_model = LinearSearchInput
+async def linear_search(execution: ToolExecution, args: LinearSearchInput) -> ToolResult:
+    client = execution.ctx.get_client("linear", LinearClient)
+    issues = await client.search(args.query)
+    return ToolResult(content=format_issues(issues), preview=f"{len(issues)} issues")
 
-    async def execute(self, execution: ToolExecution, query: str, **kwargs: Any) -> ToolResult:
-        client = execution.ctx.get_client("linear", LinearClient)
-        issues = await client.search(query)
-        return ToolResult(content=format_issues(issues), preview=f"{len(issues)} issues")
+
+linear_tools = {
+    "linear_search": tool(
+        display_name="LinearSearch",
+        description="Search Linear issues by text",
+        input_model=LinearSearchInput,
+        requires={"linear"},
+        execute=linear_search,
+    )
+}
 ```
+
+Tool execution flows through `ToolRegistry` middleware. The default pipeline
+validates arguments against `input_model`, asks for approval when a tool returns
+approval metadata, then runs the tool. Extra middleware can wrap that pipeline
+for logging, tracing, policy, or result transforms without changing individual
+tool implementations.
 
 ## Native integration vs MCP
 

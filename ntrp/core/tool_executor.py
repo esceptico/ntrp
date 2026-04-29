@@ -47,7 +47,12 @@ class NtrpToolExecutor:
         if name not in self._meta_cache:
             tool = self._executor.registry.get(name)
             self._meta_cache[name] = (
-                ToolMeta(name=tool.name, display_name=tool.display_name, mutates=tool.mutates, volatile=tool.volatile)
+                ToolMeta(
+                    name=name,
+                    display_name=tool.display_name or name,
+                    mutates=tool.mutates,
+                    volatile=tool.volatile,
+                )
                 if tool
                 else None
             )
