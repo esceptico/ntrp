@@ -13,8 +13,10 @@ import ntrp.llm.models as llm_models
 from ntrp.automation.store import AutomationStore
 from ntrp.config import Config
 from ntrp.llm.models import EmbeddingModel, Provider
+from ntrp.memory.chat_extraction import ExtractedChatFact
 from ntrp.memory.extraction_handler import create_chat_extraction_handler
 from ntrp.memory.facts import FactMemory
+from ntrp.memory.models import FactKind
 from ntrp.settings import hash_api_key
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
 
@@ -29,6 +31,16 @@ def _make_messages(n: int) -> tuple[dict, ...]:
         role = "user" if i % 2 == 0 else "assistant"
         msgs.append({"role": role, "content": f"Message {i}"})
     return tuple(msgs)
+
+
+def _fact(
+    text: str,
+    *,
+    kind: FactKind = FactKind.NOTE,
+    salience: int = 0,
+    entities: list[str] | None = None,
+) -> ExtractedChatFact:
+    return ExtractedChatFact(text=text, kind=kind, salience=salience, entities=entities or [])
 
 
 @pytest_asyncio.fixture
@@ -79,7 +91,7 @@ class TestExtractionCountTrigger:
     async def test_count_trigger_extracts(self, memory: FactMemory, automation_store: AutomationStore):
         handler = create_chat_extraction_handler(memory, automation_store)
 
-        mock_extract = AsyncMock(return_value=["User likes Python"])
+        mock_extract = AsyncMock(return_value=[_fact("User likes Python")])
         with patch("ntrp.memory.extraction_handler.extract_from_chat", mock_extract):
             msgs = _make_messages(10)
             result = await handler(
@@ -122,7 +134,7 @@ class TestExtractionIdleTrigger:
         await automation_store.record_chat_extraction_activity("sess-1", _make_messages(6), datetime.now(UTC))
         await automation_store.record_chat_extraction_activity("sess-2", _make_messages(4), datetime.now(UTC))
 
-        mock_extract = AsyncMock(return_value=["Fact from idle"])
+        mock_extract = AsyncMock(return_value=[_fact("Fact from idle")])
         with patch("ntrp.memory.extraction_handler.extract_from_chat", mock_extract):
             await handler({"trigger_type": "idle", "idle_minutes": 5})
 
@@ -184,7 +196,21 @@ class TestExtractionRemember:
     async def test_facts_stored(self, memory: FactMemory, automation_store: AutomationStore):
         handler = create_chat_extraction_handler(memory, automation_store)
 
-        mock_extract = AsyncMock(return_value=["User prefers dark mode", "User works at Acme"])
+        mock_extract = AsyncMock(
+            return_value=[
+                _fact(
+                    "User prefers dark mode",
+                    kind=FactKind.PREFERENCE,
+                    salience=1,
+                    entities=["User"],
+                ),
+                _fact(
+                    "User works at Acme",
+                    kind=FactKind.IDENTITY,
+                    entities=["User", "Acme"],
+                ),
+            ]
+        )
         with patch("ntrp.memory.extraction_handler.extract_from_chat", mock_extract):
             await handler(
                 {
@@ -195,9 +221,13 @@ class TestExtractionRemember:
             )
 
         facts = await memory.facts.list_recent(limit=10)
-        texts = {f.text for f in facts}
-        assert "User prefers dark mode" in texts
-        assert "User works at Acme" in texts
+        by_text = {f.text: f for f in facts}
+        assert by_text["User prefers dark mode"].kind == FactKind.PREFERENCE
+        assert by_text["User prefers dark mode"].salience == 1
+        assert by_text["User works at Acme"].kind == FactKind.IDENTITY
+
+        refs = await memory.facts.get_entity_refs(by_text["User works at Acme"].id)
+        assert {ref.name for ref in refs} == {"User", "Acme"}
 
 
 class TestExtractionSkips:

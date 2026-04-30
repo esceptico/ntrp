@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -26,7 +26,7 @@ from ntrp.logging import get_logger
 from ntrp.memory.consolidation_runner import ConsolidationRunner
 from ntrp.memory.decay import decay_score
 from ntrp.memory.extraction import Extractor
-from ntrp.memory.models import ExtractionResult, Fact, FactContext, FactKind, Observation, SourceType
+from ntrp.memory.models import ExtractedEntity, ExtractionResult, Fact, FactContext, FactKind, Observation, SourceType
 from ntrp.memory.retrieval import retrieve_with_observations
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.dreams import DreamRepository
@@ -231,14 +231,23 @@ class FactMemory:
         source_type: SourceType = SourceType.EXPLICIT,
         source_ref: str | None = None,
         happened_at: datetime | None = None,
+        kind: FactKind = FactKind.NOTE,
+        salience: int = 0,
+        confidence: float = 1.0,
+        expires_at: datetime | None = None,
+        entity_names: Sequence[str] | None = None,
     ) -> RememberFactResult | None:
         if not text or not text.strip():
             return None
 
-        embedding, extraction = await asyncio.gather(
-            self.embedder.embed_one(text),
-            self.extractor.extract(text),
-        )
+        if entity_names is None:
+            embedding, extraction = await asyncio.gather(
+                self.embedder.embed_one(text),
+                self.extractor.extract(text),
+            )
+        else:
+            embedding = await self.embedder.embed_one(text)
+            extraction = ExtractionResult(entities=[ExtractedEntity(name=name) for name in entity_names])
 
         async with self.transaction():
             if similar := await self.facts.search_facts_vector(embedding, limit=1):
@@ -263,6 +272,10 @@ class FactMemory:
                 source_ref=source_ref,
                 embedding=embedding,
                 happened_at=happened_at,
+                kind=kind,
+                salience=salience,
+                confidence=confidence,
+                expires_at=expires_at,
             )
             entities_extracted = await self._process_extraction(fact.id, extraction)
 

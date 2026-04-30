@@ -5,9 +5,11 @@ import pytest
 from ntrp.memory.chat_extraction import (
     CHAT_EXTRACTION_PROMPT,
     ChatExtractionSchema,
+    ExtractedChatFact,
     _format_messages,
     extract_from_chat,
 )
+from ntrp.memory.models import FactKind
 
 
 def mock_llm_response(content: str):
@@ -88,17 +90,35 @@ class TestExtractFromChat:
         assert "source-of-truth facts" in prompt
         assert "Do not write observations, patterns" in prompt
         assert "Patterns not directly stated" in prompt
+        assert "Assign exactly one kind" in prompt
 
     @pytest.mark.asyncio
     async def test_returns_extracted_facts(self):
-        schema = ChatExtractionSchema(facts=["User chose Postgres", "John handles deployment"])
+        schema = ChatExtractionSchema(
+            facts=[
+                ExtractedChatFact(
+                    text="User chose Postgres",
+                    kind=FactKind.DECISION,
+                    salience=1,
+                    entities=["User", "Postgres"],
+                ),
+                ExtractedChatFact(
+                    text="John handles deployment",
+                    kind=FactKind.RELATIONSHIP,
+                    entities=["John"],
+                ),
+            ]
+        )
         mock_client = AsyncMock()
         mock_client.completion.return_value = mock_llm_response(schema.model_dump_json())
 
         with patch("ntrp.memory.chat_extraction.get_completion_client", return_value=mock_client):
             facts = await extract_from_chat(SAMPLE_MESSAGES, "test-model")
 
-        assert facts == ["User chose Postgres", "John handles deployment"]
+        assert [fact.text for fact in facts] == ["User chose Postgres", "John handles deployment"]
+        assert facts[0].kind == FactKind.DECISION
+        assert facts[0].salience == 1
+        assert facts[0].entities == ["User", "Postgres"]
 
     @pytest.mark.asyncio
     async def test_returns_empty_for_no_facts(self):
@@ -110,6 +130,22 @@ class TestExtractFromChat:
             facts = await extract_from_chat(SAMPLE_MESSAGES, "test-model")
 
         assert facts == []
+
+    @pytest.mark.asyncio
+    async def test_drops_temporary_facts_without_expiry(self):
+        schema = ChatExtractionSchema(
+            facts=[
+                ExtractedChatFact(text="User is debugging login today", kind=FactKind.TEMPORARY),
+                ExtractedChatFact(text="User prefers direct answers", kind=FactKind.PREFERENCE),
+            ]
+        )
+        mock_client = AsyncMock()
+        mock_client.completion.return_value = mock_llm_response(schema.model_dump_json())
+
+        with patch("ntrp.memory.chat_extraction.get_completion_client", return_value=mock_client):
+            facts = await extract_from_chat(SAMPLE_MESSAGES, "test-model")
+
+        assert [fact.text for fact in facts] == ["User prefers direct answers"]
 
     @pytest.mark.asyncio
     async def test_returns_empty_for_tool_only_messages(self):

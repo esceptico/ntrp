@@ -225,14 +225,13 @@ Status:
 
 ```text
 chat extraction prompt tightened to source-of-truth facts only
+chat extraction now returns typed facts with kind/salience/confidence/entities
 consolidation prompt tightened to skip atomic facts and require direct provenance
 temporal/dream prompts tightened around concrete support and concise generated memory
-typed extraction schema/backfill still pending
+legacy fact backfill still pending
 ```
 
-Current chat extraction returns only `facts: list[str]`, then `remember()` runs a separate entity extraction pass.
-
-Move toward one extraction result:
+Chat extraction now uses one extraction result instead of `facts: list[str]` plus a separate entity pass:
 
 ```json
 {

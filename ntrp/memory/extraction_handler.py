@@ -45,11 +45,17 @@ def create_chat_extraction_handler(memory: FactMemory, store: AutomationStore) -
 
         _logger.info("Extracted %d facts from chat (session %s)", len(facts), sid[:8])
         source_ref = f"{sid}:{context_start}-{len(messages)}"
-        for fact_text in facts:
+        for fact in facts:
             await memory.remember(
-                text=fact_text,
+                text=fact.text,
                 source_type=SourceType.CHAT,
                 source_ref=source_ref,
+                happened_at=fact.happened_at,
+                kind=fact.kind,
+                salience=fact.salience,
+                confidence=fact.confidence,
+                expires_at=fact.expires_at,
+                entity_names=fact.entities,
             )
         return len(facts)
 

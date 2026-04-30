@@ -1,16 +1,19 @@
-from pydantic import BaseModel
+from datetime import datetime
+
+from pydantic import BaseModel, Field, field_validator
 
 from ntrp.agent import Role
 from ntrp.constants import CONSOLIDATION_TEMPERATURE, SESSION_HANDOFF_MARKER
 from ntrp.core.prompts import env
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
+from ntrp.memory.models import FactKind
 
 _logger = get_logger(__name__)
 
 CHAT_EXTRACTION_PROMPT = env.from_string("""Extract durable source-of-truth facts from this conversation.
 
-Return facts worth remembering permanently — things useful to recall months later.
+Return facts worth remembering permanently as typed source-of-truth records — things useful to recall months later.
 Do not write observations, patterns, summaries, or inferred profile statements. Those are derived later from facts.
 
 EXTRACT:
@@ -39,14 +42,39 @@ RULES:
 - Only state what was explicitly said — do not infer or add context
 - Prefer fewer high-quality facts over many low-quality ones
 - Keep enough names, dates, project names, and constraints for provenance
+- Assign exactly one kind: identity, preference, relationship, decision, project, event, artifact, procedure, constraint, temporary, or note
+- Use salience 0 for normal, 1 for useful, 2 only for durable always-relevant facts
+- Use confidence below 1.0 only when the conversation states the fact ambiguously
+- Temporary facts must include expires_at; otherwise skip them
+- Include concrete entity names used by the fact, including User when the fact is about the user
 - If nothing durable was discussed, return an empty list
 
 CONVERSATION:
 {{ conversation }}""")
 
 
+class ExtractedChatFact(BaseModel):
+    text: str
+    kind: FactKind = FactKind.NOTE
+    salience: int = Field(default=0, ge=0, le=2)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    happened_at: datetime | None = None
+    expires_at: datetime | None = None
+    entities: list[str] = Field(default_factory=list)
+
+    @field_validator("text")
+    @classmethod
+    def _strip_text(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("entities")
+    @classmethod
+    def _strip_entities(cls, value: list[str]) -> list[str]:
+        return [name.strip() for name in value if name.strip()]
+
+
 class ChatExtractionSchema(BaseModel):
-    facts: list[str] = []
+    facts: list[ExtractedChatFact] = Field(default_factory=list)
 
 
 def _format_messages(messages: tuple[dict, ...]) -> str:
@@ -67,7 +95,7 @@ def _format_messages(messages: tuple[dict, ...]) -> str:
 async def extract_from_chat(
     messages: tuple[dict, ...],
     model: str,
-) -> list[str]:
+) -> list[ExtractedChatFact]:
     conversation = _format_messages(messages)
     if not conversation.strip():
         return []
@@ -88,7 +116,11 @@ async def extract_from_chat(
             return []
 
         parsed = ChatExtractionSchema.model_validate_json(content)
-        return parsed.facts
+        return [
+            fact
+            for fact in parsed.facts
+            if fact.text and (fact.kind != FactKind.TEMPORARY or fact.expires_at is not None)
+        ]
 
     except Exception:
         _logger.warning("Chat extraction failed", exc_info=True)
