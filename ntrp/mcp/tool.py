@@ -1,10 +1,15 @@
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Protocol
 
+from mcp.types import CallToolResult
 from mcp.types import Tool as McpTool
 
-from ntrp.mcp.session import MCPServerSession
+from ntrp.mcp.results import call_tool_result_to_tool_result
 from ntrp.tools.core.base import Tool, ToolResult
 from ntrp.tools.core.context import ToolExecution
+
+
+class MCPToolSession(Protocol):
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> CallToolResult: ...
 
 
 class MCPTool(Tool):
@@ -12,7 +17,7 @@ class MCPTool(Tool):
     input_model = None
     mutates = True
 
-    def __init__(self, server_name: str, mcp_tool: McpTool, session: MCPServerSession):
+    def __init__(self, server_name: str, mcp_tool: McpTool, session: MCPToolSession):
         self._server_name = server_name
         self._mcp_tool = mcp_tool
         self._session = session
@@ -32,20 +37,7 @@ class MCPTool(Tool):
     async def execute(self, execution: ToolExecution, **kwargs: Any) -> ToolResult:
         try:
             result = await self._session.call_tool(self._mcp_tool.name, kwargs)
-            parts = []
-            for block in result.content:
-                if hasattr(block, "text"):
-                    parts.append(block.text)
-                elif hasattr(block, "data"):
-                    parts.append(f"[{block.type}: {len(block.data)} bytes]")
-                else:
-                    parts.append(str(block))
-            content = "\n".join(parts)
-            return ToolResult(
-                content=content,
-                preview=content[:100] if content else "Empty result",
-                is_error=bool(result.isError),
-            )
+            return call_tool_result_to_tool_result(result)
         except Exception as e:
             return ToolResult(
                 content=f"MCP tool error ({self._server_name}/{self._mcp_tool.name}): {e}",
