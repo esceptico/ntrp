@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Config } from "../../../types.js";
-import type { FactFilters } from "../../../api/client.js";
+import type { FactFilters, ObservationFilters } from "../../../api/client.js";
 import { useFactsTab } from "../../../hooks/useFactsTab.js";
 import { useObservationsTab } from "../../../hooks/useObservationsTab.js";
 import { useDreamsTab } from "../../../hooks/useDreamsTab.js";
@@ -23,12 +23,13 @@ interface MemoryViewerProps {
 export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const [activeTab, setActiveTab] = useState<TabType>("facts");
   const [factFilters, setFactFilters] = useState<FactFilters>({ status: "active" });
+  const [observationFilters, setObservationFilters] = useState<ObservationFilters>({ status: "active" });
 
-  const { facts, factTotal, observations, dreams, loading, error, setFacts, setObservations, setDreams, setError, reload } =
-    useMemoryData(config, factFilters);
+  const { facts, factTotal, observations, observationTotal, dreams, loading, error, setFacts, setObservations, setDreams, setError, reload } =
+    useMemoryData(config, factFilters, observationFilters);
 
   const factsTab = useFactsTab(config, facts, 80, factFilters, setFactFilters, factTotal);
-  const obsTab = useObservationsTab(config, observations, 80);
+  const obsTab = useObservationsTab(config, observations, 80, observationFilters, setObservationFilters, observationTotal);
   const dreamsTab = useDreamsTab(config, dreams, 80);
 
   const { saving } = useMemoryKeypress({
@@ -72,14 +73,21 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
       {({ width, height }) => {
         const sectionHeight = height - 2;
         const tab = activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : dreamsTab;
-        const factFilterDisplay = activeTab === "facts"
+        const filterDisplay = activeTab === "facts"
           ? [
               `kind: ${factsTab.filters.kind ?? "all"}`,
               `status: ${factsTab.filters.status ?? "active"}`,
               `src: ${factsTab.filters.sourceType ?? "all"}`,
               `seen: ${factsTab.filters.accessed ?? "all"}`,
             ].join(" · ")
-          : "";
+          : activeTab === "observations"
+            ? [
+                `status: ${obsTab.filters.status ?? "active"}`,
+                `seen: ${obsTab.filters.accessed ?? "all"}`,
+                `support: ${obsTab.filters.minSources ? `${obsTab.filters.minSources}+` : "all"}`,
+                `total: ${obsTab.observationTotal}`,
+              ].join(" · ")
+            : "";
         const sortDisplay = `sort: ${tab.sortOrder}`;
 
         return (
@@ -89,12 +97,12 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 tabs={TABS}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                labels={{ facts: "Facts", observations: "Observations", dreams: "Dreams" }}
+                labels={{ facts: "Facts", observations: "Patterns", dreams: "Dreams" }}
               />
               <box flexGrow={1} />
-              {factFilterDisplay && (
+              {filterDisplay && (
                 <box marginRight={3}>
-                  <text><span fg={colors.text.disabled}>{factFilterDisplay}</span></text>
+                  <text><span fg={colors.text.disabled}>{filterDisplay}</span></text>
                 </box>
               )}
               <text><span fg={colors.text.disabled}>{sortDisplay}</span></text>

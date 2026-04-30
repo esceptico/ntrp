@@ -551,7 +551,7 @@ That is a decent base, but it is not enough for the new memory model. The UI nee
 
 ### UX Research Takeaways
 
-Observed patterns from ChatGPT/OpenAI, Letta ADE, LangGraph/LangChain docs, Mem0, and AI UX pattern writeups:
+These are UI trust patterns, not architecture guidance. Observed patterns from ChatGPT/OpenAI, Letta ADE, LangGraph/LangChain docs, Mem0, and AI UX writeups:
 
 ```text
 1. Separate always-visible memory from searchable archive.
@@ -567,6 +567,85 @@ Observed patterns from ChatGPT/OpenAI, Letta ADE, LangGraph/LangChain docs, Mem0
 ```
 
 The important product idea: memory is not just backend storage. It is a user-facing control surface for trust.
+
+### Observation Research Update, 2026-05-01
+
+Sweep notes checked:
+
+```text
+2026-04-11, 04-13, 04-15, 04-16, 04-17, 04-18, 04-19,
+2026-04-20, 04-21, 04-22, 04-24, 04-28, 04-29, 04-30
+```
+
+The useful signal is not "use memory framework X". The useful signal is a set of data-structure rules that show up repeatedly across the papers and production writeups.
+
+The target split:
+
+```text
+semantic facts    durable, typed, user-controllable truth
+profile/core      tiny always-visible projection over facts
+observations      derived episodic/reflection layer, renamed to Patterns in UI
+skills/rules      higher-compression procedural memory, not truth
+```
+
+#### Paper-derived rules
+
+| Signal | Memory rule for ntrp |
+| --- | --- |
+| Mem0 v2/v3 ADD-only extraction, OpenClaw Dreaming, MuninnDB Dream Engine | Capture is append-only. Consolidation is async, retryable, and reviewable. Do not block the chat turn on merge/update/delete policy. |
+| MemReader-4B, DeltaMem, Response-Utility Selection | A memory write or injection needs a gate. The gate asks whether the item has information value, resolves ambiguity, or would change the response. Similarity alone is not enough. |
+| FOCAL, StructMem, GAM, ADEMA | Segment by task/time/semantic shift before summarizing. A single global summarizer over the whole chat is the wrong abstraction; it erases task boundaries. |
+| FSFM, Adaptive Memory Crystallization, IE-as-Cache, ZenBrain | Memory needs hot/warm/cold tiers and forgetting. Reinforcement by actual reuse is a pruning signal; safety-triggered forgetting is a separate hard rule. |
+| Experience Compression Spectrum, ContextWeaver, PhysNote | Facts, patterns, skills, and notes are the same evidence at different compression levels. Promotion requires provenance, not vibes. |
+| SkillLearnBench, AJ-Bench, VLAA-GUI, AgentSearchBench | Self-review drifts. Derived knowledge should be promoted or ranked using external signals: user approval, execution result, repeated retrieval/use, or deterministic checks. |
+| SRA-Bench, Decoupled Memory Control, SAGER | Retrieval is not the real bottleneck. The harder problem is deciding when to inject memory and which layer to inject. |
+| Memanto, WUPHF, Anthropic CMA memory | Typed schema plus audit/provenance can beat vector-heavy graph theater. BM25/entity/time filters are worth exhausting before adding more infrastructure. |
+| Hierarchical Persona Induction, Bian Que | User/profile patterns must stay evidence-aligned. A correction should update both the derived memory and the procedural rule/skill that caused the mistake. |
+| AEL "less is more" | Do not ship a maximal memory architecture first. Nail facts, provenance, simple retrieval, and simple reflection before adding planners, judges, or RL policy loops. |
+
+#### Practical implications
+
+```text
+facts       source of truth, typed, editable, provenance-bearing
+profile     tiny projection over high-salience identity/preference/constraint facts
+patterns    derived claims over facts; useful for retrieval, not authoritative
+skills      procedures with activation conditions; promoted only after validation
+events      raw-ish append log for reconstruction, audit, and future consolidation
+```
+
+Do not make observations a second editable truth store. They are derived artifacts over fact provenance. If the user corrects a pattern, the correction should either create/update facts or mark the pattern as wrong/stale; it should not silently rewrite history.
+
+Live ntrp sample from `~/.ntrp/memory.db` after the first cleanup work:
+
+```text
+facts:                   4,340
+observations:            6,379 active
+zero-access observations: 5,198
+empty-source observations:   2
+```
+
+This confirms the issue is not lack of storage. The derived layer is too large and mostly unproven by use.
+
+Near-term implementation direction:
+
+```text
+1. Rename the UI concept to Patterns while keeping observation as the backend table name.
+2. Make patterns filterable by active/archive/all, used/never-used, and support count.
+3. Show full supporting fact metadata in pattern details.
+4. Add dry-run prune and review before any archival writes.
+5. Add pattern creation policy:
+   - minimum direct supporting facts
+   - no pattern without source fact IDs
+   - no promotion from pattern to profile without explicit fact update
+   - no consolidation write without provenance
+6. Add injection policy metrics:
+   - retrieved but not injected
+   - injected and used by the model
+   - injected and later corrected by the user
+   - stale pattern suggested
+```
+
+The first code slice in this direction is intentionally boring: make Patterns visible, filterable, and provenance-backed before writing another consolidator.
 
 ### Proposed Memory Viewer
 

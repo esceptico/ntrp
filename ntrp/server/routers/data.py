@@ -3,7 +3,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ntrp.memory.models import Fact, FactKind, SourceType
+from ntrp.memory.models import Fact, FactKind, Observation, SourceType
 from ntrp.memory.service import MemoryService
 from ntrp.server.deps import require_memory
 from ntrp.server.schemas import (
@@ -35,6 +35,19 @@ def _fact_payload(fact: Fact) -> dict:
         "expires_at": fact.expires_at.isoformat() if fact.expires_at else None,
         "pinned_at": fact.pinned_at.isoformat() if fact.pinned_at else None,
         "superseded_by_fact_id": fact.superseded_by_fact_id,
+    }
+
+
+def _observation_payload(observation: Observation) -> dict:
+    return {
+        "id": observation.id,
+        "summary": observation.summary,
+        "evidence_count": observation.evidence_count,
+        "access_count": observation.access_count,
+        "created_at": observation.created_at.isoformat(),
+        "updated_at": observation.updated_at.isoformat(),
+        "last_accessed_at": observation.last_accessed_at.isoformat(),
+        "archived_at": observation.archived_at.isoformat() if observation.archived_at else None,
     }
 
 
@@ -201,21 +214,24 @@ async def delete_fact(fact_id: int, svc: MemoryService = Depends(require_memory)
 @router.get("/observations")
 async def get_observations(
     limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    status: Literal["active", "archived", "all"] = "active",
+    accessed: Literal["never", "used"] | None = None,
+    min_sources: int | None = Query(default=None, ge=0),
+    max_sources: int | None = Query(default=None, ge=0),
     svc: MemoryService = Depends(require_memory),
 ):
-    observations = await svc.observations.list_recent(limit=limit)
+    observations, total = await svc.observations.list_filtered(
+        limit=limit,
+        offset=offset,
+        status=status,
+        accessed=accessed,
+        min_sources=min_sources,
+        max_sources=max_sources,
+    )
     return {
-        "observations": [
-            {
-                "id": o.id,
-                "summary": o.summary,
-                "evidence_count": o.evidence_count,
-                "access_count": o.access_count,
-                "created_at": o.created_at.isoformat(),
-                "updated_at": o.updated_at.isoformat(),
-            }
-            for o in observations
-        ],
+        "observations": [_observation_payload(o) for o in observations],
+        "total": total,
     }
 
 
@@ -227,15 +243,8 @@ async def get_observation_details(observation_id: int, svc: MemoryService = Depe
         raise HTTPException(status_code=404, detail="Observation not found")
 
     return {
-        "observation": {
-            "id": obs.id,
-            "summary": obs.summary,
-            "evidence_count": obs.evidence_count,
-            "access_count": obs.access_count,
-            "created_at": obs.created_at.isoformat(),
-            "updated_at": obs.updated_at.isoformat(),
-        },
-        "supporting_facts": [{"id": f.id, "text": f.text} for f in facts],
+        "observation": _observation_payload(obs),
+        "supporting_facts": [_fact_payload(f) for f in facts],
     }
 
 
@@ -249,14 +258,7 @@ async def update_observation(
         raise HTTPException(status_code=404, detail="Observation not found")
 
     return {
-        "observation": {
-            "id": obs.id,
-            "summary": obs.summary,
-            "evidence_count": obs.evidence_count,
-            "access_count": obs.access_count,
-            "created_at": obs.created_at.isoformat(),
-            "updated_at": obs.updated_at.isoformat(),
-        }
+        "observation": _observation_payload(obs),
     }
 
 

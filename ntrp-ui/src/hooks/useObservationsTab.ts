@@ -3,12 +3,16 @@ import { useQuery } from "@tanstack/react-query";
 import type { Config } from "../types.js";
 import type { Key } from "./useKeypress.js";
 import { getObservationDetails, type Observation, type ObservationDetails } from "../api/client.js";
+import type { ObservationAccessed, ObservationFilters, ObservationStatus } from "../api/client.js";
 import { OBS_SECTIONS, type ObsDetailSection, getObsSectionMaxIndex } from "../components/viewers/memory/ObservationDetailsView.js";
-import { useListDetail, type SortOrder } from "./useListDetail.js";
+import { useListDetail, type SortOrder, type ListKeyHelpers } from "./useListDetail.js";
 
 export type { SortOrder };
 
 const filterObs = (o: Observation, q: string) => o.summary.toLowerCase().includes(q);
+const STATUS_FILTERS: ObservationStatus[] = ["active", "all", "archived"];
+const ACCESSED_FILTERS: Array<ObservationAccessed | undefined> = [undefined, "never", "used"];
+const MIN_SOURCE_FILTERS: Array<number | undefined> = [undefined, 2, 3, 5, 10];
 
 export interface ObservationsTabState {
   filteredObservations: Observation[];
@@ -27,6 +31,8 @@ export interface ObservationsTabState {
   cursorPos: number;
   confirmDelete: boolean;
   sortOrder: SortOrder;
+  filters: ObservationFilters;
+  observationTotal: number;
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
   setSelectedIndex: Dispatch<SetStateAction<number>>;
@@ -41,9 +47,36 @@ export interface ObservationsTabState {
 export function useObservationsTab(
   config: Config,
   observations: Observation[],
-  contentWidth: number
+  contentWidth: number,
+  filters: ObservationFilters,
+  setFilters: Dispatch<SetStateAction<ObservationFilters>>,
+  observationTotal: number
 ): ObservationsTabState {
   const detailsRef = useRef<ObservationDetails | null>(null);
+
+  const cycle = useCallback(<T,>(values: T[], current: T): T => {
+    const idx = values.indexOf(current);
+    return values[(idx + 1) % values.length];
+  }, []);
+
+  const onListKey = useCallback((key: Key, { setSelectedIndex }: ListKeyHelpers) => {
+    if (key.name === "x") {
+      setFilters((current) => ({ ...current, status: cycle(STATUS_FILTERS, current.status ?? "active") }));
+      setSelectedIndex(0);
+      return true;
+    }
+    if (key.name === "u") {
+      setFilters((current) => ({ ...current, accessed: cycle(ACCESSED_FILTERS, current.accessed) }));
+      setSelectedIndex(0);
+      return true;
+    }
+    if (key.name === "v") {
+      setFilters((current) => ({ ...current, minSources: cycle(MIN_SOURCE_FILTERS, current.minSources) }));
+      setSelectedIndex(0);
+      return true;
+    }
+    return false;
+  }, [cycle, setFilters]);
 
   const getSectionMaxIndex = useCallback(
     (section: number) => getObsSectionMaxIndex(detailsRef.current, section as ObsDetailSection),
@@ -61,6 +94,7 @@ export function useObservationsTab(
     getSectionMaxIndex,
     getScrollText,
     contentWidth,
+    onListKey,
   });
 
   const currentId = ld.filtered[ld.selectedIndex]?.id;
@@ -90,6 +124,8 @@ export function useObservationsTab(
     cursorPos: ld.cursorPos,
     confirmDelete: ld.confirmDelete,
     sortOrder: ld.sortOrder,
+    filters,
+    observationTotal,
     handleKeys: ld.handleKeys,
     setSearchQuery: ld.setSearchQuery,
     setSelectedIndex: ld.setSelectedIndex,

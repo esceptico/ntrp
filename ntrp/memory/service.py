@@ -172,12 +172,31 @@ class ObservationService:
     async def list_recent(self, limit: int = 50) -> list[Observation]:
         return await self._memory.observations.list_recent(limit=limit)
 
+    async def list_filtered(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        status: str = "active",
+        accessed: str | None = None,
+        min_sources: int | None = None,
+        max_sources: int | None = None,
+    ) -> tuple[list[Observation], int]:
+        return await self._memory.observations.list_filtered(
+            limit=limit,
+            offset=offset,
+            status=status,
+            accessed=accessed,
+            min_sources=min_sources,
+            max_sources=max_sources,
+        )
+
     async def get(self, observation_id: int) -> tuple[Observation, list[Fact]]:
         if not (obs := await self._memory.observations.get(observation_id)):
             raise KeyError(f"Observation {observation_id} not found")
         fact_ids = await self._memory.observations.get_fact_ids(observation_id)
         facts_by_id = await self._memory.facts.get_batch(fact_ids)
-        return obs, list(facts_by_id.values())
+        return obs, [facts_by_id[fact_id] for fact_id in fact_ids if fact_id in facts_by_id]
 
     async def update(self, observation_id: int, new_summary: str) -> Observation:
         async with self._memory.transaction():

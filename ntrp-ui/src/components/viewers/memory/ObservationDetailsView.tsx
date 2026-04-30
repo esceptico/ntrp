@@ -60,7 +60,7 @@ export function ObservationDetailsView({
   if (!details) {
     return (
       <box flexDirection="column" paddingLeft={1}>
-        <text><span fg={colors.text.muted}>Select an observation to view details</span></text>
+        <text><span fg={colors.text.muted}>Select a pattern to view details</span></text>
       </box>
     );
   }
@@ -72,13 +72,13 @@ export function ObservationDetailsView({
   const textWidth = width - 2;
 
   if (confirmDelete) {
-    return <DeleteConfirmation width={width} height={height} message={`Delete this observation? This will remove the observation and ${details.supporting_facts.length} supporting fact references.`} />;
+    return <DeleteConfirmation width={width} height={height} message={`Delete this pattern? This will remove the pattern and ${details.supporting_facts.length} supporting fact references.`} />;
   }
 
   if (editMode) {
     return (
       <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
-        <text><span fg={colors.text.muted}>EDIT OBSERVATION</span></text>
+        <text><span fg={colors.text.muted}>EDIT PATTERN</span></text>
         <box marginTop={1}>
           <TextEditArea
             value={editText}
@@ -114,13 +114,21 @@ export function ObservationDetailsView({
       {/* Metadata — single line */}
       <box marginTop={1}>
         <text>
-          <span fg={accentValue}>observation</span>
+          <span fg={accentValue}>pattern</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
           <span fg={labelColor}>{observation.evidence_count} facts</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
           <span fg={labelColor}>{"\u00D7"}{observation.access_count}</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
-          <span fg={labelColor}>{formatTimeAgo(observation.created_at)}</span>
+          <span fg={labelColor}>created {formatTimeAgo(observation.created_at)}</span>
+          <span fg={colors.text.disabled}> {"\u2502"} </span>
+          <span fg={labelColor}>{observation.access_count ? `used ${formatTimeAgo(observation.last_accessed_at)}` : "never used"}</span>
+          {observation.archived_at && (
+            <>
+              <span fg={colors.text.disabled}> {"\u2502"} </span>
+              <span fg={colors.status.error}>archived</span>
+            </>
+          )}
         </text>
       </box>
 
@@ -132,13 +140,25 @@ export function ObservationDetailsView({
             items={supporting_facts}
             selectedIndex={factsIndex}
             visibleLines={Math.min(supporting_facts.length, 8)}
-            renderItem={(fact, _idx, selected) => (
-              <text>
-                <span fg={selected && sectionFocused(OBS_SECTIONS.FACTS) ? textColor : colors.text.secondary}>
-                  {"\u2022"} {truncateText(fact.text, textWidth - 4)}
-                </span>
-              </text>
-            )}
+            renderItem={(fact, _idx, selected) => {
+              const status = fact.archived_at
+                ? "archived"
+                : fact.superseded_by_fact_id
+                  ? `superseded:${fact.superseded_by_fact_id}`
+                  : fact.expires_at && new Date(fact.expires_at) <= new Date()
+                    ? "expired"
+                    : "active";
+              const meta = `${fact.kind} · ${fact.source_type} · ${status}`;
+              const bodyWidth = Math.max(10, textWidth - meta.length - 7);
+              return (
+                <text>
+                  <span fg={selected && sectionFocused(OBS_SECTIONS.FACTS) ? textColor : colors.text.secondary}>
+                    {"\u2022"} {truncateText(fact.text, bodyWidth)}
+                  </span>
+                  <span fg={colors.text.disabled}>  {meta}</span>
+                </text>
+              );
+            }}
             width={textWidth}
           />
         </box>

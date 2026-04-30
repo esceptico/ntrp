@@ -17,6 +17,7 @@ import {
   type Fact,
   type FactDetails,
   type Observation,
+  type ObservationDetails,
   type Dream,
 } from "../api/client.js";
 
@@ -214,7 +215,10 @@ export function useMemoryKeypress({
             updateObservation(config, obsTab.obsDetails.observation.id, obsTab.editText)
               .then((result) => {
                 setObservations((prev: Observation[]) =>
-                  prev.map((o) => (o.id === result.id ? { ...o, summary: result.summary } : o))
+                  prev.map((o) => (o.id === result.observation.id ? result.observation : o))
+                );
+                queryClient.setQueryData<ObservationDetails>(["obsDetails", result.observation.id], (prev) =>
+                  prev ? { ...prev, observation: result.observation } : prev
                 );
                 obsTab.setEditMode(false);
                 obsTab.setEditText("");

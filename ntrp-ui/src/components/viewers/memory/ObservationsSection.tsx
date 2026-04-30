@@ -29,7 +29,9 @@ export function ObservationsSection({ tab, height, width, saving }: Observations
         </text>
         <text>
           <span fg={ctx.isSelected ? accentValue : tagColor}>[{obs.evidence_count}]</span>
+          <span fg={tagColor}> {"\u00D7"}{obs.access_count}</span>
           <span fg={tagColor}> [{shortTime(obs.created_at)}]</span>
+          {obs.archived_at && <span fg={colors.status.error}> archived</span>}
         </text>
       </box>
     );
@@ -41,7 +43,7 @@ export function ObservationsSection({ tab, height, width, saving }: Observations
       selectedIndex={tab.selectedIndex}
       renderItem={renderItem}
       getKey={(o) => o.id}
-      emptyMessage="No observations synthesized yet"
+      emptyMessage="No patterns synthesized yet"
       searchQuery={tab.searchQuery}
       searchMode={tab.searchMode}
       focusPane={tab.focusPane}

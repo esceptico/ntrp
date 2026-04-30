@@ -400,6 +400,37 @@ class TestObservationCRUD:
     """E2E tests for observation PATCH and DELETE endpoints"""
 
     @pytest.mark.asyncio
+    async def test_list_observations_filters_and_total(
+        self,
+        test_client: AsyncClient,
+        sample_observation: int,
+    ):
+        response = await test_client.get("/observations?accessed=never&min_sources=1&status=active")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] >= 1
+        assert any(row["id"] == sample_observation for row in data["observations"])
+        row = next(row for row in data["observations"] if row["id"] == sample_observation)
+        assert row["archived_at"] is None
+        assert row["last_accessed_at"]
+
+    @pytest.mark.asyncio
+    async def test_observation_details_returns_full_supporting_fact_payload(
+        self,
+        test_client: AsyncClient,
+        sample_observation: int,
+    ):
+        response = await test_client.get(f"/observations/{sample_observation}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["observation"]["id"] == sample_observation
+        assert data["supporting_facts"]
+        support = data["supporting_facts"][0]
+        assert {"id", "text", "kind", "source_type", "archived_at", "superseded_by_fact_id"} <= set(support)
+
+    @pytest.mark.asyncio
     async def test_patch_observation_updates_summary(self, test_client: AsyncClient, sample_observation: int):
         """PATCH /observations/{id} should update summary and re-embed"""
         response = await test_client.patch(

@@ -7,6 +7,7 @@ import {
   type Fact,
   type FactFilters,
   type Observation,
+  type ObservationFilters,
   type Dream,
 } from "../api/client.js";
 
@@ -14,6 +15,7 @@ interface UseMemoryDataResult {
   facts: Fact[];
   factTotal: number;
   observations: Observation[];
+  observationTotal: number;
   dreams: Dream[];
   loading: boolean;
   error: string | null;
@@ -24,12 +26,13 @@ interface UseMemoryDataResult {
   reload: () => void;
 }
 
-export function useMemoryData(config: Config, factFilters?: FactFilters): UseMemoryDataResult {
+export function useMemoryData(config: Config, factFilters?: FactFilters, observationFilters?: ObservationFilters): UseMemoryDataResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [facts, setFacts] = useState<Fact[]>([]);
   const [factTotal, setFactTotal] = useState(0);
   const [observations, setObservations] = useState<Observation[]>([]);
+  const [observationTotal, setObservationTotal] = useState(0);
   const [dreams, setDreams] = useState<Dream[]>([]);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -43,13 +46,14 @@ export function useMemoryData(config: Config, factFilters?: FactFilters): UseMem
       try {
         const [factsData, obsData, dreamsData] = await Promise.all([
           getFacts(config, 200, factFilters),
-          getObservations(config, 100),
+          getObservations(config, 100, observationFilters),
           getDreams(config, 50),
         ]);
         if (fetchIdRef.current !== id) return;
         setFacts(factsData.facts || []);
         setFactTotal(factsData.total || 0);
         setObservations(obsData.observations || []);
+        setObservationTotal(obsData.total || 0);
         setDreams(dreamsData.dreams || []);
       } catch (e) {
         if (fetchIdRef.current !== id) return;
@@ -58,7 +62,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters): UseMem
         if (fetchIdRef.current === id) setLoading(false);
       }
     })();
-  }, [config, fetchCount, factFilters]);
+  }, [config, fetchCount, factFilters, observationFilters]);
 
   const reload = useCallback(() => {
     setFetchCount((c) => c + 1);
@@ -68,6 +72,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters): UseMem
     facts,
     factTotal,
     observations,
+    observationTotal,
     dreams,
     loading,
     error,

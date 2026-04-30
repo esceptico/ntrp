@@ -45,7 +45,11 @@ export function MemoryFooter({ activeTab, factsTab, obsTab, dreamsTab }: MemoryF
       ["x", "status"] as [string, string],
       ["s", "source"] as [string, string],
       ["u", "used"] as [string, string],
-    ] : []),
+    ] : [
+      ["x", "status"] as [string, string],
+      ["u", "used"] as [string, string],
+      ["v", "support"] as [string, string],
+    ]),
     ["o", "sort"],
   ];
   return <Hints items={listHints} />;

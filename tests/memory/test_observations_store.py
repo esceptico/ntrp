@@ -75,6 +75,31 @@ class TestObservationCRUD:
         await repo.create(summary="New obs")
         assert await repo.count() == initial + 1
 
+    @pytest.mark.asyncio
+    async def test_list_filtered(self, repo: ObservationRepository, fact_repo: FactRepository):
+        f1 = await fact_repo.create(text="Fact 1", source_type=SourceType.EXPLICIT)
+        f2 = await fact_repo.create(text="Fact 2", source_type=SourceType.EXPLICIT)
+        supported = await repo.create(summary="Supported pattern", source_fact_id=f1.id)
+        low_support = await repo.create(summary="Low support pattern")
+        await repo.add_source_facts(supported.id, [f2.id])
+        await repo.reinforce([supported.id])
+        await repo.archive_batch([low_support.id])
+
+        active, active_total = await repo.list_filtered(status="active")
+        assert supported.id in [obs.id for obs in active]
+        assert low_support.id not in [obs.id for obs in active]
+        assert active_total >= 1
+
+        archived, archived_total = await repo.list_filtered(status="archived")
+        assert low_support.id in [obs.id for obs in archived]
+        assert archived_total >= 1
+
+        used, _ = await repo.list_filtered(status="active", accessed="used")
+        assert [obs.id for obs in used] == [supported.id]
+
+        enough_support, _ = await repo.list_filtered(status="active", min_sources=2)
+        assert [obs.id for obs in enough_support] == [supported.id]
+
 
 class TestUpdate:
     @pytest.mark.asyncio

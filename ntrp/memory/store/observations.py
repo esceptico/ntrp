@@ -122,6 +122,47 @@ def _row_dict(row: aiosqlite.Row) -> dict:
     return d
 
 
+def _filtered_observation_clauses(
+    *,
+    status: str,
+    accessed: str | None,
+    min_sources: int | None,
+    max_sources: int | None,
+) -> tuple[str, list[object]]:
+    where = []
+    params: list[object] = []
+
+    match status:
+        case "active":
+            where.append("o.archived_at IS NULL")
+        case "archived":
+            where.append("o.archived_at IS NOT NULL")
+        case "all":
+            pass
+        case _:
+            raise ValueError(f"unsupported observation status: {status}")
+
+    match accessed:
+        case "never":
+            where.append("o.access_count = 0")
+        case "used":
+            where.append("o.access_count > 0")
+        case None:
+            pass
+        case _:
+            raise ValueError(f"unsupported observation accessed filter: {accessed}")
+
+    if min_sources is not None:
+        where.append("COALESCE(json_array_length(o.source_fact_ids), 0) >= ?")
+        params.append(min_sources)
+    if max_sources is not None:
+        where.append("COALESCE(json_array_length(o.source_fact_ids), 0) <= ?")
+        params.append(max_sources)
+
+    where_sql = f" WHERE {' AND '.join(where)}" if where else ""
+    return where_sql, params
+
+
 async def _insert_observation_fact(conn: aiosqlite.Connection, observation_id: int, fact_id: int, created_at: str) -> None:
     await conn.execute(_SQL_INSERT_OBSERVATION_FACT, (observation_id, created_at, fact_id))
 
@@ -389,6 +430,32 @@ class ObservationRepository:
     async def list_recent(self, limit: int = 100) -> list[Observation]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_RECENT_OBSERVATIONS, (limit,))
         return [Observation.model_validate(_row_dict(r)) for r in rows]
+
+    async def list_filtered(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        status: str = "active",
+        accessed: str | None = None,
+        min_sources: int | None = None,
+        max_sources: int | None = None,
+    ) -> tuple[list[Observation], int]:
+        where_sql, params = _filtered_observation_clauses(
+            status=status,
+            accessed=accessed,
+            min_sources=min_sources,
+            max_sources=max_sources,
+        )
+        count_rows = await self.read_conn.execute_fetchall(
+            f"SELECT COUNT(*) FROM observations o{where_sql}",
+            params,
+        )
+        rows = await self.read_conn.execute_fetchall(
+            f"SELECT o.* FROM observations o{where_sql} ORDER BY o.updated_at DESC LIMIT ? OFFSET ?",
+            (*params, limit, offset),
+        )
+        return [Observation.model_validate(_row_dict(r)) for r in rows], count_rows[0][0]
 
     async def count(self) -> int:
         rows = await self.conn.execute_fetchall(_SQL_COUNT_OBSERVATIONS)

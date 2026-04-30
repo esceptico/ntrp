@@ -91,11 +91,23 @@ export interface Observation {
   access_count: number;
   created_at: string;
   updated_at: string;
+  last_accessed_at: string;
+  archived_at: string | null;
+}
+
+export type ObservationStatus = "active" | "archived" | "all";
+export type ObservationAccessed = "never" | "used";
+
+export interface ObservationFilters {
+  status?: ObservationStatus;
+  accessed?: ObservationAccessed;
+  minSources?: number;
+  maxSources?: number;
 }
 
 export interface ObservationDetails {
   observation: Observation;
-  supporting_facts: Array<{ id: number; text: string }>;
+  supporting_facts: Fact[];
 }
 
 export interface Dream {
@@ -117,6 +129,15 @@ function factQuery(limit: number, filters?: FactFilters): string {
   if (filters?.status) params.set("status", filters.status);
   if (filters?.accessed) params.set("accessed", filters.accessed);
   if (filters?.entity?.trim()) params.set("entity", filters.entity.trim());
+  return params.toString();
+}
+
+function observationQuery(limit: number, filters?: ObservationFilters): string {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.accessed) params.set("accessed", filters.accessed);
+  if (filters?.minSources !== undefined) params.set("min_sources", String(filters.minSources));
+  if (filters?.maxSources !== undefined) params.set("max_sources", String(filters.maxSources));
   return params.toString();
 }
 
@@ -172,10 +193,13 @@ export async function getStats(config: Config): Promise<Stats> {
   return api.get<Stats>(`${config.serverUrl}/stats`);
 }
 
-export async function getObservations(config: Config, limit = 50): Promise<{
+export async function getObservations(config: Config, limit = 50, filters?: ObservationFilters): Promise<{
   observations: Observation[];
+  total: number;
 }> {
-  return api.get<{ observations: Observation[] }>(`${config.serverUrl}/observations?limit=${limit}`);
+  return api.get<{ observations: Observation[]; total: number }>(
+    `${config.serverUrl}/observations?${observationQuery(limit, filters)}`
+  );
 }
 
 export async function getObservationDetails(config: Config, observationId: number, signal?: AbortSignal): Promise<ObservationDetails> {
@@ -187,14 +211,9 @@ export async function updateObservation(
   observationId: number,
   summary: string
 ): Promise<{
-  id: number;
-  summary: string;
-  evidence_count: number;
-  access_count: number;
-  created_at: string;
-  updated_at: string;
+  observation: Observation;
 }> {
-  return api.patch(`${config.serverUrl}/observations/${observationId}`, { summary });
+  return api.patch<{ observation: Observation }>(`${config.serverUrl}/observations/${observationId}`, { summary });
 }
 
 export async function deleteObservation(
