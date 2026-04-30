@@ -191,6 +191,7 @@ FACT B (id={{ id_b }}):
 Rules:
 - "same" = both facts capture the same event/state/preference, just worded differently or with different detail levels. Keep the more informative version.
 - "different" = facts share structure or vocabulary but describe genuinely different events, people, companies, dates, or topics.
+- Changed preferences, corrections, and contradictions are "different"; do not merge them into one fact. Supersession review handles which older fact should be hidden.
 - When merging, produce a single fact text that preserves all specific details (dates, names, numbers) from both.
 - CRITICAL: "User applied to X on date1" and "User applied to Y on date2" are DIFFERENT facts even if structurally similar.""")
 

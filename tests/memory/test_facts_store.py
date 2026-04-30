@@ -134,6 +134,57 @@ class TestFactCRUD:
         assert archived.id not in ids
         assert superseded.id not in ids
 
+    @pytest.mark.asyncio
+    async def test_list_supersession_candidates_for_same_entity_and_kind(self, repo: FactRepository):
+        entity = await repo.create_entity("User")
+        older = await repo.create(
+            text="User prefers concise answers",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+        )
+        newer = await repo.create(
+            text="User prefers detailed answers",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+        )
+        different_kind = await repo.create(
+            text="User works at Anthropic",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.IDENTITY,
+        )
+        note = await repo.create(
+            text="User prefers manual review for memory",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.NOTE,
+        )
+        other_entity = await repo.create(
+            text="Alice prefers concise answers",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+        )
+
+        await repo.add_entity_ref(older.id, "User", entity.id)
+        await repo.add_entity_ref(newer.id, "User", entity.id)
+        await repo.add_entity_ref(different_kind.id, "User", entity.id)
+        await repo.add_entity_ref(note.id, "User", entity.id)
+        await repo.add_entity_ref(other_entity.id, "Alice")
+
+        rows = await repo.list_supersession_candidates(
+            (FactKind.IDENTITY, FactKind.PREFERENCE, FactKind.CONSTRAINT),
+            limit=10,
+        )
+
+        assert rows == [
+            {
+                "older_fact_id": older.id,
+                "newer_fact_id": newer.id,
+                "kind": FactKind.PREFERENCE,
+                "entity_name": "User",
+                "older_created_at": older.created_at.isoformat(),
+                "newer_created_at": newer.created_at.isoformat(),
+            }
+        ]
+
 
 class TestReinforce:
     @pytest.mark.asyncio

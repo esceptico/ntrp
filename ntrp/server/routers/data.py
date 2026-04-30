@@ -62,6 +62,27 @@ async def get_fact_kind_review(
     }
 
 
+@router.get("/memory/supersession/candidates")
+async def get_supersession_candidates(
+    limit: int = Query(default=100, ge=1, le=500),
+    svc: MemoryService = Depends(require_memory),
+):
+    candidates = await svc.facts.list_supersession_candidates(limit=limit)
+    return {
+        "candidates": [
+            {
+                "kind": row["kind"],
+                "entity": row["entity"],
+                "older_fact": _fact_payload(row["older_fact"]),
+                "newer_fact": _fact_payload(row["newer_fact"]),
+                "reason": row["reason"],
+            }
+            for row in candidates
+        ],
+        "total": len(candidates),
+    }
+
+
 @router.get("/facts/{fact_id}")
 async def get_fact_details(fact_id: int, svc: MemoryService = Depends(require_memory)):
     try:

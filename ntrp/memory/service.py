@@ -2,7 +2,7 @@ from collections.abc import Awaitable, Callable
 
 from ntrp.logging import get_logger
 from ntrp.memory.audit import memory_audit, observation_prune_dry_run
-from ntrp.memory.facts import FactMemory
+from ntrp.memory.facts import PROFILE_FACT_KINDS, FactMemory
 from ntrp.memory.models import Dream, EntityRef, Fact, Observation
 
 _logger = get_logger(__name__)
@@ -26,6 +26,28 @@ class FactService:
 
     async def list_kind_review(self, limit: int = 100, offset: int = 0) -> tuple[list[Fact], int]:
         return await self._memory.facts.list_kind_review(limit=limit, offset=offset)
+
+    async def list_supersession_candidates(self, limit: int = 100) -> list[dict]:
+        rows = await self._memory.facts.list_supersession_candidates(PROFILE_FACT_KINDS, limit=limit)
+        fact_ids = sorted({row["older_fact_id"] for row in rows} | {row["newer_fact_id"] for row in rows})
+        facts = await self._memory.facts.get_batch(fact_ids)
+
+        candidates = []
+        for row in rows:
+            older = facts.get(row["older_fact_id"])
+            newer = facts.get(row["newer_fact_id"])
+            if not older or not newer:
+                continue
+            candidates.append(
+                {
+                    "kind": row["kind"],
+                    "entity": row["entity_name"],
+                    "older_fact": older,
+                    "newer_fact": newer,
+                    "reason": "same entity and fact kind; review whether newer fact supersedes older fact",
+                }
+            )
+        return candidates
 
     async def get(self, fact_id: int) -> tuple[Fact, list[EntityRef]]:
         if not (fact := await self._memory.facts.get(fact_id)):

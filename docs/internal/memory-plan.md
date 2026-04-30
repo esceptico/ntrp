@@ -1085,6 +1085,14 @@ No hard delete until archive behavior is boring.
 
 ### 6. Supersession Resolver
 
+Status:
+
+```text
+read-only supersession candidate endpoint added
+manual apply path exists via PATCH /facts/{id}/metadata superseded_by_fact_id
+no automatic supersession yet
+```
+
 Purpose:
 
 ```text
@@ -1114,7 +1122,7 @@ archive old temporary/event facts when safe
 leave audit trail
 ```
 
-For low confidence conflicts, produce review candidates instead of writing.
+Current rule: produce review candidates instead of writing. Automatic supersession needs an explicit slot/key or stronger typed extraction so unrelated preferences do not become fake contradictions.
 
 ### 7. Episodic Session Digest
 

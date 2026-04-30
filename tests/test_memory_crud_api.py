@@ -283,6 +283,40 @@ class TestFactMetadataAPI:
         assert review_fact.id in ids
         assert typed_fact.id not in ids
 
+    @pytest.mark.asyncio
+    async def test_supersession_candidates_list_review_pairs(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        repo = test_runtime.memory.facts
+        user = await repo.create_entity("User")
+        older = await repo.create(
+            "User prefers concise answers",
+            SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+        )
+        newer = await repo.create(
+            "User prefers detailed answers",
+            SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+        )
+        await repo.add_entity_ref(older.id, "User", user.id)
+        await repo.add_entity_ref(newer.id, "User", user.id)
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.get("/memory/supersession/candidates")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        candidate = body["candidates"][0]
+        assert candidate["kind"] == "preference"
+        assert candidate["entity"] == "User"
+        assert candidate["older_fact"]["id"] == older.id
+        assert candidate["newer_fact"]["id"] == newer.id
+        assert "review" in candidate["reason"]
+
 
 class TestObservationCRUD:
     """E2E tests for observation PATCH and DELETE endpoints"""
@@ -449,6 +483,7 @@ class TestMemoryDisabled:
                 client.delete("/observations/1"),
                 client.get("/memory/audit"),
                 client.get("/memory/facts/kind-review"),
+                client.get("/memory/supersession/candidates"),
                 client.get("/memory/profile"),
                 client.post("/memory/prune/dry-run", json={}),
             )
