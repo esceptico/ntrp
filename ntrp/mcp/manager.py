@@ -1,5 +1,6 @@
 from ntrp.integrations.base import IntegrationHealth, ToolProviderStatus
 from ntrp.logging import get_logger
+from ntrp.mcp.errors import describe_mcp_error
 from ntrp.mcp.models import parse_server_config
 from ntrp.mcp.session import MCPServerSession
 from ntrp.mcp.tool import MCPTool
@@ -44,8 +45,9 @@ class MCPManager:
                     self._tools.append(MCPTool(name, mcp_tool, session))
                 _logger.info("MCP server %r connected", name, tools=len(session.tools))
             except BaseException as e:
-                _logger.warning("Failed to connect MCP server %r: %s", name, e)
-                self._errors[name] = str(e)
+                detail = describe_mcp_error(e)
+                _logger.warning("Failed to connect MCP server %r: %s", name, detail)
+                self._errors[name] = detail
                 try:
                     await session.close()
                 except BaseException:

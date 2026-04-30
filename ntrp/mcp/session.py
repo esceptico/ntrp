@@ -8,18 +8,20 @@ from mcp.types import CallToolResult
 from mcp.types import Tool as McpTool
 
 from ntrp.logging import get_logger
+from ntrp.mcp.errors import describe_mcp_error
 from ntrp.mcp.models import HttpTransport, MCPServerConfig, StdioTransport
 
 _logger = get_logger(__name__)
 
 _MAX_RECONNECT_RETRIES = 5
 _MAX_BACKOFF = 60.0
+_INITIAL_CONNECT_TIMEOUT = 15.0
 
 _OAUTH_REAUTH_MSG = "OAuth tokens expired — re-authenticate via /mcp/servers/{name}/oauth"
 
 
 def _is_oauth_error(exc: BaseException) -> bool:
-    if isinstance(exc, ExceptionGroup):
+    if isinstance(exc, BaseExceptionGroup):
         return any(_is_oauth_error(e) for e in exc.exceptions)
     name = type(exc).__name__
     msg = str(exc)
@@ -133,6 +135,8 @@ class MCPServerSession:
                 else:
                     await self._run_stdio()
                 break  # clean exit (shutdown requested)
+            except asyncio.CancelledError:
+                raise
             except BaseException as exc:
                 self._session = None
 
@@ -141,7 +145,7 @@ class MCPServerSession:
                     if _is_oauth_error(exc):
                         self._error = RuntimeError(_OAUTH_REAUTH_MSG.format(name=self.name))
                     else:
-                        self._error = exc
+                        self._error = RuntimeError(describe_mcp_error(exc))
                     self._ready.set()
                     return
 
@@ -163,7 +167,7 @@ class MCPServerSession:
                         "MCP server %r failed after %d reconnect attempts: %s",
                         self.name,
                         _MAX_RECONNECT_RETRIES,
-                        exc,
+                        describe_mcp_error(exc),
                     )
                     return
 
@@ -173,7 +177,7 @@ class MCPServerSession:
                     retries,
                     _MAX_RECONNECT_RETRIES,
                     backoff,
-                    exc,
+                    describe_mcp_error(exc),
                 )
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, _MAX_BACKOFF)
@@ -191,7 +195,20 @@ class MCPServerSession:
     async def connect(self) -> None:
         """Start the background task and wait until connected (or failed)."""
         self._task = asyncio.create_task(self._run())
-        await self._ready.wait()
+        try:
+            await asyncio.wait_for(self._ready.wait(), timeout=_INITIAL_CONNECT_TIMEOUT)
+        except TimeoutError as exc:
+            detail = f"MCP server {self.name!r} did not initialize within {_INITIAL_CONNECT_TIMEOUT:.0f}s"
+            self._error = RuntimeError(detail)
+            self._shutdown.set()
+            if self._task and not self._task.done():
+                self._task.cancel()
+                try:
+                    await self._task
+                except BaseException:
+                    pass
+            self._task = None
+            raise self._error from exc
         if self._error:
             raise self._error
 
