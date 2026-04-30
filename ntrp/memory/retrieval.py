@@ -2,12 +2,13 @@ import heapq
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Generic, Protocol, TypeVar
 
 import numpy as np
 
 from ntrp.constants import (
+    CONSOLIDATED_FACT_RECALL_WEIGHT,
     ENTITY_EXPANSION_IDF_FLOOR,
     ENTITY_EXPANSION_MAX_FACTS,
     ENTITY_EXPANSION_PER_ENTITY_LIMIT,
@@ -257,7 +258,18 @@ def score_fact(
         fact.happened_at or fact.created_at,
         reference_time=query_time,
     )
-    return base_score * decay * recency
+    score = base_score * decay * recency
+    if fact.consolidated_at is not None:
+        score *= CONSOLIDATED_FACT_RECALL_WEIGHT
+    return score
+
+
+def _is_recallable_fact(fact: Fact, now: datetime | None = None) -> bool:
+    if fact.archived_at is not None or fact.superseded_by_fact_id is not None:
+        return False
+    if fact.expires_at is None:
+        return True
+    return fact.expires_at > (now or datetime.now(UTC))
 
 
 async def retrieve_facts(
@@ -294,9 +306,9 @@ async def retrieve_facts(
     candidate_ids.update(expansion.keys())
     candidate_ids.update(temporal_ids.keys())
 
-    # Fetch all candidate facts in one query, exclude already-consolidated
+    # Fetch all candidate facts in one query. consolidated_at means "processed", not "hide from recall".
     facts_by_id = await repo.get_batch(list(candidate_ids))
-    facts_by_id = {fid: f for fid, f in facts_by_id.items() if f.consolidated_at is None and f.archived_at is None}
+    facts_by_id = {fid: f for fid, f in facts_by_id.items() if _is_recallable_fact(f)}
 
     if not facts_by_id:
         return FactContext(facts=[])

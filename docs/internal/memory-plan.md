@@ -370,6 +370,14 @@ If an observation wants to become a 5,000-char essay, the model is doing documen
 
 ## Phase 6: Retrieval
 
+Status:
+
+```text
+direct fact recall no longer hides consolidated facts
+archived, expired, and superseded facts are filtered from recall candidates
+consolidated facts get a small ranking penalty instead of hard exclusion
+```
+
 Current recall searches observations first and filters consolidated facts out of direct fact recall. That makes consolidated facts too dependent on observation quality.
 
 Change retrieval to:

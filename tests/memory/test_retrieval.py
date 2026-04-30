@@ -156,6 +156,23 @@ class TestScoreFact:
 
         assert score_high > score_low
 
+    def test_consolidated_fact_still_scores(self):
+        now = datetime.now(UTC)
+        fact = Fact(
+            id=1,
+            text="processed",
+            embedding=None,
+            source_type=SourceType.EXPLICIT,
+            source_ref=None,
+            created_at=now,
+            happened_at=now,
+            last_accessed_at=now,
+            access_count=0,
+            consolidated_at=now,
+        )
+
+        assert score_fact(fact, 1.0) > 0
+
 
 class TestHybridSearch:
     @pytest.mark.asyncio
@@ -275,6 +292,59 @@ class TestRetrieveFacts:
         fact_ids = [f.id for f in context.facts]
         assert f1.id in fact_ids
         assert f2.id in fact_ids
+
+    @pytest.mark.asyncio
+    async def test_retrieves_consolidated_facts(self, repo: FactRepository):
+        emb = mock_embedding("processed memory")
+        fact = await repo.create(
+            text="processed memory remains directly recallable",
+            source_type=SourceType.EXPLICIT,
+            embedding=emb,
+        )
+        await repo.mark_consolidated(fact.id)
+
+        context = await retrieve_facts(repo, "processed memory", emb, seed_limit=5)
+
+        assert fact.id in [f.id for f in context.facts]
+
+    @pytest.mark.asyncio
+    async def test_filters_non_recallable_facts(self, repo: FactRepository):
+        emb = mock_embedding("memory hygiene")
+        active = await repo.create(
+            text="memory hygiene active",
+            source_type=SourceType.EXPLICIT,
+            embedding=emb,
+        )
+        expired = await repo.create(
+            text="memory hygiene expired",
+            source_type=SourceType.EXPLICIT,
+            embedding=emb,
+            expires_at=datetime.now(UTC) - timedelta(days=1),
+        )
+        replacement = await repo.create(
+            text="memory hygiene replacement",
+            source_type=SourceType.EXPLICIT,
+        )
+        superseded = await repo.create(
+            text="memory hygiene superseded",
+            source_type=SourceType.EXPLICIT,
+            embedding=emb,
+            superseded_by_fact_id=replacement.id,
+        )
+        archived = await repo.create(
+            text="memory hygiene archived",
+            source_type=SourceType.EXPLICIT,
+            embedding=emb,
+        )
+        await repo.archive_batch([archived.id])
+
+        context = await retrieve_facts(repo, "memory hygiene", emb, seed_limit=10)
+
+        ids = [f.id for f in context.facts]
+        assert active.id in ids
+        assert expired.id not in ids
+        assert superseded.id not in ids
+        assert archived.id not in ids
 
 
 class TestRetrieveWithObservations:
