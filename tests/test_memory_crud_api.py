@@ -129,6 +129,8 @@ class TestFactCRUD:
         fact = data["fact"]
         assert fact["id"] == sample_fact
         assert fact["text"] == "Alice is a researcher at Anthropic working on Claude"
+        assert fact["kind"] == "note"
+        assert fact["salience"] == 0
 
         entity_refs = data["entity_refs"]
         assert isinstance(entity_refs, list)

@@ -5,7 +5,7 @@ import aiosqlite
 
 from ntrp.database import serialize_embedding
 from ntrp.memory.fts import build_fts_query
-from ntrp.memory.models import Embedding, Entity, EntityRef, Fact, SourceType
+from ntrp.memory.models import Embedding, Entity, EntityRef, Fact, FactKind, SourceType
 
 _SQL_GET_FACT = "SELECT * FROM facts WHERE id = ?"
 _SQL_COUNT_FACTS = "SELECT COUNT(*) FROM facts"
@@ -17,9 +17,10 @@ _SQL_DELETE_FACT = "DELETE FROM facts WHERE id = ?"
 _SQL_INSERT_FACT = """
     INSERT INTO facts (
         text, embedding, source_type, source_ref,
-        created_at, happened_at, last_accessed_at, access_count
+        created_at, happened_at, last_accessed_at, access_count,
+        kind, salience, confidence, expires_at, pinned_at, superseded_by_fact_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SQL_LIST_TIME_WINDOW = """
@@ -225,6 +226,12 @@ class FactRepository:
         source_ref: str | None = None,
         embedding: Embedding | None = None,
         happened_at: datetime | None = None,
+        kind: FactKind = FactKind.NOTE,
+        salience: int = 0,
+        confidence: float = 1.0,
+        expires_at: datetime | None = None,
+        pinned_at: datetime | None = None,
+        superseded_by_fact_id: int | None = None,
     ) -> Fact:
         now = datetime.now(UTC)
         embedding_bytes = serialize_embedding(embedding)
@@ -239,6 +246,12 @@ class FactRepository:
                 happened_at.isoformat() if happened_at else None,
                 now.isoformat(),
                 0,
+                kind,
+                salience,
+                confidence,
+                expires_at.isoformat() if expires_at else None,
+                pinned_at.isoformat() if pinned_at else None,
+                superseded_by_fact_id,
             ),
         )
         fact_id = cursor.lastrowid
@@ -255,6 +268,12 @@ class FactRepository:
             happened_at=happened_at,
             last_accessed_at=now,
             access_count=0,
+            kind=kind,
+            salience=salience,
+            confidence=confidence,
+            expires_at=expires_at,
+            pinned_at=pinned_at,
+            superseded_by_fact_id=superseded_by_fact_id,
         )
 
     async def reinforce(self, fact_ids: Sequence[int]) -> None:

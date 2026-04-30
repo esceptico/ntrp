@@ -143,6 +143,22 @@ async def memory_audit(conn: aiosqlite.Connection) -> dict[str, Any]:
         ORDER BY total DESC
         """,
     )
+    by_kind = await _all(
+        conn,
+        """
+        SELECT
+            kind,
+            COUNT(*) AS total,
+            COALESCE(SUM(archived_at IS NULL), 0) AS active,
+            COALESCE(SUM(archived_at IS NULL AND access_count = 0), 0) AS zero_access,
+            COALESCE(SUM(archived_at IS NULL AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP), 0)
+                AS expired_active,
+            COALESCE(SUM(archived_at IS NULL AND pinned_at IS NOT NULL), 0) AS pinned_active
+        FROM facts
+        GROUP BY kind
+        ORDER BY active DESC, total DESC
+        """,
+    )
     observation_sources = await _all(
         conn,
         """
@@ -187,6 +203,7 @@ async def memory_audit(conn: aiosqlite.Connection) -> dict[str, Any]:
         "observations": observations,
         "dreams": dreams,
         "facts_by_source": by_source,
+        "facts_by_kind": by_kind,
         "observation_source_distribution": observation_sources,
         "top_entities": top_entities,
         "temporal": temporal,

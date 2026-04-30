@@ -1,7 +1,9 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 import pytest_asyncio
 
-from ntrp.memory.models import SourceType
+from ntrp.memory.models import FactKind, SourceType
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
 from tests.conftest import mock_embedding
@@ -56,6 +58,26 @@ class TestFactCRUD:
         initial = await repo.count()
         await repo.create(text="New fact", source_type=SourceType.EXPLICIT)
         assert await repo.count() == initial + 1
+
+    @pytest.mark.asyncio
+    async def test_create_typed_fact(self, repo: FactRepository):
+        expires_at = datetime.now(UTC) + timedelta(days=7)
+        fact = await repo.create(
+            text="User prefers direct SQL",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+            salience=2,
+            confidence=0.9,
+            expires_at=expires_at,
+        )
+
+        retrieved = await repo.get(fact.id)
+        assert retrieved.kind == FactKind.PREFERENCE
+        assert retrieved.salience == 2
+        assert retrieved.confidence == 0.9
+        assert retrieved.expires_at == expires_at
+        assert retrieved.pinned_at is None
+        assert retrieved.superseded_by_fact_id is None
 
 
 class TestReinforce:

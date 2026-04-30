@@ -52,10 +52,19 @@ CREATE TABLE IF NOT EXISTS facts (
     last_accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     access_count INTEGER DEFAULT 0,
     consolidated_at TIMESTAMP,  -- NULL = not yet consolidated
-    archived_at TIMESTAMP
+    archived_at TIMESTAMP,
+    kind TEXT NOT NULL DEFAULT 'note',
+    salience INTEGER NOT NULL DEFAULT 0,
+    confidence REAL NOT NULL DEFAULT 1.0,
+    expires_at TIMESTAMP,
+    pinned_at TIMESTAMP,
+    superseded_by_fact_id INTEGER REFERENCES facts(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_facts_created ON facts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_facts_kind ON facts(kind);
+CREATE INDEX IF NOT EXISTS idx_facts_expires ON facts(expires_at);
+CREATE INDEX IF NOT EXISTS idx_facts_superseded ON facts(superseded_by_fact_id);
 
 CREATE TABLE IF NOT EXISTS entities (
     id INTEGER PRIMARY KEY,

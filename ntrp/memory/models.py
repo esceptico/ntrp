@@ -20,6 +20,24 @@ class SourceType(StrEnum):
         return cls.EXPLICIT
 
 
+class FactKind(StrEnum):
+    IDENTITY = "identity"
+    PREFERENCE = "preference"
+    RELATIONSHIP = "relationship"
+    DECISION = "decision"
+    PROJECT = "project"
+    EVENT = "event"
+    ARTIFACT = "artifact"
+    PROCEDURE = "procedure"
+    CONSTRAINT = "constraint"
+    TEMPORARY = "temporary"
+    NOTE = "note"
+
+    @classmethod
+    def _missing_(cls, value: object) -> "FactKind":
+        return cls.NOTE
+
+
 def _parse_datetime(value: Any) -> datetime | None:
     if value is None:
         return None
@@ -121,9 +139,24 @@ class Fact(_MemoryModel):
     access_count: int
     consolidated_at: datetime | None = None
     archived_at: datetime | None = None
+    kind: FactKind = FactKind.NOTE
+    salience: int = 0
+    confidence: float = 1.0
+    expires_at: datetime | None = None
+    pinned_at: datetime | None = None
+    superseded_by_fact_id: int | None = None
     entity_refs: list["EntityRef"] = []
 
-    @field_validator("created_at", "happened_at", "last_accessed_at", "consolidated_at", "archived_at", mode="before")
+    @field_validator(
+        "created_at",
+        "happened_at",
+        "last_accessed_at",
+        "consolidated_at",
+        "archived_at",
+        "expires_at",
+        "pinned_at",
+        mode="before",
+    )
     @classmethod
     def _parse_dt(cls, v: Any) -> datetime | None:
         return _parse_datetime(v)

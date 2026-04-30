@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 
 from ntrp.memory.audit import memory_audit, observation_prune_dry_run
-from ntrp.memory.models import SourceType
+from ntrp.memory.models import FactKind, SourceType
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
@@ -34,7 +34,12 @@ class TestMemoryAudit:
         fact_repo: FactRepository,
         obs_repo: ObservationRepository,
     ):
-        active_fact = await fact_repo.create("User prefers raw SQL", SourceType.EXPLICIT)
+        active_fact = await fact_repo.create(
+            "User prefers raw SQL",
+            SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+            salience=1,
+        )
         archived_fact = await fact_repo.create("Old chat fact", SourceType.CHAT)
         await fact_repo.mark_consolidated(active_fact.id)
         await fact_repo.archive_batch([archived_fact.id])
@@ -60,6 +65,10 @@ class TestMemoryAudit:
         by_source = {row["source_type"]: row for row in audit["facts_by_source"]}
         assert by_source["explicit"]["active"] == 1
         assert by_source["chat"]["active"] == 0
+
+        by_kind = {row["kind"]: row for row in audit["facts_by_kind"]}
+        assert by_kind["preference"]["active"] == 1
+        assert by_kind["preference"]["pinned_active"] == 0
 
     @pytest.mark.asyncio
     async def test_reports_generated_memory_provenance(

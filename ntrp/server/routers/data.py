@@ -1,10 +1,32 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ntrp.memory.models import Fact
 from ntrp.memory.service import MemoryService
 from ntrp.server.deps import require_memory
 from ntrp.server.schemas import MemoryPruneDryRunRequest, UpdateFactRequest, UpdateObservationRequest
 
 router = APIRouter(tags=["data"])
+
+
+def _fact_payload(fact: Fact) -> dict:
+    return {
+        "id": fact.id,
+        "text": fact.text,
+        "source_type": fact.source_type,
+        "source_ref": fact.source_ref,
+        "created_at": fact.created_at.isoformat(),
+        "happened_at": fact.happened_at.isoformat() if fact.happened_at else None,
+        "last_accessed_at": fact.last_accessed_at.isoformat(),
+        "access_count": fact.access_count,
+        "consolidated_at": fact.consolidated_at.isoformat() if fact.consolidated_at else None,
+        "archived_at": fact.archived_at.isoformat() if fact.archived_at else None,
+        "kind": fact.kind,
+        "salience": fact.salience,
+        "confidence": fact.confidence,
+        "expires_at": fact.expires_at.isoformat() if fact.expires_at else None,
+        "pinned_at": fact.pinned_at.isoformat() if fact.pinned_at else None,
+        "superseded_by_fact_id": fact.superseded_by_fact_id,
+    }
 
 
 @router.get("/facts")
@@ -15,15 +37,7 @@ async def get_facts(
 ):
     facts, total = await svc.facts.list_recent(limit=limit, offset=offset)
     return {
-        "facts": [
-            {
-                "id": f.id,
-                "text": f.text,
-                "source_type": f.source_type,
-                "created_at": f.created_at.isoformat(),
-            }
-            for f in facts
-        ],
+        "facts": [_fact_payload(f) for f in facts],
         "total": total,
     }
 
@@ -36,14 +50,7 @@ async def get_fact_details(fact_id: int, svc: MemoryService = Depends(require_me
         raise HTTPException(status_code=404, detail="Fact not found")
 
     return {
-        "fact": {
-            "id": fact.id,
-            "text": fact.text,
-            "source_type": fact.source_type,
-            "source_ref": fact.source_ref,
-            "created_at": fact.created_at.isoformat(),
-            "access_count": fact.access_count,
-        },
+        "fact": _fact_payload(fact),
         "entities": [{"name": e.name, "entity_id": e.entity_id} for e in entity_refs],
         "linked_facts": [],
     }
@@ -57,14 +64,7 @@ async def update_fact(fact_id: int, request: UpdateFactRequest, svc: MemoryServi
         raise HTTPException(status_code=404, detail="Fact not found")
 
     return {
-        "fact": {
-            "id": fact.id,
-            "text": fact.text,
-            "source_type": fact.source_type,
-            "source_ref": fact.source_ref,
-            "created_at": fact.created_at.isoformat(),
-            "access_count": fact.access_count,
-        },
+        "fact": _fact_payload(fact),
         "entity_refs": entity_refs,
     }
 

@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 4
+CURRENT_VERSION = 5
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -125,11 +125,34 @@ async def _migrate_v4(conn: aiosqlite.Connection) -> None:
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_entity_refs_entity ON obs_entity_refs(entity_id)")
 
 
+async def _migrate_v5(conn: aiosqlite.Connection) -> None:
+    """Add typed fact metadata."""
+    _logger.info("Migration v5: adding typed fact metadata")
+
+    existing = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(facts)")}
+    columns = (
+        ("kind", "TEXT NOT NULL DEFAULT 'note'"),
+        ("salience", "INTEGER NOT NULL DEFAULT 0"),
+        ("confidence", "REAL NOT NULL DEFAULT 1.0"),
+        ("expires_at", "TIMESTAMP"),
+        ("pinned_at", "TIMESTAMP"),
+        ("superseded_by_fact_id", "INTEGER REFERENCES facts(id) ON DELETE SET NULL"),
+    )
+    for name, definition in columns:
+        if name not in existing:
+            await conn.execute(f"ALTER TABLE facts ADD COLUMN {name} {definition}")
+
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_kind ON facts(kind)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_expires ON facts(expires_at)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_superseded ON facts(superseded_by_fact_id)")
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
     (3, _migrate_v3),
     (4, _migrate_v4),
+    (5, _migrate_v5),
 ]
 
 

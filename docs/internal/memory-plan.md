@@ -166,6 +166,14 @@ No delete first. Archive only.
 
 ## Phase 1: Fact Types
 
+Status:
+
+```text
+schema/model fields added in migration v5
+API returns the new fields on fact payloads
+extractor/backfill not changed yet
+```
+
 Add a small `kind` enum to facts. Do not make this an ontology project.
 
 Initial kinds:
