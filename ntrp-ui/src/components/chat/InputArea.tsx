@@ -9,6 +9,7 @@ import { useAccentColor } from "../../hooks/index.js";
 import { useAutocomplete } from "../../hooks/useAutocomplete.js";
 import { AutocompleteList } from "./AutocompleteList.js";
 import { InputFooter } from "./InputFooter.js";
+import { TRANSCRIPT_GUTTER_WIDTH } from "./messages/TranscriptRow.js";
 import { getClipboardImage } from "../../lib/clipboard.js";
 import { getImagePixels } from "../../lib/image-preview.js";
 
@@ -28,6 +29,7 @@ interface InputAreaProps {
   commands: readonly SlashCommand[];
   messages?: readonly { role: string; content: string; id?: string }[];
   onEditingChange?: (messageId: string | null) => void;
+  editing?: boolean;
   skipApprovals?: boolean;
   chatModel?: string;
   reasoningEffort?: string | null;
@@ -50,6 +52,7 @@ export const InputArea = memo(function InputArea({
   commands,
   messages = [],
   onEditingChange,
+  editing = false,
   skipApprovals = false,
   chatModel,
   reasoningEffort = null,
@@ -292,7 +295,7 @@ export const InputArea = memo(function InputArea({
         <box
           border={["top"]}
           borderColor={colors.divider}
-          paddingLeft={2}
+          paddingLeft={0}
           paddingRight={2}
           paddingTop={1}
           paddingBottom={1}
@@ -303,7 +306,7 @@ export const InputArea = memo(function InputArea({
             flexGrow={1}
             overflow="hidden"
           >
-            <box width={4} flexShrink={0}>
+            <box width={TRANSCRIPT_GUTTER_WIDTH} flexShrink={0}>
               <text><span fg={accentValue}>›</span></text>
             </box>
             <box flexDirection="column" flexGrow={1} overflow="hidden">
@@ -335,6 +338,9 @@ export const InputArea = memo(function InputArea({
                 onContentChange={handleContentChange}
               />
               <box flexDirection="row" flexShrink={0} marginTop={1} gap={1}>
+                {editing ? (
+                  <text><span fg={colors.status.warning}>editing</span></text>
+                ) : null}
                 {images.length > 0 ? (
                   <text><span fg={accentValue}>{images.length} image{images.length > 1 ? "s" : ""} · esc to remove</span></text>
                 ) : null}

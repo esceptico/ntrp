@@ -19,15 +19,19 @@ export const UserMessage = memo(function UserMessage({ content, images, editing 
   }, [images]);
 
   return (
-    <TranscriptRow railColor={editing ? colors.status.warning : accentValue}>
+    <TranscriptRow railColor={editing ? colors.status.warning : accentValue} railInset={1}>
       <box
         paddingTop={editing ? 0 : 1}
         paddingBottom={editing ? 0 : 1}
+        paddingLeft={1}
         paddingRight={editing ? 1 : 2}
-        backgroundColor={colors.background.panel}
+        backgroundColor={editing ? colors.background.element ?? colors.background.panel : colors.background.panel}
         flexShrink={0}
         overflow="hidden"
       >
+        {editing && (
+          <text><span fg={colors.status.warning}>editing</span></text>
+        )}
         {previews && previews.map((rows, i) => (
           <box key={i} flexDirection="column" flexShrink={0} paddingBottom={content ? 1 : 0}>
             {rows.map((row, y) => (

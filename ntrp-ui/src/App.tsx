@@ -542,6 +542,7 @@ function AppContent({
             commands={allCommands}
             messages={messages}
             onEditingChange={setEditingMessageId}
+            editing={!!editingMessageId}
             skipApprovals={skipApprovals}
             chatModel={serverConfig?.chat_model}
             reasoningEffort={serverConfig?.reasoning_effort ?? null}
