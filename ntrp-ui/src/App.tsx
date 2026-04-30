@@ -5,7 +5,7 @@ import type { BoxRenderable, Selection, ScrollBoxRenderable } from "@opentui/cor
 import type { Message, Config } from "./types.js";
 import { cancelBackgroundTask, type ImageBlock } from "./api/chat.js";
 import { colors, setTheme, useThemeVersion, themeNames, type Theme } from "./components/ui/index.js";
-import { BULLET } from "./lib/constants.js";
+import { BULLET, Status } from "./lib/constants.js";
 import { queryClient } from "./lib/queryClient.js";
 import {
   useSettings,
@@ -35,6 +35,7 @@ import { Setup } from "./components/Setup.js";
 import { ProviderOnboarding } from "./components/ProviderOnboarding.js";
 import { Sidebar } from "./components/sidebar/index.js";
 import { Markdown } from "./components/Markdown.js";
+import { LiveStatusMessage } from "./components/chat/messages/LiveStatusMessage.js";
 import { TranscriptRow } from "./components/chat/messages/TranscriptRow.js";
 import { COMMANDS } from "./lib/commands.js";
 import { nextReasoningEffort, reasoningEfforts } from "./lib/reasoning.js";
@@ -336,6 +337,7 @@ function AppContent({
   );
   const lastVisibleRole = visibleMessages[visibleMessages.length - 1]?.role;
   const liveToolMargin = lastVisibleRole && lastVisibleRole !== "tool" && lastVisibleRole !== "tool_chain" ? 1 : 0;
+  const showLiveStatus = status === Status.COMPRESSING || (isStreaming && !pendingText.trimStart());
 
   const cycleIdRef = useRef<string | null>(null);
 
@@ -509,6 +511,12 @@ function AppContent({
             </box>
           )}
 
+          {showLiveStatus && (
+            <box marginTop={toolChain.length > 0 || pendingText.trimStart() ? 1 : liveToolMargin}>
+              <LiveStatusMessage isStreaming={isStreaming} status={status} />
+            </box>
+          )}
+
           {pendingApproval && (
             <ApprovalDialog
               approval={pendingApproval}
@@ -537,8 +545,6 @@ function AppContent({
             onEditSubmit={handleEditSubmit}
             disabled={!serverConnected || hasOverlay || showSettings || !!pendingApproval}
             focus={isInChatMode && !hasOverlay && !showSettings && !pendingApproval}
-            isStreaming={isStreaming}
-            status={status}
             commands={allCommands}
             messages={messages}
             onEditingChange={setEditingMessageId}

@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Status, type Status as StatusType } from "../../lib/constants.js";
 import { colors } from "../ui/colors.js";
 import { truncateText } from "../../lib/utils.js";
 import { useKeypress, type Key } from "../../hooks/index.js";
 import type { BackgroundTask } from "../../stores/streamingStore.js";
-import { BraillePendulum, BrailleCompress, BrailleSort, CyclingStatus } from "../ui/spinners/index.js";
+import { BrailleSort } from "../ui/spinners/index.js";
+import { TRANSCRIPT_GUTTER_WIDTH } from "./messages/TranscriptRow.js";
 
 function formatElapsed(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -26,7 +26,7 @@ function TaskDetails({ tasks, onCancel }: { tasks: Map<string, BackgroundTask>; 
   const now = Date.now();
 
   return (
-    <box flexDirection="column" marginLeft={3} marginBottom={1}>
+    <box flexDirection="column" marginLeft={TRANSCRIPT_GUTTER_WIDTH} marginBottom={1}>
       {entries.map((t) => {
         const last = t.activity.length > 0 ? t.activity[t.activity.length - 1] : null;
         return (
@@ -57,8 +57,6 @@ function TaskDetails({ tasks, onCancel }: { tasks: Map<string, BackgroundTask>; 
 }
 
 export interface InputFooterProps {
-  isStreaming: boolean;
-  status: StatusType;
   accentValue: string;
   escHint: boolean;
   copiedFlash: boolean;
@@ -73,7 +71,7 @@ export interface InputFooterProps {
   } | null;
 }
 
-export function InputFooter({ isStreaming, status, accentValue, escHint, copiedFlash, backgroundTaskCount, backgroundTasks, onCancelBackgroundTask, indexStatus }: InputFooterProps) {
+export function InputFooter({ accentValue, escHint, copiedFlash, backgroundTaskCount, backgroundTasks, onCancelBackgroundTask, indexStatus }: InputFooterProps) {
   const [expanded, setExpanded] = useState(false);
   const hasTasks = backgroundTaskCount != null && backgroundTaskCount > 0;
 
@@ -88,56 +86,18 @@ export function InputFooter({ isStreaming, status, accentValue, escHint, copiedF
     { isActive: hasTasks }
   );
   const hasTaskDetails = backgroundTasks && backgroundTasks.size > 0;
+  const hasIndexWork = Boolean(indexStatus?.indexing || indexStatus?.reembedding);
+  const hasFeedback = copiedFlash || escHint;
 
-  if (isStreaming || status === Status.COMPRESSING) {
-    return (
-      <box flexDirection="column">
-        {expanded && hasTaskDetails && <TaskDetails tasks={backgroundTasks} onCancel={onCancelBackgroundTask} />}
-        <box flexDirection="row" justifyContent="space-between">
-          <box flexDirection="row" gap={1} flexGrow={1}>
-            <box marginLeft={1}>
-              {status === Status.COMPRESSING ? (
-                <BrailleCompress width={8} color={accentValue} interval={30} />
-              ) : (
-                <BraillePendulum width={8} color={accentValue} spread={1} interval={20} />
-              )}
-            </box>
-            {status === Status.COMPRESSING ? (
-              <text><span fg={colors.text.muted}>compressing context</span></text>
-            ) : (
-              <CyclingStatus status={status} isStreaming={isStreaming} />
-            )}
-            {hasTasks && (
-              <box onMouseDown={() => setExpanded((v) => !v)}>
-                <text>
-                  <span fg={colors.text.disabled}>{` · ${backgroundTaskCount} background `}</span>
-                  <span fg={colors.footer}>{expanded ? "ctrl+x stop · ctrl+b hide" : "ctrl+b"}</span>
-                </text>
-              </box>
-            )}
-          </box>
-          {isStreaming && (
-            <box flexDirection="row" gap={2}>
-              <text>
-                <span fg={colors.footer}>ctrl+o</span>
-                <span fg={colors.text.disabled}> background</span>
-              </text>
-              <text>
-                <span fg={colors.footer}>esc</span>
-                <span fg={colors.text.disabled}> interrupt</span>
-              </text>
-            </box>
-          )}
-        </box>
-      </box>
-    );
+  if (!expanded && !hasTasks && !hasIndexWork && !hasFeedback) {
+    return null;
   }
 
   return (
     <box flexDirection="column">
       {expanded && hasTaskDetails && <TaskDetails tasks={backgroundTasks} onCancel={onCancelBackgroundTask} />}
       <box flexDirection="row" justifyContent="space-between">
-        <box flexDirection="row" marginLeft={3}>
+        <box flexDirection="row" marginLeft={TRANSCRIPT_GUTTER_WIDTH}>
           {hasTasks ? (
             <box onMouseDown={() => setExpanded((v) => !v)}>
               <text>
@@ -145,10 +105,10 @@ export function InputFooter({ isStreaming, status, accentValue, escHint, copiedF
                 <span fg={colors.footer}>ctrl+b</span>
               </text>
             </box>
-          ) : indexStatus?.indexing || indexStatus?.reembedding ? (
+          ) : hasIndexWork ? (
             <box flexDirection="row" gap={1}>
               <BrailleSort width={8} color={accentValue} interval={40} />
-              <text><span fg={colors.text.muted}>{indexStatus.reembedding ? "re-embedding" : "indexing"}</span></text>
+              <text><span fg={colors.text.muted}>{indexStatus?.reembedding ? "re-embedding" : "indexing"}</span></text>
             </box>
           ) : null}
           <text>
@@ -157,28 +117,6 @@ export function InputFooter({ isStreaming, status, accentValue, escHint, copiedF
             ) : escHint ? (
               <span fg={accentValue}>esc again to clear</span>
             ) : null}
-          </text>
-        </box>
-        <box gap={2} flexDirection="row">
-          <text>
-            <span fg={colors.footer}>ctrl+n</span>
-            <span fg={colors.text.disabled}> new chat</span>
-          </text>
-          <text>
-            <span fg={colors.footer}>ctrl+l</span>
-            <span fg={colors.text.disabled}> sidebar</span>
-          </text>
-          <text>
-            <span fg={colors.footer}>ctrl+t</span>
-            <span fg={colors.text.disabled}> reasoning</span>
-          </text>
-          <text>
-            <span fg={colors.footer}>tab tab</span>
-            <span fg={colors.text.disabled}> approvals</span>
-          </text>
-          <text>
-            <span fg={colors.footer}>shift+tab</span>
-            <span fg={colors.text.disabled}> switch chat</span>
           </text>
         </box>
       </box>

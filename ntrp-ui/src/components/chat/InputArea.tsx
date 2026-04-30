@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useMemo, memo, useEffect } from "react";
 import type { TextareaRenderable, KeyEvent, PasteEvent } from "@opentui/core";
 import type { SlashCommand } from "../../types.js";
-import type { Status as StatusType } from "../../lib/constants.js";
 import type { ImageBlock } from "../../api/chat.js";
 import type { BackgroundTask } from "../../stores/streamingStore.js";
 import { colors, useThemeVersion } from "../ui/colors.js";
@@ -24,8 +23,6 @@ interface InputAreaProps {
   onEditSubmit?: (message: string, turns: number) => void;
   disabled: boolean;
   focus: boolean;
-  isStreaming: boolean;
-  status: StatusType;
   commands: readonly SlashCommand[];
   messages?: readonly { role: string; content: string; id?: string }[];
   onEditingChange?: (messageId: string | null) => void;
@@ -47,8 +44,6 @@ export const InputArea = memo(function InputArea({
   onEditSubmit,
   disabled,
   focus,
-  isStreaming,
-  status,
   commands,
   messages = [],
   onEditingChange,
@@ -71,6 +66,7 @@ export const InputArea = memo(function InputArea({
   const [value, setValue] = useState("");
   const [escHint, setEscHint] = useState(false);
   const [images, setImages] = useState<ImageBlock[]>([]);
+  const [showHelp, setShowHelp] = useState(false);
 
   const escPendingRef = useRef(false);
   const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -103,6 +99,7 @@ export const InputArea = memo(function InputArea({
       inputRef.current.setText(prefill);
       inputRef.current.editBuffer.setCursorByOffset(prefill.length);
       setValue(prefill);
+      setShowHelp(false);
       onPrefillConsumed?.();
     }
   }, [prefill, onPrefillConsumed]);
@@ -125,6 +122,7 @@ export const InputArea = memo(function InputArea({
     inputRef.current?.clear();
     setValue("");
     setImages([]);
+    setShowHelp(false);
     resetIndex();
     escPendingRef.current = false;
     setEscHint(false);
@@ -171,6 +169,7 @@ export const InputArea = memo(function InputArea({
   const attachClipboardImage = useCallback(() => {
     const img = getClipboardImage();
     if (!img) return false;
+    setShowHelp(false);
     setImages((prev) => [...prev, img]);
     return true;
   }, []);
@@ -185,11 +184,23 @@ export const InputArea = memo(function InputArea({
       return;
     }
 
+    if (e.name === "escape" && showHelp) {
+      e.preventDefault();
+      setShowHelp(false);
+      return;
+    }
+
     if (e.name === "v" && e.ctrl) {
       if (attachClipboardImage()) {
         e.preventDefault();
         return;
       }
+      return;
+    }
+
+    if (e.sequence === "?" && !valueRef.current && imagesRef.current.length === 0 && historyIndexRef.current < 0) {
+      e.preventDefault();
+      setShowHelp((v) => !v);
       return;
     }
 
@@ -211,6 +222,7 @@ export const InputArea = memo(function InputArea({
         inputRef.current?.setText(entry.content);
         inputRef.current?.editBuffer.setCursorByOffset(entry.content.length);
         setValue(entry.content);
+        setShowHelp(false);
         notifyEditing(nextIdx);
       }
       return;
@@ -230,6 +242,7 @@ export const InputArea = memo(function InputArea({
         inputRef.current?.editBuffer.setCursorByOffset(entry.content.length);
         setValue(entry.content);
       }
+      setShowHelp(false);
       notifyEditing(nextIdx);
       return;
     }
@@ -253,12 +266,13 @@ export const InputArea = memo(function InputArea({
       }
       return;
     }
-  }, [disabled, doSubmit, resetInput, handleAutocompleteKey, showAutocomplete, userEntries, notifyEditing]);
+  }, [disabled, showHelp, doSubmit, resetInput, handleAutocompleteKey, showAutocomplete, userEntries, notifyEditing]);
 
   const handleContentChange = useCallback(() => {
     const text = inputRef.current?.plainText ?? "";
     setValue(text);
     resetIndex();
+    if (text || imagesRef.current.length > 0) setShowHelp(false);
     if (historyNavRef.current) {
       historyNavRef.current = false;
       return;
@@ -292,6 +306,34 @@ export const InputArea = memo(function InputArea({
       )}
 
       <box flexDirection="column">
+        {showHelp && (
+          <box
+            flexDirection="column"
+            flexShrink={0}
+            paddingLeft={TRANSCRIPT_GUTTER_WIDTH}
+            paddingBottom={1}
+            gap={1}
+          >
+            <text><span fg={accentValue}>shortcuts</span></text>
+            <box flexDirection="row" gap={3}>
+              <text><span fg={colors.footer}>enter</span><span fg={colors.text.disabled}> send</span></text>
+              <text><span fg={colors.footer}>shift+enter</span><span fg={colors.text.disabled}> newline</span></text>
+              <text><span fg={colors.footer}>up</span><span fg={colors.text.disabled}> edit previous</span></text>
+              <text><span fg={colors.footer}>esc</span><span fg={colors.text.disabled}> clear/close</span></text>
+            </box>
+            <box flexDirection="row" gap={3}>
+              <text><span fg={colors.footer}>ctrl+n</span><span fg={colors.text.disabled}> new chat</span></text>
+              <text><span fg={colors.footer}>ctrl+l</span><span fg={colors.text.disabled}> sidebar</span></text>
+              <text><span fg={colors.footer}>ctrl+t</span><span fg={colors.text.disabled}> reasoning</span></text>
+              <text><span fg={colors.footer}>shift+tab</span><span fg={colors.text.disabled}> switch chat</span></text>
+            </box>
+            <box flexDirection="row" gap={3}>
+              <text><span fg={colors.footer}>tab tab</span><span fg={colors.text.disabled}> approvals</span></text>
+              <text><span fg={colors.footer}>ctrl+o</span><span fg={colors.text.disabled}> background run</span></text>
+              <text><span fg={colors.footer}>ctrl+b</span><span fg={colors.text.disabled}> background tasks</span></text>
+            </box>
+          </box>
+        )}
         <box
           border={["top"]}
           borderColor={colors.divider}
@@ -337,28 +379,32 @@ export const InputArea = memo(function InputArea({
                 onKeyDown={handleKeyDown}
                 onContentChange={handleContentChange}
               />
-              <box flexDirection="row" flexShrink={0} marginTop={1} gap={1}>
-                {editing ? (
-                  <text><span fg={colors.status.warning}>editing</span></text>
-                ) : null}
-                {images.length > 0 ? (
-                  <text><span fg={accentValue}>{images.length} image{images.length > 1 ? "s" : ""} · esc to remove</span></text>
-                ) : null}
-                {metadata ? (
-                  <text flexShrink={0} fg={colors.text.muted}>
-                    {metadata}
-                  </text>
-                ) : null}
-                {skipApprovals ? (
-                  <text><span fg={colors.status.warning}><strong>skip approvals</strong></span></text>
-                ) : null}
+              <box flexDirection="row" flexShrink={0} marginTop={1} justifyContent="space-between">
+                <box flexDirection="row" gap={1} overflow="hidden">
+                  {editing ? (
+                    <text><span fg={colors.status.warning}>editing</span></text>
+                  ) : null}
+                  {images.length > 0 ? (
+                    <text><span fg={accentValue}>{images.length} image{images.length > 1 ? "s" : ""} · esc to remove</span></text>
+                  ) : null}
+                  {metadata ? (
+                    <text flexShrink={0} fg={colors.text.muted}>
+                      {metadata}
+                    </text>
+                  ) : null}
+                  {skipApprovals ? (
+                    <text><span fg={colors.status.warning}><strong>skip approvals</strong></span></text>
+                  ) : null}
+                </box>
+                <text>
+                  <span fg={colors.footer}>?</span>
+                  <span fg={colors.text.disabled}> help</span>
+                </text>
               </box>
             </box>
           </box>
         </box>
         <InputFooter
-          isStreaming={isStreaming}
-          status={status}
           accentValue={accentValue}
           escHint={escHint}
           copiedFlash={copiedFlash}
