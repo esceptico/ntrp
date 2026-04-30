@@ -10,6 +10,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from ntrp.config import Config
+from ntrp.memory.fact_review import FactMetadataSuggestion
 from ntrp.memory.models import FactKind, SourceType
 from ntrp.server.app import app
 from ntrp.server.runtime import Runtime
@@ -284,6 +285,50 @@ class TestFactMetadataAPI:
         assert typed_fact.id not in ids
 
     @pytest.mark.asyncio
+    async def test_kind_review_suggestions_do_not_write_metadata(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+        monkeypatch,
+    ):
+        review_fact = await test_runtime.memory.facts.create(
+            "User prefers raw SQL over ORMs",
+            SourceType.EXPLICIT,
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        async def mock_suggest(facts, model):
+            assert [fact.id for fact in facts] == [review_fact.id]
+            return [
+                FactMetadataSuggestion(
+                    fact_id=review_fact.id,
+                    kind=FactKind.PREFERENCE,
+                    salience=1,
+                    confidence=0.9,
+                    reason="stable preference",
+                )
+            ]
+
+        monkeypatch.setattr("ntrp.memory.service.suggest_fact_metadata", mock_suggest)
+
+        response = await test_client.post(
+            "/memory/facts/kind-review/suggestions",
+            json={"fact_ids": [review_fact.id]},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total_reviewable"] == 1
+        suggestion = body["suggestions"][0]["suggestion"]
+        assert suggestion["kind"] == "preference"
+        assert suggestion["salience"] == 1
+        assert suggestion["confidence"] == 0.9
+
+        stored = await test_runtime.memory.facts.get(review_fact.id)
+        assert stored.kind == FactKind.NOTE
+        assert stored.salience == 0
+
+    @pytest.mark.asyncio
     async def test_supersession_candidates_list_review_pairs(
         self,
         test_client: AsyncClient,
@@ -483,6 +528,7 @@ class TestMemoryDisabled:
                 client.delete("/observations/1"),
                 client.get("/memory/audit"),
                 client.get("/memory/facts/kind-review"),
+                client.post("/memory/facts/kind-review/suggestions", json={}),
                 client.get("/memory/supersession/candidates"),
                 client.get("/memory/profile"),
                 client.post("/memory/prune/dry-run", json={}),

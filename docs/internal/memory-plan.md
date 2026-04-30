@@ -227,9 +227,10 @@ Status:
 chat extraction prompt tightened to source-of-truth facts only
 chat extraction now returns typed facts with kind/salience/confidence/entities
 explicit remember tool can pass typed metadata into the same fact ingestion path
+legacy note facts have a review-only typed metadata suggestion endpoint
 consolidation prompt tightened to skip atomic facts and require direct provenance
 temporal/dream prompts tightened around concrete support and concise generated memory
-legacy fact backfill still pending
+legacy fact auto-apply/backfill still pending
 ```
 
 Chat extraction now uses one extraction result instead of `facts: list[str]` plus a separate entity pass:
@@ -873,6 +874,7 @@ API additions:
 GET /memory/audit
 GET /memory/profile
 GET /memory/facts/kind-review
+POST /memory/facts/kind-review/suggestions
 GET /memory/facts?kind=&archived=&limit=&offset=
 GET /memory/observations?min_sources=&accessed=&archived=
 GET /memory/events

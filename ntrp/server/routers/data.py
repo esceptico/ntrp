@@ -6,6 +6,7 @@ from ntrp.memory.models import Fact
 from ntrp.memory.service import MemoryService
 from ntrp.server.deps import require_memory
 from ntrp.server.schemas import (
+    FactKindReviewSuggestionRequest,
     MemoryPruneDryRunRequest,
     UpdateFactMetadataRequest,
     UpdateFactRequest,
@@ -59,6 +60,34 @@ async def get_fact_kind_review(
     return {
         "facts": [_fact_payload(f) for f in facts],
         "total": total,
+    }
+
+
+@router.post("/memory/facts/kind-review/suggestions")
+async def suggest_fact_kind_review(
+    request: FactKindReviewSuggestionRequest,
+    svc: MemoryService = Depends(require_memory),
+):
+    suggestions, total = await svc.facts.suggest_kind_review(
+        fact_ids=request.fact_ids,
+        limit=request.limit,
+        offset=request.offset,
+    )
+    return {
+        "suggestions": [
+            {
+                "fact": _fact_payload(fact),
+                "suggestion": {
+                    "kind": suggestion.kind,
+                    "salience": suggestion.salience,
+                    "confidence": suggestion.confidence,
+                    "expires_at": suggestion.expires_at.isoformat() if suggestion.expires_at else None,
+                    "reason": suggestion.reason,
+                },
+            }
+            for fact, suggestion in suggestions
+        ],
+        "total_reviewable": total,
     }
 
 

@@ -1,9 +1,11 @@
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 
 from ntrp.logging import get_logger
 from ntrp.memory.audit import memory_audit, observation_prune_dry_run
+from ntrp.memory.fact_review import FactMetadataSuggestion, suggest_fact_metadata
 from ntrp.memory.facts import PROFILE_FACT_KINDS, FactMemory
-from ntrp.memory.models import Dream, EntityRef, Fact, Observation
+from ntrp.memory.models import Dream, EntityRef, Fact, FactKind, Observation
 
 _logger = get_logger(__name__)
 
@@ -26,6 +28,33 @@ class FactService:
 
     async def list_kind_review(self, limit: int = 100, offset: int = 0) -> tuple[list[Fact], int]:
         return await self._memory.facts.list_kind_review(limit=limit, offset=offset)
+
+    async def suggest_kind_review(
+        self,
+        *,
+        fact_ids: list[int] | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[tuple[Fact, FactMetadataSuggestion]], int]:
+        if fact_ids:
+            now = datetime.now(UTC)
+            facts_by_id = await self._memory.facts.get_batch(fact_ids)
+            facts = [
+                fact
+                for fact_id in fact_ids
+                if (fact := facts_by_id.get(fact_id)) is not None
+                and fact.kind == FactKind.NOTE
+                and fact.archived_at is None
+                and fact.superseded_by_fact_id is None
+                and (fact.expires_at is None or fact.expires_at > now)
+            ]
+            total = len(facts)
+        else:
+            facts, total = await self._memory.facts.list_kind_review(limit=limit, offset=offset)
+
+        suggestions = await suggest_fact_metadata(facts, self._memory.model)
+        facts_by_id = {fact.id: fact for fact in facts}
+        return [(facts_by_id[suggestion.fact_id], suggestion) for suggestion in suggestions], total
 
     async def list_supersession_candidates(self, limit: int = 100) -> list[dict]:
         rows = await self._memory.facts.list_supersession_candidates(PROFILE_FACT_KINDS, limit=limit)

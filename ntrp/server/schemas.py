@@ -69,6 +69,7 @@ class ChatRunsStatusResponse(BaseModel):
 
 
 OutboxEventId = Annotated[int, Field(gt=0)]
+FactId = Annotated[int, Field(gt=0)]
 
 
 class ReplayOutboxRequest(BaseModel):
@@ -281,6 +282,12 @@ class UpdateFactMetadataRequest(BaseModel):
     expires_at: datetime | None = None
     pinned: bool | None = None
     superseded_by_fact_id: int | None = Field(default=None, ge=1)
+
+
+class FactKindReviewSuggestionRequest(BaseModel):
+    fact_ids: list[FactId] | None = Field(default=None, min_length=1, max_length=50)
+    limit: int = Field(default=20, ge=1, le=50)
+    offset: int = Field(default=0, ge=0)
 
 
 class UpdateObservationRequest(BaseModel):
