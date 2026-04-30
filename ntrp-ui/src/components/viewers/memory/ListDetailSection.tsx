@@ -20,6 +20,7 @@ interface ListDetailSectionProps<T> {
   focusPane?: "list" | "details";
   itemHeight?: number;
   onItemClick?: (index: number) => void;
+  totalCount?: number;
 }
 
 export function ListDetailSection<T>({
@@ -36,6 +37,7 @@ export function ListDetailSection<T>({
   focusPane = "list",
   itemHeight = 1,
   onItemClick,
+  totalCount,
 }: ListDetailSectionProps<T>) {
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
   const availableLines = Math.max(1, height - 4);
@@ -74,6 +76,7 @@ export function ListDetailSection<T>({
           <text>
             <span fg={colors.text.muted}>
               {selectedIndex + 1}/{items.length}
+              {totalCount !== undefined && totalCount !== items.length ? ` of ${totalCount}` : ""}
             </span>
           </text>
         </box>

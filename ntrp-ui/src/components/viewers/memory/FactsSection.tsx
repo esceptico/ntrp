@@ -19,6 +19,12 @@ export function FactsSection({ tab, height, width, saving }: FactsSectionProps) 
   const renderItem = (fact: Fact, ctx: RenderItemContext) => {
     const textWidth = listWidth - 4;
     const tagColor = ctx.isSelected ? colors.text.secondary : colors.text.disabled;
+    const status =
+      fact.archived_at ? "arch" :
+      fact.superseded_by_fact_id ? "sup" :
+      fact.expires_at ? "tmp" :
+      fact.pinned_at ? "pin" :
+      "act";
 
     return (
       <box flexDirection="column" marginBottom={1}>
@@ -26,7 +32,9 @@ export function FactsSection({ tab, height, width, saving }: FactsSectionProps) 
           <span fg={ctx.colors.text}>{truncateText(fact.text, textWidth)}</span>
         </text>
         <text>
-          <span fg={tagColor}>[{fact.source_type}] [{shortTime(fact.created_at)}]</span>
+          <span fg={tagColor}>
+            {fact.kind} · {fact.source_type} · s{fact.salience} · {status} · {shortTime(fact.created_at)}
+          </span>
         </text>
       </box>
     );
@@ -38,13 +46,14 @@ export function FactsSection({ tab, height, width, saving }: FactsSectionProps) 
       selectedIndex={tab.selectedIndex}
       renderItem={renderItem}
       getKey={(f) => f.id}
-      emptyMessage="No facts stored yet"
+      emptyMessage="No facts match filters"
       searchQuery={tab.searchQuery}
       searchMode={tab.searchMode}
       focusPane={tab.focusPane}
       height={height}
       width={width}
       itemHeight={3}
+      totalCount={tab.factTotal}
       onItemClick={tab.setSelectedIndex}
       details={
         <FactDetailsView
@@ -65,6 +74,9 @@ export function FactsSection({ tab, height, width, saving }: FactsSectionProps) 
           setCursorPos={tab.setCursorPos}
           confirmDelete={tab.confirmDelete}
           saving={saving}
+          metadataSuggestion={tab.metadataSuggestion}
+          suggestionLoading={tab.suggestionLoading}
+          suggestionError={tab.suggestionError}
         />
       }
     />

@@ -1,4 +1,4 @@
-import type { FactDetails } from "../../../api/client.js";
+import type { FactDetails, FactMetadataSuggestion } from "../../../api/client.js";
 import { colors, truncateText, ExpandableText, ScrollableList, TextEditArea } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import { formatTimeAgo } from "../../../lib/format.js";
@@ -31,6 +31,9 @@ interface FactDetailsViewProps {
   setCursorPos: (pos: number | ((prev: number) => number)) => void;
   confirmDelete: boolean;
   saving: boolean;
+  metadataSuggestion: FactMetadataSuggestion | null;
+  suggestionLoading: boolean;
+  suggestionError: string | null;
 }
 
 const TEXT_VISIBLE_LINES = 10;
@@ -53,6 +56,9 @@ export function FactDetailsView({
   setCursorPos,
   confirmDelete,
   saving,
+  metadataSuggestion,
+  suggestionLoading,
+  suggestionError,
 }: FactDetailsViewProps) {
   const { accentValue } = useAccentColor();
 
@@ -71,7 +77,7 @@ export function FactDetailsView({
   const textColor = isFocused ? colors.text.primary : colors.text.secondary;
   const labelColor = colors.text.muted;
 
-  const typeLabel = fact.source_type;
+  const typeLabel = `${fact.kind} · ${fact.source_type}`;
   const typeColor = accentValue;
 
   const sectionFocused = (section: FactDetailSection) => isFocused && focusedSection === section;
@@ -122,11 +128,46 @@ export function FactDetailsView({
         <text>
           <span fg={typeColor}>{typeLabel}</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
+          <span fg={labelColor}>s{fact.salience}</span>
+          <span fg={colors.text.disabled}> {"\u2502"} </span>
+          <span fg={labelColor}>{Math.round(fact.confidence * 100)}%</span>
+          <span fg={colors.text.disabled}> {"\u2502"} </span>
           <span fg={labelColor}>{"\u00D7"}{fact.access_count}</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
           <span fg={labelColor}>{formatTimeAgo(fact.created_at)}</span>
         </text>
       </box>
+
+      <box marginTop={1}>
+        <text>
+          <span fg={colors.text.disabled}>state </span>
+          <span fg={labelColor}>
+            {fact.archived_at ? "archived" : fact.superseded_by_fact_id ? `superseded by #${fact.superseded_by_fact_id}` : fact.pinned_at ? "pinned" : fact.expires_at ? "temporary" : "active"}
+          </span>
+        </text>
+      </box>
+
+      {(suggestionLoading || suggestionError || metadataSuggestion) && (
+        <box flexDirection="column" marginTop={1}>
+          <text><span fg={labelColor}>REVIEW SUGGESTION</span></text>
+          {suggestionLoading && <text><span fg={colors.tool.running}>Classifying...</span></text>}
+          {suggestionError && <text><span fg={colors.status.error}>{suggestionError}</span></text>}
+          {metadataSuggestion && (
+            <>
+              <text>
+                <span fg={accentValue}>{metadataSuggestion.kind}</span>
+                <span fg={colors.text.disabled}> · </span>
+                <span fg={colors.text.secondary}>s{metadataSuggestion.salience}</span>
+                <span fg={colors.text.disabled}> · </span>
+                <span fg={colors.text.secondary}>{Math.round(metadataSuggestion.confidence * 100)}%</span>
+              </text>
+              {metadataSuggestion.reason && (
+                <text><span fg={colors.text.muted}>{truncateText(metadataSuggestion.reason, textWidth)}</span></text>
+              )}
+            </>
+          )}
+        </box>
+      )}
 
       {/* Entities — only if non-empty */}
       {entities.length > 0 && (

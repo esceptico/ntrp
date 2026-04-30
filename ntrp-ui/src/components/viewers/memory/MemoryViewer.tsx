@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Config } from "../../../types.js";
+import type { FactFilters } from "../../../api/client.js";
 import { useFactsTab } from "../../../hooks/useFactsTab.js";
 import { useObservationsTab } from "../../../hooks/useObservationsTab.js";
 import { useDreamsTab } from "../../../hooks/useDreamsTab.js";
@@ -21,11 +22,12 @@ interface MemoryViewerProps {
 
 export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const [activeTab, setActiveTab] = useState<TabType>("facts");
+  const [factFilters, setFactFilters] = useState<FactFilters>({ status: "active" });
 
-  const { facts, observations, dreams, loading, error, setFacts, setObservations, setDreams, setError, reload } =
-    useMemoryData(config);
+  const { facts, factTotal, observations, dreams, loading, error, setFacts, setObservations, setDreams, setError, reload } =
+    useMemoryData(config, factFilters);
 
-  const factsTab = useFactsTab(config, facts, 80);
+  const factsTab = useFactsTab(config, facts, 80, factFilters, setFactFilters, factTotal);
   const obsTab = useObservationsTab(config, observations, 80);
   const dreamsTab = useDreamsTab(config, dreams, 80);
 
@@ -70,7 +72,14 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
       {({ width, height }) => {
         const sectionHeight = height - 2;
         const tab = activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : dreamsTab;
-        const sourceDisplay = activeTab === "facts" ? `src: ${factsTab.sourceFilter}` : "";
+        const factFilterDisplay = activeTab === "facts"
+          ? [
+              `kind: ${factsTab.filters.kind ?? "all"}`,
+              `status: ${factsTab.filters.status ?? "active"}`,
+              `src: ${factsTab.filters.sourceType ?? "all"}`,
+              `seen: ${factsTab.filters.accessed ?? "all"}`,
+            ].join(" · ")
+          : "";
         const sortDisplay = `sort: ${tab.sortOrder}`;
 
         return (
@@ -83,9 +92,9 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 labels={{ facts: "Facts", observations: "Observations", dreams: "Dreams" }}
               />
               <box flexGrow={1} />
-              {sourceDisplay && (
+              {factFilterDisplay && (
                 <box marginRight={3}>
-                  <text><span fg={colors.text.disabled}>{sourceDisplay}</span></text>
+                  <text><span fg={colors.text.disabled}>{factFilterDisplay}</span></text>
                 </box>
               )}
               <text><span fg={colors.text.disabled}>{sortDisplay}</span></text>

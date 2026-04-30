@@ -5,12 +5,14 @@ import {
   getObservations,
   getDreams,
   type Fact,
+  type FactFilters,
   type Observation,
   type Dream,
 } from "../api/client.js";
 
 interface UseMemoryDataResult {
   facts: Fact[];
+  factTotal: number;
   observations: Observation[];
   dreams: Dream[];
   loading: boolean;
@@ -22,10 +24,11 @@ interface UseMemoryDataResult {
   reload: () => void;
 }
 
-export function useMemoryData(config: Config): UseMemoryDataResult {
+export function useMemoryData(config: Config, factFilters?: FactFilters): UseMemoryDataResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [facts, setFacts] = useState<Fact[]>([]);
+  const [factTotal, setFactTotal] = useState(0);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [dreams, setDreams] = useState<Dream[]>([]);
   const [fetchCount, setFetchCount] = useState(0);
@@ -39,12 +42,13 @@ export function useMemoryData(config: Config): UseMemoryDataResult {
     (async () => {
       try {
         const [factsData, obsData, dreamsData] = await Promise.all([
-          getFacts(config, 200),
+          getFacts(config, 200, factFilters),
           getObservations(config, 100),
           getDreams(config, 50),
         ]);
         if (fetchIdRef.current !== id) return;
         setFacts(factsData.facts || []);
+        setFactTotal(factsData.total || 0);
         setObservations(obsData.observations || []);
         setDreams(dreamsData.dreams || []);
       } catch (e) {
@@ -54,7 +58,7 @@ export function useMemoryData(config: Config): UseMemoryDataResult {
         if (fetchIdRef.current === id) setLoading(false);
       }
     })();
-  }, [config, fetchCount]);
+  }, [config, fetchCount, factFilters]);
 
   const reload = useCallback(() => {
     setFetchCount((c) => c + 1);
@@ -62,6 +66,7 @@ export function useMemoryData(config: Config): UseMemoryDataResult {
 
   return {
     facts,
+    factTotal,
     observations,
     dreams,
     loading,

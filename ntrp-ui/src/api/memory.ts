@@ -5,18 +5,48 @@ export interface Fact {
   id: number;
   text: string;
   source_type: string;
+  source_ref: string | null;
   created_at: string;
+  happened_at: string | null;
+  last_accessed_at: string;
+  access_count: number;
+  consolidated_at: string | null;
+  archived_at: string | null;
+  kind: FactKind;
+  salience: number;
+  confidence: number;
+  expires_at: string | null;
+  pinned_at: string | null;
+  superseded_by_fact_id: number | null;
+}
+
+export type FactKind =
+  | "identity"
+  | "preference"
+  | "relationship"
+  | "decision"
+  | "project"
+  | "event"
+  | "artifact"
+  | "procedure"
+  | "constraint"
+  | "temporary"
+  | "note";
+
+export type SourceType = "chat" | "explicit";
+export type FactStatus = "active" | "archived" | "superseded" | "expired" | "temporary" | "pinned" | "all";
+export type FactAccessed = "never" | "used";
+
+export interface FactFilters {
+  kind?: FactKind;
+  sourceType?: SourceType;
+  status?: FactStatus;
+  accessed?: FactAccessed;
+  entity?: string;
 }
 
 export interface FactDetails {
-  fact: {
-    id: number;
-    text: string;
-    source_type: string;
-    source_ref: string | null;
-    created_at: string;
-    access_count: number;
-  };
+  fact: Fact;
   entities: Array<{ name: string; entity_id: number }>;
   linked_facts: Array<{
     id: number;
@@ -24,6 +54,28 @@ export interface FactDetails {
     link_type: string;
     weight: number;
   }>;
+}
+
+export interface FactMetadataUpdate {
+  kind?: FactKind;
+  salience?: number;
+  confidence?: number;
+  expires_at?: string | null;
+  pinned?: boolean;
+  superseded_by_fact_id?: number | null;
+}
+
+export interface FactMetadataSuggestion {
+  kind: FactKind;
+  salience: number;
+  confidence: number;
+  expires_at: string | null;
+  reason: string;
+}
+
+export interface FactKindReviewSuggestion {
+  fact: Fact;
+  suggestion: FactMetadataSuggestion;
 }
 
 export interface Stats {
@@ -58,11 +110,21 @@ export interface DreamDetails {
   source_facts: Array<{ id: number; text: string }>;
 }
 
-export async function getFacts(config: Config, limit = 50): Promise<{
+function factQuery(limit: number, filters?: FactFilters): string {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (filters?.kind) params.set("kind", filters.kind);
+  if (filters?.sourceType) params.set("source_type", filters.sourceType);
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.accessed) params.set("accessed", filters.accessed);
+  if (filters?.entity?.trim()) params.set("entity", filters.entity.trim());
+  return params.toString();
+}
+
+export async function getFacts(config: Config, limit = 50, filters?: FactFilters): Promise<{
   facts: Fact[];
   total: number;
 }> {
-  return api.get<{ facts: Fact[]; total: number }>(`${config.serverUrl}/facts?limit=${limit}`);
+  return api.get<{ facts: Fact[]; total: number }>(`${config.serverUrl}/facts?${factQuery(limit, filters)}`);
 }
 
 export async function getFactDetails(config: Config, factId: number, signal?: AbortSignal): Promise<FactDetails> {
@@ -73,18 +135,26 @@ export async function updateFact(
   config: Config,
   factId: number,
   text: string
-): Promise<{
-  fact: {
-    id: number;
-    text: string;
-    source_type: string;
-    source_ref: string | null;
-    created_at: string;
-    access_count: number;
-  };
-  entity_refs: Array<{ name: string; entity_id: number }>;
-}> {
+): Promise<{ fact: Fact; entity_refs: Array<{ name: string; entity_id: number }> }> {
   return api.patch(`${config.serverUrl}/facts/${factId}`, { text });
+}
+
+export async function updateFactMetadata(
+  config: Config,
+  factId: number,
+  update: FactMetadataUpdate
+): Promise<{ fact: Fact }> {
+  return api.patch<{ fact: Fact }>(`${config.serverUrl}/facts/${factId}/metadata`, update);
+}
+
+export async function suggestFactMetadata(
+  config: Config,
+  factId: number
+): Promise<{ suggestions: FactKindReviewSuggestion[]; total_reviewable: number }> {
+  return api.post<{ suggestions: FactKindReviewSuggestion[]; total_reviewable: number }>(
+    `${config.serverUrl}/memory/facts/kind-review/suggestions`,
+    { fact_ids: [factId] }
+  );
 }
 
 export async function deleteFact(

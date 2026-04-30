@@ -1,14 +1,42 @@
-import { useState, useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from "react";
+import { useState, useEffect, useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Config } from "../types.js";
 import type { Key } from "./useKeypress.js";
-import { getFactDetails, type Fact, type FactDetails } from "../api/client.js";
+import {
+  getFactDetails,
+  type Fact,
+  type FactAccessed,
+  type FactDetails,
+  type FactFilters,
+  type FactKind,
+  type FactMetadataSuggestion,
+  type FactStatus,
+  type SourceType,
+} from "../api/client.js";
 import { FACT_SECTIONS, type FactDetailSection, getFactSectionMaxIndex } from "../components/viewers/memory/FactDetailsView.js";
 import { useListDetail, type SortOrder, type ListKeyHelpers } from "./useListDetail.js";
 
 export type { SortOrder };
 
 const filterFact = (f: Fact, q: string) => f.text.toLowerCase().includes(q);
+
+const KIND_FILTERS: Array<FactKind | undefined> = [
+  undefined,
+  "note",
+  "identity",
+  "preference",
+  "relationship",
+  "decision",
+  "project",
+  "event",
+  "artifact",
+  "procedure",
+  "constraint",
+  "temporary",
+];
+const SOURCE_FILTERS: Array<SourceType | undefined> = [undefined, "chat", "explicit"];
+const STATUS_FILTERS: FactStatus[] = ["active", "all", "archived", "superseded", "expired", "temporary", "pinned"];
+const ACCESSED_FILTERS: Array<FactAccessed | undefined> = [undefined, "never", "used"];
 
 export interface FactsTabState {
   filteredFacts: Fact[];
@@ -27,9 +55,12 @@ export interface FactsTabState {
   editText: string;
   cursorPos: number;
   confirmDelete: boolean;
-  sourceFilter: string;
+  filters: FactFilters;
+  factTotal: number;
+  metadataSuggestion: FactMetadataSuggestion | null;
+  suggestionLoading: boolean;
+  suggestionError: string | null;
   sortOrder: SortOrder;
-  availableSources: string[];
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
   setSelectedIndex: Dispatch<SetStateAction<number>>;
@@ -39,37 +70,52 @@ export interface FactsTabState {
   setEditText: Dispatch<SetStateAction<string>>;
   setCursorPos: Dispatch<SetStateAction<number>>;
   setConfirmDelete: Dispatch<SetStateAction<boolean>>;
+  setMetadataSuggestion: Dispatch<SetStateAction<FactMetadataSuggestion | null>>;
+  setSuggestionLoading: Dispatch<SetStateAction<boolean>>;
+  setSuggestionError: Dispatch<SetStateAction<string | null>>;
 }
 
 export function useFactsTab(
   config: Config,
   facts: Fact[],
-  contentWidth: number
+  contentWidth: number,
+  filters: FactFilters,
+  setFilters: Dispatch<SetStateAction<FactFilters>>,
+  factTotal: number
 ): FactsTabState {
-  const [sourceFilter, setSourceFilter] = useState("all");
+  const [metadataSuggestion, setMetadataSuggestion] = useState<FactMetadataSuggestion | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [suggestionError, setSuggestionError] = useState<string | null>(null);
   const detailsRef = useRef<FactDetails | null>(null);
 
-  const availableSources = useMemo(() => {
-    const sources = new Set(facts.map((f) => f.source_type));
-    return ["all", ...Array.from(sources).sort()];
-  }, [facts]);
-
-  const sourceFiltered = useMemo(() => {
-    if (sourceFilter === "all") return facts;
-    return facts.filter((f) => f.source_type === sourceFilter);
-  }, [facts, sourceFilter]);
+  const cycle = useCallback(<T,>(values: T[], current: T): T => {
+    const idx = values.indexOf(current);
+    return values[(idx + 1) % values.length];
+  }, []);
 
   const onListKey = useCallback((key: Key, { setSelectedIndex }: ListKeyHelpers) => {
     if (key.name === "s") {
-      setSourceFilter((current) => {
-        const idx = availableSources.indexOf(current);
-        return availableSources[(idx + 1) % availableSources.length];
-      });
+      setFilters((current) => ({ ...current, sourceType: cycle(SOURCE_FILTERS, current.sourceType) }));
+      setSelectedIndex(0);
+      return true;
+    }
+    if (key.name === "m") {
+      setFilters((current) => ({ ...current, kind: cycle(KIND_FILTERS, current.kind) }));
+      setSelectedIndex(0);
+      return true;
+    }
+    if (key.name === "x") {
+      setFilters((current) => ({ ...current, status: cycle(STATUS_FILTERS, current.status ?? "active") }));
+      setSelectedIndex(0);
+      return true;
+    }
+    if (key.name === "u") {
+      setFilters((current) => ({ ...current, accessed: cycle(ACCESSED_FILTERS, current.accessed) }));
       setSelectedIndex(0);
       return true;
     }
     return false;
-  }, [availableSources]);
+  }, [cycle, setFilters]);
 
   const getSectionMaxIndex = useCallback(
     (section: number) => getFactSectionMaxIndex(detailsRef.current, section as FactDetailSection),
@@ -81,7 +127,7 @@ export function useFactsTab(
   );
 
   const ld = useListDetail({
-    items: sourceFiltered,
+    items: facts,
     filterFn: filterFact,
     sectionCount: 3,
     getSectionMaxIndex,
@@ -91,6 +137,12 @@ export function useFactsTab(
   });
 
   const currentId = ld.filtered[ld.selectedIndex]?.id;
+
+  useEffect(() => {
+    setMetadataSuggestion(null);
+    setSuggestionError(null);
+    setSuggestionLoading(false);
+  }, [currentId]);
 
   const { data: factDetails = null, isLoading: detailsLoading } = useQuery({
     queryKey: ["factDetails", currentId],
@@ -117,9 +169,12 @@ export function useFactsTab(
     editText: ld.editText,
     cursorPos: ld.cursorPos,
     confirmDelete: ld.confirmDelete,
-    sourceFilter,
+    filters,
+    factTotal,
+    metadataSuggestion,
+    suggestionLoading,
+    suggestionError,
     sortOrder: ld.sortOrder,
-    availableSources,
     handleKeys: ld.handleKeys,
     setSearchQuery: ld.setSearchQuery,
     setSelectedIndex: ld.setSelectedIndex,
@@ -129,5 +184,8 @@ export function useFactsTab(
     setEditText: ld.setEditText,
     setCursorPos: ld.setCursorPos,
     setConfirmDelete: ld.setConfirmDelete,
+    setMetadataSuggestion,
+    setSuggestionLoading,
+    setSuggestionError,
   };
 }

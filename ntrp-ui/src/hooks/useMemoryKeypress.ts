@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useKeypress, type Key } from "./useKeypress.js";
 import { useTextInput } from "./useTextInput.js";
 import type { Config } from "../types.js";
@@ -7,11 +8,14 @@ import type { ObservationsTabState } from "./useObservationsTab.js";
 import type { DreamsTabState } from "./useDreamsTab.js";
 import {
   updateFact,
+  updateFactMetadata,
+  suggestFactMetadata,
   deleteFact,
   updateObservation,
   deleteObservation,
   deleteDream,
   type Fact,
+  type FactDetails,
   type Observation,
   type Dream,
 } from "../api/client.js";
@@ -52,6 +56,7 @@ export function useMemoryKeypress({
   onClose,
 }: UseMemoryKeypressOptions): UseMemoryKeypressResult {
   const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
 
   const factsTextInput = useTextInput({
     text: factsTab.editText,
@@ -94,7 +99,10 @@ export function useMemoryKeypress({
             updateFact(config, factsTab.factDetails.fact.id, factsTab.editText)
               .then((result) => {
                 setFacts((prev: Fact[]) =>
-                  prev.map((f) => (f.id === result.fact.id ? { ...f, text: result.fact.text } : f))
+                  prev.map((f) => (f.id === result.fact.id ? result.fact : f))
+                );
+                queryClient.setQueryData<FactDetails>(["factDetails", result.fact.id], (prev) =>
+                  prev ? { ...prev, fact: result.fact } : prev
                 );
                 factsTab.setEditMode(false);
                 factsTab.setEditText("");
@@ -121,6 +129,40 @@ export function useMemoryKeypress({
           factsTab.setEditMode(true);
           factsTab.setEditText(factsTab.factDetails.fact.text);
           factsTab.setCursorPos(factsTab.factDetails.fact.text.length);
+          return;
+        }
+        if (key.name === "g") {
+          factsTab.setSuggestionLoading(true);
+          factsTab.setSuggestionError(null);
+          factsTab.setMetadataSuggestion(null);
+          suggestFactMetadata(config, factsTab.factDetails.fact.id)
+            .then((result) => {
+              const suggestion = result.suggestions[0]?.suggestion ?? null;
+              factsTab.setMetadataSuggestion(suggestion);
+              if (!suggestion) factsTab.setSuggestionError("No suggestion for this fact");
+            })
+            .catch((e: unknown) => factsTab.setSuggestionError(`Suggest failed: ${e}`))
+            .finally(() => factsTab.setSuggestionLoading(false));
+          return;
+        }
+        if (key.name === "a" && factsTab.metadataSuggestion) {
+          setSaving(true);
+          updateFactMetadata(config, factsTab.factDetails.fact.id, {
+            kind: factsTab.metadataSuggestion.kind,
+            salience: factsTab.metadataSuggestion.salience,
+            confidence: factsTab.metadataSuggestion.confidence,
+            expires_at: factsTab.metadataSuggestion.expires_at,
+          })
+            .then((result) => {
+              setFacts((prev: Fact[]) => prev.map((f) => (f.id === result.fact.id ? result.fact : f)));
+              queryClient.setQueryData<FactDetails>(["factDetails", result.fact.id], (prev) =>
+                prev ? { ...prev, fact: result.fact } : prev
+              );
+              factsTab.setMetadataSuggestion(null);
+              reload();
+            })
+            .catch((e: unknown) => setError(`Apply failed: ${e}`))
+            .finally(() => setSaving(false));
           return;
         }
         if (key.name === "d" || key.name === "delete") {
@@ -289,7 +331,7 @@ export function useMemoryKeypress({
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
-    [activeTab, factsTab, obsTab, dreamsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setDreams, setError]
+    [activeTab, factsTab, obsTab, dreamsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setDreams, setError, queryClient]
   );
 
   useKeypress(handleKeypress, { isActive: true });

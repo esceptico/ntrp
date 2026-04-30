@@ -5,7 +5,7 @@ type TabType = "facts" | "observations" | "dreams";
 
 interface MemoryFooterProps {
   activeTab: TabType;
-  factsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean };
+  factsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean; metadataSuggestion: unknown };
   obsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean };
   dreamsTab: { confirmDelete: boolean; focusPane: string; searchMode: boolean };
 }
@@ -25,7 +25,13 @@ export function MemoryFooter({ activeTab, factsTab, obsTab, dreamsTab }: MemoryF
   if (tab.editMode) return <Hints items={[["^s", "save"], ["esc", "cancel"], ["←→", "cursor"]]} />;
   if (tab.confirmDelete) return <Hints items={[["y", "confirm"], ["any", "cancel"]]} />;
   if (tab.focusPane === "details") {
-    return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ["enter", "expand"], ["e", "edit"], ["d", "del"]]} />;
+    const detailHints: [string, string][] = [["↑↓", "navigate"], ["tab", "list"], ["enter", "expand"], ["e", "edit"]];
+    if (activeTab === "facts") {
+      detailHints.push(["g", "suggest"]);
+      if (factsTab.metadataSuggestion) detailHints.push(["a", "apply"]);
+    }
+    detailHints.push(["d", "del"]);
+    return <Hints items={detailHints} />;
   }
   if (tab.searchMode) return <Hints items={[["type", "search"], ["esc", "clear/exit"], ["enter", "done"]]} />;
   const listHints: [string, string][] = [
@@ -34,7 +40,12 @@ export function MemoryFooter({ activeTab, factsTab, obsTab, dreamsTab }: MemoryF
     ["/", "search"],
     ["e", "edit"],
     ["d", "del"],
-    ...(activeTab === "facts" ? [["s", "source"] as [string, string]] : []),
+    ...(activeTab === "facts" ? [
+      ["m", "kind"] as [string, string],
+      ["x", "status"] as [string, string],
+      ["s", "source"] as [string, string],
+      ["u", "used"] as [string, string],
+    ] : []),
     ["o", "sort"],
   ];
   return <Hints items={listHints} />;
