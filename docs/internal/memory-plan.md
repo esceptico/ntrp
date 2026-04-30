@@ -875,7 +875,7 @@ GET /memory/audit
 GET /memory/profile
 GET /memory/facts/kind-review
 POST /memory/facts/kind-review/suggestions
-GET /memory/facts?kind=&archived=&limit=&offset=
+GET /facts?kind=&source_type=&status=&accessed=&entity=&limit=&offset=
 GET /memory/observations?min_sources=&accessed=&archived=
 GET /memory/events
 POST /memory/recall/inspect

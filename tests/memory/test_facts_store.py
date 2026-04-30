@@ -185,6 +185,80 @@ class TestFactCRUD:
             }
         ]
 
+    @pytest.mark.asyncio
+    async def test_list_filtered_facts(self, repo: FactRepository):
+        now = datetime.now(UTC)
+        user = await repo.create_entity("User")
+        active = await repo.create(
+            "User prefers raw SQL",
+            SourceType.CHAT,
+            kind=FactKind.PREFERENCE,
+            salience=1,
+        )
+        pinned = await repo.create(
+            "User is Timur",
+            SourceType.EXPLICIT,
+            kind=FactKind.IDENTITY,
+            pinned_at=now,
+        )
+        archived = await repo.create("Archived note", SourceType.EXPLICIT)
+        replacement = await repo.create("Replacement preference", SourceType.EXPLICIT, kind=FactKind.PREFERENCE)
+        superseded = await repo.create(
+            "Old preference",
+            SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+            superseded_by_fact_id=replacement.id,
+        )
+        expired = await repo.create(
+            "Expired temporary state",
+            SourceType.EXPLICIT,
+            kind=FactKind.TEMPORARY,
+            expires_at=now - timedelta(days=1),
+        )
+        temporary = await repo.create(
+            "Current temporary state",
+            SourceType.EXPLICIT,
+            kind=FactKind.TEMPORARY,
+            expires_at=now + timedelta(days=1),
+        )
+        await repo.add_entity_ref(active.id, "User", user.id)
+        await repo.archive_batch([archived.id])
+
+        preference_facts, preference_total = await repo.list_filtered(kind=FactKind.PREFERENCE)
+        preference_ids = {fact.id for fact in preference_facts}
+        assert preference_total == 2
+        assert active.id in preference_ids
+        assert replacement.id in preference_ids
+        assert superseded.id not in preference_ids
+
+        chat_facts, _ = await repo.list_filtered(source_type=SourceType.CHAT)
+        assert [fact.id for fact in chat_facts] == [active.id]
+
+        entity_facts, _ = await repo.list_filtered(entity="user")
+        assert [fact.id for fact in entity_facts] == [active.id]
+
+        archived_facts, _ = await repo.list_filtered(status="archived")
+        assert [fact.id for fact in archived_facts] == [archived.id]
+
+        superseded_facts, _ = await repo.list_filtered(status="superseded")
+        assert [fact.id for fact in superseded_facts] == [superseded.id]
+
+        expired_facts, _ = await repo.list_filtered(status="expired")
+        assert [fact.id for fact in expired_facts] == [expired.id]
+
+        temporary_facts, _ = await repo.list_filtered(status="temporary")
+        assert [fact.id for fact in temporary_facts] == [temporary.id]
+
+        pinned_facts, _ = await repo.list_filtered(status="pinned")
+        assert [fact.id for fact in pinned_facts] == [pinned.id]
+
+        never_accessed, _ = await repo.list_filtered(accessed="never")
+        assert active.id in {fact.id for fact in never_accessed}
+
+        await repo.reinforce([active.id])
+        used_facts, _ = await repo.list_filtered(accessed="used")
+        assert [fact.id for fact in used_facts] == [active.id]
+
 
 class TestReinforce:
     @pytest.mark.asyncio

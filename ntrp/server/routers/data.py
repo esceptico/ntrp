@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ntrp.memory.models import Fact
+from ntrp.memory.models import Fact, FactKind, SourceType
 from ntrp.memory.service import MemoryService
 from ntrp.server.deps import require_memory
 from ntrp.server.schemas import (
@@ -41,9 +42,22 @@ def _fact_payload(fact: Fact) -> dict:
 async def get_facts(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    kind: FactKind | None = None,
+    source_type: SourceType | None = None,
+    status: Literal["active", "archived", "superseded", "expired", "temporary", "pinned", "all"] = "active",
+    accessed: Literal["never", "used"] | None = None,
+    entity: str | None = Query(default=None, min_length=1),
     svc: MemoryService = Depends(require_memory),
 ):
-    facts, total = await svc.facts.list_recent(limit=limit, offset=offset)
+    facts, total = await svc.facts.list_filtered(
+        limit=limit,
+        offset=offset,
+        kind=kind,
+        source_type=source_type,
+        status=status,
+        accessed=accessed,
+        entity=entity,
+    )
     return {
         "facts": [_fact_payload(f) for f in facts],
         "total": total,

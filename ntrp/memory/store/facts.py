@@ -255,6 +255,87 @@ def _row_dict(row: aiosqlite.Row) -> dict:
     return dict(row)
 
 
+def _filtered_fact_clauses(
+    *,
+    kind: FactKind | None,
+    source_type: SourceType | None,
+    status: str,
+    accessed: str | None,
+    entity: str | None,
+) -> tuple[str, str, list[object]]:
+    joins = []
+    where = []
+    params: list[object] = []
+
+    if entity:
+        joins.append("JOIN entity_refs er ON f.id = er.fact_id")
+        where.append(
+            "(er.entity_id = (SELECT id FROM entities WHERE name = ? COLLATE NOCASE) "
+            "OR (er.entity_id IS NULL AND er.name = ? COLLATE NOCASE))"
+        )
+        params.extend([entity, entity])
+
+    if kind is not None:
+        where.append("f.kind = ?")
+        params.append(kind.value)
+
+    if source_type is not None:
+        where.append("f.source_type = ?")
+        params.append(source_type.value)
+
+    match status:
+        case "active":
+            where.extend(
+                [
+                    "f.archived_at IS NULL",
+                    "f.superseded_by_fact_id IS NULL",
+                    "(f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)",
+                ]
+            )
+        case "archived":
+            where.append("f.archived_at IS NOT NULL")
+        case "superseded":
+            where.append("f.superseded_by_fact_id IS NOT NULL")
+        case "expired":
+            where.append("f.expires_at IS NOT NULL AND f.expires_at <= CURRENT_TIMESTAMP")
+        case "temporary":
+            where.extend(
+                [
+                    "f.expires_at IS NOT NULL",
+                    "f.expires_at > CURRENT_TIMESTAMP",
+                    "f.archived_at IS NULL",
+                    "f.superseded_by_fact_id IS NULL",
+                ]
+            )
+        case "pinned":
+            where.extend(
+                [
+                    "f.pinned_at IS NOT NULL",
+                    "f.archived_at IS NULL",
+                    "f.superseded_by_fact_id IS NULL",
+                    "(f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)",
+                ]
+            )
+        case "all":
+            pass
+        case _:
+            raise ValueError(f"unsupported fact status: {status}")
+
+    match accessed:
+        case "never":
+            where.append("f.access_count = 0")
+        case "used":
+            where.append("f.access_count > 0")
+        case None:
+            pass
+        case _:
+            raise ValueError(f"unsupported fact accessed filter: {accessed}")
+
+    join_sql = f" {' '.join(joins)}" if joins else ""
+    where_sql = f" WHERE {' AND '.join(where)}" if where else ""
+    return join_sql, where_sql, params
+
+
 class FactRepository:
     def __init__(self, conn: aiosqlite.Connection, read_conn: aiosqlite.Connection | None = None):
         self.conn = conn
@@ -353,6 +434,34 @@ class FactRepository:
     async def list_recent(self, limit: int = 100, offset: int = 0) -> list[Fact]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_RECENT, (limit, offset))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
+
+    async def list_filtered(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        kind: FactKind | None = None,
+        source_type: SourceType | None = None,
+        status: str = "active",
+        accessed: str | None = None,
+        entity: str | None = None,
+    ) -> tuple[list[Fact], int]:
+        join_sql, where_sql, params = _filtered_fact_clauses(
+            kind=kind,
+            source_type=source_type,
+            status=status,
+            accessed=accessed,
+            entity=entity,
+        )
+        count_rows = await self.read_conn.execute_fetchall(
+            f"SELECT COUNT(DISTINCT f.id) FROM facts f{join_sql}{where_sql}",
+            params,
+        )
+        rows = await self.read_conn.execute_fetchall(
+            f"SELECT DISTINCT f.* FROM facts f{join_sql}{where_sql} ORDER BY f.created_at DESC LIMIT ? OFFSET ?",
+            (*params, limit, offset),
+        )
+        return [Fact.model_validate(_row_dict(r)) for r in rows], count_rows[0][0]
 
     async def list_kind_review(self, limit: int = 100, offset: int = 0) -> tuple[list[Fact], int]:
         count_rows = await self.read_conn.execute_fetchall(_SQL_COUNT_KIND_REVIEW)

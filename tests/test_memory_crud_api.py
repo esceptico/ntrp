@@ -225,6 +225,39 @@ class TestFactCRUD:
 
         assert all(r.status_code == 200 for r in responses)
 
+    @pytest.mark.asyncio
+    async def test_list_facts_supports_review_filters(self, test_client: AsyncClient, test_runtime: Runtime):
+        repo = test_runtime.memory.facts
+        user = await repo.create_entity("User")
+        visible = await repo.create(
+            "User prefers raw SQL",
+            SourceType.CHAT,
+            kind=FactKind.PREFERENCE,
+        )
+        hidden = await repo.create(
+            "Archived preference",
+            SourceType.CHAT,
+            kind=FactKind.PREFERENCE,
+        )
+        await repo.add_entity_ref(visible.id, "User", user.id)
+        await repo.add_entity_ref(hidden.id, "User", user.id)
+        await repo.archive_batch([hidden.id])
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.get(
+            "/facts",
+            params={"kind": "preference", "source_type": "chat", "entity": "user"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert [fact["id"] for fact in body["facts"]] == [visible.id]
+
+        archived = await test_client.get("/facts", params={"status": "archived"})
+        assert archived.status_code == 200
+        assert hidden.id in {fact["id"] for fact in archived.json()["facts"]}
+
 
 class TestFactMetadataAPI:
     @pytest.mark.asyncio
@@ -523,6 +556,7 @@ class TestMemoryDisabled:
             responses = await asyncio.gather(
                 client.patch("/facts/1", json={"text": "test"}),
                 client.patch("/facts/1/metadata", json={"kind": "preference"}),
+                client.get("/facts"),
                 client.delete("/facts/1"),
                 client.patch("/observations/1", json={"summary": "test"}),
                 client.delete("/observations/1"),

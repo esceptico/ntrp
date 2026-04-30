@@ -5,7 +5,7 @@ from ntrp.logging import get_logger
 from ntrp.memory.audit import memory_audit, observation_prune_dry_run
 from ntrp.memory.fact_review import FactMetadataSuggestion, suggest_fact_metadata
 from ntrp.memory.facts import PROFILE_FACT_KINDS, FactMemory
-from ntrp.memory.models import Dream, EntityRef, Fact, FactKind, Observation
+from ntrp.memory.models import Dream, EntityRef, Fact, FactKind, Observation, SourceType
 
 _logger = get_logger(__name__)
 
@@ -25,6 +25,27 @@ class FactService:
         total = await self._memory.facts.count_active()
         facts = await self._memory.facts.list_recent(limit=limit, offset=offset)
         return facts, total
+
+    async def list_filtered(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        kind: FactKind | None = None,
+        source_type: SourceType | None = None,
+        status: str = "active",
+        accessed: str | None = None,
+        entity: str | None = None,
+    ) -> tuple[list[Fact], int]:
+        return await self._memory.facts.list_filtered(
+            limit=limit,
+            offset=offset,
+            kind=kind,
+            source_type=source_type,
+            status=status,
+            accessed=accessed,
+            entity=entity,
+        )
 
     async def list_kind_review(self, limit: int = 100, offset: int = 0) -> tuple[list[Fact], int]:
         return await self._memory.facts.list_kind_review(limit=limit, offset=offset)
