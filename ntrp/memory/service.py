@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable
 
 from ntrp.logging import get_logger
+from ntrp.memory.audit import memory_audit, observation_prune_dry_run
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.models import Dream, EntityRef, Fact, Observation
 
@@ -154,6 +155,23 @@ class MemoryService:
             "archived_fact_count": await self.memory.facts.count_archived(),
             "archived_observation_count": await self.memory.observations.count_archived(),
         }
+
+    async def audit(self) -> dict:
+        return await memory_audit(self.memory.facts.read_conn)
+
+    async def prune_observations_dry_run(
+        self,
+        *,
+        older_than_days: int = 30,
+        max_sources: int = 5,
+        limit: int = 100,
+    ) -> dict:
+        return await observation_prune_dry_run(
+            self.memory.observations.read_conn,
+            older_than_days=older_than_days,
+            max_sources=max_sources,
+            limit=limit,
+        )
 
     async def count_unconsolidated(self) -> int:
         return await self.memory.facts.count_unconsolidated()

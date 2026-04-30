@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -105,6 +106,7 @@ async def sample_observation(test_runtime: Runtime) -> int:
         embedding=mock_embedding("test observation"),
         source_fact_id=result.fact.id,
     )
+    await memory.db.conn.commit()
     return obs.id
 
 
@@ -290,6 +292,47 @@ class TestObservationCRUD:
         assert response.json()["detail"] == "Observation not found"
 
 
+class TestMemoryAuditAPI:
+    @pytest.mark.asyncio
+    async def test_memory_audit(self, test_client: AsyncClient, sample_observation: int):
+        response = await test_client.get("/memory/audit")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["facts"]["total"] >= 1
+        assert data["observations"]["total"] >= 1
+        assert "observation_source_distribution" in data
+        assert "provenance" in data
+
+    @pytest.mark.asyncio
+    async def test_prune_dry_run_does_not_delete(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+        sample_observation: int,
+    ):
+        now = datetime.now(UTC)
+        old = (now - timedelta(days=31)).isoformat()
+        await test_runtime.memory.db.conn.execute(
+            "UPDATE observations SET created_at = ?, updated_at = ? WHERE id = ?",
+            (old, old, sample_observation),
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.post(
+            "/memory/prune/dry-run",
+            json={"older_than_days": 30, "max_sources": 5, "limit": 10},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["summary"]["total"] >= 1
+        assert any(row["id"] == sample_observation for row in data["candidates"])
+
+        obs = await test_runtime.memory.observations.get(sample_observation)
+        assert obs is not None
+
+
 class TestMemoryDisabled:
     """Test error handling when memory is disabled"""
 
@@ -325,6 +368,8 @@ class TestMemoryDisabled:
                 client.delete("/facts/1"),
                 client.patch("/observations/1", json={"summary": "test"}),
                 client.delete("/observations/1"),
+                client.get("/memory/audit"),
+                client.post("/memory/prune/dry-run", json={}),
             )
 
             assert all(r.status_code == 503 for r in responses)

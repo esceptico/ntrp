@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.memory.service import MemoryService
 from ntrp.server.deps import require_memory
-from ntrp.server.schemas import UpdateFactRequest, UpdateObservationRequest
+from ntrp.server.schemas import MemoryPruneDryRunRequest, UpdateFactRequest, UpdateObservationRequest
 
 router = APIRouter(tags=["data"])
 
@@ -208,6 +208,20 @@ async def delete_dream(dream_id: int, svc: MemoryService = Depends(require_memor
 @router.get("/stats")
 async def get_stats(svc: MemoryService = Depends(require_memory)):
     return await svc.stats()
+
+
+@router.get("/memory/audit")
+async def get_memory_audit(svc: MemoryService = Depends(require_memory)):
+    return await svc.audit()
+
+
+@router.post("/memory/prune/dry-run")
+async def prune_memory_dry_run(request: MemoryPruneDryRunRequest, svc: MemoryService = Depends(require_memory)):
+    return await svc.prune_observations_dry_run(
+        older_than_days=request.older_than_days,
+        max_sources=request.max_sources,
+        limit=request.limit,
+    )
 
 
 @router.post("/memory/clear")

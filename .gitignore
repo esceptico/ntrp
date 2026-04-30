@@ -16,6 +16,7 @@ wheels/
 .context/
 .features/
 data/
+backups/
 evals/
 /scripts/
 node_modules/
