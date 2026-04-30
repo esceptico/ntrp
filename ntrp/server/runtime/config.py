@@ -52,7 +52,7 @@ class RuntimeConfig:
 
             integrations = self._get_integrations()
             integrations.sync(config)
-            await self._get_knowledge().reload_config(config, self._get_stores(), integrations)
+            await self._get_knowledge().reload_config(config, self._get_stores())
             await self._sync_mcp(config)
 
             self.config = config

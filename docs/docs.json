@@ -35,8 +35,7 @@
             "pages": [
               "integrations/models",
               "integrations/gmail",
-              "integrations/calendar",
-              "integrations/obsidian"
+              "integrations/calendar"
             ]
           },
           {

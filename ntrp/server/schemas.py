@@ -251,7 +251,6 @@ class UpdateConfigRequest(BaseModel):
     compression_keep_ratio: float | None = None
     summary_max_tokens: int | None = None
     consolidation_interval: int | None = None
-    vault_path: str | None = None
     web_search: Literal["auto", "exa", "ddgs", "none"] | None = None
     integrations: IntegrationToggles | None = None
 

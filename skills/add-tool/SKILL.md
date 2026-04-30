@@ -73,23 +73,24 @@ The execute function must return `ToolResult`. Returning a string, dict, or arbi
 ### Client-backed
 
 ```python
-from ntrp.integrations.obsidian.client import ObsidianClient
+from ntrp.integrations.slack.client import SlackClient
 
 
-async def search_notes(execution: ToolExecution, args: MyInput) -> ToolResult:
-    client = execution.ctx.get_client("notes", ObsidianClient)
+async def search_slack(execution: ToolExecution, args: MyInput) -> ToolResult:
+    client = execution.ctx.get_client("slack", SlackClient)
     if client is None:
-        return ToolResult(content="Obsidian is not configured.", preview="Missing service", is_error=True)
-    results = client.search(args.query)
-    return ToolResult(content="\n".join(results), preview=f"{len(results)} results")
+        return ToolResult(content="Slack is not configured.", preview="Missing service", is_error=True)
+    results = await client.search_messages(args.query)
+    lines = [f"{item.title}: {item.content}" for item in results]
+    return ToolResult(content="\n".join(lines), preview=f"{len(results)} results")
 
 
 tools = {
-    "search_notes": tool(
-        description="Search Obsidian notes.",
+    "search_slack": tool(
+        description="Search Slack messages.",
         input_model=MyInput,
-        requires={"notes"},
-        execute=search_notes,
+        requires={"slack"},
+        execute=search_slack,
     )
 }
 ```
@@ -107,7 +108,6 @@ Keys for `requires` and `execution.ctx.services`:
 
 | Key | Type | What it provides |
 |-----|------|-----------------|
-| `notes` | `ObsidianClient` | Obsidian vault read/write/search |
 | `gmail` | `MultiGmailSource` | Email read/search/send |
 | `calendar` | `MultiCalendarSource` | Calendar events CRUD |
 | `web` | `WebClient` | Web search and content fetch |

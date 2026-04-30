@@ -1,9 +1,9 @@
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
-from ntrp.integrations.types import RawItem
+from ntrp.search.types import RawItem
 
 
-class MemoryIndexable:
+class MemorySearchSource:
     name = "memory"
 
     def __init__(self, db: GraphDatabase):

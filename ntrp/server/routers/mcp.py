@@ -3,7 +3,7 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ntrp.mcp.models import parse_server_config
+from ntrp.mcp.models import HttpTransport, parse_server_config
 from ntrp.mcp.oauth import OAuthOptions, clear_tokens, run_mcp_oauth
 from ntrp.server.deps import require_config_service
 from ntrp.server.runtime import Runtime, get_runtime
@@ -67,12 +67,16 @@ async def add_mcp_server(
         raise HTTPException(status_code=409, detail=f"MCP server {req.name!r} already exists")
 
     try:
-        parse_server_config(req.name, req.config)
+        parsed = parse_server_config(req.name, req.config)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    config = dict(req.config)
+    if isinstance(parsed.transport, HttpTransport):
+        config["url"] = parsed.transport.url
+
     try:
-        await cfg_svc.add_mcp_server(req.name, req.config)
+        await cfg_svc.add_mcp_server(req.name, config)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -150,22 +154,24 @@ async def mcp_oauth(
         raise HTTPException(status_code=404, detail=f"MCP server {name!r} not found")
 
     raw = existing[name]
-    if raw.get("transport") != "http" or raw.get("auth") != "oauth":
+    try:
+        parsed = parse_server_config(name, raw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    transport = parsed.transport
+    if not isinstance(transport, HttpTransport) or transport.auth != "oauth":
         raise HTTPException(status_code=400, detail="Server does not use OAuth authentication")
 
-    url = raw.get("url")
-    if not url:
-        raise HTTPException(status_code=400, detail="Server has no URL configured")
-
     opts = OAuthOptions(
-        client_id=raw.get("client_id"),
-        client_secret=raw.get("client_secret"),
-        redirect_port=raw.get("redirect_port"),
-        scope=raw.get("scope"),
-        client_name=raw.get("client_name") or "NTRP",
+        client_id=transport.client_id,
+        client_secret=transport.client_secret,
+        redirect_port=transport.redirect_port,
+        scope=transport.scope,
+        client_name=transport.client_name or "NTRP",
     )
     try:
-        await asyncio.to_thread(run_mcp_oauth, name, url, opts)
+        await asyncio.to_thread(run_mcp_oauth, name, transport.url, opts)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

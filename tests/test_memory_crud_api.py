@@ -35,7 +35,6 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
 
     test_config = Config(
         ntrp_dir=tmp_path / "db",
-        vault_path=tmp_path / "vault",
         openai_api_key="test-key",
         api_key_hash=hash_api_key("test-api-key"),
         memory=True,
@@ -45,7 +44,6 @@ async def test_runtime(tmp_path: Path, monkeypatch) -> AsyncGenerator[Runtime]:
         exa_api_key=None,
     )
 
-    test_config.vault_path.mkdir(parents=True, exist_ok=True)
     test_config.db_dir.mkdir(parents=True, exist_ok=True)
 
     runtime = Runtime(config=test_config)
@@ -306,7 +304,6 @@ class TestMemoryDisabled:
 
         test_config = Config(
             ntrp_dir=tmp_path / "db",
-            vault_path=tmp_path / "vault",
             openai_api_key="test-key",
             api_key_hash=hash_api_key("test-api-key"),
             memory=False,

@@ -7,8 +7,7 @@ from ntrp.embedder import Embedder
 from ntrp.logging import get_logger
 from ntrp.search.retrieval import HybridRetriever
 from ntrp.search.store import SearchStore
-from ntrp.search.types import SearchResult
-from ntrp.integrations.types import RawItem
+from ntrp.search.types import RawItem, SearchResult
 
 _logger = get_logger(__name__)
 
@@ -22,7 +21,7 @@ type ProgressCallback = Callable[[int, int], None]
 
 
 class SearchIndex:
-    EMBED_SOURCES = {"notes", "memory"}
+    EMBED_SOURCES = {"memory"}
 
     def __init__(
         self,

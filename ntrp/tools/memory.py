@@ -19,7 +19,7 @@ WHEN TO USE:
 Your system prompt has a small memory snapshot — recall() searches the FULL memory store which is much richer.
 
 PREFER recall() FOR: Known facts, user preferences, stored knowledge, past context
-PREFER search() FOR: Finding new info in notes/emails/web pages"""
+PREFER search() FOR: Finding new info in email, files, or web pages"""
 
 FORGET_DESCRIPTION = "Delete facts from memory by semantic search."
 
@@ -27,7 +27,7 @@ REMEMBER_DESCRIPTION = """Store a fact in memory for future recall.
 
 WHEN TO USE:
 - After learning something important about the user
-- After discovering a key fact from notes/emails
+- After discovering a key fact from email, files, or connected services
 - To record user preferences or decisions
 
 IMPORTANT: Only store facts that would be useful to recall in 6+ months.

@@ -39,11 +39,10 @@ export const MEMORY_NUMBER_ITEMS: NumberItem[] = [
   { key: "consolidationInterval", label: "Interval", description: "Minutes between consolidation runs", min: 5, max: 120, step: 5 },
 ];
 
-export const INTEGRATION_ITEMS = ["vault", "google", "web"] as const;
+export const INTEGRATION_ITEMS = ["google", "web"] as const;
 export type IntegrationItem = (typeof INTEGRATION_ITEMS)[number];
 
 export const INTEGRATION_LABELS = {
-  vault: "Notes",
   google: "Google",
   web: "Web Search",
 } satisfies Record<IntegrationItem, string>;

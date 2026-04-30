@@ -43,7 +43,6 @@ async def memory(tmp_path: Path, monkeypatch) -> AsyncGenerator[FactMemory]:
 
     config = Config(
         ntrp_dir=tmp_path / "db",
-        vault_path=tmp_path / "vault",
         openai_api_key="test-key",
         api_key_hash=hash_api_key("test-api-key"),
         memory=True,

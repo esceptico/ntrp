@@ -1,7 +1,6 @@
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from copy import deepcopy
-from pathlib import Path
 
 from ntrp.config import PERSIST_KEYS, PROVIDER_KEY_FIELDS
 from ntrp.llm.models import Model, Provider, add_custom_model, get_models_by_provider, remove_custom_model
@@ -31,16 +30,6 @@ class ConfigService:
             raise
 
     async def update(self, **fields) -> None:
-        if "vault_path" in fields:
-            path = fields["vault_path"]
-            if path:
-                vault = Path(path).expanduser()
-                if not vault.exists():
-                    raise ValueError(f"Vault path does not exist: {vault}")
-                fields["vault_path"] = str(vault)
-            else:
-                fields["vault_path"] = None
-
         persist = {k: v for k, v in fields.items() if k in PERSIST_KEYS}
         if not persist:
             return

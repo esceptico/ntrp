@@ -42,7 +42,6 @@ PERSIST_KEYS = frozenset(
         "research_model",
         "memory_model",
         "embedding_model",
-        "vault_path",
         "memory",
         "dreams",
         "consolidation_interval",
@@ -104,9 +103,6 @@ class Config(BaseSettings):
     # Slack
     slack_bot_token: str | None = Field(default=None, alias="SLACK_BOT_TOKEN")
     slack_user_token: str | None = Field(default=None, alias="SLACK_USER_TOKEN")
-
-    # Obsidian vault
-    vault_path: Path | None = None
 
     # MCP servers
     mcp_servers: dict[str, dict] | None = None

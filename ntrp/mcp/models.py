@@ -1,4 +1,7 @@
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
+
+_HTTP_SCHEMES = frozenset({"http", "https"})
 
 
 @dataclass(frozen=True)
@@ -27,6 +30,20 @@ class MCPServerConfig:
     tools: list[str] | None = None
 
 
+def _normalize_http_url(name: str, raw_url: object) -> str:
+    if not isinstance(raw_url, str) or not raw_url.strip():
+        raise ValueError(f"MCP server {name!r}: http transport requires 'url'")
+
+    url = raw_url.strip()
+    if "://" not in url:
+        url = f"http://{url}"
+
+    parsed = urlparse(url)
+    if parsed.scheme not in _HTTP_SCHEMES or not parsed.netloc:
+        raise ValueError(f"MCP server {name!r}: http url must use http:// or https://")
+    return url
+
+
 def parse_server_config(name: str, raw: dict) -> MCPServerConfig:
     transport_type = raw.get("transport")
     if transport_type == "stdio":
@@ -39,11 +56,8 @@ def parse_server_config(name: str, raw: dict) -> MCPServerConfig:
             env=raw.get("env"),
         )
     elif transport_type == "http":
-        url = raw.get("url")
-        if not url:
-            raise ValueError(f"MCP server {name!r}: http transport requires 'url'")
         transport = HttpTransport(
-            url=url,
+            url=_normalize_http_url(name, raw.get("url")),
             headers=raw.get("headers", {}),
             auth=raw.get("auth"),
             client_id=raw.get("client_id"),

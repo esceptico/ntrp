@@ -2,14 +2,14 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ntrp.server.runtime import Runtime, get_runtime
-from ntrp.settings import NTRP_DIR
+from ntrp.integrations.gmail.client import GmailSource
 from ntrp.integrations.google_auth.auth import (
     CREDENTIALS_PATH,
     add_gmail_account,
     discover_gmail_tokens,
 )
-from ntrp.integrations.gmail.client import GmailSource
+from ntrp.server.runtime import Runtime, get_runtime
+from ntrp.settings import NTRP_DIR
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
 

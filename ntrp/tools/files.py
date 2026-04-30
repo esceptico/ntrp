@@ -8,8 +8,7 @@ from ntrp.tools.core.formatting import format_lines_with_pagination
 
 READ_FILE_DESCRIPTION = (
     "Read content from a file. Use for code, configs, logs, etc. "
-    "For large files, use offset and limit parameters to read in chunks. "
-    "(For Obsidian notes, use read_note instead.)"
+    "For large files, use offset and limit parameters to read in chunks."
 )
 
 

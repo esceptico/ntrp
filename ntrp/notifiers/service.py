@@ -2,9 +2,9 @@ import re
 import sys
 from datetime import UTC, datetime
 
+from ntrp.integrations import ALL_INTEGRATIONS
 from ntrp.logging import get_logger
 from ntrp.notifiers.base import Notifier, NotifierContext
-from ntrp.integrations import ALL_INTEGRATIONS
 from ntrp.notifiers.bash import BashNotifier
 from ntrp.notifiers.models import NotifierConfig
 from ntrp.notifiers.store import NotifierStore

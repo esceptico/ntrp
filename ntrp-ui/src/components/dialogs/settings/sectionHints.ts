@@ -83,12 +83,6 @@ function getIntegrationsHints(state: UseSettingsStateResult, serverConfig: Serve
   const c = state.connections;
   const item = c.sourceItem;
 
-  if (item === "vault") {
-    if (c.vault.editingVault) {
-      return [["enter", "save"], ["esc", "cancel"]];
-    }
-    return [["↑↓", "navigate"], ["enter", "edit path"], ["esc", "back"]];
-  }
   if (item === "google") {
     const googleEnabled = serverConfig?.integrations?.google?.enabled;
     if (googleEnabled) {

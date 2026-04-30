@@ -9,11 +9,8 @@ services:
       - "${NTRP_PORT:-6877}:6877"
     volumes:
       - ntrp-data:/home/ntrp/.ntrp
-      # obsidian vault, comment if not using (and change ro to rw if you need to edit)
-      - ${NTRP_VAULT_PATH}:/vault:ro
     env_file: .env
     environment:
-      - NTRP_VAULT_PATH=/vault
       # browser history doesn't work in docker
       - NTRP_BROWSER=
     networks:

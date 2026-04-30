@@ -6,14 +6,14 @@ from typing import Any
 from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import build
 
-from ntrp.logging import get_logger
-from ntrp.settings import NTRP_DIR
 from ntrp.integrations.google_auth.auth import (
     SCOPES_CALENDAR,
     get_google_credentials,
     has_scope,
 )
-from ntrp.integrations.types import RawItem
+from ntrp.logging import get_logger
+from ntrp.search.types import RawItem
+from ntrp.settings import NTRP_DIR
 
 
 def parse_event_datetime(dt_obj: dict) -> datetime | None:

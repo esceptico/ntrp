@@ -42,7 +42,6 @@ def _config_response(rt: Runtime) -> dict:
             "provider": web_provider,
         }
     )
-    integrations.setdefault("notes", {})["path"] = str(config.vault_path) if config.vault_path else None
     integrations.setdefault("slack", {}).update(
         {
             "has_user_token": bool(config.slack_user_token),
@@ -83,9 +82,7 @@ def _config_response(rt: Runtime) -> dict:
         "embedding_model": config.embedding_model,
         "web_search": config.web_search,
         "web_search_provider": web_provider,
-        "vault_path": config.vault_path,
         "google_enabled": config.google,
-        "has_notes": "notes" in rt.integrations.clients,
         "max_depth": config.max_depth,
         "compression_threshold": config.compression_threshold,
         "max_messages": config.max_messages,

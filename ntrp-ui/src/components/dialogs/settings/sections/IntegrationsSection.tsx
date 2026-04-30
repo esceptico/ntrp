@@ -1,5 +1,4 @@
 import { colors, truncateText } from "../../../ui/index.js";
-import { TextInputField } from "../../../ui/input/TextInputField.js";
 import { SelectionIndicator } from "../../../ui/index.js";
 import type { ServerConfig, GoogleAccount } from "../../../../api/client.js";
 import { INTEGRATION_LABELS, type IntegrationItem } from "../config.js";
@@ -30,35 +29,6 @@ export function IntegrationsSection({ connections: c, services, activeList, serv
   return (
     <box flexDirection="column">
       <Header first>Connections</Header>
-      <Row item="vault" selected={c.sourceItem === "vault"} accent={connectionsAccent}>
-        {c.vault.editingVault ? (
-          <box flexDirection="row">
-            <text><span fg={colors.text.muted}>[</span></text>
-            <TextInputField
-              value={c.vault.vaultPath}
-              cursorPos={c.vault.vaultCursorPos}
-              placeholder="Enter vault path..."
-              showCursor={true}
-              textColor={colors.text.primary}
-            />
-            <text><span fg={colors.text.muted}>]</span></text>
-          </box>
-        ) : c.vault.updatingVault ? (
-          <text><span fg={colors.status.warning}>Updating...</span></text>
-        ) : (
-          <text>
-            <span fg={serverConfig?.vault_path ? colors.text.primary : colors.text.muted}>
-              {truncateText(serverConfig?.vault_path || "Not configured", valueWidth)}
-            </span>
-          </text>
-        )}
-      </Row>
-      {c.vault.vaultError && (
-        <box marginLeft={4}>
-          <text><span fg={colors.status.error}>{c.vault.vaultError}</span></text>
-        </box>
-      )}
-
       <GoogleRow item="google" selectedItem={c.sourceItem} integrations={integrations} accounts={c.googleAccounts} accent={connectionsAccent} />
 
       {isGoogleItem && googleEnabled && c.googleAccounts.length > 0 && (

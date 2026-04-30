@@ -81,12 +81,11 @@ Each command runs in a fresh subprocess — no state (env vars, shell functions,
 
 PREFER OTHER TOOLS:
 - For searching files: use search() instead of grep/find
-- For reading files: use read_note() or read_file()
-- For editing files: use edit_note() or create_note()
+- For reading files: use read_file()
 
 USE bash FOR:
 - System commands: git, npm, pip, brew
-- File operations: mkdir, cp, mv (with permission)
+- File operations: mkdir, cp, mv, direct file edits (with permission when needed)
 - Checking system state: pwd, whoami, date
 
 Destructive commands (rm -rf) are blocked. Non-safe commands require approval."""

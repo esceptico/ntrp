@@ -1,6 +1,6 @@
 # ntrp
 
-**ntrp** is entropy – the measure of disorder in a system. Your calendar, emails, notes, half-remembered conversations – it all accumulates. This project exists to reduce it.
+**ntrp** is entropy – the measure of disorder in a system. Your calendar, emails, memory, half-remembered conversations – it all accumulates. This project exists to reduce it.
 
 I built this for myself. ADHD and scattered attention meant I kept losing track of things (e.g. what I said, what I planned, what I was supposed to follow up on). So I made an assistant that hooks into my stuff and actually remembers.
 
@@ -11,7 +11,7 @@ I built this for myself. ADHD and scattered attention meant I kept losing track 
 
 - **Persistent memory**: learns facts and patterns across conversations, consolidates them over time
 - **Scheduled tasks**: morning briefings, daily reviews, health tracking – runs autonomously on a schedule
-- **Connected sources**: Obsidian vault, Gmail, Google Calendar, web search (so far)
+- **Connected sources**: Gmail, Google Calendar, Slack, web search, MCP tools
 - **Shell access**: runs commands, manages files, sends emails
 - **Any LLM**: Claude, GPT, Gemini built-in; OpenRouter, Ollama, vLLM, or any OpenAI-compatible endpoint via custom models
 

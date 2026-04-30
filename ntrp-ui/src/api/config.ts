@@ -6,7 +6,6 @@ export interface IntegrationInfo {
   connected: boolean;
   error?: string;
   accounts?: string[];
-  path?: string;
   mode?: "auto" | "exa" | "ddgs" | "none";
   provider?: "exa" | "ddgs" | "none" | "unknown";
   dreams?: boolean;
@@ -21,9 +20,7 @@ export interface ServerConfig {
   embedding_model: string;
   web_search: "auto" | "exa" | "ddgs" | "none";
   web_search_provider: "exa" | "ddgs" | "none" | "unknown";
-  vault_path: string;
   google_enabled: boolean;
-  has_notes: boolean;
   max_depth: number;
   compression_threshold: number;
   max_messages: number;
@@ -104,13 +101,6 @@ export async function checkHealth(config: Config): Promise<{
   } catch {
     return { ok: false, version: null, hasProviders: true, configVersion: null, configLoadedAt: null };
   }
-}
-
-export async function updateVaultPath(
-  config: Config,
-  vaultPath: string
-): Promise<{ vault_path: string }> {
-  return api.patch(`${config.serverUrl}/config`, { vault_path: vaultPath });
 }
 
 export async function getDirectives(config: Config): Promise<{ content: string }> {

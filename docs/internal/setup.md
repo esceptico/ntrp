@@ -145,16 +145,6 @@ EXA_API_KEY=your-key
 
 Control the provider with `WEB_SEARCH` (`auto` | `exa` | `ddgs` | `none`). Default `auto` prefers Exa when `EXA_API_KEY` is set, otherwise falls back to DDGS.
 
-## Obsidian
-
-Point ntrp at your vault directory:
-
-```
-NTRP_VAULT_PATH=/path/to/your/vault
-```
-
-Ntrp indexes `.md` files from the vault for retrieval during conversations.
-
 ## Browser History
 
 Reads local browser history for context. macOS only.
@@ -186,8 +176,6 @@ docker compose up -d
 ```
 
 Data (sessions, memory, search index) is persisted in the `ntrp-data` volume, mapped to `~/.ntrp` inside the container. The server runs as a non-root user and is available at `http://localhost:6877` (or `NTRP_PORT`).
-
-The Obsidian vault is bind-mounted read-only at `/vault`. If you don't use Obsidian, comment out the vault volume in `docker-compose.yml`.
 
 Gmail and Calendar tokens are stored in `~/.ntrp/` (covered by the data volume). Browser history is not available in Docker.
 

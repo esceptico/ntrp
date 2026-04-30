@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import aiosqlite
 
 from ntrp.logging import get_logger
+from ntrp.search.migrations import run_migrations
 
 _logger = get_logger(__name__)
 
@@ -115,6 +116,7 @@ class SearchStore:
             self._has_vec = False
 
         await self._set_meta("embedding_dim", str(self.embedding_dim))
+        await run_migrations(self.conn)
         await self.conn.commit()
 
     async def _get_meta(self, key: str) -> str | None:

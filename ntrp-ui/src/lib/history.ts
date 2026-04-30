@@ -10,13 +10,9 @@ function extractDescription(name: string, argsJson?: string): string | undefined
     switch (name) {
       case "bash":
         return args.command;
-      case "read_note":
       case "read_file":
       case "view":
         return args.path || args.file_path;
-      case "edit_note":
-      case "create_note":
-        return args.path;
       case "search":
         return args.query;
       case "web_search":

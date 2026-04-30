@@ -105,10 +105,10 @@ tool implementations.
 ## Native integration vs MCP
 
 **Use a native integration** when you need:
-- Deep indexing into memory (vector search across content)
 - Platform-specific auth (Google OAuth, Slack dual-token, PKCE)
 - Notifier integration (proactive sends)
 - Custom query semantics beyond what an MCP tool exposes
+- Explicit ingestion into memory/search via a source-owned sync path
 - In-process performance
 
 **Use MCP** when:
@@ -118,9 +118,12 @@ tool implementations.
 
 MCP servers appear alongside native integrations in `GET /tool-providers` with `kind="mcp"`.
 
-## Indexable integrations
+## Search indexing
 
-Integrations whose clients implement `async def scan() -> list[RawItem]` are automatically picked up by the indexer. `Obsidian`, `Gmail`, and `Calendar` are indexable today. Nothing else changes — the runtime detects `isinstance(client, Indexable)` during `_sync_indexables`.
+Search indexing is owned by memory. Native integrations expose tools and
+services; they are not implicitly scanned by the indexer. If an external source
+needs retrieval, add explicit sync/outbox behavior for that source instead of
+making the integration client double as an index source.
 
 ## Hot reload
 

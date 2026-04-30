@@ -10,6 +10,12 @@ export type MCPAddField = "name" | "transport" | "command" | "url" | "auth" | "h
 export type MCPAuth = "none" | "oauth";
 export type MCPMode = "list" | "add" | "confirm-remove" | "tools" | "oauth";
 
+function normalizeMcpHttpUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+}
+
 export interface UseMCPServersResult {
   mcpServers: MCPServerInfo[];
   mcpIndex: number;
@@ -161,7 +167,7 @@ export function useMCPServers(config: Config, onChanged?: () => Promise<void> | 
         args: parts.slice(1),
       };
     } else {
-      const url = mcpUrl.trim();
+      const url = normalizeMcpHttpUrl(mcpUrl);
       if (!url) { setMcpError("URL is required"); return; }
       serverConfig = { transport: "http", url } as Record<string, unknown>;
       if (mcpAuth === "oauth") {

@@ -10,7 +10,6 @@ import {
 } from "../../api/client.js";
 import type { IntegrationItem } from "../../components/dialogs/settings/config.js";
 import { INTEGRATION_ITEMS, TOGGLEABLE_INTEGRATIONS } from "../../components/dialogs/settings/config.js";
-import { useVaultPath, type UseVaultPathResult } from "./useVaultPath.js";
 import type { Key } from "../useKeypress.js";
 
 export interface UseConnectionsResult {
@@ -18,8 +17,6 @@ export interface UseConnectionsResult {
   googleAccounts: GoogleAccount[];
   selectedGoogleIndex: number;
   actionInProgress: string | null;
-
-  vault: UseVaultPathResult;
 
   handleKeypress: (key: Key) => void;
   isEditing: boolean;
@@ -31,9 +28,7 @@ export function useConnections(
   serverConfig: ServerConfig | null,
   onServerConfigChange: (config: ServerConfig) => void,
 ): UseConnectionsResult {
-  const vault = useVaultPath(config, serverConfig, onServerConfigChange);
-
-  const [sourceItem, setIntegrationItem] = useState<IntegrationItem>("vault");
+  const [sourceItem, setIntegrationItem] = useState<IntegrationItem>("google");
   const [googleAccounts, setGoogleAccounts] = useState<GoogleAccount[]>([]);
   const [selectedGoogleIndex, setSelectedGoogleIndex] = useState(0);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
@@ -112,21 +107,10 @@ export function useConnections(
     }
   }, [config, serverConfig, onServerConfigChange]);
 
-  const isEditing = vault.editingVault;
-  const cancelEdit = vault.handleCancelVaultEdit;
+  const isEditing = false;
+  const cancelEdit = useCallback(() => {}, []);
 
   const handleKeypress = useCallback((key: Key) => {
-    if (vault.editingVault) {
-      if (key.name === "escape") {
-        vault.handleCancelVaultEdit();
-      } else if (key.name === "return") {
-        vault.handleSaveVault();
-      } else {
-        vault.handleVaultKey(key);
-      }
-      return;
-    }
-
     const connIdx = INTEGRATION_ITEMS.indexOf(sourceItem);
     const isGoogleSource = sourceItem === "google";
     const sourceEnabled = isGoogleSource && serverConfig?.integrations?.google?.enabled;
@@ -147,9 +131,7 @@ export function useConnections(
         setSelectedGoogleIndex(0);
       }
     } else if (key.name === "return" || key.name === "space") {
-      if (sourceItem === "vault") {
-        vault.handleStartVaultEdit();
-      } else if (TOGGLEABLE_INTEGRATIONS.includes(sourceItem)) {
+      if (TOGGLEABLE_INTEGRATIONS.includes(sourceItem)) {
         handleToggleSource(sourceItem);
       }
     } else if ((key.name === "right" || key.name === "l") && sourceItem === "web") {
@@ -163,8 +145,7 @@ export function useConnections(
     }
   }, [
     sourceItem, serverConfig, googleAccounts, selectedGoogleIndex,
-    vault.editingVault, vault.handleCancelVaultEdit, vault.handleSaveVault, vault.handleVaultKey,
-    vault.handleStartVaultEdit, handleToggleSource, handleChangeWebSearch, handleAddGoogle, handleRemoveGoogle,
+    handleToggleSource, handleChangeWebSearch, handleAddGoogle, handleRemoveGoogle,
   ]);
 
   return {
@@ -172,7 +153,6 @@ export function useConnections(
     googleAccounts,
     selectedGoogleIndex,
     actionInProgress,
-    vault,
     handleKeypress,
     isEditing,
     cancelEdit,

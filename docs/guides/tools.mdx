@@ -18,19 +18,6 @@ Tools are capabilities the agent can invoke during a conversation. Some tools re
 | `background` | Spawn an autonomous background agent for long-running tasks | — |
 | `set_directives` | Set persistent behavioral directives injected into the system prompt | 🔒 |
 
-## Notes (Obsidian)
-
-Requires `NTRP_VAULT_PATH` to be set.
-
-| Tool | Description | Approval |
-|------|-------------|----------|
-| `notes` | Search and list notes | — |
-| `read_note` | Read full note contents | — |
-| `edit_note` | Edit a note | 🔒 |
-| `create_note` | Create a new note | 🔒 |
-| `delete_note` | Delete a note | 🔒 |
-| `move_note` | Move/rename a note | 🔒 |
-
 ## Email
 
 Requires Gmail to be connected.
@@ -101,6 +88,8 @@ Background tasks are spawned via the `background` tool. Results are delivered au
 | Tool | Description | Approval |
 |------|-------------|----------|
 | `use_skill` | Activate a skill for specialized instructions | — |
+
+Obsidian is handled through the `/obsidian` skill or an external MCP server.
 
 ## Approval flow
 

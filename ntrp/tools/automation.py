@@ -103,7 +103,7 @@ class CreateAutomationInput(BaseModel):
         default=None,
         description="For event_approaching only: trigger when event is this many minutes away (default 60).",
     )
-    writable: bool = Field(default=False, description="Allow automation to write to memory and notes")
+    writable: bool = Field(default=False, description="Allow automation to write to memory and connected services")
 
 
 class UpdateAutomationInput(BaseModel):
@@ -129,7 +129,7 @@ class UpdateAutomationInput(BaseModel):
         default=None,
         description="New lead time for event_approaching (minutes or duration like '2h30m')",
     )
-    writable: bool | None = Field(default=None, description="Allow writes to memory and notes")
+    writable: bool | None = Field(default=None, description="Allow writes to memory and connected services")
     enabled: bool | None = Field(default=None, description="Enable or disable the automation")
 
 

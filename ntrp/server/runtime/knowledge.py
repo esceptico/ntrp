@@ -1,9 +1,7 @@
 from ntrp.config import Config
-from ntrp.integrations import IntegrationRegistry
-from ntrp.integrations.types import Indexable
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
-from ntrp.memory.indexable import MemoryIndexable
+from ntrp.memory.search_source import MemorySearchSource
 from ntrp.memory.service import MemoryService
 from ntrp.server.indexer import Indexer
 from ntrp.server.stores import Stores
@@ -19,22 +17,25 @@ class KnowledgeRuntime:
         self.search_index = None
         self.memory: FactMemory | None = None
         self.memory_service: MemoryService | None = None
-        self.indexables: dict[str, Indexable] = {}
+        self.memory_search_source: MemorySearchSource | None = None
 
     @property
     def memory_ready(self) -> bool:
         return bool(self.config.memory and self.embedding and self.config.memory_model)
 
-    async def connect(self, stores: Stores, integrations: IntegrationRegistry) -> None:
+    async def connect(self, stores: Stores) -> None:
         await self._init_search()
-        self.sync_indexables(integrations, start_if_changed=False)
         await self._init_memory(stores)
 
-    async def reload_config(self, config: Config, stores: Stores, integrations: IntegrationRegistry) -> None:
+    async def reload_config(self, config: Config, stores: Stores | None) -> None:
+        had_source = self.memory_search_source is not None
         self.config = config
         await self._sync_embedding()
+        if stores is None:
+            return
         await self._sync_memory(stores)
-        self.sync_indexables(integrations)
+        if had_source != (self.memory_search_source is not None):
+            self.start_indexing()
 
     async def stop(self) -> None:
         if self.indexer:
@@ -55,7 +56,7 @@ class KnowledgeRuntime:
 
     def start_indexing(self) -> None:
         if self.indexer:
-            self.indexer.start(list(self.indexables.values()))
+            self.indexer.start(self.memory_search_source)
 
     async def get_index_status(self) -> dict:
         status = await self.indexer.get_status() if self.indexer else {"status": "disabled"}
@@ -72,7 +73,6 @@ class KnowledgeRuntime:
     async def _init_memory(self, stores: Stores) -> None:
         if self.memory_ready:
             await self._create_memory(stores)
-            self.indexables["memory"] = MemoryIndexable(self.memory.db)
         elif self.config.memory:
             _logger.warning("Memory enabled but no embedding model configured — skipping")
 
@@ -91,12 +91,14 @@ class KnowledgeRuntime:
             enqueue_fact_index_delete=stores.outbox.enqueue_fact_index_delete,
             enqueue_memory_index_clear=stores.outbox.enqueue_memory_index_clear,
         )
+        self.memory_search_source = MemorySearchSource(self.memory.db)
 
     async def _close_memory(self) -> None:
         if self.memory:
             await self.memory.close()
         self.memory = None
         self.memory_service = None
+        self.memory_search_source = None
 
     async def _sync_memory(self, stores: Stores) -> None:
         if self.memory_ready and not self.memory:
@@ -117,20 +119,26 @@ class KnowledgeRuntime:
 
     async def _sync_embedding(self) -> None:
         new_embedding = self.config.embedding
-        if new_embedding != self.embedding:
-            self.embedding = new_embedding
-            if self.indexer:
-                await self.indexer.update_embedding(new_embedding)
-            if self.memory:
-                self.memory.start_reembed(new_embedding, rebuild=True)
+        if new_embedding == self.embedding:
+            return
 
-    def sync_indexables(self, integrations: IntegrationRegistry, *, start_if_changed: bool = True) -> None:
-        prev = set(self.indexables.keys())
-        self.indexables.clear()
-        for name, client in integrations.clients.items():
-            if isinstance(client, Indexable):
-                self.indexables[name] = client
+        self.embedding = new_embedding
+
+        if new_embedding is None:
+            if self.indexer:
+                await self.indexer.stop()
+                await self.indexer.close()
+            self.indexer = None
+            self.search_index = None
+            return
+
+        if self.indexer:
+            await self.indexer.stop()
+            await self.indexer.update_embedding(new_embedding)
+        else:
+            self.indexer = Indexer(db_path=self.config.search_db_path, embedding=new_embedding)
+            await self.indexer.connect()
+        self.search_index = self.indexer.index
+
         if self.memory:
-            self.indexables["memory"] = MemoryIndexable(self.memory.db)
-        if start_if_changed and set(self.indexables.keys()) != prev:
-            self.start_indexing()
+            self.memory.start_reembed(new_embedding, rebuild=True)

@@ -5,8 +5,8 @@ from pathlib import Path
 
 import ntrp.database as database
 from ntrp.embedder import Embedder, EmbeddingConfig
-from ntrp.integrations.types import Indexable
 from ntrp.logging import get_logger
+from ntrp.memory.search_source import MemorySearchSource
 from ntrp.search.index import SearchIndex
 from ntrp.search.store import SearchStore
 
@@ -80,29 +80,27 @@ class Indexer:
     def running(self) -> bool:
         return self._running
 
-    def start(self, sources: list[Indexable]) -> None:
+    def start(self, source: MemorySearchSource | None) -> None:
         if self._running:
             return
 
-        sources = [s for s in sources if self.index.should_embed(s.name)]
-        if not sources:
+        if not source or not self.index or not self.index.should_embed(source.name):
             self._progress = IndexProgress(status=IndexStatus.SKIPPED)
             return
 
-        self._task = asyncio.create_task(self._run(sources))
+        self._task = asyncio.create_task(self._run(source))
 
-    async def _run(self, sources: list[Indexable]) -> None:
+    async def _run(self, source: MemorySearchSource) -> None:
         self._running = True
         self._progress = IndexProgress()
 
         try:
             self._progress.status = IndexStatus.INDEXING
 
-            for source in sources:
-                items = await source.scan()
-                u, d = await self.index.sync(source.name, items, progress_callback=self._on_progress)
-                self._progress.updated += u
-                self._progress.deleted += d
+            items = await source.scan()
+            updated, deleted = await self.index.sync(source.name, items, progress_callback=self._on_progress)
+            self._progress.updated += updated
+            self._progress.deleted += deleted
 
             self._progress.status = IndexStatus.DONE
         except asyncio.CancelledError:

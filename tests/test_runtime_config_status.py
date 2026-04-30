@@ -1,7 +1,9 @@
 import pytest
 
 from ntrp.config import Config
+from ntrp.llm.models import EmbeddingModel, Provider
 from ntrp.server.runtime.core import Runtime
+from ntrp.server.runtime.knowledge import KnowledgeRuntime
 
 
 class _Integrations:
@@ -17,8 +19,8 @@ class _Knowledge:
         self.fail = fail
         self.reloaded = []
 
-    async def reload_config(self, config, stores, integrations):
-        self.reloaded.append((config, stores, integrations))
+    async def reload_config(self, config, stores):
+        self.reloaded.append((config, stores))
         if self.fail:
             raise RuntimeError("knowledge reload failed")
 
@@ -55,7 +57,7 @@ async def test_runtime_reload_advances_config_version_after_success(monkeypatch)
 
     assert runtime.config is updated
     assert integrations.synced == [updated]
-    assert knowledge.reloaded == [(updated, None, integrations)]
+    assert knowledge.reloaded == [(updated, None)]
     assert runtime.config_status()["config_version"] == before + 1
 
 
@@ -80,3 +82,29 @@ async def test_runtime_reload_does_not_advance_config_version_after_failure(monk
 
     assert runtime.config is original
     assert runtime.config_status()["config_version"] == before
+
+
+@pytest.mark.asyncio
+async def test_knowledge_runtime_syncs_indexer_with_embedding_config(tmp_path, monkeypatch):
+    import ntrp.llm.models as llm_models
+
+    monkeypatch.setitem(llm_models._embedding_models, "test-embedding", EmbeddingModel("test-embedding", Provider.OPENAI, 3))
+
+    initial = Config(ntrp_dir=tmp_path, memory=False, embedding_model=None)
+    initial.db_dir.mkdir(parents=True, exist_ok=True)
+    knowledge = KnowledgeRuntime(initial)
+
+    assert knowledge.indexer is None
+    assert knowledge.search_index is None
+
+    enabled = Config(ntrp_dir=tmp_path, memory=False, embedding_model="test-embedding")
+    await knowledge.reload_config(enabled, stores=None)
+
+    assert knowledge.indexer is not None
+    assert knowledge.search_index is not None
+
+    disabled = Config(ntrp_dir=tmp_path, memory=False, embedding_model=None)
+    await knowledge.reload_config(disabled, stores=None)
+
+    assert knowledge.indexer is None
+    assert knowledge.search_index is None

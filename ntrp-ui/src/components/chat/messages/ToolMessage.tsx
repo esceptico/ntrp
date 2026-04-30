@@ -7,7 +7,7 @@ import { MAX_TOOL_OUTPUT_LINES, MIN_RESEARCH_DURATION_SHOW } from "../../../lib/
 const TOOL_MARKER = "\u2192"; // →
 
 function isReadTool(name: string): boolean {
-  return ["read_note", "read_file", "view"].includes(name);
+  return ["read_file", "view"].includes(name);
 }
 
 interface ResearchMessageProps {

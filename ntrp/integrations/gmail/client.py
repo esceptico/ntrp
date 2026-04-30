@@ -21,8 +21,8 @@ from ntrp.integrations.google_auth.auth import (
     get_google_credentials,
     has_scope,
 )
-from ntrp.integrations.types import RawItem
 from ntrp.logging import get_logger
+from ntrp.search.types import RawItem
 from ntrp.settings import NTRP_DIR
 
 

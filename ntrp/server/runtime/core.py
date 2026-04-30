@@ -93,10 +93,6 @@ class Runtime:
         return self.knowledge.search_index
 
     @property
-    def indexables(self):
-        return self.knowledge.indexables
-
-    @property
     def scheduler(self):
         return self.automation.scheduler if self.automation else None
 
@@ -164,7 +160,7 @@ class Runtime:
 
         llm_init(self.config)
         self.stores = await Stores.connect(self.config)
-        await self.knowledge.connect(self.stores, self.integrations)
+        await self.knowledge.connect(self.stores)
         self._init_skills()
         await self._init_notifiers()
         self._init_automation()
