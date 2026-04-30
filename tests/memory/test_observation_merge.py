@@ -2,6 +2,7 @@
 
 import json
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import numpy as np
@@ -10,7 +11,7 @@ import pytest_asyncio
 
 from ntrp.memory.models import SourceType
 from ntrp.memory.observation_merge import observation_merge_pass
-from ntrp.memory.retrieval import cosine_similarity, find_top_pair
+from ntrp.memory.retrieval import SimilarityPairQueue, cosine_similarity, find_top_pair
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.observations import ObservationRepository
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
@@ -183,6 +184,61 @@ class TestFindTopPair:
 
         result = find_top_pair(obs_list, set(), threshold=0.90)
         assert result is None
+
+
+class TestSimilarityPairQueue:
+    def test_skips_pairs_without_rebuilding(self):
+        candidates = SimilarityPairQueue(
+            [
+                SimpleNamespace(id=1, embedding=np.array([1.0, 0.0])),
+                SimpleNamespace(id=2, embedding=np.array([1.0, 0.0])),
+                SimpleNamespace(id=3, embedding=np.array([0.8, 0.6])),
+            ],
+            threshold=0.7,
+        )
+
+        first = candidates.pop(set())
+        assert first is not None
+        assert {first.left.id, first.right.id} == {1, 2}
+
+        second = candidates.pop({(1, 2)})
+        assert second is not None
+        assert {second.left.id, second.right.id} != {1, 2}
+        assert second.score >= 0.7
+
+    def test_replace_refreshes_keeper_candidates(self):
+        candidates = SimilarityPairQueue(
+            [
+                SimpleNamespace(id=1, embedding=np.array([1.0, 0.0])),
+                SimpleNamespace(id=2, embedding=np.array([1.0, 0.0])),
+                SimpleNamespace(id=3, embedding=np.array([0.0, 1.0])),
+            ],
+            threshold=0.8,
+        )
+
+        first = candidates.pop(set())
+        assert first is not None
+        assert {first.left.id, first.right.id} == {1, 2}
+
+        candidates.replace(SimpleNamespace(id=1, embedding=np.array([0.0, 1.0])), removed_id=2)
+
+        refreshed = candidates.pop(set())
+        assert refreshed is not None
+        assert {refreshed.left.id, refreshed.right.id} == {1, 3}
+        assert refreshed.score == pytest.approx(1.0)
+
+    def test_stale_pairs_are_discarded(self):
+        candidates = SimilarityPairQueue(
+            [
+                SimpleNamespace(id=1, embedding=np.array([1.0, 0.0])),
+                SimpleNamespace(id=2, embedding=np.array([1.0, 0.0])),
+            ],
+            threshold=0.8,
+        )
+
+        candidates.replace(SimpleNamespace(id=1, embedding=np.array([0.0, 1.0])))
+
+        assert candidates.pop(set()) is None
 
 
 class TestObservationMergePass:

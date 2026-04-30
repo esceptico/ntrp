@@ -19,7 +19,7 @@ from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact
 from ntrp.memory.prompts import FACT_MERGE_PROMPT
-from ntrp.memory.retrieval import find_top_pair
+from ntrp.memory.retrieval import SimilarityPairQueue
 from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
@@ -151,16 +151,16 @@ async def fact_merge_pass(
     if len(facts) < 2:
         return 0
 
+    candidates = await asyncio.to_thread(SimilarityPairQueue, facts, threshold)
     skipped_pairs: set[tuple[int, int]] = set()
     merges = 0
 
     while True:
-        pair = await asyncio.to_thread(find_top_pair, facts, skipped_pairs, threshold)
+        pair = await asyncio.to_thread(candidates.pop, skipped_pairs)
         if pair is None:
             break
 
-        i, j, sim = pair
-        fact_a, fact_b = facts[i], facts[j]
+        fact_a, fact_b, sim = pair.left, pair.right, pair.score
 
         decision = await _llm_merge_decision(fact_a, fact_b, model)
 
@@ -195,12 +195,12 @@ async def fact_merge_pass(
         )
         merges += 1
 
-        # Update in-memory list
         updated_keeper = await fact_repo.get(keeper.id)
         if updated_keeper:
-            facts = [updated_keeper if f.id == keeper.id else f for f in facts if f.id != removed.id]
+            await asyncio.to_thread(candidates.replace, updated_keeper, removed.id)
         else:
-            facts = [f for f in facts if f.id != removed.id and f.id != keeper.id]
+            await asyncio.to_thread(candidates.remove, keeper.id)
+            await asyncio.to_thread(candidates.remove, removed.id)
 
     if merges > 0:
         _logger.info("Fact merge pass: %d merges", merges)

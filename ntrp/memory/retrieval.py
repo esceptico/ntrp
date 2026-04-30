@@ -1,6 +1,9 @@
 import heapq
 import math
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Generic, Protocol, TypeVar
 
 import numpy as np
 
@@ -22,6 +25,124 @@ from ntrp.memory.store.observations import ObservationRepository
 from ntrp.search.retrieval import rrf_merge
 
 PAIR_SEARCH_BLOCK_SIZE = 256
+
+
+class EmbeddedItem(Protocol):
+    id: int
+    embedding: Embedding | None
+
+
+ItemT = TypeVar("ItemT", bound=EmbeddedItem)
+
+
+@dataclass(frozen=True)
+class SimilarityPair(Generic[ItemT]):
+    left: ItemT
+    right: ItemT
+    score: float
+
+
+def _pair_key(left_id: int, right_id: int) -> tuple[int, int]:
+    return (left_id, right_id) if left_id < right_id else (right_id, left_id)
+
+
+def _normalized_embedding(embedding: Embedding) -> np.ndarray:
+    array = np.asarray(embedding, dtype=np.float32)
+    norm = np.linalg.norm(array)
+    return array / norm if norm > 0 else array.copy()
+
+
+class SimilarityPairQueue(Generic[ItemT]):
+    """Ranked near-duplicate candidates with lazy stale-pair invalidation."""
+
+    def __init__(self, items: Sequence[ItemT], threshold: float):
+        self.threshold = threshold
+        self._items: dict[int, ItemT] = {}
+        self._embeddings: dict[int, np.ndarray] = {}
+        self._versions: dict[int, int] = {}
+        self._heap: list[tuple[float, int, int, int, int]] = []
+
+        for item in items:
+            item_id = int(item.id)
+            self._items[item_id] = item
+            self._versions[item_id] = 0
+            if item.embedding is not None:
+                self._embeddings[item_id] = _normalized_embedding(item.embedding)
+
+        self._push_initial_pairs()
+
+    def pop(self, skipped: set[tuple[int, int]]) -> SimilarityPair[ItemT] | None:
+        while self._heap:
+            negative_score, left_id, right_id, left_version, right_version = heapq.heappop(self._heap)
+            if _pair_key(left_id, right_id) in skipped:
+                continue
+            if left_id not in self._items or right_id not in self._items:
+                continue
+            if self._versions[left_id] != left_version or self._versions[right_id] != right_version:
+                continue
+            return SimilarityPair(self._items[left_id], self._items[right_id], -negative_score)
+        return None
+
+    def remove(self, item_id: int) -> None:
+        item_id = int(item_id)
+        self._items.pop(item_id, None)
+        self._embeddings.pop(item_id, None)
+        self._versions.pop(item_id, None)
+
+    def replace(self, item: ItemT, removed_id: int | None = None) -> None:
+        item_id = int(item.id)
+        if removed_id is not None and int(removed_id) != item_id:
+            self.remove(removed_id)
+
+        self._items[item_id] = item
+        self._versions[item_id] = self._versions.get(item_id, 0) + 1
+
+        if item.embedding is None:
+            self._embeddings.pop(item_id, None)
+            return
+
+        self._embeddings[item_id] = _normalized_embedding(item.embedding)
+        self._push_pairs_for(item_id)
+
+    def _push_initial_pairs(self) -> None:
+        item_ids = list(self._embeddings)
+        if len(item_ids) < 2:
+            return
+
+        embeddings = np.stack([self._embeddings[item_id] for item_id in item_ids])
+        columns = np.arange(len(item_ids))
+
+        for start in range(0, len(item_ids), PAIR_SEARCH_BLOCK_SIZE):
+            end = min(start + PAIR_SEARCH_BLOCK_SIZE, len(item_ids))
+            scores = embeddings[start:end] @ embeddings.T
+            row_indices = np.arange(start, end)[:, None]
+            scores[columns[None, :] <= row_indices] = -np.inf
+
+            rows, cols = np.where(scores >= self.threshold)
+            for local_row, col in zip(rows, cols, strict=False):
+                row = start + int(local_row)
+                self._push_pair(item_ids[row], item_ids[int(col)], float(scores[local_row, col]))
+
+    def _push_pairs_for(self, item_id: int) -> None:
+        embedding = self._embeddings.get(item_id)
+        if embedding is None:
+            return
+
+        other_ids = [other_id for other_id in self._embeddings if other_id != item_id]
+        if not other_ids:
+            return
+
+        embeddings = np.stack([self._embeddings[other_id] for other_id in other_ids])
+        scores = embeddings @ embedding
+        for index in np.flatnonzero(scores >= self.threshold):
+            self._push_pair(item_id, other_ids[int(index)], float(scores[index]))
+
+    def _push_pair(self, left_id: int, right_id: int, score: float) -> None:
+        left_id, right_id = _pair_key(left_id, right_id)
+        heapq.heappush(
+            self._heap,
+            (-score, left_id, right_id, self._versions[left_id], self._versions[right_id]),
+        )
 
 
 async def hybrid_search(
@@ -96,56 +217,12 @@ def find_top_pair(
 
     Items must have `.id` (int) and `.embedding` (ndarray | None) attributes.
     """
-    indexed = [
-        (i, item.id, np.asarray(item.embedding, dtype=np.float32))
-        for i, item in enumerate(items)
-        if item.embedding is not None
-    ]
-    if len(indexed) < 2:
+    item_indices = {int(item.id): i for i, item in enumerate(items)}
+    candidates = SimilarityPairQueue(items, threshold)
+    pair = candidates.pop(skipped)
+    if pair is None:
         return None
-
-    item_indices = np.array([i for i, _, _ in indexed], dtype=np.int64)
-    item_ids = np.array([item_id for _, item_id, _ in indexed], dtype=np.int64)
-    embeddings = np.stack([embedding for _, _, embedding in indexed])
-    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-    embeddings = embeddings / np.where(norms == 0, 1, norms)
-
-    skipped_by_id: dict[int, set[int]] = {}
-    for left_id, right_id in skipped:
-        skipped_by_id.setdefault(left_id, set()).add(right_id)
-        skipped_by_id.setdefault(right_id, set()).add(left_id)
-    id_to_embedding_index = {int(item_id): i for i, item_id in enumerate(item_ids)}
-
-    best: tuple[int, int, float] | None = None
-    best_score = -np.inf
-    all_columns = np.arange(len(indexed))
-
-    for start in range(0, len(indexed), PAIR_SEARCH_BLOCK_SIZE):
-        end = min(start + PAIR_SEARCH_BLOCK_SIZE, len(indexed))
-        scores = embeddings[start:end] @ embeddings.T
-
-        row_indices = np.arange(start, end)[:, None]
-        scores[all_columns[None, :] <= row_indices] = -np.inf
-
-        if skipped_by_id:
-            for local_row, item_id in enumerate(item_ids[start:end]):
-                skipped_columns = [
-                    id_to_embedding_index[other_id]
-                    for other_id in skipped_by_id.get(int(item_id), ())
-                    if other_id in id_to_embedding_index
-                ]
-                if skipped_columns:
-                    scores[local_row, skipped_columns] = -np.inf
-
-        flat_index = int(np.argmax(scores))
-        block_score = float(scores.flat[flat_index])
-        if block_score >= threshold and block_score > best_score:
-            local_i, j = np.unravel_index(flat_index, scores.shape)
-            i = start + int(local_i)
-            best = (int(item_indices[i]), int(item_indices[j]), block_score)
-            best_score = block_score
-
-    return best
+    return (item_indices[int(pair.left.id)], item_indices[int(pair.right.id)], pair.score)
 
 
 async def _temporal_vector_expand(

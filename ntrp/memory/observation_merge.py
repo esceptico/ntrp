@@ -20,7 +20,7 @@ from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Observation
 from ntrp.memory.prompts import OBSERVATION_MERGE_PROMPT
-from ntrp.memory.retrieval import find_top_pair
+from ntrp.memory.retrieval import SimilarityPairQueue
 from ntrp.memory.store.observations import ObservationRepository
 
 _logger = get_logger(__name__)
@@ -79,16 +79,16 @@ async def observation_merge_pass(
     if len(observations) < 2:
         return 0
 
+    candidates = await asyncio.to_thread(SimilarityPairQueue, observations, threshold)
     skipped_pairs: set[tuple[int, int]] = set()
     merges = 0
 
     while True:
-        pair = await asyncio.to_thread(find_top_pair, observations, skipped_pairs, threshold)
+        pair = await asyncio.to_thread(candidates.pop, skipped_pairs)
         if pair is None:
             break
 
-        i, j, sim = pair
-        obs_a, obs_b = observations[i], observations[j]
+        obs_a, obs_b, sim = pair.left, pair.right, pair.score
 
         decision = await _llm_merge_decision(obs_a, obs_b, model)
 
@@ -135,8 +135,9 @@ async def observation_merge_pass(
                 decision.text[:80],
             )
             merges += 1
-            # Update in-memory list: replace keeper, remove removed
-            observations = [merged if o.id == keeper.id else o for o in observations if o.id != removed.id]
+            await asyncio.to_thread(candidates.replace, merged, removed.id)
+        else:
+            skipped_pairs.add((min(obs_a.id, obs_b.id), max(obs_a.id, obs_b.id)))
 
     if merges > 0:
         _logger.info("Observation merge pass: %d merges", merges)
