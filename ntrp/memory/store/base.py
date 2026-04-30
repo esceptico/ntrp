@@ -107,6 +107,26 @@ CREATE TABLE IF NOT EXISTS dreams (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS observation_facts (
+    observation_id INTEGER NOT NULL REFERENCES observations(id) ON DELETE CASCADE,
+    fact_id INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'support',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (observation_id, fact_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_observation_facts_fact ON observation_facts(fact_id);
+
+CREATE TABLE IF NOT EXISTS dream_facts (
+    dream_id INTEGER NOT NULL REFERENCES dreams(id) ON DELETE CASCADE,
+    fact_id INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'support',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (dream_id, fact_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dream_facts_fact ON dream_facts(fact_id);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
     text,
     content='facts',
@@ -158,9 +178,11 @@ class GraphDatabase:
         await self.conn.commit()
 
     async def clear_all(self) -> None:
+        await self.conn.execute("DELETE FROM dream_facts")
         await self.conn.execute("DELETE FROM dreams")
         await self.conn.execute("DELETE FROM temporal_checkpoints")
         await self.conn.execute("DELETE FROM obs_entity_refs")
+        await self.conn.execute("DELETE FROM observation_facts")
         await self.conn.execute("DELETE FROM observations_vec")
         await self.conn.execute("DELETE FROM observations")
         await self.conn.execute("DELETE FROM entity_refs")

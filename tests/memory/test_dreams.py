@@ -314,6 +314,23 @@ class TestDreamRepository:
         assert fetched.source_fact_ids == [1, 2, 3]
 
     @pytest.mark.asyncio
+    async def test_create_links_existing_source_facts(
+        self,
+        dream_repo: DreamRepository,
+        fact_repo: FactRepository,
+    ):
+        f1 = await fact_repo.create("Fact 1", SourceType.EXPLICIT)
+        f2 = await fact_repo.create("Fact 2", SourceType.EXPLICIT)
+
+        dream = await dream_repo.create("bridge", "insight", [f1.id, f2.id, 999_999])
+
+        rows = await dream_repo.conn.execute_fetchall(
+            "SELECT fact_id FROM dream_facts WHERE dream_id = ? ORDER BY fact_id",
+            (dream.id,),
+        )
+        assert [row["fact_id"] for row in rows] == sorted([f1.id, f2.id])
+
+    @pytest.mark.asyncio
     async def test_list_and_count(self, dream_repo: DreamRepository):
         await dream_repo.create("b1", "i1", [1])
         await dream_repo.create("b2", "i2", [2])

@@ -76,6 +76,12 @@ _SQL_REINFORCE_OBSERVATIONS = """
 
 _SQL_INSERT_OBSERVATION_VEC = "INSERT INTO observations_vec (observation_id, embedding) VALUES (?, ?)"
 _SQL_DELETE_OBSERVATION_VEC = "DELETE FROM observations_vec WHERE observation_id = ?"
+_SQL_INSERT_OBSERVATION_FACT = """
+    INSERT OR IGNORE INTO observation_facts (observation_id, fact_id, role, created_at)
+    SELECT ?, id, 'support', ? FROM facts WHERE id = ?
+"""
+_SQL_DELETE_OBSERVATION_FACTS = "DELETE FROM observation_facts WHERE observation_id = ?"
+_SQL_DELETE_OBSERVATION_FACTS_BY_FACT = "DELETE FROM observation_facts WHERE fact_id IN ({placeholders})"
 
 _SQL_SEARCH_OBSERVATIONS_VEC = """
     SELECT v.observation_id, v.distance
@@ -103,6 +109,7 @@ _SQL_COUNT_ARCHIVED_OBS = "SELECT COUNT(*) FROM observations WHERE archived_at I
 _SQL_UPDATE_SUMMARY = "UPDATE observations SET summary = ?, embedding = ?, updated_at = ? WHERE id = ?"
 _SQL_DELETE_OBSERVATION = "DELETE FROM observations WHERE id = ?"
 _SQL_CLEAR_OBS_ENTITY_REFS = "DELETE FROM obs_entity_refs"
+_SQL_CLEAR_OBS_FACTS = "DELETE FROM observation_facts"
 _SQL_CLEAR_OBS_VEC = "DELETE FROM observations_vec"
 _SQL_CLEAR_OBSERVATIONS = "DELETE FROM observations"
 _SQL_UPDATE_OBS_EMBEDDING = "UPDATE observations SET embedding = ? WHERE id = ?"
@@ -113,6 +120,10 @@ def _row_dict(row: aiosqlite.Row) -> dict:
     d["source_fact_ids"] = json.loads(d["source_fact_ids"]) if d.get("source_fact_ids") else []
     d["history"] = json.loads(d["history"]) if d.get("history") else []
     return d
+
+
+async def _insert_observation_fact(conn: aiosqlite.Connection, observation_id: int, fact_id: int, created_at: str) -> None:
+    await conn.execute(_SQL_INSERT_OBSERVATION_FACT, (observation_id, created_at, fact_id))
 
 
 class ObservationRepository:
@@ -147,6 +158,8 @@ class ObservationRepository:
 
         if embedding_bytes is not None:
             await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (obs_id, embedding_bytes))
+        if source_fact_id:
+            await _insert_observation_fact(self.conn, obs_id, source_fact_id, now.isoformat())
 
         return Observation(
             id=obs_id,
@@ -219,6 +232,8 @@ class ObservationRepository:
             embedding_bytes = serialize_embedding(embedding)
             await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (observation_id,))
             await self.conn.execute(_SQL_INSERT_OBSERVATION_VEC, (observation_id, embedding_bytes))
+        if new_fact_id:
+            await _insert_observation_fact(self.conn, observation_id, new_fact_id, now.isoformat())
 
         return Observation(
             id=observation_id,
@@ -248,6 +263,8 @@ class ObservationRepository:
             return
         fact_id_set = set(fact_ids)
         rows = await self.conn.execute_fetchall(_SQL_GET_NONEMPTY_SOURCE_FACTS)
+        placeholders = ",".join("?" * len(fact_ids))
+        await self.conn.execute(_SQL_DELETE_OBSERVATION_FACTS_BY_FACT.format(placeholders=placeholders), fact_ids)
         for row in rows:
             raw_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []
             new_ids = [fid for fid in raw_ids if fid not in fact_id_set]
@@ -258,8 +275,12 @@ class ObservationRepository:
         if not fact_ids:
             return
         existing = await self.get_fact_ids(observation_id)
-        merged = existing + [fid for fid in fact_ids if fid not in existing]
+        new_ids = [fid for fid in fact_ids if fid not in existing]
+        merged = existing + new_ids
         await self.conn.execute(_SQL_ADD_SOURCE_FACTS, (json.dumps(merged), observation_id))
+        now = datetime.now(UTC).isoformat()
+        for fact_id in new_ids:
+            await _insert_observation_fact(self.conn, observation_id, fact_id, now)
 
     async def get_fact_ids(self, observation_id: int) -> list[int]:
         rows = await self.conn.execute_fetchall(_SQL_GET_SOURCE_FACT_IDS, (observation_id,))
@@ -285,6 +306,7 @@ class ObservationRepository:
 
     async def delete(self, observation_id: int) -> None:
         await self.conn.execute(_SQL_DELETE_OBS_ENTITY_REFS, (observation_id,))
+        await self.conn.execute(_SQL_DELETE_OBSERVATION_FACTS, (observation_id,))
         await self.conn.execute(_SQL_DELETE_OBSERVATION_VEC, (observation_id,))
         await self.conn.execute(_SQL_DELETE_OBSERVATION, (observation_id,))
 
@@ -335,6 +357,9 @@ class ObservationRepository:
                 keeper_id,
             ),
         )
+        await self.conn.execute(_SQL_DELETE_OBSERVATION_FACTS, (keeper_id,))
+        for fact_id in merged_fids:
+            await _insert_observation_fact(self.conn, keeper_id, fact_id, now.isoformat())
 
         # Update vec table
         if embedding_bytes is not None:
@@ -371,6 +396,7 @@ class ObservationRepository:
 
     async def clear_all(self) -> int:
         await self.conn.execute(_SQL_CLEAR_OBS_ENTITY_REFS)
+        await self.conn.execute(_SQL_CLEAR_OBS_FACTS)
         await self.conn.execute(_SQL_CLEAR_OBS_VEC)
         cursor = await self.conn.execute(_SQL_CLEAR_OBSERVATIONS)
         return cursor.rowcount

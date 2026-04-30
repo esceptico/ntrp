@@ -22,8 +22,14 @@ async def _all(conn: aiosqlite.Connection, sql: str, params: tuple[Any, ...] = (
     return [_dict(row) for row in rows]
 
 
-async def _source_provenance(conn: aiosqlite.Connection, table: str, active_filter: str = "1 = 1") -> dict[str, Any]:
-    return await _one(
+async def _source_provenance(
+    conn: aiosqlite.Connection,
+    table: str,
+    active_filter: str = "1 = 1",
+    relation_table: str | None = None,
+    relation_id_column: str | None = None,
+) -> dict[str, Any]:
+    result = await _one(
         conn,
         f"""
         WITH records AS (
@@ -85,6 +91,18 @@ async def _source_provenance(conn: aiosqlite.Connection, table: str, active_filt
             ) AS records_with_archived_sources
         """,
     )
+    if relation_table and relation_id_column:
+        relation_refs = await _one(
+            conn,
+            f"""
+            SELECT COUNT(*) AS relation_refs
+            FROM {relation_table} rel
+            JOIN {table} records ON records.id = rel.{relation_id_column}
+            WHERE {active_filter}
+            """,
+        )
+        result.update(relation_refs)
+    return result
 
 
 async def memory_audit(conn: aiosqlite.Connection) -> dict[str, Any]:
@@ -194,8 +212,19 @@ async def memory_audit(conn: aiosqlite.Connection) -> dict[str, Any]:
         """,
     )
     provenance = {
-        "observations": await _source_provenance(conn, "observations", "archived_at IS NULL"),
-        "dreams": await _source_provenance(conn, "dreams"),
+        "observations": await _source_provenance(
+            conn,
+            "observations",
+            "archived_at IS NULL",
+            relation_table="observation_facts",
+            relation_id_column="observation_id",
+        ),
+        "dreams": await _source_provenance(
+            conn,
+            "dreams",
+            relation_table="dream_facts",
+            relation_id_column="dream_id",
+        ),
     }
 
     return {

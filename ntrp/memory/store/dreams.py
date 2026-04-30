@@ -24,6 +24,12 @@ _SQL_RECENT_EMBEDDINGS = """
 
 _SQL_GET_NONEMPTY_DREAM_SOURCES = "SELECT id, source_fact_ids FROM dreams WHERE source_fact_ids != '[]'"
 _SQL_UPDATE_DREAM_SOURCES = "UPDATE dreams SET source_fact_ids = ? WHERE id = ?"
+_SQL_INSERT_DREAM_FACT = """
+    INSERT OR IGNORE INTO dream_facts (dream_id, fact_id, role, created_at)
+    SELECT ?, id, 'support', ? FROM facts WHERE id = ?
+"""
+_SQL_DELETE_DREAM_FACTS = "DELETE FROM dream_facts WHERE dream_id = ?"
+_SQL_DELETE_DREAM_FACTS_BY_FACT = "DELETE FROM dream_facts WHERE fact_id IN ({placeholders})"
 
 
 def _row_dict(row: aiosqlite.Row) -> dict:
@@ -31,6 +37,10 @@ def _row_dict(row: aiosqlite.Row) -> dict:
     d["source_fact_ids"] = json.loads(d["source_fact_ids"]) if d.get("source_fact_ids") else []
     d.pop("embedding", None)
     return d
+
+
+async def _insert_dream_fact(conn: aiosqlite.Connection, dream_id: int, fact_id: int, created_at: str) -> None:
+    await conn.execute(_SQL_INSERT_DREAM_FACT, (dream_id, created_at, fact_id))
 
 
 class DreamRepository:
@@ -46,8 +56,11 @@ class DreamRepository:
             _SQL_INSERT_DREAM,
             (bridge, insight, serialize_embedding(embedding), json.dumps(source_fact_ids), now.isoformat()),
         )
+        dream_id = cursor.lastrowid
+        for fact_id in source_fact_ids:
+            await _insert_dream_fact(self.conn, dream_id, fact_id, now.isoformat())
         return Dream(
-            id=cursor.lastrowid,
+            id=dream_id,
             bridge=bridge,
             insight=insight,
             source_fact_ids=source_fact_ids,
@@ -67,6 +80,7 @@ class DreamRepository:
         return rows[0][0]
 
     async def delete(self, dream_id: int) -> None:
+        await self.conn.execute(_SQL_DELETE_DREAM_FACTS, (dream_id,))
         await self.conn.execute(_SQL_DELETE, (dream_id,))
 
     async def last_created_at(self) -> datetime | None:
@@ -83,6 +97,8 @@ class DreamRepository:
         if not fact_ids:
             return
         fact_id_set = set(fact_ids)
+        placeholders = ",".join("?" * len(fact_ids))
+        await self.conn.execute(_SQL_DELETE_DREAM_FACTS_BY_FACT.format(placeholders=placeholders), fact_ids)
         rows = await self.conn.execute_fetchall(_SQL_GET_NONEMPTY_DREAM_SOURCES)
         for row in rows:
             raw_ids = json.loads(row["source_fact_ids"]) if row["source_fact_ids"] else []

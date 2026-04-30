@@ -300,6 +300,23 @@ The source of truth remains the fact. The profile row is a cache/projection.
 
 ## Phase 4: Generated Memory Provenance
 
+Status:
+
+```text
+observation_facts and dream_facts added in migration v6
+legacy JSON source_fact_ids is still kept during transition
+repositories write both JSON and relation-table provenance for existing valid facts
+```
+
+Real-data migration check on backup copy:
+
+```text
+schema_version: 6
+observation_facts: 39,239 rows
+dream_facts: 574 rows
+skipped invalid legacy refs: 1 observation ref, 22 dream refs
+```
+
 Replace JSON source ids with real relations. Start with observations, then dreams.
 
 ```text

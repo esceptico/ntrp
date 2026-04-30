@@ -55,6 +55,12 @@ class TestObservationCRUD:
         fact_ids = await repo.get_fact_ids(obs.id)
         assert fact_ids == [f1.id]
 
+        rows = await repo.conn.execute_fetchall(
+            "SELECT fact_id FROM observation_facts WHERE observation_id = ?",
+            (obs.id,),
+        )
+        assert [row["fact_id"] for row in rows] == [f1.id]
+
     @pytest.mark.asyncio
     async def test_list_recent(self, repo: ObservationRepository):
         await repo.create(summary="Obs 1")
@@ -104,6 +110,12 @@ class TestUpdate:
         assert updated.history[0].previous_text == "Obs"
         assert updated.history[0].reason == "Added new evidence"
         assert updated.history[0].source_fact_id == f2.id
+
+        rows = await repo.conn.execute_fetchall(
+            "SELECT fact_id FROM observation_facts WHERE observation_id = ? ORDER BY fact_id",
+            (obs.id,),
+        )
+        assert [row["fact_id"] for row in rows] == sorted([f1.id, f2.id])
 
     @pytest.mark.asyncio
     async def test_update_nonexistent(self, repo: ObservationRepository):

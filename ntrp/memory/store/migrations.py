@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 5
+CURRENT_VERSION = 6
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -20,6 +20,14 @@ async def _set_version(conn: aiosqlite.Connection, version: int) -> None:
         "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
         (str(version),),
     )
+
+
+async def _table_exists(conn: aiosqlite.Connection, table: str) -> bool:
+    rows = await conn.execute_fetchall(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table,),
+    )
+    return bool(rows)
 
 
 async def _migrate_v1(conn: aiosqlite.Connection) -> None:
@@ -147,12 +155,58 @@ async def _migrate_v5(conn: aiosqlite.Connection) -> None:
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_superseded ON facts(superseded_by_fact_id)")
 
 
+async def _migrate_v6(conn: aiosqlite.Connection) -> None:
+    """Add relation-table provenance for generated memory."""
+    _logger.info("Migration v6: adding generated memory provenance tables")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS observation_facts (
+            observation_id INTEGER NOT NULL REFERENCES observations(id) ON DELETE CASCADE,
+            fact_id INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
+            role TEXT NOT NULL DEFAULT 'support',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (observation_id, fact_id)
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_observation_facts_fact ON observation_facts(fact_id)")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS dream_facts (
+            dream_id INTEGER NOT NULL REFERENCES dreams(id) ON DELETE CASCADE,
+            fact_id INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
+            role TEXT NOT NULL DEFAULT 'support',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (dream_id, fact_id)
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_dream_facts_fact ON dream_facts(fact_id)")
+
+    if await _table_exists(conn, "observations"):
+        await conn.execute("""
+            INSERT OR IGNORE INTO observation_facts (observation_id, fact_id, role, created_at)
+            SELECT o.id, f.id, 'support', COALESCE(o.created_at, CURRENT_TIMESTAMP)
+            FROM observations o, json_each(o.source_fact_ids) source
+            JOIN facts f ON f.id = CAST(source.value AS INTEGER)
+            WHERE json_valid(o.source_fact_ids)
+        """)
+
+    if await _table_exists(conn, "dreams"):
+        await conn.execute("""
+            INSERT OR IGNORE INTO dream_facts (dream_id, fact_id, role, created_at)
+            SELECT d.id, f.id, 'support', COALESCE(d.created_at, CURRENT_TIMESTAMP)
+            FROM dreams d, json_each(d.source_fact_ids) source
+            JOIN facts f ON f.id = CAST(source.value AS INTEGER)
+            WHERE json_valid(d.source_fact_ids)
+        """)
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
     (3, _migrate_v3),
     (4, _migrate_v4),
     (5, _migrate_v5),
+    (6, _migrate_v6),
 ]
 
 

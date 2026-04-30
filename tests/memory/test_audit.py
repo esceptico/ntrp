@@ -100,6 +100,7 @@ class TestMemoryAudit:
         assert observation_provenance["records_with_missing_sources"] == 1
         assert observation_provenance["archived_source_refs"] == 1
         assert observation_provenance["records_with_archived_sources"] == 1
+        assert observation_provenance["relation_refs"] == 2
 
         dream_provenance = audit["provenance"]["dreams"]
         assert dream_provenance["records"] == 2
@@ -107,6 +108,7 @@ class TestMemoryAudit:
         assert dream_provenance["source_refs"] == 3
         assert dream_provenance["missing_source_refs"] == 1
         assert dream_provenance["archived_source_refs"] == 1
+        assert dream_provenance["relation_refs"] == 2
 
 
 class TestObservationPruneDryRun:
