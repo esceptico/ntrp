@@ -23,7 +23,7 @@ export function ToolChainDisplay({ items, maxItems = 5, interactive = false }: {
   if (roots.length === 0) return null;
 
   return (
-    <box flexDirection="column" overflow="hidden" paddingLeft={3}>
+    <box flexDirection="column" overflow="hidden">
       {roots.map((node) => (
         <TreeItem key={node.id} node={node} indent={0} expanded={expanded} width={width - 3} />
       ))}

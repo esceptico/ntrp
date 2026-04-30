@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { colors, useThemeVersion } from "../../ui/colors.js";
-import { SplitBorder } from "../../ui/border.js";
+import { TranscriptRow } from "./TranscriptRow.js";
 
 interface ErrorMessageProps {
   content: string;
@@ -10,21 +10,16 @@ export const ErrorMessage = memo(function ErrorMessage({ content }: ErrorMessage
   useThemeVersion();
 
   return (
-    <box
-      overflow="hidden"
-      border={SplitBorder.border}
-      borderColor={colors.status.error}
-      customBorderChars={SplitBorder.customBorderChars}
-    >
+    <TranscriptRow railColor={colors.status.error}>
       <box
         paddingTop={1}
         paddingBottom={1}
-        paddingLeft={2}
         paddingRight={2}
         backgroundColor={colors.background.panel}
+        overflow="hidden"
       >
         <text><span fg={colors.status.error}>{content}</span></text>
       </box>
-    </box>
+    </TranscriptRow>
   );
 });

@@ -35,6 +35,7 @@ import { Setup } from "./components/Setup.js";
 import { ProviderOnboarding } from "./components/ProviderOnboarding.js";
 import { Sidebar } from "./components/sidebar/index.js";
 import { Markdown } from "./components/Markdown.js";
+import { TranscriptRow } from "./components/chat/messages/TranscriptRow.js";
 import { COMMANDS } from "./lib/commands.js";
 import { nextReasoningEffort, reasoningEfforts } from "./lib/reasoning.js";
 import { setApiKey } from "./api/fetch.js";
@@ -491,16 +492,20 @@ function AppContent({
           })}
 
           {pendingText.trimStart() && (
-            <box marginTop={1} paddingLeft={3} overflow="hidden">
+            <box marginTop={1} overflow="hidden">
+              <TranscriptRow>
               <box flexGrow={1} flexDirection="column" overflow="hidden">
                 <Markdown streaming>{pendingText.trimStart()}</Markdown>
               </box>
+              </TranscriptRow>
             </box>
           )}
 
           {toolChain.length > 0 && (
             <box marginTop={liveToolMargin}>
-              <ToolChainDisplay items={toolChain} interactive />
+              <TranscriptRow>
+                <ToolChainDisplay items={toolChain} interactive />
+              </TranscriptRow>
             </box>
           )}
 

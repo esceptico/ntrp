@@ -3,6 +3,7 @@ import { colors, useThemeVersion } from "../../ui/colors.js";
 import { useDimensions } from "../../../contexts/index.js";
 import { truncateText } from "../../ui/index.js";
 import { MAX_TOOL_OUTPUT_LINES, MIN_RESEARCH_DURATION_SHOW } from "../../../lib/constants.js";
+import { TranscriptRow, TRANSCRIPT_GUTTER_WIDTH } from "./TranscriptRow.js";
 
 const TOOL_MARKER = "\u2192"; // →
 
@@ -30,19 +31,21 @@ const ResearchMessage = memo(function ResearchMessage({
   if (duration && duration >= MIN_RESEARCH_DURATION_SHOW) parts.push(`${duration}s`);
   const stats = parts.length > 0 ? ` \u00B7 ${parts.join(" \u00B7 ")}` : "";
   const descText = description || "research";
-  const contentWidth = Math.max(0, terminalWidth - 7);
+  const contentWidth = Math.max(0, terminalWidth - TRANSCRIPT_GUTTER_WIDTH - 4);
   const descWidth = Math.max(0, contentWidth - 2 - stats.length);
   const statusLabel = cancelled ? "Cancelled" : "Done";
 
   return (
-    <box flexDirection="column" overflow="hidden" paddingLeft={3}>
-      <text>
-        <span fg={cancelled ? colors.tool.error : colors.tool.completed}>{TOOL_MARKER} </span>
-        <span fg={colors.text.muted}>{truncateText(descText, descWidth)}</span>
-        {stats && <span fg={colors.text.disabled}>{stats}</span>}
-      </text>
-      <text><span fg={cancelled ? colors.status.error : colors.text.disabled}>{"  "} {statusLabel}</span></text>
-    </box>
+    <TranscriptRow>
+      <box flexDirection="column" overflow="hidden">
+        <text>
+          <span fg={cancelled ? colors.tool.error : colors.tool.completed}>{TOOL_MARKER} </span>
+          <span fg={colors.text.muted}>{truncateText(descText, descWidth)}</span>
+          {stats && <span fg={colors.text.disabled}>{stats}</span>}
+        </text>
+        <text><span fg={cancelled ? colors.status.error : colors.text.disabled}>{"  "} {statusLabel}</span></text>
+      </box>
+    </TranscriptRow>
   );
 });
 
@@ -77,7 +80,7 @@ export const ToolMessage = memo(function ToolMessage({
 }: ToolMessageProps) {
   useThemeVersion();
   const { width } = useDimensions();
-  const contentWidth = Math.max(0, width - 3);
+  const contentWidth = Math.max(0, width - TRANSCRIPT_GUTTER_WIDTH);
   const metadataWidth = Math.max(0, contentWidth - 11);
   const suffix = autoApproved ? AUTO_SUFFIX : "";
 
@@ -106,21 +109,23 @@ export const ToolMessage = memo(function ToolMessage({
 
   if (isReadTool(name) && totalLines !== null) {
     return (
-      <box flexDirection="column" overflow="hidden" paddingLeft={3}>
-        <text>
-          <span fg={colors.tool.completed}>{TOOL_MARKER} </span>
-          <span fg={colors.text.muted}>{truncateText(displayName, contentWidth - 2 - suffix.length)}</span>
-          {suffix && <span fg={colors.status.success}>{suffix}</span>}
-        </text>
-        <text>
-          <span fg={colors.text.disabled}>
-            {"  "} Read <strong>{String(totalLines)}</strong> lines
-          </span>
-        </text>
-        {metadata && (
-          <text><span fg={colors.text.disabled}>{"  "} metadata {truncateText(metadata, metadataWidth)}</span></text>
-        )}
-      </box>
+      <TranscriptRow>
+        <box flexDirection="column" overflow="hidden">
+          <text>
+            <span fg={colors.tool.completed}>{TOOL_MARKER} </span>
+            <span fg={colors.text.muted}>{truncateText(displayName, contentWidth - 2 - suffix.length)}</span>
+            {suffix && <span fg={colors.status.success}>{suffix}</span>}
+          </text>
+          <text>
+            <span fg={colors.text.disabled}>
+              {"  "} Read <strong>{String(totalLines)}</strong> lines
+            </span>
+          </text>
+          {metadata && (
+            <text><span fg={colors.text.disabled}>{"  "} metadata {truncateText(metadata, metadataWidth)}</span></text>
+          )}
+        </box>
+      </TranscriptRow>
     );
   }
 
@@ -131,33 +136,35 @@ export const ToolMessage = memo(function ToolMessage({
     : Math.max(0, lines.length - MAX_TOOL_OUTPUT_LINES);
 
   return (
-    <box flexDirection="column" overflow="hidden" paddingLeft={3}>
-      <text>
-        <span fg={colors.tool.completed}>{TOOL_MARKER} </span>
-        <span fg={colors.text.muted}>{truncateText(displayName, contentWidth - 2 - suffix.length)}</span>
-        {suffix && <span fg={colors.status.success}>{suffix}</span>}
-      </text>
-      {(visibleLines.length > 0 || hiddenCount > 0) && (
-        <box flexDirection="row">
-          <box width={2} flexShrink={0}>
-            <text><span fg={colors.text.disabled}>{"  "}</span></text>
+    <TranscriptRow>
+      <box flexDirection="column" overflow="hidden">
+        <text>
+          <span fg={colors.tool.completed}>{TOOL_MARKER} </span>
+          <span fg={colors.text.muted}>{truncateText(displayName, contentWidth - 2 - suffix.length)}</span>
+          {suffix && <span fg={colors.status.success}>{suffix}</span>}
+        </text>
+        {(visibleLines.length > 0 || hiddenCount > 0) && (
+          <box flexDirection="row">
+            <box width={2} flexShrink={0}>
+              <text><span fg={colors.text.disabled}>{"  "}</span></text>
+            </box>
+            <box flexDirection="column" flexGrow={1} overflow="hidden">
+              {visibleLines.map((line, i) => (
+                <text key={i}><span fg={colors.text.disabled}>{truncateText(line, contentWidth - 2)}</span></text>
+              ))}
+              {hiddenCount > 0 && (
+                <text><span fg={colors.text.disabled}>{"\u2026"} +{hiddenCount} lines</span></text>
+              )}
+              {metadata && (
+                <text><span fg={colors.text.disabled}>metadata {truncateText(metadata, metadataWidth)}</span></text>
+              )}
+            </box>
           </box>
-          <box flexDirection="column" flexGrow={1} overflow="hidden">
-            {visibleLines.map((line, i) => (
-              <text key={i}><span fg={colors.text.disabled}>{truncateText(line, contentWidth - 2)}</span></text>
-            ))}
-            {hiddenCount > 0 && (
-              <text><span fg={colors.text.disabled}>{"\u2026"} +{hiddenCount} lines</span></text>
-            )}
-            {metadata && (
-              <text><span fg={colors.text.disabled}>metadata {truncateText(metadata, metadataWidth)}</span></text>
-            )}
-          </box>
-        </box>
-      )}
-      {visibleLines.length === 0 && hiddenCount === 0 && metadata && (
-        <text><span fg={colors.text.disabled}>{"  "} metadata {truncateText(metadata, metadataWidth)}</span></text>
-      )}
-    </box>
+        )}
+        {visibleLines.length === 0 && hiddenCount === 0 && metadata && (
+          <text><span fg={colors.text.disabled}>{"  "} metadata {truncateText(metadata, metadataWidth)}</span></text>
+        )}
+      </box>
+    </TranscriptRow>
   );
 });

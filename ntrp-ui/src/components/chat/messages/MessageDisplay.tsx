@@ -7,6 +7,7 @@ import { ToolMessage } from "./ToolMessage.js";
 import { StatusMessage } from "./StatusMessage.js";
 import { ErrorMessage } from "./ErrorMessage.js";
 import { ThinkingMessage } from "./ThinkingMessage.js";
+import { TranscriptRow } from "./TranscriptRow.js";
 
 interface MessageDisplayProps {
   msg: Message;
@@ -36,7 +37,7 @@ export const MessageDisplay = memo(function MessageDisplay({
       );
     case "tool_chain":
       return msg.toolChain && msg.toolChain.length > 0
-        ? <ToolChainDisplay items={msg.toolChain as ToolChainItem[]} />
+        ? <TranscriptRow><ToolChainDisplay items={msg.toolChain as ToolChainItem[]} /></TranscriptRow>
         : null;
     case "thinking":
       return <ThinkingMessage content={msg.content} />;
