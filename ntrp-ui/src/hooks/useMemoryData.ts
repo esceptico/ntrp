@@ -4,11 +4,13 @@ import {
   getFacts,
   getObservations,
   getDreams,
+  getMemoryPruneDryRun,
   type Fact,
   type FactFilters,
   type Observation,
   type ObservationFilters,
   type Dream,
+  type MemoryPruneDryRun,
 } from "../api/client.js";
 
 interface UseMemoryDataResult {
@@ -17,6 +19,7 @@ interface UseMemoryDataResult {
   observations: Observation[];
   observationTotal: number;
   dreams: Dream[];
+  pruneDryRun: MemoryPruneDryRun | null;
   loading: boolean;
   error: string | null;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
@@ -34,6 +37,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
   const [observations, setObservations] = useState<Observation[]>([]);
   const [observationTotal, setObservationTotal] = useState(0);
   const [dreams, setDreams] = useState<Dream[]>([]);
+  const [pruneDryRun, setPruneDryRun] = useState<MemoryPruneDryRun | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
   const fetchIdRef = useRef(0);
@@ -44,10 +48,11 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
 
     (async () => {
       try {
-        const [factsData, obsData, dreamsData] = await Promise.all([
+        const [factsData, obsData, dreamsData, pruneData] = await Promise.all([
           getFacts(config, 200, factFilters),
           getObservations(config, 100, observationFilters),
           getDreams(config, 50),
+          getMemoryPruneDryRun(config),
         ]);
         if (fetchIdRef.current !== id) return;
         setFacts(factsData.facts || []);
@@ -55,6 +60,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
         setObservations(obsData.observations || []);
         setObservationTotal(obsData.total || 0);
         setDreams(dreamsData.dreams || []);
+        setPruneDryRun(pruneData);
       } catch (e) {
         if (fetchIdRef.current !== id) return;
         setError(`Failed to load: ${e}`);
@@ -74,6 +80,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
     observations,
     observationTotal,
     dreams,
+    pruneDryRun,
     loading,
     error,
     setFacts,

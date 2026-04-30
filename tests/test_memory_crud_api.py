@@ -547,8 +547,12 @@ class TestMemoryAuditAPI:
 
         assert response.status_code == 200
         data = response.json()
+        assert data["criteria"]["older_than_days"] == 30
+        assert data["criteria"]["max_sources"] == 5
         assert data["summary"]["total"] >= 1
         assert any(row["id"] == sample_observation for row in data["candidates"])
+        candidate = next(row for row in data["candidates"] if row["id"] == sample_observation)
+        assert {"summary", "created_at", "updated_at", "evidence_count", "chars", "reason"} <= set(candidate)
 
         obs = await test_runtime.memory.observations.get(sample_observation)
         assert obs is not None

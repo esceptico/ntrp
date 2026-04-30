@@ -150,7 +150,18 @@ class TestObservationPruneDryRun:
         ids = [row["id"] for row in result["candidates"]]
         assert ids == [candidate.id]
         assert result["summary"]["total"] == 1
-        assert result["candidates"][0]["reason"] == "zero_access_low_support"
+        first = result["candidates"][0]
+        assert {
+            "id",
+            "summary",
+            "created_at",
+            "updated_at",
+            "access_count",
+            "evidence_count",
+            "chars",
+            "reason",
+        } <= set(first)
+        assert first["reason"] == "zero_access_low_support"
 
     @pytest.mark.asyncio
     async def test_limit_applies_after_total_count(self, db: GraphDatabase, obs_repo: ObservationRepository):

@@ -603,6 +603,23 @@ skills/rules      higher-compression procedural memory, not truth
 | Hierarchical Persona Induction, Bian Que | User/profile patterns must stay evidence-aligned. A correction should update both the derived memory and the procedural rule/skill that caused the mistake. |
 | AEL "less is more" | Do not ship a maximal memory architecture first. Nail facts, provenance, simple retrieval, and simple reflection before adding planners, judges, or RL policy loops. |
 
+#### Paper status
+
+The current implementation is deliberately limited to review/provenance UI. It does not depend on reproducing any paper algorithm yet. Before implementing algorithmic memory policy, read these papers directly rather than relying only on sweep summaries:
+
+| Topic | Papers / sources to read directly before implementation | Why it matters |
+| --- | --- | --- |
+| Capture and consolidation | Mem0 token-efficient algorithm, OpenClaw Dreaming notes, MuninnDB Dream Engine | Defines append-only capture, async consolidation, and dry-run dream/prune behavior. |
+| Write gates and memory CRUD policy | MemReader-4B, DeltaMem, Response-Utility Selection | Needed before adding automatic pattern/fact write policy. |
+| Task segmentation and observation compression | FOCAL, StructMem, GAM, ADEMA, TACO | Needed before changing how observations are generated from sessions. |
+| Forgetting and tiers | FSFM, Adaptive Memory Crystallization, IE-as-Cache, ZenBrain | Needed before enabling automatic archive/delete behavior. |
+| Compression/promotions | Experience Compression Spectrum, ContextWeaver, PhysNote | Needed before promoting raw events to facts, patterns, or skills. |
+| External validation | SkillLearnBench, AJ-Bench, VLAA-GUI, AgentSearchBench | Needed before trusting self-review, skill promotion, or pattern ranking. |
+| Injection control | SRA-Bench, Decoupled Memory Control, SAGER | Needed before changing retrieval/injection policy. |
+| Typed memory and provenance | Memanto, WUPHF, Anthropic CMA memory | Needed before adding more schema/index infrastructure. |
+| Evidence-aligned profile/persona | Hierarchical Persona Induction, Bian Que | Needed before turning patterns into profile/persona memory. |
+| Architecture sanity check | AEL | Needed before adding complex planner/judge/RL machinery. |
+
 #### Practical implications
 
 ```text
@@ -645,7 +662,13 @@ Near-term implementation direction:
    - stale pattern suggested
 ```
 
-The first code slice in this direction is intentionally boring: make Patterns visible, filterable, and provenance-backed before writing another consolidator.
+The first code slices in this direction are intentionally boring:
+
+```text
+1. Make Patterns visible, filterable, and provenance-backed.
+2. Make prune candidates visible as a dry-run review tab.
+3. Defer archive/apply writes until the review surface is boring.
+```
 
 ### Proposed Memory Viewer
 
