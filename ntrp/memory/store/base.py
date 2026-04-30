@@ -62,9 +62,6 @@ CREATE TABLE IF NOT EXISTS facts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_facts_created ON facts(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_facts_kind ON facts(kind);
-CREATE INDEX IF NOT EXISTS idx_facts_expires ON facts(expires_at);
-CREATE INDEX IF NOT EXISTS idx_facts_superseded ON facts(superseded_by_fact_id);
 
 CREATE TABLE IF NOT EXISTS entities (
     id INTEGER PRIMARY KEY,
