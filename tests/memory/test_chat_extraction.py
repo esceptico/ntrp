@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from ntrp.memory.chat_extraction import (
+    CHAT_EXTRACTION_PROMPT,
     ChatExtractionSchema,
     _format_messages,
     extract_from_chat,
@@ -81,6 +82,13 @@ class TestFormatMessages:
 
 
 class TestExtractFromChat:
+    def test_prompt_describes_source_of_truth_not_patterns(self):
+        prompt = CHAT_EXTRACTION_PROMPT.render(conversation="user: I prefer raw SQL")
+
+        assert "source-of-truth facts" in prompt
+        assert "Do not write observations, patterns" in prompt
+        assert "Patterns not directly stated" in prompt
+
     @pytest.mark.asyncio
     async def test_returns_extracted_facts(self):
         schema = ChatExtractionSchema(facts=["User chose Postgres", "John handles deployment"])

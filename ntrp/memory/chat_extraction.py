@@ -8,9 +8,10 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CHAT_EXTRACTION_PROMPT = env.from_string("""Extract durable personal knowledge from this conversation.
+CHAT_EXTRACTION_PROMPT = env.from_string("""Extract durable source-of-truth facts from this conversation.
 
 Return facts worth remembering permanently — things useful to recall months later.
+Do not write observations, patterns, summaries, or inferred profile statements. Those are derived later from facts.
 
 EXTRACT:
 - Decisions: "User chose Postgres for the project" (not both sides — just the outcome)
@@ -18,6 +19,8 @@ EXTRACT:
 - People and roles: "Maria leads frontend", "Artem is User's brother"
 - Deadlines and commitments: "MVP deadline is March 15th"
 - Personal details: locations, routines, background
+- Constraints and standing rules: "User cannot share proprietary client data"
+- Durable procedures only when explicitly reusable: "User runs release candidates with ./release --rc"
 
 SKIP:
 - Transient project state: current blockers, active tasks, feature requirements
@@ -27,12 +30,15 @@ SKIP:
 - Tool outputs and code snippets
 - Both sides of the same decision — only the outcome matters
 - Inferences not directly stated in the conversation
+- Patterns not directly stated: do not infer "User is X type of person" from one example
+- Assistant-generated claims unless the user confirms or states them
 
 RULES:
 - Each fact must be atomic and concrete (one idea per fact)
 - Use "User" for first-person references
 - Only state what was explicitly said — do not infer or add context
 - Prefer fewer high-quality facts over many low-quality ones
+- Keep enough names, dates, project names, and constraints for provenance
 - If nothing durable was discussed, return an empty list
 
 CONVERSATION:

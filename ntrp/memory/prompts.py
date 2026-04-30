@@ -11,27 +11,31 @@ Use "User" for first-person references.
 
 Text: {{ text }}""")
 
-CONSOLIDATION_PROMPT = env.from_string("""You are a memory consolidation system. Synthesize facts into higher-level observations.
+CONSOLIDATION_PROMPT = env.from_string("""You are a strict memory consolidation system. Facts are the source of truth.
+Observations are derived patterns with direct provenance to supporting facts.
 
 ## OBSERVATIONS ARE A HIGHER ABSTRACTION LEVEL THAN FACTS
 
-Observations are not rephrases — they add insight, pattern recognition, or inference that goes beyond what any single fact states.
+Observations are not rephrases. They capture a pattern, trajectory, contradiction, or transition supported by multiple facts.
+Most facts should NOT create observations. The fact remains directly retrievable on its own.
 
 Good observations (higher abstraction):
-- Fact: "User applied to Anthropic" → "User is exploring AI safety companies" (inference)
 - Facts: "User slept 4h on Mon" + "User slept 3.5h on Wed" + "User's resting HR elevated" → "User has a chronic sleep deprivation pattern correlating with elevated vitals" (pattern)
 - Facts: "User applied to Anthropic" + "User studying mechanistic interpretability" + "User applying to MATS" → "User is pivoting from applied ML toward AI safety/interpretability research" (trajectory)
+- Facts: "User preferred Prisma", "User later chose raw SQL", "User rejected ORM abstraction" → "User has moved from ORM convenience toward explicit database control" (transition)
 
 BAD observations (just rephrasing):
 - Fact: "User likes coffee" → "User enjoys coffee" ← same thing, different words
 - Fact: "User's birthday is Jan 24" → "User was born on January 24" ← no abstraction possible
 - Fact: "User has two cats" → "User is a cat owner" ← trivial restatement
+- Fact: "User applied to Anthropic" → "User is exploring AI safety companies" ← unsupported inference from one fact
+- Fact: "Alice prefers Python" → "Alice is a Python-focused developer" ← inflated single preference
 
 ## WHEN TO USE EACH ACTION
 
-- **update**: The fact adds to or refines an existing observation. This is the most common action.
-- **create**: The fact reveals a pattern or allows genuine inference beyond what it literally states. The observation must be at a higher abstraction level than the source fact.
-- **skip**: The fact is ephemeral, or there's no higher-level insight to extract. When in doubt, skip — the fact is still retrievable on its own.
+- **update**: The fact adds support, contradiction, or temporal refinement to an existing observation.
+- **create**: The new fact plus other evidence reveals a real multi-fact pattern/trajectory/transition not already represented.
+- **skip**: The fact is durable but atomic, ephemeral, weakly supported, or has no higher-level pattern. This is the default.
 
 ## MULTIPLE ACTIONS ALLOWED
 
@@ -61,10 +65,33 @@ Skip facts that describe temporary state:
 - "User is currently tired" → skip (temporary state)
 - "User's HRV was 51.4 ms today" → skip (single data point, not a pattern yet)
 
+## SKIP ATOMIC DURABLE FACTS
+
+Do not create observations for a single:
+- identity fact
+- preference
+- relationship
+- decision
+- deadline
+- artifact/resource
+- procedure/workflow
+
+Those remain facts. They are still directly retrievable and may enter profile memory through fact kind/salience.
+
 ## OBSERVATION SIZE
 
-When an observation has 10+ source facts, bias toward CREATE a new sub-topic observation
-rather than growing a single observation indefinitely.
+Keep observations as one concise statement. Soft max 500 chars; hard max 1000 chars.
+If updating would create a long paragraph, either tighten the observation or skip.
+
+## PROVENANCE
+
+Every update/create is stored with the new fact as direct provenance.
+Your reason must name the support relationship, for example:
+- "third sleep datapoint supports existing sleep-deprivation pattern"
+- "newer role fact updates prior role trajectory"
+- "contradicts prior preference and preserves transition"
+
+If you cannot explain how the new fact directly supports the observation, skip.
 
 ## CRITICAL RULES
 
@@ -72,7 +99,8 @@ rather than growing a single observation indefinitely.
 2. NEVER merge facts about DIFFERENT people
 3. NEVER merge unrelated topics
 4. Keep observations focused on ONE topic per entity
-5. When in doubt, SKIP — facts are retrievable on their own, low-quality observations are noise
+5. Require direct provenance and concrete support
+6. When in doubt, SKIP — facts are retrievable on their own, low-quality observations are noise
 
 ---
 
@@ -96,7 +124,7 @@ Return your actions as a JSON object with an "actions" array:
 {"actions": [
   {"action": "update", "observation_id": <id>, "text": "synthesized observation", "reason": "..."},
   {"action": "create", "text": "new synthesized observation", "reason": "..."},
-  {"action": "skip", "reason": "ephemeral/no durable knowledge"}
+  {"action": "skip", "reason": "atomic fact/no supported pattern"}
 ]}""")
 
 DREAM_PROMPT = env.from_string("""Two clusters of facts from different life domains of the same person:
@@ -112,6 +140,7 @@ DOMAIN B:
 {{ supporters_b }}
 
 Find the deepest structural pattern, hidden dependency, or ironic contradiction connecting these domains.
+The insight must be grounded in facts from BOTH domains. Do not invent motive, emotion, or causality.
 
 Reply ONLY with valid JSON:
 {"bridge": "<2-4 word abstract concept>", "insight": "<one vivid, specific sentence — should feel like a genuine insight, not a fortune cookie>"}
@@ -181,6 +210,8 @@ TEMPORAL_PATTERN_PROMPT = env.from_string("""You are a temporal pattern detector
 3. Each pattern must span a meaningful time range — same-day facts are not a trend
 4. Be specific about the time range and direction of the pattern
 5. Do NOT rephrase individual facts — patterns must synthesize across multiple facts
+6. Every created pattern must include direct source_fact_ids for the facts that support it
+7. Keep each pattern concise — one clear statement, not a paragraph
 
 ---
 

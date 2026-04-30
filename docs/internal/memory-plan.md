@@ -219,6 +219,15 @@ Avoid:
 
 ## Phase 2: Extraction Shape
 
+Status:
+
+```text
+chat extraction prompt tightened to source-of-truth facts only
+consolidation prompt tightened to skip atomic facts and require direct provenance
+temporal/dream prompts tightened around concrete support and concise generated memory
+typed extraction schema/backfill still pending
+```
+
 Current chat extraction returns only `facts: list[str]`, then `remember()` runs a separate entity extraction pass.
 
 Move toward one extraction result:

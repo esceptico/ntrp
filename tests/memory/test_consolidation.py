@@ -600,6 +600,30 @@ class TestTemporalConsolidation:
         assert jan_10.isoformat() in prompt_content
 
     @pytest.mark.asyncio
+    async def test_prompt_mentions_atomic_fact_skip_and_provenance(
+        self,
+        fact_repo: FactRepository,
+        obs_repo: ObservationRepository,
+    ):
+        fact = await fact_repo.create(
+            text="User prefers raw SQL",
+            source_type=SourceType.EXPLICIT,
+            embedding=mock_embedding("raw sql"),
+        )
+
+        mock_client = AsyncMock()
+        mock_client.completion.return_value = mock_llm_response(
+            '{"actions": [{"action": "skip", "reason": "atomic preference fact"}]}'
+        )
+        with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
+            await get_consolidation_decisions(fact, obs_repo, fact_repo, "test-model")
+
+        prompt_content = mock_client.completion.call_args[1]["messages"][0]["content"]
+        assert "SKIP ATOMIC DURABLE FACTS" in prompt_content
+        assert "PROVENANCE" in prompt_content
+        assert "single preference" in prompt_content
+
+    @pytest.mark.asyncio
     async def test_addition_not_contradiction(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
         """Consolidation distinguishes expansion from supersession.
 
