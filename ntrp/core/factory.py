@@ -18,6 +18,7 @@ class AgentConfig:
     model: str
     research_model: str | None
     max_depth: int
+    reasoning_effort: str | None = None
     compactor: Compactor | None = None
 
     @classmethod
@@ -26,6 +27,7 @@ class AgentConfig:
             model=model or config.chat_model,
             research_model=config.research_model,
             max_depth=config.max_depth,
+            reasoning_effort=config.reasoning_effort,
             compactor=SummaryCompactor(
                 threshold=config.compression_threshold,
                 max_messages=config.max_messages,
@@ -69,6 +71,7 @@ def create_agent(
         model=config.model,
         max_depth=config.max_depth,
         current_depth=0,
+        reasoning_effort=config.reasoning_effort,
     )
 
     ntrp_executor = NtrpToolExecutor(executor, tool_ctx, ledger=tool_ctx.ledger)
@@ -79,6 +82,7 @@ def create_agent(
         executor=ntrp_executor,
         model=config.model,
         max_depth=config.max_depth,
+        reasoning_effort=config.reasoning_effort,
         hooks=AgentHooks(),
         model_request_middlewares=(CompactionModelRequestMiddleware(compactor=config.compactor),),
     )

@@ -1,4 +1,5 @@
 export function truncateText(text: string, max: number, mode: 'end' | 'middle' | 'start' = 'end'): string {
+  if (max <= 0) return '';
   if (text.length <= max) return text;
   if (max <= 3) return '...'.slice(0, max);
 

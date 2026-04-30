@@ -2,6 +2,9 @@ import React from "react";
 import { truncateText } from "../../lib/utils.js";
 import type { ServerConfig } from "../../api/client.js";
 import { SectionHeader, D, S } from "./shared.js";
+import { currentReasoningEffort } from "../../lib/reasoning.js";
+
+const LABEL_WIDTH = 6;
 
 function formatModel(model?: string | null): string {
   if (!model) return "—";
@@ -10,6 +13,7 @@ function formatModel(model?: string | null): string {
 }
 
 export function ModelsSection({ cfg, width }: { cfg: ServerConfig; width: number }) {
+  const reasoning = currentReasoningEffort(cfg);
   return (
     <box flexDirection="column">
       <SectionHeader label="MODELS" />
@@ -19,11 +23,17 @@ export function ModelsSection({ cfg, width }: { cfg: ServerConfig; width: number
         const display = formatModel(raw);
         return (
           <text key={label}>
-            <span fg={D()}>{label.padEnd(5)}</span>
-            <span fg={S()}>{truncateText(display, width - 5)}</span>
+            <span fg={D()}>{label.padEnd(LABEL_WIDTH)}</span>
+            <span fg={S()}>{truncateText(display, width - LABEL_WIDTH)}</span>
           </text>
         );
       })}
+      {reasoning && (
+        <text>
+          <span fg={D()}>{"think".padEnd(LABEL_WIDTH)}</span>
+          <span fg={S()}>{reasoning}</span>
+        </text>
+      )}
     </box>
   );
 }

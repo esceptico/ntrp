@@ -31,6 +31,7 @@ export const MessageDisplay = memo(function MessageDisplay({
           toolCount={msg.toolCount}
           duration={msg.duration}
           autoApproved={msg.autoApproved}
+          data={msg.data}
         />
       );
     case "tool_chain":

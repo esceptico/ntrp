@@ -55,6 +55,9 @@ export function convertHistoryToMessages(raw: HistoryMessage[]): Message[] {
         break;
 
       case "assistant":
+        if (msg.reasoning_content?.trim()) {
+          messages.push({ id: `h-${idCounter++}`, role: "thinking", content: msg.reasoning_content });
+        }
         if (msg.content?.trim()) {
           messages.push({ id: `h-${idCounter++}`, role: "assistant", content: msg.content });
         }

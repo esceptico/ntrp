@@ -1,8 +1,9 @@
 import { useCallback, useRef } from "react";
 import type { Config, Message } from "../types.js";
-import type { HistoryMessage, ImageBlock } from "../api/client.js";
+import type { HistoryMessage, ImageBlock, ServerConfig } from "../api/client.js";
 import { Status, type Status as StatusType } from "../lib/constants.js";
 import { convertHistoryToMessages } from "../lib/history.js";
+import { formatReasoningEffort, parseReasoningEffortArg, reasoningEfforts, reasoningUsage } from "../lib/reasoning.js";
 import {
   branchSession,
   clearSession,
@@ -31,6 +32,7 @@ function findSession(sessions: SessionListItem[], query: string): SessionListIte
 
 interface CommandContext {
   config: Config;
+  serverConfig: ServerConfig | null;
   sessionId: string | null;
   messages: { role: string; content: string; id?: string }[];
   setViewMode: (mode: ViewMode) => void;
@@ -39,6 +41,11 @@ interface CommandContext {
   clearMessages: () => void;
   sendMessage: (msg: string, images?: ImageBlock[]) => void;
   setStatus: (status: StatusType) => void;
+  setReasoningEffort: (effort: string | null) => Promise<boolean>;
+  showReasoning: boolean;
+  setShowReasoning: (enabled: boolean) => void;
+  skipApprovals: boolean;
+  setSkipApprovals: (enabled: boolean) => void;
   toggleSettings: () => void;
   openDialog: (id: string) => void;
   exit: () => void;
@@ -61,6 +68,56 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   automations: ({ setViewMode }) => { setViewMode("automations"); return true; },
   theme: ({ openDialog }) => { openDialog("theme"); return true; },
   settings: ({ toggleSettings }) => { toggleSettings(); return true; },
+
+  reasoning: async ({ serverConfig, setReasoningEffort, showReasoning, setShowReasoning, addMessage }, args) => {
+    const mode = args[0]?.toLowerCase();
+    if (mode === "show" || mode === "hide") {
+      const enabled = mode === "show";
+      setShowReasoning(enabled);
+      return true;
+    }
+    if (mode === "toggle-view") {
+      const enabled = !showReasoning;
+      setShowReasoning(enabled);
+      return true;
+    }
+
+    if (!serverConfig) {
+      addMessage({ role: "error", content: "Server config is not loaded yet" });
+      return true;
+    }
+
+    const efforts = reasoningEfforts(serverConfig);
+    if (efforts.length === 0) {
+      addMessage({ role: "status", content: "Current chat model has no reasoning variants" });
+      return true;
+    }
+
+    if (args[0]?.toLowerCase() === "list") {
+      const current = formatReasoningEffort(serverConfig.reasoning_effort);
+      addMessage({
+        role: "status",
+        content: `Reasoning ${current}; output ${showReasoning ? "shown" : "hidden"}; variants: default, ${efforts.join(", ")}`,
+      });
+      return true;
+    }
+
+    const next = parseReasoningEffortArg(serverConfig, args[0]);
+    if (next === undefined) {
+      addMessage({ role: "error", content: `Usage: ${reasoningUsage(serverConfig)}` });
+      return true;
+    }
+
+    await setReasoningEffort(next);
+    return true;
+  },
+
+  approvals: ({ skipApprovals, setSkipApprovals }, args) => {
+    const mode = args[0]?.toLowerCase();
+    const enabled = mode === "on" ? true : mode === "off" ? false : !skipApprovals;
+    setSkipApprovals(enabled);
+    return true;
+  },
 
   compact: async ({ config, sessionId, addMessage, setStatus }) => {
     try {

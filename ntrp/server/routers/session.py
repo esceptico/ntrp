@@ -59,6 +59,8 @@ async def get_session_history(svc: SessionService = Depends(require_session_serv
                 }
                 for tc in msg["tool_calls"]
             ]
+        if role == Role.ASSISTANT and msg.get("reasoning_content"):
+            entry["reasoning_content"] = msg["reasoning_content"]
 
         if role == Role.TOOL and "tool_call_id" in msg:
             entry["tool_call_id"] = msg["tool_call_id"]

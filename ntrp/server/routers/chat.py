@@ -4,7 +4,18 @@ from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ntrp.events.sse import BackgroundTaskEvent, TextDeltaEvent, TextEvent, TextMessageEndEvent, TextMessageStartEvent
+from ntrp.events.sse import (
+    BackgroundTaskEvent,
+    ReasoningEndEvent,
+    ReasoningMessageContentEvent,
+    ReasoningMessageEndEvent,
+    ReasoningMessageStartEvent,
+    ReasoningStartEvent,
+    TextDeltaEvent,
+    TextEvent,
+    TextMessageEndEvent,
+    TextMessageStartEvent,
+)
 from ntrp.server.bus import BusRegistry
 from ntrp.server.deps import get_bus_registry, require_run_registry
 from ntrp.server.middleware import SSEStreamingResponse
@@ -53,7 +64,15 @@ async def _event_stream(
                 break
 
             is_text = isinstance(event, TextDeltaEvent | TextEvent)
-            is_passthrough = isinstance(event, BackgroundTaskEvent)
+            is_passthrough = isinstance(
+                event,
+                BackgroundTaskEvent
+                | ReasoningStartEvent
+                | ReasoningMessageStartEvent
+                | ReasoningMessageContentEvent
+                | ReasoningMessageEndEvent
+                | ReasoningEndEvent,
+            )
 
             if is_text and not in_text_message:
                 msg_counter += 1

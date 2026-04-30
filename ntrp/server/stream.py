@@ -3,7 +3,7 @@ from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
 from ntrp.agent import Result
-from ntrp.events.sse import RunCancelledEvent, agent_event_to_sse
+from ntrp.events.sse import RunCancelledEvent, agent_events_to_sse
 
 if TYPE_CHECKING:
     from ntrp.agent import Agent
@@ -27,8 +27,7 @@ async def run_agent_loop(
             if isinstance(item, Result):
                 result = item.text
             else:
-                sse = agent_event_to_sse(item)
-                if sse:
+                for sse in agent_events_to_sse(item):
                     await bus.emit(sse)
                     await asyncio.sleep(0)
     except asyncio.CancelledError:

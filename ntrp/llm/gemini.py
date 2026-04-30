@@ -21,6 +21,13 @@ from ntrp.core.content import render_context
 from ntrp.llm.base import CompletionClient, EmbeddingClient
 from ntrp.llm.utils import blocks_to_text, parse_args
 
+_THINKING_LEVELS = {
+    "minimal": types.ThinkingLevel.MINIMAL,
+    "low": types.ThinkingLevel.LOW,
+    "medium": types.ThinkingLevel.MEDIUM,
+    "high": types.ThinkingLevel.HIGH,
+}
+
 
 class GeminiClient(CompletionClient, EmbeddingClient):
     def __init__(self, api_key: str | None = None):
@@ -34,6 +41,7 @@ class GeminiClient(CompletionClient, EmbeddingClient):
         tool_choice: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
         **kwargs,
     ) -> CompletionResponse:
@@ -44,6 +52,10 @@ class GeminiClient(CompletionClient, EmbeddingClient):
             config_kwargs["temperature"] = temperature
         if max_tokens is not None:
             config_kwargs["max_output_tokens"] = max_tokens
+        if reasoning_effort is not None and (thinking_level := _THINKING_LEVELS.get(reasoning_effort)) is not None:
+            config_kwargs["thinking_config"] = types.ThinkingConfig(
+                thinking_level=thinking_level,
+            )
 
         if response_format is not None:
             config_kwargs["response_mime_type"] = "application/json"

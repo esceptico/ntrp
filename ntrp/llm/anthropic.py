@@ -10,6 +10,7 @@ from ntrp.agent import (
     FinishReason,
     FunctionCall,
     Message,
+    ReasoningContentDelta,
     Role,
     ToolCall,
     Usage,
@@ -26,6 +27,20 @@ _FINISH_REASONS: dict[str, FinishReason] = {
     "stop_sequence": FinishReason.STOP,
 }
 
+_THINKING_BUDGETS: dict[str, int] = {
+    "minimal": 1024,
+    "low": 4096,
+    "medium": 8192,
+    "high": 16384,
+    "max": 32768,
+}
+
+_ADAPTIVE_THINKING_MODELS = (
+    "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-sonnet-4-6",
+)
+
 
 class AnthropicClient(CompletionClient):
     def __init__(self, api_key: str | None = None, timeout: float = 60.0):
@@ -39,6 +54,7 @@ class AnthropicClient(CompletionClient):
         tool_choice: str | None,
         temperature: float | None,
         max_tokens: int | None,
+        reasoning_effort: str | None,
         response_format: type[BaseModel] | None,
         **kwargs,
     ) -> tuple[str, dict]:
@@ -66,6 +82,7 @@ class AnthropicClient(CompletionClient):
             tool_choice=api_tool_choice,
             temperature=temperature,
             max_tokens=max_tokens,
+            reasoning_effort=reasoning_effort,
             **kwargs,
         )
         return model, request
@@ -78,6 +95,7 @@ class AnthropicClient(CompletionClient):
         tool_choice: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
         **kwargs,
     ) -> CompletionResponse:
@@ -88,6 +106,7 @@ class AnthropicClient(CompletionClient):
             tool_choice,
             temperature,
             max_tokens,
+            reasoning_effort,
             response_format,
             **kwargs,
         )
@@ -103,9 +122,10 @@ class AnthropicClient(CompletionClient):
         tool_choice: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
         **kwargs,
-    ) -> AsyncGenerator[str | CompletionResponse]:
+    ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
         model, request = self._prepare(
             messages,
             model,
@@ -113,12 +133,19 @@ class AnthropicClient(CompletionClient):
             tool_choice,
             temperature,
             max_tokens,
+            reasoning_effort,
             response_format,
             **kwargs,
         )
         async with self._client.messages.stream(**request) as stream:
-            async for text in stream.text_stream:
-                yield text
+            async for event in stream:
+                if event.type != "content_block_delta":
+                    continue
+                delta = event.delta
+                if delta.type == "text_delta":
+                    yield delta.text
+                elif delta.type == "thinking_delta":
+                    yield ReasoningContentDelta(delta.thinking)
             response = await stream.get_final_message()
         yield self._parse_response(response, model, response_format)
 
@@ -149,6 +176,7 @@ class AnthropicClient(CompletionClient):
         tool_choice: dict | None,
         temperature: float | None,
         max_tokens: int | None,
+        reasoning_effort: str | None,
         **kwargs,
     ) -> dict:
         request: dict = {
@@ -160,6 +188,8 @@ class AnthropicClient(CompletionClient):
             "system": system,
             "tools": tools,
             "tool_choice": tool_choice,
+            "thinking": self._thinking_config(model, reasoning_effort, max_tokens),
+            "output_config": self._output_config(model, reasoning_effort),
         }
         if temperature is not None and "opus-4-7" not in model:
             optional["temperature"] = temperature
@@ -167,6 +197,30 @@ class AnthropicClient(CompletionClient):
         if extra := kwargs.get("extra_body"):
             request.update(extra)
         return request
+
+    def _thinking_config(self, model: str, effort: str | None, max_tokens: int | None) -> dict | None:
+        if effort is None or max_tokens is None:
+            return None
+        if self._uses_adaptive_thinking(model):
+            config = {"type": "adaptive"}
+            if "claude-opus-4-7" in model:
+                config["display"] = "summarized"
+            return config
+        budget_tokens = _THINKING_BUDGETS.get(effort)
+        if budget_tokens is None:
+            return None
+        budget = min(budget_tokens, max_tokens - 1024)
+        if budget < 1024:
+            return None
+        return {"type": "enabled", "budget_tokens": budget}
+
+    def _output_config(self, model: str, effort: str | None) -> dict | None:
+        if effort is None or not self._uses_adaptive_thinking(model):
+            return None
+        return {"effort": effort}
+
+    def _uses_adaptive_thinking(self, model: str) -> bool:
+        return any(model_id in model for model_id in _ADAPTIVE_THINKING_MODELS)
 
     # --- Message conversion ---
 

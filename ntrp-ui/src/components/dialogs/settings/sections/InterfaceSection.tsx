@@ -26,6 +26,7 @@ interface InterfaceSectionProps {
 function buildItems(ui: UiSettings, sidebar: SidebarSettings): InterfaceItem[] {
   const items: InterfaceItem[] = [
     { type: "toggle", label: "Enabled", enabled: ui.streaming, header: "Streaming", firstHeader: true },
+    { type: "toggle", label: "Show reasoning", enabled: ui.showReasoning, header: "Reasoning" },
   ];
 
   for (let i = 0; i < SIDEBAR_SECTION_IDS.length; i++) {

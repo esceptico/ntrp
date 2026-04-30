@@ -4,7 +4,7 @@ import json
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 
-from ntrp.agent import Choice, CompletionResponse, FunctionCall, Message, ToolCall, Usage
+from ntrp.agent import Choice, CompletionResponse, FunctionCall, Message, ReasoningContentDelta, ToolCall, Usage
 from ntrp.context.models import SessionState
 from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.llm.base import CompletionClient
@@ -101,10 +101,10 @@ class MockLLMClient:
         return self._client.calls
 
     async def stream(
-        self, messages: list[dict], model: str, tools: list[dict], tool_choice=None
-    ) -> AsyncGenerator[str | CompletionResponse]:
+        self, messages: list[dict], model: str, tools: list[dict], tool_choice=None, reasoning_effort: str | None = None
+    ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
         async for item in self._client.stream_completion(
-            model=model, messages=messages, tools=tools, tool_choice="auto"
+            model=model, messages=messages, tools=tools, tool_choice="auto", reasoning_effort=reasoning_effort
         ):
             yield item
 

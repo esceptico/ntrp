@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator
 
-from ntrp.agent import CompletionResponse, SpecificTool, ToolChoice, ToolChoiceMode
+from ntrp.agent import CompletionResponse, ReasoningContentDelta, SpecificTool, ToolChoice, ToolChoiceMode
+from ntrp.llm.models import get_model
 from ntrp.llm.router import get_completion_client
 
 
@@ -17,19 +18,27 @@ def _tool_choice_to_str(tc: ToolChoice | None) -> str | dict | None:
 
 
 class NtrpLLMClient:
+    def _supported_reasoning_effort(self, model: str, effort: str | None) -> str | None:
+        if effort is None:
+            return None
+        return effort if effort in get_model(model).reasoning_efforts else None
+
     async def stream(
         self,
         messages: list[dict],
         model: str,
         tools: list[dict],
         tool_choice: ToolChoice | None = None,
-    ) -> AsyncGenerator[str | CompletionResponse]:
+        reasoning_effort: str | None = None,
+    ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
         client = get_completion_client(model)
+        reasoning_effort = self._supported_reasoning_effort(model, reasoning_effort)
         async for item in client.stream_completion(
             model=model,
             messages=messages,
             tools=tools,
             tool_choice=_tool_choice_to_str(tool_choice),
+            reasoning_effort=reasoning_effort,
         ):
             yield item
 

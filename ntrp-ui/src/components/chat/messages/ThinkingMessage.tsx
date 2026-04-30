@@ -12,21 +12,21 @@ export const ThinkingMessage = memo(function ThinkingMessage({ content }: Thinki
 
   return (
     <box
-      flexDirection="column"
       overflow="hidden"
       border={SplitBorder.border}
       borderColor={colors.background.element ?? colors.border}
       customBorderChars={SplitBorder.customBorderChars}
-      paddingLeft={2}
     >
-      <text>
-        <span fg={accentValue}>Thinking{"\u2026"}</span>
-      </text>
-      {content && (
-        <box overflow="hidden">
-          <text><span fg={colors.text.secondary}>{content}</span></text>
-        </box>
-      )}
+      <box flexDirection="column" overflow="hidden" paddingLeft={2} paddingRight={2}>
+        <text>
+          <span fg={accentValue}>Reasoning</span>
+        </text>
+        {content && (
+          <box overflow="hidden">
+            <text><span fg={colors.text.secondary}>{content.trimStart()}</span></text>
+          </box>
+        )}
+      </box>
     </box>
   );
 });

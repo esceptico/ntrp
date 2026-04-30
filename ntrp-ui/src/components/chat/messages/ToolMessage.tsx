@@ -53,9 +53,18 @@ interface ToolMessageProps {
   toolCount?: number;
   duration?: number;
   autoApproved?: boolean;
+  data?: Record<string, unknown>;
 }
 
 const AUTO_SUFFIX = " \u00B7 auto"; // " · auto"
+
+function metadataSummary(data?: Record<string, unknown>): string | null {
+  if (!data) return null;
+  const keys = Object.keys(data).filter((key) => data[key] !== undefined && data[key] !== null);
+  if (keys.length === 0) return null;
+  const visible = keys.slice(0, 4).join(", ");
+  return keys.length > 4 ? `${visible}, +${keys.length - 4}` : visible;
+}
 
 export const ToolMessage = memo(function ToolMessage({
   name,
@@ -64,10 +73,12 @@ export const ToolMessage = memo(function ToolMessage({
   toolCount,
   duration,
   autoApproved,
+  data,
 }: ToolMessageProps) {
   useThemeVersion();
   const { width } = useDimensions();
   const contentWidth = Math.max(0, width - 3);
+  const metadataWidth = Math.max(0, contentWidth - 11);
   const suffix = autoApproved ? AUTO_SUFFIX : "";
 
   if (name === "research") {
@@ -82,6 +93,7 @@ export const ToolMessage = memo(function ToolMessage({
   }
 
   const displayName = description || name;
+  const metadata = metadataSummary(data);
   const lineCountMatch = content.match(/^\[(\d+)\s*lines\]\n/);
   let totalLines: number | null = null;
   let displayContent = content;
@@ -105,6 +117,9 @@ export const ToolMessage = memo(function ToolMessage({
             {"  "} Read <strong>{String(totalLines)}</strong> lines
           </span>
         </text>
+        {metadata && (
+          <text><span fg={colors.text.disabled}>{"  "} metadata {truncateText(metadata, metadataWidth)}</span></text>
+        )}
       </box>
     );
   }
@@ -134,8 +149,14 @@ export const ToolMessage = memo(function ToolMessage({
             {hiddenCount > 0 && (
               <text><span fg={colors.text.disabled}>{"\u2026"} +{hiddenCount} lines</span></text>
             )}
+            {metadata && (
+              <text><span fg={colors.text.disabled}>metadata {truncateText(metadata, metadataWidth)}</span></text>
+            )}
           </box>
         </box>
+      )}
+      {visibleLines.length === 0 && hiddenCount === 0 && metadata && (
+        <text><span fg={colors.text.disabled}>{"  "} metadata {truncateText(metadata, metadataWidth)}</span></text>
       )}
     </box>
   );

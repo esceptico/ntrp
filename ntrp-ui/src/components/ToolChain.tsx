@@ -5,7 +5,7 @@ import { TreeItem, buildTree, type ToolChainItem } from "./toolchain/index.js";
 
 export type { ToolChainItem } from "./toolchain/index.js";
 
-export function ToolChainDisplay({ items, maxItems = 5 }: { items: ToolChainItem[]; maxItems?: number }) {
+export function ToolChainDisplay({ items, maxItems = 5, interactive = false }: { items: ToolChainItem[]; maxItems?: number; interactive?: boolean }) {
   const { width } = useDimensions();
   const [expanded, setExpanded] = useState(false);
 
@@ -13,7 +13,7 @@ export function ToolChainDisplay({ items, maxItems = 5 }: { items: ToolChainItem
     useCallback((key: Key) => {
       if (key.ctrl && key.name === "e") setExpanded((prev) => !prev);
     }, []),
-    { isActive: true }
+    { isActive: interactive }
   );
 
   const roots = useMemo(() => {

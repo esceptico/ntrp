@@ -246,6 +246,7 @@ class UpdateConfigRequest(BaseModel):
     research_model: str | None = None
     memory_model: str | None = None
     max_depth: int | None = None
+    reasoning_effort: str | None = None
     compression_threshold: float | None = None
     max_messages: int | None = None
     compression_keep_ratio: float | None = None

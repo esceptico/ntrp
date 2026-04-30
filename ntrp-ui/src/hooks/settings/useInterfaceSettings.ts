@@ -4,8 +4,8 @@ import { SIDEBAR_SECTION_IDS } from "../useSettings.js";
 import type { Key } from "../useKeypress.js";
 import { handleListNav } from "../keyUtils.js";
 
-// Items: streaming, then sidebar toggles
-const TOTAL_ITEMS = 1 + SIDEBAR_SECTION_IDS.length;
+const UI_TOGGLE_KEYS = ["streaming", "showReasoning"] as const;
+const TOTAL_ITEMS = UI_TOGGLE_KEYS.length + SIDEBAR_SECTION_IDS.length;
 
 export interface UseInterfaceSettingsResult {
   interfaceIndex: number;
@@ -24,10 +24,11 @@ export function useInterfaceSettings(
     if (handleListNav(key, TOTAL_ITEMS, setInterfaceIndex)) {
       // handled
     } else if (key.name === "return" || key.name === "space") {
-      if (interfaceIndex === 0) {
-        onUpdate("ui", "streaming", !settings.ui.streaming);
+      if (interfaceIndex < UI_TOGGLE_KEYS.length) {
+        const key = UI_TOGGLE_KEYS[interfaceIndex];
+        onUpdate("ui", key, !settings.ui[key]);
       } else {
-        const id = SIDEBAR_SECTION_IDS[interfaceIndex - 1];
+        const id = SIDEBAR_SECTION_IDS[interfaceIndex - UI_TOGGLE_KEYS.length];
         onUpdate("sidebar", id, !settings.sidebar[id]);
       }
     }

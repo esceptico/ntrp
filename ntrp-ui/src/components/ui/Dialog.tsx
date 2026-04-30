@@ -20,11 +20,15 @@ export function Dialog({ title, size = "medium", closable = true, footer, childr
 
   const dialogW = size === "full" ? W - 8 : size === "large" ? Math.min(80, W - 4) : Math.min(60, W - 4);
   const contentW = dialogW - 4;
-  const contentMaxH = size === "full" ? H - 10 : Math.floor(H / 2) - 6;
+  const contentMaxH = Math.max(
+    3,
+    size === "full" ? H - 10 : size === "large" ? H - 12 : Math.floor(H * 0.55) - 4,
+  );
+  const paddingTop = size === "full" ? 2 : size === "large" ? 2 : Math.max(1, Math.floor(H / 5));
 
   return (
     <box position="absolute" top={0} left={0} width={W} height={H} backgroundColor={colors.background.base != null ? OVERLAY_BG : undefined}>
-      <box alignItems="center" paddingTop={size === "full" ? 2 : Math.floor(H / 4)}>
+      <box alignItems="center" paddingTop={paddingTop}>
         <box
           width={dialogW}
           maxWidth={W - 2}

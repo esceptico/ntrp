@@ -161,9 +161,9 @@ export function useSession(config: Config) {
     }
   };
 
-  const toggleSkipApprovals = () => {
-    setSkipApprovals((prev) => !prev);
-  };
+  const setSkipApprovalsEnabled = useCallback((enabled: boolean) => {
+    setSkipApprovals(enabled);
+  }, []);
 
   const updateServerConfig = (patch: Partial<ServerConfig>) => {
     setServerConfig((prev) => prev && { ...prev, ...patch });
@@ -220,7 +220,7 @@ export function useSession(config: Config) {
     history,
     refreshIndexStatus,
     updateSessionInfo,
-    toggleSkipApprovals,
+    setSkipApprovalsEnabled,
     updateServerConfig,
     switchSession,
     createNewSession,

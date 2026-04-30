@@ -34,6 +34,7 @@ def create_spawn_fn(
     model: str,
     max_depth: int,
     current_depth: int,
+    reasoning_effort: str | None = None,
 ):
     async def spawn_child(
         calling_ctx: ToolContext,
@@ -79,6 +80,7 @@ def create_spawn_fn(
             model=child_model,
             max_depth=max_depth,
             current_depth=current_depth + 1,
+            reasoning_effort=reasoning_effort,
         )
 
         child_executor = NtrpToolExecutor(executor, child_ctx, ledger=calling_ctx.ledger)
@@ -91,6 +93,7 @@ def create_spawn_fn(
             max_depth=max_depth,
             current_depth=current_depth + 1,
             parent_id=parent_id,
+            reasoning_effort=reasoning_effort,
         )
 
         child_messages = [

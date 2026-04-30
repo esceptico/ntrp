@@ -18,6 +18,8 @@ export interface ServerConfig {
   research_model: string;
   memory_model: string;
   embedding_model: string;
+  reasoning_effort?: string | null;
+  reasoning_efforts?: string[];
   web_search: "auto" | "exa" | "ddgs" | "none";
   web_search_provider: "exa" | "ddgs" | "none" | "unknown";
   google_enabled: boolean;
@@ -42,10 +44,10 @@ export async function getServerConfig(config: Config): Promise<ServerConfig> {
 
 export async function updateConfig(
   config: Config,
-  patch: Partial<Pick<ServerConfig, "chat_model" | "research_model" | "memory_model" | "max_depth" | "web_search" | "compression_threshold" | "max_messages" | "compression_keep_ratio" | "summary_max_tokens" | "consolidation_interval">> & {
+  patch: Partial<Pick<ServerConfig, "chat_model" | "research_model" | "memory_model" | "max_depth" | "reasoning_effort" | "web_search" | "compression_threshold" | "max_messages" | "compression_keep_ratio" | "summary_max_tokens" | "consolidation_interval">> & {
     integrations?: Record<string, boolean>;
   }
-): Promise<Record<string, unknown>> {
+): Promise<ServerConfig> {
   return api.patch(`${config.serverUrl}/config`, patch);
 }
 

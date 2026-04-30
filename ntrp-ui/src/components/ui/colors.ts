@@ -342,6 +342,7 @@ export const colors: Omit<Palette, "accent"> = {
 // Theme version — incremented on every setTheme call.
 let _themeVersion = 0;
 const _listeners = new Set<() => void>();
+let _activeThemeKey: string | null = null;
 
 export function getThemeVersion() { return _themeVersion; }
 export function subscribeThemeVersion(cb: () => void) {
@@ -352,6 +353,8 @@ export function subscribeThemeVersion(cb: () => void) {
 export function setTheme(theme: Theme, accent?: AccentColor, transparentBg?: boolean) {
   const p = palettes[theme];
   if (!p) return;
+  const key = `${theme}:${accent ?? ""}:${transparentBg ? "transparent" : "solid"}`;
+  if (_activeThemeKey === key) return;
 
   Object.assign(colors.text, p.text);
   Object.assign(colors.status, p.status);
@@ -383,6 +386,7 @@ export function setTheme(theme: Theme, accent?: AccentColor, transparentBg?: boo
     currentAccent.shimmer = p.accent.shimmer;
   }
 
+  _activeThemeKey = key;
   _themeVersion++;
   for (const cb of _listeners) cb();
 }

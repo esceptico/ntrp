@@ -46,6 +46,7 @@ class Model:
     pricing: Pricing = field(default_factory=lambda: Pricing(0, 0))
     base_url: str | None = None
     api_key_env: str | None = None
+    reasoning_efforts: tuple[str, ...] = ()
 
 
 # Prices are per million tokens.
@@ -54,9 +55,10 @@ DEFAULTS = [
     Model(
         "claude-opus-4-7",
         provider=Provider.ANTHROPIC,
-        max_context_tokens=200_000,
+        max_context_tokens=1_000_000,
         max_output_tokens=128_000,
         pricing=Pricing(price_in=5, price_out=25, price_cache_read=0.50, price_cache_write=6.25),
+        reasoning_efforts=("low", "medium", "high", "xhigh", "max"),
     ),
     Model(
         "claude-opus-4-6",
@@ -64,6 +66,7 @@ DEFAULTS = [
         max_context_tokens=200_000,
         max_output_tokens=128_000,
         pricing=Pricing(price_in=5, price_out=25, price_cache_read=0.50, price_cache_write=6.25),
+        reasoning_efforts=("low", "medium", "high", "max"),
     ),
     Model(
         "claude-sonnet-4-6",
@@ -71,6 +74,7 @@ DEFAULTS = [
         max_context_tokens=200_000,
         max_output_tokens=64_000,
         pricing=Pricing(price_in=3, price_out=15, price_cache_read=0.30, price_cache_write=3.75),
+        reasoning_efforts=("low", "medium", "high", "max"),
     ),
     Model(
         "claude-haiku-4-5-20251001",
@@ -78,6 +82,7 @@ DEFAULTS = [
         max_context_tokens=200_000,
         max_output_tokens=64_000,
         pricing=Pricing(price_in=1, price_out=5, price_cache_read=0.10, price_cache_write=1.25),
+        reasoning_efforts=("high", "max"),
     ),
     # --- OpenAI ---
     Model(
@@ -86,6 +91,7 @@ DEFAULTS = [
         max_context_tokens=1_050_000,
         max_output_tokens=128_000,
         pricing=Pricing(price_in=2.50, price_out=15),
+        reasoning_efforts=("minimal", "low", "medium", "high", "xhigh"),
     ),
     Model(
         "gpt-5.4-mini",
@@ -93,6 +99,7 @@ DEFAULTS = [
         max_context_tokens=400_000,
         max_output_tokens=128_000,
         pricing=Pricing(price_in=0.75, price_out=4.50),
+        reasoning_efforts=("minimal", "low", "medium", "high", "xhigh"),
     ),
     Model(
         "gpt-5.4-nano",
@@ -100,6 +107,7 @@ DEFAULTS = [
         max_context_tokens=400_000,
         max_output_tokens=128_000,
         pricing=Pricing(price_in=0.20, price_out=1.25),
+        reasoning_efforts=("minimal", "low", "medium", "high"),
     ),
     Model(
         "gpt-5.2",
@@ -107,6 +115,7 @@ DEFAULTS = [
         max_context_tokens=128_000,
         max_output_tokens=16384,
         pricing=Pricing(price_in=1.75, price_out=14),
+        reasoning_efforts=("minimal", "low", "medium", "high", "xhigh"),
     ),
     # --- Google ---
     Model(
@@ -115,6 +124,7 @@ DEFAULTS = [
         max_context_tokens=1_000_000,
         max_output_tokens=65_536,
         pricing=Pricing(price_in=2, price_out=12),
+        reasoning_efforts=("low", "medium", "high"),
     ),
     Model(
         "gemini-3.1-flash-lite-preview",
@@ -122,6 +132,7 @@ DEFAULTS = [
         max_context_tokens=1_000_000,
         max_output_tokens=65_536,
         pricing=Pricing(price_in=0.25, price_out=1.50),
+        reasoning_efforts=("low", "medium", "high"),
     ),
     Model(
         "gemini-3-flash-preview",
@@ -129,6 +140,7 @@ DEFAULTS = [
         max_context_tokens=1_000_000,
         max_output_tokens=65_536,
         pricing=Pricing(price_in=0.50, price_out=3),
+        reasoning_efforts=("low", "high"),
     ),
     # --- OpenRouter ---
     Model(
@@ -235,6 +247,7 @@ def load_custom_models(base_dir: Path) -> None:
             ),
             base_url=entry["base_url"],
             api_key_env=entry.get("api_key_env"),
+            reasoning_efforts=tuple(entry.get("reasoning_efforts", ())),
         )
         _models[model_id] = model
         _logger.info("Registered custom model: %s (base_url=%s)", model_id, model.base_url)

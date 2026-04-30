@@ -9,12 +9,14 @@ from ntrp.agent import (
     FinishReason,
     FunctionCall,
     Message,
+    ReasoningContentDelta,
     Role,
     ToolCall,
     Usage,
 )
 from ntrp.core.content import render_context
 from ntrp.llm.base import CompletionClient, EmbeddingClient
+from ntrp.llm.models import Provider, get_model
 from ntrp.llm.utils import blocks_to_text
 
 
@@ -46,6 +48,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         tool_choice: str | None,
         temperature: float | None,
         max_tokens: int | None,
+        reasoning_effort: str | None,
         response_format: type[BaseModel] | None,
         **kwargs,
     ) -> dict:
@@ -73,9 +76,26 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
             }
 
         if extra := kwargs.get("extra_body"):
-            request["extra_body"] = extra
+            request["extra_body"] = dict(extra)
+
+        self._apply_reasoning_effort(request, model, reasoning_effort)
 
         return request
+
+    def _apply_reasoning_effort(self, request: dict, model: str, effort: str | None) -> None:
+        if effort is None:
+            return
+        if self._native_openai:
+            request["reasoning_effort"] = effort
+            return
+        provider = get_model(model).provider
+        if provider == Provider.OPENROUTER:
+            extra_body = dict(request.get("extra_body") or {})
+            extra_body["reasoning"] = {"effort": "high" if effort == "xhigh" else effort}
+            request["extra_body"] = extra_body
+            return
+        if provider == Provider.CUSTOM:
+            request["reasoning_effort"] = effort
 
     async def _completion(
         self,
@@ -85,6 +105,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         tool_choice: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
         **kwargs,
     ) -> CompletionResponse:
@@ -95,6 +116,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
             tool_choice,
             temperature,
             max_tokens,
+            reasoning_effort,
             response_format,
             **kwargs,
         )
@@ -109,9 +131,10 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         tool_choice: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        reasoning_effort: str | None = None,
         response_format: type[BaseModel] | None = None,
         **kwargs,
-    ) -> AsyncGenerator[str | CompletionResponse]:
+    ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
         request = self._prepare(
             messages,
             model,
@@ -119,6 +142,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
             tool_choice,
             temperature,
             max_tokens,
+            reasoning_effort,
             response_format,
             **kwargs,
         )
@@ -150,6 +174,7 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
 
             if rc := getattr(delta, "reasoning_content", None):
                 reasoning_parts.append(rc)
+                yield ReasoningContentDelta(rc)
 
             if delta.tool_calls:
                 for tc in delta.tool_calls:

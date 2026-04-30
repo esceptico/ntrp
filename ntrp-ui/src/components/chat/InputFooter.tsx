@@ -33,7 +33,7 @@ function TaskDetails({ tasks, onCancel }: { tasks: Map<string, BackgroundTask>; 
           <box key={t.id} flexDirection="column">
             <box flexDirection="row">
               <text>
-                <span fg={colors.status.info}>◦ </span>
+                <span fg={colors.status.processing}>◦ </span>
                 <span fg={colors.text.muted}>{truncateText(t.command, 50)}</span>
                 <span fg={colors.text.disabled}> · {t.id} · {formatElapsed(now - t.startedAt)}</span>
                 <span fg={colors.text.disabled}> · {t.activity.length} calls</span>
@@ -166,7 +166,11 @@ export function InputFooter({ isStreaming, status, accentValue, escHint, copiedF
           </text>
           <text>
             <span fg={colors.footer}>ctrl+l</span>
-            <span fg={colors.text.disabled}> side panel</span>
+            <span fg={colors.text.disabled}> sidebar</span>
+          </text>
+          <text>
+            <span fg={colors.footer}>ctrl+t</span>
+            <span fg={colors.text.disabled}> reasoning</span>
           </text>
           <text>
             <span fg={colors.footer}>tab tab</span>

@@ -48,6 +48,7 @@ PERSIST_KEYS = frozenset(
         "google",
         "gmail_days",
         "max_depth",
+        "reasoning_effort",
         "compression_threshold",
         "max_messages",
         "compression_keep_ratio",
@@ -109,6 +110,7 @@ class Config(BaseSettings):
 
     # Agent
     max_depth: int = 8
+    reasoning_effort: str | None = None
 
     # Context compaction
     compression_threshold: float = 0.8

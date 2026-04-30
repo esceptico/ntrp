@@ -55,6 +55,23 @@ async def test_simple_text_response():
 
 
 @pytest.mark.asyncio
+async def test_agent_passes_reasoning_effort_to_llm_client():
+    client = MockCompletionClient([make_text_response("Hello!")])
+    executor = make_executor()
+    agent = Agent(
+        tools=[],
+        client=MockLLMClient(client),
+        executor=make_test_executor(executor),
+        model="test-model",
+        reasoning_effort="high",
+    )
+
+    await agent.run(_msgs("Hi"))
+
+    assert client.calls[0]["reasoning_effort"] == "high"
+
+
+@pytest.mark.asyncio
 async def test_tool_call_then_response():
     client = MockCompletionClient(
         [make_tool_response("echo", {"text": "world"}), make_text_response("Got: echo: world")]

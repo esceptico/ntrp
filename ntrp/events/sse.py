@@ -1,8 +1,18 @@
 import json
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
+from uuid import uuid4
 
-from ntrp.agent import TextBlock, TextDelta, ToolCompleted, ToolStarted
+from ntrp.agent import (
+    ReasoningBlock,
+    ReasoningDelta,
+    ReasoningEnded,
+    ReasoningStarted,
+    TextBlock,
+    TextDelta,
+    ToolCompleted,
+    ToolStarted,
+)
 
 
 class EventType(StrEnum):
@@ -11,6 +21,11 @@ class EventType(StrEnum):
     TEXT_DELTA = "text_delta"
     TEXT_MESSAGE_START = "text_message_start"
     TEXT_MESSAGE_END = "text_message_end"
+    REASONING_START = "REASONING_START"
+    REASONING_MESSAGE_START = "REASONING_MESSAGE_START"
+    REASONING_MESSAGE_CONTENT = "REASONING_MESSAGE_CONTENT"
+    REASONING_MESSAGE_END = "REASONING_MESSAGE_END"
+    REASONING_END = "REASONING_END"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
     APPROVAL_NEEDED = "approval_needed"
@@ -185,6 +200,38 @@ class TextMessageEndEvent(SSEEvent):
 
 
 @dataclass(frozen=True)
+class ReasoningStartEvent(SSEEvent):
+    type: EventType = field(default=EventType.REASONING_START, init=False)
+    messageId: str
+
+
+@dataclass(frozen=True)
+class ReasoningMessageStartEvent(SSEEvent):
+    type: EventType = field(default=EventType.REASONING_MESSAGE_START, init=False)
+    messageId: str
+    role: str = "reasoning"
+
+
+@dataclass(frozen=True)
+class ReasoningMessageContentEvent(SSEEvent):
+    type: EventType = field(default=EventType.REASONING_MESSAGE_CONTENT, init=False)
+    messageId: str
+    delta: str
+
+
+@dataclass(frozen=True)
+class ReasoningMessageEndEvent(SSEEvent):
+    type: EventType = field(default=EventType.REASONING_MESSAGE_END, init=False)
+    messageId: str
+
+
+@dataclass(frozen=True)
+class ReasoningEndEvent(SSEEvent):
+    type: EventType = field(default=EventType.REASONING_END, init=False)
+    messageId: str
+
+
+@dataclass(frozen=True)
 class AutomationProgressEvent(SSEEvent):
     type: EventType = field(default=EventType.AUTOMATION_PROGRESS, init=False)
     task_id: str
@@ -198,31 +245,62 @@ class AutomationFinishedEvent(SSEEvent):
     result: str | None = None
 
 
-def agent_event_to_sse(event) -> "SSEEvent | None":
+def agent_events_to_sse(event) -> tuple[SSEEvent, ...]:
     """Convert an ntrp.agent event to an SSEEvent."""
     base = {"depth": event.depth, "parent_id": event.parent_id}
     match event:
         case TextDelta():
-            return TextDeltaEvent(content=event.content, **base)
+            return (TextDeltaEvent(content=event.content, **base),)
         case TextBlock():
-            return TextEvent(content=event.content, **base)
+            return (TextEvent(content=event.content, **base),)
+        case ReasoningBlock():
+            message_id = f"reasoning-{uuid4().hex[:10]}"
+            content = event.content.strip()
+            return (
+                ReasoningStartEvent(messageId=message_id),
+                ReasoningMessageStartEvent(messageId=message_id),
+                ReasoningMessageContentEvent(messageId=message_id, delta=content),
+                ReasoningMessageEndEvent(messageId=message_id),
+                ReasoningEndEvent(messageId=message_id),
+            )
+        case ReasoningStarted():
+            return (
+                ReasoningStartEvent(messageId=event.message_id),
+                ReasoningMessageStartEvent(messageId=event.message_id),
+            )
+        case ReasoningDelta():
+            return (ReasoningMessageContentEvent(messageId=event.message_id, delta=event.content),)
+        case ReasoningEnded():
+            return (
+                ReasoningMessageEndEvent(messageId=event.message_id),
+                ReasoningEndEvent(messageId=event.message_id),
+            )
         case ToolStarted():
-            return ToolCallEvent(
-                tool_id=event.tool_id,
-                name=event.name,
-                args=event.args,
-                display_name=event.display_name,
-                **base,
+            return (
+                ToolCallEvent(
+                    tool_id=event.tool_id,
+                    name=event.name,
+                    args=event.args,
+                    display_name=event.display_name,
+                    **base,
+                ),
             )
         case ToolCompleted():
-            return ToolResultEvent(
-                tool_id=event.tool_id,
-                name=event.name,
-                result=event.result,
-                preview=event.preview,
-                duration_ms=event.duration_ms,
-                data=event.data,
-                display_name=event.display_name,
-                **base,
+            return (
+                ToolResultEvent(
+                    tool_id=event.tool_id,
+                    name=event.name,
+                    result=event.result,
+                    preview=event.preview,
+                    duration_ms=event.duration_ms,
+                    data=event.data,
+                    display_name=event.display_name,
+                    **base,
+                ),
             )
-    return None
+    return ()
+
+
+def agent_event_to_sse(event) -> "SSEEvent | None":
+    events = agent_events_to_sse(event)
+    return events[0] if len(events) == 1 else None

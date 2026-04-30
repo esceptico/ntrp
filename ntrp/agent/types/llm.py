@@ -38,3 +38,8 @@ class CompletionResponse:
     choices: list[Choice]
     usage: Usage
     model: str
+
+
+@dataclass(frozen=True)
+class ReasoningContentDelta:
+    content: str

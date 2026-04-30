@@ -62,7 +62,7 @@ class FakeLLM:
         self.last_messages: list[dict] | None = None
         self.last_tool_choice = None
 
-    async def stream(self, messages, model, tools, tool_choice=None) -> AsyncGenerator:
+    async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None) -> AsyncGenerator:
         self.call_count += 1
         self.last_messages = list(messages)
         self.last_tool_choice = tool_choice
@@ -336,10 +336,10 @@ async def test_model_request_middleware_can_override_model_and_tool_choice():
         return await next_request(replace(request, model="override-model", tool_choice=ToolChoiceMode.REQUIRED))
 
     class Capture(FakeLLM):
-        async def stream(self, messages, model, tools, tool_choice=None):
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None):
             captured["model"] = model
             captured["tool_choice"] = tool_choice
-            async for item in super().stream(messages, model, tools, tool_choice):
+            async for item in super().stream(messages, model, tools, tool_choice, reasoning_effort):
                 yield item
 
     llm = Capture([_response(text="ok")])
@@ -530,7 +530,7 @@ async def test_cancellation_yields_cancelled_result_and_reraises():
     slow_event = asyncio.Event()
 
     class BlockingLLM:
-        async def stream(self, messages, model, tools, tool_choice=None):
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None):
             await slow_event.wait()
             yield _response(text="unreached")
 
@@ -596,7 +596,7 @@ async def test_spawn_timeout_raises():
     slow = asyncio.Event()
 
     class BlockingLLM:
-        async def stream(self, messages, model, tools, tool_choice=None):
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None):
             await slow.wait()
             yield _response(text="never")
 

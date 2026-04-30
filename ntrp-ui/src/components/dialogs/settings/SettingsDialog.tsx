@@ -13,6 +13,7 @@ import {
 import { useSettingsState } from "../../../hooks/useSettingsState.js";
 import { useSettingsKeypress } from "../../../hooks/useSettingsKeypress.js";
 import { getSectionHints } from "./sectionHints.js";
+import { reasoningEfforts } from "../../../lib/reasoning.js";
 
 interface SettingsDialogProps {
   config: Config;
@@ -64,7 +65,7 @@ export function SettingsDialog({
 
   return (
     <Dialog
-      title="PREFERENCES"
+      title="SYSTEM CONFIG"
       size="large"
       onClose={onClose}
       footer={<Hints items={footerHints} />}
@@ -109,7 +110,7 @@ export function SettingsDialog({
                 {activeSection === "memory" && <MemorySection memory={state.memory} serverConfig={serverConfig} agentSettings={settings.agent} accent={accent} />}
                 {activeSection === "instructions" && <DirectivesSection directives={state.directives} accent={accent} height={contentHeight} />}
                 {activeSection === "context" && <ContextSection settings={settings.agent} selectedIndex={state.context.contextIndex} accent={accent} />}
-                {activeSection === "agent" && <AgentSection settings={settings.agent} selectedIndex={state.agent.agentIndex} accent={accent} />}
+                {activeSection === "agent" && <AgentSection settings={settings.agent} reasoningEfforts={reasoningEfforts(serverConfig)} selectedIndex={state.agent.agentIndex} accent={accent} />}
                 {activeSection === "notifications" && <NotifiersSection notifiers={state.notifiers} accent={accent} />}
                 {activeSection === "skills" && <SkillsSection skills={state.skills} accent={accent} width={detailWidth} height={contentHeight} />}
                 {activeSection === "mcp" && <MCPSection mcp={state.mcp} accent={accent} width={detailWidth} height={contentHeight} />}

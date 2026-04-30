@@ -12,8 +12,10 @@
   "scripts": {
     "start": "bun run src/index.tsx",
     "dev": "bun --watch run src/index.tsx",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
     "build": "bun build ./src/index.tsx --minify --target=bun --outdir ./dist && chmod +x ./dist/index.js",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "bun run typecheck && bun run build"
   },
   "repository": {
     "type": "git",

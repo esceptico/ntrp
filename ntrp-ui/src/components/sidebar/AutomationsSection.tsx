@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { truncateText } from "../../lib/utils.js";
 import type { Automation } from "../../api/client.js";
 import { connectAutomationEvents, type AutomationEvent } from "../../api/automations.js";
+import type { Config } from "../../types.js";
 import { formatCountdown, triggersLabel } from "../../lib/format.js";
 import { SectionHeader, D, S } from "./shared.js";
 import { colors } from "../ui/colors.js";
@@ -11,13 +12,13 @@ interface Progress {
   done?: boolean;
 }
 
-function useAutomationProgress(serverUrl: string) {
+function useAutomationProgress(config: Config) {
   const [progress, setProgress] = useState<Map<string, Progress>>(new Map());
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     const disconnect = connectAutomationEvents(
-      { serverUrl },
+      config,
       (event: AutomationEvent) => {
         if (event.type === "automation_progress") {
           setProgress(prev => {
@@ -58,7 +59,7 @@ function useAutomationProgress(serverUrl: string) {
       for (const timer of timers.current.values()) clearTimeout(timer);
       timers.current.clear();
     };
-  }, [serverUrl]);
+  }, [config]);
 
   return progress;
 }
@@ -110,14 +111,14 @@ function AutomationRow({
 export function AutomationsSection({
   automations,
   width,
-  serverUrl,
+  config,
 }: {
   automations: Automation[];
   width: number;
-  serverUrl: string;
+  config: Config;
 }) {
   const userAutomations = automations.filter(a => !a.builtin);
-  const progress = useAutomationProgress(serverUrl);
+  const progress = useAutomationProgress(config);
 
   if (userAutomations.length === 0) return null;
 

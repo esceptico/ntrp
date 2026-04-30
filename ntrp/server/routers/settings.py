@@ -5,9 +5,13 @@ from ntrp.llm.models import (
     get_embedding_models as get_embedding_models_fn,
 )
 from ntrp.llm.models import (
+    get_model,
+    list_embedding_models,
+    list_models,
+)
+from ntrp.llm.models import (
     get_models as get_models_fn,
 )
-from ntrp.llm.models import list_embedding_models, list_models
 from ntrp.server.deps import require_config_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
@@ -25,6 +29,8 @@ def _config_response(rt: Runtime) -> dict:
     memory_connected = rt.memory is not None
     web_client = rt.integrations.get_client("web")
     web_provider = getattr(web_client, "provider", "unknown") if web_client else "none"
+    reasoning_efforts = list(get_model(config.chat_model).reasoning_efforts) if config.chat_model else []
+    reasoning_effort = config.reasoning_effort if config.reasoning_effort in reasoning_efforts else None
 
     integrations: dict[str, dict] = {}
     for integration in rt.integrations.integrations.values():
@@ -84,6 +90,8 @@ def _config_response(rt: Runtime) -> dict:
         "web_search_provider": web_provider,
         "google_enabled": config.google,
         "max_depth": config.max_depth,
+        "reasoning_effort": reasoning_effort,
+        "reasoning_efforts": reasoning_efforts,
         "compression_threshold": config.compression_threshold,
         "max_messages": config.max_messages,
         "compression_keep_ratio": config.compression_keep_ratio,
@@ -95,6 +103,28 @@ def _config_response(rt: Runtime) -> dict:
 
 
 # --- Config ---
+
+
+def _reasoning_efforts(model_id: str | None) -> tuple[str, ...]:
+    return get_model(model_id).reasoning_efforts if model_id else ()
+
+
+def _validate_reasoning_patch(fields: dict, config) -> None:
+    target_model = fields.get("chat_model", config.chat_model)
+    efforts = _reasoning_efforts(target_model)
+
+    if "reasoning_effort" in fields:
+        effort = fields["reasoning_effort"]
+        if effort is not None and effort not in efforts:
+            available = ", ".join(efforts) or "none"
+            raise HTTPException(
+                status_code=400,
+                detail=f"reasoning_effort {effort!r} is not supported by {target_model!r}; available: {available}",
+            )
+        return
+
+    if "chat_model" in fields and config.reasoning_effort not in efforts:
+        fields["reasoning_effort"] = None
 
 
 @router.get("/config")
@@ -130,6 +160,7 @@ async def update_config(
     if toggles := fields.pop("integrations", None):
         fields.update({k: v for k, v in toggles.items() if v is not None})
     try:
+        _validate_reasoning_patch(fields, runtime.config)
         await cfg_svc.update(**fields)
     except (ValueError, ValidationError) as e:
         raise HTTPException(status_code=400, detail=str(e))

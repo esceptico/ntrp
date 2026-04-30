@@ -16,6 +16,7 @@ import { useMemorySettings, type UseMemorySettingsResult } from "./settings/useM
 import { useContextSettings, type UseContextSettingsResult } from "./settings/useContextSettings.js";
 import { useAgentSettings, type UseAgentSettingsResult } from "./settings/useAgentSettings.js";
 import { useInterfaceSettings, type UseInterfaceSettingsResult } from "./settings/useInterfaceSettings.js";
+import { reasoningEfforts } from "../lib/reasoning.js";
 
 export interface UseSettingsStateOptions {
   config: Config;
@@ -68,7 +69,7 @@ export function useSettingsState({
   const integrationsNav = useIntegrationsNav(connections, services);
   const memory = useMemorySettings(config, serverConfig, onServerConfigChange, settings, onUpdate);
   const context = useContextSettings(settings, onUpdate);
-  const agent = useAgentSettings(settings, onUpdate);
+  const agent = useAgentSettings(settings, onUpdate, reasoningEfforts(serverConfig));
   const iface = useInterfaceSettings(settings, onUpdate);
 
   useEffect(() => {

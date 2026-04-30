@@ -12,6 +12,7 @@ class ModelRequest:
     model: str
     tools: list[dict]
     tool_choice: ToolChoice
+    reasoning_effort: str | None
     previous_response: CompletionResponse | None
 
 

@@ -21,6 +21,27 @@ class TextBlock(AgentEventBase):
 
 
 @dataclass(frozen=True, kw_only=True)
+class ReasoningBlock(AgentEventBase):
+    content: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReasoningStarted(AgentEventBase):
+    message_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReasoningDelta(AgentEventBase):
+    message_id: str
+    content: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReasoningEnded(AgentEventBase):
+    message_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
 class ToolStarted(AgentEventBase):
     tool_id: str
     name: str

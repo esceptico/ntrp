@@ -5,6 +5,33 @@ export interface ThinkingEvent {
   status: string;
 }
 
+export interface ReasoningStartEvent {
+  type: "REASONING_START";
+  messageId: string;
+}
+
+export interface ReasoningMessageStartEvent {
+  type: "REASONING_MESSAGE_START";
+  messageId: string;
+  role: "reasoning";
+}
+
+export interface ReasoningMessageContentEvent {
+  type: "REASONING_MESSAGE_CONTENT";
+  messageId: string;
+  delta: string;
+}
+
+export interface ReasoningMessageEndEvent {
+  type: "REASONING_MESSAGE_END";
+  messageId: string;
+}
+
+export interface ReasoningEndEvent {
+  type: "REASONING_END";
+  messageId: string;
+}
+
 export interface TextEvent {
   type: "text";
   content: string;
@@ -127,6 +154,11 @@ export interface MessageIngestedEvent {
 
 export type ServerEvent =
   | ThinkingEvent
+  | ReasoningStartEvent
+  | ReasoningMessageStartEvent
+  | ReasoningMessageContentEvent
+  | ReasoningMessageEndEvent
+  | ReasoningEndEvent
   | TextEvent
   | TextDeltaEvent
   | TextMessageStartEvent
@@ -152,6 +184,7 @@ export interface Message {
   toolDescription?: string;
   toolCount?: number;
   duration?: number;
+  data?: Record<string, unknown>;
   toolChain?: ToolChainItem[];
   autoApproved?: boolean;
   imageCount?: number;

@@ -7,7 +7,6 @@ import type { BackgroundTask } from "../../stores/streamingStore.js";
 import { colors, useThemeVersion } from "../ui/colors.js";
 import { useAccentColor } from "../../hooks/index.js";
 import { useAutocomplete } from "../../hooks/useAutocomplete.js";
-import { EmptyBorder } from "../ui/border.js";
 import { AutocompleteList } from "./AutocompleteList.js";
 import { InputFooter } from "./InputFooter.js";
 import { getClipboardImage } from "../../lib/clipboard.js";
@@ -31,7 +30,7 @@ interface InputAreaProps {
   onEditingChange?: (messageId: string | null) => void;
   skipApprovals?: boolean;
   chatModel?: string;
-  sessionName?: string | null;
+  reasoningEffort?: string | null;
   indexStatus?: { indexing: boolean; progress: { total: number; done: number }; reembedding?: boolean; reembed_progress?: { total: number; done: number } | null } | null;
   copiedFlash?: boolean;
   backgroundTaskCount?: number;
@@ -53,7 +52,7 @@ export const InputArea = memo(function InputArea({
   onEditingChange,
   skipApprovals = false,
   chatModel,
-  sessionName,
+  reasoningEffort = null,
   indexStatus = null,
   copiedFlash = false,
   backgroundTaskCount = 0,
@@ -65,7 +64,7 @@ export const InputArea = memo(function InputArea({
   const { accentValue } = useAccentColor();
 
   useThemeVersion();
-  const inputRef = useRef<TextareaRenderable>(null);
+  const inputRef = useRef<TextareaRenderable | null>(null);
   const [value, setValue] = useState("");
   const [escHint, setEscHint] = useState(false);
   const [images, setImages] = useState<ImageBlock[]>([]);
@@ -259,10 +258,19 @@ export const InputArea = memo(function InputArea({
     resetIndex();
     if (historyNavRef.current) {
       historyNavRef.current = false;
+      return;
+    }
+    if (historyIndexRef.current >= 0) {
+      historyIndexRef.current = -1;
+      notifyEditing(-1);
     }
   }, [resetIndex, notifyEditing]);
 
   const modelName = formatModel(chatModel);
+  const metadata = [
+    modelName || null,
+    reasoningEffort ? `think ${reasoningEffort}` : null,
+  ].filter(Boolean).join(" · ");
   const imagePreview = useMemo(() => {
     if (images.length === 0) return null;
     const last = images[images.length - 1];
@@ -280,79 +288,67 @@ export const InputArea = memo(function InputArea({
         />
       )}
 
-      <box>
+      <box flexDirection="column">
         <box
-          border={["left"]}
-          borderColor={accentValue}
-          customBorderChars={{
-            ...EmptyBorder,
-            vertical: "\u2503",
-            bottomLeft: "\u2579",
-          }}
+          border={["top"]}
+          borderColor={colors.divider}
+          paddingLeft={2}
+          paddingRight={2}
+          paddingTop={1}
+          paddingBottom={1}
+          flexShrink={0}
         >
           <box
-            paddingLeft={2}
-            paddingRight={2}
-            paddingTop={1}
-            flexShrink={0}
-            backgroundColor={colors.background.element}
+            flexDirection="row"
             flexGrow={1}
+            overflow="hidden"
           >
-            {imagePreview && (
-              <box flexDirection="column" flexShrink={0} paddingBottom={1}>
-                {imagePreview.map((row, y) => (
-                  <text key={y}>
-                    {row.pixels.map((p, x) => (
-                      <span key={x} fg={p.fg} bg={p.bg}>▀</span>
-                    ))}
+            <box width={4} flexShrink={0}>
+              <text><span fg={accentValue}>›</span></text>
+            </box>
+            <box flexDirection="column" flexGrow={1} overflow="hidden">
+              {imagePreview && (
+                <box flexDirection="column" flexShrink={0} paddingBottom={1}>
+                  {imagePreview.map((row, y) => (
+                    <text key={y}>
+                      {row.pixels.map((p, x) => (
+                        <span key={x} fg={p.fg} bg={p.bg}>▀</span>
+                      ))}
+                    </text>
+                  ))}
+                </box>
+              )}
+              <textarea
+                ref={inputRef}
+                minHeight={1}
+                maxHeight={6}
+                placeholder={images.length > 0 ? `${images.length} image${images.length > 1 ? "s" : ""} attached · type a message or press Enter` : "Message ntrp..."}
+                focused={focus}
+                textColor={colors.text.primary}
+                placeholderColor={colors.text.disabled}
+                focusedBackgroundColor={colors.background.base}
+                keyBindings={[
+                  { name: "return", shift: true, action: "newline" },
+                ]}
+                onPaste={handlePaste}
+                onKeyDown={handleKeyDown}
+                onContentChange={handleContentChange}
+              />
+              <box flexDirection="row" flexShrink={0} marginTop={1} gap={1}>
+                {images.length > 0 ? (
+                  <text><span fg={accentValue}>{images.length} image{images.length > 1 ? "s" : ""} · esc to remove</span></text>
+                ) : null}
+                {metadata ? (
+                  <text flexShrink={0} fg={colors.text.muted}>
+                    {metadata}
                   </text>
-                ))}
+                ) : null}
+                {skipApprovals ? (
+                  <text><span fg={colors.status.warning}><strong>skip approvals</strong></span></text>
+                ) : null}
               </box>
-            )}
-            <textarea
-              ref={inputRef as any}
-              minHeight={1}
-              maxHeight={6}
-              placeholder={images.length > 0 ? `${images.length} image${images.length > 1 ? "s" : ""} attached · type a message or press Enter` : "Message ntrp..."}
-              focused={focus}
-              textColor={colors.text.primary}
-              focusedBackgroundColor={colors.background.element}
-              keyBindings={[
-                { name: "return", shift: true, action: "newline" },
-              ]}
-              onPaste={handlePaste}
-              onKeyDown={handleKeyDown}
-              onContentChange={handleContentChange}
-            />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              {images.length > 0 ? (
-                <text><span fg={accentValue}>{images.length} image{images.length > 1 ? "s" : ""} · esc to remove</span></text>
-              ) : null}
-              {(sessionName || chatModel) ? (
-                <text flexShrink={0} fg={colors.text.muted}>
-                  {sessionName ? `${sessionName} · ${modelName}` : modelName}
-                </text>
-              ) : null}
-              {skipApprovals ? (
-                <text><span fg={colors.status.warning}><strong>skip approvals</strong></span></text>
-              ) : null}
             </box>
           </box>
-        </box>
-        <box
-          height={1}
-          border={["left"]}
-          borderColor={accentValue}
-          customBorderChars={{ ...EmptyBorder, vertical: "\u2579" }}
-        >
-          {colors.background.element != null && (
-            <box
-              height={1}
-              border={["bottom"]}
-              borderColor={colors.background.element}
-              customBorderChars={{ ...EmptyBorder, horizontal: "\u2580" }}
-            />
-          )}
         </box>
         <InputFooter
           isStreaming={isStreaming}

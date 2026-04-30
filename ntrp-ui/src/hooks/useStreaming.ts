@@ -42,6 +42,7 @@ export function useStreaming({
   const configRef = useRef(config);
   configRef.current = config;
   const connectionsRef = useRef<Map<string, { disconnect: () => void; stream: boolean }>>(new Map());
+  const sseErrorAtRef = useRef<Map<string, number>>(new Map());
   const prevBgCountRef = useRef(0);
   const prevIsStreamingRef = useRef(false);
 
@@ -127,6 +128,47 @@ export function useStreaming({
             : Status.THINKING;
           break;
 
+        case "REASONING_START":
+        case "REASONING_END":
+          break;
+
+        case "REASONING_MESSAGE_START":
+          if (!s.messages.some((m) => m.id === event.messageId)) {
+            addMessageToSession(s, { id: event.messageId, role: "thinking", content: "" });
+          }
+          break;
+
+        case "REASONING_MESSAGE_CONTENT": {
+          const index = s.messages.findIndex((m) => m.id === event.messageId);
+          if (index === -1) {
+            addMessageToSession(s, {
+              id: event.messageId,
+              role: "thinking",
+              content: truncateText(event.delta.trimStart(), MAX_ASSISTANT_CHARS, "end"),
+            });
+          } else {
+            const current = s.messages[index];
+            const delta = current.content ? event.delta : event.delta.trimStart();
+            s.messages = [
+              ...s.messages.slice(0, index),
+              {
+                ...current,
+                content: truncateText(current.content + delta, MAX_ASSISTANT_CHARS, "end"),
+              },
+              ...s.messages.slice(index + 1),
+            ];
+          }
+          break;
+        }
+
+        case "REASONING_MESSAGE_END": {
+          const message = s.messages.find((m) => m.id === event.messageId);
+          if (message && !message.content) {
+            s.messages = s.messages.filter((m) => m.id !== event.messageId);
+          }
+          break;
+        }
+
         case "tool_call": {
           s.currentDepth = event.depth;
           s.status = Status.TOOL;
@@ -159,7 +201,7 @@ export function useStreaming({
           if (childCount > 0) {
             addMessageToSession(s, {
               role: "tool", content: event.result, toolName: event.name,
-              toolDescription, toolCount: childCount, duration, autoApproved,
+              toolDescription, toolCount: childCount, duration, autoApproved, data: event.data,
             });
             s.toolChain = s.toolChain.filter((item) => item.id !== event.tool_id && item.parentId !== event.tool_id);
           } else if (event.depth > 0) {
@@ -169,7 +211,7 @@ export function useStreaming({
                 : item
             );
           } else {
-            addMessageToSession(s, { role: "tool", content: event.result, toolName: event.name, toolDescription, duration, autoApproved });
+            addMessageToSession(s, { role: "tool", content: event.result, toolName: event.name, toolDescription, duration, autoApproved, data: event.data });
             s.toolChain = s.toolChain.filter((item) => item.id !== event.tool_id);
           }
           s.status = Status.THINKING;
@@ -395,6 +437,20 @@ export function useStreaming({
       configRef.current,
       (event) => handleEventRef.current!(targetId, event),
       { stream: streaming },
+      (error) => {
+        const now = Date.now();
+        const last = sseErrorAtRef.current.get(targetId) ?? 0;
+        if (now - last < 10000) return;
+        sseErrorAtRef.current.set(targetId, now);
+        mutateSession(targetId, (s) => {
+          if (!s.isStreaming) return;
+          addMessageToSession(s, {
+            role: "status",
+            content: `Event stream disconnected (${error.message}). Reconnecting...`,
+          });
+          if (targetId !== store.getState().viewedId) s.notification = "error";
+        });
+      },
     );
 
     connections.set(targetId, { disconnect, stream: streaming });

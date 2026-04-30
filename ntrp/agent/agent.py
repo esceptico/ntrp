@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import AsyncGenerator, Sequence
+from uuid import uuid4
 
 from ntrp.agent.hooks import AgentHooks
 from ntrp.agent.llm.client import LLMClient
@@ -8,13 +9,33 @@ from ntrp.agent.model_request import ModelRequest, ModelRequestMiddleware, apply
 from ntrp.agent.tools.dispatch import dispatch_tools
 from ntrp.agent.tools.executor import AgentToolExecutor
 from ntrp.agent.tools.runner import ToolRunner
-from ntrp.agent.types.events import Result, TextBlock, TextDelta, ToolCompleted, ToolStarted
-from ntrp.agent.types.llm import CompletionResponse
+from ntrp.agent.types.events import (
+    ReasoningBlock,
+    ReasoningDelta,
+    ReasoningEnded,
+    ReasoningStarted,
+    Result,
+    TextBlock,
+    TextDelta,
+    ToolCompleted,
+    ToolStarted,
+)
+from ntrp.agent.types.llm import CompletionResponse, ReasoningContentDelta
 from ntrp.agent.types.stop import StopReason
 from ntrp.agent.types.tool_choice import ToolChoice, ToolChoiceMode
 from ntrp.agent.types.usage import Usage
 
-AgentEvent = TextDelta | TextBlock | ToolStarted | ToolCompleted | Result
+AgentEvent = (
+    TextDelta
+    | TextBlock
+    | ReasoningBlock
+    | ReasoningStarted
+    | ReasoningDelta
+    | ReasoningEnded
+    | ToolStarted
+    | ToolCompleted
+    | Result
+)
 
 
 class Agent:
@@ -29,6 +50,7 @@ class Agent:
         current_depth: int = 0,
         parent_id: str | None = None,
         tool_choice: ToolChoice = ToolChoiceMode.AUTO,
+        reasoning_effort: str | None = None,
         hooks: AgentHooks | None = None,
         model_request_middlewares: Sequence[ModelRequestMiddleware] = (),
     ):
@@ -40,6 +62,7 @@ class Agent:
         self.current_depth = current_depth
         self.parent_id = parent_id
         self.tool_choice = tool_choice
+        self.reasoning_effort = reasoning_effort
         self.hooks = hooks or AgentHooks()
         self.model_request_middlewares = tuple(model_request_middlewares)
         self._runner = ToolRunner(executor=executor, depth=current_depth, parent_id=parent_id)
@@ -61,9 +84,9 @@ class Agent:
                     yield self._result(result_text, StopReason.MAX_ITERATIONS, step)
                     return
 
-                step_model, step_tools, step_tool_choice = await self._prepare(step, messages)
+                step_model, step_tools, step_tool_choice, step_reasoning_effort = await self._prepare(step, messages)
 
-                async for event in self._call_llm(messages, step_model, step_tools, step_tool_choice):
+                async for event in self._call_llm(messages, step_model, step_tools, step_tool_choice, step_reasoning_effort):
                     yield event
 
                 response_message = self._last_response.choices[0].message
@@ -118,7 +141,9 @@ class Agent:
         if pending:
             messages.extend(pending)
 
-    async def _prepare(self, step: int, messages: list[dict]) -> tuple[str, list[dict], ToolChoice]:
+    async def _prepare(
+        self, step: int, messages: list[dict]
+    ) -> tuple[str, list[dict], ToolChoice, str | None]:
         prepared = await apply_model_request_middlewares(
             ModelRequest(
                 step=step,
@@ -126,6 +151,7 @@ class Agent:
                 model=self.model,
                 tools=self.tools,
                 tool_choice=self.tool_choice,
+                reasoning_effort=self.reasoning_effort,
                 previous_response=self._last_response,
             ),
             self.model_request_middlewares,
@@ -135,7 +161,7 @@ class Agent:
             messages.clear()
             messages.extend(prepared.messages)
 
-        return prepared.model, prepared.tools, prepared.tool_choice
+        return prepared.model, prepared.tools, prepared.tool_choice, prepared.reasoning_effort
 
     async def _call_llm(
         self,
@@ -143,12 +169,37 @@ class Agent:
         model: str,
         tools: list[dict],
         tool_choice: ToolChoice,
+        reasoning_effort: str | None,
     ) -> AsyncGenerator[AgentEvent]:
         try:
             response = None
-            async for item in self.client.stream(messages, model, tools, tool_choice):
+            reasoning_id = f"reasoning-{uuid4().hex[:10]}"
+            reasoning_started = False
+            reasoning_parts: list[str] = []
+            kwargs = {"tool_choice": tool_choice}
+            if reasoning_effort is not None:
+                kwargs["reasoning_effort"] = reasoning_effort
+            async for item in self.client.stream(messages, model, tools, **kwargs):
                 if isinstance(item, str):
                     yield TextDelta(depth=self.current_depth, parent_id=self.parent_id, content=item)
+                elif isinstance(item, ReasoningContentDelta):
+                    content = item.content.lstrip() if not reasoning_parts else item.content
+                    if not content:
+                        continue
+                    reasoning_parts.append(content)
+                    if not reasoning_started:
+                        reasoning_started = True
+                        yield ReasoningStarted(
+                            depth=self.current_depth,
+                            parent_id=self.parent_id,
+                            message_id=reasoning_id,
+                        )
+                    yield ReasoningDelta(
+                        depth=self.current_depth,
+                        parent_id=self.parent_id,
+                        message_id=reasoning_id,
+                        content=content,
+                    )
                 elif isinstance(item, CompletionResponse):
                     response = item
         except Exception as exc:
@@ -161,6 +212,10 @@ class Agent:
 
         self._last_response = response
         self._usage += response.usage
+        if reasoning_started:
+            yield ReasoningEnded(depth=self.current_depth, parent_id=self.parent_id, message_id=reasoning_id)
+        elif reasoning := response.choices[0].message.reasoning_content:
+            yield ReasoningBlock(depth=self.current_depth, parent_id=self.parent_id, content=reasoning)
         messages.append(normalize_assistant_message(response.choices[0].message))
         if self.hooks.on_response:
             await self.hooks.on_response(response)

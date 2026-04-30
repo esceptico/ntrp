@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { accentNames, themeNames, type AccentColor, type Theme } from "../components/ui/colors.js";
-import { updateConfig } from "../api/client.js";
+import { updateConfig, type ServerConfig } from "../api/client.js";
 import type { Config } from "../types.js";
 import * as fs from "fs";
 import * as path from "path";
@@ -11,10 +11,12 @@ export interface UiSettings {
   theme: Theme;
   transparentBg: boolean;
   streaming: boolean;
+  showReasoning: boolean;
 }
 
 export interface AgentSettings {
   maxDepth: number;
+  reasoningEffort: string | null;
   compressionThreshold: number;
   maxMessages: number;
   compressionKeepRatio: number;
@@ -39,9 +41,11 @@ const defaultSettings: Settings = {
     theme: "dark",
     transparentBg: false,
     streaming: true,
+    showReasoning: false,
   },
   agent: {
     maxDepth: 8,
+    reasoningEffort: null,
     compressionThreshold: 80,
     maxMessages: 120,
     compressionKeepRatio: 20,
@@ -61,6 +65,30 @@ const defaultSettings: Settings = {
 
 const SETTINGS_DIR = path.join(os.homedir(), ".ntrp");
 const SETTINGS_FILE = path.join(SETTINGS_DIR, "settings.json");
+
+export function agentSettingsFromServerConfig(config: ServerConfig): AgentSettings {
+  return {
+    maxDepth: config.max_depth,
+    reasoningEffort: config.reasoning_effort ?? null,
+    compressionThreshold: Math.round(config.compression_threshold * 100),
+    maxMessages: config.max_messages,
+    compressionKeepRatio: Math.round(config.compression_keep_ratio * 100),
+    summaryMaxTokens: config.summary_max_tokens,
+    consolidationInterval: config.consolidation_interval,
+  };
+}
+
+function sameAgentSettings(a: AgentSettings, b: AgentSettings): boolean {
+  return (
+    a.maxDepth === b.maxDepth &&
+    a.reasoningEffort === b.reasoningEffort &&
+    a.compressionThreshold === b.compressionThreshold &&
+    a.maxMessages === b.maxMessages &&
+    a.compressionKeepRatio === b.compressionKeepRatio &&
+    a.summaryMaxTokens === b.summaryMaxTokens &&
+    a.consolidationInterval === b.consolidationInterval
+  );
+}
 
 function loadSettings(): Settings {
   try {
@@ -123,6 +151,7 @@ export function useSettings(config: Config) {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [showSettings, setShowSettings] = useState(false);
   const initializedRef = useRef(false);
+  const syncedConfigVersionRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (initializedRef.current) {
@@ -132,16 +161,17 @@ export function useSettings(config: Config) {
     }
   }, [settings]);
 
-  useEffect(() => {
-    updateConfig(config, {
-      max_depth: settings.agent.maxDepth,
-      compression_threshold: settings.agent.compressionThreshold / 100,
-      max_messages: settings.agent.maxMessages,
-      compression_keep_ratio: settings.agent.compressionKeepRatio / 100,
-      summary_max_tokens: settings.agent.summaryMaxTokens,
-      consolidation_interval: settings.agent.consolidationInterval,
-    }).catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const syncAgentSettingsFromServer = useCallback((serverConfig: ServerConfig | null) => {
+    if (!serverConfig) return;
+    if (syncedConfigVersionRef.current === serverConfig.config_version) return;
+    syncedConfigVersionRef.current = serverConfig.config_version;
+
+    const agent = agentSettingsFromServerConfig(serverConfig);
+    setSettings((prev) => {
+      if (sameAgentSettings(prev.agent, agent)) return prev;
+      return { ...prev, agent };
+    });
+  }, []);
 
   const updateSetting = useCallback(
     (category: keyof Settings, key: string, value: unknown) => {
@@ -154,6 +184,7 @@ export function useSettings(config: Config) {
         if (category === "agent") {
           const agentPatch: Record<string, unknown> = {};
           if (key === "maxDepth") agentPatch.max_depth = value;
+          if (key === "reasoningEffort") agentPatch.reasoning_effort = value;
           if (key === "compressionThreshold") agentPatch.compression_threshold = (value as number) / 100;
           if (key === "maxMessages") agentPatch.max_messages = value;
           if (key === "compressionKeepRatio") agentPatch.compression_keep_ratio = (value as number) / 100;
@@ -175,6 +206,7 @@ export function useSettings(config: Config) {
     settings,
     showSettings,
     updateSetting,
+    syncAgentSettingsFromServer,
     closeSettings,
     toggleSettings,
   };
