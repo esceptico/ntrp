@@ -250,6 +250,15 @@ Extraction policy:
 
 ## Phase 3: Profile Memory
 
+Status:
+
+```text
+read-only profile projection added over typed facts
+GET /memory/profile returns profile-worthy facts
+system prompt memory can format profile sections separately from legacy user facts
+no materialized profile table yet
+```
+
 Profile should answer: "What should the assistant always know about the user?"
 
 Do not create a separate editable profile table first. Start with a projection over typed facts:

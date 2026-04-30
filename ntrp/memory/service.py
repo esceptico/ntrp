@@ -159,6 +159,9 @@ class MemoryService:
     async def audit(self) -> dict:
         return await memory_audit(self.memory.facts.read_conn)
 
+    async def profile(self, limit: int = 6) -> list[Fact]:
+        return await self.memory.get_profile(limit=limit)
+
     async def prune_observations_dry_run(
         self,
         *,

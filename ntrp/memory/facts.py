@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -17,6 +18,7 @@ from ntrp.constants import (
     FORGET_SIMILARITY_THRESHOLD,
     RECALL_SEARCH_LIMIT,
     SYSTEM_PROMPT_OBSERVATION_LIMIT,
+    SYSTEM_PROMPT_PROFILE_LIMIT,
     USER_ENTITY_NAME,
 )
 from ntrp.embedder import Embedder, EmbeddingConfig
@@ -24,7 +26,7 @@ from ntrp.logging import get_logger
 from ntrp.memory.consolidation_runner import ConsolidationRunner
 from ntrp.memory.decay import decay_score
 from ntrp.memory.extraction import Extractor
-from ntrp.memory.models import ExtractionResult, Fact, FactContext, Observation, SourceType
+from ntrp.memory.models import ExtractionResult, Fact, FactContext, FactKind, Observation, SourceType
 from ntrp.memory.retrieval import retrieve_with_observations
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.dreams import DreamRepository
@@ -33,12 +35,26 @@ from ntrp.memory.store.observations import ObservationRepository
 
 _logger = get_logger(__name__)
 
+PROFILE_FACT_KINDS = (
+    FactKind.IDENTITY,
+    FactKind.PREFERENCE,
+    FactKind.RELATIONSHIP,
+    FactKind.CONSTRAINT,
+)
+
 
 class RememberFactResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     fact: Fact
     entities_extracted: list[str]
+
+
+@dataclass(frozen=True)
+class SessionMemory:
+    observations: list[Observation]
+    profile_facts: list[Fact]
+    user_facts: list[Fact]
 
 
 class ReembedProgress(TypedDict):
@@ -347,7 +363,14 @@ class FactMemory:
     async def count(self) -> int:
         return await self.facts.count()
 
-    async def get_context(self, user_limit: int = 10) -> tuple[list[Observation], list[Fact]]:
+    async def get_profile(self, limit: int = SYSTEM_PROMPT_PROFILE_LIMIT) -> list[Fact]:
+        return await self.facts.list_profile_facts(PROFILE_FACT_KINDS, limit=limit)
+
+    async def get_session_memory(
+        self,
+        user_limit: int = 10,
+        profile_limit: int = SYSTEM_PROMPT_PROFILE_LIMIT,
+    ) -> SessionMemory:
         if user_entity := await self.facts.get_entity_by_name(USER_ENTITY_NAME):
             raw_obs = await self.observations.get_for_entity(user_entity.id, limit=20)
             scored_obs = sorted(
@@ -359,14 +382,21 @@ class FactMemory:
         else:
             observations = []
 
+        profile_facts = await self.get_profile(limit=profile_limit)
+
         exclude_ids: set[int] = set()
         for obs in observations:
             exclude_ids.update(obs.source_fact_ids)
+        exclude_ids.update(f.id for f in profile_facts)
 
         all_user_facts = await self.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=user_limit + len(exclude_ids))
         user_facts = [f for f in all_user_facts if f.id not in exclude_ids][:user_limit]
 
-        return observations, user_facts
+        return SessionMemory(observations=observations, profile_facts=profile_facts, user_facts=user_facts)
+
+    async def get_context(self, user_limit: int = 10) -> tuple[list[Observation], list[Fact]]:
+        session_memory = await self.get_session_memory(user_limit=user_limit)
+        return session_memory.observations, [*session_memory.profile_facts, *session_memory.user_facts]
 
     async def clear_observations(self) -> dict[str, int]:
         async with self.transaction():

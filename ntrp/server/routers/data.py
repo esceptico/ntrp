@@ -215,6 +215,15 @@ async def get_memory_audit(svc: MemoryService = Depends(require_memory)):
     return await svc.audit()
 
 
+@router.get("/memory/profile")
+async def get_memory_profile(
+    limit: int = Query(default=6, ge=1, le=50),
+    svc: MemoryService = Depends(require_memory),
+):
+    facts = await svc.profile(limit=limit)
+    return {"facts": [_fact_payload(f) for f in facts]}
+
+
 @router.post("/memory/prune/dry-run")
 async def prune_memory_dry_run(request: MemoryPruneDryRunRequest, svc: MemoryService = Depends(require_memory)):
     return await svc.prune_observations_dry_run(

@@ -10,7 +10,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from ntrp.config import Config
-from ntrp.memory.models import SourceType
+from ntrp.memory.models import FactKind, SourceType
 from ntrp.server.app import app
 from ntrp.server.runtime import Runtime
 from ntrp.settings import hash_api_key
@@ -307,6 +307,23 @@ class TestMemoryAuditAPI:
         assert "provenance" in data
 
     @pytest.mark.asyncio
+    async def test_memory_profile(self, test_client: AsyncClient, test_runtime: Runtime):
+        fact = await test_runtime.memory.facts.create(
+            "User prefers concise status updates",
+            SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+            salience=2,
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.get("/memory/profile")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [row["id"] for row in data["facts"]] == [fact.id]
+        assert data["facts"][0]["kind"] == "preference"
+
+    @pytest.mark.asyncio
     async def test_prune_dry_run_does_not_delete(
         self,
         test_client: AsyncClient,
@@ -371,6 +388,7 @@ class TestMemoryDisabled:
                 client.patch("/observations/1", json={"summary": "test"}),
                 client.delete("/observations/1"),
                 client.get("/memory/audit"),
+                client.get("/memory/profile"),
                 client.post("/memory/prune/dry-run", json={}),
             )
 

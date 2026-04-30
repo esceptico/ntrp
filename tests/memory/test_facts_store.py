@@ -79,6 +79,61 @@ class TestFactCRUD:
         assert retrieved.pinned_at is None
         assert retrieved.superseded_by_fact_id is None
 
+    @pytest.mark.asyncio
+    async def test_list_profile_facts(self, repo: FactRepository):
+        now = datetime.now(UTC)
+        visible = await repo.create(
+            text="User prefers concise answers",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+            salience=1,
+        )
+        pinned = await repo.create(
+            text="User is Timur",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.IDENTITY,
+            salience=0,
+            pinned_at=now,
+        )
+        note = await repo.create(
+            text="Regular note",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.NOTE,
+            salience=2,
+        )
+        expired = await repo.create(
+            text="Expired preference",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+            expires_at=now - timedelta(days=1),
+        )
+        archived = await repo.create(
+            text="Archived preference",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+        )
+        replacement = await repo.create(
+            text="Replacement preference",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+        )
+        superseded = await repo.create(
+            text="Superseded preference",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+            superseded_by_fact_id=replacement.id,
+        )
+        await repo.archive_batch([archived.id])
+
+        facts = await repo.list_profile_facts((FactKind.IDENTITY, FactKind.PREFERENCE), limit=10)
+
+        ids = [fact.id for fact in facts]
+        assert ids[:2] == [pinned.id, visible.id]
+        assert note.id not in ids
+        assert expired.id not in ids
+        assert archived.id not in ids
+        assert superseded.id not in ids
+
 
 class TestReinforce:
     @pytest.mark.asyncio

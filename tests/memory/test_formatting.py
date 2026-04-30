@@ -1,10 +1,10 @@
 from datetime import datetime
 
-from ntrp.memory.formatting import format_memory_context
-from ntrp.memory.models import Fact, FactContext, Observation, SourceType
+from ntrp.memory.formatting import format_memory_context, format_session_memory
+from ntrp.memory.models import Fact, FactContext, FactKind, Observation, SourceType
 
 
-def make_fact(id: int, text: str) -> Fact:
+def make_fact(id: int, text: str, kind: FactKind = FactKind.NOTE) -> Fact:
     now = datetime.now()
     return Fact(
         id=id,
@@ -17,6 +17,7 @@ def make_fact(id: int, text: str) -> Fact:
         last_accessed_at=now,
         access_count=0,
         consolidated_at=None,
+        kind=kind,
     )
 
 
@@ -71,3 +72,20 @@ class TestFormatMemoryContext:
         assert "**Relevant**" in result
         assert "Likes coffee" in result
         assert "Morning person" in result
+
+
+class TestFormatSessionMemory:
+    def test_profile_facts_are_sectioned(self):
+        result = format_session_memory(
+            profile_facts=[
+                make_fact(1, "User is Timur", FactKind.IDENTITY),
+                make_fact(2, "User prefers terse updates", FactKind.PREFERENCE),
+            ],
+            user_facts=[make_fact(3, "Legacy user fact")],
+        )
+
+        assert "**Identity**" in result
+        assert "**Preferences**" in result
+        assert "**About user**" in result
+        assert "User is Timur" in result
+        assert "User prefers terse updates" in result

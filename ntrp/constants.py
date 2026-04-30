@@ -117,6 +117,7 @@ FORGET_SEARCH_LIMIT = 10
 RECALL_SEARCH_LIMIT = 5  # seed nodes from search
 RECALL_OBSERVATION_LIMIT = 5  # max observations in context
 RECALL_STANDALONE_FACT_LIMIT = 10  # max standalone facts (not bundled with observations)
+SYSTEM_PROMPT_PROFILE_LIMIT = 6  # max typed profile facts in system prompt memory context
 SYSTEM_PROMPT_OBSERVATION_LIMIT = 5  # max observations in system prompt memory context
 OBSERVATION_HISTORY_LIMIT = 10  # max history entries kept per observation
 

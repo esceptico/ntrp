@@ -149,8 +149,12 @@ async def _prepare_messages(
 ) -> list[dict]:
     memory_context = None
     if deps.memory:
-        observations, user_facts = await deps.memory.get_context()
-        memory_context = format_session_memory(observations=observations, user_facts=user_facts)
+        session_memory = await deps.memory.get_session_memory()
+        memory_context = format_session_memory(
+            profile_facts=session_memory.profile_facts,
+            observations=session_memory.observations,
+            user_facts=session_memory.user_facts,
+        )
 
     skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None
     directives = load_directives()

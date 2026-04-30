@@ -88,6 +88,15 @@ _SQL_GET_FACTS_FOR_ENTITY = """
     ORDER BY f.access_count DESC, f.created_at DESC
     LIMIT ?
 """
+_SQL_LIST_PROFILE_FACTS = """
+    SELECT * FROM facts
+    WHERE archived_at IS NULL
+      AND superseded_by_fact_id IS NULL
+      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+      AND kind IN ({placeholders})
+    ORDER BY pinned_at IS NULL, salience DESC, access_count DESC, created_at DESC
+    LIMIT ?
+"""
 
 _SQL_GET_ENTITY = "SELECT * FROM entities WHERE id = ?"
 _SQL_GET_ENTITY_BY_NAME = "SELECT * FROM entities WHERE name = ? COLLATE NOCASE"
@@ -288,6 +297,17 @@ class FactRepository:
 
     async def list_recent(self, limit: int = 100, offset: int = 0) -> list[Fact]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_RECENT, (limit, offset))
+        return [Fact.model_validate(_row_dict(r)) for r in rows]
+
+    async def list_profile_facts(self, kinds: Sequence[FactKind], limit: int) -> list[Fact]:
+        if not kinds:
+            return []
+        placeholders = ",".join("?" * len(kinds))
+        params = tuple(kind.value for kind in kinds) + (limit,)
+        rows = await self.read_conn.execute_fetchall(
+            _SQL_LIST_PROFILE_FACTS.format(placeholders=placeholders),
+            params,
+        )
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def list_in_time_window(self, start: datetime, end: datetime) -> list[Fact]:

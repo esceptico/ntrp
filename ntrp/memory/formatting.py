@@ -1,6 +1,13 @@
-from ntrp.memory.models import Fact, Observation, SourceType
+from ntrp.memory.models import Fact, FactKind, Observation, SourceType
 
 MEMORY_CONTEXT_CHAR_BUDGET = 3000
+
+PROFILE_SECTIONS = (
+    (FactKind.IDENTITY, "**Identity**"),
+    (FactKind.PREFERENCE, "**Preferences**"),
+    (FactKind.RELATIONSHIP, "**Relationships**"),
+    (FactKind.CONSTRAINT, "**Standing constraints**"),
+)
 
 
 def _source_label(fact: Fact) -> str:
@@ -24,6 +31,15 @@ def _format_bundled_observation(obs: Observation, source_facts: list[Fact]) -> s
 
 def _format_observation(obs: Observation) -> str:
     return f"- {obs.summary}"
+
+
+def _profile_sections(profile_facts: list[Fact]) -> list[tuple[str, list[str]]]:
+    sections: list[tuple[str, list[str]]] = []
+    for kind, header in PROFILE_SECTIONS:
+        items = [f"- {fact.text}" for fact in profile_facts if fact.kind == kind]
+        if items:
+            sections.append((header, items))
+    return sections
 
 
 def _format_sections(
@@ -57,13 +73,16 @@ def _format_sections(
 
 
 def format_session_memory(
+    profile_facts: list[Fact] | None = None,
     observations: list[Observation] | None = None,
     user_facts: list[Fact] | None = None,
 ) -> str | None:
     """Format stable user memory for the system prompt (cacheable)."""
-    if not observations and not user_facts:
+    if not profile_facts and not observations and not user_facts:
         return None
     sections: list[tuple[str, list[str]]] = []
+    if profile_facts:
+        sections.extend(_profile_sections(profile_facts))
     if observations:
         sections.append(("**Patterns**", [_format_observation(obs) for obs in observations]))
     if user_facts:
