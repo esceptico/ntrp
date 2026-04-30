@@ -101,7 +101,14 @@ export function SessionPicker({ config, currentSessionId, onSwitch, onDelete, on
 
   const footer = confirmDelete
     ? <Hints items={[["y", showArchived ? "confirm permanent delete" : "confirm archive"], ["any", "cancel"]]} />
-    : undefined;
+    : (
+      <Hints
+        items={showArchived
+          ? [["↑↓", "move"], ["r", "restore"], ["d", "delete"], ["a", "active"], ["esc", "close"]]
+          : [["↑↓", "move"], ["enter", "switch"], ["n", "new"], ["d", "archive"], ["a", "archived"], ["esc", "close"]]
+        }
+      />
+    );
 
   return (
     <Dialog title={showArchived ? "Archived Sessions" : "Sessions"} size="medium" onClose={onClose} footer={footer}>
