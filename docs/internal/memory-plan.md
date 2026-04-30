@@ -171,7 +171,9 @@ Status:
 ```text
 schema/model fields added in migration v5
 API returns the new fields on fact payloads
-extractor/backfill not changed yet
+manual metadata update endpoint added
+kind-review endpoint added for untyped active facts
+automated classifier/backfill not changed yet
 ```
 
 Add a small `kind` enum to facts. Do not make this an ontology project.
@@ -870,12 +872,14 @@ API additions:
 ```text
 GET /memory/audit
 GET /memory/profile
+GET /memory/facts/kind-review
 GET /memory/facts?kind=&archived=&limit=&offset=
 GET /memory/observations?min_sources=&accessed=&archived=
 GET /memory/events
 POST /memory/recall/inspect
 POST /memory/prune/dry-run
 POST /memory/prune/apply
+PATCH /facts/{id}/metadata
 ```
 
 UI should show:

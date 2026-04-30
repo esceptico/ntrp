@@ -225,6 +225,65 @@ class TestFactCRUD:
         assert all(r.status_code == 200 for r in responses)
 
 
+class TestFactMetadataAPI:
+    @pytest.mark.asyncio
+    async def test_patch_fact_metadata(self, test_client: AsyncClient, sample_fact: int):
+        expires_at = (datetime.now(UTC) + timedelta(days=7)).isoformat()
+
+        response = await test_client.patch(
+            f"/facts/{sample_fact}/metadata",
+            json={
+                "kind": "preference",
+                "salience": 2,
+                "confidence": 0.8,
+                "expires_at": expires_at,
+                "pinned": True,
+            },
+        )
+
+        assert response.status_code == 200
+        fact = response.json()["fact"]
+        assert fact["kind"] == "preference"
+        assert fact["salience"] == 2
+        assert fact["confidence"] == 0.8
+        assert fact["expires_at"] == expires_at
+        assert fact["pinned_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_patch_fact_metadata_rejects_missing_superseding_fact(
+        self,
+        test_client: AsyncClient,
+        sample_fact: int,
+    ):
+        response = await test_client.patch(
+            f"/facts/{sample_fact}/metadata",
+            json={"superseded_by_fact_id": 999_999},
+        )
+
+        assert response.status_code == 422
+        assert "superseding fact not found" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_kind_review_lists_untyped_facts(self, test_client: AsyncClient, test_runtime: Runtime):
+        review_fact = await test_runtime.memory.facts.create(
+            "User has not reviewed this fact yet",
+            SourceType.EXPLICIT,
+        )
+        typed_fact = await test_runtime.memory.facts.create(
+            "User prefers typed facts",
+            SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.get("/memory/facts/kind-review")
+
+        assert response.status_code == 200
+        ids = [row["id"] for row in response.json()["facts"]]
+        assert review_fact.id in ids
+        assert typed_fact.id not in ids
+
+
 class TestObservationCRUD:
     """E2E tests for observation PATCH and DELETE endpoints"""
 
@@ -384,10 +443,12 @@ class TestMemoryDisabled:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=headers) as client:
             responses = await asyncio.gather(
                 client.patch("/facts/1", json={"text": "test"}),
+                client.patch("/facts/1/metadata", json={"kind": "preference"}),
                 client.delete("/facts/1"),
                 client.patch("/observations/1", json={"summary": "test"}),
                 client.delete("/observations/1"),
                 client.get("/memory/audit"),
+                client.get("/memory/facts/kind-review"),
                 client.get("/memory/profile"),
                 client.post("/memory/prune/dry-run", json={}),
             )

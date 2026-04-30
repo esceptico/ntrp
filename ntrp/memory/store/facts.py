@@ -12,6 +12,22 @@ _SQL_COUNT_FACTS = "SELECT COUNT(*) FROM facts"
 _SQL_COUNT_ACTIVE_FACTS = "SELECT COUNT(*) FROM facts WHERE archived_at IS NULL"
 _SQL_COUNT_UNCONSOLIDATED = "SELECT COUNT(*) FROM facts WHERE consolidated_at IS NULL"
 _SQL_LIST_RECENT = "SELECT * FROM facts WHERE archived_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?"
+_SQL_COUNT_KIND_REVIEW = """
+    SELECT COUNT(*) FROM facts
+    WHERE archived_at IS NULL
+      AND kind = 'note'
+      AND superseded_by_fact_id IS NULL
+      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+"""
+_SQL_LIST_KIND_REVIEW = """
+    SELECT * FROM facts
+    WHERE archived_at IS NULL
+      AND kind = 'note'
+      AND superseded_by_fact_id IS NULL
+      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+    ORDER BY access_count DESC, created_at DESC
+    LIMIT ? OFFSET ?
+"""
 _SQL_DELETE_FACT = "DELETE FROM facts WHERE id = ?"
 
 _SQL_INSERT_FACT = """
@@ -299,6 +315,11 @@ class FactRepository:
         rows = await self.conn.execute_fetchall(_SQL_LIST_RECENT, (limit, offset))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
+    async def list_kind_review(self, limit: int = 100, offset: int = 0) -> tuple[list[Fact], int]:
+        count_rows = await self.read_conn.execute_fetchall(_SQL_COUNT_KIND_REVIEW)
+        rows = await self.read_conn.execute_fetchall(_SQL_LIST_KIND_REVIEW, (limit, offset))
+        return [Fact.model_validate(_row_dict(r)) for r in rows], count_rows[0][0]
+
     async def list_profile_facts(self, kinds: Sequence[FactKind], limit: int) -> list[Fact]:
         if not kinds:
             return []
@@ -334,6 +355,38 @@ class FactRepository:
         )
         await self.conn.execute(_SQL_DELETE_FACT_VEC, (fact_id,))
         await self.conn.execute(_SQL_INSERT_FACT_VEC, (fact_id, embedding_bytes))
+
+    async def update_metadata(self, fact_id: int, updates: dict[str, object]) -> Fact | None:
+        if not updates:
+            return await self.get(fact_id)
+
+        allowed = {
+            "kind",
+            "salience",
+            "confidence",
+            "expires_at",
+            "pinned_at",
+            "superseded_by_fact_id",
+        }
+        invalid = set(updates) - allowed
+        if invalid:
+            raise ValueError(f"unsupported fact metadata field(s): {sorted(invalid)}")
+
+        assignments = ", ".join(f"{field} = ?" for field in updates)
+        values = []
+        for value in updates.values():
+            if isinstance(value, datetime):
+                values.append(value.isoformat())
+            elif isinstance(value, FactKind):
+                values.append(value.value)
+            else:
+                values.append(value)
+
+        await self.conn.execute(
+            f"UPDATE facts SET {assignments} WHERE id = ?",
+            (*values, fact_id),
+        )
+        return await self.get(fact_id)
 
     async def delete_entity_refs(self, fact_id: int) -> None:
         await self.conn.execute(_SQL_DELETE_ENTITY_REFS, (fact_id,))

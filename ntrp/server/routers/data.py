@@ -1,9 +1,16 @@
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.memory.models import Fact
 from ntrp.memory.service import MemoryService
 from ntrp.server.deps import require_memory
-from ntrp.server.schemas import MemoryPruneDryRunRequest, UpdateFactRequest, UpdateObservationRequest
+from ntrp.server.schemas import (
+    MemoryPruneDryRunRequest,
+    UpdateFactMetadataRequest,
+    UpdateFactRequest,
+    UpdateObservationRequest,
+)
 
 router = APIRouter(tags=["data"])
 
@@ -42,6 +49,19 @@ async def get_facts(
     }
 
 
+@router.get("/memory/facts/kind-review")
+async def get_fact_kind_review(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    svc: MemoryService = Depends(require_memory),
+):
+    facts, total = await svc.facts.list_kind_review(limit=limit, offset=offset)
+    return {
+        "facts": [_fact_payload(f) for f in facts],
+        "total": total,
+    }
+
+
 @router.get("/facts/{fact_id}")
 async def get_fact_details(fact_id: int, svc: MemoryService = Depends(require_memory)):
     try:
@@ -67,6 +87,37 @@ async def update_fact(fact_id: int, request: UpdateFactRequest, svc: MemoryServi
         "fact": _fact_payload(fact),
         "entity_refs": entity_refs,
     }
+
+
+@router.patch("/facts/{fact_id}/metadata")
+async def update_fact_metadata(
+    fact_id: int,
+    request: UpdateFactMetadataRequest,
+    svc: MemoryService = Depends(require_memory),
+):
+    updates: dict[str, object] = {}
+    fields = request.model_fields_set
+    if "kind" in fields and request.kind is not None:
+        updates["kind"] = request.kind
+    if "salience" in fields and request.salience is not None:
+        updates["salience"] = request.salience
+    if "confidence" in fields and request.confidence is not None:
+        updates["confidence"] = request.confidence
+    if "expires_at" in fields:
+        updates["expires_at"] = request.expires_at
+    if "pinned" in fields:
+        updates["pinned_at"] = datetime.now(UTC) if request.pinned else None
+    if "superseded_by_fact_id" in fields:
+        updates["superseded_by_fact_id"] = request.superseded_by_fact_id
+
+    try:
+        fact = await svc.facts.update_metadata(fact_id, updates)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Fact not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    return {"fact": _fact_payload(fact)}
 
 
 @router.delete("/facts/{fact_id}")

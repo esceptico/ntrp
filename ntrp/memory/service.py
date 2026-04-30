@@ -24,6 +24,9 @@ class FactService:
         facts = await self._memory.facts.list_recent(limit=limit, offset=offset)
         return facts, total
 
+    async def list_kind_review(self, limit: int = 100, offset: int = 0) -> tuple[list[Fact], int]:
+        return await self._memory.facts.list_kind_review(limit=limit, offset=offset)
+
     async def get(self, fact_id: int) -> tuple[Fact, list[EntityRef]]:
         if not (fact := await self._memory.facts.get(fact_id)):
             raise KeyError(f"Fact {fact_id} not found")
@@ -51,6 +54,23 @@ class FactService:
 
         entity_refs = await repo.get_entity_refs(fact_id)
         return fact, [{"name": e.name, "entity_id": e.entity_id} for e in entity_refs]
+
+    async def update_metadata(self, fact_id: int, updates: dict[str, object]) -> Fact:
+        async with self._memory.transaction():
+            repo = self._memory.facts
+            if not (await repo.get(fact_id)):
+                raise KeyError(f"Fact {fact_id} not found")
+
+            superseded_by = updates.get("superseded_by_fact_id")
+            if superseded_by is not None:
+                if superseded_by == fact_id:
+                    raise ValueError("fact cannot supersede itself")
+                if not (await repo.get(int(superseded_by))):
+                    raise ValueError("superseding fact not found")
+
+            fact = await repo.update_metadata(fact_id, updates)
+
+        return fact
 
     async def count_unconsolidated(self) -> int:
         return await self._memory.facts.count_unconsolidated()

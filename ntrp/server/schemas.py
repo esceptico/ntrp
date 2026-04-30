@@ -1,6 +1,9 @@
+from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
+
+from ntrp.memory.models import FactKind
 
 # --- Chat / run ---
 
@@ -269,6 +272,15 @@ class UpdateDirectivesRequest(BaseModel):
 
 class UpdateFactRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=10000)
+
+
+class UpdateFactMetadataRequest(BaseModel):
+    kind: FactKind | None = None
+    salience: int | None = Field(default=None, ge=0, le=2)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    expires_at: datetime | None = None
+    pinned: bool | None = None
+    superseded_by_fact_id: int | None = Field(default=None, ge=1)
 
 
 class UpdateObservationRequest(BaseModel):
