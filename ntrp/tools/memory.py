@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from ntrp.memory.formatting import format_memory_context
-from ntrp.memory.models import SourceType
+from ntrp.memory.models import FactKind, SourceType
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.types import ApprovalInfo
@@ -36,10 +36,18 @@ BAD: "Python is a programming language" (not user-specific)"""
 
 class RememberInput(BaseModel):
     fact: str = Field(description="The fact to remember (natural language).")
+    kind: FactKind = Field(
+        default=FactKind.NOTE,
+        description="Fact type: identity, preference, relationship, decision, project, event, artifact, procedure, constraint, temporary, or note.",
+    )
+    salience: int = Field(default=0, ge=0, le=2, description="0 normal, 1 useful, 2 always-relevant.")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence in the stated fact.")
+    entities: list[str] | None = Field(default=None, description="Concrete entity names in the fact, including User.")
     source: str | None = Field(default=None, description="Where this fact came from (e.g. file path, email id).")
     happened_at: str | None = Field(
         default=None, description="ISO timestamp of when the event occurred (for temporal linking)."
     )
+    expires_at: str | None = Field(default=None, description="ISO timestamp when a temporary fact expires.")
 
 
 async def approve_remember(execution: ToolExecution, args: RememberInput) -> ApprovalInfo | None:
@@ -49,12 +57,18 @@ async def approve_remember(execution: ToolExecution, args: RememberInput) -> App
 async def remember(execution: ToolExecution, args: RememberInput) -> ToolResult:
     memory = execution.ctx.services["memory"]
     event_time = datetime.fromisoformat(args.happened_at) if args.happened_at else None
+    expires_at = datetime.fromisoformat(args.expires_at) if args.expires_at else None
 
     result = await memory.remember(
         text=args.fact,
         source_type=SourceType.CHAT,
         source_ref=args.source,
         happened_at=event_time,
+        kind=args.kind,
+        salience=args.salience,
+        confidence=args.confidence,
+        expires_at=expires_at,
+        entity_names=args.entities,
     )
 
     if not result:
@@ -62,7 +76,7 @@ async def remember(execution: ToolExecution, args: RememberInput) -> ToolResult:
 
     entities = ", ".join(result.entities_extracted) if result.entities_extracted else "none"
     return ToolResult(
-        content=f"Remembered: {result.fact.text}\nEntities: {entities}",
+        content=f"Remembered: {result.fact.text}\nKind: {result.fact.kind}\nEntities: {entities}",
         preview="Remembered",
     )
 

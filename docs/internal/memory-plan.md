@@ -226,6 +226,7 @@ Status:
 ```text
 chat extraction prompt tightened to source-of-truth facts only
 chat extraction now returns typed facts with kind/salience/confidence/entities
+explicit remember tool can pass typed metadata into the same fact ingestion path
 consolidation prompt tightened to skip atomic facts and require direct provenance
 temporal/dream prompts tightened around concrete support and concise generated memory
 legacy fact backfill still pending
