@@ -4,6 +4,7 @@ Finds the most similar observation pair above threshold, asks LLM to merge
 or skip, re-embeds, repeats until no pairs remain above threshold.
 """
 
+import asyncio
 from collections.abc import Callable, Coroutine
 from contextlib import AbstractAsyncContextManager, nullcontext
 from typing import Literal
@@ -82,7 +83,7 @@ async def observation_merge_pass(
     merges = 0
 
     while True:
-        pair = find_top_pair(observations, skipped_pairs, threshold)
+        pair = await asyncio.to_thread(find_top_pair, observations, skipped_pairs, threshold)
         if pair is None:
             break
 

@@ -21,6 +21,8 @@ from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
 from ntrp.search.retrieval import rrf_merge
 
+PAIR_SEARCH_BLOCK_SIZE = 256
+
 
 async def hybrid_search(
     repo: FactRepository,
@@ -94,19 +96,55 @@ def find_top_pair(
 
     Items must have `.id` (int) and `.embedding` (ndarray | None) attributes.
     """
-    best = None
-    for i in range(len(items)):
-        if items[i].embedding is None:
-            continue
-        for j in range(i + 1, len(items)):
-            if items[j].embedding is None:
-                continue
-            pair_key = (min(items[i].id, items[j].id), max(items[i].id, items[j].id))
-            if pair_key in skipped:
-                continue
-            sim = cosine_similarity(items[i].embedding, items[j].embedding)
-            if sim >= threshold and (best is None or sim > best[2]):
-                best = (i, j, sim)
+    indexed = [
+        (i, item.id, np.asarray(item.embedding, dtype=np.float32))
+        for i, item in enumerate(items)
+        if item.embedding is not None
+    ]
+    if len(indexed) < 2:
+        return None
+
+    item_indices = np.array([i for i, _, _ in indexed], dtype=np.int64)
+    item_ids = np.array([item_id for _, item_id, _ in indexed], dtype=np.int64)
+    embeddings = np.stack([embedding for _, _, embedding in indexed])
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    embeddings = embeddings / np.where(norms == 0, 1, norms)
+
+    skipped_by_id: dict[int, set[int]] = {}
+    for left_id, right_id in skipped:
+        skipped_by_id.setdefault(left_id, set()).add(right_id)
+        skipped_by_id.setdefault(right_id, set()).add(left_id)
+    id_to_embedding_index = {int(item_id): i for i, item_id in enumerate(item_ids)}
+
+    best: tuple[int, int, float] | None = None
+    best_score = -np.inf
+    all_columns = np.arange(len(indexed))
+
+    for start in range(0, len(indexed), PAIR_SEARCH_BLOCK_SIZE):
+        end = min(start + PAIR_SEARCH_BLOCK_SIZE, len(indexed))
+        scores = embeddings[start:end] @ embeddings.T
+
+        row_indices = np.arange(start, end)[:, None]
+        scores[all_columns[None, :] <= row_indices] = -np.inf
+
+        if skipped_by_id:
+            for local_row, item_id in enumerate(item_ids[start:end]):
+                skipped_columns = [
+                    id_to_embedding_index[other_id]
+                    for other_id in skipped_by_id.get(int(item_id), ())
+                    if other_id in id_to_embedding_index
+                ]
+                if skipped_columns:
+                    scores[local_row, skipped_columns] = -np.inf
+
+        flat_index = int(np.argmax(scores))
+        block_score = float(scores.flat[flat_index])
+        if block_score >= threshold and block_score > best_score:
+            local_i, j = np.unravel_index(flat_index, scores.shape)
+            i = start + int(local_i)
+            best = (int(item_indices[i]), int(item_indices[j]), block_score)
+            best_score = block_score
+
     return best
 
 

@@ -5,6 +5,7 @@ to find candidates, LLM to decide merge vs skip, then transfers entity refs
 and updates observation source_fact_ids.
 """
 
+import asyncio
 import json
 from collections.abc import Callable, Coroutine
 from contextlib import AbstractAsyncContextManager, nullcontext
@@ -154,7 +155,7 @@ async def fact_merge_pass(
     merges = 0
 
     while True:
-        pair = find_top_pair(facts, skipped_pairs, threshold)
+        pair = await asyncio.to_thread(find_top_pair, facts, skipped_pairs, threshold)
         if pair is None:
             break
 

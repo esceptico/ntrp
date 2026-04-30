@@ -12,18 +12,29 @@ interface Progress {
   done?: boolean;
 }
 
+const AUTOMATION_PROGRESS_MIN_INTERVAL_MS = 500;
+
 function useAutomationProgress(config: Config) {
   const [progress, setProgress] = useState<Map<string, Progress>>(new Map());
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const lastProgressAt = useRef<Map<string, number>>(new Map());
+  const lastProgressStatus = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     const disconnect = connectAutomationEvents(
       config,
       (event: AutomationEvent) => {
         if (event.type === "automation_progress") {
+          const status = event.status || "working...";
+          const now = Date.now();
+          const lastAt = lastProgressAt.current.get(event.task_id) ?? 0;
+          if (lastProgressStatus.current.get(event.task_id) === status) return;
+          if (now - lastAt < AUTOMATION_PROGRESS_MIN_INTERVAL_MS) return;
+          lastProgressAt.current.set(event.task_id, now);
+          lastProgressStatus.current.set(event.task_id, status);
           setProgress(prev => {
             const next = new Map(prev);
-            next.set(event.task_id, { status: event.status || "working..." });
+            next.set(event.task_id, { status });
             return next;
           });
         } else if (event.type === "automation_finished") {
@@ -32,10 +43,13 @@ function useAutomationProgress(config: Config) {
           if (existing) clearTimeout(existing);
 
           const result = event.result;
+          const status = result ? truncateText(result, 60) : "done";
+          lastProgressAt.current.set(event.task_id, Date.now());
+          lastProgressStatus.current.set(event.task_id, status);
           setProgress(prev => {
             const next = new Map(prev);
             next.set(event.task_id, {
-              status: result ? truncateText(result, 60) : "done",
+              status,
               done: true,
             });
             return next;
@@ -43,6 +57,8 @@ function useAutomationProgress(config: Config) {
 
           const timer = setTimeout(() => {
             timers.current.delete(event.task_id);
+            lastProgressAt.current.delete(event.task_id);
+            lastProgressStatus.current.delete(event.task_id);
             setProgress(prev => {
               const next = new Map(prev);
               next.delete(event.task_id);
@@ -58,6 +74,8 @@ function useAutomationProgress(config: Config) {
       disconnect();
       for (const timer of timers.current.values()) clearTimeout(timer);
       timers.current.clear();
+      lastProgressAt.current.clear();
+      lastProgressStatus.current.clear();
     };
   }, [config]);
 

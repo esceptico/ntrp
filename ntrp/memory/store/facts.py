@@ -358,7 +358,7 @@ class FactRepository:
 
     async def search_facts_vector(self, query_embedding: Embedding, limit: int = 10) -> list[tuple[Fact, float]]:
         query_bytes = serialize_embedding(query_embedding)
-        rows = await self.conn.execute_fetchall(_SQL_SEARCH_FACTS_VEC, (query_bytes, limit))
+        rows = await self.read_conn.execute_fetchall(_SQL_SEARCH_FACTS_VEC, (query_bytes, limit))
         if not rows:
             return []
 
@@ -366,7 +366,9 @@ class FactRepository:
         distances = {r[0]: r[1] for r in rows}
 
         placeholders = ",".join("?" * len(fact_ids))
-        fact_rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_BY_IDS.format(placeholders=placeholders), fact_ids)
+        fact_rows = await self.read_conn.execute_fetchall(
+            _SQL_GET_FACTS_BY_IDS.format(placeholders=placeholders), fact_ids
+        )
         facts_by_id = {r["id"]: Fact.model_validate(_row_dict(r)) for r in fact_rows}
 
         return [
@@ -379,11 +381,11 @@ class FactRepository:
         fts_query = build_fts_query(query)
         if not fts_query:
             return []
-        rows = await self.conn.execute_fetchall(_SQL_SEARCH_FACTS_FTS, (fts_query, limit))
+        rows = await self.read_conn.execute_fetchall(_SQL_SEARCH_FACTS_FTS, (fts_query, limit))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def search_facts_temporal(self, reference_time: datetime, limit: int = 10) -> list[Fact]:
-        rows = await self.conn.execute_fetchall(_SQL_SEARCH_FACTS_TEMPORAL, (reference_time.isoformat(), limit))
+        rows = await self.read_conn.execute_fetchall(_SQL_SEARCH_FACTS_TEMPORAL, (reference_time.isoformat(), limit))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def get_entity(self, entity_id: int) -> Entity | None:

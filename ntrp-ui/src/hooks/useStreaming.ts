@@ -15,6 +15,9 @@ import { createStreamingStore, type SessionNotification, type SessionStreamState
 
 export type { SessionNotification };
 
+const BACKGROUND_ACTIVITY_MIN_INTERVAL_MS = 500;
+const BACKGROUND_ACTIVITY_MAX_ITEMS = 20;
+
 interface UseStreamingOptions {
   config: Config;
   sessionId: string | null;
@@ -43,6 +46,8 @@ export function useStreaming({
   configRef.current = config;
   const connectionsRef = useRef<Map<string, { disconnect: () => void; stream: boolean }>>(new Map());
   const sseErrorAtRef = useRef<Map<string, number>>(new Map());
+  const backgroundActivityAtRef = useRef<Map<string, number>>(new Map());
+  const backgroundActivityDetailRef = useRef<Map<string, string>>(new Map());
   const prevBgCountRef = useRef(0);
   const prevIsStreamingRef = useRef(false);
 
@@ -82,6 +87,18 @@ export function useStreaming({
   const handleEventRef = useRef<(targetId: string, event: ServerEvent) => Promise<void>>(null);
   handleEventRef.current = async (targetId: string, event: ServerEvent) => {
     const viewedId = store.getState().viewedId;
+
+    if (event.type === "background_task" && event.status === "activity") {
+      const detail = event.detail;
+      if (!detail) return;
+      const key = `${targetId}:${event.task_id}`;
+      const now = Date.now();
+      const lastAt = backgroundActivityAtRef.current.get(key) ?? 0;
+      const lastDetail = backgroundActivityDetailRef.current.get(key);
+      if (detail === lastDetail || now - lastAt < BACKGROUND_ACTIVITY_MIN_INTERVAL_MS) return;
+      backgroundActivityAtRef.current.set(key, now);
+      backgroundActivityDetailRef.current.set(key, detail);
+    }
 
     if (event.type === "text" || event.type === "text_delta") {
       const isDelta = event.type === "text_delta";
@@ -316,6 +333,9 @@ export function useStreaming({
 
         case "background_task":
           if (event.status === "started") {
+            const key = `${targetId}:${event.task_id}`;
+            backgroundActivityAtRef.current.delete(key);
+            backgroundActivityDetailRef.current.delete(key);
             s.backgroundTaskCount++;
             s.backgroundTasks.set(event.task_id, {
               id: event.task_id,
@@ -327,9 +347,12 @@ export function useStreaming({
           } else if (event.status === "activity") {
             const task = s.backgroundTasks.get(event.task_id);
             if (task && event.detail) {
-              task.activity = [...task.activity, event.detail];
+              task.activity = [...task.activity, event.detail].slice(-BACKGROUND_ACTIVITY_MAX_ITEMS);
             }
           } else {
+            const key = `${targetId}:${event.task_id}`;
+            backgroundActivityAtRef.current.delete(key);
+            backgroundActivityDetailRef.current.delete(key);
             s.backgroundTaskCount = Math.max(0, s.backgroundTaskCount - 1);
             if (event.status === "completed" || event.status === "failed") {
               s.completedBackgroundTasks.push({ id: event.task_id, status: event.status });

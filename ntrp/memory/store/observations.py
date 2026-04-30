@@ -385,7 +385,7 @@ class ObservationRepository:
         fts_query = build_fts_query(query)
         if not fts_query:
             return []
-        rows = await self.conn.execute_fetchall(_SQL_SEARCH_OBSERVATIONS_FTS, (fts_query, limit))
+        rows = await self.read_conn.execute_fetchall(_SQL_SEARCH_OBSERVATIONS_FTS, (fts_query, limit))
         return [Observation.model_validate(_row_dict(r)) for r in rows]
 
     async def search_temporal(self, reference_time: datetime, limit: int = 10) -> list[Observation]:
@@ -433,7 +433,7 @@ class ObservationRepository:
 
     async def search_vector(self, query_embedding: Embedding, limit: int = 10) -> list[tuple[Observation, float]]:
         query_bytes = serialize_embedding(query_embedding)
-        rows = await self.conn.execute_fetchall(_SQL_SEARCH_OBSERVATIONS_VEC, (query_bytes, limit))
+        rows = await self.read_conn.execute_fetchall(_SQL_SEARCH_OBSERVATIONS_VEC, (query_bytes, limit))
         if not rows:
             return []
 
@@ -441,7 +441,7 @@ class ObservationRepository:
         distances = {r[0]: r[1] for r in rows}
 
         placeholders = ",".join("?" * len(obs_ids))
-        obs_rows = await self.conn.execute_fetchall(
+        obs_rows = await self.read_conn.execute_fetchall(
             _SQL_GET_OBSERVATIONS_BY_IDS.format(placeholders=placeholders), obs_ids
         )
         obs_by_id = {r["id"]: Observation.model_validate(_row_dict(r)) for r in obs_rows}
