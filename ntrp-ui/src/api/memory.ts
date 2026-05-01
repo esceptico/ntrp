@@ -176,6 +176,23 @@ export interface MemoryEvent {
   details: Record<string, unknown>;
 }
 
+export interface MemoryAccessEvent {
+  id: number;
+  created_at: string;
+  source: string;
+  query: string | null;
+  retrieved_fact_ids: number[];
+  retrieved_observation_ids: number[];
+  injected_fact_ids: number[];
+  injected_observation_ids: number[];
+  omitted_fact_ids: number[];
+  omitted_observation_ids: number[];
+  bundled_fact_ids: number[];
+  formatted_chars: number;
+  policy_version: string;
+  details: Record<string, unknown>;
+}
+
 export interface MemoryStorageHealth {
   vec_rows: number;
   missing_vec_rows: number;
@@ -369,6 +386,10 @@ export async function applyMemoryPrune(
 
 export async function getMemoryEvents(config: Config, limit = 100): Promise<{ events: MemoryEvent[] }> {
   return api.get<{ events: MemoryEvent[] }>(`${config.serverUrl}/memory/events?limit=${limit}`);
+}
+
+export async function getMemoryAccessEvents(config: Config, limit = 100): Promise<{ events: MemoryAccessEvent[] }> {
+  return api.get<{ events: MemoryAccessEvent[] }>(`${config.serverUrl}/memory/access/events?limit=${limit}`);
 }
 
 export async function getMemoryAudit(config: Config): Promise<MemoryAudit> {

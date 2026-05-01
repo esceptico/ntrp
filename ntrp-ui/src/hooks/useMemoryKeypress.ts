@@ -7,6 +7,7 @@ import type { FactsTabState } from "./useFactsTab.js";
 import type { ObservationsTabState } from "./useObservationsTab.js";
 import type { PruneTabState } from "./usePruneTab.js";
 import type { MemoryEventsTabState } from "./useMemoryEventsTab.js";
+import type { MemoryAccessTabState } from "./useMemoryAccessTab.js";
 import type { RecallInspectTabState } from "./useRecallInspectTab.js";
 import {
   updateFact,
@@ -23,7 +24,7 @@ import {
   type MemoryPruneDryRun,
 } from "../api/client.js";
 
-type TabType = "overview" | "recall" | "profile" | "facts" | "observations" | "prune" | "events";
+type TabType = "overview" | "recall" | "context" | "profile" | "facts" | "observations" | "prune" | "events";
 
 interface UseMemoryKeypressOptions {
   activeTab: TabType;
@@ -34,6 +35,7 @@ interface UseMemoryKeypressOptions {
   obsTab: ObservationsTabState;
   pruneTab: PruneTabState;
   pruneDryRun: MemoryPruneDryRun | null;
+  accessTab: MemoryAccessTabState;
   eventsTab: MemoryEventsTabState;
   config: Config;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
@@ -60,6 +62,7 @@ export function useMemoryKeypress({
   obsTab,
   pruneTab,
   pruneDryRun,
+  accessTab,
   eventsTab,
   config,
   setFacts,
@@ -339,11 +342,12 @@ export function useMemoryKeypress({
 
       if (key.name === "1") { setActiveTab("overview"); return; }
       if (key.name === "2") { setActiveTab("recall"); return; }
-      if (key.name === "3") { setActiveTab("profile"); return; }
-      if (key.name === "4") { setActiveTab("facts"); return; }
-      if (key.name === "5") { setActiveTab("observations"); return; }
-      if (key.name === "6") { setActiveTab("prune"); return; }
-      if (key.name === "7") { setActiveTab("events"); return; }
+      if (key.name === "3") { setActiveTab("context"); return; }
+      if (key.name === "4") { setActiveTab("profile"); return; }
+      if (key.name === "5") { setActiveTab("facts"); return; }
+      if (key.name === "6") { setActiveTab("observations"); return; }
+      if (key.name === "7") { setActiveTab("prune"); return; }
+      if (key.name === "8") { setActiveTab("events"); return; }
       if (key.name === "r") { reload(); return; }
 
       if (key.name === "escape" || key.name === "q") {
@@ -351,7 +355,7 @@ export function useMemoryKeypress({
           onClose();
           return;
         }
-        const tab = activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : eventsTab;
+        const tab = activeTab === "context" ? accessTab : activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : eventsTab;
         if (tab.searchMode) {
           tab.handleKeys(key);
           return;
@@ -371,13 +375,14 @@ export function useMemoryKeypress({
       }
 
       if (activeTab === "overview") { return; }
+      if (activeTab === "context") { accessTab.handleKeys(key); return; }
       if (activeTab === "profile") { profileTab.handleKeys(key); return; }
       if (activeTab === "events") { eventsTab.handleKeys(key); return; }
       if (activeTab === "prune") { pruneTab.handleKeys(key); return; }
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
-    [activeTab, recallTab, profileTab, factsTab, obsTab, pruneTab, pruneDryRun, eventsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setError, queryClient]
+    [activeTab, recallTab, profileTab, factsTab, obsTab, pruneTab, pruneDryRun, accessTab, eventsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setError, queryClient]
   );
 
   useKeypress(handleKeypress, { isActive: true });

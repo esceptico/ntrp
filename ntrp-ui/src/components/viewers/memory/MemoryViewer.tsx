@@ -5,11 +5,14 @@ import { useFactsTab } from "../../../hooks/useFactsTab.js";
 import { useObservationsTab } from "../../../hooks/useObservationsTab.js";
 import { usePruneTab } from "../../../hooks/usePruneTab.js";
 import { useMemoryEventsTab } from "../../../hooks/useMemoryEventsTab.js";
+import { useMemoryAccessTab } from "../../../hooks/useMemoryAccessTab.js";
 import { useMemoryData } from "../../../hooks/useMemoryData.js";
 import { useMemoryKeypress } from "../../../hooks/useMemoryKeypress.js";
 import { useRecallInspectTab } from "../../../hooks/useRecallInspectTab.js";
 import { Dialog, Loading, Tabs, colors } from "../../ui/index.js";
+import { memoryAccessSourceLabel } from "../../../lib/memoryAccess.js";
 import { FactsSection } from "./FactsSection.js";
+import { MemoryAccessSection } from "./MemoryAccessSection.js";
 import { ObservationsSection } from "./ObservationsSection.js";
 import { PruneSection } from "./PruneSection.js";
 import { MemoryEventsSection } from "./MemoryEventsSection.js";
@@ -17,7 +20,7 @@ import { MemoryFooter } from "./MemoryFooter.js";
 import { OverviewSection } from "./OverviewSection.js";
 import { RecallInspectSection } from "./RecallInspectSection.js";
 
-const TABS = ["overview", "recall", "profile", "facts", "observations", "prune", "events"] as const;
+const TABS = ["overview", "recall", "context", "profile", "facts", "observations", "prune", "events"] as const;
 type TabType = (typeof TABS)[number];
 
 interface MemoryViewerProps {
@@ -31,7 +34,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const [factFilters, setFactFilters] = useState<FactFilters>({ status: "active" });
   const [observationFilters, setObservationFilters] = useState<ObservationFilters>({ status: "active" });
 
-  const { facts, factTotal, profileFacts, observations, observationTotal, pruneDryRun, memoryEvents, memoryAudit, loading, error, setFacts, setObservations, setError, reload } =
+  const { facts, factTotal, profileFacts, observations, observationTotal, pruneDryRun, memoryEvents, memoryAccessEvents, memoryAudit, loading, error, setFacts, setObservations, setError, reload } =
     useMemoryData(config, factFilters, observationFilters);
 
   const profileTab = useFactsTab(config, profileFacts, 80, profileFilters, setProfileFilters, profileFacts.length);
@@ -39,6 +42,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const obsTab = useObservationsTab(config, observations, 80, observationFilters, setObservationFilters, observationTotal);
   const pruneTab = usePruneTab(pruneDryRun?.candidates ?? [], 80);
   const eventsTab = useMemoryEventsTab(memoryEvents, 80);
+  const accessTab = useMemoryAccessTab(memoryAccessEvents, 80);
   const recallTab = useRecallInspectTab(config);
 
   const { saving } = useMemoryKeypress({
@@ -50,6 +54,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     obsTab,
     pruneTab,
     pruneDryRun,
+    accessTab,
     eventsTab,
     config,
     setFacts,
@@ -88,19 +93,25 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
           factsTab={factsTab}
           obsTab={obsTab}
           pruneTab={pruneTab}
+          accessTab={accessTab}
           eventsTab={eventsTab}
         />
       }
     >
       {({ width, height }) => {
         const sectionHeight = height - 2;
-        const tab = activeTab === "overview" || activeTab === "recall" ? null : activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : eventsTab;
+        const tab = activeTab === "overview" || activeTab === "recall" ? null : activeTab === "context" ? accessTab : activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : eventsTab;
         const filterDisplay = activeTab === "overview"
-          ? "Recall · Profile · Facts · Patterns · Cleanup · Log"
+          ? "Recall · Context · Profile · Facts · Patterns · Cleanup · Log"
           : activeTab === "recall"
           ? recallTab.result
             ? `${recallTab.result.observations.length} patterns · ${recallTab.result.facts.length} facts`
             : "no query yet"
+          : activeTab === "context"
+          ? [
+              `source: ${accessTab.sourceFilter === "all" ? "all" : memoryAccessSourceLabel(accessTab.sourceFilter)}`,
+              `records: ${memoryAccessEvents.length}`,
+            ].join(" · ")
           : activeTab === "profile"
           ? `profile facts: ${profileFacts.length}`
           : activeTab === "facts"
@@ -140,7 +151,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 tabs={TABS}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                labels={{ overview: "Overview", recall: "Recall", profile: "Profile", facts: "Facts", observations: "Patterns", prune: "Cleanup", events: "Log" }}
+                labels={{ overview: "Overview", recall: "Recall", context: "Context", profile: "Profile", facts: "Facts", observations: "Patterns", prune: "Cleanup", events: "Log" }}
               />
               <box flexGrow={1} />
               {filterDisplay && (
@@ -158,6 +169,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 observationTotal={observationTotal}
                 pruneDryRun={pruneDryRun}
                 memoryEvents={memoryEvents}
+                memoryAccessEvents={memoryAccessEvents}
                 memoryAudit={memoryAudit}
                 height={sectionHeight}
                 width={width}
@@ -166,6 +178,10 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
 
             {activeTab === "recall" && (
               <RecallInspectSection tab={recallTab} height={sectionHeight} width={width} />
+            )}
+
+            {activeTab === "context" && (
+              <MemoryAccessSection tab={accessTab} totalCount={memoryAccessEvents.length} height={sectionHeight} width={width} />
             )}
 
             {activeTab === "profile" && (

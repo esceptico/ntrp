@@ -689,6 +689,13 @@ Adoption order:
 6. Add skill-local retrieval requirements later, when skills are back in scope.
 ```
 
+Implementation status:
+
+```text
+2026-05-01: memory_access_events records prompt/tool context access.
+2026-05-01: Memory UI has a Context tab for recent injected bundles.
+```
+
 Rejected for now:
 
 ```text

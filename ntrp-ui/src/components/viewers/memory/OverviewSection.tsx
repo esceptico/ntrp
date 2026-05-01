@@ -1,7 +1,8 @@
-import type { Fact, MemoryAudit, MemoryEvent, MemoryPruneDryRun, MemoryStorageHealth } from "../../../api/client.js";
+import type { Fact, MemoryAccessEvent, MemoryAudit, MemoryEvent, MemoryPruneDryRun, MemoryStorageHealth } from "../../../api/client.js";
 import { colors } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import { formatTimeAgo } from "../../../lib/format.js";
+import { memoryAccessSourceLabel } from "../../../lib/memoryAccess.js";
 
 interface OverviewSectionProps {
   profileFacts: Fact[];
@@ -9,6 +10,7 @@ interface OverviewSectionProps {
   observationTotal: number;
   pruneDryRun: MemoryPruneDryRun | null;
   memoryEvents: MemoryEvent[];
+  memoryAccessEvents: MemoryAccessEvent[];
   memoryAudit: MemoryAudit | null;
   height: number;
   width: number;
@@ -41,12 +43,14 @@ export function OverviewSection({
   observationTotal,
   pruneDryRun,
   memoryEvents,
+  memoryAccessEvents,
   memoryAudit,
   height,
   width,
 }: OverviewSectionProps) {
   const { accentValue } = useAccentColor();
   const latestEvent = memoryEvents[0];
+  const latestAccess = memoryAccessEvents[0];
   const storageIssues =
     storageIssueCount(memoryAudit?.storage.facts) + storageIssueCount(memoryAudit?.storage.observations);
   const relationIssues = relationIssueCount(memoryAudit?.relations);
@@ -62,6 +66,7 @@ export function OverviewSection({
       <box flexDirection="column" marginTop={2}>
         <MetricRow label="Profile" value={profileFacts.length} note="always-on facts shown to the agent first" />
         <MetricRow label="Recall" value="query" note="inspect retrieved context before it reaches the agent" />
+        <MetricRow label="Context" value={memoryAccessEvents.length} note="recent memory bundles injected into prompts/tools" />
         <MetricRow label="Facts" value={factTotal} note="source-of-truth memory records" />
         <MetricRow label="Patterns" value={observationTotal} note="derived summaries with supporting facts" />
         <MetricRow label="Embeddings" value={missingEmbeddings} note="active rows missing vectors" />
@@ -78,6 +83,7 @@ export function OverviewSection({
       <box flexDirection="column" marginTop={2}>
         <text><span fg={colors.text.muted}>OPEN NEXT</span></text>
         <text><span fg={colors.text.secondary}>Recall</span><span fg={colors.text.disabled}> to debug query-time memory retrieval</span></text>
+        <text><span fg={colors.text.secondary}>Context</span><span fg={colors.text.disabled}> to inspect what memory reached the model</span></text>
         <text><span fg={colors.text.secondary}>Profile</span><span fg={colors.text.disabled}> for what the agent should always know</span></text>
         <text><span fg={colors.text.secondary}>Facts</span><span fg={colors.text.disabled}> to edit durable truth</span></text>
         <text><span fg={colors.text.secondary}>Patterns</span><span fg={colors.text.disabled}> to inspect derived memory and provenance</span></text>
@@ -86,7 +92,21 @@ export function OverviewSection({
       </box>
 
       <box flexDirection="column" marginTop={2}>
-        <text><span fg={colors.text.muted}>LATEST</span></text>
+        <text><span fg={colors.text.muted}>LATEST CONTEXT</span></text>
+        {latestAccess ? (
+          <text>
+            <span fg={colors.text.secondary}>{memoryAccessSourceLabel(latestAccess.source)}</span>
+            <span fg={colors.text.disabled}> {"\u2502"} {latestAccess.injected_fact_ids.length} facts</span>
+            <span fg={colors.text.disabled}> / {latestAccess.injected_observation_ids.length} patterns</span>
+            <span fg={colors.text.disabled}> {"\u2502"} {formatTimeAgo(latestAccess.created_at)}</span>
+          </text>
+        ) : (
+          <text><span fg={colors.text.disabled}>No context injections loaded</span></text>
+        )}
+      </box>
+
+      <box flexDirection="column" marginTop={1}>
+        <text><span fg={colors.text.muted}>LATEST LOG</span></text>
         {latestEvent ? (
           <text>
             <span fg={colors.text.secondary}>{latestEvent.action}</span>
