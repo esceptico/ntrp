@@ -53,6 +53,7 @@ def create_chat_extraction_handler(memory: FactMemory, store: AutomationStore) -
                 source_ref=source_ref,
                 happened_at=fact.happened_at,
                 kind=fact.kind,
+                lifetime=fact.lifetime,
                 salience=fact.salience,
                 confidence=fact.confidence,
                 expires_at=fact.expires_at,

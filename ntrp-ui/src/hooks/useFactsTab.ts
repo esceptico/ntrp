@@ -9,6 +9,7 @@ import {
   type FactDetails,
   type FactFilters,
   type FactKind,
+  type FactLifetime,
   type FactMetadataSuggestion,
   type FactStatus,
   type SourceType,
@@ -32,10 +33,10 @@ const KIND_FILTERS: Array<FactKind | undefined> = [
   "artifact",
   "procedure",
   "constraint",
-  "temporary",
 ];
+const LIFETIME_FILTERS: Array<FactLifetime | undefined> = [undefined, "durable", "temporary"];
 const SOURCE_FILTERS: Array<SourceType | undefined> = [undefined, "chat", "explicit"];
-const STATUS_FILTERS: FactStatus[] = ["active", "all", "archived", "superseded", "expired", "temporary", "pinned"];
+const STATUS_FILTERS: FactStatus[] = ["active", "all", "archived", "superseded", "expired", "pinned"];
 const ACCESSED_FILTERS: Array<FactAccessed | undefined> = [undefined, "never", "used"];
 
 export interface FactsTabState {
@@ -104,6 +105,11 @@ export function useFactsTab(
     }
     if (key.name === "m") {
       setFilters((current) => ({ ...current, kind: cycle(KIND_FILTERS, current.kind) }));
+      setSelectedIndex(0);
+      return true;
+    }
+    if (key.name === "l") {
+      setFilters((current) => ({ ...current, lifetime: cycle(LIFETIME_FILTERS, current.lifetime) }));
       setSelectedIndex(0);
       return true;
     }

@@ -68,12 +68,10 @@ When facts contradict, preserve history in the observation:
 - "User was previously a React enthusiast but has now switched to Vue"
 - "Alice works at Meta (previously thought to work at Google)"
 
-## SKIP EPHEMERAL STATE
+## SKIP TEMPORARY MEMORY
 
-Skip facts that describe temporary state:
-- "User is at the coffee shop" → skip (ephemeral location)
-- "User is currently tired" → skip (temporary state)
-- "User's HRV was 51.4 ms today" → skip (single data point, not a pattern yet)
+Skip source facts whose `lifetime` is `temporary`. Temporary facts may be directly recallable until expiry,
+but they must not become durable observations.
 
 ## SKIP ATOMIC DURABLE FACTS
 

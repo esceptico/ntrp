@@ -281,6 +281,7 @@ class TestFactMetadataAPI:
             f"/facts/{sample_fact}/metadata",
             json={
                 "kind": "preference",
+                "lifetime": "temporary",
                 "salience": 2,
                 "confidence": 0.8,
                 "expires_at": expires_at,
@@ -291,6 +292,7 @@ class TestFactMetadataAPI:
         assert response.status_code == 200
         fact = response.json()["fact"]
         assert fact["kind"] == "preference"
+        assert fact["lifetime"] == "temporary"
         assert fact["salience"] == 2
         assert fact["confidence"] == 0.8
         assert fact["expires_at"] == expires_at
@@ -302,7 +304,7 @@ class TestFactMetadataAPI:
         )
         assert events.status_code == 200
         event = events.json()["events"][0]
-        assert event["details"]["fields"] == ["confidence", "expires_at", "kind", "pinned_at", "salience"]
+        assert event["details"]["fields"] == ["confidence", "expires_at", "kind", "lifetime", "pinned_at", "salience"]
 
         learning_events = await test_client.get(
             "/memory/learning/events",

@@ -27,7 +27,16 @@ from ntrp.memory.audit import memory_audit
 from ntrp.memory.consolidation_runner import ConsolidationRunner
 from ntrp.memory.decay import decay_score
 from ntrp.memory.extraction import Extractor
-from ntrp.memory.models import ExtractedEntity, ExtractionResult, Fact, FactContext, FactKind, Observation, SourceType
+from ntrp.memory.models import (
+    ExtractedEntity,
+    ExtractionResult,
+    Fact,
+    FactContext,
+    FactKind,
+    FactLifetime,
+    Observation,
+    SourceType,
+)
 from ntrp.memory.retrieval import retrieve_with_observations
 from ntrp.memory.store.access_events import MemoryAccessEventRepository
 from ntrp.memory.store.base import GraphDatabase
@@ -351,6 +360,7 @@ class FactMemory:
         source_ref: str | None = None,
         happened_at: datetime | None = None,
         kind: FactKind = FactKind.NOTE,
+        lifetime: FactLifetime | None = None,
         salience: int = 0,
         confidence: float = 1.0,
         expires_at: datetime | None = None,
@@ -397,6 +407,7 @@ class FactMemory:
                 embedding=embedding,
                 happened_at=happened_at,
                 kind=kind,
+                lifetime=lifetime,
                 salience=salience,
                 confidence=confidence,
                 expires_at=expires_at,
@@ -412,7 +423,8 @@ class FactMemory:
                 reason="remembered fact",
                 policy_version="memory.remember.v1",
                 details={
-                    "kind": kind.value,
+                    "kind": fact.kind.value,
+                    "lifetime": fact.lifetime.value,
                     "salience": salience,
                     "confidence": confidence,
                     "expires_at": expires_at,

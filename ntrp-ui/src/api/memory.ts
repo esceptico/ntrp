@@ -13,6 +13,7 @@ export interface Fact {
   consolidated_at: string | null;
   archived_at: string | null;
   kind: FactKind;
+  lifetime: FactLifetime;
   salience: number;
   confidence: number;
   expires_at: string | null;
@@ -30,15 +31,16 @@ export type FactKind =
   | "artifact"
   | "procedure"
   | "constraint"
-  | "temporary"
   | "note";
 
+export type FactLifetime = "durable" | "temporary";
 export type SourceType = "chat" | "explicit";
 export type FactStatus = "active" | "archived" | "superseded" | "expired" | "temporary" | "pinned" | "all";
 export type FactAccessed = "never" | "used";
 
 export interface FactFilters {
   kind?: FactKind;
+  lifetime?: FactLifetime;
   sourceType?: SourceType;
   status?: FactStatus;
   accessed?: FactAccessed;
@@ -58,6 +60,7 @@ export interface FactDetails {
 
 export interface FactMetadataUpdate {
   kind?: FactKind;
+  lifetime?: FactLifetime;
   salience?: number;
   confidence?: number;
   expires_at?: string | null;
@@ -67,6 +70,7 @@ export interface FactMetadataUpdate {
 
 export interface FactMetadataSuggestion {
   kind: FactKind;
+  lifetime: FactLifetime;
   salience: number;
   confidence: number;
   expires_at: string | null;
@@ -342,6 +346,7 @@ export interface MemoryRepairEmbeddingsResult {
 function factQuery(limit: number, filters?: FactFilters): string {
   const params = new URLSearchParams({ limit: String(limit) });
   if (filters?.kind) params.set("kind", filters.kind);
+  if (filters?.lifetime) params.set("lifetime", filters.lifetime);
   if (filters?.sourceType) params.set("source_type", filters.sourceType);
   if (filters?.status) params.set("status", filters.status);
   if (filters?.accessed) params.set("accessed", filters.accessed);

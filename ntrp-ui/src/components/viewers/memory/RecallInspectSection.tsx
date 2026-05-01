@@ -34,7 +34,8 @@ function sourceLines(tab: RecallInspectTabState, width: number): string[] {
   if (result.facts.length > 0) {
     lines.push("", "SOURCES - FACTS");
     for (const fact of result.facts) {
-      lines.push(`${fact.kind} · ${truncateText(fact.text, Math.max(10, width - fact.kind.length - 3))}`);
+      const label = `${fact.kind} · ${fact.lifetime}`;
+      lines.push(`${label} · ${truncateText(fact.text, Math.max(10, width - label.length - 3))}`);
     }
   }
   return lines;

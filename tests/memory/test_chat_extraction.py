@@ -9,7 +9,7 @@ from ntrp.memory.chat_extraction import (
     _format_messages,
     extract_from_chat,
 )
-from ntrp.memory.models import FactKind
+from ntrp.memory.models import FactKind, FactLifetime
 
 
 def mock_llm_response(content: str):
@@ -87,10 +87,11 @@ class TestExtractFromChat:
     def test_prompt_describes_source_of_truth_not_patterns(self):
         prompt = CHAT_EXTRACTION_PROMPT.render(conversation="user: I prefer raw SQL")
 
-        assert "source-of-truth facts" in prompt
+        assert "source-of-truth memory facts" in prompt
         assert "Do not write observations, patterns" in prompt
         assert "Patterns not directly stated" in prompt
         assert "Assign exactly one kind" in prompt
+        assert "Assign exactly one lifetime" in prompt
 
     @pytest.mark.asyncio
     async def test_returns_extracted_facts(self):
@@ -135,7 +136,7 @@ class TestExtractFromChat:
     async def test_drops_temporary_facts_without_expiry(self):
         schema = ChatExtractionSchema(
             facts=[
-                ExtractedChatFact(text="User is debugging login today", kind=FactKind.TEMPORARY),
+                ExtractedChatFact(text="User is debugging login today", lifetime=FactLifetime.TEMPORARY),
                 ExtractedChatFact(text="User prefers direct answers", kind=FactKind.PREFERENCE),
             ]
         )

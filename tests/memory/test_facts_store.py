@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import pytest_asyncio
 
-from ntrp.memory.models import FactKind, SourceType
+from ntrp.memory.models import FactKind, FactLifetime, SourceType
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
 from tests.conftest import mock_embedding
@@ -212,13 +212,13 @@ class TestFactCRUD:
         expired = await repo.create(
             "Expired temporary state",
             SourceType.EXPLICIT,
-            kind=FactKind.TEMPORARY,
+            lifetime=FactLifetime.TEMPORARY,
             expires_at=now - timedelta(days=1),
         )
         temporary = await repo.create(
             "Current temporary state",
             SourceType.EXPLICIT,
-            kind=FactKind.TEMPORARY,
+            lifetime=FactLifetime.TEMPORARY,
             expires_at=now + timedelta(days=1),
         )
         await repo.add_entity_ref(active.id, "User", user.id)

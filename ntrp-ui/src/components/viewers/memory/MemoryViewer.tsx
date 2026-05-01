@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Config } from "../../../types.js";
-import type { FactFilters, ObservationFilters } from "../../../api/client.js";
+import type { Fact, FactFilters, MemoryProfilePolicyItem, ObservationFilters } from "../../../api/client.js";
 import { useFactsTab } from "../../../hooks/useFactsTab.js";
 import { useObservationsTab } from "../../../hooks/useObservationsTab.js";
 import { usePruneTab } from "../../../hooks/usePruneTab.js";
@@ -14,7 +14,7 @@ import { Dialog, Tabs, colors, truncateText } from "../../ui/index.js";
 import { useContentWidth } from "../../../contexts/index.js";
 import { memoryAccessSourceLabel } from "../../../lib/memoryAccess.js";
 import { MEMORY_TABS, MEMORY_TAB_COPY, memoryTabLabels, type MemoryTabType } from "../../../lib/memoryTabs.js";
-import { FactsSection } from "./FactsSection.js";
+import { FactsSection, type FactReviewMarker } from "./FactsSection.js";
 import { LearningSection } from "./LearningSection.js";
 import { MemoryAccessSection } from "./MemoryAccessSection.js";
 import { ObservationsSection } from "./ObservationsSection.js";
@@ -29,6 +29,33 @@ type SortableTab = { sortOrder: string };
 interface MemoryViewerProps {
   config: Config;
   onClose: () => void;
+}
+
+function mergeProfileReviewFacts(profileFacts: Fact[], reviewItems: MemoryProfilePolicyItem[]): Fact[] {
+  const byId = new Map(profileFacts.map((fact) => [fact.id, fact]));
+  for (const item of reviewItems) {
+    if (!byId.has(item.fact.id)) byId.set(item.fact.id, item.fact);
+  }
+  return [...byId.values()];
+}
+
+function profileReviewMarkerMap(reviewItems: MemoryProfilePolicyItem[]): Map<number, FactReviewMarker> {
+  const markers = new Map<number, FactReviewMarker>();
+  for (const item of reviewItems) {
+    const current = markers.get(item.fact.id);
+    if (current) {
+      markers.set(item.fact.id, {
+        reasons: [...new Set([...current.reasons, ...item.reasons])],
+        recommendation: current.recommendation,
+      });
+    } else {
+      markers.set(item.fact.id, {
+        reasons: item.reasons,
+        recommendation: item.recommendation,
+      });
+    }
+  }
+  return markers;
 }
 
 export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
@@ -65,7 +92,27 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     reload,
   } = useMemoryData(config, factFilters, observationFilters);
 
-  const profileTab = useFactsTab(config, profileFacts, contentWidth, profileFilters, setProfileFilters, profileFacts.length, false);
+  const profileReviewItems = useMemo(
+    () => [...(memoryProfilePolicy?.issues ?? []), ...(memoryProfilePolicy?.candidates ?? [])],
+    [memoryProfilePolicy],
+  );
+  const profileFactsWithReview = useMemo(
+    () => mergeProfileReviewFacts(profileFacts, profileReviewItems),
+    [profileFacts, profileReviewItems],
+  );
+  const profileReviewMarkers = useMemo(
+    () => profileReviewMarkerMap(profileReviewItems),
+    [profileReviewItems],
+  );
+  const profileTab = useFactsTab(
+    config,
+    profileFactsWithReview,
+    contentWidth,
+    profileFilters,
+    setProfileFilters,
+    profileFactsWithReview.length,
+    false,
+  );
   const factsTab = useFactsTab(config, facts, contentWidth, factFilters, setFactFilters, factTotal);
   const obsTab = useObservationsTab(config, observations, contentWidth, observationFilters, setObservationFilters, observationTotal);
   const pruneTab = usePruneTab(pruneDryRun?.candidates ?? [], contentWidth);
@@ -149,11 +196,12 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
           : activeTab === "profile"
           ? [
               `profile facts: ${profileFacts.length}`,
-              `review: ${(memoryProfilePolicy?.summary.candidates ?? 0) + (memoryProfilePolicy?.summary.issues ?? 0)}`,
+              `review shown: ${profileReviewItems.length}`,
             ].join(" · ")
           : activeTab === "facts"
           ? [
               `kind: ${factsTab.filters.kind ?? "all"}`,
+              `life: ${factsTab.filters.lifetime ?? "all"}`,
               `status: ${factsTab.filters.status ?? "active"}`,
               `source: ${factsTab.filters.sourceType ?? "all"}`,
               `usage: ${factsTab.filters.accessed ?? "all"}`,
@@ -258,7 +306,14 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
             )}
 
             {activeTab === "profile" && (
-              <FactsSection tab={profileTab} height={sectionHeight} width={width} saving={saving} emptyMessage="No profile facts yet" />
+              <FactsSection
+                tab={profileTab}
+                height={sectionHeight}
+                width={width}
+                saving={saving}
+                emptyMessage="No profile facts or review items"
+                reviewMarkers={profileReviewMarkers}
+              />
             )}
 
             {activeTab === "facts" && (

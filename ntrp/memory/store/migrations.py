@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 12
+CURRENT_VERSION = 13
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -378,6 +378,33 @@ async def _migrate_v12(conn: aiosqlite.Connection) -> None:
     """)
 
 
+async def _migrate_v13(conn: aiosqlite.Connection) -> None:
+    """Add explicit fact lifetime metadata."""
+    _logger.info("Migration v13: adding fact lifetime")
+
+    if not await _table_exists(conn, "facts"):
+        return
+
+    existing = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(facts)")}
+    if "lifetime" not in existing:
+        await conn.execute("ALTER TABLE facts ADD COLUMN lifetime TEXT NOT NULL DEFAULT 'durable'")
+
+    existing = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(facts)")}
+    if "expires_at" in existing:
+        await conn.execute("""
+            UPDATE facts
+            SET lifetime = 'temporary'
+            WHERE expires_at IS NOT NULL
+        """)
+    if "kind" in existing:
+        await conn.execute("""
+            UPDATE facts
+            SET kind = 'note'
+            WHERE kind = 'temporary'
+        """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_lifetime ON facts(lifetime)")
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
@@ -391,6 +418,7 @@ _MIGRATIONS: list[tuple[int, callable]] = [
     (10, _migrate_v10),
     (11, _migrate_v11),
     (12, _migrate_v12),
+    (13, _migrate_v13),
 ]
 
 

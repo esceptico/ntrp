@@ -30,12 +30,16 @@ class FactKind(StrEnum):
     ARTIFACT = "artifact"
     PROCEDURE = "procedure"
     CONSTRAINT = "constraint"
-    TEMPORARY = "temporary"
     NOTE = "note"
 
     @classmethod
     def _missing_(cls, value: object) -> "FactKind":
         return cls.NOTE
+
+
+class FactLifetime(StrEnum):
+    DURABLE = "durable"
+    TEMPORARY = "temporary"
 
 
 def _parse_datetime(value: Any) -> datetime | None:
@@ -142,12 +146,25 @@ class Fact(_MemoryModel):
     consolidated_at: datetime | None = None
     archived_at: datetime | None = None
     kind: FactKind = FactKind.NOTE
+    lifetime: FactLifetime = FactLifetime.DURABLE
     salience: int = 0
     confidence: float = 1.0
     expires_at: datetime | None = None
     pinned_at: datetime | None = None
     superseded_by_fact_id: int | None = None
     entity_refs: list["EntityRef"] = []
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_lifetime(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            legacy_temporary_kind = data.get("kind") == "temporary"
+            has_expiry = data.get("expires_at") is not None
+            if data.get("lifetime") is None:
+                data["lifetime"] = FactLifetime.TEMPORARY.value if has_expiry else FactLifetime.DURABLE.value
+            if legacy_temporary_kind:
+                data["kind"] = FactKind.NOTE.value
+        return data
 
     @field_validator(
         "created_at",

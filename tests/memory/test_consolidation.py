@@ -15,7 +15,7 @@ from ntrp.memory.consolidation import (
     apply_consolidation,
     get_consolidation_decisions,
 )
-from ntrp.memory.models import Fact, FactKind, HistoryEntry, Observation, SourceType
+from ntrp.memory.models import Fact, FactKind, FactLifetime, HistoryEntry, Observation, SourceType
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
@@ -252,6 +252,24 @@ class TestConsolidateFact:
 
         updated = await fact_repo.get(fact.id)
         assert updated.consolidated_at is not None
+
+    @pytest.mark.asyncio
+    async def test_temporary_fact_never_reaches_consolidation_llm(
+        self, fact_repo: FactRepository, obs_repo: ObservationRepository
+    ):
+        fact = await fact_repo.create(
+            text="User is using a rental laptop today",
+            source_type=SourceType.EXPLICIT,
+            embedding=mock_embedding("rental laptop"),
+            lifetime=FactLifetime.TEMPORARY,
+            expires_at=datetime(2026, 5, 2, tzinfo=UTC),
+        )
+
+        with patch("ntrp.memory.consolidation.get_completion_client") as get_client:
+            actions = await get_consolidation_decisions(fact, obs_repo, fact_repo, "test-model")
+
+        assert actions == []
+        get_client.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_ephemeral_fact_skipped(self, fact_repo: FactRepository, obs_repo: ObservationRepository):

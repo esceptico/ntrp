@@ -1,7 +1,7 @@
 import type { FactDetails, FactMetadataSuggestion } from "../../../api/client.js";
 import { colors, truncateText, ExpandableText, ScrollableList, TextEditArea } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
-import { formatTimeAgo } from "../../../lib/format.js";
+import { formatRelativeTime, formatTimeAgo } from "../../../lib/format.js";
 import { DeleteConfirmation } from "./DeleteConfirmation.js";
 
 // Section indices for keyboard navigation
@@ -82,6 +82,16 @@ export function FactDetailsView({
 
   const sectionFocused = (section: FactDetailSection) => isFocused && focusedSection === section;
   const textWidth = width - 2;
+  const lifetimeLabel = fact.expires_at
+    ? `${fact.lifetime} until ${formatRelativeTime(fact.expires_at)}`
+    : fact.lifetime;
+  const expired = fact.expires_at ? new Date(fact.expires_at).getTime() <= Date.now() : false;
+  const stateLabel =
+    fact.archived_at ? "archived" :
+    fact.superseded_by_fact_id ? "superseded" :
+    expired ? "expired" :
+    fact.pinned_at ? "pinned" :
+    "active";
 
   if (confirmDelete) {
     return <DeleteConfirmation width={width} height={height} message={`Delete this fact? This will remove ${details.entities.length} entities, ${details.linked_facts.length} links.`} />;
@@ -136,6 +146,8 @@ export function FactDetailsView({
         <text>
           <span fg={typeColor}>{typeLabel}</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
+          <span fg={labelColor}>{lifetimeLabel}</span>
+          <span fg={colors.text.disabled}> {"\u2502"} </span>
           <span fg={labelColor}>importance {fact.salience}/2</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
           <span fg={labelColor}>confidence {Math.round(fact.confidence * 100)}%</span>
@@ -149,9 +161,7 @@ export function FactDetailsView({
       <box marginTop={1}>
         <text>
           <span fg={colors.text.disabled}>state </span>
-          <span fg={labelColor}>
-            {fact.archived_at ? "archived" : fact.superseded_by_fact_id ? "superseded" : fact.pinned_at ? "pinned" : fact.expires_at ? "temporary" : "active"}
-          </span>
+          <span fg={labelColor}>{stateLabel}</span>
         </text>
       </box>
 
@@ -164,6 +174,14 @@ export function FactDetailsView({
             <>
               <text>
                 <span fg={accentValue}>{metadataSuggestion.kind}</span>
+                <span fg={colors.text.disabled}> · </span>
+                <span fg={colors.text.secondary}>{metadataSuggestion.lifetime}</span>
+                {metadataSuggestion.expires_at && (
+                  <>
+                    <span fg={colors.text.disabled}> · </span>
+                    <span fg={colors.text.secondary}>until {formatRelativeTime(metadataSuggestion.expires_at)}</span>
+                  </>
+                )}
                 <span fg={colors.text.disabled}> · </span>
                 <span fg={colors.text.secondary}>importance {metadataSuggestion.salience}/2</span>
                 <span fg={colors.text.disabled}> · </span>

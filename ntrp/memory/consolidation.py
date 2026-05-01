@@ -12,7 +12,7 @@ from ntrp.constants import (
 )
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
-from ntrp.memory.models import Embedding, Fact, FactKind, Observation, SourceType
+from ntrp.memory.models import Embedding, Fact, FactKind, FactLifetime, Observation, SourceType
 from ntrp.memory.prompts import CONSOLIDATION_PROMPT
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
@@ -45,6 +45,8 @@ async def get_consolidation_decisions(
     fact_repo: FactRepository,
     model: str,
 ) -> list[ConsolidationAction]:
+    if fact.lifetime == FactLifetime.TEMPORARY:
+        return []
     if fact.embedding is None:
         return []
 
@@ -75,7 +77,7 @@ async def apply_consolidation(
 
 
 def _can_create_observation_from_fact(fact: Fact) -> tuple[bool, str]:
-    if fact.kind == FactKind.TEMPORARY:
+    if fact.lifetime == FactLifetime.TEMPORARY:
         return False, "temporary_fact"
     if fact.source_type == SourceType.CHAT and fact.kind == FactKind.NOTE and fact.salience <= 0:
         return False, "chat_note_low_salience"
@@ -236,6 +238,7 @@ def _format_fact(fact: Fact) -> dict:
         "id": fact.id,
         "text": fact.text,
         "kind": fact.kind.value,
+        "lifetime": fact.lifetime.value,
         "source_type": fact.source_type.value,
         "source_ref": fact.source_ref,
         "happened_at": fact.happened_at.isoformat() if fact.happened_at else None,

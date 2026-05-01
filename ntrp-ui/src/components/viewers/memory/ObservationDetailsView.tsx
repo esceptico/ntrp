@@ -186,7 +186,7 @@ export function ObservationDetailsView({
                   : fact.expires_at && new Date(fact.expires_at) <= new Date()
                     ? "expired"
                     : "active";
-              const meta = `${fact.kind} · ${fact.source_type} · ${status}`;
+              const meta = `${fact.kind} · ${fact.lifetime} · ${fact.source_type} · ${status}`;
               const bodyWidth = Math.max(10, textWidth - meta.length - 7);
               return (
                 <text>

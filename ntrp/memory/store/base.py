@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS facts (
     consolidated_at TIMESTAMP,  -- NULL = not yet consolidated
     archived_at TIMESTAMP,
     kind TEXT NOT NULL DEFAULT 'note',
+    lifetime TEXT NOT NULL DEFAULT 'durable',
     salience INTEGER NOT NULL DEFAULT 0,
     confidence REAL NOT NULL DEFAULT 1.0,
     expires_at TIMESTAMP,

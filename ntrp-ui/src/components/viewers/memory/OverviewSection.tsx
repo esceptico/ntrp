@@ -9,11 +9,9 @@ import type {
   MemoryPruneDryRun,
   MemoryStorageHealth,
 } from "../../../api/client.js";
-import { colors, truncateText } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
-import { formatTimeAgo } from "../../../lib/format.js";
-import { memoryAccessSourceLabel } from "../../../lib/memoryAccess.js";
-import { learningChangeLabel } from "../../../lib/memoryLearning.js";
+import { truncateText } from "../../../lib/utils.js";
+import { colors } from "../../ui/index.js";
 
 interface OverviewSectionProps {
   profileFacts: Fact[];
@@ -38,37 +36,32 @@ const PROFILE_REASON_LABELS: Record<string, string> = {
   profile_low_confidence: "low confidence",
 };
 
-function filledText(text: string, width: number): string {
-  if (width <= 0) return "";
-  return truncateText(text, width).padEnd(width);
-}
-
 interface LineSegment {
   text: string;
   fg: string;
   width?: number;
 }
 
-function OverviewLine({ segments, width }: { segments: LineSegment[]; width: number }) {
-  const bg = colors.background.element ?? colors.background.menu;
-  let used = 0;
-  const rendered = segments.map((segment, index) => {
-    const remaining = Math.max(0, width - used);
-    const segmentWidth = Math.min(segment.width ?? remaining, remaining);
-    if (segmentWidth <= 0) return null;
-    used += segmentWidth;
-    return (
-      <span key={index} fg={segment.fg} bg={bg}>
-        {filledText(segment.text, segmentWidth)}
-      </span>
-    );
-  });
-  const rest = Math.max(0, width - used);
+function cell(text: string, width: number): string {
+  if (width <= 0) return "";
+  return truncateText(text, width).padEnd(width);
+}
 
+function OverviewLine({ segments, width }: { segments: LineSegment[]; width: number }) {
+  let used = 0;
   return (
     <text>
-      {rendered}
-      {rest > 0 && <span bg={bg}>{filledText("", rest)}</span>}
+      {segments.map((segment, index) => {
+        const remaining = Math.max(0, width - used);
+        const segmentWidth = Math.min(segment.width ?? remaining, remaining);
+        if (segmentWidth <= 0) return null;
+        used += segmentWidth;
+        return (
+          <span key={index} fg={segment.fg}>
+            {cell(segment.text, segmentWidth)}
+          </span>
+        );
+      })}
     </text>
   );
 }
@@ -93,10 +86,25 @@ function ActionRow({ keyName, label, note, width }: { keyName: string; label: st
     <OverviewLine
       width={width}
       segments={[
-        { text: keyName, fg: colors.text.primary, width: 3 },
-        { text: label, fg: colors.text.secondary, width: 10 },
+        { text: keyName, fg: colors.text.primary, width: 2 },
+        { text: label, fg: colors.text.secondary, width: 9 },
         { text: note, fg: colors.text.secondary },
       ]}
+    />
+  );
+}
+
+function CompactActionRow({ actions, width }: { actions: [string, string, string][]; width: number }) {
+  const noteWidth = Math.max(8, Math.floor((width - 39) / 3));
+  return (
+    <OverviewLine
+      width={width}
+      segments={actions.flatMap(([keyName, label, note], index) => [
+        ...(index > 0 ? [{ text: "  ", fg: colors.text.disabled, width: 2 }] : []),
+        { text: keyName, fg: colors.text.primary, width: 2 },
+        { text: label, fg: colors.text.secondary, width: 9 },
+        { text: note, fg: colors.text.disabled, width: noteWidth },
+      ])}
     />
   );
 }
@@ -126,9 +134,8 @@ export function OverviewSection({
   width,
 }: OverviewSectionProps) {
   const { accentValue } = useAccentColor();
-  const latestEvent = memoryEvents[0];
-  const latestLearningCandidate = learningCandidates[0];
-  const latestAccess = memoryAccessEvents[0];
+  const textWidth = Math.max(1, width - 1);
+  const compact = height < 24;
   const storageIssues =
     storageIssueCount(memoryAudit?.storage.facts) + storageIssueCount(memoryAudit?.storage.observations);
   const relationIssues = relationIssueCount(memoryAudit?.relations);
@@ -139,7 +146,8 @@ export function OverviewSection({
   const profileReviewLabel = topProfileReview
     ? topProfileReview.reasons.map((reason) => PROFILE_REASON_LABELS[reason] ?? reason).join(", ")
     : "";
-  const textWidth = Math.max(1, width - 1);
+  const policyReviewCount = memoryInjectionPolicy?.summary.candidates ?? 0;
+  const cleanupCount = pruneDryRun?.summary.total ?? 0;
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
@@ -153,113 +161,89 @@ export function OverviewSection({
       />
 
       <box flexDirection="column" marginTop={2}>
-        <MetricRow label="Profile" value={profileFacts.length} note="always-on facts shown to the agent first" width={textWidth} />
-        <MetricRow label="Profile review" value={profileReviewCount} note="profile candidates and quality flags" width={textWidth} />
-        <MetricRow label="Search" value="query" note="test retrieval before it reaches the agent" width={textWidth} />
-        <MetricRow label="Sent" value={memoryAccessEvents.length} note="recent memory bundles injected into prompts/tools" width={textWidth} />
+        <OverviewLine width={textWidth} segments={[{ text: "ATTENTION", fg: accentValue }]} />
         <MetricRow
-          label="Policy"
-          value={memoryInjectionPolicy?.summary.candidates ?? 0}
-          note="recent injected-memory bundles worth reviewing"
+          label="Profile review"
+          value={profileReviewCount}
+          note={topProfileReview ? profileReviewLabel || "review profile memory" : "clean"}
           width={textWidth}
         />
-        <MetricRow label="Facts" value={factTotal} note="source-of-truth memory records" width={textWidth} />
-        <MetricRow label="Patterns" value={observationTotal} note="derived summaries with supporting facts" width={textWidth} />
-        <MetricRow label="Embeddings" value={missingEmbeddings} note="active rows missing vectors" width={textWidth} />
-        <MetricRow label="Storage" value={storageIssues} note="vec/FTS index rows needing repair" width={textWidth} />
-        <MetricRow label="Relations" value={relationIssues} note="orphaned provenance/entity links" width={textWidth} />
+        <MetricRow
+          label="Sent policy"
+          value={policyReviewCount}
+          note={policyReviewCount > 0 ? "review injected-memory bundles" : "clean"}
+          width={textWidth}
+        />
         <MetricRow
           label="Cleanup"
-          value={pruneDryRun?.summary.total ?? 0}
-          note="archive candidates matching the current cleanup rule"
+          value={cleanupCount}
+          note={cleanupCount > 0 ? "bulk archive candidates ready" : "clean"}
           width={textWidth}
         />
-        <MetricRow label="Improve" value={learningCandidates.length} note="reviewable policy, skill, and prompt candidates" width={textWidth} />
+        <MetricRow
+          label="Improve"
+          value={learningCandidates.length}
+          note={learningCandidates.length > 0 ? "durable improvement proposals" : "no proposals"}
+          width={textWidth}
+        />
+      </box>
+
+      <box flexDirection="column" marginTop={2}>
+        <OverviewLine width={textWidth} segments={[{ text: "INVENTORY", fg: accentValue }]} />
+        <MetricRow label="Profile" value={profileFacts.length} note="always-on facts shown to the agent first" width={textWidth} />
+        <MetricRow label="Facts" value={factTotal} note="source-of-truth memory records" width={textWidth} />
+        <MetricRow label="Patterns" value={observationTotal} note="derived summaries with supporting facts" width={textWidth} />
+        <MetricRow label="Sent" value={memoryAccessEvents.length} note="recent memory bundles injected into prompts/tools" width={textWidth} />
         <MetricRow label="Audit" value={memoryEvents.length} note="recent memory writes and automation outcomes loaded" width={textWidth} />
+        {!compact && (
+          <>
+            <MetricRow label="Embeddings" value={missingEmbeddings} note="active rows missing vectors" width={textWidth} />
+            <MetricRow label="Storage" value={storageIssues} note="vec/FTS index rows needing repair" width={textWidth} />
+            <MetricRow label="Relations" value={relationIssues} note="orphaned provenance/entity links" width={textWidth} />
+          </>
+        )}
       </box>
 
       <box flexDirection="column" marginTop={2}>
-        <OverviewLine width={textWidth} segments={[{ text: "TAB MAP", fg: accentValue }]} />
-        <ActionRow keyName="1" label="Home" note="memory health and navigation map" width={textWidth} />
-        <ActionRow keyName="2" label="Search" note="debug query-time memory retrieval" width={textWidth} />
-        <ActionRow keyName="3" label="Sent" note="inspect what memory reached the model" width={textWidth} />
-        <ActionRow keyName="4" label="Profile" note="edit always-visible facts" width={textWidth} />
-        <ActionRow keyName="5" label="Facts" note="edit durable truth" width={textWidth} />
-        <ActionRow keyName="6" label="Patterns" note="inspect derived memory and provenance" width={textWidth} />
-        <ActionRow keyName="7" label="Cleanup" note="archive low-value patterns in bulk" width={textWidth} />
-        <ActionRow keyName="8" label="Improve" note="review proposed durable improvements" width={textWidth} />
-        <ActionRow keyName="9" label="Audit" note="answer why memory changed" width={textWidth} />
-      </box>
-
-      <box flexDirection="column" marginTop={2}>
-        <OverviewLine width={textWidth} segments={[{ text: "PROFILE REVIEW", fg: accentValue }]} />
-        {topProfileReview ? (
-          <OverviewLine
-            width={textWidth}
-            segments={[
-              { text: topProfileReview.fact.text, fg: colors.text.secondary, width: Math.max(12, Math.floor(textWidth * 0.45)) },
-              { text: " | ", fg: colors.text.disabled, width: 3 },
-              { text: profileReviewLabel, fg: colors.text.secondary, width: 24 },
-              { text: " | ", fg: colors.text.disabled, width: 3 },
-              { text: topProfileReview.recommendation, fg: colors.text.secondary },
-            ]}
-          />
+        <OverviewLine width={textWidth} segments={[{ text: "NAVIGATION", fg: accentValue }]} />
+        {width >= 96 ? (
+          <>
+            <CompactActionRow
+              width={textWidth}
+              actions={[
+                ["2", "Search", "test recall"],
+                ["3", "Sent", "model memory"],
+                ["4", "Profile", "always-on"],
+              ]}
+            />
+            <CompactActionRow
+              width={textWidth}
+              actions={[
+                ["5", "Facts", "edit truth"],
+                ["6", "Patterns", "derived"],
+                ["7", "Cleanup", "archive"],
+              ]}
+            />
+            <CompactActionRow
+              width={textWidth}
+              actions={[
+                ["8", "Improve", "proposals"],
+                ["9", "Audit", "history"],
+              ]}
+            />
+          </>
         ) : (
-          <OverviewLine width={textWidth} segments={[{ text: "No profile policy flags loaded", fg: colors.text.disabled }]} />
-        )}
-      </box>
-
-      <box flexDirection="column" marginTop={1}>
-        <OverviewLine width={textWidth} segments={[{ text: "LATEST SENT MEMORY", fg: accentValue }]} />
-        {latestAccess ? (
-          <OverviewLine
-            width={textWidth}
-            segments={[
-              { text: memoryAccessSourceLabel(latestAccess.source), fg: colors.text.secondary, width: 18 },
-              { text: " | ", fg: colors.text.disabled, width: 3 },
-              { text: `${latestAccess.injected_fact_ids.length} facts / ${latestAccess.injected_observation_ids.length} patterns`, fg: colors.text.secondary, width: 22 },
-              { text: " | ", fg: colors.text.disabled, width: 3 },
-              { text: formatTimeAgo(latestAccess.created_at), fg: colors.text.secondary },
-            ]}
-          />
-        ) : (
-          <OverviewLine width={textWidth} segments={[{ text: "No context injections loaded", fg: colors.text.disabled }]} />
-        )}
-      </box>
-
-      <box flexDirection="column" marginTop={1}>
-        <OverviewLine width={textWidth} segments={[{ text: "LATEST LEARNING", fg: accentValue }]} />
-        {latestLearningCandidate ? (
-          <OverviewLine
-            width={textWidth}
-            segments={[
-              { text: latestLearningCandidate.status, fg: colors.text.secondary, width: 12 },
-              { text: " | ", fg: colors.text.disabled, width: 3 },
-              { text: learningChangeLabel(latestLearningCandidate.change_type), fg: colors.text.secondary, width: 20 },
-              { text: " | ", fg: colors.text.disabled, width: 3 },
-              { text: latestLearningCandidate.proposal, fg: colors.text.secondary },
-            ]}
-          />
-        ) : (
-          <OverviewLine width={textWidth} segments={[{ text: "No learning candidates loaded", fg: colors.text.disabled }]} />
-        )}
-      </box>
-
-      <box flexDirection="column" marginTop={1}>
-        <OverviewLine width={textWidth} segments={[{ text: "LATEST LOG", fg: accentValue }]} />
-        {latestEvent ? (
-          <OverviewLine
-            width={textWidth}
-            segments={[
-              { text: latestEvent.action, fg: colors.text.secondary, width: 22 },
-              { text: " | ", fg: colors.text.disabled, width: 3 },
-              { text: latestEvent.actor, fg: colors.text.secondary, width: 16 },
-              { text: " | ", fg: colors.text.disabled, width: 3 },
-              { text: formatTimeAgo(latestEvent.created_at), fg: colors.text.secondary },
-            ]}
-          />
-        ) : (
-          <OverviewLine width={textWidth} segments={[{ text: "No memory log entries loaded", fg: colors.text.disabled }]} />
+          <>
+            <ActionRow keyName="1" label="Home" note="memory health and navigation map" width={textWidth} />
+            <ActionRow keyName="2" label="Search" note="debug query-time memory retrieval" width={textWidth} />
+            <ActionRow keyName="3" label="Sent" note="inspect what memory reached the model" width={textWidth} />
+            <ActionRow keyName="4" label="Profile" note="edit always-visible facts" width={textWidth} />
+            <ActionRow keyName="5" label="Facts" note="edit durable truth" width={textWidth} />
+            <ActionRow keyName="6" label="Patterns" note="inspect derived memory and provenance" width={textWidth} />
+            <ActionRow keyName="7" label="Cleanup" note="archive low-value patterns in bulk" width={textWidth} />
+            <ActionRow keyName="8" label="Improve" note="review proposed durable improvements" width={textWidth} />
+            <ActionRow keyName="9" label="Audit" note="answer why memory changed" width={textWidth} />
+          </>
         )}
       </box>
     </box>

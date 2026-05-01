@@ -7,7 +7,7 @@ import { canApproveLearningCandidate, canRejectLearningCandidate } from "../../.
 interface MemoryFooterProps {
   activeTab: MemoryTabType;
   recallTab: RecallInspectTabState;
-  profileTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean };
+  profileTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean; metadataSuggestion: unknown };
   factsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean; metadataSuggestion: unknown };
   obsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean };
   pruneTab: { focusPane: string; searchMode: boolean; confirmApply: "selected" | "all" | null };
@@ -37,10 +37,13 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
     if (profileTab.editMode) return <Hints items={[["^s", "save"], ["esc", "cancel"], ["←→", "cursor"]]} />;
     if (profileTab.confirmDelete) return <Hints items={[["y", "confirm"], ["any", "cancel"]]} />;
     if (profileTab.focusPane === "details") {
-      return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ["enter", "expand"], ["e", "edit"], ["d", "del"], ["r", "refresh"]]} />;
+      const detailHints: [string, string][] = [["↑↓", "navigate"], ["tab", "list"], ["enter", "expand"], ["e", "edit"], ["g", "suggest"]];
+      if (profileTab.metadataSuggestion) detailHints.push(["a", "apply"]);
+      detailHints.push(["d", "del"], ["r", "refresh"]);
+      return <Hints items={detailHints} />;
     }
     if (profileTab.searchMode) return <Hints items={[["type", "search"], ["esc", "clear/exit"], ["enter", "done"]]} />;
-    return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["e", "edit"], ["d", "del"], ["o", "sort"], ["r", "refresh"]]} />;
+    return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["e", "edit"], ["g", "suggest"], ["d", "del"], ["o", "sort"], ["r", "refresh"]]} />;
   }
 
   if (activeTab === "prune") {
@@ -112,6 +115,7 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
     ["d", "del"],
     ...(activeTab === "facts" ? [
       ["m", "kind"] as [string, string],
+      ["l", "life"] as [string, string],
       ["x", "status"] as [string, string],
       ["s", "source"] as [string, string],
       ["u", "used"] as [string, string],

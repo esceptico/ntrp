@@ -7,6 +7,7 @@ from ntrp.memory.formatting import format_memory_context, format_session_memory
 from ntrp.memory.models import (
     Fact,
     FactKind,
+    FactLifetime,
     LearningCandidate,
     LearningEvent,
     MemoryAccessEvent,
@@ -48,6 +49,7 @@ def _fact_payload(fact: Fact) -> dict:
         "consolidated_at": fact.consolidated_at.isoformat() if fact.consolidated_at else None,
         "archived_at": fact.archived_at.isoformat() if fact.archived_at else None,
         "kind": fact.kind,
+        "lifetime": fact.lifetime,
         "salience": fact.salience,
         "confidence": fact.confidence,
         "expires_at": fact.expires_at.isoformat() if fact.expires_at else None,
@@ -152,6 +154,7 @@ async def get_facts(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     kind: FactKind | None = None,
+    lifetime: FactLifetime | None = None,
     source_type: SourceType | None = None,
     status: Literal["active", "archived", "superseded", "expired", "temporary", "pinned", "all"] = "active",
     accessed: Literal["never", "used"] | None = None,
@@ -162,6 +165,7 @@ async def get_facts(
         limit=limit,
         offset=offset,
         kind=kind,
+        lifetime=lifetime,
         source_type=source_type,
         status=status,
         accessed=accessed,
@@ -202,6 +206,7 @@ async def suggest_fact_kind_review(
                 "fact": _fact_payload(fact),
                 "suggestion": {
                     "kind": suggestion.kind,
+                    "lifetime": suggestion.lifetime,
                     "salience": suggestion.salience,
                     "confidence": suggestion.confidence,
                     "expires_at": suggestion.expires_at.isoformat() if suggestion.expires_at else None,
@@ -272,6 +277,8 @@ async def update_fact_metadata(
     fields = request.model_fields_set
     if "kind" in fields and request.kind is not None:
         updates["kind"] = request.kind
+    if "lifetime" in fields and request.lifetime is not None:
+        updates["lifetime"] = request.lifetime
     if "salience" in fields and request.salience is not None:
         updates["salience"] = request.salience
     if "confidence" in fields and request.confidence is not None:

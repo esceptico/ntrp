@@ -8,7 +8,7 @@ from ntrp.constants import CONSOLIDATION_TEMPERATURE
 from ntrp.core.prompts import env
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
-from ntrp.memory.models import Fact, FactKind
+from ntrp.memory.models import Fact, FactKind, FactLifetime
 
 _logger = get_logger(__name__)
 
@@ -27,15 +27,16 @@ Kinds:
 - artifact: document, URL, file, repo, note, resource
 - procedure: reusable how-to or workflow
 - constraint: rule, legal/contractual/product constraint
-- temporary: short-lived state; must include expires_at
 - note: fallback when none of the above is clear
 
 Rules:
 - Do not infer beyond the fact text.
 - Prefer "note" when uncertain.
+- Suggest exactly one lifetime: durable or temporary.
 - Use salience 0 for normal, 1 for useful, 2 only for always-relevant durable facts.
 - Use confidence below 1.0 when the fact text is ambiguous.
-- Temporary suggestions without an explicit expiry are invalid.
+- Temporary suggestions must include expires_at.
+- Durable suggestions must not include expires_at.
 - Do not suggest supersession here.
 - Return one suggestion per input fact id.
 
@@ -46,6 +47,7 @@ Facts:
 class FactMetadataSuggestion(BaseModel):
     fact_id: int
     kind: FactKind = FactKind.NOTE
+    lifetime: FactLifetime = FactLifetime.DURABLE
     salience: int = Field(default=0, ge=0, le=2)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     expires_at: datetime | None = None
@@ -67,6 +69,7 @@ def _fact_review_payload(facts: list[Fact]) -> list[dict]:
             "id": fact.id,
             "text": fact.text,
             "source_type": fact.source_type,
+            "lifetime": fact.lifetime,
             "created_at": fact.created_at.isoformat(),
             "access_count": fact.access_count,
         }
@@ -75,12 +78,20 @@ def _fact_review_payload(facts: list[Fact]) -> list[dict]:
 
 
 def _normalize_suggestion(suggestion: FactMetadataSuggestion) -> FactMetadataSuggestion:
-    if suggestion.kind == FactKind.TEMPORARY and suggestion.expires_at is None:
+    if suggestion.lifetime == FactLifetime.TEMPORARY and suggestion.expires_at is None:
         return suggestion.model_copy(
             update={
+                "lifetime": FactLifetime.DURABLE,
                 "kind": FactKind.NOTE,
                 "salience": min(suggestion.salience, 1),
                 "reason": f"{suggestion.reason} temporary suggestion had no expiry; kept as note".strip(),
+            }
+        )
+    if suggestion.lifetime == FactLifetime.DURABLE and suggestion.expires_at is not None:
+        return suggestion.model_copy(
+            update={
+                "expires_at": None,
+                "reason": f"{suggestion.reason} durable suggestion had expiry; removed expiry".strip(),
             }
         )
     return suggestion

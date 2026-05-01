@@ -5,7 +5,7 @@ import aiosqlite
 
 from ntrp.database import serialize_embedding
 from ntrp.memory.fts import build_fts_query
-from ntrp.memory.models import Embedding, Entity, EntityRef, Fact, FactKind, SourceType
+from ntrp.memory.models import Embedding, Entity, EntityRef, Fact, FactKind, FactLifetime, SourceType
 
 _SQL_GET_FACT = "SELECT * FROM facts WHERE id = ?"
 _SQL_COUNT_FACTS = "SELECT COUNT(*) FROM facts"
@@ -34,9 +34,9 @@ _SQL_INSERT_FACT = """
     INSERT INTO facts (
         text, embedding, source_type, source_ref,
         created_at, happened_at, last_accessed_at, access_count,
-        kind, salience, confidence, expires_at, pinned_at, superseded_by_fact_id
+        kind, lifetime, salience, confidence, expires_at, pinned_at, superseded_by_fact_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SQL_LIST_TIME_WINDOW = """
@@ -111,6 +111,7 @@ _SQL_LIST_PROFILE_FACTS = """
     WHERE archived_at IS NULL
       AND superseded_by_fact_id IS NULL
       AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+      AND lifetime = 'durable'
       AND kind IN ({placeholders})
     ORDER BY pinned_at IS NULL, salience DESC, access_count DESC, created_at DESC
     LIMIT ?
@@ -120,6 +121,7 @@ _SQL_LIST_PROFILE_REVIEW_CANDIDATES = """
     WHERE archived_at IS NULL
       AND superseded_by_fact_id IS NULL
       AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+      AND lifetime = 'durable'
       AND kind NOT IN ({placeholders})
       AND (pinned_at IS NOT NULL OR salience >= ? OR (salience >= 1 AND access_count >= ?))
     ORDER BY pinned_at IS NULL, salience DESC, access_count DESC, created_at DESC
@@ -213,6 +215,7 @@ _SQL_GET_FACTS_FOR_ENTITY_TEMPORAL = """
     JOIN entity_refs er ON f.id = er.fact_id
     WHERE er.entity_id = ?
       AND f.archived_at IS NULL
+      AND f.lifetime = 'durable'
       AND COALESCE(f.happened_at, f.created_at) >= datetime('now', '-' || ? || ' days')
       AND COALESCE(f.happened_at, f.created_at) <= datetime('now')
     ORDER BY COALESCE(f.happened_at, f.created_at) ASC
@@ -238,6 +241,7 @@ _SQL_GET_ENTITIES_WITH_FACT_COUNT = """
       AND COALESCE(f.happened_at, f.created_at) <= datetime('now')
       AND er.entity_id IS NOT NULL
       AND f.archived_at IS NULL
+      AND f.lifetime = 'durable'
     GROUP BY er.entity_id
     HAVING COUNT(*) >= ?
     ORDER BY fact_count DESC
@@ -276,6 +280,7 @@ def _row_dict(row: aiosqlite.Row) -> dict:
 def _filtered_fact_clauses(
     *,
     kind: FactKind | None,
+    lifetime: FactLifetime | None,
     source_type: SourceType | None,
     status: str,
     accessed: str | None,
@@ -296,6 +301,10 @@ def _filtered_fact_clauses(
     if kind is not None:
         where.append("f.kind = ?")
         params.append(kind.value)
+
+    if lifetime is not None:
+        where.append("f.lifetime = ?")
+        params.append(lifetime.value)
 
     if source_type is not None:
         where.append("f.source_type = ?")
@@ -319,7 +328,7 @@ def _filtered_fact_clauses(
         case "temporary":
             where.extend(
                 [
-                    "f.expires_at IS NOT NULL",
+                    "f.lifetime = 'temporary'",
                     "f.expires_at > CURRENT_TIMESTAMP",
                     "f.archived_at IS NULL",
                     "f.superseded_by_fact_id IS NULL",
@@ -352,6 +361,21 @@ def _filtered_fact_clauses(
     join_sql = f" {' '.join(joins)}" if joins else ""
     where_sql = f" WHERE {' AND '.join(where)}" if where else ""
     return join_sql, where_sql, params
+
+
+def _normalize_metadata(
+    *,
+    kind: FactKind,
+    lifetime: FactLifetime | None,
+    expires_at: datetime | None,
+) -> tuple[FactKind, FactLifetime, datetime | None]:
+    if lifetime is None:
+        lifetime = FactLifetime.TEMPORARY if expires_at is not None else FactLifetime.DURABLE
+    if lifetime == FactLifetime.TEMPORARY and expires_at is None:
+        raise ValueError("temporary lifetime requires expires_at")
+    if lifetime == FactLifetime.DURABLE and expires_at is not None:
+        raise ValueError("durable lifetime cannot have expires_at")
+    return kind, lifetime, expires_at
 
 
 class FactRepository:
@@ -390,6 +414,7 @@ class FactRepository:
         embedding: Embedding | None = None,
         happened_at: datetime | None = None,
         kind: FactKind = FactKind.NOTE,
+        lifetime: FactLifetime | None = None,
         salience: int = 0,
         confidence: float = 1.0,
         expires_at: datetime | None = None,
@@ -397,6 +422,7 @@ class FactRepository:
         superseded_by_fact_id: int | None = None,
     ) -> Fact:
         now = datetime.now(UTC)
+        kind, lifetime, expires_at = _normalize_metadata(kind=kind, lifetime=lifetime, expires_at=expires_at)
         embedding_bytes = serialize_embedding(embedding)
         cursor = await self.conn.execute(
             _SQL_INSERT_FACT,
@@ -410,6 +436,7 @@ class FactRepository:
                 now.isoformat(),
                 0,
                 kind,
+                lifetime,
                 salience,
                 confidence,
                 expires_at.isoformat() if expires_at else None,
@@ -432,6 +459,7 @@ class FactRepository:
             last_accessed_at=now,
             access_count=0,
             kind=kind,
+            lifetime=lifetime,
             salience=salience,
             confidence=confidence,
             expires_at=expires_at,
@@ -459,6 +487,7 @@ class FactRepository:
         limit: int = 100,
         offset: int = 0,
         kind: FactKind | None = None,
+        lifetime: FactLifetime | None = None,
         source_type: SourceType | None = None,
         status: str = "active",
         accessed: str | None = None,
@@ -466,6 +495,7 @@ class FactRepository:
     ) -> tuple[list[Fact], int]:
         join_sql, where_sql, params = _filtered_fact_clauses(
             kind=kind,
+            lifetime=lifetime,
             source_type=source_type,
             status=status,
             accessed=accessed,
@@ -557,6 +587,7 @@ class FactRepository:
 
         allowed = {
             "kind",
+            "lifetime",
             "salience",
             "confidence",
             "expires_at",
@@ -567,12 +598,33 @@ class FactRepository:
         if invalid:
             raise ValueError(f"unsupported fact metadata field(s): {sorted(invalid)}")
 
-        assignments = ", ".join(f"{field} = ?" for field in updates)
+        current = await self.get(fact_id)
+        if current is None:
+            return None
+        normalized_updates = dict(updates)
+        kind = updates.get("kind", current.kind)
+        lifetime = updates.get("lifetime", current.lifetime)
+        expires_at = updates.get("expires_at", current.expires_at)
+        if not isinstance(kind, FactKind):
+            kind = FactKind(kind)
+        if lifetime is not None and not isinstance(lifetime, FactLifetime):
+            lifetime = FactLifetime(lifetime)
+        if expires_at is not None and not isinstance(expires_at, datetime):
+            expires_at = datetime.fromisoformat(str(expires_at))
+        kind, lifetime, expires_at = _normalize_metadata(kind=kind, lifetime=lifetime, expires_at=expires_at)
+        if "kind" in updates or kind != current.kind:
+            normalized_updates["kind"] = kind
+        if "lifetime" in updates or lifetime != current.lifetime:
+            normalized_updates["lifetime"] = lifetime
+        if "expires_at" in updates or expires_at != current.expires_at:
+            normalized_updates["expires_at"] = expires_at
+
+        assignments = ", ".join(f"{field} = ?" for field in normalized_updates)
         values = []
-        for value in updates.values():
+        for value in normalized_updates.values():
             if isinstance(value, datetime):
                 values.append(value.isoformat())
-            elif isinstance(value, FactKind):
+            elif isinstance(value, (FactKind, FactLifetime)):
                 values.append(value.value)
             else:
                 values.append(value)

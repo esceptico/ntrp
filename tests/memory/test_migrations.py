@@ -68,9 +68,48 @@ async def test_init_schema_migrates_existing_v4_database(tmp_path: Path):
 
     columns = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(facts)")}
     assert "kind" in columns
+    assert "lifetime" in columns
 
     version = await conn.execute_fetchall("SELECT value FROM meta WHERE key = 'schema_version'")
     assert version[0][0] == str(CURRENT_VERSION)
+
+    await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_migrate_v13_adds_lifetime_and_backfills_legacy_temporary(tmp_path: Path):
+    conn = await aiosqlite.connect(tmp_path / "memory.db")
+    conn.row_factory = aiosqlite.Row
+    await conn.executescript("""
+        CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+        INSERT INTO meta (key, value) VALUES ('schema_version', '12');
+
+        CREATE TABLE facts (
+            id INTEGER PRIMARY KEY,
+            text TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'note',
+            expires_at TIMESTAMP
+        );
+        INSERT INTO facts (id, text, source_type, kind) VALUES (1, 'Durable note', 'explicit', 'note');
+        INSERT INTO facts (id, text, source_type, kind, expires_at)
+        VALUES (2, 'Legacy temporary', 'explicit', 'temporary', '2026-05-02T00:00:00+00:00');
+        INSERT INTO facts (id, text, source_type, kind, expires_at)
+        VALUES (3, 'Expiring note', 'explicit', 'note', '2026-05-02T00:00:00+00:00');
+        INSERT INTO facts (id, text, source_type, kind) VALUES (4, 'Legacy temporary without expiry', 'explicit', 'temporary');
+    """)
+
+    await run_migrations(conn)
+
+    rows = await conn.execute_fetchall("SELECT id, kind, lifetime FROM facts ORDER BY id")
+    assert [(row["id"], row["kind"], row["lifetime"]) for row in rows] == [
+        (1, "note", "durable"),
+        (2, "note", "temporary"),
+        (3, "note", "temporary"),
+        (4, "note", "durable"),
+    ]
+    indexes = {row["name"] for row in await conn.execute_fetchall("PRAGMA index_list(facts)")}
+    assert "idx_facts_lifetime" in indexes
 
     await conn.close()
 

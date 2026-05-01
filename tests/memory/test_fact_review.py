@@ -9,7 +9,7 @@ from ntrp.memory.fact_review import (
     FactMetadataSuggestionSchema,
     suggest_fact_metadata,
 )
-from ntrp.memory.models import Fact, FactKind, SourceType
+from ntrp.memory.models import Fact, FactKind, FactLifetime, SourceType
 
 
 def mock_llm_response(content: str):
@@ -48,6 +48,7 @@ def test_fact_kind_review_prompt_is_review_only():
 
     assert "metadata suggestions only" in prompt
     assert "Prefer \"note\" when uncertain" in prompt
+    assert "Suggest exactly one lifetime" in prompt
     assert "Do not suggest supersession" in prompt
 
 
@@ -65,7 +66,7 @@ async def test_suggest_fact_metadata_filters_and_normalizes_results():
             ),
             FactMetadataSuggestion(
                 fact_id=2,
-                kind=FactKind.TEMPORARY,
+                lifetime=FactLifetime.TEMPORARY,
                 salience=2,
                 confidence=0.8,
                 reason="short-lived debugging state",
@@ -92,5 +93,6 @@ async def test_suggest_fact_metadata_filters_and_normalizes_results():
     assert suggestions[0].kind == FactKind.PREFERENCE
     assert suggestions[0].salience == 1
     assert suggestions[1].kind == FactKind.NOTE
+    assert suggestions[1].lifetime == FactLifetime.DURABLE
     assert suggestions[1].salience == 1
     assert "no expiry" in suggestions[1].reason

@@ -196,7 +196,7 @@ export function useMemoryKeypress({
           activeFactTab.setCursorPos(activeFactTab.factDetails.fact.text.length);
           return;
         }
-        if (activeTab === "facts" && key.name === "g") {
+        if ((activeTab === "facts" || activeTab === "profile") && key.name === "g") {
           activeFactTab.setSuggestionLoading(true);
           activeFactTab.setSuggestionError(null);
           activeFactTab.setMetadataSuggestion(null);
@@ -210,10 +210,11 @@ export function useMemoryKeypress({
             .finally(() => activeFactTab.setSuggestionLoading(false));
           return;
         }
-        if (activeTab === "facts" && key.name === "a" && activeFactTab.metadataSuggestion) {
+        if ((activeTab === "facts" || activeTab === "profile") && key.name === "a" && activeFactTab.metadataSuggestion) {
           setSaving(true);
           updateFactMetadata(config, activeFactTab.factDetails.fact.id, {
             kind: activeFactTab.metadataSuggestion.kind,
+            lifetime: activeFactTab.metadataSuggestion.lifetime,
             salience: activeFactTab.metadataSuggestion.salience,
             confidence: activeFactTab.metadataSuggestion.confidence,
             expires_at: activeFactTab.metadataSuggestion.expires_at,

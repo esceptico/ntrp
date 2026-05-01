@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
-from ntrp.memory.models import FactKind
+from ntrp.memory.models import FactKind, FactLifetime
 
 # --- Chat / run ---
 
@@ -278,6 +278,7 @@ class UpdateFactRequest(BaseModel):
 
 class UpdateFactMetadataRequest(BaseModel):
     kind: FactKind | None = None
+    lifetime: FactLifetime | None = None
     salience: int | None = Field(default=None, ge=0, le=2)
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     expires_at: datetime | None = None

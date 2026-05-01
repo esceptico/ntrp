@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from ntrp.memory.formatting import format_memory_context_render
-from ntrp.memory.models import FactKind, SourceType
+from ntrp.memory.models import FactKind, FactLifetime, SourceType
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.types import ApprovalInfo
@@ -38,7 +38,11 @@ class RememberInput(BaseModel):
     fact: str = Field(description="The fact to remember (natural language).")
     kind: FactKind = Field(
         default=FactKind.NOTE,
-        description="Fact type: identity, preference, relationship, decision, project, event, artifact, procedure, constraint, temporary, or note.",
+        description="Fact type: identity, preference, relationship, decision, project, event, artifact, procedure, constraint, or note.",
+    )
+    lifetime: FactLifetime = Field(
+        default=FactLifetime.DURABLE,
+        description="How long this fact should remain active: durable or temporary.",
     )
     salience: int = Field(default=0, ge=0, le=2, description="0 normal, 1 useful, 2 always-relevant.")
     confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence in the stated fact.")
@@ -65,6 +69,7 @@ async def remember(execution: ToolExecution, args: RememberInput) -> ToolResult:
         source_ref=args.source,
         happened_at=event_time,
         kind=args.kind,
+        lifetime=args.lifetime,
         salience=args.salience,
         confidence=args.confidence,
         expires_at=expires_at,
@@ -76,7 +81,12 @@ async def remember(execution: ToolExecution, args: RememberInput) -> ToolResult:
 
     entities = ", ".join(result.entities_extracted) if result.entities_extracted else "none"
     return ToolResult(
-        content=f"Remembered: {result.fact.text}\nKind: {result.fact.kind}\nEntities: {entities}",
+        content=(
+            f"Remembered: {result.fact.text}\n"
+            f"Kind: {result.fact.kind}\n"
+            f"Lifetime: {result.fact.lifetime}\n"
+            f"Entities: {entities}"
+        ),
         preview="Remembered",
     )
 
