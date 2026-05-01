@@ -29,11 +29,13 @@ def build_memory_policy_proposals(
     injection_preview: dict[str, Any],
     profile_preview: ProfilePolicyPreview,
     prune_preview: dict[str, Any],
+    supersession_candidates: list[dict[str, Any]] | None = None,
 ) -> list[LearningPolicyProposal]:
     proposals: list[LearningPolicyProposal] = []
     proposals.extend(_injection_proposals(injection_preview))
     proposals.extend(_profile_proposals(profile_preview))
     proposals.extend(_prune_proposals(prune_preview))
+    proposals.extend(_supersession_proposals(supersession_candidates or []))
     return proposals
 
 
@@ -204,6 +206,49 @@ def _prune_proposals(preview: dict[str, Any]) -> list[LearningPolicyProposal]:
                 "summary": summary,
                 "criteria": criteria,
                 "observation_ids": observation_ids,
+            },
+        )
+    ]
+
+
+def _supersession_proposals(candidates: list[dict[str, Any]]) -> list[LearningPolicyProposal]:
+    if not candidates:
+        return []
+
+    pairs = []
+    evidence_ids: list[str] = []
+    for candidate in candidates[:_MAX_EVIDENCE_IDS]:
+        older_id = candidate.get("older_fact_id")
+        newer_id = candidate.get("newer_fact_id")
+        if older_id is None or newer_id is None:
+            continue
+        pairs.append(
+            {
+                "older_fact_id": older_id,
+                "newer_fact_id": newer_id,
+                "kind": candidate.get("kind"),
+                "entity": candidate.get("entity_name"),
+            }
+        )
+        evidence_ids.extend([f"fact:{older_id}", f"fact:{newer_id}"])
+
+    if not pairs:
+        return []
+
+    return [
+        LearningPolicyProposal(
+            source_id="facts:supersession_candidates",
+            scope="profile",
+            signal=f"{len(pairs)} same-entity profile fact pair(s) may need supersession review.",
+            evidence_ids=tuple(dict.fromkeys(evidence_ids)),
+            change_type="supersession_review",
+            target_key="memory.facts.supersession.profile",
+            proposal="Review older/newer profile fact pairs and mark stale facts as superseded when the newer fact replaces the old one.",
+            rationale="Contradictory profile facts should preserve history but avoid competing equally in recall.",
+            expected_metric="fewer stale profile facts injected into active context",
+            details={
+                "pair_count": len(pairs),
+                "pairs": pairs,
             },
         )
     ]

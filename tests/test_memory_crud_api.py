@@ -911,6 +911,54 @@ class TestMemoryAuditAPI:
         ] == []
 
     @pytest.mark.asyncio
+    async def test_learning_policy_scan_surfaces_supersession_review(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        repo = test_runtime.memory.facts
+        user = await repo.create_entity("User")
+        older = await repo.create(
+            "User prefers concise answers",
+            SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+        )
+        newer = await repo.create(
+            "User prefers detailed answers",
+            SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+        )
+        await repo.add_entity_ref(older.id, "User", user.id)
+        await repo.add_entity_ref(newer.id, "User", user.id)
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.post(
+            "/memory/learning/propose",
+            json={
+                "include_skill_notes": False,
+                "access_limit": 1,
+                "profile_limit": 10,
+                "prune_limit": 1,
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        candidates = body["created_candidates"]
+        candidate = next(row for row in candidates if row["change_type"] == "supersession_review")
+        event = next(row for row in body["created_events"] if row["id"] == candidate["evidence_event_ids"][0])
+        assert candidate["target_key"] == "memory.facts.supersession.profile"
+        assert event["evidence_ids"] == [f"fact:{older.id}", f"fact:{newer.id}"]
+        assert candidate["details"]["pairs"] == [
+            {
+                "older_fact_id": older.id,
+                "newer_fact_id": newer.id,
+                "kind": "preference",
+                "entity": "User",
+            }
+        ]
+
+    @pytest.mark.asyncio
     async def test_repair_embeddings_is_explicit_and_audited(
         self,
         test_client: AsyncClient,

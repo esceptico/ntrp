@@ -538,10 +538,15 @@ class LearningService:
             max_sources=prune_max_sources,
             limit=prune_limit,
         )
+        supersession_candidates = await self._memory.facts.list_supersession_candidates(
+            PROFILE_FACT_KINDS,
+            limit=profile_limit,
+        )
         proposals = build_memory_policy_proposals(
             injection_preview=injection_preview,
             profile_preview=profile_preview,
             prune_preview=prune_preview,
+            supersession_candidates=supersession_candidates,
         )
 
         created_events: list[LearningEvent] = []

@@ -728,6 +728,7 @@ Implementation status:
 2026-05-01: learning review scan proposes deduplicated memory-policy candidates from existing telemetry; it never auto-applies them.
 2026-05-01: chat prompt assembly adds bounded current-message memory prefetch (`chat_prefetch`) with duplicate filtering against the always-visible session memory.
 2026-05-01: learning review scan proposes skill-note review candidates from explicit skill-scoped learning events with direct evidence ids; it never writes skill files.
+2026-05-01: learning review scan surfaces aggregate profile-fact supersession review instead of auto-mutating contradictory facts.
 2026-05-01: Memory UI has a Learning tab for candidate review and approve/reject status changes.
 ```
 
@@ -816,7 +817,7 @@ learning_candidate
   id
   created_at
   status                 proposed | approved | applied | rejected | reverted
-  change_type            retrieval_rule | injection_rule | compression_rule | prune_rule | skill_note | prompt_note
+  change_type            retrieval_rule | injection_rule | compression_rule | prune_rule | supersession_review | skill_note | prompt_note
   target_key             stable id for the rule/skill/prompt section
   proposal               small text or structured patch
   rationale              why this should help
