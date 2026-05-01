@@ -92,22 +92,18 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
       return <Hints items={[["y", action], ["n/esc", "cancel"]]} />;
     }
     const selectedStatus = learningTab.selectedCandidate?.status;
-    const canReview = learningTab.focusPane === "details";
-    const canApprove = canReview && canApproveLearningCandidate(selectedStatus);
-    const canApply = canReview && canApplyLearningCandidate(selectedStatus);
-    const canReject = canReview && canRejectLearningCandidate(selectedStatus);
-    const canRevert = canReview && canRevertLearningCandidate(selectedStatus);
+    const canApprove = canApproveLearningCandidate(selectedStatus);
+    const canApply = canApplyLearningCandidate(selectedStatus);
+    const canReject = canRejectLearningCandidate(selectedStatus);
+    const canRevert = canRevertLearningCandidate(selectedStatus);
     const reviewHints: [string, string][] = [];
     if (canApprove) reviewHints.push(["a", "approve"]);
     if (canApply) reviewHints.push(["a", "apply"]);
     if (canReject) reviewHints.push(["d", "reject"]);
     if (canRevert) reviewHints.push(["z", "revert"]);
     reviewHints.push(["p", "create proposals"], ["r", "refresh"]);
-    if (learningTab.focusPane === "details") {
-      return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ...reviewHints]} />;
-    }
     if (learningTab.searchMode) return <Hints items={[["type", "search"], ["esc", "clear/exit"], ["enter", "done"]]} />;
-    return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["l", "lane"], ["s", "status"], ["v", "type"], ...reviewHints, ["o", "sort"]]} />;
+    return <Hints items={[["↑↓", "select"], ["/", "search"], ["l", "lane"], ["s", "status"], ["v", "type"], ...reviewHints, ["p", "scan"], ["r", "refresh"], ["o", "sort"]]} />;
   }
 
   const tab = activeTab === "facts" ? factsTab : obsTab;

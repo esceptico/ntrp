@@ -35,6 +35,19 @@ interface SessionInfo {
   last_activity: string;
 }
 
+const MAX_SIDEBAR_SESSIONS = 8;
+
+function visibleSessions(sessions: SessionInfo[], currentSessionId: string | null): SessionInfo[] {
+  const visible = sessions.slice(0, MAX_SIDEBAR_SESSIONS);
+  if (!currentSessionId || visible.some((session) => session.session_id === currentSessionId)) {
+    return visible;
+  }
+
+  const current = sessions.find((session) => session.session_id === currentSessionId);
+  if (!current) return visible;
+  return [...visible.slice(0, MAX_SIDEBAR_SESSIONS - 1), current];
+}
+
 function SessionRow({ session, isCurrent, glowColor, width }: { session: SessionInfo; isCurrent: boolean; glowColor?: string; width: number }) {
   const indicator = isCurrent ? "\u25B8 " : "  ";
   const label = session.name || session.session_id;
@@ -75,11 +88,13 @@ export function SessionsList({ sessions, currentSessionId, sessionStates, width,
 
   const t = hasStreaming ? (Math.sin(phase * Math.PI * 2 / 60) + 1) / 2 : 1;
   const streamingColor = hasStreaming ? lerpColor(colors.text.disabled, accentValue, t) : accentValue;
+  const visible = visibleSessions(sessions, currentSessionId);
+  const hiddenCount = Math.max(0, sessions.length - visible.length);
 
   return (
     <box flexDirection="column">
       <SectionHeader label="SESSIONS" />
-      {sessions.map((s) => (
+      {visible.map((s) => (
         <box key={s.session_id} onMouseDown={onSessionClick ? () => onSessionClick(s.session_id) : undefined}>
           <SessionRow
             session={s}
@@ -89,6 +104,9 @@ export function SessionsList({ sessions, currentSessionId, sessionStates, width,
           />
         </box>
       ))}
+      {hiddenCount > 0 && (
+        <text><span fg={D()}>+{hiddenCount} more in /sessions</span></text>
+      )}
     </box>
   );
 }

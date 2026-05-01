@@ -13,6 +13,7 @@ import { IntegrationsSection } from "./IntegrationsSection.js";
 import { AutomationsSection } from "./AutomationsSection.js";
 import { SessionsList } from "./SessionsList.js";
 import { MemorySection } from "./MemorySection.js";
+import { summarizeLearningCandidates } from "../../lib/memoryLearning.js";
 
 interface SidebarProps {
   config: Config;
@@ -31,6 +32,8 @@ interface SidebarProps {
 export const Sidebar = React.memo(function Sidebar({ config, serverConfig, serverVersion, data, usage, width, height, currentSessionId, sessionStates, sections, onSessionClick }: SidebarProps) {
   const { accentValue } = useAccentColor();
   const contentWidth = width - 2;
+  const learningSummary = summarizeLearningCandidates(data.learningCandidates);
+  const showMemory = (sections.memory_stats && data.memoryStats) || learningSummary.needsAction > 0;
 
   return (
     <scrollbox
@@ -52,7 +55,13 @@ export const Sidebar = React.memo(function Sidebar({ config, serverConfig, serve
         {sections.usage && <UsageSection usage={usage} />}
         {sections.integrations && serverConfig && <IntegrationsSection cfg={serverConfig} />}
         {sections.automations && data.nextAutomations.length > 0 && <AutomationsSection automations={data.nextAutomations} width={contentWidth} config={config} />}
-        {sections.memory_stats && data.memoryStats && <MemorySection stats={data.memoryStats} />}
+        {showMemory && (
+          <MemorySection
+            stats={sections.memory_stats ? data.memoryStats : null}
+            learningCandidates={data.learningCandidates}
+            width={contentWidth}
+          />
+        )}
 
         {sections.sessions && data.sessions.length > 0 && (
           <SessionsList

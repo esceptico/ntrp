@@ -1,5 +1,17 @@
+import type { LearningCandidate } from "../api/client.js";
+
 export type LearningLane = "memory" | "runtime" | "skill" | "automation";
 export type LearningLaneFilter = "all" | LearningLane;
+
+export interface LearningNotificationSummary {
+  total: number;
+  proposed: number;
+  readyToApply: number;
+  active: number;
+  closed: number;
+  needsAction: number;
+  needsActionByLane: Record<LearningLane, number>;
+}
 
 export function learningChangeLabel(changeType: string): string {
   switch (changeType) {
@@ -104,6 +116,59 @@ export function canRejectLearningCandidate(status: string | undefined): boolean 
 
 export function canRevertLearningCandidate(status: string | undefined): boolean {
   return status === "applied";
+}
+
+export function learningCandidateIsActive(candidate: LearningCandidate): boolean {
+  const lane = learningLane(candidate.change_type, candidate.target_key);
+  return (
+    candidate.status === "applied" ||
+    (candidate.status === "approved" && (lane === "runtime" || lane === "skill"))
+  );
+}
+
+export function summarizeLearningCandidates(candidates: LearningCandidate[]): LearningNotificationSummary {
+  const summary: LearningNotificationSummary = {
+    total: candidates.length,
+    proposed: 0,
+    readyToApply: 0,
+    active: 0,
+    closed: 0,
+    needsAction: 0,
+    needsActionByLane: {
+      memory: 0,
+      runtime: 0,
+      skill: 0,
+      automation: 0,
+    },
+  };
+
+  for (const candidate of candidates) {
+    const lane = learningLane(candidate.change_type, candidate.target_key);
+    if (candidate.status === "proposed") {
+      summary.proposed += 1;
+      summary.needsAction += 1;
+      summary.needsActionByLane[lane] += 1;
+      continue;
+    }
+
+    if (learningCandidateIsActive(candidate)) {
+      summary.active += 1;
+      continue;
+    }
+
+    if (candidate.status === "approved") {
+      summary.readyToApply += 1;
+      summary.needsAction += 1;
+      summary.needsActionByLane[lane] += 1;
+      continue;
+    }
+
+    if (candidate.status === "rejected" || candidate.status === "reverted") {
+      summary.closed += 1;
+    }
+  }
+
+  return summary;
 }
 
 export function learningApprovalEffect(changeType: string): string {

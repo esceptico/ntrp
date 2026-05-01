@@ -413,7 +413,6 @@ export function useMemoryKeypress({
       if (
         activeTab === "learning" &&
         !learningTab.searchMode &&
-        learningTab.focusPane === "details" &&
         learningTab.selectedCandidate
       ) {
         if (learningTab.confirmStatus) {
@@ -456,6 +455,10 @@ export function useMemoryKeypress({
         }
       }
 
+      if (activeTab === "learning" && !learningTab.searchMode && key.name === "tab") {
+        return;
+      }
+
       if (activeTab === "learning" && !learningTab.searchMode && key.name === "p") {
         learningTab.setConfirmProposalScan(true);
         return;
@@ -490,6 +493,15 @@ export function useMemoryKeypress({
         const tab = activeTab === "context" ? accessTab : activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : activeTab === "learning" ? learningTab : eventsTab;
         if (tab.searchMode) {
           tab.handleKeys(key);
+          return;
+        }
+        if (activeTab === "learning") {
+          if (tab.searchQuery) {
+            tab.setSearchQuery("");
+            tab.setSelectedIndex(0);
+            return;
+          }
+          onClose();
           return;
         }
         if (tab.focusPane === "details") {

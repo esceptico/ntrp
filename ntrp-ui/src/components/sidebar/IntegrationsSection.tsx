@@ -23,10 +23,13 @@ function getIntegrationEntries(cfg: ServerConfig): IntegrationEntry[] {
 }
 
 export function IntegrationsSection({ cfg }: { cfg: ServerConfig }) {
-  const entries = getIntegrationEntries(cfg);
+  const entries = getIntegrationEntries(cfg).filter((entry) => entry.on || entry.error);
   return (
     <box flexDirection="column">
       <SectionHeader label="INTEGRATIONS" />
+      {entries.length === 0 && (
+        <text><span fg={D()}>none connected</span></text>
+      )}
       {entries.map(({ key, label, on, error }) => {
         const color = error ? colors.status.error : on ? colors.status.success : D();
         return (

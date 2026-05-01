@@ -13,6 +13,7 @@ import { useRecallInspectTab } from "../../../hooks/useRecallInspectTab.js";
 import { Dialog, Tabs, colors, truncateText } from "../../ui/index.js";
 import { useContentWidth } from "../../../contexts/index.js";
 import { memoryAccessSourceLabel } from "../../../lib/memoryAccess.js";
+import { summarizeLearningCandidates } from "../../../lib/memoryLearning.js";
 import { MEMORY_TABS, MEMORY_TAB_COPY, memoryTabLabels, type MemoryTabType } from "../../../lib/memoryTabs.js";
 import { FactsSection, type FactReviewMarker } from "./FactsSection.js";
 import { LearningSection } from "./LearningSection.js";
@@ -120,6 +121,10 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const eventsTab = useMemoryEventsTab(memoryEvents, contentWidth);
   const accessTab = useMemoryAccessTab(memoryAccessEvents, contentWidth);
   const recallTab = useRecallInspectTab(config);
+  const learningSummary = useMemo(
+    () => summarizeLearningCandidates(learningCandidates),
+    [learningCandidates],
+  );
 
   const { saving } = useMemoryKeypress({
     activeTab,
@@ -182,7 +187,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                         ? learningTab
                         : eventsTab;
         const filterDisplay = activeTab === "overview"
-          ? `${factTotal} facts · ${observationTotal} patterns · ${learningCandidates.length} proposals`
+          ? `${factTotal} facts · ${observationTotal} patterns · ${learningSummary.needsAction} learning`
           : activeTab === "recall"
           ? recallTab.result
             ? `${recallTab.result.observations.length} patterns · ${recallTab.result.facts.length} facts`
@@ -224,7 +229,9 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                   `lane: ${learningTab.laneFilter}`,
                   `status: ${learningTab.statusFilter}`,
                   `type: ${learningTab.changeTypeFilter ?? "all"}`,
-                  `candidates: ${learningCandidates.length}`,
+                  `review: ${learningSummary.proposed}`,
+                  `apply: ${learningSummary.readyToApply}`,
+                  `active: ${learningSummary.active}`,
                   `events: ${learningEvents.length}`,
                 ].join(" · ")
             : activeTab === "events"

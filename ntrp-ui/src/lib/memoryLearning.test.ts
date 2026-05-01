@@ -6,11 +6,37 @@ import {
   canRevertLearningCandidate,
   learningApprovalEffect,
   learningCandidateEffect,
+  learningCandidateIsActive,
   learningChangeLabel,
   learningLane,
   learningLaneLabel,
   learningTargetLabel,
+  summarizeLearningCandidates,
 } from "./memoryLearning.js";
+import type { LearningCandidate } from "../api/client.js";
+
+function candidate(
+  status: string,
+  changeType: string,
+  targetKey: string,
+): LearningCandidate {
+  return {
+    id: 1,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    status,
+    change_type: changeType,
+    target_key: targetKey,
+    proposal: "proposal",
+    rationale: "rationale",
+    evidence_event_ids: [],
+    expected_metric: null,
+    policy_version: "test",
+    applied_at: null,
+    reverted_at: null,
+    details: {},
+  };
+}
 
 test("labels memory learning change types for humans", () => {
   expect(learningChangeLabel("skill_note")).toBe("skill note");
@@ -69,4 +95,26 @@ test("matches learning action affordances to legal transitions", () => {
 
   expect(canRevertLearningCandidate("applied")).toBe(true);
   expect(canRevertLearningCandidate("approved")).toBe(false);
+});
+
+test("summarizes learning notifications by pending action", () => {
+  const summary = summarizeLearningCandidates([
+    candidate("proposed", "memory_feedback", "memory.extraction.feedback"),
+    candidate("approved", "memory_feedback", "memory.injection.ranking"),
+    candidate("approved", "skill_note", "skill.release"),
+    candidate("approved", "prompt_note", "prompt.runtime"),
+    candidate("applied", "automation_rule", "automation.daily"),
+    candidate("rejected", "memory_feedback", "memory.profile.quality"),
+  ]);
+
+  expect(learningCandidateIsActive(candidate("approved", "skill_note", "skill.release"))).toBe(true);
+  expect(learningCandidateIsActive(candidate("approved", "memory_feedback", "memory.profile.quality"))).toBe(false);
+  expect(summary.total).toBe(6);
+  expect(summary.proposed).toBe(1);
+  expect(summary.readyToApply).toBe(1);
+  expect(summary.active).toBe(3);
+  expect(summary.closed).toBe(1);
+  expect(summary.needsAction).toBe(2);
+  expect(summary.needsActionByLane.memory).toBe(2);
+  expect(summary.needsActionByLane.skill).toBe(0);
 });

@@ -10,7 +10,7 @@ import type {
   MemoryStorageHealth,
 } from "../../../api/client.js";
 import { useAccentColor } from "../../../hooks/index.js";
-import { learningLane } from "../../../lib/memoryLearning.js";
+import { summarizeLearningCandidates } from "../../../lib/memoryLearning.js";
 import { truncateText } from "../../../lib/utils.js";
 import { colors } from "../../ui/index.js";
 
@@ -149,11 +149,7 @@ export function OverviewSection({
     : "";
   const policyReviewCount = memoryInjectionPolicy?.summary.candidates ?? 0;
   const cleanupCount = pruneDryRun?.summary.total ?? 0;
-  const activeLearningCount = learningCandidates.filter((candidate) =>
-    candidate.status === "applied" ||
-    (learningLane(candidate.change_type, candidate.target_key) === "runtime" && candidate.status === "approved")
-  ).length;
-  const openLearningCount = learningCandidates.filter((candidate) => candidate.status === "proposed").length;
+  const learningSummary = summarizeLearningCandidates(learningCandidates);
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
@@ -188,10 +184,12 @@ export function OverviewSection({
         />
         <MetricRow
           label="Improve"
-          value={learningCandidates.length}
+          value={learningSummary.needsAction}
           note={
-            learningCandidates.length > 0
-              ? `${openLearningCount} proposed, ${activeLearningCount} active`
+            learningSummary.needsAction > 0
+              ? `${learningSummary.proposed} review, ${learningSummary.readyToApply} apply, ${learningSummary.active} active`
+              : learningSummary.active > 0
+                ? `${learningSummary.active} active, no pending review`
               : "no proposals"
           }
           width={textWidth}

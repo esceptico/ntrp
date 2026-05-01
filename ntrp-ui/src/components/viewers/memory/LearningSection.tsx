@@ -4,7 +4,11 @@ import type { LearningTabState } from "../../../hooks/useLearningTab.js";
 import { formatTimeAgo, shortTime } from "../../../lib/format.js";
 import { cleanLearningText, learningDetailRows, summarizeLearningEvidence } from "../../../lib/memoryLearningDetails.js";
 import {
-  learningCandidateEffect,
+  canApplyLearningCandidate,
+  canApproveLearningCandidate,
+  canRejectLearningCandidate,
+  canRevertLearningCandidate,
+  learningCandidateIsActive,
   learningChangeLabel,
   learningLane,
   learningLaneLabel,
@@ -34,19 +38,6 @@ function statusColor(status: string, accent: string): string {
   }
 }
 
-function lifecycleLabel(status: string): string {
-  switch (status) {
-    case "proposed":
-      return "evidence -> proposed";
-    case "approved":
-      return "evidence -> approved";
-    case "applied":
-      return "evidence -> applied";
-    default:
-      return `evidence -> ${status}`;
-  }
-}
-
 function laneColor(lane: string, accent: string): string {
   switch (lane) {
     case "runtime":
@@ -63,11 +54,12 @@ function laneColor(lane: string, accent: string): string {
 function DetailsSummary({ details, width }: { details: Record<string, unknown>; width: number }) {
   const rows = learningDetailRows(details);
   if (rows.length === 0) {
-    return <text><span fg={colors.text.disabled}>No extra review metadata</span></text>;
+    return null;
   }
 
   return (
-    <box flexDirection="column">
+    <box marginTop={2} flexDirection="column">
+      <text><span fg={colors.text.muted}>Source summary</span></text>
       {rows.map((row, index) => (
         <text key={index}>
           <span fg={colors.text.muted}>{row.label} </span>
@@ -78,22 +70,27 @@ function DetailsSummary({ details, width }: { details: Record<string, unknown>; 
   );
 }
 
+function evidenceSourceLabel(event: LearningEvent): string {
+  const source = event.source_type.replaceAll("_", " ");
+  if (event.scope && event.scope !== event.source_type) return `${source} / ${event.scope}`;
+  return source;
+}
+
 function EvidenceList({ events, width }: { events: LearningEvent[]; width: number }) {
   if (events.length === 0) {
-    return <text><span fg={colors.text.disabled}>No loaded evidence events</span></text>;
+    return <text><span fg={colors.text.disabled}>No evidence loaded for this proposal.</span></text>;
   }
   return (
     <box flexDirection="column">
-      {events.slice(0, 5).map((event) => (
+      {events.slice(0, 4).map((event) => (
         <box key={event.id} flexDirection="column" marginBottom={1}>
           <text>
-            <span fg={colors.text.secondary}>{event.source_type}</span>
-            <span fg={colors.text.disabled}> / {event.scope}</span>
-            <span fg={colors.text.disabled}> {"\u2502"} {truncateText(event.signal, width - 20)}</span>
+            <span fg={colors.text.secondary}>{evidenceSourceLabel(event)}</span>
+            <span fg={colors.text.disabled}> {"\u2502"} {truncateText(cleanLearningText(event.signal), width - 20)}</span>
           </text>
           {event.evidence_ids.length > 0 && (
             <text>
-              <span fg={colors.text.muted}>  evidence </span>
+              <span fg={colors.text.muted}>  based on </span>
               <span fg={colors.text.disabled}>
                 {truncateText(summarizeLearningEvidence(event.evidence_ids), width - 11)}
               </span>
@@ -101,11 +98,90 @@ function EvidenceList({ events, width }: { events: LearningEvent[]; width: numbe
           )}
         </box>
       ))}
-      {events.length > 5 && (
-        <text><span fg={colors.text.disabled}>... +{events.length - 5} events</span></text>
+      {events.length > 4 && (
+        <text><span fg={colors.text.disabled}>... +{events.length - 4} more evidence events</span></text>
       )}
     </box>
   );
+}
+
+function primaryEvidenceText(candidate: LearningCandidate, events: LearningEvent[]): string {
+  const signal = events.find((event) => event.signal.trim())?.signal;
+  return cleanLearningText(signal || candidate.proposal);
+}
+
+function proposalTitle(candidate: LearningCandidate, events: LearningEvent[]): string {
+  const lane = learningLane(candidate.change_type, candidate.target_key);
+  if (lane === "automation") return "Automation issue needs review";
+  if (candidate.change_type === "prune_rule") return "Cleanup rule needs review";
+  if (candidate.change_type === "profile_rule") return "Profile memory needs review";
+  if (candidate.change_type === "supersession_review") return "Profile conflict needs review";
+  if (candidate.target_key.includes("injection")) return "Sent memory behavior needs review";
+  if (candidate.target_key.includes("recall")) return "Memory search behavior needs review";
+  if (candidate.target_key.includes("compression")) return "Pattern compression needs review";
+  if (lane === "skill") return "Skill idea needs review";
+  if (lane === "runtime") return "Prompt behavior needs review";
+  if (events.length > 0) return "Memory behavior needs review";
+  return "Learning proposal needs review";
+}
+
+function stateLabel(candidate: LearningCandidate): string {
+  if (candidate.status === "proposed") return "Needs decision";
+  if (candidate.status === "approved" && learningCandidateIsActive(candidate)) return "Active in prompts";
+  if (candidate.status === "approved") return "Ready to apply";
+  if (candidate.status === "applied") return "Active";
+  if (candidate.status === "reverted") return "Reverted";
+  if (candidate.status === "rejected") return "Rejected";
+  return candidate.status;
+}
+
+function actionText(candidate: LearningCandidate): string {
+  const lane = learningLane(candidate.change_type, candidate.target_key);
+  if (canApproveLearningCandidate(candidate.status)) {
+    if (lane === "runtime" || lane === "skill") {
+      return "Approve to let future prompts use this note, or reject it if it is not useful.";
+    }
+    return "Approve if this should become a durable improvement candidate. Reject it if the evidence is weak.";
+  }
+  if (canApplyLearningCandidate(candidate.status)) {
+    if (lane === "memory") return "Apply to make memory extraction, recall, or cleanup prompts use this note.";
+    if (lane === "automation") return "Apply to make matching future automation runs use this note.";
+    return "Apply to mark this prompt note as fully handled.";
+  }
+  if (canRevertLearningCandidate(candidate.status)) {
+    return "This is active now. Revert it if it is making behavior worse.";
+  }
+  if (canRejectLearningCandidate(candidate.status)) {
+    return "Reject if this should not affect future behavior.";
+  }
+  return "No action is needed for this item.";
+}
+
+function impactText(candidate: LearningCandidate): string {
+  const lane = learningLane(candidate.change_type, candidate.target_key);
+  if (lane === "automation") {
+    return candidate.status === "applied"
+      ? "Matching automation runs already receive this note before they run."
+      : "If applied, matching automation runs will receive this note before they run.";
+  }
+  if (lane === "memory") {
+    return candidate.status === "applied"
+      ? "Memory extraction, recall, or cleanup already uses this policy note."
+      : "If applied, memory extraction, recall, or cleanup will use this policy note.";
+  }
+  if (lane === "skill") {
+    return "If approved, future prompts can use this skill note.";
+  }
+  return "If approved, future prompts can use this runtime note.";
+}
+
+function actionHint(candidate: LearningCandidate): string {
+  const parts: string[] = [];
+  if (canApproveLearningCandidate(candidate.status)) parts.push("a approve");
+  if (canApplyLearningCandidate(candidate.status)) parts.push("a apply");
+  if (canRejectLearningCandidate(candidate.status)) parts.push("d reject");
+  if (canRevertLearningCandidate(candidate.status)) parts.push("z revert");
+  return parts.join("  ");
 }
 
 function CandidateDetails({
@@ -127,7 +203,7 @@ function CandidateDetails({
   const textWidth = Math.max(10, width - 2);
 
   if (!candidate && !confirmProposalScan) {
-    return <text><span fg={colors.text.muted}>No learning candidates. Press p to create proposals from review sources.</span></text>;
+    return <text><span fg={colors.text.muted}>No learning inbox items. Press p to scan review sources.</span></text>;
   }
   if (!candidate) {
     return (
@@ -138,57 +214,49 @@ function CandidateDetails({
     );
   }
 
-  const effect = learningCandidateEffect(candidate.change_type, candidate.status);
   const lane = learningLane(candidate.change_type, candidate.target_key);
+  const title = proposalTitle(candidate, events);
+  const action = actionText(candidate);
+  const hint = actionHint(candidate);
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       <text>
-        <span fg={accentValue}>learning proposal</span>
+        <span fg={accentValue}>{title}</span>
         <span fg={colors.text.disabled}> {"\u2502"} </span>
         <span fg={laneColor(lane, accentValue)}>{learningLaneLabel(lane)}</span>
         <span fg={colors.text.disabled}> {"\u2502"} </span>
-        <span fg={statusColor(candidate.status, accentValue)}>{candidate.status}</span>
+        <span fg={statusColor(candidate.status, accentValue)}>{stateLabel(candidate)}</span>
         <span fg={colors.text.disabled}> {"\u2502"} {formatTimeAgo(candidate.created_at)}</span>
       </text>
 
       <box marginTop={1} flexDirection="column">
         <text>
-          <span fg={colors.text.muted}>lane </span>
-          <span fg={colors.text.secondary}>{learningLaneLabel(lane)}</span>
+          <span fg={colors.text.muted}>What happened</span>
         </text>
         <text>
-          <span fg={colors.text.muted}>type </span>
-          <span fg={colors.text.secondary}>{learningChangeLabel(candidate.change_type)}</span>
+          <span fg={colors.text.secondary}>{truncateText(primaryEvidenceText(candidate, events), textWidth)}</span>
+        </text>
+      </box>
+
+      <box marginTop={1} flexDirection="column">
+        <text>
+          <span fg={colors.text.muted}>What would change</span>
         </text>
         <text>
-          <span fg={colors.text.muted}>applies to </span>
-          <span fg={colors.text.secondary}>{truncateText(learningTargetLabel(candidate.target_key), textWidth - 11)}</span>
+          <span fg={colors.text.secondary}>{truncateText(learningTargetLabel(candidate.target_key), textWidth)}</span>
         </text>
         <text>
-          <span fg={colors.text.muted}>policy </span>
-          <span fg={colors.text.secondary}>{candidate.policy_version}</span>
+          <span fg={colors.text.disabled}>{truncateText(impactText(candidate), textWidth)}</span>
         </text>
-        {effect && (
+      </box>
+
+      <box marginTop={1} flexDirection="column">
+        <text><span fg={colors.text.muted}>What you can do</span></text>
+        <text><span fg={colors.text.secondary}>{truncateText(action, textWidth)}</span></text>
+        {hint && (
           <text>
-            <span fg={colors.text.muted}>effect </span>
-            <span fg={colors.text.secondary}>{effect}</span>
-          </text>
-        )}
-        <text>
-          <span fg={colors.text.muted}>lifecycle </span>
-          <span fg={colors.text.disabled}>{lifecycleLabel(candidate.status)}</span>
-        </text>
-        {candidate.applied_at && (
-          <text>
-            <span fg={colors.text.muted}>applied </span>
-            <span fg={colors.text.disabled}>{formatTimeAgo(candidate.applied_at)}</span>
-          </text>
-        )}
-        {candidate.reverted_at && (
-          <text>
-            <span fg={colors.text.muted}>reverted </span>
-            <span fg={colors.text.disabled}>{formatTimeAgo(candidate.reverted_at)}</span>
+            <span fg={colors.text.disabled}>{hint}</span>
           </text>
         )}
       </box>
@@ -213,31 +281,28 @@ function CandidateDetails({
       )}
 
       <box marginTop={1} flexDirection="column">
-        <text><span fg={colors.text.muted}>PROPOSAL</span></text>
+        <text><span fg={colors.text.muted}>Proposed note</span></text>
         <text><span fg={colors.text.secondary}>{truncateText(candidate.proposal, textWidth)}</span></text>
       </box>
 
       <box marginTop={1} flexDirection="column">
-        <text><span fg={colors.text.muted}>RATIONALE</span></text>
+        <text><span fg={colors.text.muted}>Why ntrp proposed it</span></text>
         <text><span fg={colors.text.disabled}>{truncateText(cleanLearningText(candidate.rationale), textWidth)}</span></text>
       </box>
 
       {candidate.expected_metric && (
         <box marginTop={1} flexDirection="column">
-          <text><span fg={colors.text.muted}>EXPECTED METRIC</span></text>
+          <text><span fg={colors.text.muted}>Success would look like</span></text>
           <text><span fg={colors.text.disabled}>{truncateText(candidate.expected_metric, textWidth)}</span></text>
         </box>
       )}
 
       <box marginTop={2} flexDirection="column">
-        <text><span fg={colors.text.muted}>EVIDENCE</span></text>
+        <text><span fg={colors.text.muted}>Evidence</span></text>
         <EvidenceList events={events} width={textWidth} />
       </box>
 
-      <box marginTop={2} flexDirection="column">
-        <text><span fg={colors.text.muted}>REVIEW METADATA</span></text>
-        <DetailsSummary details={candidate.details} width={textWidth} />
-      </box>
+      <DetailsSummary details={candidate.details} width={textWidth} />
     </box>
   );
 }
@@ -251,16 +316,17 @@ export function LearningSection({ tab, totalCount, height, width }: LearningSect
     const textWidth = listWidth - 4;
     const tagColor = ctx.isSelected ? colors.text.secondary : colors.text.disabled;
     const lane = learningLane(candidate.change_type, candidate.target_key);
+    const title = proposalTitle(candidate, []);
 
     return (
       <box flexDirection="column" marginBottom={1}>
         <text>
-          <span fg={ctx.colors.text}>{truncateText(candidate.proposal, textWidth)}</span>
+          <span fg={ctx.colors.text}>{truncateText(title, textWidth)}</span>
         </text>
         <text>
           <span fg={laneColor(lane, accentValue)}>{learningLaneLabel(lane)}</span>
           <span fg={tagColor}> {"\u2502"} </span>
-          <span fg={statusColor(candidate.status, accentValue)}>{candidate.status}</span>
+          <span fg={statusColor(candidate.status, accentValue)}>{stateLabel(candidate)}</span>
           <span fg={tagColor}> {learningChangeLabel(candidate.change_type)}</span>
           <span fg={tagColor}> [{shortTime(candidate.created_at)}]</span>
         </text>

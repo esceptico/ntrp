@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { Config } from "../types.js";
 import { getContextUsage, getAutomations, listSessions, type Automation, type SessionListItem } from "../api/client.js";
-import { getStats, type Stats } from "../api/memory.js";
+import { getLearningCandidates, getStats, type LearningCandidate, type Stats } from "../api/memory.js";
 import type { SidebarSettings } from "./useSettings.js";
 
 const POLL_INTERVAL = 60_000;
@@ -17,9 +17,41 @@ export interface SidebarData {
   nextAutomations: Automation[];
   sessions: SessionListItem[];
   memoryStats: Stats | null;
+  learningCandidates: LearningCandidate[];
 }
 
-const EMPTY: SidebarData = { context: null, nextAutomations: [], sessions: [], memoryStats: null };
+const EMPTY: SidebarData = {
+  context: null,
+  nextAutomations: [],
+  sessions: [],
+  memoryStats: null,
+  learningCandidates: [],
+};
+
+function nextAutomations(automations: Automation[]): Automation[] {
+  return automations
+    .filter(s => s.enabled && (s.next_run_at || s.running_since))
+    .sort((a, b) => {
+      if (a.running_since && !b.running_since) return -1;
+      if (!a.running_since && b.running_since) return 1;
+      return new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime();
+    })
+    .slice(0, 5);
+}
+
+async function loadMemorySidebar(config: Config, includeStats: boolean): Promise<{
+  memoryStats: Stats | null;
+  learningCandidates: LearningCandidate[];
+}> {
+  const [memoryStats, learningResult] = await Promise.all([
+    includeStats ? getStats(config).catch(() => null) : null,
+    getLearningCandidates(config, 40).catch(() => ({ candidates: [] as LearningCandidate[] })),
+  ]);
+  return {
+    memoryStats,
+    learningCandidates: learningResult.candidates ?? [],
+  };
+}
 
 export function useSidebar(config: Config, active: boolean, messageCount: number, sessionId: string | null, sidebarSettings?: SidebarSettings) {
   const [data, setData] = useState<SidebarData>(EMPTY);
@@ -50,24 +82,21 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
       const sid = sessionIdRef.current ?? undefined;
       const ss = sidebarSettingsRef.current;
       const wantMemory = ss?.memory_stats ?? false;
-      const [context, automationsResult, sessionsResult, memoryStats] = await Promise.all([
+      const [context, automationsResult, sessionsResult, memory] = await Promise.all([
         getContextUsage(config, sid),
         getAutomations(config),
         listSessions(config).catch(() => ({ sessions: [] })),
-        wantMemory ? getStats(config).catch(() => null) : null,
+        loadMemorySidebar(config, wantMemory),
       ]);
       if (!activeRef.current) return;
 
-      const nextAutomations = automationsResult.automations
-        .filter(s => s.enabled && (s.next_run_at || s.running_since))
-        .sort((a, b) => {
-          if (a.running_since && !b.running_since) return -1;
-          if (!a.running_since && b.running_since) return 1;
-          return new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime();
-        })
-        .slice(0, 5);
-
-      setData({ context, nextAutomations, sessions: sessionsResult.sessions, memoryStats });
+      setData({
+        context,
+        nextAutomations: nextAutomations(automationsResult.automations),
+        sessions: sessionsResult.sessions,
+        memoryStats: memory.memoryStats,
+        learningCandidates: memory.learningCandidates,
+      });
     } catch {
       // ignore
     }
@@ -80,17 +109,15 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
     Promise.all([
       listSessions(config).catch(() => ({ sessions: [] as SessionListItem[] })),
       getAutomations(config).catch(() => ({ automations: [] as Automation[] })),
-      wantMemory ? getStats(config).catch(() => null) : null,
-    ]).then(([sessionsResult, automationsResult, memoryStats]) => {
-      const nextAutomations = automationsResult.automations
-        .filter(s => s.enabled && (s.next_run_at || s.running_since))
-        .sort((a, b) => {
-          if (a.running_since && !b.running_since) return -1;
-          if (!a.running_since && b.running_since) return 1;
-          return new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime();
-        })
-        .slice(0, 5);
-      setData(prev => ({ ...prev, sessions: sessionsResult.sessions, nextAutomations, memoryStats }));
+      loadMemorySidebar(config, wantMemory),
+    ]).then(([sessionsResult, automationsResult, memory]) => {
+      setData(prev => ({
+        ...prev,
+        sessions: sessionsResult.sessions,
+        nextAutomations: nextAutomations(automationsResult.automations),
+        memoryStats: memory.memoryStats,
+        learningCandidates: memory.learningCandidates,
+      }));
     });
   }, [config]);
 
@@ -103,11 +130,17 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
     return () => { if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current); };
   }, [active, sessionId, messageCount, refreshSession]);
 
-  // Fetch memory stats when toggled on
+  // Keep memory notifications fresh; load full stats only when that panel is enabled.
   const wantMemory = sidebarSettings?.memory_stats ?? false;
   useEffect(() => {
-    if (!active || !wantMemory) return;
-    getStats(config).then(stats => setData(prev => ({ ...prev, memoryStats: stats }))).catch(() => {});
+    if (!active) return;
+    loadMemorySidebar(config, wantMemory)
+      .then(memory => setData(prev => ({
+        ...prev,
+        memoryStats: memory.memoryStats,
+        learningCandidates: memory.learningCandidates,
+      })))
+      .catch(() => {});
   }, [wantMemory, active, config]);
 
   // Fallback poll for all data including global
