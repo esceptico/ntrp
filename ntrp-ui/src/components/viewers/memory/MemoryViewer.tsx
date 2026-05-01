@@ -22,10 +22,36 @@ import { RecallInspectSection } from "./RecallInspectSection.js";
 
 const TABS = ["overview", "recall", "context", "profile", "facts", "observations", "prune", "events"] as const;
 type TabType = (typeof TABS)[number];
+type SortableTab = { sortOrder: string };
 
 interface MemoryViewerProps {
   config: Config;
   onClose: () => void;
+}
+
+function tabLabels(width: number): Record<TabType, string> {
+  if (width < 95) {
+    return {
+      overview: "Home",
+      recall: "Query",
+      context: "Used",
+      profile: "Prof",
+      facts: "Facts",
+      observations: "Pat",
+      prune: "Clean",
+      events: "Log",
+    };
+  }
+  return {
+    overview: "Overview",
+    recall: "Recall",
+    context: "Used",
+    profile: "Profile",
+    facts: "Facts",
+    observations: "Patterns",
+    prune: "Cleanup",
+    events: "Log",
+  };
 }
 
 export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
@@ -100,9 +126,22 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     >
       {({ width, height }) => {
         const sectionHeight = height - 2;
-        const tab = activeTab === "overview" || activeTab === "recall" ? null : activeTab === "context" ? accessTab : activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : eventsTab;
+        const tab: SortableTab | null =
+          activeTab === "overview" || activeTab === "recall"
+            ? null
+            : activeTab === "context"
+              ? accessTab
+              : activeTab === "profile"
+                ? profileTab
+                : activeTab === "facts"
+                  ? factsTab
+                  : activeTab === "observations"
+                    ? obsTab
+                    : activeTab === "prune"
+                      ? pruneTab
+                      : eventsTab;
         const filterDisplay = activeTab === "overview"
-          ? "Recall · Context · Profile · Facts · Patterns · Cleanup · Log"
+          ? "Recall · Used · Profile · Facts · Patterns · Cleanup · Log"
           : activeTab === "recall"
           ? recallTab.result
             ? `${recallTab.result.observations.length} patterns · ${recallTab.result.facts.length} facts`
@@ -110,7 +149,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
           : activeTab === "context"
           ? [
               `source: ${accessTab.sourceFilter === "all" ? "all" : memoryAccessSourceLabel(accessTab.sourceFilter)}`,
-              `records: ${memoryAccessEvents.length}`,
+              `loaded: ${memoryAccessEvents.length}`,
             ].join(" · ")
           : activeTab === "profile"
           ? `profile facts: ${profileFacts.length}`
@@ -151,7 +190,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 tabs={TABS}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                labels={{ overview: "Overview", recall: "Recall", context: "Context", profile: "Profile", facts: "Facts", observations: "Patterns", prune: "Cleanup", events: "Log" }}
+                labels={tabLabels(width)}
               />
               <box flexGrow={1} />
               {filterDisplay && (
