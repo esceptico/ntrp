@@ -17,6 +17,7 @@ import {
 } from "../../../lib/memoryLearning.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
 import { ListDetailSection, memoryDetailWidth } from "./ListDetailSection.js";
+import { MemoryMetaLine, MemoryMetaRows } from "./MemoryMeta.js";
 
 interface LearningSectionProps {
   tab: LearningTabState;
@@ -63,14 +64,8 @@ function DetailsSummary({ details, width }: { details: Record<string, unknown>; 
   if (rows.length === 0) return null;
 
   return (
-    <box marginTop={1} flexDirection="column">
-      <text><span fg={colors.text.muted}>Signals</span></text>
-      {rows.map((row, index) => (
-        <text key={index}>
-          <span fg={colors.text.secondary}>{row.label}</span>
-          <span fg={colors.text.disabled}> {"\u2502"} {truncateText(row.value, Math.max(8, width - row.label.length - 3))}</span>
-        </text>
-      ))}
+    <box marginTop={1}>
+      <MemoryMetaRows title="Signals" rows={rows} width={width} />
     </box>
   );
 }
@@ -109,10 +104,13 @@ function EvidenceSummary({ events, width }: { events: LearningEvent[]; width: nu
   }
 
   return (
-    <text>
-      <span fg={colors.text.secondary}>{truncateText(evidenceSourceLabel(event), Math.min(28, width))}</span>
-      <span fg={colors.text.disabled}> {"\u2502"} {events.length} source{events.length === 1 ? "" : "s"}</span>
-    </text>
+    <MemoryMetaLine
+      width={width}
+      segments={[
+        { text: evidenceSourceLabel(event), fg: colors.text.secondary },
+        { text: `${events.length} source${events.length === 1 ? "" : "s"}`, fg: colors.text.disabled },
+      ]}
+    />
   );
 }
 
@@ -267,14 +265,15 @@ function CandidateDetails({
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
-      <text>
-        <span fg={accentValue}>{title}</span>
-        <span fg={colors.text.disabled}> {"\u2502"} </span>
-        <span fg={laneColor(lane, accentValue)}>{learningLaneLabel(lane)}</span>
-        <span fg={colors.text.disabled}> {"\u2502"} </span>
-        <span fg={statusColor(candidate.status, accentValue)}>{stateLabel(candidate)}</span>
-        <span fg={colors.text.disabled}> {"\u2502"} {formatTimeAgo(candidate.created_at)}</span>
-      </text>
+      <MemoryMetaLine
+        width={textWidth}
+        segments={[
+          { text: title, fg: accentValue },
+          { text: learningLaneLabel(lane), fg: laneColor(lane, accentValue) },
+          { text: stateLabel(candidate), fg: statusColor(candidate.status, accentValue) },
+          { text: formatTimeAgo(candidate.created_at), fg: colors.text.disabled },
+        ]}
+      />
 
       <box marginTop={1} flexDirection="column">
         <text><span fg={colors.text.muted}>Proposed note</span></text>

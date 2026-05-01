@@ -4,6 +4,7 @@ import { useAccentColor } from "../../../hooks/index.js";
 import { formatTimeAgo, shortTime } from "../../../lib/format.js";
 import type { PruneTabState } from "../../../hooks/usePruneTab.js";
 import { ListDetailSection, memoryDetailWidth } from "./ListDetailSection.js";
+import { MemoryMetaLine, MemoryMetaRows } from "./MemoryMeta.js";
 
 interface PruneSectionProps {
   tab: PruneTabState;
@@ -34,17 +35,23 @@ function PruneDetails({
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
-      <text>
-        <span fg={accentValue}>cleanup candidates</span>
-        <span fg={colors.text.disabled}> {"\u2502"} older than {dryRun.criteria.older_than_days}d</span>
-        <span fg={colors.text.disabled}> {"\u2502"} support {"<="} {dryRun.criteria.max_sources}</span>
-      </text>
+      <MemoryMetaLine
+        width={textWidth}
+        segments={[
+          { text: "cleanup candidates", fg: accentValue },
+          { text: `older than ${dryRun.criteria.older_than_days}d`, fg: colors.text.disabled },
+          { text: `support <= ${dryRun.criteria.max_sources}`, fg: colors.text.disabled },
+        ]}
+      />
       <box marginTop={1}>
-        <text>
-          <span fg={colors.text.secondary}>{dryRun.summary.total} matching patterns</span>
-          <span fg={colors.text.disabled}> {"\u2502"} {dryRun.summary.empty_sources} no sources</span>
-          <span fg={colors.text.disabled}> {"\u2502"} {dryRun.summary.over_1000_chars} long</span>
-        </text>
+        <MemoryMetaLine
+          width={textWidth}
+          segments={[
+            { text: `${dryRun.summary.total} matching patterns`, fg: colors.text.secondary },
+            { text: `${dryRun.summary.empty_sources} no sources`, fg: colors.text.disabled },
+            { text: `${dryRun.summary.over_1000_chars} long`, fg: colors.text.disabled },
+          ]}
+        />
       </box>
 
       {candidate ? (
@@ -52,20 +59,21 @@ function PruneDetails({
           <box marginTop={2}>
             <text><span fg={colors.text.primary}>{truncateText(candidate.summary, textWidth)}</span></text>
           </box>
-          <box marginTop={1} flexDirection="column">
-            <text>
-              <span fg={colors.text.muted}>archive candidate</span>
-              <span fg={colors.text.disabled}> {"\u2502"} {candidate.reason}</span>
-            </text>
-            <text>
-              <span fg={colors.text.disabled}>created {formatTimeAgo(candidate.created_at)}</span>
-              <span fg={colors.text.disabled}> {"\u2502"} updated {formatTimeAgo(candidate.updated_at)}</span>
-            </text>
-            <text>
-              <span fg={colors.text.disabled}>{candidate.evidence_count} facts</span>
-              <span fg={colors.text.disabled}> {"\u2502"} {"\u00D7"}{candidate.access_count}</span>
-              <span fg={colors.text.disabled}> {"\u2502"} {candidate.chars} chars</span>
-            </text>
+          <box marginTop={1}>
+            <MemoryMetaRows
+              width={textWidth}
+              rows={[
+                { label: "archive candidate", value: candidate.reason, labelFg: colors.text.muted },
+                {
+                  label: "dates",
+                  value: `created ${formatTimeAgo(candidate.created_at)}; updated ${formatTimeAgo(candidate.updated_at)}`,
+                },
+                {
+                  label: "shape",
+                  value: `${candidate.evidence_count} facts; ${candidate.access_count} uses; ${candidate.chars} chars`,
+                },
+              ]}
+            />
           </box>
           <box marginTop={2}>
             {tab.confirmApply === "selected" ? (

@@ -13,6 +13,7 @@ import { memoryAccessSourceLabel } from "../../../lib/memoryAccess.js";
 import { memoryMetadataRows } from "../../../lib/memoryMetadata.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
 import { ListDetailSection, memoryDetailWidth } from "./ListDetailSection.js";
+import { MemoryMetaLine, MemoryMetaRows } from "./MemoryMeta.js";
 
 interface MemoryAccessSectionProps {
   tab: MemoryAccessTabState;
@@ -43,16 +44,7 @@ function MetadataRows({ details, width }: { details: Record<string, unknown>; wi
   if (rows.length === 0) {
     return <text><span fg={colors.text.disabled}>No extra run metadata</span></text>;
   }
-  return (
-    <box flexDirection="column">
-      {rows.map((row, index) => (
-        <text key={index}>
-          <span fg={colors.text.muted}>{row.label.toLowerCase()} </span>
-          <span fg={colors.text.disabled}>{truncateText(row.value, Math.max(8, width - row.label.length - 1))}</span>
-        </text>
-      ))}
-    </box>
-  );
+  return <MemoryMetaRows rows={rows.map((row) => ({ label: row.label.toLowerCase(), value: row.value }))} width={width} />;
 }
 
 function MemoryTextList<T>({
@@ -133,51 +125,37 @@ function AccessDetails({
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
-      <text>
-        <span fg={accentValue}>sent memory</span>
-        <span fg={colors.text.disabled}> {"\u2502"} </span>
-        <span fg={colors.text.secondary}>{memoryAccessSourceLabel(event.source)}</span>
-        <span fg={colors.text.disabled}> {"\u2502"} {formatTimeAgo(event.created_at)}</span>
-      </text>
+      <MemoryMetaLine
+        width={textWidth}
+        segments={[
+          { text: "sent memory", fg: accentValue },
+          { text: memoryAccessSourceLabel(event.source), fg: colors.text.secondary },
+          { text: formatTimeAgo(event.created_at), fg: colors.text.disabled },
+        ]}
+      />
 
       <box marginTop={1} flexDirection="column">
-        <text>
-          <span fg={colors.text.muted}>policy </span>
-          <span fg={colors.text.secondary}>{event.policy_version}</span>
-        </text>
-        <text>
-          <span fg={colors.text.muted}>chars </span>
-          <span fg={colors.text.secondary}>{event.formatted_chars}</span>
-        </text>
-        {event.query && (
-          <text>
-            <span fg={colors.text.muted}>query </span>
-            <span fg={colors.text.secondary}>{truncateText(event.query, textWidth - 7)}</span>
-          </text>
-        )}
+        <MemoryMetaRows
+          width={textWidth}
+          rows={[
+            { label: "policy", value: event.policy_version, valueFg: colors.text.secondary },
+            { label: "chars", value: event.formatted_chars, valueFg: colors.text.secondary },
+            ...(event.query ? [{ label: "query", value: event.query, valueFg: colors.text.secondary }] : []),
+          ]}
+        />
       </box>
 
       <box marginTop={1} flexDirection="column">
-        <text>
-          <span fg={colors.text.muted}>retrieved </span>
-          <span fg={colors.text.secondary}>{retrievedFacts} facts</span>
-          <span fg={colors.text.disabled}> / </span>
-          <span fg={colors.text.secondary}>{retrievedPatterns} patterns</span>
-        </text>
-        <text>
-          <span fg={colors.text.muted}>injected  </span>
-          <span fg={colors.text.secondary}>{injectedFacts} facts</span>
-          <span fg={colors.text.disabled}> / </span>
-          <span fg={colors.text.secondary}>{injectedPatterns} patterns</span>
-        </text>
-        {(omittedFacts > 0 || omittedPatterns > 0) && (
-          <text>
-            <span fg={colors.text.muted}>omitted   </span>
-            <span fg={colors.text.secondary}>{omittedFacts} facts</span>
-            <span fg={colors.text.disabled}> / </span>
-            <span fg={colors.text.secondary}>{omittedPatterns} patterns</span>
-          </text>
-        )}
+        <MemoryMetaRows
+          width={textWidth}
+          rows={[
+            { label: "retrieved", value: `${retrievedFacts} facts; ${retrievedPatterns} patterns`, valueFg: colors.text.secondary },
+            { label: "injected", value: `${injectedFacts} facts; ${injectedPatterns} patterns`, valueFg: colors.text.secondary },
+            ...(omittedFacts > 0 || omittedPatterns > 0
+              ? [{ label: "omitted", value: `${omittedFacts} facts; ${omittedPatterns} patterns`, valueFg: colors.text.secondary }]
+              : []),
+          ]}
+        />
       </box>
 
       {candidate && (
