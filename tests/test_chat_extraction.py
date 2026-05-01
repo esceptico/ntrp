@@ -13,7 +13,7 @@ import ntrp.llm.models as llm_models
 from ntrp.automation.store import AutomationStore
 from ntrp.config import Config
 from ntrp.llm.models import EmbeddingModel, Provider
-from ntrp.memory.chat_extraction import ExtractedChatFact
+from ntrp.memory.chat_extraction import ExtractedChatFact, _format_messages
 from ntrp.memory.extraction_handler import create_chat_extraction_handler
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.models import FactKind
@@ -31,6 +31,20 @@ def _make_messages(n: int) -> tuple[dict, ...]:
         role = "user" if i % 2 == 0 else "assistant"
         msgs.append({"role": role, "content": f"Message {i}"})
     return tuple(msgs)
+
+
+def test_extraction_transcript_marks_assistant_as_context_only():
+    transcript = _format_messages(
+        (
+            {"role": "user", "content": "I prefer raw SQL."},
+            {"role": "assistant", "content": "You prefer Prisma."},
+            {"role": "tool", "content": "irrelevant"},
+        )
+    )
+
+    assert "USER (evidence): I prefer raw SQL." in transcript
+    assert "ASSISTANT (context only): You prefer Prisma." in transcript
+    assert "irrelevant" not in transcript
 
 
 def _fact(

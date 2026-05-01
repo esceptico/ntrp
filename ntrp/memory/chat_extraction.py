@@ -16,6 +16,12 @@ CHAT_EXTRACTION_PROMPT = env.from_string("""Extract durable source-of-truth fact
 Return facts worth remembering permanently as typed source-of-truth records — things useful to recall months later.
 Do not write observations, patterns, summaries, or inferred profile statements. Those are derived later from facts.
 
+Evidence rules:
+- User messages are the evidence source.
+- Assistant messages are context only; never turn assistant wording into memory unless a later user message explicitly confirms it.
+- User corrections override earlier assistant claims and earlier extracted-looking context.
+- Do not store meta-commentary about the current task unless it is a reusable preference, standing rule, or durable decision.
+
 EXTRACT:
 - Decisions: "User chose Postgres for the project" (not both sides — just the outcome)
 - Preferences: "User prefers raw SQL over ORMs"
@@ -35,6 +41,7 @@ SKIP:
 - Inferences not directly stated in the conversation
 - Patterns not directly stated: do not infer "User is X type of person" from one example
 - Assistant-generated claims unless the user confirms or states them
+- Praise, jokes, reactions, and one-off opinions about the assistant's current output
 
 RULES:
 - Each fact must be atomic and concrete (one idea per fact)
@@ -88,7 +95,8 @@ def _format_messages(messages: tuple[dict, ...]) -> str:
             continue
         if content.startswith(SESSION_HANDOFF_MARKER):
             continue
-        parts.append(f"{role}: {content}")
+        label = "USER (evidence)" if role == "user" else "ASSISTANT (context only)"
+        parts.append(f"{label}: {content}")
     return "\n\n".join(parts)
 
 

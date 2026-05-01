@@ -733,6 +733,7 @@ Implementation status:
 2026-05-01: learning review scan turns memory feedback events into deduplicated review candidates for extraction, profile, compression, and prune policy.
 2026-05-01: operator automations now reuse bounded memory prefetch (`operator_prefetch`) so scheduled tasks get task-specific context without growing always-visible memory.
 2026-05-01: Memory UI has a Learning tab for candidate review and approve/reject status changes.
+2026-05-01: chat extraction now marks user messages as evidence and assistant messages as context-only before prompting the memory model.
 ```
 
 Rejected for now:
