@@ -184,6 +184,40 @@ function actionHint(candidate: LearningCandidate): string {
   return parts.join("  ");
 }
 
+function ScanConfirmation({ width, height }: { width: number; height: number }) {
+  const { accentValue } = useAccentColor();
+  const textWidth = Math.max(10, width - 2);
+
+  return (
+    <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
+      <text><span fg={accentValue}>Scan review sources?</span></text>
+
+      <box marginTop={1} flexDirection="column">
+        <text><span fg={colors.text.muted}>What this does</span></text>
+        <text>
+          <span fg={colors.text.secondary}>
+            {truncateText("Looks for new reviewable improvements in memory, prompts, skills, and automation feedback.", textWidth)}
+          </span>
+        </text>
+      </box>
+
+      <box marginTop={1} flexDirection="column">
+        <text><span fg={colors.text.muted}>What it will not do</span></text>
+        <text>
+          <span fg={colors.text.secondary}>
+            {truncateText("Nothing is applied automatically. New items land in this inbox for review.", textWidth)}
+          </span>
+        </text>
+      </box>
+
+      <box marginTop={1} flexDirection="column">
+        <text><span fg={colors.text.muted}>Confirm</span></text>
+        <text><span fg={colors.text.disabled}>y scan now  n/esc cancel</span></text>
+      </box>
+    </box>
+  );
+}
+
 function CandidateDetails({
   candidate,
   events,
@@ -202,16 +236,15 @@ function CandidateDetails({
   const { accentValue } = useAccentColor();
   const textWidth = Math.max(10, width - 2);
 
+  if (confirmProposalScan) {
+    return <ScanConfirmation width={width} height={height} />;
+  }
+
   if (!candidate && !confirmProposalScan) {
     return <text><span fg={colors.text.muted}>No learning inbox items. Press p to scan review sources.</span></text>;
   }
   if (!candidate) {
-    return (
-      <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
-        <text><span fg={colors.status.warning}>create new learning proposals from review sources?</span></text>
-        <text><span fg={colors.text.disabled}>press y to confirm, n or esc to cancel</span></text>
-      </box>
-    );
+    return null;
   }
 
   const lane = learningLane(candidate.change_type, candidate.target_key);
@@ -261,19 +294,17 @@ function CandidateDetails({
         )}
       </box>
 
-      {(confirmStatus || confirmProposalScan) && (
+      {confirmStatus && (
         <box marginTop={1} flexDirection="column">
           <text>
             <span fg={colors.status.warning}>
-              {confirmProposalScan
-                ? "create new learning proposals from review sources?"
-                : confirmStatus === "approved"
-                  ? "approve this proposal?"
-                  : confirmStatus === "applied"
-                    ? "apply this proposal?"
-                    : confirmStatus === "reverted"
-                      ? "revert this applied proposal?"
-                      : "reject this proposal?"}
+              {confirmStatus === "approved"
+                ? "approve this proposal?"
+                : confirmStatus === "applied"
+                  ? "apply this proposal?"
+                  : confirmStatus === "reverted"
+                    ? "revert this applied proposal?"
+                    : "reject this proposal?"}
             </span>
           </text>
           <text><span fg={colors.text.disabled}>press y to confirm, n or esc to cancel</span></text>
