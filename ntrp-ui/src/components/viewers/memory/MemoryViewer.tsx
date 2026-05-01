@@ -60,8 +60,25 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const [factFilters, setFactFilters] = useState<FactFilters>({ status: "active" });
   const [observationFilters, setObservationFilters] = useState<ObservationFilters>({ status: "active" });
 
-  const { facts, factTotal, profileFacts, observations, observationTotal, pruneDryRun, memoryEvents, memoryAccessEvents, memoryInjectionPolicy, memoryAudit, loading, error, setFacts, setObservations, setError, reload } =
-    useMemoryData(config, factFilters, observationFilters);
+  const {
+    facts,
+    factTotal,
+    profileFacts,
+    memoryProfilePolicy,
+    observations,
+    observationTotal,
+    pruneDryRun,
+    memoryEvents,
+    memoryAccessEvents,
+    memoryInjectionPolicy,
+    memoryAudit,
+    loading,
+    error,
+    setFacts,
+    setObservations,
+    setError,
+    reload,
+  } = useMemoryData(config, factFilters, observationFilters);
 
   const profileTab = useFactsTab(config, profileFacts, 80, profileFilters, setProfileFilters, profileFacts.length);
   const factsTab = useFactsTab(config, facts, 80, factFilters, setFactFilters, factTotal);
@@ -153,7 +170,10 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
               `loaded: ${memoryAccessEvents.length}`,
             ].join(" · ")
           : activeTab === "profile"
-          ? `profile facts: ${profileFacts.length}`
+          ? [
+              `profile facts: ${profileFacts.length}`,
+              `review: ${(memoryProfilePolicy?.summary.candidates ?? 0) + (memoryProfilePolicy?.summary.issues ?? 0)}`,
+            ].join(" · ")
           : activeTab === "facts"
           ? [
               `kind: ${factsTab.filters.kind ?? "all"}`,
@@ -205,6 +225,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
             {activeTab === "overview" && (
               <OverviewSection
                 profileFacts={profileFacts}
+                memoryProfilePolicy={memoryProfilePolicy}
                 factTotal={factTotal}
                 observationTotal={observationTotal}
                 pruneDryRun={pruneDryRun}

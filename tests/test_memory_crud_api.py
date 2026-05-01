@@ -690,6 +690,41 @@ class TestMemoryAuditAPI:
         assert reasons_by_source["chat_prompt"] == ["over_budget", "pattern_heavy"]
 
     @pytest.mark.asyncio
+    async def test_profile_policy_preview_flags_review_candidates_and_profile_issues(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        profile_fact = await test_runtime.memory.facts.create(
+            text="User prefers concise architecture reviews with direct evidence.",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+            confidence=0.6,
+        )
+        candidate = await test_runtime.memory.facts.create(
+            text="User is working on a durable continuous-learning roadmap.",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.PROJECT,
+            salience=2,
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.get(
+            "/memory/profile/policy/preview",
+            params={"fact_char_budget": 20, "char_budget": 40},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["policy"]["version"] == "memory.profile.preview.v1"
+        assert data["summary"]["current_count"] == 1
+        assert data["summary"]["over_budget"] is True
+        assert data["candidates"][0]["fact"]["id"] == candidate.id
+        assert data["candidates"][0]["reasons"] == ["important_non_profile"]
+        assert data["issues"][0]["fact"]["id"] == profile_fact.id
+        assert data["issues"][0]["reasons"] == ["profile_overlong", "profile_low_confidence"]
+
+    @pytest.mark.asyncio
     async def test_repair_embeddings_is_explicit_and_audited(
         self,
         test_client: AsyncClient,

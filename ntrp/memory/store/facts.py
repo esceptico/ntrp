@@ -113,6 +113,16 @@ _SQL_LIST_PROFILE_FACTS = """
     ORDER BY pinned_at IS NULL, salience DESC, access_count DESC, created_at DESC
     LIMIT ?
 """
+_SQL_LIST_PROFILE_REVIEW_CANDIDATES = """
+    SELECT * FROM facts
+    WHERE archived_at IS NULL
+      AND superseded_by_fact_id IS NULL
+      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+      AND kind NOT IN ({placeholders})
+      AND (pinned_at IS NOT NULL OR salience >= ? OR (salience >= 1 AND access_count >= ?))
+    ORDER BY pinned_at IS NULL, salience DESC, access_count DESC, created_at DESC
+    LIMIT ?
+"""
 _SQL_LIST_SUPERSESSION_CANDIDATES = """
     WITH refs AS (
         SELECT
@@ -481,6 +491,24 @@ class FactRepository:
         params = tuple(kind.value for kind in kinds) + (limit,)
         rows = await self.read_conn.execute_fetchall(
             _SQL_LIST_PROFILE_FACTS.format(placeholders=placeholders),
+            params,
+        )
+        return [Fact.model_validate(_row_dict(r)) for r in rows]
+
+    async def list_profile_review_candidates(
+        self,
+        profile_kinds: Sequence[FactKind],
+        *,
+        min_salience: int,
+        min_access_count: int,
+        limit: int,
+    ) -> list[Fact]:
+        if not profile_kinds:
+            return []
+        placeholders = ",".join("?" * len(profile_kinds))
+        params = tuple(kind.value for kind in profile_kinds) + (min_salience, min_access_count, limit)
+        rows = await self.read_conn.execute_fetchall(
+            _SQL_LIST_PROFILE_REVIEW_CANDIDATES.format(placeholders=placeholders),
             params,
         )
         return [Fact.model_validate(_row_dict(r)) for r in rows]

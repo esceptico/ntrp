@@ -22,6 +22,13 @@ from ntrp.memory.models import (
     Observation,
     SourceType,
 )
+from ntrp.memory.profile_policy import (
+    DEFAULT_PROFILE_CHAR_BUDGET,
+    DEFAULT_PROFILE_FACT_CHAR_BUDGET,
+    DEFAULT_PROFILE_REVIEW_ACCESS_COUNT,
+    ProfilePolicyPreview,
+    profile_policy_preview,
+)
 
 _logger = get_logger(__name__)
 
@@ -416,6 +423,30 @@ class MemoryService:
 
     async def profile(self, limit: int = 6) -> list[Fact]:
         return await self.memory.get_profile(limit=limit)
+
+    async def profile_policy_preview(
+        self,
+        *,
+        limit: int = 100,
+        profile_limit: int = 20,
+        char_budget: int = DEFAULT_PROFILE_CHAR_BUDGET,
+        fact_char_budget: int = DEFAULT_PROFILE_FACT_CHAR_BUDGET,
+        review_access_count: int = DEFAULT_PROFILE_REVIEW_ACCESS_COUNT,
+    ) -> ProfilePolicyPreview:
+        profile_facts = await self.memory.get_profile(limit=profile_limit)
+        review_facts = await self.memory.facts.list_profile_review_candidates(
+            PROFILE_FACT_KINDS,
+            min_salience=2,
+            min_access_count=review_access_count,
+            limit=limit,
+        )
+        return profile_policy_preview(
+            profile_facts=profile_facts,
+            review_facts=review_facts,
+            char_budget=char_budget,
+            fact_char_budget=fact_char_budget,
+            review_access_count=review_access_count,
+        )
 
     async def inspect_recall(self, *, query: str, limit: int = 5) -> tuple[FactContext, SessionMemory]:
         context = await self.memory.inspect_recall(query=query, limit=limit)

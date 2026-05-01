@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.memory.formatting import format_memory_context, format_session_memory
 from ntrp.memory.models import Fact, FactKind, MemoryAccessEvent, MemoryEvent, Observation, SourceType
+from ntrp.memory.profile_policy import ProfilePolicyItem
 from ntrp.memory.service import MemoryService
 from ntrp.server.deps import require_memory
 from ntrp.server.schemas import (
@@ -89,6 +90,14 @@ def _memory_access_event_payload(event: MemoryAccessEvent) -> dict:
         "formatted_chars": event.formatted_chars,
         "policy_version": event.policy_version,
         "details": event.details,
+    }
+
+
+def _profile_policy_item_payload(item: ProfilePolicyItem) -> dict:
+    return {
+        "fact": _fact_payload(item.fact),
+        "reasons": list(item.reasons),
+        "recommendation": item.recommendation,
     }
 
 
@@ -419,6 +428,40 @@ async def get_memory_profile(
 ):
     facts = await svc.profile(limit=limit)
     return {"facts": [_fact_payload(f) for f in facts]}
+
+
+@router.get("/memory/profile/policy/preview")
+async def get_memory_profile_policy_preview(
+    limit: int = Query(default=100, ge=1, le=500),
+    profile_limit: int = Query(default=20, ge=1, le=100),
+    char_budget: int = Query(default=1200, ge=1, le=20000),
+    fact_char_budget: int = Query(default=220, ge=1, le=5000),
+    review_access_count: int = Query(default=3, ge=1, le=1000),
+    svc: MemoryService = Depends(require_memory),
+):
+    preview = await svc.profile_policy_preview(
+        limit=limit,
+        profile_limit=profile_limit,
+        char_budget=char_budget,
+        fact_char_budget=fact_char_budget,
+        review_access_count=review_access_count,
+    )
+    return {
+        "policy": {
+            "version": preview.policy_version,
+            "char_budget": preview.char_budget,
+            "fact_char_budget": preview.fact_char_budget,
+        },
+        "summary": {
+            "current_count": preview.current_count,
+            "current_chars": preview.current_chars,
+            "over_budget": preview.over_budget,
+            "candidates": len(preview.candidates),
+            "issues": len(preview.issues),
+        },
+        "candidates": [_profile_policy_item_payload(item) for item in preview.candidates],
+        "issues": [_profile_policy_item_payload(item) for item in preview.issues],
+    }
 
 
 @router.post("/memory/recall/inspect")

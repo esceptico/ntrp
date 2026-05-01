@@ -37,6 +37,7 @@ backup: backups/memory-20260501-012739.db
 GET  /memory/audit
 POST /memory/prune/dry-run
 GET  /memory/injection-policy/preview
+GET  /memory/profile/policy/preview
 ```
 
 The first implementation is read-only:
@@ -77,6 +78,14 @@ The injection policy preview is also read-only. It scans recent memory access ev
 empty recall queries
 context bundles above the configured character budget
 pattern-heavy bundles where derived observations dominate source facts
+```
+
+The profile policy preview is also read-only. It keeps profile as a projection over source facts and flags:
+
+```text
+pinned, important, or useful-and-repeatedly-used facts that are not profile kinds yet
+profile facts that are too long for always-on memory
+profile facts with low confidence
 ```
 
 ## Target Model
@@ -702,7 +711,8 @@ Implementation status:
 
 ```text
 2026-05-01: memory_access_events records prompt/tool context access.
-2026-05-01: Memory UI has a Context tab for recent injected bundles.
+2026-05-01: Memory UI has a Used tab for recent injected bundles.
+2026-05-01: read-only injection and profile policy previews are exposed in API/UI.
 ```
 
 Rejected for now:

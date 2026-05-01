@@ -4,16 +4,18 @@ import type {
   MemoryAudit,
   MemoryEvent,
   MemoryInjectionPolicyPreview,
+  MemoryProfilePolicyPreview,
   MemoryPruneDryRun,
   MemoryStorageHealth,
 } from "../../../api/client.js";
-import { colors } from "../../ui/index.js";
+import { colors, truncateText } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import { formatTimeAgo } from "../../../lib/format.js";
 import { memoryAccessSourceLabel } from "../../../lib/memoryAccess.js";
 
 interface OverviewSectionProps {
   profileFacts: Fact[];
+  memoryProfilePolicy: MemoryProfilePolicyPreview | null;
   factTotal: number;
   observationTotal: number;
   pruneDryRun: MemoryPruneDryRun | null;
@@ -24,6 +26,14 @@ interface OverviewSectionProps {
   height: number;
   width: number;
 }
+
+const PROFILE_REASON_LABELS: Record<string, string> = {
+  pinned_non_profile: "pinned non-profile",
+  important_non_profile: "important non-profile",
+  reused_non_profile: "reused non-profile",
+  profile_overlong: "overlong",
+  profile_low_confidence: "low confidence",
+};
 
 function MetricRow({ label, value, note }: { label: string; value: string | number; note: string }) {
   return (
@@ -48,6 +58,7 @@ function relationIssueCount(relations: Record<string, number> | undefined): numb
 
 export function OverviewSection({
   profileFacts,
+  memoryProfilePolicy,
   factTotal,
   observationTotal,
   pruneDryRun,
@@ -65,6 +76,12 @@ export function OverviewSection({
     storageIssueCount(memoryAudit?.storage.facts) + storageIssueCount(memoryAudit?.storage.observations);
   const relationIssues = relationIssueCount(memoryAudit?.relations);
   const missingEmbeddings = (memoryAudit?.facts.no_embedding ?? 0) + (memoryAudit?.observations.no_embedding ?? 0);
+  const profileReviewCount =
+    (memoryProfilePolicy?.summary.candidates ?? 0) + (memoryProfilePolicy?.summary.issues ?? 0);
+  const topProfileReview = memoryProfilePolicy?.candidates[0] ?? memoryProfilePolicy?.issues[0] ?? null;
+  const profileReviewLabel = topProfileReview
+    ? topProfileReview.reasons.map((reason) => PROFILE_REASON_LABELS[reason] ?? reason).join(", ")
+    : "";
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
@@ -75,6 +92,7 @@ export function OverviewSection({
 
       <box flexDirection="column" marginTop={2}>
         <MetricRow label="Profile" value={profileFacts.length} note="always-on facts shown to the agent first" />
+        <MetricRow label="Profile review" value={profileReviewCount} note="profile candidates and quality flags" />
         <MetricRow label="Recall" value="query" note="inspect retrieved context before it reaches the agent" />
         <MetricRow label="Used" value={memoryAccessEvents.length} note="recent memory bundles injected into prompts/tools" />
         <MetricRow
@@ -108,6 +126,19 @@ export function OverviewSection({
       </box>
 
       <box flexDirection="column" marginTop={2}>
+        <text><span fg={colors.text.muted}>PROFILE REVIEW</span></text>
+        {topProfileReview ? (
+          <text>
+            <span fg={colors.text.secondary}>#{topProfileReview.fact.id}</span>
+            <span fg={colors.text.disabled}> {"\u2502"} {profileReviewLabel}</span>
+            <span fg={colors.text.disabled}> {"\u2502"} {truncateText(topProfileReview.recommendation, width - 28)}</span>
+          </text>
+        ) : (
+          <text><span fg={colors.text.disabled}>No profile policy flags loaded</span></text>
+        )}
+      </box>
+
+      <box flexDirection="column" marginTop={1}>
         <text><span fg={colors.text.muted}>LATEST USED MEMORY</span></text>
         {latestAccess ? (
           <text>

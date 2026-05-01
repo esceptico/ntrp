@@ -3,6 +3,7 @@ import type { Config } from "../types.js";
 import {
   getFacts,
   getMemoryProfile,
+  getMemoryProfilePolicyPreview,
   getObservations,
   getMemoryPruneDryRun,
   getMemoryEvents,
@@ -17,6 +18,7 @@ import {
   type MemoryEvent,
   type MemoryAccessEvent,
   type MemoryInjectionPolicyPreview,
+  type MemoryProfilePolicyPreview,
   type MemoryAudit,
 } from "../api/client.js";
 
@@ -24,6 +26,7 @@ interface UseMemoryDataResult {
   facts: Fact[];
   factTotal: number;
   profileFacts: Fact[];
+  memoryProfilePolicy: MemoryProfilePolicyPreview | null;
   observations: Observation[];
   observationTotal: number;
   pruneDryRun: MemoryPruneDryRun | null;
@@ -45,6 +48,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
   const [facts, setFacts] = useState<Fact[]>([]);
   const [factTotal, setFactTotal] = useState(0);
   const [profileFacts, setProfileFacts] = useState<Fact[]>([]);
+  const [memoryProfilePolicy, setMemoryProfilePolicy] = useState<MemoryProfilePolicyPreview | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [observationTotal, setObservationTotal] = useState(0);
   const [pruneDryRun, setPruneDryRun] = useState<MemoryPruneDryRun | null>(null);
@@ -62,9 +66,20 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
 
     (async () => {
       try {
-        const [factsData, profileData, obsData, pruneData, eventsData, accessData, policyData, auditData] = await Promise.all([
+        const [
+          factsData,
+          profileData,
+          profilePolicyData,
+          obsData,
+          pruneData,
+          eventsData,
+          accessData,
+          policyData,
+          auditData,
+        ] = await Promise.all([
           getFacts(config, 200, factFilters),
           getMemoryProfile(config, 20),
+          getMemoryProfilePolicyPreview(config, 100),
           getObservations(config, 100, observationFilters),
           getMemoryPruneDryRun(config),
           getMemoryEvents(config, 100),
@@ -76,6 +91,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
         setFacts(factsData.facts || []);
         setFactTotal(factsData.total || 0);
         setProfileFacts(profileData.facts || []);
+        setMemoryProfilePolicy(profilePolicyData);
         setObservations(obsData.observations || []);
         setObservationTotal(obsData.total || 0);
         setPruneDryRun(pruneData);
@@ -100,6 +116,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
     facts,
     factTotal,
     profileFacts,
+    memoryProfilePolicy,
     observations,
     observationTotal,
     pruneDryRun,
