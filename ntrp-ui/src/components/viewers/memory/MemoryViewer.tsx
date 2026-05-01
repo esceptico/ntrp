@@ -7,6 +7,7 @@ import { usePruneTab } from "../../../hooks/usePruneTab.js";
 import { useMemoryEventsTab } from "../../../hooks/useMemoryEventsTab.js";
 import { useMemoryData } from "../../../hooks/useMemoryData.js";
 import { useMemoryKeypress } from "../../../hooks/useMemoryKeypress.js";
+import { useRecallInspectTab } from "../../../hooks/useRecallInspectTab.js";
 import { Dialog, Loading, Tabs, colors } from "../../ui/index.js";
 import { FactsSection } from "./FactsSection.js";
 import { ObservationsSection } from "./ObservationsSection.js";
@@ -14,8 +15,9 @@ import { PruneSection } from "./PruneSection.js";
 import { MemoryEventsSection } from "./MemoryEventsSection.js";
 import { MemoryFooter } from "./MemoryFooter.js";
 import { OverviewSection } from "./OverviewSection.js";
+import { RecallInspectSection } from "./RecallInspectSection.js";
 
-const TABS = ["overview", "profile", "facts", "observations", "prune", "events"] as const;
+const TABS = ["overview", "recall", "profile", "facts", "observations", "prune", "events"] as const;
 type TabType = (typeof TABS)[number];
 
 interface MemoryViewerProps {
@@ -37,10 +39,12 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const obsTab = useObservationsTab(config, observations, 80, observationFilters, setObservationFilters, observationTotal);
   const pruneTab = usePruneTab(pruneDryRun?.candidates ?? [], 80);
   const eventsTab = useMemoryEventsTab(memoryEvents, 80);
+  const recallTab = useRecallInspectTab(config);
 
   const { saving } = useMemoryKeypress({
     activeTab,
     setActiveTab,
+    recallTab,
     profileTab,
     factsTab,
     obsTab,
@@ -79,6 +83,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
       footer={
         <MemoryFooter
           activeTab={activeTab}
+          recallTab={recallTab}
           profileTab={profileTab}
           factsTab={factsTab}
           obsTab={obsTab}
@@ -89,9 +94,13 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     >
       {({ width, height }) => {
         const sectionHeight = height - 2;
-        const tab = activeTab === "overview" ? null : activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : eventsTab;
+        const tab = activeTab === "overview" || activeTab === "recall" ? null : activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : eventsTab;
         const filterDisplay = activeTab === "overview"
-          ? "Profile · Facts · Patterns · Cleanup · Log"
+          ? "Recall · Profile · Facts · Patterns · Cleanup · Log"
+          : activeTab === "recall"
+          ? recallTab.result
+            ? `${recallTab.result.observations.length} patterns · ${recallTab.result.facts.length} facts`
+            : "no query yet"
           : activeTab === "profile"
           ? `profile facts: ${profileFacts.length}`
           : activeTab === "facts"
@@ -131,7 +140,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 tabs={TABS}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                labels={{ overview: "Overview", profile: "Profile", facts: "Facts", observations: "Patterns", prune: "Cleanup", events: "Log" }}
+                labels={{ overview: "Overview", recall: "Recall", profile: "Profile", facts: "Facts", observations: "Patterns", prune: "Cleanup", events: "Log" }}
               />
               <box flexGrow={1} />
               {filterDisplay && (
@@ -152,6 +161,10 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 height={sectionHeight}
                 width={width}
               />
+            )}
+
+            {activeTab === "recall" && (
+              <RecallInspectSection tab={recallTab} height={sectionHeight} width={width} />
             )}
 
             {activeTab === "profile" && (

@@ -3,11 +3,13 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ntrp.memory.formatting import format_memory_context, format_session_memory
 from ntrp.memory.models import Fact, FactKind, MemoryEvent, Observation, SourceType
 from ntrp.memory.service import MemoryService
 from ntrp.server.deps import require_memory
 from ntrp.server.schemas import (
     FactKindReviewSuggestionRequest,
+    MemoryRecallInspectRequest,
     MemoryPruneApplyRequest,
     MemoryPruneDryRunRequest,
     UpdateFactMetadataRequest,
@@ -377,6 +379,36 @@ async def get_memory_profile(
 ):
     facts = await svc.profile(limit=limit)
     return {"facts": [_fact_payload(f) for f in facts]}
+
+
+@router.post("/memory/recall/inspect")
+async def inspect_memory_recall(request: MemoryRecallInspectRequest, svc: MemoryService = Depends(require_memory)):
+    context, session_memory = await svc.inspect_recall(query=request.query, limit=request.limit)
+    return {
+        "query": request.query,
+        "limit": request.limit,
+        "formatted_recall": format_memory_context(
+            query_facts=context.facts,
+            query_observations=context.observations,
+            bundled_sources=context.bundled_sources,
+        ),
+        "formatted_session": format_session_memory(
+            profile_facts=session_memory.profile_facts,
+            observations=session_memory.observations,
+            user_facts=session_memory.user_facts,
+        ),
+        "facts": [_fact_payload(f) for f in context.facts],
+        "observations": [_observation_payload(o) for o in context.observations],
+        "bundled_sources": {
+            str(observation_id): [_fact_payload(f) for f in facts]
+            for observation_id, facts in context.bundled_sources.items()
+        },
+        "session": {
+            "profile_facts": [_fact_payload(f) for f in session_memory.profile_facts],
+            "observations": [_observation_payload(o) for o in session_memory.observations],
+            "user_facts": [_fact_payload(f) for f in session_memory.user_facts],
+        },
+    }
 
 
 @router.post("/memory/prune/dry-run")

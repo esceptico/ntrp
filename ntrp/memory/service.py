@@ -9,8 +9,8 @@ from ntrp.memory.audit import (
     observation_prune_dry_run,
 )
 from ntrp.memory.fact_review import FactMetadataSuggestion, suggest_fact_metadata
-from ntrp.memory.facts import PROFILE_FACT_KINDS, FactMemory
-from ntrp.memory.models import Dream, EntityRef, Fact, FactKind, MemoryEvent, Observation, SourceType
+from ntrp.memory.facts import PROFILE_FACT_KINDS, FactMemory, SessionMemory
+from ntrp.memory.models import Dream, EntityRef, Fact, FactContext, FactKind, MemoryEvent, Observation, SourceType
 
 _logger = get_logger(__name__)
 
@@ -377,6 +377,11 @@ class MemoryService:
 
     async def profile(self, limit: int = 6) -> list[Fact]:
         return await self.memory.get_profile(limit=limit)
+
+    async def inspect_recall(self, *, query: str, limit: int = 5) -> tuple[FactContext, SessionMemory]:
+        context = await self.memory.inspect_recall(query=query, limit=limit)
+        session_memory = await self.memory.get_session_memory()
+        return context, session_memory
 
     async def prune_observations_dry_run(
         self,

@@ -45,6 +45,7 @@ export function OverviewSection({
 
       <box flexDirection="column" marginTop={2}>
         <MetricRow label="Profile" value={profileFacts.length} note="always-on facts shown to the agent first" />
+        <MetricRow label="Recall" value="query" note="inspect retrieved context before it reaches the agent" />
         <MetricRow label="Facts" value={factTotal} note="source-of-truth memory records" />
         <MetricRow label="Patterns" value={observationTotal} note="derived summaries with supporting facts" />
         <MetricRow
@@ -57,6 +58,7 @@ export function OverviewSection({
 
       <box flexDirection="column" marginTop={2}>
         <text><span fg={colors.text.muted}>OPEN NEXT</span></text>
+        <text><span fg={colors.text.secondary}>Recall</span><span fg={colors.text.disabled}> to debug query-time memory retrieval</span></text>
         <text><span fg={colors.text.secondary}>Profile</span><span fg={colors.text.disabled}> for what the agent should always know</span></text>
         <text><span fg={colors.text.secondary}>Facts</span><span fg={colors.text.disabled}> to edit durable truth</span></text>
         <text><span fg={colors.text.secondary}>Patterns</span><span fg={colors.text.disabled}> to inspect derived memory and provenance</span></text>

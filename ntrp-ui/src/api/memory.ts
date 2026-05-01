@@ -176,6 +176,21 @@ export interface MemoryEvent {
   details: Record<string, unknown>;
 }
 
+export interface MemoryRecallInspectResult {
+  query: string;
+  limit: number;
+  formatted_recall: string | null;
+  formatted_session: string | null;
+  facts: Fact[];
+  observations: Observation[];
+  bundled_sources: Record<string, Fact[]>;
+  session: {
+    profile_facts: Fact[];
+    observations: Observation[];
+    user_facts: Fact[];
+  };
+}
+
 function factQuery(limit: number, filters?: FactFilters): string {
   const params = new URLSearchParams({ limit: String(limit) });
   if (filters?.kind) params.set("kind", filters.kind);
@@ -249,6 +264,14 @@ export async function getStats(config: Config): Promise<Stats> {
 
 export async function getMemoryProfile(config: Config, limit = 20): Promise<{ facts: Fact[] }> {
   return api.get<{ facts: Fact[] }>(`${config.serverUrl}/memory/profile?limit=${limit}`);
+}
+
+export async function inspectMemoryRecall(
+  config: Config,
+  query: string,
+  limit = 5
+): Promise<MemoryRecallInspectResult> {
+  return api.post<MemoryRecallInspectResult>(`${config.serverUrl}/memory/recall/inspect`, { query, limit });
 }
 
 export async function getObservations(config: Config, limit = 50, filters?: ObservationFilters): Promise<{

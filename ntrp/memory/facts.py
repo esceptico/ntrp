@@ -349,6 +349,22 @@ class FactMemory:
 
         return context
 
+    async def inspect_recall(
+        self,
+        query: str,
+        limit: int = RECALL_SEARCH_LIMIT,
+        query_time: datetime | None = None,
+    ) -> FactContext:
+        query_embedding = await self.embedder.embed_one(query)
+        return await retrieve_with_observations(
+            self.facts,
+            self.observations,
+            query,
+            query_embedding,
+            seed_limit=limit,
+            query_time=query_time,
+        )
+
     async def forget(self, query: str) -> int:
         query_embedding = await self.embedder.embed_one(query)
         results = await self.facts.search_facts_vector(query_embedding, limit=FORGET_SEARCH_LIMIT)

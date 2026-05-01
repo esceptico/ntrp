@@ -564,6 +564,37 @@ class TestMemoryAuditAPI:
         assert data["facts"][0]["kind"] == "preference"
 
     @pytest.mark.asyncio
+    async def test_recall_inspect_is_read_only(self, test_client: AsyncClient, test_runtime: Runtime):
+        fact = await test_runtime.memory.facts.create(
+            text="User prefers SQLite-backed memory retrieval",
+            source_type=SourceType.EXPLICIT,
+            embedding=mock_embedding("sqlite memory retrieval"),
+        )
+        obs = await test_runtime.memory.observations.create(
+            summary="User often works on SQLite memory retrieval",
+            embedding=mock_embedding("sqlite memory retrieval"),
+            source_fact_id=fact.id,
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.post(
+            "/memory/recall/inspect",
+            json={"query": "sqlite memory retrieval", "limit": 5},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["query"] == "sqlite memory retrieval"
+        assert "SQLite memory retrieval" in data["formatted_recall"]
+        assert data["observations"][0]["id"] == obs.id
+        assert data["bundled_sources"][str(obs.id)][0]["id"] == fact.id
+
+        stored_fact = await test_runtime.memory.facts.get(fact.id)
+        stored_obs = await test_runtime.memory.observations.get(obs.id)
+        assert stored_fact.access_count == 0
+        assert stored_obs.access_count == 0
+
+    @pytest.mark.asyncio
     async def test_prune_dry_run_does_not_delete(
         self,
         test_client: AsyncClient,
