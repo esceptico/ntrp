@@ -110,6 +110,8 @@ export interface ObservationFilters {
 export interface ObservationDetails {
   observation: Observation;
   supporting_facts: Fact[];
+  source_fact_ids: number[];
+  missing_source_fact_ids: number[];
 }
 
 export interface Dream {

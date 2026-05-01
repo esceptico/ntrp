@@ -274,12 +274,13 @@ class ObservationService:
             max_sources=max_sources,
         )
 
-    async def get(self, observation_id: int) -> tuple[Observation, list[Fact]]:
+    async def get(self, observation_id: int) -> tuple[Observation, list[Fact], list[int], list[int]]:
         if not (obs := await self._memory.observations.get(observation_id)):
             raise KeyError(f"Observation {observation_id} not found")
         fact_ids = await self._memory.observations.get_fact_ids(observation_id)
         facts_by_id = await self._memory.facts.get_batch(fact_ids)
-        return obs, [facts_by_id[fact_id] for fact_id in fact_ids if fact_id in facts_by_id]
+        missing_fact_ids = [fact_id for fact_id in fact_ids if fact_id not in facts_by_id]
+        return obs, [facts_by_id[fact_id] for fact_id in fact_ids if fact_id in facts_by_id], fact_ids, missing_fact_ids
 
     async def update(self, observation_id: int, new_summary: str) -> Observation:
         async with self._memory.transaction():

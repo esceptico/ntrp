@@ -334,13 +334,15 @@ async def get_observations(
 @router.get("/observations/{observation_id}")
 async def get_observation_details(observation_id: int, svc: MemoryService = Depends(require_memory)):
     try:
-        obs, facts = await svc.observations.get(observation_id)
+        obs, facts, source_fact_ids, missing_source_fact_ids = await svc.observations.get(observation_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Observation not found")
 
     return {
         "observation": _observation_payload(obs),
         "supporting_facts": [_fact_payload(f) for f in facts],
+        "source_fact_ids": source_fact_ids,
+        "missing_source_fact_ids": missing_source_fact_ids,
     }
 
 

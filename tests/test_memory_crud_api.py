@@ -447,8 +447,31 @@ class TestObservationCRUD:
         data = response.json()
         assert data["observation"]["id"] == sample_observation
         assert data["supporting_facts"]
+        assert data["source_fact_ids"] == [data["supporting_facts"][0]["id"]]
+        assert data["missing_source_fact_ids"] == []
         support = data["supporting_facts"][0]
         assert {"id", "text", "kind", "source_type", "archived_at", "superseded_by_fact_id"} <= set(support)
+
+    @pytest.mark.asyncio
+    async def test_get_observation_details_reports_missing_provenance(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        obs = await test_runtime.memory.observations.create(
+            summary="Pattern with a missing source",
+            embedding=mock_embedding("missing source"),
+        )
+        await test_runtime.memory.observations.add_source_facts(obs.id, [999_999])
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.get(f"/observations/{obs.id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["source_fact_ids"] == [999_999]
+        assert data["supporting_facts"] == []
+        assert data["missing_source_fact_ids"] == [999_999]
 
     @pytest.mark.asyncio
     async def test_patch_observation_updates_summary(self, test_client: AsyncClient, sample_observation: int):
