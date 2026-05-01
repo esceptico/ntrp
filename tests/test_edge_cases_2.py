@@ -13,7 +13,12 @@ from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
 from ntrp.memory.facts import SessionMemory
 from ntrp.memory.models import Fact, FactContext, Observation, SourceType
-from ntrp.memory.prefetch import filter_prefetch_context, memory_prefetch_query, prefetch_memory_context
+from ntrp.memory.prefetch import (
+    filter_prefetch_context,
+    memory_prefetch_query,
+    prefetch_memory_context,
+    prompt_prefetch_context,
+)
 from ntrp.services.chat import _retain_user_content, _time_gap_note
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
@@ -134,6 +139,23 @@ def test_filter_prefetch_context_removes_session_memory_duplicates():
     assert [fact.id for fact in filtered.facts] == [4]
     assert [obs.id for obs in filtered.observations] == [11]
     assert list(filtered.bundled_sources) == [11]
+
+
+def test_prompt_prefetch_context_keeps_facts_only_as_observation_evidence_when_possible():
+    observation = _observation(11, "User wants consolidated memory in prompts", [4])
+    bundled_fact = _fact(4, "User said raw facts are noisy")
+    standalone_fact = _fact(5, "User mentioned a temporary UI bug")
+    context = FactContext(
+        facts=[standalone_fact],
+        observations=[observation],
+        bundled_sources={observation.id: [bundled_fact]},
+    )
+
+    shaped = prompt_prefetch_context(context)
+
+    assert shaped.facts == []
+    assert shaped.observations == [observation]
+    assert shaped.bundled_sources == {observation.id: [bundled_fact]}
 
 
 @pytest.mark.asyncio
