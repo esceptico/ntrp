@@ -40,6 +40,11 @@ from ntrp.memory.profile_policy import (
     ProfilePolicyPreview,
     profile_policy_preview,
 )
+from ntrp.memory.skill_learning import (
+    SKILL_NOTE_POLICY_VERSION,
+    SKILL_NOTE_SOURCE_TYPE,
+    build_skill_note_proposals,
+)
 
 _logger = get_logger(__name__)
 
@@ -580,6 +585,89 @@ class LearningService:
             created_events=created_events,
             created_candidates=created_candidates,
             skipped_candidates=skipped_candidates,
+        )
+
+    async def propose_skill_notes_from_events(
+        self,
+        *,
+        event_limit: int = 100,
+    ) -> LearningProposalScanResult:
+        events = await self._memory.learning.list_events(
+            limit=event_limit,
+            scope="skill",
+        )
+        existing_skill_notes = await self._memory.learning.list_candidates(
+            limit=500,
+            change_type="skill_note",
+        )
+        used_event_ids = {event_id for candidate in existing_skill_notes for event_id in candidate.evidence_event_ids}
+        proposals = build_skill_note_proposals(
+            event for event in events if event.id not in used_event_ids and event.source_type != SKILL_NOTE_SOURCE_TYPE
+        )
+
+        created_events: list[LearningEvent] = []
+        created_candidates: list[LearningCandidate] = []
+        skipped_candidates: list[LearningCandidate] = []
+
+        async with self._memory.transaction():
+            for proposal in proposals:
+                existing = await self._memory.learning.find_open_candidate(
+                    change_type=proposal.change_type,
+                    target_key=proposal.target_key,
+                    statuses=("proposed", "approved"),
+                )
+                if existing:
+                    skipped_candidates.append(existing)
+                    continue
+
+                candidate = await self._memory.learning.create_candidate(
+                    change_type=proposal.change_type,
+                    target_key=proposal.target_key,
+                    proposal=proposal.proposal,
+                    rationale=proposal.rationale,
+                    evidence_event_ids=list(proposal.evidence_event_ids),
+                    expected_metric=proposal.expected_metric,
+                    policy_version=SKILL_NOTE_POLICY_VERSION,
+                    details=proposal.details,
+                )
+                created_candidates.append(candidate)
+
+        return LearningProposalScanResult(
+            proposals_considered=len(proposals),
+            created_events=created_events,
+            created_candidates=created_candidates,
+            skipped_candidates=skipped_candidates,
+        )
+
+    async def propose_review_candidates(
+        self,
+        *,
+        access_limit: int = 100,
+        injection_char_budget: int = DEFAULT_INJECTION_CHAR_BUDGET,
+        profile_limit: int = 100,
+        prune_older_than_days: int = DEFAULT_PRUNE_OLDER_THAN_DAYS,
+        prune_max_sources: int = DEFAULT_PRUNE_MAX_SOURCES,
+        prune_limit: int = DEFAULT_PRUNE_LIMIT,
+        skill_event_limit: int = 100,
+        include_skill_notes: bool = True,
+    ) -> LearningProposalScanResult:
+        memory_result = await self.propose_from_memory_policy(
+            access_limit=access_limit,
+            injection_char_budget=injection_char_budget,
+            profile_limit=profile_limit,
+            prune_older_than_days=prune_older_than_days,
+            prune_max_sources=prune_max_sources,
+            prune_limit=prune_limit,
+        )
+        if not include_skill_notes:
+            return memory_result
+
+        skill_result = await self.propose_skill_notes_from_events(event_limit=skill_event_limit)
+        return LearningProposalScanResult(
+            proposals_considered=memory_result.proposals_considered + skill_result.proposals_considered,
+            created_events=[*memory_result.created_events, *skill_result.created_events],
+            created_candidates=[*memory_result.created_candidates, *skill_result.created_candidates],
+            skipped_candidates=[*memory_result.skipped_candidates, *skill_result.skipped_candidates],
         )
 
 

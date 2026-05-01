@@ -838,6 +838,79 @@ class TestMemoryAuditAPI:
         assert [row["id"] for row in retry["skipped_candidates"]] == [candidate["id"]]
 
     @pytest.mark.asyncio
+    async def test_learning_review_scan_proposes_skill_notes_from_direct_evidence(
+        self,
+        test_client: AsyncClient,
+    ):
+        event_response = await test_client.post(
+            "/memory/learning/events",
+            json={
+                "source_type": "user_correction",
+                "source_id": "msg-release-1",
+                "scope": "skill",
+                "signal": "User corrected the prerelease command workflow.",
+                "evidence_ids": ["message:msg-release-1"],
+                "outcome": "corrected",
+                "details": {
+                    "skill_name": "release-workflow",
+                    "proposal": "Add a prerelease checklist before running release commands.",
+                    "expected_metric": "fewer release workflow corrections",
+                },
+            },
+        )
+        assert event_response.status_code == 200
+        source_event = event_response.json()["event"]
+        no_evidence_response = await test_client.post(
+            "/memory/learning/events",
+            json={
+                "source_type": "user_correction",
+                "source_id": "msg-floating",
+                "scope": "skill",
+                "signal": "This correction has no direct source ids.",
+                "outcome": "corrected",
+                "details": {"skill_name": "floating-skill-note"},
+            },
+        )
+        assert no_evidence_response.status_code == 200
+
+        first = await test_client.post(
+            "/memory/learning/propose",
+            json={
+                "include_skill_notes": True,
+                "access_limit": 1,
+                "profile_limit": 1,
+                "prune_limit": 1,
+            },
+        )
+
+        assert first.status_code == 200
+        body = first.json()
+        candidates = [candidate for candidate in body["created_candidates"] if candidate["change_type"] == "skill_note"]
+        assert len(candidates) == 1
+        candidate = candidates[0]
+        assert candidate["target_key"] == "skill.release-workflow"
+        assert candidate["policy_version"] == "learning.skill_note.v1"
+        assert candidate["evidence_event_ids"] == [source_event["id"]]
+        assert candidate["details"]["direct_evidence_ids"] == ["message:msg-release-1"]
+        assert "skill.floating-skill-note" not in [row["target_key"] for row in body["created_candidates"]]
+
+        second = await test_client.post(
+            "/memory/learning/propose",
+            json={
+                "include_skill_notes": True,
+                "access_limit": 1,
+                "profile_limit": 1,
+                "prune_limit": 1,
+            },
+        )
+
+        assert second.status_code == 200
+        retry = second.json()
+        assert [
+            candidate for candidate in retry["created_candidates"] if candidate["change_type"] == "skill_note"
+        ] == []
+
+    @pytest.mark.asyncio
     async def test_repair_embeddings_is_explicit_and_audited(
         self,
         test_client: AsyncClient,

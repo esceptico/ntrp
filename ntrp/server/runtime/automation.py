@@ -111,7 +111,7 @@ class AutomationRuntime:
             memory = self.get_memory()
             if not memory:
                 return None
-            result = await MemoryService(memory).learning.propose_from_memory_policy()
+            result = await MemoryService(memory).learning.propose_review_candidates()
             return (
                 "Learning review scan: "
                 f"{len(result.created_candidates)} new, "

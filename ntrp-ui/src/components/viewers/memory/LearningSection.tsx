@@ -50,12 +50,22 @@ function EvidenceList({ events, width }: { events: LearningEvent[]; width: numbe
   return (
     <box flexDirection="column">
       {events.slice(0, 5).map((event) => (
-        <text key={event.id}>
-          <span fg={colors.text.secondary}>#{event.id}</span>
-          <span fg={colors.text.disabled}> {event.source_type}</span>
-          <span fg={colors.text.disabled}> / {event.scope}</span>
-          <span fg={colors.text.disabled}> {"\u2502"} {truncateText(event.signal, width - 18)}</span>
-        </text>
+        <box key={event.id} flexDirection="column" marginBottom={1}>
+          <text>
+            <span fg={colors.text.secondary}>#{event.id}</span>
+            <span fg={colors.text.disabled}> {event.source_type}</span>
+            <span fg={colors.text.disabled}> / {event.scope}</span>
+            <span fg={colors.text.disabled}> {"\u2502"} {truncateText(event.signal, width - 18)}</span>
+          </text>
+          {event.evidence_ids.length > 0 && (
+            <text>
+              <span fg={colors.text.muted}>  evidence </span>
+              <span fg={colors.text.disabled}>
+                {truncateText(event.evidence_ids.slice(0, 4).join(", "), width - 11)}
+              </span>
+            </text>
+          )}
+        </box>
       ))}
       {events.length > 5 && (
         <text><span fg={colors.text.disabled}>... +{events.length - 5} events</span></text>
@@ -79,7 +89,7 @@ function CandidateDetails({
   const textWidth = Math.max(10, width - 2);
 
   if (!candidate) {
-    return <text><span fg={colors.text.muted}>No learning candidates. Press p to scan memory policy previews.</span></text>;
+    return <text><span fg={colors.text.muted}>No learning candidates. Press p to scan review sources.</span></text>;
   }
 
   return (
@@ -165,7 +175,7 @@ export function LearningSection({ tab, totalCount, height, width }: LearningSect
       selectedIndex={tab.selectedIndex}
       renderItem={renderItem}
       getKey={(candidate) => candidate.id}
-      emptyMessage="No learning candidates. Press p to scan policy previews."
+      emptyMessage="No learning candidates. Press p to scan review sources."
       searchQuery={tab.searchQuery}
       searchMode={tab.searchMode}
       focusPane={tab.focusPane}

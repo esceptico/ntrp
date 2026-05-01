@@ -608,13 +608,15 @@ async def propose_learning_candidates(
     request: ProposeLearningCandidatesRequest,
     svc: MemoryService = Depends(require_memory),
 ):
-    result = await svc.learning.propose_from_memory_policy(
+    result = await svc.learning.propose_review_candidates(
         access_limit=request.access_limit,
         injection_char_budget=request.injection_char_budget,
         profile_limit=request.profile_limit,
         prune_older_than_days=request.prune_older_than_days,
         prune_max_sources=request.prune_max_sources,
         prune_limit=request.prune_limit,
+        skill_event_limit=request.skill_event_limit,
+        include_skill_notes=request.include_skill_notes,
     )
     return {
         "proposals_considered": result.proposals_considered,
