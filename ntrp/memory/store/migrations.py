@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 11
+CURRENT_VERSION = 12
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -356,6 +356,28 @@ async def _migrate_v11(conn: aiosqlite.Connection) -> None:
     """)
 
 
+async def _migrate_v12(conn: aiosqlite.Connection) -> None:
+    """Add relational provenance edges for learning candidates."""
+    _logger.info("Migration v12: adding learning candidate event links")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS learning_candidate_events (
+            candidate_id INTEGER NOT NULL REFERENCES learning_candidates(id) ON DELETE CASCADE,
+            event_id INTEGER NOT NULL REFERENCES learning_events(id) ON DELETE CASCADE,
+            PRIMARY KEY (candidate_id, event_id)
+        )
+    """)
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learning_candidate_events_event ON learning_candidate_events(event_id)"
+    )
+    await conn.execute("""
+        INSERT OR IGNORE INTO learning_candidate_events (candidate_id, event_id)
+        SELECT learning_candidates.id, CAST(event_id.value AS INTEGER)
+        FROM learning_candidates, json_each(learning_candidates.evidence_event_ids) AS event_id
+        WHERE json_valid(learning_candidates.evidence_event_ids)
+    """)
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
@@ -368,6 +390,7 @@ _MIGRATIONS: list[tuple[int, callable]] = [
     (9, _migrate_v9),
     (10, _migrate_v10),
     (11, _migrate_v11),
+    (12, _migrate_v12),
 ]
 
 

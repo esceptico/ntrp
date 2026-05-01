@@ -57,7 +57,6 @@ from ntrp.memory.skill_learning import (
 _logger = get_logger(__name__)
 
 _TARGET_BLOCKING_LEARNING_STATUSES = ("proposed", "approved")
-_ACTIVE_LEARNING_STATUSES = ("proposed", "approved", "applied")
 _HANDLED_LEARNING_STATUSES = ("proposed", "approved", "applied", "rejected", "reverted")
 
 
@@ -580,7 +579,12 @@ class LearningService:
         status: str = "proposed",
         details: dict | None = None,
     ) -> LearningCandidate:
+        if status != "proposed":
+            raise ValueError("new learning candidates must start as proposed")
+        if not evidence_event_ids:
+            raise ValueError("learning candidates require direct evidence_event_ids")
         async with self._memory.transaction():
+            await self._memory.learning.require_events(evidence_event_ids)
             return await self._memory.learning.create_candidate(
                 change_type=change_type,
                 target_key=target_key,
@@ -753,7 +757,7 @@ class LearningService:
                 existing = await self._memory.learning.find_open_candidate(
                     change_type=proposal.change_type,
                     target_key=proposal.target_key,
-                    statuses=_ACTIVE_LEARNING_STATUSES,
+                    statuses=_TARGET_BLOCKING_LEARNING_STATUSES,
                 )
                 if existing:
                     skipped_candidates.append(existing)
@@ -825,7 +829,7 @@ class LearningService:
                 existing = await self._memory.learning.find_open_candidate(
                     change_type=proposal.change_type,
                     target_key=proposal.target_key,
-                    statuses=_ACTIVE_LEARNING_STATUSES,
+                    statuses=_TARGET_BLOCKING_LEARNING_STATUSES,
                 )
                 if existing:
                     skipped_candidates.append(existing)

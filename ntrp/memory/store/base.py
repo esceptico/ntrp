@@ -204,6 +204,14 @@ CREATE INDEX IF NOT EXISTS idx_learning_candidates_status ON learning_candidates
 CREATE INDEX IF NOT EXISTS idx_learning_candidates_change_type ON learning_candidates(change_type);
 CREATE INDEX IF NOT EXISTS idx_learning_candidates_created ON learning_candidates(created_at DESC);
 
+CREATE TABLE IF NOT EXISTS learning_candidate_events (
+    candidate_id INTEGER NOT NULL REFERENCES learning_candidates(id) ON DELETE CASCADE,
+    event_id INTEGER NOT NULL REFERENCES learning_events(id) ON DELETE CASCADE,
+    PRIMARY KEY (candidate_id, event_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_learning_candidate_events_event ON learning_candidate_events(event_id);
+
 CREATE TABLE IF NOT EXISTS learning_event_processing (
     scanner TEXT NOT NULL,
     event_id INTEGER NOT NULL REFERENCES learning_events(id) ON DELETE CASCADE,
@@ -267,6 +275,7 @@ class GraphDatabase:
 
     async def clear_all(self) -> None:
         await self.conn.execute("DELETE FROM learning_event_processing")
+        await self.conn.execute("DELETE FROM learning_candidate_events")
         await self.conn.execute("DELETE FROM learning_candidates")
         await self.conn.execute("DELETE FROM learning_events")
         await self.conn.execute("DELETE FROM dream_facts")

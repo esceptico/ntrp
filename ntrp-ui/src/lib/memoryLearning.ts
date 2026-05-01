@@ -26,6 +26,14 @@ export function learningCandidateEffect(changeType: string, status: string): str
   return "accepted for manual follow-up";
 }
 
+export function canApproveLearningCandidate(status: string | undefined): boolean {
+  return status === "proposed";
+}
+
+export function canRejectLearningCandidate(status: string | undefined): boolean {
+  return status === "proposed" || status === "approved";
+}
+
 export function learningApprovalEffect(changeType: string): string {
   if (changeType === "skill_note" || changeType === "prompt_note") {
     return "approval adds this to future prompts";

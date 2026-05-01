@@ -102,6 +102,13 @@ export function useListDetail<T>({
     if (selectedId !== undefined) resetDetailState();
   }, [selectedId, resetDetailState]);
 
+  useEffect(() => {
+    setSelectedIndex((index) => {
+      if (filtered.length === 0) return 0;
+      return Math.min(index, filtered.length - 1);
+    });
+  }, [filtered.length]);
+
   const handleKeys = useCallback(
     (key: Key) => {
       // Tab: switch focus pane
@@ -246,7 +253,7 @@ export function useListDetail<T>({
         return;
       }
       if (key.name === "down" || key.name === "j") {
-        setSelectedIndex((i) => Math.min(filtered.length - 1, i + 1));
+        setSelectedIndex((i) => Math.min(Math.max(0, filtered.length - 1), i + 1));
         return;
       }
     },

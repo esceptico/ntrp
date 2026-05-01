@@ -29,6 +29,7 @@ import {
   type MemoryPruneDryRun,
 } from "../api/client.js";
 import type { MemoryTabType } from "../lib/memoryTabs.js";
+import { canApproveLearningCandidate, canRejectLearningCandidate } from "../lib/memoryLearning.js";
 
 interface UseMemoryKeypressOptions {
   activeTab: MemoryTabType;
@@ -59,6 +60,8 @@ interface UseMemoryKeypressResult {
 function isUpperA(key: Key): boolean {
   return key.sequence === "A" || (key.name === "a" && key.shift);
 }
+
+type SearchModeTab = { searchMode: boolean; handleKeys: (key: Key) => void };
 
 export function useMemoryKeypress({
   activeTab,
@@ -120,6 +123,20 @@ export function useMemoryKeypress({
         factsTab.setFocusPane("details");
         setActiveTab("facts");
       };
+      const activeSearchTab: SearchModeTab | null =
+        activeTab === "context" ? accessTab :
+        activeTab === "profile" ? profileTab :
+        activeTab === "facts" ? factsTab :
+        activeTab === "observations" ? obsTab :
+        activeTab === "prune" ? pruneTab :
+        activeTab === "learning" ? learningTab :
+        activeTab === "events" ? eventsTab :
+        null;
+
+      if (activeSearchTab?.searchMode) {
+        activeSearchTab.handleKeys(key);
+        return;
+      }
 
       if (activeFactTab?.focusPane === "details" && activeFactTab.factDetails) {
         if (activeFactTab.confirmDelete) {
@@ -408,13 +425,12 @@ export function useMemoryKeypress({
         }
         if (
           key.name === "a" &&
-          learningTab.selectedCandidate.status !== "approved" &&
-          learningTab.selectedCandidate.status !== "applied"
+          canApproveLearningCandidate(learningTab.selectedCandidate.status)
         ) {
           learningTab.setConfirmStatus("approved");
           return;
         }
-        if (key.name === "d" && learningTab.selectedCandidate.status !== "rejected") {
+        if (key.name === "d" && canRejectLearningCandidate(learningTab.selectedCandidate.status)) {
           learningTab.setConfirmStatus("rejected");
           return;
         }

@@ -11,6 +11,7 @@ import { useMemoryData } from "../../../hooks/useMemoryData.js";
 import { useMemoryKeypress } from "../../../hooks/useMemoryKeypress.js";
 import { useRecallInspectTab } from "../../../hooks/useRecallInspectTab.js";
 import { Dialog, Tabs, colors, truncateText } from "../../ui/index.js";
+import { useContentWidth } from "../../../contexts/index.js";
 import { memoryAccessSourceLabel } from "../../../lib/memoryAccess.js";
 import { MEMORY_TABS, MEMORY_TAB_COPY, memoryTabLabels, type MemoryTabType } from "../../../lib/memoryTabs.js";
 import { FactsSection } from "./FactsSection.js";
@@ -31,6 +32,7 @@ interface MemoryViewerProps {
 }
 
 export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
+  const contentWidth = useContentWidth();
   const [activeTab, setActiveTab] = useState<MemoryTabType>("overview");
   const [profileFilters, setProfileFilters] = useState<FactFilters>({ status: "active" });
   const [factFilters, setFactFilters] = useState<FactFilters>({ status: "active" });
@@ -63,13 +65,13 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     reload,
   } = useMemoryData(config, factFilters, observationFilters);
 
-  const profileTab = useFactsTab(config, profileFacts, 80, profileFilters, setProfileFilters, profileFacts.length, false);
-  const factsTab = useFactsTab(config, facts, 80, factFilters, setFactFilters, factTotal);
-  const obsTab = useObservationsTab(config, observations, 80, observationFilters, setObservationFilters, observationTotal);
-  const pruneTab = usePruneTab(pruneDryRun?.candidates ?? [], 80);
-  const learningTab = useLearningTab(learningCandidates, learningEvents, 80);
-  const eventsTab = useMemoryEventsTab(memoryEvents, 80);
-  const accessTab = useMemoryAccessTab(memoryAccessEvents, 80);
+  const profileTab = useFactsTab(config, profileFacts, contentWidth, profileFilters, setProfileFilters, profileFacts.length, false);
+  const factsTab = useFactsTab(config, facts, contentWidth, factFilters, setFactFilters, factTotal);
+  const obsTab = useObservationsTab(config, observations, contentWidth, observationFilters, setObservationFilters, observationTotal);
+  const pruneTab = usePruneTab(pruneDryRun?.candidates ?? [], contentWidth);
+  const learningTab = useLearningTab(learningCandidates, learningEvents, contentWidth);
+  const eventsTab = useMemoryEventsTab(memoryEvents, contentWidth);
+  const accessTab = useMemoryAccessTab(memoryAccessEvents, contentWidth);
   const recallTab = useRecallInspectTab(config);
 
   const { saving } = useMemoryKeypress({

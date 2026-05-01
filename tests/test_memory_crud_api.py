@@ -764,7 +764,7 @@ class TestMemoryAuditAPI:
         assert data["issues"][0]["reasons"] == ["profile_overlong", "profile_low_confidence"]
 
     @pytest.mark.asyncio
-    async def test_learning_event_and_candidate_api(self, test_client: AsyncClient):
+    async def test_learning_event_and_candidate_api(self, test_client: AsyncClient, test_runtime: Runtime):
         event_response = await test_client.post(
             "/memory/learning/events",
             json={
@@ -798,6 +798,37 @@ class TestMemoryAuditAPI:
         candidate = candidate_response.json()["candidate"]
         assert candidate["status"] == "proposed"
         assert candidate["evidence_event_ids"] == [event["id"]]
+        links = await test_runtime.memory.db.conn.execute_fetchall(
+            "SELECT event_id FROM learning_candidate_events WHERE candidate_id = ?",
+            (candidate["id"],),
+        )
+        assert [row["event_id"] for row in links] == [event["id"]]
+
+        missing_evidence_response = await test_client.post(
+            "/memory/learning/candidates",
+            json={
+                "change_type": "skill_note",
+                "target_key": "missing-evidence",
+                "proposal": "This should not be accepted without direct evidence.",
+                "rationale": "Candidates need source events.",
+                "policy_version": "learning.manual.v1",
+            },
+        )
+        assert missing_evidence_response.status_code == 422
+
+        preapproved_response = await test_client.post(
+            "/memory/learning/candidates",
+            json={
+                "change_type": "skill_note",
+                "target_key": "preapproved",
+                "proposal": "This should not skip review.",
+                "rationale": "New candidates must be reviewed.",
+                "evidence_event_ids": [event["id"]],
+                "policy_version": "learning.manual.v1",
+                "status": "approved",
+            },
+        )
+        assert preapproved_response.status_code == 422
 
         status_response = await test_client.patch(
             f"/memory/learning/candidates/{candidate['id']}/status",
@@ -809,6 +840,72 @@ class TestMemoryAuditAPI:
         list_response = await test_client.get("/memory/learning/candidates", params={"status": "approved"})
         assert list_response.status_code == 200
         assert [row["id"] for row in list_response.json()["candidates"]] == [candidate["id"]]
+
+    @pytest.mark.asyncio
+    async def test_learning_candidate_status_transitions_are_explicit(self, test_client: AsyncClient):
+        event_response = await test_client.post(
+            "/memory/learning/events",
+            json={
+                "source_type": "user_correction",
+                "source_id": "msg-transition",
+                "scope": "skill",
+                "signal": "User corrected the transition workflow.",
+                "evidence_ids": ["message:msg-transition"],
+                "outcome": "corrected",
+            },
+        )
+        event = event_response.json()["event"]
+        candidate_response = await test_client.post(
+            "/memory/learning/candidates",
+            json={
+                "change_type": "skill_note",
+                "target_key": "transition-workflow",
+                "proposal": "Document the transition workflow.",
+                "rationale": "The user corrected it.",
+                "evidence_event_ids": [event["id"]],
+                "policy_version": "learning.manual.v1",
+            },
+        )
+        candidate = candidate_response.json()["candidate"]
+
+        invalid_revert = await test_client.patch(
+            f"/memory/learning/candidates/{candidate['id']}/status",
+            json={"status": "reverted"},
+        )
+        assert invalid_revert.status_code == 422
+
+        approved = await test_client.patch(
+            f"/memory/learning/candidates/{candidate['id']}/status",
+            json={"status": "approved"},
+        )
+        assert approved.status_code == 200
+        assert approved.json()["candidate"]["status"] == "approved"
+
+        invalid_backtrack = await test_client.patch(
+            f"/memory/learning/candidates/{candidate['id']}/status",
+            json={"status": "proposed"},
+        )
+        assert invalid_backtrack.status_code == 422
+
+        applied = await test_client.patch(
+            f"/memory/learning/candidates/{candidate['id']}/status",
+            json={"status": "applied"},
+        )
+        assert applied.status_code == 200
+        assert applied.json()["candidate"]["applied_at"] is not None
+
+        invalid_reject = await test_client.patch(
+            f"/memory/learning/candidates/{candidate['id']}/status",
+            json={"status": "rejected"},
+        )
+        assert invalid_reject.status_code == 422
+
+        reverted = await test_client.patch(
+            f"/memory/learning/candidates/{candidate['id']}/status",
+            json={"status": "reverted"},
+        )
+        assert reverted.status_code == 200
+        assert reverted.json()["candidate"]["reverted_at"] is not None
 
     @pytest.mark.asyncio
     async def test_learning_policy_proposal_scan_is_deduplicated(
@@ -853,6 +950,12 @@ class TestMemoryAuditAPI:
         assert retry["proposals_considered"] == 1
         assert retry["created_candidates"] == []
         assert [row["id"] for row in retry["skipped_candidates"]] == [candidate["id"]]
+
+        approved = await test_client.patch(
+            f"/memory/learning/candidates/{candidate['id']}/status",
+            json={"status": "approved"},
+        )
+        assert approved.status_code == 200
 
         applied = await test_client.patch(
             f"/memory/learning/candidates/{candidate['id']}/status",
@@ -1047,6 +1150,88 @@ class TestMemoryAuditAPI:
         assert [
             candidate for candidate in retry["created_candidates"] if candidate["change_type"] == "skill_note"
         ] == []
+
+    @pytest.mark.asyncio
+    async def test_applied_learning_candidate_does_not_swallow_new_skill_evidence(
+        self,
+        test_client: AsyncClient,
+    ):
+        first_event = await test_client.post(
+            "/memory/learning/events",
+            json={
+                "source_type": "user_correction",
+                "source_id": "msg-release-1",
+                "scope": "skill",
+                "signal": "User corrected the release workflow.",
+                "evidence_ids": ["message:msg-release-1"],
+                "outcome": "corrected",
+                "details": {
+                    "skill_name": "release-workflow",
+                    "proposal": "Check release tags before running release commands.",
+                },
+            },
+        )
+        assert first_event.status_code == 200
+
+        first_scan = await test_client.post(
+            "/memory/learning/propose",
+            json={
+                "include_skill_notes": True,
+                "access_limit": 1,
+                "profile_limit": 1,
+                "prune_limit": 1,
+            },
+        )
+        assert first_scan.status_code == 200
+        first_candidate = next(
+            row for row in first_scan.json()["created_candidates"] if row["change_type"] == "skill_note"
+        )
+
+        approved = await test_client.patch(
+            f"/memory/learning/candidates/{first_candidate['id']}/status",
+            json={"status": "approved"},
+        )
+        assert approved.status_code == 200
+        applied = await test_client.patch(
+            f"/memory/learning/candidates/{first_candidate['id']}/status",
+            json={"status": "applied"},
+        )
+        assert applied.status_code == 200
+
+        second_event = await test_client.post(
+            "/memory/learning/events",
+            json={
+                "source_type": "user_correction",
+                "source_id": "msg-release-2",
+                "scope": "skill",
+                "signal": "User corrected the release workflow again.",
+                "evidence_ids": ["message:msg-release-2"],
+                "outcome": "corrected",
+                "details": {
+                    "skill_name": "release-workflow",
+                    "proposal": "Also check prerelease tags before running release commands.",
+                },
+            },
+        )
+        assert second_event.status_code == 200
+
+        second_scan = await test_client.post(
+            "/memory/learning/propose",
+            json={
+                "include_skill_notes": True,
+                "access_limit": 1,
+                "profile_limit": 1,
+                "prune_limit": 1,
+            },
+        )
+        assert second_scan.status_code == 200
+        second_candidates = [
+            row for row in second_scan.json()["created_candidates"] if row["change_type"] == "skill_note"
+        ]
+        assert len(second_candidates) == 1
+        assert second_candidates[0]["target_key"] == first_candidate["target_key"]
+        assert second_candidates[0]["id"] != first_candidate["id"]
+        assert second_candidates[0]["details"]["direct_evidence_ids"] == ["message:msg-release-2"]
 
     @pytest.mark.asyncio
     async def test_learning_review_scan_proposes_memory_feedback_reviews(

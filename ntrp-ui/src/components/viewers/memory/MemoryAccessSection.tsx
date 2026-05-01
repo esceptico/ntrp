@@ -271,6 +271,7 @@ export function MemoryAccessSection({ tab, totalCount, policyPreview, facts, obs
       focusPane={tab.focusPane}
       height={height}
       width={width}
+      listWidth={listWidth}
       itemHeight={3}
       onItemClick={tab.setSelectedIndex}
       totalCount={totalCount}

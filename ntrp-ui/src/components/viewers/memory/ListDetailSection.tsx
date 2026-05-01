@@ -18,6 +18,7 @@ interface ListDetailSectionProps<T> {
   width: number;
   details: ReactNode;
   focusPane?: "list" | "details";
+  listWidth?: number;
   itemHeight?: number;
   onItemClick?: (index: number) => void;
   totalCount?: number;
@@ -35,11 +36,12 @@ export function ListDetailSection<T>({
   width,
   details,
   focusPane = "list",
+  listWidth: providedListWidth,
   itemHeight = 1,
   onItemClick,
   totalCount,
 }: ListDetailSectionProps<T>) {
-  const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
+  const listWidth = providedListWidth ?? Math.min(45, Math.max(30, Math.floor(width * 0.4)));
   const availableLines = Math.max(1, height - 4);
   const visibleLines = Math.max(1, Math.floor(availableLines / itemHeight));
 

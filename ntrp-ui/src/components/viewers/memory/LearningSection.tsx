@@ -218,6 +218,7 @@ export function LearningSection({ tab, totalCount, height, width }: LearningSect
       focusPane={tab.focusPane}
       height={height}
       width={width}
+      listWidth={listWidth}
       itemHeight={3}
       onItemClick={tab.setSelectedIndex}
       totalCount={totalCount}

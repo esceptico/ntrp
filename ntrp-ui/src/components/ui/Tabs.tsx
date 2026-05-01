@@ -7,7 +7,7 @@ interface TabsProps<T extends string> {
   labels?: Record<T, string>;
 }
 
-export function Tabs<T extends string>({ tabs, activeTab, labels }: TabsProps<T>) {
+export function Tabs<T extends string>({ tabs, activeTab, labels, onTabChange }: TabsProps<T>) {
   return (
     <box flexDirection="row">
       {tabs.map((tab, i) => {
@@ -15,7 +15,7 @@ export function Tabs<T extends string>({ tabs, activeTab, labels }: TabsProps<T>
         const label = labels?.[tab] || tab.charAt(0).toUpperCase() + tab.slice(1);
 
         return (
-          <box key={tab} marginRight={1}>
+          <box key={tab} marginRight={1} onMouseDown={() => onTabChange(tab)}>
             <text>
               {isActive ? (
                 <span fg={colors.contrast} bg={colors.tabs.active}><strong> {label.toUpperCase()} </strong></span>

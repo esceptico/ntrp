@@ -2,6 +2,7 @@ import React from "react";
 import { Hints } from "../../ui/index.js";
 import type { RecallInspectTabState } from "../../../hooks/useRecallInspectTab.js";
 import type { MemoryTabType } from "../../../lib/memoryTabs.js";
+import { canApproveLearningCandidate, canRejectLearningCandidate } from "../../../lib/memoryLearning.js";
 
 interface MemoryFooterProps {
   activeTab: MemoryTabType;
@@ -75,8 +76,8 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
       return <Hints items={[["y", learningTab.confirmStatus === "approved" ? "approve" : "reject"], ["n/esc", "cancel"]]} />;
     }
     const selectedStatus = learningTab.selectedCandidate?.status;
-    const canApprove = !!selectedStatus && selectedStatus !== "approved" && selectedStatus !== "applied";
-    const canReject = !!selectedStatus && selectedStatus !== "rejected";
+    const canApprove = canApproveLearningCandidate(selectedStatus);
+    const canReject = canRejectLearningCandidate(selectedStatus);
     const reviewHints: [string, string][] = [];
     if (canApprove) reviewHints.push(["a", "approve"]);
     if (canReject) reviewHints.push(["d", "reject"]);

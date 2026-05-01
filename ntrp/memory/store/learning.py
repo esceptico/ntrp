@@ -8,6 +8,13 @@ import aiosqlite
 from ntrp.memory.models import LearningCandidate, LearningEvent
 
 LEARNING_CANDIDATE_STATUSES = frozenset({"proposed", "approved", "applied", "rejected", "reverted"})
+LEARNING_CANDIDATE_TRANSITIONS = {
+    "proposed": frozenset({"approved", "rejected"}),
+    "approved": frozenset({"applied", "rejected"}),
+    "applied": frozenset({"reverted"}),
+    "rejected": frozenset(),
+    "reverted": frozenset(),
+}
 
 _SQL_INSERT_LEARNING_EVENT = """
     INSERT INTO learning_events (
@@ -42,6 +49,11 @@ _SQL_RECORD_LEARNING_EVENT_PROCESSING = """
     VALUES (?, ?, ?, ?, ?)
 """
 
+_SQL_INSERT_LEARNING_CANDIDATE_EVENT = """
+    INSERT OR IGNORE INTO learning_candidate_events (candidate_id, event_id)
+    VALUES (?, ?)
+"""
+
 _SQL_INSERT_LEARNING_CANDIDATE = """
     INSERT INTO learning_candidates (
         created_at, updated_at, status, change_type, target_key, proposal, rationale,
@@ -58,6 +70,8 @@ _SQL_LIST_LEARNING_CANDIDATES = """
 """
 
 _SQL_GET_LEARNING_CANDIDATE = "SELECT * FROM learning_candidates WHERE id = ?"
+
+_SQL_COUNT_LEARNING_EVENTS = "SELECT COUNT(DISTINCT id) AS count FROM learning_events WHERE id IN ({ids})"
 
 _SQL_FIND_OPEN_LEARNING_CANDIDATE = """
     SELECT * FROM learning_candidates
@@ -95,6 +109,17 @@ def _validate_status(status: str) -> None:
     if status not in LEARNING_CANDIDATE_STATUSES:
         allowed = ", ".join(sorted(LEARNING_CANDIDATE_STATUSES))
         raise ValueError(f"unsupported learning candidate status: {status}; expected one of {allowed}")
+
+
+def _validate_status_transition(current: str, next_status: str) -> None:
+    _validate_status(current)
+    _validate_status(next_status)
+    if current == next_status:
+        return
+    allowed = LEARNING_CANDIDATE_TRANSITIONS[current]
+    if next_status not in allowed:
+        allowed_text = ", ".join(sorted(allowed)) or "none"
+        raise ValueError(f"invalid learning candidate status transition: {current} -> {next_status}; expected {allowed_text}")
 
 
 class LearningRepository:
@@ -200,6 +225,23 @@ class LearningRepository:
             (scanner, event_id, candidate_id, decision, datetime.now(UTC).isoformat()),
         )
 
+    async def require_events(self, event_ids: list[int]) -> None:
+        unique_ids = sorted(set(event_ids))
+        if not unique_ids:
+            return
+        placeholders = ", ".join("?" for _ in unique_ids)
+        rows = await self.read_conn.execute_fetchall(
+            _SQL_COUNT_LEARNING_EVENTS.format(ids=placeholders),
+            tuple(unique_ids),
+        )
+        found_count = int(rows[0]["count"]) if rows else 0
+        if found_count != len(unique_ids):
+            raise ValueError("learning candidate evidence_event_ids must reference existing learning events")
+
+    async def _link_candidate_events(self, candidate_id: int, event_ids: list[int] | None) -> None:
+        for event_id in sorted(set(event_ids or [])):
+            await self.conn.execute(_SQL_INSERT_LEARNING_CANDIDATE_EVENT, (candidate_id, event_id))
+
     async def create_candidate(
         self,
         *,
@@ -231,6 +273,7 @@ class LearningRepository:
                 _json_details(details),
             ),
         )
+        await self._link_candidate_events(cursor.lastrowid, evidence_event_ids)
         return LearningCandidate(
             id=cursor.lastrowid,
             created_at=now,
@@ -291,6 +334,15 @@ class LearningRepository:
 
     async def update_candidate_status(self, candidate_id: int, status: str) -> LearningCandidate | None:
         _validate_status(status)
+        rows = await self.conn.execute_fetchall(_SQL_GET_LEARNING_CANDIDATE, (candidate_id,))
+        if not rows:
+            return None
+
+        current = LearningCandidate.model_validate(_row_dict(rows[0]))
+        _validate_status_transition(current.status, status)
+        if current.status == status:
+            return current
+
         now = datetime.now(UTC)
         updates = ["status = ?", "updated_at = ?"]
         params: list[object] = [status, now.isoformat()]

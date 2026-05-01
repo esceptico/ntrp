@@ -34,7 +34,7 @@ const bases = {
 
   dark: {
     text: { primary: "#c8c8c8", secondary: "#888888", muted: "#7a7a7a", disabled: "#505050" },
-    status: { success: "#888888", error: "#888888", warning: "#888888", processing: "#c8c8c8", processingShimmer: "#e0e0e0" },
+    status: { success: "#8ec07c", error: "#e06c75", warning: "#e6b450", processing: "#c8c8c8", processingShimmer: "#e0e0e0" },
     selection: { active: "#c8c8c8", indicator: "#c8c8c8" },
     panel: { title: "#c8c8c8", subtitle: "#888888" },
     tabs: { active: "#c8c8c8", inactive: "#7a7a7a", separator: "#3a3a3a" },
@@ -45,14 +45,14 @@ const bases = {
     divider: "#3a3a3a",
     footer: "#7a7a7a",
     diff: { added: "#888888", addedBg: "#2c2c2c", removed: "#6a6a6a", removedBg: "#212121" },
-    tool: { pending: "#7a7a7a", running: "#888888", completed: "#c8c8c8", error: "#888888" },
+    tool: { pending: "#7a7a7a", running: "#e6b450", completed: "#8ec07c", error: "#e06c75" },
     contrast: "#000000",
     accent: { primary: "#c8c8c8", shimmer: "#e0e0e0" },
   },
 
   light: {
     text: { primary: "#1a1717", secondary: "#4a4747", muted: "#6b6868", disabled: "#a8a5a5" },
-    status: { success: "#4a4747", error: "#4a4747", warning: "#4a4747", processing: "#1a1717", processingShimmer: "#4a4747" },
+    status: { success: "#4a8a3e", error: "#c04048", warning: "#b08520", processing: "#1a1717", processingShimmer: "#4a4747" },
     selection: { active: "#1a1717", indicator: "#1a1717" },
     panel: { title: "#1a1717", subtitle: "#4a4747" },
     tabs: { active: "#1a1717", inactive: "#6b6868", separator: "#c5c1c1" },
@@ -63,7 +63,7 @@ const bases = {
     divider: "#c5c1c1",
     footer: "#6b6868",
     diff: { added: "#4a4747", addedBg: "#e2dfdf", removed: "#6b6868", removedBg: "#d5d1d1" },
-    tool: { pending: "#6b6868", running: "#4a4747", completed: "#1a1717", error: "#4a4747" },
+    tool: { pending: "#6b6868", running: "#b08520", completed: "#4a8a3e", error: "#c04048" },
     contrast: "#eeebeb",
     accent: { primary: "#1a1717", shimmer: "#4a4747" },
   },

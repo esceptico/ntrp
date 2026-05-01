@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { learningApprovalEffect, learningCandidateEffect, learningChangeLabel } from "./memoryLearning.js";
+import {
+  canApproveLearningCandidate,
+  canRejectLearningCandidate,
+  learningApprovalEffect,
+  learningCandidateEffect,
+  learningChangeLabel,
+} from "./memoryLearning.js";
 
 test("labels memory learning change types for humans", () => {
   expect(learningChangeLabel("skill_note")).toBe("skill note");
@@ -21,4 +27,15 @@ test("explains approval before mutation", () => {
   expect(learningApprovalEffect("memory_feedback")).toBe(
     "approval records manual follow-up; it does not change runtime"
   );
+});
+
+test("matches learning action affordances to legal transitions", () => {
+  expect(canApproveLearningCandidate("proposed")).toBe(true);
+  expect(canApproveLearningCandidate("approved")).toBe(false);
+  expect(canApproveLearningCandidate("applied")).toBe(false);
+
+  expect(canRejectLearningCandidate("proposed")).toBe(true);
+  expect(canRejectLearningCandidate("approved")).toBe(true);
+  expect(canRejectLearningCandidate("applied")).toBe(false);
+  expect(canRejectLearningCandidate("reverted")).toBe(false);
 });
