@@ -626,11 +626,15 @@ class FactMemory:
         return await self.facts.count()
 
     async def get_profile(self, limit: int = SYSTEM_PROMPT_PROFILE_LIMIT) -> list[Fact]:
-        return await self.facts.list_profile_facts(PROFILE_FACT_KINDS, limit=limit)
+        return await self.facts.list_profile_facts_for_entity(
+            USER_ENTITY_NAME,
+            PROFILE_FACT_KINDS,
+            limit=limit,
+        )
 
     async def get_session_memory(
         self,
-        user_limit: int = 10,
+        user_limit: int = 0,
         profile_limit: int = SYSTEM_PROMPT_PROFILE_LIMIT,
     ) -> SessionMemory:
         if user_entity := await self.facts.get_entity_by_name(USER_ENTITY_NAME):
@@ -660,8 +664,11 @@ class FactMemory:
             exclude_ids.update(obs.source_fact_ids)
         exclude_ids.update(f.id for f in profile_facts)
 
-        all_user_facts = await self.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=user_limit + len(exclude_ids))
-        user_facts = [f for f in all_user_facts if f.id not in exclude_ids][:user_limit]
+        if user_limit > 0:
+            all_user_facts = await self.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=user_limit + len(exclude_ids))
+            user_facts = [f for f in all_user_facts if f.id not in exclude_ids][:user_limit]
+        else:
+            user_facts = []
 
         return SessionMemory(observations=observations, profile_facts=profile_facts, user_facts=user_facts)
 

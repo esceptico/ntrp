@@ -115,11 +115,14 @@ class TestFormatSessionMemory:
                 make_fact(1, "User is Timur", FactKind.IDENTITY),
                 make_fact(2, "User prefers terse updates", FactKind.PREFERENCE),
             ],
+            observations=[make_observation(4, "User is improving memory quality")],
             user_facts=[make_fact(3, "Legacy user fact")],
         )
 
+        assert result.index("**Patterns**") < result.index("**Identity**")
         assert "**Identity**" in result
         assert "**Preferences**" in result
         assert "**About user**" in result
+        assert "User is improving memory quality" in result
         assert "User is Timur" in result
         assert "User prefers terse updates" in result

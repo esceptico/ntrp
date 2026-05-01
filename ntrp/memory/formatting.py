@@ -126,10 +126,10 @@ def format_session_memory(
     if not profile_facts and not observations and not user_facts:
         return None
     sections: list[tuple[str, list[str]]] = []
-    if profile_facts:
-        sections.extend(_profile_sections(profile_facts))
     if observations:
         sections.append(("**Patterns**", [_format_observation(obs) for obs in observations]))
+    if profile_facts:
+        sections.extend(_profile_sections(profile_facts))
     if user_facts:
         sections.append(("**About user**", [f"- {f.text}" for f in user_facts]))
     return _format_sections(sections)
@@ -143,6 +143,11 @@ def format_session_memory_render(
     if not profile_facts and not observations and not user_facts:
         return None
     sections: list[tuple[str, list[_TrackedItem]]] = []
+    if observations:
+        sections.append((
+            "**Patterns**",
+            [_TrackedItem(text=_format_observation(obs), observation_ids=(obs.id,)) for obs in observations],
+        ))
     if profile_facts:
         for kind, header in PROFILE_SECTIONS:
             items = [
@@ -152,11 +157,6 @@ def format_session_memory_render(
             ]
             if items:
                 sections.append((header, items))
-    if observations:
-        sections.append((
-            "**Patterns**",
-            [_TrackedItem(text=_format_observation(obs), observation_ids=(obs.id,)) for obs in observations],
-        ))
     if user_facts:
         sections.append((
             "**About user**",

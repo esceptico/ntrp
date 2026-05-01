@@ -116,6 +116,22 @@ _SQL_LIST_PROFILE_FACTS = """
     ORDER BY pinned_at IS NULL, salience DESC, access_count DESC, created_at DESC
     LIMIT ?
 """
+_SQL_LIST_PROFILE_FACTS_FOR_ENTITY = """
+    SELECT DISTINCT f.*
+    FROM facts f
+    JOIN entity_refs er ON f.id = er.fact_id
+    WHERE f.archived_at IS NULL
+      AND f.superseded_by_fact_id IS NULL
+      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
+      AND f.lifetime = 'durable'
+      AND f.kind IN ({placeholders})
+      AND (
+          er.entity_id = (SELECT id FROM entities WHERE name = ? COLLATE NOCASE)
+          OR (er.entity_id IS NULL AND er.name = ? COLLATE NOCASE)
+      )
+    ORDER BY f.pinned_at IS NULL, f.salience DESC, f.access_count DESC, f.created_at DESC
+    LIMIT ?
+"""
 _SQL_LIST_PROFILE_REVIEW_CANDIDATES = """
     SELECT * FROM facts
     WHERE archived_at IS NULL
@@ -523,6 +539,22 @@ class FactRepository:
         params = tuple(kind.value for kind in kinds) + (limit,)
         rows = await self.read_conn.execute_fetchall(
             _SQL_LIST_PROFILE_FACTS.format(placeholders=placeholders),
+            params,
+        )
+        return [Fact.model_validate(_row_dict(r)) for r in rows]
+
+    async def list_profile_facts_for_entity(
+        self,
+        name: str,
+        kinds: Sequence[FactKind],
+        limit: int,
+    ) -> list[Fact]:
+        if not kinds:
+            return []
+        placeholders = ",".join("?" * len(kinds))
+        params = tuple(kind.value for kind in kinds) + (name, name, limit)
+        rows = await self.read_conn.execute_fetchall(
+            _SQL_LIST_PROFILE_FACTS_FOR_ENTITY.format(placeholders=placeholders),
             params,
         )
         return [Fact.model_validate(_row_dict(r)) for r in rows]

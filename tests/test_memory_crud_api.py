@@ -588,12 +588,14 @@ class TestMemoryAuditAPI:
 
     @pytest.mark.asyncio
     async def test_memory_profile(self, test_client: AsyncClient, test_runtime: Runtime):
+        user = await test_runtime.memory.facts.create_entity("User")
         fact = await test_runtime.memory.facts.create(
             "User prefers concise status updates",
             SourceType.EXPLICIT,
             kind=FactKind.PREFERENCE,
             salience=2,
         )
+        await test_runtime.memory.facts.add_entity_ref(fact.id, "User", user.id)
         await test_runtime.memory.db.conn.commit()
 
         response = await test_client.get("/memory/profile")
@@ -729,6 +731,48 @@ class TestMemoryAuditAPI:
         assert current.id in session_fact_ids
         assert expired.id not in session_fact_ids
         assert superseded.id not in session_fact_ids
+
+    @pytest.mark.asyncio
+    async def test_default_session_memory_prefers_patterns_and_user_profile(
+        self,
+        test_runtime: Runtime,
+    ):
+        repo = test_runtime.memory.facts
+        user = await repo.create_entity("User")
+        regina = await repo.create_entity("Regina")
+        user_fact = await repo.create(
+            "User prefers concise memory context",
+            SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+            salience=2,
+        )
+        raw_user_fact = await repo.create("User mentioned a one-off implementation detail", SourceType.EXPLICIT)
+        global_fact = await repo.create(
+            "Regina is a Dex team member",
+            SourceType.EXPLICIT,
+            kind=FactKind.IDENTITY,
+            salience=2,
+        )
+        source_a = await repo.create("User is improving memory prompt quality", SourceType.EXPLICIT)
+        source_b = await repo.create("User wants consolidated memory in the prompt", SourceType.EXPLICIT)
+        for fact in (user_fact, raw_user_fact, source_a, source_b):
+            await repo.add_entity_ref(fact.id, "User", user.id)
+        await repo.add_entity_ref(global_fact.id, "Regina", regina.id)
+
+        observation = await test_runtime.memory.observations.create(
+            summary="User is improving memory prompt quality by preferring consolidated context over raw facts.",
+            embedding=mock_embedding("memory prompt quality"),
+            source_fact_id=source_a.id,
+        )
+        await test_runtime.memory.observations.add_source_facts(observation.id, [source_b.id])
+        await test_runtime.memory.observations.link_entities(observation.id, [user.id])
+        await test_runtime.memory.db.conn.commit()
+
+        session = await test_runtime.memory.get_session_memory()
+
+        assert [obs.id for obs in session.observations] == [observation.id]
+        assert [fact.id for fact in session.profile_facts] == [user_fact.id]
+        assert session.user_facts == []
 
     @pytest.mark.asyncio
     async def test_recall_tool_records_access_event(self, test_client: AsyncClient, test_runtime: Runtime):
@@ -891,6 +935,7 @@ class TestMemoryAuditAPI:
         test_client: AsyncClient,
         test_runtime: Runtime,
     ):
+        user = await test_runtime.memory.facts.create_entity("User")
         profile_fact = await test_runtime.memory.facts.create(
             text="User prefers concise architecture reviews with direct evidence.",
             source_type=SourceType.EXPLICIT,
@@ -903,6 +948,7 @@ class TestMemoryAuditAPI:
             kind=FactKind.PROJECT,
             salience=2,
         )
+        await test_runtime.memory.facts.add_entity_ref(profile_fact.id, "User", user.id)
         await test_runtime.memory.db.conn.commit()
 
         response = await test_client.get(

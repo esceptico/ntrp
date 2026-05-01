@@ -135,6 +135,35 @@ class TestFactCRUD:
         assert superseded.id not in ids
 
     @pytest.mark.asyncio
+    async def test_list_profile_facts_for_entity_excludes_global_people(self, repo: FactRepository):
+        user = await repo.create_entity("User")
+        regina = await repo.create_entity("Regina")
+        user_fact = await repo.create(
+            text="User prefers concise answers",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+            salience=1,
+        )
+        other_fact = await repo.create(
+            text="Regina is a Dex power user",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.IDENTITY,
+            salience=2,
+        )
+        await repo.add_entity_ref(user_fact.id, "User", user.id)
+        await repo.add_entity_ref(other_fact.id, "Regina", regina.id)
+
+        facts = await repo.list_profile_facts_for_entity(
+            "User",
+            (FactKind.IDENTITY, FactKind.PREFERENCE),
+            limit=10,
+        )
+
+        ids = [fact.id for fact in facts]
+        assert user_fact.id in ids
+        assert other_fact.id not in ids
+
+    @pytest.mark.asyncio
     async def test_list_supersession_candidates_for_same_entity_and_kind(self, repo: FactRepository):
         entity = await repo.create_entity("User")
         older = await repo.create(
