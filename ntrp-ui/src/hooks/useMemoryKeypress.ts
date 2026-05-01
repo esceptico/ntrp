@@ -376,15 +376,6 @@ export function useMemoryKeypress({
         return;
       }
 
-      if (activeTab === "recall") {
-        if (key.name === "escape") {
-          onClose();
-          return;
-        }
-        recallTab.handleKeys(key);
-        return;
-      }
-
       if (key.name === "1") { setActiveTab("overview"); return; }
       if (key.name === "2") { setActiveTab("recall"); return; }
       if (key.name === "3") { setActiveTab("context"); return; }
@@ -394,6 +385,16 @@ export function useMemoryKeypress({
       if (key.name === "7") { setActiveTab("prune"); return; }
       if (key.name === "8") { setActiveTab("learning"); return; }
       if (key.name === "9") { setActiveTab("events"); return; }
+
+      if (activeTab === "recall") {
+        if (key.name === "escape") {
+          onClose();
+          return;
+        }
+        recallTab.handleKeys(key);
+        return;
+      }
+
       if (key.name === "r") { reload(); return; }
 
       if (key.name === "escape" || key.name === "q") {

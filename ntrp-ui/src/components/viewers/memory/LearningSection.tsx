@@ -53,10 +53,9 @@ function EvidenceList({ events, width }: { events: LearningEvent[]; width: numbe
       {events.slice(0, 5).map((event) => (
         <box key={event.id} flexDirection="column" marginBottom={1}>
           <text>
-            <span fg={colors.text.secondary}>#{event.id}</span>
-            <span fg={colors.text.disabled}> {event.source_type}</span>
+            <span fg={colors.text.secondary}>{event.source_type}</span>
             <span fg={colors.text.disabled}> / {event.scope}</span>
-            <span fg={colors.text.disabled}> {"\u2502"} {truncateText(event.signal, width - 18)}</span>
+            <span fg={colors.text.disabled}> {"\u2502"} {truncateText(event.signal, width - 20)}</span>
           </text>
           {event.evidence_ids.length > 0 && (
             <text>
@@ -98,7 +97,7 @@ function CandidateDetails({
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       <text>
-        <span fg={accentValue}>candidate #{candidate.id}</span>
+        <span fg={accentValue}>learning proposal</span>
         <span fg={colors.text.disabled}> {"\u2502"} </span>
         <span fg={statusColor(candidate.status, accentValue)}>{candidate.status}</span>
         <span fg={colors.text.disabled}> {"\u2502"} {formatTimeAgo(candidate.created_at)}</span>

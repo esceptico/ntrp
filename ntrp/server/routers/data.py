@@ -454,8 +454,20 @@ async def get_memory_access_events(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     source: str | None = Query(default=None, min_length=1),
+    include_records: bool = Query(default=False),
     svc: MemoryService = Depends(require_memory),
 ):
+    if include_records:
+        events, facts, observations = await svc.access_events.list_recent_with_records(
+            limit=limit,
+            offset=offset,
+            source=source,
+        )
+        return {
+            "events": [_memory_access_event_payload(event) for event in events],
+            "facts": [_fact_payload(fact) for fact in facts.values()],
+            "observations": [_observation_payload(observation) for observation in observations.values()],
+        }
     events = await svc.access_events.list_recent(limit=limit, offset=offset, source=source)
     return {"events": [_memory_access_event_payload(event) for event in events]}
 

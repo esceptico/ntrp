@@ -680,12 +680,17 @@ class TestMemoryAuditAPI:
             details={"has_context": True},
         )
 
-        response = await test_client.get("/memory/access/events", params={"source": "chat_prompt"})
+        response = await test_client.get(
+            "/memory/access/events",
+            params={"source": "chat_prompt", "include_records": True},
+        )
         assert response.status_code == 200
-        event = response.json()["events"][0]
+        payload = response.json()
+        event = payload["events"][0]
         assert result.fact.id in event["injected_fact_ids"]
         assert event["query"] is None
         assert event["details"] == {"has_context": True}
+        assert payload["facts"][0]["text"] == "User prefers visible memory provenance"
 
     @pytest.mark.asyncio
     async def test_memory_injection_policy_preview_flags_recent_access_events(

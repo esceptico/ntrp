@@ -108,7 +108,7 @@ export function ObservationDetailsView({
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       <box marginBottom={1}>
         <text>
-          <span fg={accentValue}>pattern #{observation.id}</span>
+          <span fg={accentValue}>memory pattern</span>
           <span fg={colors.text.disabled}> {"\u2502"} derived from supporting facts</span>
         </text>
       </box>

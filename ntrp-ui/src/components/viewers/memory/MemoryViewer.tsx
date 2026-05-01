@@ -10,7 +10,7 @@ import { useLearningTab } from "../../../hooks/useLearningTab.js";
 import { useMemoryData } from "../../../hooks/useMemoryData.js";
 import { useMemoryKeypress } from "../../../hooks/useMemoryKeypress.js";
 import { useRecallInspectTab } from "../../../hooks/useRecallInspectTab.js";
-import { Dialog, Loading, Tabs, colors, truncateText } from "../../ui/index.js";
+import { Dialog, Tabs, colors, truncateText } from "../../ui/index.js";
 import { memoryAccessSourceLabel } from "../../../lib/memoryAccess.js";
 import { MEMORY_TABS, MEMORY_TAB_COPY, memoryTabLabels, type MemoryTabType } from "../../../lib/memoryTabs.js";
 import { FactsSection } from "./FactsSection.js";
@@ -48,9 +48,12 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     learningEvents,
     learningCandidates,
     memoryAccessEvents,
+    memoryAccessFacts,
+    memoryAccessObservations,
     memoryInjectionPolicy,
     memoryAudit,
     loading,
+    backgroundLoading,
     error,
     setFacts,
     setObservations,
@@ -89,22 +92,6 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     onClose,
   });
 
-  if (loading) {
-    return (
-      <Dialog title="MEMORY" size="full" onClose={onClose}>
-        {() => <Loading message="Loading memory..." />}
-      </Dialog>
-    );
-  }
-
-  if (error) {
-    return (
-      <Dialog title="MEMORY" size="full" onClose={onClose}>
-        {() => <text><span fg={colors.text.muted}>{error}</span></text>}
-      </Dialog>
-    );
-  }
-
   return (
     <Dialog
       title="MEMORY"
@@ -125,7 +112,8 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
       }
     >
       {({ width, height }) => {
-        const sectionHeight = Math.max(1, height - 4);
+        const errorLineHeight = error ? 1 : 0;
+        const sectionHeight = Math.max(1, height - 4 - errorLineHeight);
         const tab: SortableTab | null =
           activeTab === "overview" || activeTab === "recall"
             ? null
@@ -195,7 +183,8 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 ].join(" · ")
             : "";
         const sortDisplay = tab ? `sort: ${tab.sortOrder}` : "";
-        const statusDisplay = [filterDisplay, sortDisplay].filter(Boolean).join(" · ");
+        const loadDisplay = loading ? "loading memory" : backgroundLoading ? "loading checks" : error ? "load warning" : "";
+        const statusDisplay = [loadDisplay, filterDisplay, sortDisplay].filter(Boolean).join(" · ");
         const copy = MEMORY_TAB_COPY[activeTab];
         const copyWidth = Math.max(1, Math.min(width, Math.max(24, Math.floor(width * 0.58))));
         const copyDescriptionWidth = Math.max(8, copyWidth - copy.title.length - 3);
@@ -225,6 +214,12 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
               )}
             </box>
 
+            {error && (
+              <box marginBottom={1}>
+                <text><span fg={colors.status.error}>{truncateText(error, width)}</span></text>
+              </box>
+            )}
+
             {activeTab === "overview" && (
               <OverviewSection
                 profileFacts={profileFacts}
@@ -251,6 +246,8 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 tab={accessTab}
                 totalCount={memoryAccessEvents.length}
                 policyPreview={memoryInjectionPolicy}
+                facts={[...profileFacts, ...facts, ...memoryAccessFacts]}
+                observations={[...observations, ...memoryAccessObservations]}
                 height={sectionHeight}
                 width={width}
               />

@@ -1,8 +1,10 @@
 import type {
+  Fact,
   MemoryAccessEvent,
   MemoryInjectionPolicyCandidate,
   MemoryInjectionPolicyPreview,
   MemoryInjectionPolicyReason,
+  Observation,
 } from "../../../api/client.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import type { MemoryAccessTabState } from "../../../hooks/useMemoryAccessTab.js";
@@ -15,6 +17,8 @@ interface MemoryAccessSectionProps {
   tab: MemoryAccessTabState;
   totalCount: number;
   policyPreview: MemoryInjectionPolicyPreview | null;
+  facts: Fact[];
+  observations: Observation[];
   height: number;
   width: number;
 }
@@ -31,11 +35,6 @@ function reasonLabel(reason: MemoryInjectionPolicyReason): string {
 
 function reasonsLabel(reasons: MemoryInjectionPolicyReason[]): string {
   return reasons.map(reasonLabel).join(", ");
-}
-
-function idsLabel(ids: number[], width: number): string {
-  if (ids.length === 0) return "none";
-  return truncateText(ids.map((id) => `#${id}`).join(" "), width);
 }
 
 function DetailsJson({ details, width }: { details: Record<string, unknown>; width: number }) {
@@ -55,14 +54,65 @@ function DetailsJson({ details, width }: { details: Record<string, unknown>; wid
   );
 }
 
+function MemoryTextList<T>({
+  title,
+  ids,
+  records,
+  getText,
+  width,
+}: {
+  title: string;
+  ids: number[];
+  records: Map<number, T>;
+  getText: (record: T) => string;
+  width: number;
+}) {
+  if (ids.length === 0) return null;
+
+  const resolved = ids.flatMap((id) => {
+    const record = records.get(id);
+    return record ? [record] : [];
+  });
+  const visible = resolved.slice(0, 4);
+  const missing = ids.length - resolved.length;
+  const remaining = Math.max(0, resolved.length - visible.length);
+
+  return (
+    <box flexDirection="column" marginTop={1}>
+      <text>
+        <span fg={colors.text.muted}>{title} </span>
+        <span fg={colors.text.secondary}>{ids.length}</span>
+      </text>
+      {visible.map((record, index) => (
+        <text key={index}>
+          <span fg={colors.text.disabled}>- {truncateText(getText(record), Math.max(8, width - 2))}</span>
+        </text>
+      ))}
+      {(remaining > 0 || missing > 0) && (
+        <text>
+          <span fg={colors.text.disabled}>
+            {remaining > 0 ? `... ${remaining} more loaded` : ""}
+            {remaining > 0 && missing > 0 ? " / " : ""}
+            {missing > 0 ? `${missing} not loaded here` : ""}
+          </span>
+        </text>
+      )}
+    </box>
+  );
+}
+
 function AccessDetails({
   event,
   candidate,
+  factsById,
+  observationsById,
   width,
   height,
 }: {
   event: MemoryAccessEvent | null;
   candidate: MemoryInjectionPolicyCandidate | null;
+  factsById: Map<number, Fact>;
+  observationsById: Map<number, Observation>;
   width: number;
   height: number;
 }) {
@@ -83,7 +133,7 @@ function AccessDetails({
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       <text>
-        <span fg={accentValue}>sent #{event.id}</span>
+        <span fg={accentValue}>sent memory</span>
         <span fg={colors.text.disabled}> {"\u2502"} </span>
         <span fg={colors.text.secondary}>{memoryAccessSourceLabel(event.source)}</span>
         <span fg={colors.text.disabled}> {"\u2502"} {formatTimeAgo(event.created_at)}</span>
@@ -142,35 +192,42 @@ function AccessDetails({
         </box>
       )}
 
-      <box marginTop={1} flexDirection="column">
-        <text>
-          <span fg={colors.text.muted}>fact ids </span>
-          <span fg={colors.text.disabled}>{idsLabel(event.injected_fact_ids, textWidth - 9)}</span>
-        </text>
-        <text>
-          <span fg={colors.text.muted}>pattern ids </span>
-          <span fg={colors.text.disabled}>{idsLabel(event.injected_observation_ids, textWidth - 12)}</span>
-        </text>
-        {event.bundled_fact_ids.length > 0 && (
-          <text>
-            <span fg={colors.text.muted}>bundled </span>
-            <span fg={colors.text.disabled}>{idsLabel(event.bundled_fact_ids, textWidth - 9)}</span>
-          </text>
-        )}
-      </box>
+      <MemoryTextList
+        title="injected facts"
+        ids={event.injected_fact_ids}
+        records={factsById}
+        getText={(fact) => fact.text}
+        width={textWidth}
+      />
+      <MemoryTextList
+        title="injected patterns"
+        ids={event.injected_observation_ids}
+        records={observationsById}
+        getText={(observation) => observation.summary}
+        width={textWidth}
+      />
+      <MemoryTextList
+        title="bundled facts"
+        ids={event.bundled_fact_ids}
+        records={factsById}
+        getText={(fact) => fact.text}
+        width={textWidth}
+      />
 
       <box marginTop={2} flexDirection="column">
-        <text><span fg={colors.text.muted}>DETAILS</span></text>
+        <text><span fg={colors.text.muted}>RUN METADATA</span></text>
         <DetailsJson details={event.details} width={textWidth} />
       </box>
     </box>
   );
 }
 
-export function MemoryAccessSection({ tab, totalCount, policyPreview, height, width }: MemoryAccessSectionProps) {
+export function MemoryAccessSection({ tab, totalCount, policyPreview, facts, observations, height, width }: MemoryAccessSectionProps) {
   const { accentValue } = useAccentColor();
   const listWidth = Math.min(48, Math.max(32, Math.floor(width * 0.42)));
   const detailWidth = Math.max(0, width - listWidth - 1);
+  const factsById = new Map(facts.map((fact) => [fact.id, fact]));
+  const observationsById = new Map(observations.map((observation) => [observation.id, observation]));
   const candidatesByEventId = new Map(
     (policyPreview?.candidates ?? []).map((candidate) => [candidate.access_event_id, candidate])
   );
@@ -220,6 +277,8 @@ export function MemoryAccessSection({ tab, totalCount, policyPreview, height, wi
         <AccessDetails
           event={tab.selectedEvent}
           candidate={tab.selectedEvent ? candidatesByEventId.get(tab.selectedEvent.id) ?? null : null}
+          factsById={factsById}
+          observationsById={observationsById}
           width={detailWidth}
           height={height}
         />

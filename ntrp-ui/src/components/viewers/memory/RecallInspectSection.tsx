@@ -28,13 +28,13 @@ function sourceLines(tab: RecallInspectTabState, width: number): string[] {
   if (result.observations.length > 0) {
     lines.push("", "SOURCES - PATTERNS");
     for (const obs of result.observations) {
-      lines.push(`#${obs.id} ${obs.evidence_count} facts - ${truncateText(obs.summary, Math.max(10, width - 16))}`);
+      lines.push(`${obs.evidence_count} facts · ${truncateText(obs.summary, Math.max(10, width - 12))}`);
     }
   }
   if (result.facts.length > 0) {
     lines.push("", "SOURCES - FACTS");
     for (const fact of result.facts) {
-      lines.push(`#${fact.id} ${fact.kind} - ${truncateText(fact.text, Math.max(10, width - 14))}`);
+      lines.push(`${fact.kind} · ${truncateText(fact.text, Math.max(10, width - fact.kind.length - 3))}`);
     }
   }
   return lines;

@@ -40,12 +40,22 @@ const PROFILE_REASON_LABELS: Record<string, string> = {
 
 function MetricRow({ label, value, note }: { label: string; value: string | number; note: string }) {
   return (
-    <text>
-      <span fg={colors.text.secondary}>{label}</span>
-      <span fg={colors.text.disabled}> {"\u2502"} </span>
-      <span fg={colors.text.primary}>{value}</span>
-      <span fg={colors.text.disabled}> {"\u2502"} {note}</span>
-    </text>
+    <box flexDirection="row">
+      <box width={16}>
+        <text><span fg={colors.text.secondary}>{truncateText(label, 15)}</span></text>
+      </box>
+      <box width={10}>
+        <text>
+          <span fg={colors.text.disabled}>{"\u2502"} </span>
+          <span fg={colors.text.primary}>{truncateText(String(value), 7)}</span>
+        </text>
+      </box>
+      <box flexGrow={1}>
+        <text>
+          <span fg={colors.text.disabled}>{"\u2502"} {note}</span>
+        </text>
+      </box>
+    </box>
   );
 }
 
@@ -136,9 +146,9 @@ export function OverviewSection({
         <text><span fg={colors.text.muted}>PROFILE REVIEW</span></text>
         {topProfileReview ? (
           <text>
-            <span fg={colors.text.secondary}>#{topProfileReview.fact.id}</span>
+            <span fg={colors.text.secondary}>{truncateText(topProfileReview.fact.text, Math.max(10, width - 44))}</span>
             <span fg={colors.text.disabled}> {"\u2502"} {profileReviewLabel}</span>
-            <span fg={colors.text.disabled}> {"\u2502"} {truncateText(topProfileReview.recommendation, width - 28)}</span>
+            <span fg={colors.text.disabled}> {"\u2502"} {truncateText(topProfileReview.recommendation, 28)}</span>
           </text>
         ) : (
           <text><span fg={colors.text.disabled}>No profile policy flags loaded</span></text>

@@ -38,9 +38,12 @@ interface UseMemoryDataResult {
   learningEvents: LearningEvent[];
   learningCandidates: LearningCandidate[];
   memoryAccessEvents: MemoryAccessEvent[];
+  memoryAccessFacts: Fact[];
+  memoryAccessObservations: Observation[];
   memoryInjectionPolicy: MemoryInjectionPolicyPreview | null;
   memoryAudit: MemoryAudit | null;
   loading: boolean;
+  backgroundLoading: boolean;
   error: string | null;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
   setObservations: React.Dispatch<React.SetStateAction<Observation[]>>;
@@ -51,6 +54,7 @@ interface UseMemoryDataResult {
 
 export function useMemoryData(config: Config, factFilters?: FactFilters, observationFilters?: ObservationFilters): UseMemoryDataResult {
   const [loading, setLoading] = useState(true);
+  const [backgroundLoading, setBackgroundLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [facts, setFacts] = useState<Fact[]>([]);
   const [factTotal, setFactTotal] = useState(0);
@@ -63,6 +67,8 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
   const [learningEvents, setLearningEvents] = useState<LearningEvent[]>([]);
   const [learningCandidates, setLearningCandidates] = useState<LearningCandidate[]>([]);
   const [memoryAccessEvents, setMemoryAccessEvents] = useState<MemoryAccessEvent[]>([]);
+  const [memoryAccessFacts, setMemoryAccessFacts] = useState<Fact[]>([]);
+  const [memoryAccessObservations, setMemoryAccessObservations] = useState<Observation[]>([]);
   const [memoryInjectionPolicy, setMemoryInjectionPolicy] = useState<MemoryInjectionPolicyPreview | null>(null);
   const [memoryAudit, setMemoryAudit] = useState<MemoryAudit | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
@@ -71,56 +77,110 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
 
   useEffect(() => {
     const id = ++fetchIdRef.current;
+    let cancelled = false;
     setLoading(true);
+    setBackgroundLoading(true);
+    setError(null);
 
     (async () => {
-      try {
-        const [
-          factsData,
-          profileData,
-          profilePolicyData,
-          obsData,
-          pruneData,
-          eventsData,
-          learningEventsData,
-          learningCandidatesData,
-          accessData,
-          policyData,
-          auditData,
-        ] = await Promise.all([
-          getFacts(config, 200, factFilters),
-          getMemoryProfile(config, 20),
-          getMemoryProfilePolicyPreview(config, 100),
-          getObservations(config, 100, observationFilters),
-          getMemoryPruneDryRun(config),
-          getMemoryEvents(config, 100),
-          getLearningEvents(config, 100),
-          getLearningCandidates(config, 100),
-          getMemoryAccessEvents(config, 100),
-          getMemoryInjectionPolicyPreview(config, 100),
-          getMemoryAudit(config),
-        ]);
-        if (fetchIdRef.current !== id) return;
-        setFacts(factsData.facts || []);
-        setFactTotal(factsData.total || 0);
-        setProfileFacts(profileData.facts || []);
-        setMemoryProfilePolicy(profilePolicyData);
-        setObservations(obsData.observations || []);
-        setObservationTotal(obsData.total || 0);
-        setPruneDryRun(pruneData);
-        setMemoryEvents(eventsData.events || []);
-        setLearningEvents(learningEventsData.events || []);
-        setLearningCandidates(learningCandidatesData.candidates || []);
-        setMemoryAccessEvents(accessData.events || []);
-        setMemoryInjectionPolicy(policyData);
-        setMemoryAudit(auditData);
-      } catch (e) {
-        if (fetchIdRef.current !== id) return;
-        setError(`Failed to load: ${e}`);
-      } finally {
-        if (fetchIdRef.current === id) setLoading(false);
-      }
-    })();
+      const isCurrent = () => !cancelled && fetchIdRef.current === id;
+      const reportError = (label: string, e: unknown) => {
+        if (!isCurrent()) return;
+        setError((prev) => prev ?? `${label} failed: ${e}`);
+      };
+
+      const fastLoads = [
+        getFacts(config, 200, factFilters)
+          .then((data) => {
+            if (!isCurrent()) return;
+            setFacts(data.facts || []);
+            setFactTotal(data.total || 0);
+          })
+          .catch((e: unknown) => reportError("Facts", e)),
+        getMemoryProfile(config, 20)
+          .then((data) => {
+            if (!isCurrent()) return;
+            setProfileFacts(data.facts || []);
+          })
+          .catch((e: unknown) => reportError("Profile", e)),
+        getObservations(config, 100, observationFilters)
+          .then((data) => {
+            if (!isCurrent()) return;
+            setObservations(data.observations || []);
+            setObservationTotal(data.total || 0);
+          })
+          .catch((e: unknown) => reportError("Patterns", e)),
+        getMemoryEvents(config, 100)
+          .then((data) => {
+            if (!isCurrent()) return;
+            setMemoryEvents(data.events || []);
+          })
+          .catch((e: unknown) => reportError("Audit log", e)),
+        getLearningEvents(config, 100)
+          .then((data) => {
+            if (!isCurrent()) return;
+            setLearningEvents(data.events || []);
+          })
+          .catch((e: unknown) => reportError("Learning events", e)),
+        getLearningCandidates(config, 100)
+          .then((data) => {
+            if (!isCurrent()) return;
+            setLearningCandidates(data.candidates || []);
+          })
+          .catch((e: unknown) => reportError("Learning candidates", e)),
+        getMemoryAccessEvents(config, 100)
+          .then((data) => {
+            if (!isCurrent()) return;
+            setMemoryAccessEvents(data.events || []);
+            setMemoryAccessFacts(data.facts || []);
+            setMemoryAccessObservations(data.observations || []);
+          })
+          .catch((e: unknown) => reportError("Sent memory", e)),
+      ];
+
+      await Promise.allSettled(fastLoads);
+      if (!isCurrent()) return;
+      setLoading(false);
+
+      const slowLoads = [
+        getMemoryProfilePolicyPreview(config, 100)
+          .then((data) => {
+            if (!isCurrent()) return;
+            setMemoryProfilePolicy(data);
+          })
+          .catch((e: unknown) => reportError("Profile policy", e)),
+        getMemoryPruneDryRun(config)
+          .then((data) => {
+            if (!isCurrent()) return;
+            setPruneDryRun(data);
+          })
+          .catch((e: unknown) => reportError("Cleanup preview", e)),
+        getMemoryInjectionPolicyPreview(config, 100)
+          .then((data) => {
+            if (!isCurrent()) return;
+            setMemoryInjectionPolicy(data);
+          })
+          .catch((e: unknown) => reportError("Sent-memory policy", e)),
+        getMemoryAudit(config)
+          .then((data) => {
+            if (!isCurrent()) return;
+            setMemoryAudit(data);
+          })
+          .catch((e: unknown) => reportError("Memory health", e)),
+      ];
+
+      await Promise.allSettled(slowLoads);
+      if (isCurrent()) setBackgroundLoading(false);
+    })().catch((e: unknown) => {
+      if (fetchIdRef.current !== id) return;
+      setError(`Failed to load: ${e}`);
+      setLoading(false);
+      setBackgroundLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [config, fetchCount, factFilters, observationFilters]);
 
   const reload = useCallback(() => {
@@ -139,9 +199,12 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
     learningEvents,
     learningCandidates,
     memoryAccessEvents,
+    memoryAccessFacts,
+    memoryAccessObservations,
     memoryInjectionPolicy,
     memoryAudit,
     loading,
+    backgroundLoading,
     error,
     setFacts,
     setObservations,

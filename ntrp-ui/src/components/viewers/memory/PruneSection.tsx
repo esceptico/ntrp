@@ -54,7 +54,7 @@ function PruneDetails({
           </box>
           <box marginTop={1} flexDirection="column">
             <text>
-              <span fg={colors.text.muted}>#{candidate.id}</span>
+              <span fg={colors.text.muted}>archive candidate</span>
               <span fg={colors.text.disabled}> {"\u2502"} {candidate.reason}</span>
             </text>
             <text>

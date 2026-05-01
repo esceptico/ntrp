@@ -13,7 +13,7 @@ interface MemoryEventsSectionProps {
 }
 
 function eventTarget(event: MemoryEvent): string {
-  return event.target_id === null ? event.target_type : `${event.target_type} #${event.target_id}`;
+  return event.target_id === null ? event.target_type : `${event.target_type} record`;
 }
 
 function DetailsJson({ details, width }: { details: Record<string, unknown>; width: number }) {
@@ -52,7 +52,7 @@ function EventDetails({
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       <text>
-        <span fg={accentValue}>log #{event.id}</span>
+        <span fg={accentValue}>audit event</span>
         <span fg={colors.text.disabled}> {"\u2502"} </span>
         <span fg={colors.text.secondary}>{event.action}</span>
         <span fg={colors.text.disabled}> {"\u2502"} {event.actor}</span>

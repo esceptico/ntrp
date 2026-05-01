@@ -486,6 +486,24 @@ class MemoryAccessEventService:
             source=source,
         )
 
+    async def list_recent_with_records(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        source: str | None = None,
+    ) -> tuple[list[MemoryAccessEvent], dict[int, Fact], dict[int, Observation]]:
+        events = await self.list_recent(limit=limit, offset=offset, source=source)
+        fact_ids: set[int] = set()
+        observation_ids: set[int] = set()
+        for event in events:
+            fact_ids.update(event.injected_fact_ids)
+            fact_ids.update(event.bundled_fact_ids)
+            observation_ids.update(event.injected_observation_ids)
+        facts = await self._memory.facts.get_batch(sorted(fact_ids))
+        observations = await self._memory.observations.get_batch(sorted(observation_ids))
+        return events, facts, observations
+
     async def policy_preview(
         self,
         *,

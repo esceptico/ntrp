@@ -113,7 +113,7 @@ export function FactDetailsView({
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       <box marginBottom={1}>
         <text>
-          <span fg={accentValue}>fact #{fact.id}</span>
+          <span fg={accentValue}>memory fact</span>
           <span fg={colors.text.disabled}> {"\u2502"} source of truth</span>
         </text>
       </box>
@@ -149,7 +149,7 @@ export function FactDetailsView({
         <text>
           <span fg={colors.text.disabled}>state </span>
           <span fg={labelColor}>
-            {fact.archived_at ? "archived" : fact.superseded_by_fact_id ? `superseded by #${fact.superseded_by_fact_id}` : fact.pinned_at ? "pinned" : fact.expires_at ? "temporary" : "active"}
+            {fact.archived_at ? "archived" : fact.superseded_by_fact_id ? "superseded" : fact.pinned_at ? "pinned" : fact.expires_at ? "temporary" : "active"}
           </span>
         </text>
       </box>

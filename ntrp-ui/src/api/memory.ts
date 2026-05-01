@@ -521,8 +521,14 @@ export async function proposeLearningCandidates(config: Config): Promise<Learnin
   return api.post<LearningProposalResult>(`${config.serverUrl}/memory/learning/propose`, {});
 }
 
-export async function getMemoryAccessEvents(config: Config, limit = 100): Promise<{ events: MemoryAccessEvent[] }> {
-  return api.get<{ events: MemoryAccessEvent[] }>(`${config.serverUrl}/memory/access/events?limit=${limit}`);
+export async function getMemoryAccessEvents(config: Config, limit = 100): Promise<{
+  events: MemoryAccessEvent[];
+  facts?: Fact[];
+  observations?: Observation[];
+}> {
+  return api.get<{ events: MemoryAccessEvent[]; facts?: Fact[]; observations?: Observation[] }>(
+    `${config.serverUrl}/memory/access/events?limit=${limit}&include_records=true`
+  );
 }
 
 export async function getMemoryInjectionPolicyPreview(
