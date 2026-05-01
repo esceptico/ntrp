@@ -734,6 +734,7 @@ Implementation status:
 2026-05-01: operator automations now reuse bounded memory prefetch (`operator_prefetch`) so scheduled tasks get task-specific context without growing always-visible memory.
 2026-05-01: Memory UI has a Learning tab for candidate review and approve/reject status changes.
 2026-05-01: chat extraction now marks user messages as evidence and assistant messages as context-only before prompting the memory model.
+2026-05-01: approved skill/prompt learning candidates are injected as bounded procedural notes; approval affects behavior without silently editing skill files.
 ```
 
 Rejected for now:

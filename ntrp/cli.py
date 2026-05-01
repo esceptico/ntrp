@@ -12,6 +12,7 @@ from ntrp.core.factory import AgentConfig, create_agent
 from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted
 from ntrp.logging import UVICORN_LOG_CONFIG
+from ntrp.memory.learning_context import get_approved_learning_context
 from ntrp.server.runtime import Runtime
 from ntrp.settings import generate_api_key, load_user_settings, save_user_settings
 from ntrp.tools.core.context import IOBridge
@@ -113,6 +114,7 @@ async def _run_headless(prompt: str):
         system_prompt = build_system_prompt(
             source_details={},
             memory_context=None,
+            learning_context=await get_approved_learning_context(runtime.memory) if runtime.memory else None,
         )
 
         run_id = generate_slug(2)

@@ -12,6 +12,7 @@ from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationProgressEvent, ToolCallEvent, ToolResultEvent, agent_event_to_sse
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.formatting import format_session_memory
+from ntrp.memory.learning_context import get_approved_learning_context
 from ntrp.memory.prefetch import prefetch_memory_context
 from ntrp.server.bus import SessionBus
 from ntrp.tools.directives import load_directives
@@ -50,6 +51,7 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
     run_id = generate_slug(2)
 
     memory_context = None
+    learning_context = None
     if deps.memory:
         session_memory = await deps.memory.get_session_memory()
         session_context = format_session_memory(
@@ -77,10 +79,12 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
                 formatted_chars=len(session_context),
                 details={"source_id": request.source_id, "has_context": True},
             )
+        learning_context = await get_approved_learning_context(deps.memory)
 
     system_prompt = build_system_prompt(
         source_details=deps.source_details,
         memory_context=memory_context,
+        learning_context=learning_context,
         directives=load_directives(),
         notifiers=deps.notifiers or None,
     )
