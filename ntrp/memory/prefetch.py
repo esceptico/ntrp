@@ -50,7 +50,7 @@ def filter_prefetch_context(context: FactContext, session_memory: SessionMemory)
 async def prefetch_memory_context(
     memory: FactMemory,
     user_message: str,
-    session_memory: SessionMemory,
+    session_memory: SessionMemory | None = None,
     *,
     source: str,
     details: dict[str, Any] | None = None,
@@ -73,7 +73,8 @@ async def prefetch_memory_context(
         _logger.warning("Memory prefetch failed: %s", e)
         return None
 
-    context = filter_prefetch_context(context, session_memory)
+    if session_memory is not None:
+        context = filter_prefetch_context(context, session_memory)
     rendered = format_memory_context_render(
         query_facts=context.facts,
         query_observations=context.observations,

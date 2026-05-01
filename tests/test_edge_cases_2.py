@@ -13,7 +13,7 @@ from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
 from ntrp.memory.facts import SessionMemory
 from ntrp.memory.models import Fact, FactContext, Observation, SourceType
-from ntrp.memory.prefetch import filter_prefetch_context, memory_prefetch_query
+from ntrp.memory.prefetch import filter_prefetch_context, memory_prefetch_query, prefetch_memory_context
 from ntrp.services.chat import _retain_user_content, _time_gap_note
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
@@ -134,6 +134,38 @@ def test_filter_prefetch_context_removes_session_memory_duplicates():
     assert [fact.id for fact in filtered.facts] == [4]
     assert [obs.id for obs in filtered.observations] == [11]
     assert list(filtered.bundled_sources) == [11]
+
+
+@pytest.mark.asyncio
+async def test_prefetch_memory_context_can_be_prompt_context_without_session_snapshot():
+    observation = _observation(11, "User is redesigning memory around contextual consolidated observations", [4])
+    fact = _fact(4, "User rejected raw atomic prompt memory")
+
+    class Memory:
+        recorded = None
+
+        async def inspect_recall(self, *, query: str, limit: int, query_time=None):
+            assert query == "how should memory work now"
+            assert limit == 3
+            return FactContext(
+                facts=[],
+                observations=[observation],
+                bundled_sources={observation.id: [fact]},
+            )
+
+        async def record_context_access(self, **kwargs):
+            self.recorded = kwargs
+
+    memory = Memory()
+
+    rendered = await prefetch_memory_context(memory, "how should memory work now", source="chat_prefetch")
+
+    assert rendered is not None
+    assert "**Patterns**" in rendered
+    assert "contextual consolidated observations" in rendered
+    assert "raw atomic prompt memory" in rendered
+    assert memory.recorded["injected_observation_ids"] == [observation.id]
+    assert memory.recorded["bundled_fact_ids"] == [fact.id]
 
 
 # --- Read connection sees committed writes ---
