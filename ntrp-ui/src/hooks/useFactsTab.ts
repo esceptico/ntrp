@@ -64,6 +64,7 @@ export interface FactsTabState {
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
   setSelectedIndex: Dispatch<SetStateAction<number>>;
+  setSortOrder: Dispatch<SetStateAction<SortOrder>>;
   setFocusPane: (p: "list" | "details") => void;
   resetDetailState: () => void;
   setEditMode: Dispatch<SetStateAction<boolean>>;
@@ -178,6 +179,7 @@ export function useFactsTab(
     handleKeys: ld.handleKeys,
     setSearchQuery: ld.setSearchQuery,
     setSelectedIndex: ld.setSelectedIndex,
+    setSortOrder: ld.setSortOrder,
     setFocusPane: ld.setFocusPane,
     resetDetailState: ld.resetDetailState,
     setEditMode: ld.setEditMode,

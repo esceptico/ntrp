@@ -5,6 +5,7 @@ import { useTextInput } from "./useTextInput.js";
 import type { Config } from "../types.js";
 import type { FactsTabState } from "./useFactsTab.js";
 import type { ObservationsTabState } from "./useObservationsTab.js";
+import { OBS_SECTIONS } from "../components/viewers/memory/ObservationDetailsView.js";
 import type { PruneTabState } from "./usePruneTab.js";
 import type { MemoryEventsTabState } from "./useMemoryEventsTab.js";
 import type { MemoryAccessTabState } from "./useMemoryAccessTab.js";
@@ -43,6 +44,7 @@ interface UseMemoryKeypressOptions {
   eventsTab: MemoryEventsTabState;
   config: Config;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
+  setProfileFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
   setObservations: React.Dispatch<React.SetStateAction<Observation[]>>;
   setLearningCandidates: React.Dispatch<React.SetStateAction<LearningCandidate[]>>;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
@@ -72,6 +74,7 @@ export function useMemoryKeypress({
   eventsTab,
   config,
   setFacts,
+  setProfileFacts,
   setObservations,
   setLearningCandidates,
   setError,
@@ -88,6 +91,13 @@ export function useMemoryKeypress({
     setCursorPos: factsTab.setCursorPos,
   });
 
+  const profileTextInput = useTextInput({
+    text: profileTab.editText,
+    cursorPos: profileTab.cursorPos,
+    setText: profileTab.setEditText,
+    setCursorPos: profileTab.setCursorPos,
+  });
+
   const obsTextInput = useTextInput({
     text: obsTab.editText,
     cursorPos: obsTab.cursorPos,
@@ -97,39 +107,54 @@ export function useMemoryKeypress({
 
   const handleKeypress = useCallback(
     (key: Key) => {
-      if (activeTab === "facts" && factsTab.focusPane === "details" && factsTab.factDetails) {
-        if (factsTab.confirmDelete) {
+      const activeFactTab =
+        activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : null;
+      const setActiveFacts = activeTab === "profile" ? setProfileFacts : setFacts;
+      const activeFactTextInput = activeTab === "profile" ? profileTextInput : factsTextInput;
+      const openFact = (fact: Fact) => {
+        setFacts((prev) => [fact, ...prev.filter((candidate) => candidate.id !== fact.id)]);
+        factsTab.setSearchQuery("");
+        factsTab.setSortOrder("recent");
+        factsTab.setSelectedIndex(0);
+        factsTab.resetDetailState();
+        factsTab.setFocusPane("details");
+        setActiveTab("facts");
+      };
+
+      if (activeFactTab?.focusPane === "details" && activeFactTab.factDetails) {
+        if (activeFactTab.confirmDelete) {
           if (key.name === "y") {
             setSaving(true);
-            deleteFact(config, factsTab.factDetails.fact.id)
+            deleteFact(config, activeFactTab.factDetails.fact.id)
               .then(() => {
-                setFacts((prev: Fact[]) => prev.filter((f) => f.id !== factsTab.factDetails?.fact.id));
-                factsTab.setConfirmDelete(false);
-                factsTab.setFocusPane("list");
-                factsTab.resetDetailState();
+                setActiveFacts((prev: Fact[]) => prev.filter((f) => f.id !== activeFactTab.factDetails?.fact.id));
+                activeFactTab.setConfirmDelete(false);
+                activeFactTab.setFocusPane("list");
+                activeFactTab.resetDetailState();
+                reload();
               })
               .catch((e: unknown) => setError(`Delete failed: ${e}`))
               .finally(() => setSaving(false));
           } else {
-            factsTab.setConfirmDelete(false);
+            activeFactTab.setConfirmDelete(false);
           }
           return;
         }
 
-        if (factsTab.editMode) {
+        if (activeFactTab.editMode) {
           if (key.ctrl && key.name === "s") {
             setSaving(true);
-            updateFact(config, factsTab.factDetails.fact.id, factsTab.editText)
+            updateFact(config, activeFactTab.factDetails.fact.id, activeFactTab.editText)
               .then((result) => {
-                setFacts((prev: Fact[]) =>
+                setActiveFacts((prev: Fact[]) =>
                   prev.map((f) => (f.id === result.fact.id ? result.fact : f))
                 );
                 queryClient.setQueryData<FactDetails>(["factDetails", result.fact.id], (prev) =>
                   prev ? { ...prev, fact: result.fact } : prev
                 );
-                factsTab.setEditMode(false);
-                factsTab.setEditText("");
-                factsTab.setCursorPos(0);
+                activeFactTab.setEditMode(false);
+                activeFactTab.setEditText("");
+                activeFactTab.setCursorPos(0);
                 reload();
               })
               .catch((e: unknown) => setError(`Save failed: ${e}`))
@@ -137,51 +162,51 @@ export function useMemoryKeypress({
             return;
           }
           if (key.name === "escape") {
-            factsTab.setEditMode(false);
-            factsTab.setEditText("");
-            factsTab.setCursorPos(0);
+            activeFactTab.setEditMode(false);
+            activeFactTab.setEditText("");
+            activeFactTab.setCursorPos(0);
             return;
           }
-          if (factsTextInput.handleKey(key)) {
+          if (activeFactTextInput.handleKey(key)) {
             return;
           }
           return;
         }
 
         if (key.name === "e") {
-          factsTab.setEditMode(true);
-          factsTab.setEditText(factsTab.factDetails.fact.text);
-          factsTab.setCursorPos(factsTab.factDetails.fact.text.length);
+          activeFactTab.setEditMode(true);
+          activeFactTab.setEditText(activeFactTab.factDetails.fact.text);
+          activeFactTab.setCursorPos(activeFactTab.factDetails.fact.text.length);
           return;
         }
-        if (key.name === "g") {
-          factsTab.setSuggestionLoading(true);
-          factsTab.setSuggestionError(null);
-          factsTab.setMetadataSuggestion(null);
-          suggestFactMetadata(config, factsTab.factDetails.fact.id)
+        if (activeTab === "facts" && key.name === "g") {
+          activeFactTab.setSuggestionLoading(true);
+          activeFactTab.setSuggestionError(null);
+          activeFactTab.setMetadataSuggestion(null);
+          suggestFactMetadata(config, activeFactTab.factDetails.fact.id)
             .then((result) => {
               const suggestion = result.suggestions[0]?.suggestion ?? null;
-              factsTab.setMetadataSuggestion(suggestion);
-              if (!suggestion) factsTab.setSuggestionError("No suggestion for this fact");
+              activeFactTab.setMetadataSuggestion(suggestion);
+              if (!suggestion) activeFactTab.setSuggestionError("No suggestion for this fact");
             })
-            .catch((e: unknown) => factsTab.setSuggestionError(`Suggest failed: ${e}`))
-            .finally(() => factsTab.setSuggestionLoading(false));
+            .catch((e: unknown) => activeFactTab.setSuggestionError(`Suggest failed: ${e}`))
+            .finally(() => activeFactTab.setSuggestionLoading(false));
           return;
         }
-        if (key.name === "a" && factsTab.metadataSuggestion) {
+        if (activeTab === "facts" && key.name === "a" && activeFactTab.metadataSuggestion) {
           setSaving(true);
-          updateFactMetadata(config, factsTab.factDetails.fact.id, {
-            kind: factsTab.metadataSuggestion.kind,
-            salience: factsTab.metadataSuggestion.salience,
-            confidence: factsTab.metadataSuggestion.confidence,
-            expires_at: factsTab.metadataSuggestion.expires_at,
+          updateFactMetadata(config, activeFactTab.factDetails.fact.id, {
+            kind: activeFactTab.metadataSuggestion.kind,
+            salience: activeFactTab.metadataSuggestion.salience,
+            confidence: activeFactTab.metadataSuggestion.confidence,
+            expires_at: activeFactTab.metadataSuggestion.expires_at,
           })
             .then((result) => {
-              setFacts((prev: Fact[]) => prev.map((f) => (f.id === result.fact.id ? result.fact : f)));
+              setActiveFacts((prev: Fact[]) => prev.map((f) => (f.id === result.fact.id ? result.fact : f)));
               queryClient.setQueryData<FactDetails>(["factDetails", result.fact.id], (prev) =>
                 prev ? { ...prev, fact: result.fact } : prev
               );
-              factsTab.setMetadataSuggestion(null);
+              activeFactTab.setMetadataSuggestion(null);
               reload();
             })
             .catch((e: unknown) => setError(`Apply failed: ${e}`))
@@ -189,30 +214,38 @@ export function useMemoryKeypress({
           return;
         }
         if (key.name === "d" || key.name === "delete") {
-          factsTab.setConfirmDelete(true);
+          activeFactTab.setConfirmDelete(true);
           return;
         }
       }
 
-      if (activeTab === "facts" && factsTab.focusPane === "list" && factsTab.filteredFacts.length > 0) {
-        const selectedFact = factsTab.filteredFacts[factsTab.selectedIndex];
+      if (activeFactTab?.focusPane === "list" && activeFactTab.filteredFacts.length > 0) {
+        const selectedFact = activeFactTab.filteredFacts[activeFactTab.selectedIndex];
         if (selectedFact) {
           if (key.name === "e") {
-            factsTab.setFocusPane("details");
-            factsTab.setEditMode(true);
-            factsTab.setEditText(selectedFact.text);
-            factsTab.setCursorPos(selectedFact.text.length);
+            activeFactTab.setFocusPane("details");
+            activeFactTab.setEditMode(true);
+            activeFactTab.setEditText(selectedFact.text);
+            activeFactTab.setCursorPos(selectedFact.text.length);
             return;
           }
-          if ((key.name === "d" || key.name === "delete") && factsTab.factDetails) {
-            factsTab.setFocusPane("details");
-            factsTab.setConfirmDelete(true);
+          if ((key.name === "d" || key.name === "delete") && activeFactTab.factDetails) {
+            activeFactTab.setFocusPane("details");
+            activeFactTab.setConfirmDelete(true);
             return;
           }
         }
       }
 
       if (activeTab === "observations" && obsTab.focusPane === "details" && obsTab.obsDetails) {
+        if (key.name === "return" && obsTab.detailSection === OBS_SECTIONS.FACTS) {
+          const fact = obsTab.obsDetails.supporting_facts[obsTab.factsIndex];
+          if (fact) {
+            openFact(fact);
+            return;
+          }
+        }
+
         if (obsTab.confirmDelete) {
           if (key.name === "y") {
             setSaving(true);
@@ -430,7 +463,7 @@ export function useMemoryKeypress({
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
-    [activeTab, recallTab, profileTab, factsTab, obsTab, pruneTab, learningTab, pruneDryRun, accessTab, eventsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setLearningCandidates, setError, queryClient]
+    [activeTab, setActiveTab, recallTab, profileTab, factsTab, obsTab, pruneTab, learningTab, pruneDryRun, accessTab, eventsTab, onClose, reload, config, profileTextInput, factsTextInput, obsTextInput, setSaving, setProfileFacts, setFacts, setObservations, setLearningCandidates, setError, queryClient]
   );
 
   useKeypress(handleKeypress, { isActive: true });

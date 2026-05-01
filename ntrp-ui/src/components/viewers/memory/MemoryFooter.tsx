@@ -6,7 +6,7 @@ import type { MemoryTabType } from "../../../lib/memoryTabs.js";
 interface MemoryFooterProps {
   activeTab: MemoryTabType;
   recallTab: RecallInspectTabState;
-  profileTab: { focusPane: string; searchMode: boolean };
+  profileTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean };
   factsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean; metadataSuggestion: unknown };
   obsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean };
   pruneTab: { focusPane: string; searchMode: boolean; confirmApply: "selected" | "all" | null };
@@ -27,11 +27,13 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
   }
 
   if (activeTab === "profile") {
+    if (profileTab.editMode) return <Hints items={[["^s", "save"], ["esc", "cancel"], ["←→", "cursor"]]} />;
+    if (profileTab.confirmDelete) return <Hints items={[["y", "confirm"], ["any", "cancel"]]} />;
     if (profileTab.focusPane === "details") {
-      return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ["enter", "expand"], ["r", "refresh"]]} />;
+      return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ["enter", "expand"], ["e", "edit"], ["d", "del"], ["r", "refresh"]]} />;
     }
     if (profileTab.searchMode) return <Hints items={[["type", "search"], ["esc", "clear/exit"], ["enter", "done"]]} />;
-    return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["o", "sort"], ["r", "refresh"]]} />;
+    return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["e", "edit"], ["d", "del"], ["o", "sort"], ["r", "refresh"]]} />;
   }
 
   if (activeTab === "prune") {
@@ -72,7 +74,7 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
   if (tab.editMode) return <Hints items={[["^s", "save"], ["esc", "cancel"], ["←→", "cursor"]]} />;
   if (tab.confirmDelete) return <Hints items={[["y", "confirm"], ["any", "cancel"]]} />;
   if (tab.focusPane === "details") {
-    const detailHints: [string, string][] = [["↑↓", "navigate"], ["tab", "list"], ["enter", "expand"], ["e", "edit"]];
+    const detailHints: [string, string][] = [["↑↓", "navigate"], ["tab", "list"], ["enter", activeTab === "observations" ? "open/expand" : "expand"], ["e", "edit"]];
     if (activeTab === "facts") {
       detailHints.push(["g", "suggest"]);
       if (factsTab.metadataSuggestion) detailHints.push(["a", "apply"]);

@@ -38,24 +38,65 @@ const PROFILE_REASON_LABELS: Record<string, string> = {
   profile_low_confidence: "low confidence",
 };
 
-function MetricRow({ label, value, note }: { label: string; value: string | number; note: string }) {
+function filledText(text: string, width: number): string {
+  if (width <= 0) return "";
+  return truncateText(text, width).padEnd(width);
+}
+
+interface LineSegment {
+  text: string;
+  fg: string;
+  width?: number;
+}
+
+function OverviewLine({ segments, width }: { segments: LineSegment[]; width: number }) {
+  const bg = colors.background.element ?? colors.background.menu;
+  let used = 0;
+  const rendered = segments.map((segment, index) => {
+    const remaining = Math.max(0, width - used);
+    const segmentWidth = Math.min(segment.width ?? remaining, remaining);
+    if (segmentWidth <= 0) return null;
+    used += segmentWidth;
+    return (
+      <span key={index} fg={segment.fg} bg={bg}>
+        {filledText(segment.text, segmentWidth)}
+      </span>
+    );
+  });
+  const rest = Math.max(0, width - used);
+
   return (
-    <box flexDirection="row">
-      <box width={16}>
-        <text><span fg={colors.text.secondary}>{truncateText(label, 15)}</span></text>
-      </box>
-      <box width={10}>
-        <text>
-          <span fg={colors.text.disabled}>{"\u2502"} </span>
-          <span fg={colors.text.primary}>{truncateText(String(value), 7)}</span>
-        </text>
-      </box>
-      <box flexGrow={1}>
-        <text>
-          <span fg={colors.text.disabled}>{"\u2502"} {note}</span>
-        </text>
-      </box>
-    </box>
+    <text>
+      {rendered}
+      {rest > 0 && <span bg={bg}>{filledText("", rest)}</span>}
+    </text>
+  );
+}
+
+function MetricRow({ label, value, note, width }: { label: string; value: string | number; note: string; width: number }) {
+  return (
+    <OverviewLine
+      width={width}
+      segments={[
+        { text: label, fg: colors.text.secondary, width: 16 },
+        { text: " | ", fg: colors.text.disabled, width: 3 },
+        { text: String(value), fg: colors.text.primary, width: 8 },
+        { text: " | ", fg: colors.text.disabled, width: 3 },
+        { text: note, fg: colors.text.secondary },
+      ]}
+    />
+  );
+}
+
+function ActionRow({ label, note, width }: { label: string; note: string; width: number }) {
+  return (
+    <OverviewLine
+      width={width}
+      segments={[
+        { text: label, fg: colors.text.secondary, width: 9 },
+        { text: note, fg: colors.text.secondary },
+      ]}
+    />
   );
 }
 
@@ -97,101 +138,126 @@ export function OverviewSection({
   const profileReviewLabel = topProfileReview
     ? topProfileReview.reasons.map((reason) => PROFILE_REASON_LABELS[reason] ?? reason).join(", ")
     : "";
+  const textWidth = Math.max(1, width - 1);
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
-      <text>
-        <span fg={accentValue}>memory overview</span>
-        <span fg={colors.text.disabled}> {"\u2502"} facts are truth, patterns are derived, sent memory is runtime evidence</span>
-      </text>
+      <OverviewLine
+        width={textWidth}
+        segments={[
+          { text: "memory overview", fg: accentValue, width: 16 },
+          { text: " | ", fg: colors.text.disabled, width: 3 },
+          { text: "facts are truth, patterns are derived, sent memory is runtime evidence", fg: colors.text.secondary },
+        ]}
+      />
 
       <box flexDirection="column" marginTop={2}>
-        <MetricRow label="Profile" value={profileFacts.length} note="always-on facts shown to the agent first" />
-        <MetricRow label="Profile review" value={profileReviewCount} note="profile candidates and quality flags" />
-        <MetricRow label="Search" value="query" note="test retrieval before it reaches the agent" />
-        <MetricRow label="Sent" value={memoryAccessEvents.length} note="recent memory bundles injected into prompts/tools" />
+        <MetricRow label="Profile" value={profileFacts.length} note="always-on facts shown to the agent first" width={textWidth} />
+        <MetricRow label="Profile review" value={profileReviewCount} note="profile candidates and quality flags" width={textWidth} />
+        <MetricRow label="Search" value="query" note="test retrieval before it reaches the agent" width={textWidth} />
+        <MetricRow label="Sent" value={memoryAccessEvents.length} note="recent memory bundles injected into prompts/tools" width={textWidth} />
         <MetricRow
           label="Policy"
           value={memoryInjectionPolicy?.summary.candidates ?? 0}
           note="recent injected-memory bundles worth reviewing"
+          width={textWidth}
         />
-        <MetricRow label="Facts" value={factTotal} note="source-of-truth memory records" />
-        <MetricRow label="Patterns" value={observationTotal} note="derived summaries with supporting facts" />
-        <MetricRow label="Embeddings" value={missingEmbeddings} note="active rows missing vectors" />
-        <MetricRow label="Storage" value={storageIssues} note="vec/FTS index rows needing repair" />
-        <MetricRow label="Relations" value={relationIssues} note="orphaned provenance/entity links" />
+        <MetricRow label="Facts" value={factTotal} note="source-of-truth memory records" width={textWidth} />
+        <MetricRow label="Patterns" value={observationTotal} note="derived summaries with supporting facts" width={textWidth} />
+        <MetricRow label="Embeddings" value={missingEmbeddings} note="active rows missing vectors" width={textWidth} />
+        <MetricRow label="Storage" value={storageIssues} note="vec/FTS index rows needing repair" width={textWidth} />
+        <MetricRow label="Relations" value={relationIssues} note="orphaned provenance/entity links" width={textWidth} />
         <MetricRow
           label="Cleanup"
           value={pruneDryRun?.summary.total ?? 0}
           note="archive candidates matching the current cleanup rule"
+          width={textWidth}
         />
-        <MetricRow label="Improve" value={learningCandidates.length} note="reviewable policy, skill, and prompt candidates" />
-        <MetricRow label="Audit" value={memoryEvents.length} note="recent memory writes and automation outcomes loaded" />
+        <MetricRow label="Improve" value={learningCandidates.length} note="reviewable policy, skill, and prompt candidates" width={textWidth} />
+        <MetricRow label="Audit" value={memoryEvents.length} note="recent memory writes and automation outcomes loaded" width={textWidth} />
       </box>
 
       <box flexDirection="column" marginTop={2}>
-        <text><span fg={colors.text.muted}>OPEN NEXT</span></text>
-        <text><span fg={colors.text.secondary}>Search</span><span fg={colors.text.disabled}> to debug query-time memory retrieval</span></text>
-        <text><span fg={colors.text.secondary}>Sent</span><span fg={colors.text.disabled}> to inspect what memory reached the model</span></text>
-        <text><span fg={colors.text.secondary}>Sent flags</span><span fg={colors.text.disabled}> show noisy or empty context bundles</span></text>
-        <text><span fg={colors.text.secondary}>Profile</span><span fg={colors.text.disabled}> for what the agent should always know</span></text>
-        <text><span fg={colors.text.secondary}>Facts</span><span fg={colors.text.disabled}> to edit durable truth</span></text>
-        <text><span fg={colors.text.secondary}>Patterns</span><span fg={colors.text.disabled}> to inspect derived memory and provenance</span></text>
-        <text><span fg={colors.text.secondary}>Cleanup</span><span fg={colors.text.disabled}> to archive low-value patterns in bulk</span></text>
-        <text><span fg={colors.text.secondary}>Improve</span><span fg={colors.text.disabled}> to review proposed durable improvements</span></text>
-        <text><span fg={colors.text.secondary}>Audit</span><span fg={colors.text.disabled}> to answer why memory changed</span></text>
+        <OverviewLine width={textWidth} segments={[{ text: "OPEN NEXT", fg: accentValue }]} />
+        <ActionRow label="Search" note="debug query-time memory retrieval" width={textWidth} />
+        <ActionRow label="Sent" note="inspect what memory reached the model" width={textWidth} />
+        <ActionRow label="Profile" note="edit always-visible facts" width={textWidth} />
+        <ActionRow label="Facts" note="edit durable truth" width={textWidth} />
+        <ActionRow label="Patterns" note="inspect derived memory and provenance" width={textWidth} />
+        <ActionRow label="Cleanup" note="archive low-value patterns in bulk" width={textWidth} />
+        <ActionRow label="Improve" note="review proposed durable improvements" width={textWidth} />
+        <ActionRow label="Audit" note="answer why memory changed" width={textWidth} />
       </box>
 
       <box flexDirection="column" marginTop={2}>
-        <text><span fg={colors.text.muted}>PROFILE REVIEW</span></text>
+        <OverviewLine width={textWidth} segments={[{ text: "PROFILE REVIEW", fg: accentValue }]} />
         {topProfileReview ? (
-          <text>
-            <span fg={colors.text.secondary}>{truncateText(topProfileReview.fact.text, Math.max(10, width - 44))}</span>
-            <span fg={colors.text.disabled}> {"\u2502"} {profileReviewLabel}</span>
-            <span fg={colors.text.disabled}> {"\u2502"} {truncateText(topProfileReview.recommendation, 28)}</span>
-          </text>
+          <OverviewLine
+            width={textWidth}
+            segments={[
+              { text: topProfileReview.fact.text, fg: colors.text.secondary, width: Math.max(12, Math.floor(textWidth * 0.45)) },
+              { text: " | ", fg: colors.text.disabled, width: 3 },
+              { text: profileReviewLabel, fg: colors.text.secondary, width: 24 },
+              { text: " | ", fg: colors.text.disabled, width: 3 },
+              { text: topProfileReview.recommendation, fg: colors.text.secondary },
+            ]}
+          />
         ) : (
-          <text><span fg={colors.text.disabled}>No profile policy flags loaded</span></text>
+          <OverviewLine width={textWidth} segments={[{ text: "No profile policy flags loaded", fg: colors.text.disabled }]} />
         )}
       </box>
 
       <box flexDirection="column" marginTop={1}>
-        <text><span fg={colors.text.muted}>LATEST SENT MEMORY</span></text>
+        <OverviewLine width={textWidth} segments={[{ text: "LATEST SENT MEMORY", fg: accentValue }]} />
         {latestAccess ? (
-          <text>
-            <span fg={colors.text.secondary}>{memoryAccessSourceLabel(latestAccess.source)}</span>
-            <span fg={colors.text.disabled}> {"\u2502"} {latestAccess.injected_fact_ids.length} facts</span>
-            <span fg={colors.text.disabled}> / {latestAccess.injected_observation_ids.length} patterns</span>
-            <span fg={colors.text.disabled}> {"\u2502"} {formatTimeAgo(latestAccess.created_at)}</span>
-          </text>
+          <OverviewLine
+            width={textWidth}
+            segments={[
+              { text: memoryAccessSourceLabel(latestAccess.source), fg: colors.text.secondary, width: 18 },
+              { text: " | ", fg: colors.text.disabled, width: 3 },
+              { text: `${latestAccess.injected_fact_ids.length} facts / ${latestAccess.injected_observation_ids.length} patterns`, fg: colors.text.secondary, width: 22 },
+              { text: " | ", fg: colors.text.disabled, width: 3 },
+              { text: formatTimeAgo(latestAccess.created_at), fg: colors.text.secondary },
+            ]}
+          />
         ) : (
-          <text><span fg={colors.text.disabled}>No context injections loaded</span></text>
+          <OverviewLine width={textWidth} segments={[{ text: "No context injections loaded", fg: colors.text.disabled }]} />
         )}
       </box>
 
       <box flexDirection="column" marginTop={1}>
-        <text><span fg={colors.text.muted}>LATEST LEARNING</span></text>
+        <OverviewLine width={textWidth} segments={[{ text: "LATEST LEARNING", fg: accentValue }]} />
         {latestLearningCandidate ? (
-          <text>
-            <span fg={colors.text.secondary}>{latestLearningCandidate.status}</span>
-            <span fg={colors.text.disabled}> {"\u2502"} {learningChangeLabel(latestLearningCandidate.change_type)}</span>
-            <span fg={colors.text.disabled}> {"\u2502"} {truncateText(latestLearningCandidate.proposal, width - 24)}</span>
-          </text>
+          <OverviewLine
+            width={textWidth}
+            segments={[
+              { text: latestLearningCandidate.status, fg: colors.text.secondary, width: 12 },
+              { text: " | ", fg: colors.text.disabled, width: 3 },
+              { text: learningChangeLabel(latestLearningCandidate.change_type), fg: colors.text.secondary, width: 20 },
+              { text: " | ", fg: colors.text.disabled, width: 3 },
+              { text: latestLearningCandidate.proposal, fg: colors.text.secondary },
+            ]}
+          />
         ) : (
-          <text><span fg={colors.text.disabled}>No learning candidates loaded</span></text>
+          <OverviewLine width={textWidth} segments={[{ text: "No learning candidates loaded", fg: colors.text.disabled }]} />
         )}
       </box>
 
       <box flexDirection="column" marginTop={1}>
-        <text><span fg={colors.text.muted}>LATEST LOG</span></text>
+        <OverviewLine width={textWidth} segments={[{ text: "LATEST LOG", fg: accentValue }]} />
         {latestEvent ? (
-          <text>
-            <span fg={colors.text.secondary}>{latestEvent.action}</span>
-            <span fg={colors.text.disabled}> {"\u2502"} {latestEvent.actor}</span>
-            <span fg={colors.text.disabled}> {"\u2502"} {formatTimeAgo(latestEvent.created_at)}</span>
-          </text>
+          <OverviewLine
+            width={textWidth}
+            segments={[
+              { text: latestEvent.action, fg: colors.text.secondary, width: 22 },
+              { text: " | ", fg: colors.text.disabled, width: 3 },
+              { text: latestEvent.actor, fg: colors.text.secondary, width: 16 },
+              { text: " | ", fg: colors.text.disabled, width: 3 },
+              { text: formatTimeAgo(latestEvent.created_at), fg: colors.text.secondary },
+            ]}
+          />
         ) : (
-          <text><span fg={colors.text.disabled}>No memory log entries loaded</span></text>
+          <OverviewLine width={textWidth} segments={[{ text: "No memory log entries loaded", fg: colors.text.disabled }]} />
         )}
       </box>
     </box>

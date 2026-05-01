@@ -33,11 +33,6 @@ interface ObservationDetailsViewProps {
 
 const TEXT_VISIBLE_LINES = 10;
 
-function idList(ids: number[], width: number): string {
-  if (ids.length === 0) return "none";
-  return truncateText(ids.join(", "), width);
-}
-
 export function ObservationDetailsView({
   details,
   loading,
@@ -160,12 +155,15 @@ export function ObservationDetailsView({
         <text><span fg={labelColor}>PROVENANCE</span></text>
         <text>
           <span fg={colors.text.muted}>source facts </span>
-          <span fg={colors.text.secondary}>{idList(source_fact_ids, Math.max(8, textWidth - 13))}</span>
+          <span fg={colors.text.secondary}>{supporting_facts.length} loaded</span>
+          {source_fact_ids.length > supporting_facts.length && (
+            <span fg={colors.text.disabled}> / {source_fact_ids.length - supporting_facts.length} unavailable</span>
+          )}
         </text>
         {missing_source_fact_ids.length > 0 && (
           <text>
-            <span fg={colors.status.error}>missing </span>
-            <span fg={colors.status.error}>{idList(missing_source_fact_ids, Math.max(8, textWidth - 8))}</span>
+            <span fg={colors.status.error}>missing source records </span>
+            <span fg={colors.status.error}>{missing_source_fact_ids.length}</span>
           </text>
         )}
       </box>
@@ -174,6 +172,7 @@ export function ObservationDetailsView({
       {supporting_facts.length > 0 && (
         <box flexDirection="column" marginTop={1}>
           <text><span fg={labelColor}>SUPPORTING FACTS ({supporting_facts.length})</span></text>
+          <text><span fg={colors.text.disabled}>enter opens selected fact</span></text>
           <ScrollableList
             items={supporting_facts}
             selectedIndex={factsIndex}
@@ -182,7 +181,7 @@ export function ObservationDetailsView({
               const status = fact.archived_at
                 ? "archived"
                 : fact.superseded_by_fact_id
-                  ? `superseded:${fact.superseded_by_fact_id}`
+                  ? "superseded"
                   : fact.expires_at && new Date(fact.expires_at) <= new Date()
                     ? "expired"
                     : "active";

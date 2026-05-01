@@ -2,6 +2,7 @@ import type { LearningCandidate, LearningEvent } from "../../../api/client.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import type { LearningTabState } from "../../../hooks/useLearningTab.js";
 import { formatTimeAgo, shortTime } from "../../../lib/format.js";
+import { cleanLearningText, learningDetailRows, summarizeLearningEvidence } from "../../../lib/memoryLearningDetails.js";
 import { learningCandidateEffect, learningChangeLabel } from "../../../lib/memoryLearning.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
 import { ListDetailSection } from "./ListDetailSection.js";
@@ -27,19 +28,20 @@ function statusColor(status: string, accent: string): string {
   }
 }
 
-function DetailsJson({ details, width }: { details: Record<string, unknown>; width: number }) {
-  const lines = JSON.stringify(details, null, 2).split("\n");
-  const visible = lines.slice(0, 8);
+function DetailsSummary({ details, width }: { details: Record<string, unknown>; width: number }) {
+  const rows = learningDetailRows(details);
+  if (rows.length === 0) {
+    return <text><span fg={colors.text.disabled}>No extra review metadata</span></text>;
+  }
+
   return (
     <box flexDirection="column">
-      {visible.map((line, index) => (
+      {rows.map((row, index) => (
         <text key={index}>
-          <span fg={colors.text.disabled}>{truncateText(line, width)}</span>
+          <span fg={colors.text.muted}>{row.label} </span>
+          <span fg={colors.text.disabled}>{truncateText(row.value, Math.max(8, width - row.label.length - 1))}</span>
         </text>
       ))}
-      {lines.length > visible.length && (
-        <text><span fg={colors.text.disabled}>... +{lines.length - visible.length} lines</span></text>
-      )}
     </box>
   );
 }
@@ -61,7 +63,7 @@ function EvidenceList({ events, width }: { events: LearningEvent[]; width: numbe
             <text>
               <span fg={colors.text.muted}>  evidence </span>
               <span fg={colors.text.disabled}>
-                {truncateText(event.evidence_ids.slice(0, 4).join(", "), width - 11)}
+                {truncateText(summarizeLearningEvidence(event.evidence_ids), width - 11)}
               </span>
             </text>
           )}
@@ -131,7 +133,7 @@ function CandidateDetails({
 
       <box marginTop={1} flexDirection="column">
         <text><span fg={colors.text.muted}>RATIONALE</span></text>
-        <text><span fg={colors.text.disabled}>{truncateText(candidate.rationale, textWidth)}</span></text>
+        <text><span fg={colors.text.disabled}>{truncateText(cleanLearningText(candidate.rationale), textWidth)}</span></text>
       </box>
 
       {candidate.expected_metric && (
@@ -147,8 +149,8 @@ function CandidateDetails({
       </box>
 
       <box marginTop={2} flexDirection="column">
-        <text><span fg={colors.text.muted}>DETAILS</span></text>
-        <DetailsJson details={candidate.details} width={textWidth} />
+        <text><span fg={colors.text.muted}>REVIEW METADATA</span></text>
+        <DetailsSummary details={candidate.details} width={textWidth} />
       </box>
     </box>
   );

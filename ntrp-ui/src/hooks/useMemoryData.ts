@@ -46,6 +46,7 @@ interface UseMemoryDataResult {
   backgroundLoading: boolean;
   error: string | null;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
+  setProfileFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
   setObservations: React.Dispatch<React.SetStateAction<Observation[]>>;
   setLearningCandidates: React.Dispatch<React.SetStateAction<LearningCandidate[]>>;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
@@ -207,6 +208,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
     backgroundLoading,
     error,
     setFacts,
+    setProfileFacts,
     setObservations,
     setLearningCandidates,
     setError,

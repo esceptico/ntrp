@@ -38,6 +38,7 @@ export interface ListDetailState<T> {
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
   setSelectedIndex: Dispatch<SetStateAction<number>>;
+  setSortOrder: Dispatch<SetStateAction<SortOrder>>;
   setFocusPane: (p: "list" | "details") => void;
   resetDetailState: () => void;
   setEditMode: Dispatch<SetStateAction<boolean>>;
@@ -285,6 +286,7 @@ export function useListDetail<T>({
     handleKeys,
     setSearchQuery,
     setSelectedIndex,
+    setSortOrder,
     setFocusPane,
     resetDetailState,
     setEditMode,

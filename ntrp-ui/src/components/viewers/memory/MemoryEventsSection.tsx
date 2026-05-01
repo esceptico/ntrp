@@ -2,6 +2,7 @@ import type { MemoryEvent } from "../../../api/client.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import type { MemoryEventsTabState } from "../../../hooks/useMemoryEventsTab.js";
 import { formatTimeAgo, shortTime } from "../../../lib/format.js";
+import { memoryMetadataRows } from "../../../lib/memoryMetadata.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
 import { ListDetailSection } from "./ListDetailSection.js";
 
@@ -16,19 +17,19 @@ function eventTarget(event: MemoryEvent): string {
   return event.target_id === null ? event.target_type : `${event.target_type} record`;
 }
 
-function DetailsJson({ details, width }: { details: Record<string, unknown>; width: number }) {
-  const lines = JSON.stringify(details, null, 2).split("\n");
-  const visible = lines.slice(0, 12);
+function MetadataRows({ details, width }: { details: Record<string, unknown>; width: number }) {
+  const rows = memoryMetadataRows(details);
+  if (rows.length === 0) {
+    return <text><span fg={colors.text.disabled}>No extra audit metadata</span></text>;
+  }
   return (
     <box flexDirection="column">
-      {visible.map((line, index) => (
+      {rows.map((row, index) => (
         <text key={index}>
-          <span fg={colors.text.disabled}>{truncateText(line, width)}</span>
+          <span fg={colors.text.muted}>{row.label.toLowerCase()} </span>
+          <span fg={colors.text.disabled}>{truncateText(row.value, Math.max(8, width - row.label.length - 1))}</span>
         </text>
       ))}
-      {lines.length > visible.length && (
-        <text><span fg={colors.text.disabled}>... +{lines.length - visible.length} lines</span></text>
-      )}
     </box>
   );
 }
@@ -87,8 +88,8 @@ function EventDetails({
       )}
 
       <box marginTop={2} flexDirection="column">
-        <text><span fg={colors.text.muted}>DETAILS</span></text>
-        <DetailsJson details={event.details} width={textWidth} />
+        <text><span fg={colors.text.muted}>AUDIT METADATA</span></text>
+        <MetadataRows details={event.details} width={textWidth} />
       </box>
     </box>
   );
