@@ -631,10 +631,13 @@ The current implementation is deliberately limited to review/provenance UI. It d
 
 The direct-source pass confirms the boring direction: fix the data shape first, make provenance mandatory, then add small background policies with dry-runs and metrics. Do not build a memory research framework inside the product.
 
+Paper sources were checked from the April sweep notes first, then verified against primary sources where possible. The strongest signal is convergent: the system needs better data contracts and evaluation before it needs clever memory machinery.
+
 | Source | Useful idea for ntrp | What not to copy |
 | --- | --- | --- |
 | Mem0 token-efficient memory algorithm, <https://mem0.ai/blog/mem0-the-token-efficient-memory-algorithm> | ADD-only extraction, async memory processing, multi-signal retrieval, and explicit token/latency measurement. Agent-generated facts are first-class, not ignored. | Do not hide policy inside a black-box memory service. Keep local facts auditable. |
 | Mem0 state of AI agent memory, <https://mem0.ai/blog/state-of-ai-agent-memory-2026> | Memory quality needs accuracy, token cost, and latency metrics. Full-context memory is a benchmark ceiling, not a production design. | Do not optimize recall alone and pretend the system is good. |
+| Experience Compression Spectrum, <https://arxiv.org/abs/2604.15877> | Facts, patterns, skills, and rules are different compression levels over experience. This supports one evidence model with multiple projections. | Do not force all layers into one table or one UI concept. The shared part is provenance and lifecycle, not identical storage. |
 | FOCAL, <https://arxiv.org/abs/2604.19541> | Filter noisy streams before summarization, attribute events to tasks, and isolate task memory to avoid cross-task pollution. | Do not add a multi-agent logging stack before we have explicit task/session segments. |
 | RUMS, <https://arxiv.org/abs/2604.14473> | Similarity is not enough. Inject memory only when it changes or sharpens the response. | Do not implement mutual-information machinery now. Start with retrieved/injected/used/corrected telemetry. |
 | SRA-Bench, <https://arxiv.org/abs/2604.24594> | Retrieval and incorporation are separate problems. The system must decide whether a skill or memory should be loaded at all. | Do not enumerate every memory/skill in context because retrieval exists. |
@@ -642,19 +645,60 @@ The direct-source pass confirms the boring direction: fix the data shape first, 
 | TACO, <https://arxiv.org/abs/2604.19572> | Terminal agents benefit from learned compression rules over observations. Rules should preserve task-relevant output and drop low-value noise. | Do not let learned compression rules rewrite source facts. Compression is a view/policy layer. |
 | AEL, <https://arxiv.org/abs/2604.21725> | Split fast runtime memory use from slow reflection. The useful result is "less is more": memory plus reflection helped, extra planner/tool/skill mechanisms degraded. | Do not add planners, judges, RL loops, or per-tool policy knobs until simple memory telemetry proves the need. |
 | FSFM, <https://arxiv.org/abs/2604.20300> | Forgetting has distinct classes: passive decay, active deletion, safety-triggered forgetting, and adaptive reinforcement. | Do not collapse all cleanup into one "old/noisy" flag. |
+| StructMem, <https://arxiv.org/abs/2604.21748> | Preserve temporal anchors and event relationships for multi-hop/temporal questions. | Do not summarize away time and source boundaries just to reduce rows. |
 | Memanto, <https://arxiv.org/abs/2604.22085> | Typed semantic memory, temporal versioning, conflict resolution, and lower-complexity retrieval can beat graph-heavy designs. | Do not add graph theater before typed facts, time, and conflict state are boring. |
 | ContextWeaver, <https://arxiv.org/abs/2604.23069> | Preserve dependency structure and execution feedback, not just summaries. This matters for multi-step tool work. | Do not turn this into a generic graph database. Store direct evidence and dependency ids. |
 | AJ-Bench, <https://arxiv.org/abs/2604.18240> | Evaluation should acquire verifiable evidence from the environment, not just ask another model to judge. | Do not trust an LLM-only reviewer for promotion or cleanup. |
+| ZenBrain, <https://arxiv.org/abs/2604.23878> | Multi-layer routing, hot-path salience, and sleep/idle consolidation are useful ideas. | Do not copy the 7-layer neuroscience stack. It is too much machinery for ntrp right now. |
+| ADEMA, <https://arxiv.org/abs/2604.25849> | Segment-level condensation and checkpoint/resume matter more than global summaries for long-horizon work. | Do not make every memory task a multi-agent governance workflow. |
+| Hierarchical Persona Induction, <https://arxiv.org/abs/2604.26120> | Profile/persona generation must be evidence-grounded and truthfulness-scored against behavior logs. | Do not let profile/core memory become a generated biography with no direct fact support. |
+| Bian Que, <https://arxiv.org/abs/2604.26805> | Skills can declare their own retrieval requirements; one correction signal should update both derived memory and the procedural rule that caused the miss. | Do not centralize all retrieval policy in one omniscient router if skill-local requirements are clearer. |
+| PageGuide, <https://arxiv.org/abs/2604.23772> | Memory UX should show evidence in place and support guided/manual modes. Users need to see why a memory was used. | Do not hide memory behavior behind chat transcripts or abstract scores. |
 
-Deferred direct reads before implementation:
+Still worth a later skim, but not blockers for the current slice:
 
 ```text
-DeltaMem, StructMem, ADEMA, ZenBrain, PhysNote, Experience Compression Spectrum,
-Hierarchical Persona Induction, Bian Que, Decoupled Memory Control, SAGER,
-WUPHF, Anthropic CMA memory.
+DeltaMem, Decoupled Memory Control, SAGER, WUPHF, Anthropic CMA memory.
 ```
 
-These can influence later policy, but they should not block the next implementation slice unless the slice touches their domain.
+Those can influence later policy, but they should not block the next implementation slice unless the slice touches their domain.
+
+#### Consolidated paper read
+
+The practical architecture is:
+
+```text
+raw events       append-only evidence, enough to reconstruct provenance
+facts            typed source-of-truth rows over evidence
+patterns         derived episodic/behavioral claims over facts/events
+profile          tiny always-loaded projection over selected facts
+skills/rules     procedural compression over repeated successful behavior
+policies         versioned retrieval/injection/compression/prune rules
+```
+
+This is not six independent memory systems. It is one evidence/provenance spine with multiple compression levels. Coupling stays low if each layer points down to evidence ids and never silently rewrites the lower layer.
+
+Adoption order:
+
+```text
+1. Finish facts/profile/pattern provenance and cleanup review.
+2. Add retrieval/injection telemetry: retrieved, injected, omitted, used, corrected.
+3. Add task/session segmentation for new observations before more summarization.
+4. Add dry-run policy evaluation for prune, profile promotion, and injection.
+5. Add idle consolidation only after the review and metric surfaces are boring.
+6. Add skill-local retrieval requirements later, when skills are back in scope.
+```
+
+Rejected for now:
+
+```text
+generic knowledge graph
+large multi-agent memory manager
+self-review-only continuous learning
+LLM-written profile truth
+hard deletes from automatic cleanup
+one global summarizer over all observations
+```
 
 #### Implementation gates
 
