@@ -61,6 +61,14 @@ class AutomationRuntime:
                 "consolidation",
                 self._build_consolidation_handler(),
             )
+            self.scheduler.register_handler(
+                "memory_maintenance",
+                self._build_memory_maintenance_handler(),
+            )
+            self.scheduler.register_handler(
+                "memory_health",
+                self._build_memory_health_handler(),
+            )
 
         await seed_builtins(self.stores.automations)
         self.scheduler.start()
@@ -72,6 +80,24 @@ class AutomationRuntime:
             if not memory:
                 return None
             return await memory.run_consolidation()
+
+        return handler
+
+    def _build_memory_maintenance_handler(self):
+        async def handler(context: dict | None) -> str | None:
+            memory = self.get_memory()
+            if not memory:
+                return None
+            return await memory.run_memory_maintenance()
+
+        return handler
+
+    def _build_memory_health_handler(self):
+        async def handler(context: dict | None) -> str | None:
+            memory = self.get_memory()
+            if not memory:
+                return None
+            return await memory.run_memory_health_audit()
 
         return handler
 

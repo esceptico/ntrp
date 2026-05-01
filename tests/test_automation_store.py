@@ -5,9 +5,16 @@ import pytest
 import pytest_asyncio
 
 import ntrp.database as database
+from ntrp.automation.builtins import seed_builtins
 from ntrp.automation.models import Automation
 from ntrp.automation.store import AutomationStore
 from ntrp.automation.triggers import TimeTrigger
+from ntrp.constants import (
+    BUILTIN_CHAT_EXTRACTION_ID,
+    BUILTIN_CONSOLIDATION_ID,
+    BUILTIN_MEMORY_HEALTH_ID,
+    BUILTIN_MEMORY_MAINTENANCE_ID,
+)
 
 
 @pytest_asyncio.fixture
@@ -118,3 +125,22 @@ async def test_status_summarizes_scheduler_owned_state(automation_store: Automat
     assert status["count_state"]["total"] == 1
     assert status["chat_extraction"]["total"] == 1
     assert status["chat_extraction"]["pending"] == 1
+
+
+@pytest.mark.asyncio
+async def test_seed_builtins_splits_memory_jobs(automation_store: AutomationStore):
+    await seed_builtins(automation_store)
+
+    automations = {automation.task_id: automation for automation in await automation_store.list_all()}
+
+    assert {
+        BUILTIN_CHAT_EXTRACTION_ID,
+        BUILTIN_CONSOLIDATION_ID,
+        BUILTIN_MEMORY_MAINTENANCE_ID,
+        BUILTIN_MEMORY_HEALTH_ID,
+    } <= set(automations)
+    assert automations[BUILTIN_CONSOLIDATION_ID].handler == "consolidation"
+    assert automations[BUILTIN_MEMORY_MAINTENANCE_ID].handler == "memory_maintenance"
+    assert automations[BUILTIN_MEMORY_MAINTENANCE_ID].writable is True
+    assert automations[BUILTIN_MEMORY_HEALTH_ID].handler == "memory_health"
+    assert automations[BUILTIN_MEMORY_HEALTH_ID].writable is False

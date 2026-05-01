@@ -8,9 +8,13 @@ from ntrp.automation.triggers import CountTrigger, IdleTrigger, TimeTrigger, Tri
 from ntrp.constants import (
     BUILTIN_CHAT_EXTRACTION_ID,
     BUILTIN_CONSOLIDATION_ID,
+    BUILTIN_MEMORY_HEALTH_ID,
+    BUILTIN_MEMORY_MAINTENANCE_ID,
     DEFAULT_CONSOLIDATION_COOLDOWN_MINUTES,
     DEFAULT_CONSOLIDATION_IDLE_MINUTES,
     DEFAULT_EXTRACTION_IDLE_MINUTES,
+    DEFAULT_MEMORY_HEALTH_COOLDOWN_MINUTES,
+    DEFAULT_MEMORY_MAINTENANCE_COOLDOWN_MINUTES,
     EXTRACTION_EVERY_N_TURNS,
 )
 from ntrp.logging import get_logger
@@ -45,7 +49,7 @@ BUILTINS = [
     BuiltinSpec(
         task_id=BUILTIN_CONSOLIDATION_ID,
         name="Memory Consolidation",
-        description="Consolidate, merge, and archive memory",
+        description="Build supported memory patterns from pending facts",
         triggers=[
             TimeTrigger(every="30m"),
             IdleTrigger(idle_minutes=DEFAULT_CONSOLIDATION_IDLE_MINUTES),
@@ -53,6 +57,29 @@ BUILTINS = [
         handler="consolidation",
         cooldown_minutes=DEFAULT_CONSOLIDATION_COOLDOWN_MINUTES,
         writable=True,
+    ),
+    BuiltinSpec(
+        task_id=BUILTIN_MEMORY_MAINTENANCE_ID,
+        name="Memory Maintenance",
+        description="Merge duplicate memory and archive decayed rows",
+        triggers=[
+            TimeTrigger(at="03:30", days="daily"),
+            IdleTrigger(idle_minutes=DEFAULT_CONSOLIDATION_IDLE_MINUTES),
+        ],
+        handler="memory_maintenance",
+        cooldown_minutes=DEFAULT_MEMORY_MAINTENANCE_COOLDOWN_MINUTES,
+        writable=True,
+    ),
+    BuiltinSpec(
+        task_id=BUILTIN_MEMORY_HEALTH_ID,
+        name="Memory Health Audit",
+        description="Read-only memory health and provenance snapshot",
+        triggers=[
+            TimeTrigger(at="04:00", days="daily"),
+        ],
+        handler="memory_health",
+        cooldown_minutes=DEFAULT_MEMORY_HEALTH_COOLDOWN_MINUTES,
+        writable=False,
     ),
 ]
 
@@ -62,6 +89,14 @@ async def seed_builtins(store: AutomationStore) -> None:
         existing = await store.get(spec.task_id)
         if existing:
             changes: dict = {}
+            if existing.name != spec.name:
+                changes["name"] = spec.name
+            if existing.description != spec.description:
+                changes["description"] = spec.description
+            if existing.handler != spec.handler:
+                changes["handler"] = spec.handler
+            if existing.writable != spec.writable:
+                changes["writable"] = spec.writable
             if existing.cooldown_minutes is None and spec.cooldown_minutes is not None:
                 changes["cooldown_minutes"] = spec.cooldown_minutes
             spec_triggers = [{"type": t.type, **t.params()} for t in spec.triggers]

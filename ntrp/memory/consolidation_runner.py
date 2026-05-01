@@ -63,7 +63,7 @@ class ConsolidationRunner:
     def running(self) -> bool:
         return self._running
 
-    async def run_once(self) -> str:
+    async def run_consolidation(self) -> str:
         self._running = True
         try:
             results = []
@@ -71,11 +71,25 @@ class ConsolidationRunner:
             if count:
                 results.append(f"consolidated {count} facts")
             await self._maybe_run_temporal_pass()
-            await self._maybe_run_observation_merge()
-            await self._maybe_run_fact_merge()
             await self._maybe_run_dream_pass()
-            await self._maybe_run_archival_pass()
-            return "; ".join(results) if results else "no pending work"
+            return "; ".join(results) if results else "no pending consolidation"
+        finally:
+            self._running = False
+
+    async def run_maintenance(self) -> str:
+        self._running = True
+        try:
+            results = []
+            merged_observations = await self._maybe_run_observation_merge()
+            if merged_observations is not None:
+                results.append(f"merged {merged_observations} patterns")
+            merged_facts = await self._maybe_run_fact_merge()
+            if merged_facts is not None:
+                results.append(f"merged {merged_facts} facts")
+            archived_facts, archived_observations = await self._maybe_run_archival_pass()
+            if archived_facts or archived_observations:
+                results.append(f"archived {archived_facts} facts / {archived_observations} patterns")
+            return "; ".join(results) if results else "no maintenance work"
         finally:
             self._running = False
 
@@ -174,10 +188,10 @@ class ConsolidationRunner:
         except Exception as e:
             _logger.warning("Temporal consolidation pass failed: %s", e)
 
-    async def _maybe_run_observation_merge(self) -> None:
+    async def _maybe_run_observation_merge(self) -> int | None:
         now = datetime.now(UTC)
         if self._last_merge_pass and (now - self._last_merge_pass) < timedelta(days=1):
-            return
+            return None
         try:
             merged = await asyncio.wait_for(
                 observation_merge_pass(
@@ -191,15 +205,17 @@ class ConsolidationRunner:
             if merged > 0:
                 _logger.info("Observation merge pass: %d merges", merged)
             self._last_merge_pass = now
+            return merged
         except TimeoutError:
             _logger.warning("Observation merge pass timed out after %ds", CONSOLIDATION_PASS_TIMEOUT)
         except Exception as e:
             _logger.warning("Observation merge pass failed: %s", e)
+        return None
 
-    async def _maybe_run_fact_merge(self) -> None:
+    async def _maybe_run_fact_merge(self) -> int | None:
         now = datetime.now(UTC)
         if self._last_fact_merge_pass and (now - self._last_fact_merge_pass) < timedelta(days=1):
-            return
+            return None
         try:
             merged = await asyncio.wait_for(
                 fact_merge_pass(
@@ -215,10 +231,12 @@ class ConsolidationRunner:
             if merged > 0:
                 _logger.info("Fact merge pass: %d merges", merged)
             self._last_fact_merge_pass = now
+            return merged
         except TimeoutError:
             _logger.warning("Fact merge pass timed out after %ds", CONSOLIDATION_PASS_TIMEOUT)
         except Exception as e:
             _logger.warning("Fact merge pass failed: %s", e)
+        return None
 
     async def _maybe_run_dream_pass(self) -> None:
         if not self.dreams_enabled:
@@ -245,10 +263,10 @@ class ConsolidationRunner:
         except Exception as e:
             _logger.warning("Dream pass failed: %s", e)
 
-    async def _maybe_run_archival_pass(self) -> None:
+    async def _maybe_run_archival_pass(self) -> tuple[int, int]:
         now = datetime.now(UTC)
         if self._last_archival_pass and (now - self._last_archival_pass) < timedelta(days=1):
-            return
+            return (0, 0)
         try:
             archived_facts = 0
             candidates = await self.facts.list_archival_candidates(limit=100)
@@ -293,5 +311,7 @@ class ConsolidationRunner:
             if archived_facts or archived_obs:
                 _logger.info("Archival pass: %d facts, %d observations archived", archived_facts, archived_obs)
             self._last_archival_pass = now
+            return (archived_facts, archived_obs)
         except Exception as e:
             _logger.warning("Archival pass failed: %s", e)
+        return (0, 0)

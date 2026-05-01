@@ -1255,6 +1255,15 @@ Memory Consolidation  consolidate, merge, archive
 
 Keep those, but split memory maintenance into explicit jobs with narrow invariants. One omnibus "consolidation" job is hard to reason about and easy to make slow.
 
+Status:
+
+```text
+2026-05-01: builtin jobs split into:
+  - Memory Consolidation: pending fact -> supported pattern work
+  - Memory Maintenance: merge/archive passes
+  - Memory Health Audit: read-only health/provenance snapshot
+```
+
 ### 1. Memory Health Audit
 
 Purpose:

@@ -23,6 +23,7 @@ from ntrp.constants import (
 )
 from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.logging import get_logger
+from ntrp.memory.audit import memory_audit
 from ntrp.memory.consolidation_runner import ConsolidationRunner
 from ntrp.memory.decay import decay_score
 from ntrp.memory.extraction import Extractor
@@ -77,6 +78,23 @@ def _session_fact_ids(memory: SessionMemory) -> list[int]:
     ids = [fact.id for fact in memory.profile_facts]
     ids.extend(fact.id for fact in memory.user_facts)
     return _dedupe_ids(ids)
+
+
+def _storage_issue_count(storage: dict[str, object]) -> int:
+    keys = ("missing_vec_rows", "stale_vec_rows", "missing_fts_rows", "stale_fts_rows")
+    return sum(int(storage.get(key, 0) or 0) for key in keys)
+
+
+def _provenance_issue_count(provenance: dict[str, dict[str, object]]) -> int:
+    keys = (
+        "records_without_sources",
+        "duplicate_source_refs",
+        "missing_source_refs",
+        "records_with_missing_sources",
+        "archived_source_refs",
+        "records_with_archived_sources",
+    )
+    return sum(int(area.get(key, 0) or 0) for area in provenance.values() for key in keys)
 
 
 class ReembedProgress(TypedDict):
@@ -180,7 +198,24 @@ class FactMemory:
         self._consolidation.dreams_enabled = value
 
     async def run_consolidation(self) -> str:
-        return await self._consolidation.run_once()
+        return await self._consolidation.run_consolidation()
+
+    async def run_memory_maintenance(self) -> str:
+        return await self._consolidation.run_maintenance()
+
+    async def run_memory_health_audit(self) -> str:
+        audit = await memory_audit(self.facts.read_conn)
+        facts = audit["facts"]
+        observations = audit["observations"]
+        storage = audit["storage"]
+        storage_issues = _storage_issue_count(storage["facts"]) + _storage_issue_count(storage["observations"])
+        provenance_issues = _provenance_issue_count(audit["provenance"])
+        relations = sum(int(value) for value in audit["relations"].values())
+        return (
+            f"facts active={facts['active']} unconsolidated={facts['unconsolidated']} "
+            f"patterns active={observations['active']} zero_access={observations['zero_access']} "
+            f"storage_issues={storage_issues} provenance_issues={provenance_issues} relation_issues={relations}"
+        )
 
     # --- Re-embedding ---
 
