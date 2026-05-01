@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from ntrp.memory.models import Fact, FactKind, Observation, SourceType
+from ntrp.memory.models import Fact, FactContext, FactKind, Observation, SourceType
 
 MEMORY_CONTEXT_CHAR_BUDGET = 3000
 
@@ -27,6 +27,12 @@ class _TrackedItem:
     observation_ids: tuple[int, ...] = ()
     bundled_fact_ids: tuple[int, ...] = ()
     allow_clip: bool = False
+
+
+def model_memory_context(context: FactContext) -> FactContext:
+    if not context.observations:
+        return context
+    return context.model_copy(update={"facts": []})
 
 
 def _source_label(fact: Fact) -> str:

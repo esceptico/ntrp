@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from ntrp.memory.formatting import format_memory_context_render
+from ntrp.memory.formatting import format_memory_context_render, model_memory_context
 from ntrp.memory.models import FactKind, FactLifetime, SourceType
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
@@ -16,7 +16,7 @@ WHEN TO USE:
 - Before asking the user something they may have already told you
 - When a topic comes up that might have stored context (projects, people, plans, opinions)
 
-Your system prompt has a small memory snapshot — recall() searches the FULL memory store which is much richer.
+The system prompt has contextual memory only — recall() searches the full store when this turn needs more.
 
 PREFER recall() FOR: Known facts, user preferences, stored knowledge, past context
 PREFER search() FOR: Finding new info in email, files, or web pages"""
@@ -104,10 +104,11 @@ class RecallInput(BaseModel):
 async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
     memory = execution.ctx.services["memory"]
     context = await memory.inspect_recall(query=args.query, limit=args.limit)
+    render_context = model_memory_context(context)
     rendered = format_memory_context_render(
-        query_facts=context.facts,
-        query_observations=context.observations,
-        bundled_sources=context.bundled_sources,
+        query_facts=render_context.facts,
+        query_observations=render_context.observations,
+        bundled_sources=render_context.bundled_sources,
     )
     await memory.record_context_access(
         source="recall_tool",
@@ -124,8 +125,8 @@ async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
             fact_ids=rendered.fact_ids,
             observation_ids=rendered.observation_ids,
         )
-        obs_count = len(context.observations)
-        fact_count = len(context.facts)
+        obs_count = len(render_context.observations)
+        fact_count = len(render_context.facts)
         return ToolResult(content=rendered.text, preview=f"{obs_count} patterns, {fact_count} facts")
     return ToolResult(
         content="No memory found for this query. Try broader terms or use remember() to store facts first.",
