@@ -727,7 +727,7 @@ Implementation status:
 2026-05-01: learning_events and learning_candidates provide the continuous-learning audit spine.
 2026-05-01: learning review scan proposes deduplicated memory-policy candidates from existing telemetry; it never auto-applies them.
 2026-05-01: chat prompt assembly adds bounded current-message memory prefetch (`chat_prefetch`) with duplicate filtering against the always-visible session memory.
-2026-05-01: learning review scan proposes skill-note review candidates from explicit skill-scoped learning events with direct evidence ids; it never writes skill files.
+2026-05-01: learning review scan proposes skill-note review candidates from explicit skill-scoped correction/failure events with direct evidence ids; it never writes skill files.
 2026-05-01: learning review scan surfaces aggregate profile-fact supersession review instead of auto-mutating contradictory facts.
 2026-05-01: manual fact/pattern edits, deletes, and metadata changes now emit `memory_feedback` learning events with direct memory-event provenance.
 2026-05-01: learning review scan turns memory feedback events into deduplicated review candidates for extraction, profile, compression, and prune policy.

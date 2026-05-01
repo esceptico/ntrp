@@ -14,6 +14,7 @@ SKILL_NOTE_SOURCE_TYPE = "skill_learning_event"
 _MAX_GROUP_EVENTS = 5
 _MAX_DETAIL_SIGNALS = 5
 _MAX_DIRECT_EVIDENCE_IDS = 20
+_REVIEW_OUTCOMES = frozenset({"corrected", "failed", "error", "rejected"})
 
 
 @dataclass(frozen=True)
@@ -36,7 +37,7 @@ def build_skill_note_proposals(events: Iterable[LearningEvent]) -> list[SkillNot
             continue
         if not event.evidence_ids:
             continue
-        if event.outcome == "ignored":
+        if event.outcome not in _REVIEW_OUTCOMES:
             continue
         target_key = _target_key(event)
         if target_key is None:

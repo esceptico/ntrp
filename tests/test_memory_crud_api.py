@@ -882,6 +882,19 @@ class TestMemoryAuditAPI:
             },
         )
         assert no_evidence_response.status_code == 200
+        success_response = await test_client.post(
+            "/memory/learning/events",
+            json={
+                "source_type": "task_outcome",
+                "source_id": "task-release-success",
+                "scope": "skill",
+                "signal": "Release workflow succeeded once.",
+                "evidence_ids": ["task:release-success"],
+                "outcome": "succeeded",
+                "details": {"skill_name": "success-only-skill-note"},
+            },
+        )
+        assert success_response.status_code == 200
 
         first = await test_client.post(
             "/memory/learning/propose",
@@ -903,6 +916,7 @@ class TestMemoryAuditAPI:
         assert candidate["evidence_event_ids"] == [source_event["id"]]
         assert candidate["details"]["direct_evidence_ids"] == ["message:msg-release-1"]
         assert "skill.floating-skill-note" not in [row["target_key"] for row in body["created_candidates"]]
+        assert "skill.success-only-skill-note" not in [row["target_key"] for row in body["created_candidates"]]
 
         second = await test_client.post(
             "/memory/learning/propose",
