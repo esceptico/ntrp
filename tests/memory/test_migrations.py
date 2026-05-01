@@ -318,3 +318,49 @@ async def test_migrate_v10_adds_learning_tables(tmp_path: Path):
     assert version[0][0] == str(CURRENT_VERSION)
 
     await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_migrate_v14_rejects_deprecated_profile_learning_candidates(tmp_path: Path):
+    conn = await aiosqlite.connect(tmp_path / "memory.db")
+    conn.row_factory = aiosqlite.Row
+    await conn.executescript("""
+        CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+        INSERT INTO meta (key, value) VALUES ('schema_version', '13');
+        CREATE TABLE learning_candidates (
+            id INTEGER PRIMARY KEY,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            status TEXT NOT NULL DEFAULT 'proposed',
+            change_type TEXT NOT NULL,
+            target_key TEXT NOT NULL,
+            proposal TEXT NOT NULL,
+            rationale TEXT NOT NULL,
+            evidence_event_ids TEXT NOT NULL DEFAULT '[]',
+            expected_metric TEXT,
+            policy_version TEXT NOT NULL,
+            applied_at TIMESTAMP,
+            reverted_at TIMESTAMP,
+            details TEXT NOT NULL DEFAULT '{}'
+        );
+        INSERT INTO learning_candidates (
+            status, change_type, target_key, proposal, rationale, policy_version
+        ) VALUES
+            ('proposed', 'profile_rule', 'memory.profile.promotions', 'old profile', 'old', 'test'),
+            ('approved', 'supersession_review', 'memory.facts.supersession.profile', 'old conflict', 'old', 'test'),
+            ('proposed', 'injection_rule', 'memory.injection.budget', 'keep', 'keep', 'test');
+    """)
+
+    await run_migrations(conn)
+
+    rows = await conn.execute_fetchall("SELECT change_type, status FROM learning_candidates ORDER BY id")
+    assert [(row["change_type"], row["status"]) for row in rows] == [
+        ("profile_rule", "rejected"),
+        ("supersession_review", "rejected"),
+        ("injection_rule", "proposed"),
+    ]
+
+    version = await conn.execute_fetchall("SELECT value FROM meta WHERE key = 'schema_version'")
+    assert version[0][0] == str(CURRENT_VERSION)
+
+    await conn.close()

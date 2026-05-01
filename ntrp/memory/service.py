@@ -681,7 +681,6 @@ class LearningService:
         *,
         access_limit: int = 100,
         injection_char_budget: int = DEFAULT_INJECTION_CHAR_BUDGET,
-        profile_limit: int = 100,
         prune_older_than_days: int = DEFAULT_PRUNE_OLDER_THAN_DAYS,
         prune_max_sources: int = DEFAULT_PRUNE_MAX_SOURCES,
         prune_limit: int = DEFAULT_PRUNE_LIMIT,
@@ -691,35 +690,15 @@ class LearningService:
             injection_events,
             char_budget=injection_char_budget,
         )
-        profile_facts = await self._memory.get_profile(limit=20)
-        review_facts = await self._memory.facts.list_profile_review_candidates(
-            PROFILE_FACT_KINDS,
-            min_salience=2,
-            min_access_count=DEFAULT_PROFILE_REVIEW_ACCESS_COUNT,
-            limit=profile_limit,
-        )
-        profile_preview = profile_policy_preview(
-            profile_facts=profile_facts,
-            review_facts=review_facts,
-            char_budget=DEFAULT_PROFILE_CHAR_BUDGET,
-            fact_char_budget=DEFAULT_PROFILE_FACT_CHAR_BUDGET,
-            review_access_count=DEFAULT_PROFILE_REVIEW_ACCESS_COUNT,
-        )
         prune_preview = await observation_prune_dry_run(
             self._memory.observations.read_conn,
             older_than_days=prune_older_than_days,
             max_sources=prune_max_sources,
             limit=prune_limit,
         )
-        supersession_candidates = await self._memory.facts.list_supersession_candidates(
-            PROFILE_FACT_KINDS,
-            limit=profile_limit,
-        )
         proposals = build_memory_policy_proposals(
             injection_preview=injection_preview,
-            profile_preview=profile_preview,
             prune_preview=prune_preview,
-            supersession_candidates=supersession_candidates,
         )
 
         created_events: list[LearningEvent] = []
@@ -951,7 +930,6 @@ class LearningService:
         memory_result = await self.propose_from_memory_policy(
             access_limit=access_limit,
             injection_char_budget=injection_char_budget,
-            profile_limit=profile_limit,
             prune_older_than_days=prune_older_than_days,
             prune_max_sources=prune_max_sources,
             prune_limit=prune_limit,
@@ -1034,10 +1012,8 @@ class MemoryService:
             review_access_count=review_access_count,
         )
 
-    async def inspect_recall(self, *, query: str, limit: int = 5) -> tuple[FactContext, SessionMemory]:
-        context = await self.memory.inspect_recall(query=query, limit=limit)
-        session_memory = await self.memory.get_session_memory()
-        return context, session_memory
+    async def inspect_recall(self, *, query: str, limit: int = 5) -> FactContext:
+        return await self.memory.inspect_recall(query=query, limit=limit)
 
     async def repair_missing_embeddings(self, *, limit: int = 100, apply: bool = False) -> dict:
         return await self.memory.repair_missing_embeddings(limit=limit, apply=apply)

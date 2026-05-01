@@ -69,7 +69,7 @@ def _recommendation(reasons: list[str]) -> str:
     if "over_budget" in reasons:
         return "tighten injected context budget before adding more memory"
     if "pattern_heavy" in reasons:
-        return "prefer source facts or profile facts over broad derived patterns"
+        return "tighten contextual ranking and keep patterns grounded in direct evidence"
     if "empty_recall" in reasons:
         return "review recall phrasing or retrieval coverage for this query"
     return "review"

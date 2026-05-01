@@ -1589,7 +1589,7 @@ class TestMemoryAuditAPI:
         assert candidate["details"]["direct_evidence_ids"] == ["automation_run:builtin:learning-review"]
 
     @pytest.mark.asyncio
-    async def test_learning_policy_scan_surfaces_supersession_review(
+    async def test_learning_policy_scan_ignores_profile_fact_heuristics(
         self,
         test_client: AsyncClient,
         test_runtime: Runtime,
@@ -1622,19 +1622,9 @@ class TestMemoryAuditAPI:
 
         assert response.status_code == 200
         body = response.json()
-        candidates = body["created_candidates"]
-        candidate = next(row for row in candidates if row["change_type"] == "supersession_review")
-        event = next(row for row in body["created_events"] if row["id"] == candidate["evidence_event_ids"][0])
-        assert candidate["target_key"] == "memory.facts.supersession.profile"
-        assert event["evidence_ids"] == [f"fact:{older.id}", f"fact:{newer.id}"]
-        assert candidate["details"]["pairs"] == [
-            {
-                "older_fact_id": older.id,
-                "newer_fact_id": newer.id,
-                "kind": "preference",
-                "entity": "User",
-            }
-        ]
+        assert body["proposals_considered"] == 0
+        assert all(row["change_type"] != "supersession_review" for row in body["created_candidates"])
+        assert all(row["change_type"] != "profile_rule" for row in body["created_candidates"])
 
     @pytest.mark.asyncio
     async def test_repair_embeddings_is_explicit_and_audited(

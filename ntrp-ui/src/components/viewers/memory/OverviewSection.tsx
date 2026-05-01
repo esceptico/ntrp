@@ -4,7 +4,6 @@ import type {
   MemoryAudit,
   MemoryEvent,
   MemoryInjectionPolicyPreview,
-  MemoryProfilePolicyPreview,
   MemoryPruneDryRun,
   MemoryStorageHealth,
 } from "../../../api/client.js";
@@ -14,7 +13,6 @@ import { truncateText } from "../../../lib/utils.js";
 import { colors } from "../../ui/index.js";
 
 interface OverviewSectionProps {
-  memoryProfilePolicy: MemoryProfilePolicyPreview | null;
   factTotal: number;
   observationTotal: number;
   pruneDryRun: MemoryPruneDryRun | null;
@@ -26,14 +24,6 @@ interface OverviewSectionProps {
   height: number;
   width: number;
 }
-
-const PROFILE_REASON_LABELS: Record<string, string> = {
-  pinned_non_profile: "pinned non-profile",
-  important_non_profile: "important non-profile",
-  reused_non_profile: "reused non-profile",
-  profile_overlong: "overlong",
-  profile_low_confidence: "low confidence",
-};
 
 interface LineSegment {
   text: string;
@@ -119,7 +109,6 @@ function relationIssueCount(relations: Record<string, number> | undefined): numb
 }
 
 export function OverviewSection({
-  memoryProfilePolicy,
   factTotal,
   observationTotal,
   pruneDryRun,
@@ -138,12 +127,6 @@ export function OverviewSection({
     storageIssueCount(memoryAudit?.storage.facts) + storageIssueCount(memoryAudit?.storage.observations);
   const relationIssues = relationIssueCount(memoryAudit?.relations);
   const missingEmbeddings = (memoryAudit?.facts.no_embedding ?? 0) + (memoryAudit?.observations.no_embedding ?? 0);
-  const profileReviewCount =
-    (memoryProfilePolicy?.summary.candidates ?? 0) + (memoryProfilePolicy?.summary.issues ?? 0);
-  const topProfileReview = memoryProfilePolicy?.candidates[0] ?? memoryProfilePolicy?.issues[0] ?? null;
-  const profileReviewLabel = topProfileReview
-    ? topProfileReview.reasons.map((reason) => PROFILE_REASON_LABELS[reason] ?? reason).join(", ")
-    : "";
   const policyReviewCount = memoryInjectionPolicy?.summary.candidates ?? 0;
   const cleanupCount = pruneDryRun?.summary.total ?? 0;
   const learningSummary = summarizeLearningCandidates(learningCandidates);
@@ -161,12 +144,6 @@ export function OverviewSection({
 
       <box flexDirection="column" marginTop={2}>
         <OverviewLine width={textWidth} segments={[{ text: "ATTENTION", fg: accentValue }]} />
-        <MetricRow
-          label="Durable review"
-          value={profileReviewCount}
-          note={topProfileReview ? profileReviewLabel || "review durable memory" : "clean"}
-          width={textWidth}
-        />
         <MetricRow
           label="Sent policy"
           value={policyReviewCount}

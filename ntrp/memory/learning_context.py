@@ -11,9 +11,7 @@ MEMORY_POLICY_CONTEXT_CHANGE_TYPES = frozenset(
         "memory_feedback",
         "injection_rule",
         "recall_rule",
-        "profile_rule",
         "prune_rule",
-        "supersession_review",
     }
 )
 AUTOMATION_POLICY_CONTEXT_CHANGE_TYPES = frozenset({"automation_rule"})

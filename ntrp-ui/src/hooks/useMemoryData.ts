@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { Config } from "../types.js";
 import {
   getFacts,
-  getMemoryProfilePolicyPreview,
   getObservations,
   getMemoryPruneDryRun,
   getMemoryEvents,
@@ -21,14 +20,12 @@ import {
   type LearningCandidate,
   type MemoryAccessEvent,
   type MemoryInjectionPolicyPreview,
-  type MemoryProfilePolicyPreview,
   type MemoryAudit,
 } from "../api/client.js";
 
 interface UseMemoryDataResult {
   facts: Fact[];
   factTotal: number;
-  memoryProfilePolicy: MemoryProfilePolicyPreview | null;
   observations: Observation[];
   observationTotal: number;
   pruneDryRun: MemoryPruneDryRun | null;
@@ -56,7 +53,6 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
   const [error, setError] = useState<string | null>(null);
   const [facts, setFacts] = useState<Fact[]>([]);
   const [factTotal, setFactTotal] = useState(0);
-  const [memoryProfilePolicy, setMemoryProfilePolicy] = useState<MemoryProfilePolicyPreview | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [observationTotal, setObservationTotal] = useState(0);
   const [pruneDryRun, setPruneDryRun] = useState<MemoryPruneDryRun | null>(null);
@@ -134,12 +130,6 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
       setLoading(false);
 
       const slowLoads = [
-        getMemoryProfilePolicyPreview(config, 100)
-          .then((data) => {
-            if (!isCurrent()) return;
-            setMemoryProfilePolicy(data);
-          })
-          .catch((e: unknown) => reportError("Durable memory policy", e)),
         getMemoryPruneDryRun(config)
           .then((data) => {
             if (!isCurrent()) return;
@@ -181,7 +171,6 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
   return {
     facts,
     factTotal,
-    memoryProfilePolicy,
     observations,
     observationTotal,
     pruneDryRun,

@@ -267,36 +267,6 @@ export interface MemoryInjectionPolicyPreview {
   candidates: MemoryInjectionPolicyCandidate[];
 }
 
-export type MemoryProfilePolicyReason =
-  | "pinned_non_profile"
-  | "important_non_profile"
-  | "reused_non_profile"
-  | "profile_overlong"
-  | "profile_low_confidence";
-
-export interface MemoryProfilePolicyItem {
-  fact: Fact;
-  reasons: MemoryProfilePolicyReason[];
-  recommendation: string;
-}
-
-export interface MemoryProfilePolicyPreview {
-  policy: {
-    version: string;
-    char_budget: number;
-    fact_char_budget: number;
-  };
-  summary: {
-    current_count: number;
-    current_chars: number;
-    over_budget: boolean;
-    candidates: number;
-    issues: number;
-  };
-  candidates: MemoryProfilePolicyItem[];
-  issues: MemoryProfilePolicyItem[];
-}
-
 export interface MemoryStorageHealth {
   vec_rows: number;
   missing_vec_rows: number;
@@ -324,15 +294,9 @@ export interface MemoryRecallInspectResult {
   query: string;
   limit: number;
   formatted_recall: string | null;
-  formatted_session: string | null;
   facts: Fact[];
   observations: Observation[];
   bundled_sources: Record<string, Fact[]>;
-  session: {
-    profile_facts: Fact[];
-    observations: Observation[];
-    user_facts: Fact[];
-  };
 }
 
 export interface MemoryRepairEmbeddingsResult {
@@ -413,17 +377,6 @@ export async function deleteFact(
 
 export async function getStats(config: Config): Promise<Stats> {
   return api.get<Stats>(`${config.serverUrl}/stats`);
-}
-
-export async function getMemoryProfile(config: Config, limit = 20): Promise<{ facts: Fact[] }> {
-  return api.get<{ facts: Fact[] }>(`${config.serverUrl}/memory/profile?limit=${limit}`);
-}
-
-export async function getMemoryProfilePolicyPreview(
-  config: Config,
-  limit = 100
-): Promise<MemoryProfilePolicyPreview> {
-  return api.get<MemoryProfilePolicyPreview>(`${config.serverUrl}/memory/profile/policy/preview?limit=${limit}`);
 }
 
 export async function inspectMemoryRecall(

@@ -81,10 +81,6 @@ export function RecallInspectSection({ tab, height, width }: RecallInspectSectio
             <span fg={colors.text.muted}>{result.observations.length} patterns</span>
             <span fg={colors.text.disabled}> | </span>
             <span fg={colors.text.muted}>{result.facts.length} facts</span>
-            <span fg={colors.text.disabled}> | session </span>
-            <span fg={colors.text.muted}>{result.session.profile_facts.length} profile</span>
-            <span fg={colors.text.disabled}> / </span>
-            <span fg={colors.text.muted}>{result.session.observations.length} patterns</span>
           </text>
         ) : (
           <text><span fg={colors.text.disabled}>Enter a query to test retrieval</span></text>

@@ -92,7 +92,7 @@ Do not create observations for a single:
 - artifact/resource
 - procedure/workflow
 
-Those remain facts. They are still directly retrievable and may enter profile memory through fact kind/salience.
+Those remain facts. They are still directly retrievable when the current context asks for them.
 
 ## OBSERVATION SIZE
 

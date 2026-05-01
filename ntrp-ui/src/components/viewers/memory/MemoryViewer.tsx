@@ -41,7 +41,6 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const {
     facts,
     factTotal,
-    memoryProfilePolicy,
     observations,
     observationTotal,
     pruneDryRun,
@@ -221,7 +220,6 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
 
             {activeTab === "overview" && (
               <OverviewSection
-                memoryProfilePolicy={memoryProfilePolicy}
                 factTotal={factTotal}
                 observationTotal={observationTotal}
                 pruneDryRun={pruneDryRun}

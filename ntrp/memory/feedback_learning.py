@@ -36,11 +36,6 @@ class _FeedbackRule:
 
 
 _RULES: dict[str, _FeedbackRule] = {
-    "profile": _FeedbackRule(
-        target_key="memory.profile.feedback",
-        proposal="Review profile and supersession rules against recent user memory corrections.",
-        expected_metric="fewer stale or conflicting profile facts injected into context",
-    ),
     "memory_extraction": _FeedbackRule(
         target_key="memory.extraction.feedback",
         proposal="Review extraction and fact classification behavior against recent user fact corrections.",

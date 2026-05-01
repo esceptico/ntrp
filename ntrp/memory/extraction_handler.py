@@ -41,7 +41,7 @@ def create_chat_extraction_handler(memory: FactMemory, store: AutomationStore) -
 
         policy_context = await get_applied_memory_policy_context(
             memory,
-            target_prefixes=("memory.extraction.", "memory.profile."),
+            target_prefixes=("memory.extraction.",),
         )
         facts = await extract_from_chat(tuple(window), memory.model, policy_context=policy_context)
         await store.mark_chat_extraction_extracted(sid, len(messages), datetime.now(UTC))

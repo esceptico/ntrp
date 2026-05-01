@@ -2,8 +2,6 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Any
 
-from ntrp.memory.profile_policy import ProfilePolicyPreview
-
 LEARNING_POLICY_VERSION = "learning.memory_policy.v1"
 LEARNING_POLICY_SOURCE_TYPE = "memory_policy_preview"
 
@@ -27,15 +25,11 @@ class LearningPolicyProposal:
 def build_memory_policy_proposals(
     *,
     injection_preview: dict[str, Any],
-    profile_preview: ProfilePolicyPreview,
     prune_preview: dict[str, Any],
-    supersession_candidates: list[dict[str, Any]] | None = None,
 ) -> list[LearningPolicyProposal]:
     proposals: list[LearningPolicyProposal] = []
     proposals.extend(_injection_proposals(injection_preview))
-    proposals.extend(_profile_proposals(profile_preview))
     proposals.extend(_prune_proposals(prune_preview))
-    proposals.extend(_supersession_proposals(supersession_candidates or []))
     return proposals
 
 
@@ -128,56 +122,6 @@ def _injection_proposals(preview: dict[str, Any]) -> list[LearningPolicyProposal
     return proposals
 
 
-def _profile_proposals(preview: ProfilePolicyPreview) -> list[LearningPolicyProposal]:
-    proposals: list[LearningPolicyProposal] = []
-
-    if preview.candidates:
-        fact_ids = [item.fact.id for item in preview.candidates[:_MAX_EVIDENCE_IDS]]
-        proposals.append(
-            LearningPolicyProposal(
-                source_id="profile:promotion_candidates",
-                scope="profile",
-                signal=f"{len(preview.candidates)} durable facts look reviewable for always-visible profile memory.",
-                evidence_ids=tuple(f"fact:{fact_id}" for fact_id in fact_ids),
-                change_type="profile_rule",
-                target_key="memory.profile.promotions",
-                proposal="Review durable profile candidates and promote only stable identity, preference, relationship, or constraint facts.",
-                rationale="Always-visible memory should stay small, direct, and grounded in facts that repeatedly matter.",
-                expected_metric="fewer useful facts missed by profile memory without increasing profile noise",
-                details={
-                    "candidate_count": len(preview.candidates),
-                    "policy_version": preview.policy_version,
-                    "fact_ids": fact_ids,
-                },
-            )
-        )
-
-    if preview.issues:
-        fact_ids = [item.fact.id for item in preview.issues[:_MAX_EVIDENCE_IDS]]
-        proposals.append(
-            LearningPolicyProposal(
-                source_id="profile:quality_issues",
-                scope="profile",
-                signal=f"{len(preview.issues)} profile facts are overlong or low-confidence.",
-                evidence_ids=tuple(f"fact:{fact_id}" for fact_id in fact_ids),
-                change_type="profile_rule",
-                target_key="memory.profile.quality",
-                proposal="Review profile facts that are too long or low-confidence before expanding profile memory.",
-                rationale="Profile memory is injected broadly, so weak or bloated entries have a high blast radius.",
-                expected_metric="lower profile char count with higher average confidence",
-                details={
-                    "issue_count": len(preview.issues),
-                    "current_chars": preview.current_chars,
-                    "char_budget": preview.char_budget,
-                    "fact_char_budget": preview.fact_char_budget,
-                    "fact_ids": fact_ids,
-                },
-            )
-        )
-
-    return proposals
-
-
 def _prune_proposals(preview: dict[str, Any]) -> list[LearningPolicyProposal]:
     summary = preview.get("summary") or {}
     total = int(summary.get("total") or 0)
@@ -206,49 +150,6 @@ def _prune_proposals(preview: dict[str, Any]) -> list[LearningPolicyProposal]:
                 "summary": summary,
                 "criteria": criteria,
                 "observation_ids": observation_ids,
-            },
-        )
-    ]
-
-
-def _supersession_proposals(candidates: list[dict[str, Any]]) -> list[LearningPolicyProposal]:
-    if not candidates:
-        return []
-
-    pairs = []
-    evidence_ids: list[str] = []
-    for candidate in candidates[:_MAX_EVIDENCE_IDS]:
-        older_id = candidate.get("older_fact_id")
-        newer_id = candidate.get("newer_fact_id")
-        if older_id is None or newer_id is None:
-            continue
-        pairs.append(
-            {
-                "older_fact_id": older_id,
-                "newer_fact_id": newer_id,
-                "kind": candidate.get("kind"),
-                "entity": candidate.get("entity_name"),
-            }
-        )
-        evidence_ids.extend([f"fact:{older_id}", f"fact:{newer_id}"])
-
-    if not pairs:
-        return []
-
-    return [
-        LearningPolicyProposal(
-            source_id="facts:supersession_candidates",
-            scope="profile",
-            signal=f"{len(pairs)} same-entity profile fact pair(s) may need supersession review.",
-            evidence_ids=tuple(dict.fromkeys(evidence_ids)),
-            change_type="supersession_review",
-            target_key="memory.facts.supersession.profile",
-            proposal="Review older/newer profile fact pairs and mark stale facts as superseded when the newer fact replaces the old one.",
-            rationale="Contradictory profile facts should preserve history but avoid competing equally in recall.",
-            expected_metric="fewer stale profile facts injected into active context",
-            details={
-                "pair_count": len(pairs),
-                "pairs": pairs,
             },
         )
     ]

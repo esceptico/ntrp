@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 13
+CURRENT_VERSION = 14
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -405,6 +405,26 @@ async def _migrate_v13(conn: aiosqlite.Connection) -> None:
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_lifetime ON facts(lifetime)")
 
 
+async def _migrate_v14(conn: aiosqlite.Connection) -> None:
+    """Close deprecated profile-learning candidates."""
+    _logger.info("Migration v14: closing deprecated profile learning candidates")
+
+    if not await _table_exists(conn, "learning_candidates"):
+        return
+
+    await conn.execute("""
+        UPDATE learning_candidates
+        SET status = 'rejected',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE status IN ('proposed', 'approved')
+          AND (
+            change_type IN ('profile_rule', 'supersession_review')
+            OR target_key LIKE 'memory.profile.%'
+            OR target_key = 'memory.facts.supersession.profile'
+          )
+    """)
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
@@ -419,6 +439,7 @@ _MIGRATIONS: list[tuple[int, callable]] = [
     (11, _migrate_v11),
     (12, _migrate_v12),
     (13, _migrate_v13),
+    (14, _migrate_v14),
 ]
 
 

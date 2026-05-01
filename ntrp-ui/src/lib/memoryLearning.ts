@@ -22,7 +22,7 @@ export function learningChangeLabel(changeType: string): string {
     case "automation_rule":
       return "automation rule";
     case "supersession_review":
-      return "profile conflict";
+      return "fact conflict";
     case "memory_feedback":
       return "memory feedback";
     case "injection_rule":
@@ -30,7 +30,7 @@ export function learningChangeLabel(changeType: string): string {
     case "recall_rule":
       return "recall rule";
     case "profile_rule":
-      return "profile rule";
+      return "durable memory rule";
     case "prune_rule":
       return "cleanup rule";
     default:
@@ -45,9 +45,9 @@ export function learningTargetLabel(targetKey: string): string {
     case "memory.injection.ranking":
       return "memory injection ranking";
     case "memory.profile.quality":
-      return "profile memory quality";
+      return "durable memory quality";
     case "memory.facts.supersession.profile":
-      return "profile fact conflict review";
+      return "fact conflict review";
     case "memory.observations.compression.feedback":
       return "pattern compression feedback";
     case "memory.observations.prune.low_evidence":
