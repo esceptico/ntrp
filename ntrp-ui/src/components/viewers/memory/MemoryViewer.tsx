@@ -6,12 +6,14 @@ import { useObservationsTab } from "../../../hooks/useObservationsTab.js";
 import { usePruneTab } from "../../../hooks/usePruneTab.js";
 import { useMemoryEventsTab } from "../../../hooks/useMemoryEventsTab.js";
 import { useMemoryAccessTab } from "../../../hooks/useMemoryAccessTab.js";
+import { useLearningTab } from "../../../hooks/useLearningTab.js";
 import { useMemoryData } from "../../../hooks/useMemoryData.js";
 import { useMemoryKeypress } from "../../../hooks/useMemoryKeypress.js";
 import { useRecallInspectTab } from "../../../hooks/useRecallInspectTab.js";
 import { Dialog, Loading, Tabs, colors } from "../../ui/index.js";
 import { memoryAccessSourceLabel } from "../../../lib/memoryAccess.js";
 import { FactsSection } from "./FactsSection.js";
+import { LearningSection } from "./LearningSection.js";
 import { MemoryAccessSection } from "./MemoryAccessSection.js";
 import { ObservationsSection } from "./ObservationsSection.js";
 import { PruneSection } from "./PruneSection.js";
@@ -20,7 +22,7 @@ import { MemoryFooter } from "./MemoryFooter.js";
 import { OverviewSection } from "./OverviewSection.js";
 import { RecallInspectSection } from "./RecallInspectSection.js";
 
-const TABS = ["overview", "recall", "context", "profile", "facts", "observations", "prune", "events"] as const;
+const TABS = ["overview", "recall", "context", "profile", "facts", "observations", "prune", "learning", "events"] as const;
 type TabType = (typeof TABS)[number];
 type SortableTab = { sortOrder: string };
 
@@ -39,6 +41,7 @@ function tabLabels(width: number): Record<TabType, string> {
       facts: "Facts",
       observations: "Pat",
       prune: "Clean",
+      learning: "Learn",
       events: "Log",
     };
   }
@@ -50,6 +53,7 @@ function tabLabels(width: number): Record<TabType, string> {
     facts: "Facts",
     observations: "Patterns",
     prune: "Cleanup",
+    learning: "Learning",
     events: "Log",
   };
 }
@@ -69,6 +73,8 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     observationTotal,
     pruneDryRun,
     memoryEvents,
+    learningEvents,
+    learningCandidates,
     memoryAccessEvents,
     memoryInjectionPolicy,
     memoryAudit,
@@ -76,6 +82,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     error,
     setFacts,
     setObservations,
+    setLearningCandidates,
     setError,
     reload,
   } = useMemoryData(config, factFilters, observationFilters);
@@ -84,6 +91,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const factsTab = useFactsTab(config, facts, 80, factFilters, setFactFilters, factTotal);
   const obsTab = useObservationsTab(config, observations, 80, observationFilters, setObservationFilters, observationTotal);
   const pruneTab = usePruneTab(pruneDryRun?.candidates ?? [], 80);
+  const learningTab = useLearningTab(learningCandidates, learningEvents, 80);
   const eventsTab = useMemoryEventsTab(memoryEvents, 80);
   const accessTab = useMemoryAccessTab(memoryAccessEvents, 80);
   const recallTab = useRecallInspectTab(config);
@@ -96,12 +104,14 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     factsTab,
     obsTab,
     pruneTab,
+    learningTab,
     pruneDryRun,
     accessTab,
     eventsTab,
     config,
     setFacts,
     setObservations,
+    setLearningCandidates,
     setError,
     reload,
     onClose,
@@ -136,6 +146,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
           factsTab={factsTab}
           obsTab={obsTab}
           pruneTab={pruneTab}
+          learningTab={learningTab}
           accessTab={accessTab}
           eventsTab={eventsTab}
         />
@@ -156,9 +167,11 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                     ? obsTab
                     : activeTab === "prune"
                       ? pruneTab
-                      : eventsTab;
+                      : activeTab === "learning"
+                        ? learningTab
+                        : eventsTab;
         const filterDisplay = activeTab === "overview"
-          ? "Recall · Used · Profile · Facts · Patterns · Cleanup · Log"
+          ? "Recall · Used · Profile · Facts · Patterns · Cleanup · Learning · Log"
           : activeTab === "recall"
           ? recallTab.result
             ? `${recallTab.result.observations.length} patterns · ${recallTab.result.facts.length} facts`
@@ -193,6 +206,13 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                   `older: ${pruneDryRun.criteria.older_than_days}d`,
                   `max support: ${pruneDryRun.criteria.max_sources}`,
                   `candidates: ${pruneDryRun.summary.total}`,
+                ].join(" · ")
+            : activeTab === "learning"
+              ? [
+                  `status: ${learningTab.statusFilter}`,
+                  `type: ${learningTab.changeTypeFilter ?? "all"}`,
+                  `candidates: ${learningCandidates.length}`,
+                  `events: ${learningEvents.length}`,
                 ].join(" · ")
             : activeTab === "events"
               ? [
@@ -230,6 +250,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 observationTotal={observationTotal}
                 pruneDryRun={pruneDryRun}
                 memoryEvents={memoryEvents}
+                learningCandidates={learningCandidates}
                 memoryAccessEvents={memoryAccessEvents}
                 memoryInjectionPolicy={memoryInjectionPolicy}
                 memoryAudit={memoryAudit}
@@ -266,6 +287,15 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
 
             {activeTab === "prune" && (
               <PruneSection tab={pruneTab} dryRun={pruneDryRun} height={sectionHeight} width={width} />
+            )}
+
+            {activeTab === "learning" && (
+              <LearningSection
+                tab={learningTab}
+                totalCount={learningCandidates.length}
+                height={sectionHeight}
+                width={width}
+              />
             )}
 
             {activeTab === "events" && (

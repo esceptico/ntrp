@@ -725,6 +725,7 @@ Implementation status:
 2026-05-01: Memory UI has a Used tab for recent injected bundles.
 2026-05-01: read-only injection and profile policy previews are exposed in API/UI.
 2026-05-01: learning_events and learning_candidates provide the continuous-learning audit spine.
+2026-05-01: Memory UI has a Learning tab for candidate review and approve/reject status changes.
 ```
 
 Rejected for now:

@@ -7,6 +7,8 @@ import {
   getObservations,
   getMemoryPruneDryRun,
   getMemoryEvents,
+  getLearningEvents,
+  getLearningCandidates,
   getMemoryAccessEvents,
   getMemoryInjectionPolicyPreview,
   getMemoryAudit,
@@ -16,6 +18,8 @@ import {
   type ObservationFilters,
   type MemoryPruneDryRun,
   type MemoryEvent,
+  type LearningEvent,
+  type LearningCandidate,
   type MemoryAccessEvent,
   type MemoryInjectionPolicyPreview,
   type MemoryProfilePolicyPreview,
@@ -31,6 +35,8 @@ interface UseMemoryDataResult {
   observationTotal: number;
   pruneDryRun: MemoryPruneDryRun | null;
   memoryEvents: MemoryEvent[];
+  learningEvents: LearningEvent[];
+  learningCandidates: LearningCandidate[];
   memoryAccessEvents: MemoryAccessEvent[];
   memoryInjectionPolicy: MemoryInjectionPolicyPreview | null;
   memoryAudit: MemoryAudit | null;
@@ -38,6 +44,7 @@ interface UseMemoryDataResult {
   error: string | null;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
   setObservations: React.Dispatch<React.SetStateAction<Observation[]>>;
+  setLearningCandidates: React.Dispatch<React.SetStateAction<LearningCandidate[]>>;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
   reload: () => void;
 }
@@ -53,6 +60,8 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
   const [observationTotal, setObservationTotal] = useState(0);
   const [pruneDryRun, setPruneDryRun] = useState<MemoryPruneDryRun | null>(null);
   const [memoryEvents, setMemoryEvents] = useState<MemoryEvent[]>([]);
+  const [learningEvents, setLearningEvents] = useState<LearningEvent[]>([]);
+  const [learningCandidates, setLearningCandidates] = useState<LearningCandidate[]>([]);
   const [memoryAccessEvents, setMemoryAccessEvents] = useState<MemoryAccessEvent[]>([]);
   const [memoryInjectionPolicy, setMemoryInjectionPolicy] = useState<MemoryInjectionPolicyPreview | null>(null);
   const [memoryAudit, setMemoryAudit] = useState<MemoryAudit | null>(null);
@@ -73,6 +82,8 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
           obsData,
           pruneData,
           eventsData,
+          learningEventsData,
+          learningCandidatesData,
           accessData,
           policyData,
           auditData,
@@ -83,6 +94,8 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
           getObservations(config, 100, observationFilters),
           getMemoryPruneDryRun(config),
           getMemoryEvents(config, 100),
+          getLearningEvents(config, 100),
+          getLearningCandidates(config, 100),
           getMemoryAccessEvents(config, 100),
           getMemoryInjectionPolicyPreview(config, 100),
           getMemoryAudit(config),
@@ -96,6 +109,8 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
         setObservationTotal(obsData.total || 0);
         setPruneDryRun(pruneData);
         setMemoryEvents(eventsData.events || []);
+        setLearningEvents(learningEventsData.events || []);
+        setLearningCandidates(learningCandidatesData.candidates || []);
         setMemoryAccessEvents(accessData.events || []);
         setMemoryInjectionPolicy(policyData);
         setMemoryAudit(auditData);
@@ -121,6 +136,8 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
     observationTotal,
     pruneDryRun,
     memoryEvents,
+    learningEvents,
+    learningCandidates,
     memoryAccessEvents,
     memoryInjectionPolicy,
     memoryAudit,
@@ -128,6 +145,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
     error,
     setFacts,
     setObservations,
+    setLearningCandidates,
     setError,
     reload,
   };

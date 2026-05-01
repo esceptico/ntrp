@@ -1,5 +1,6 @@
 import type {
   Fact,
+  LearningCandidate,
   MemoryAccessEvent,
   MemoryAudit,
   MemoryEvent,
@@ -20,6 +21,7 @@ interface OverviewSectionProps {
   observationTotal: number;
   pruneDryRun: MemoryPruneDryRun | null;
   memoryEvents: MemoryEvent[];
+  learningCandidates: LearningCandidate[];
   memoryAccessEvents: MemoryAccessEvent[];
   memoryInjectionPolicy: MemoryInjectionPolicyPreview | null;
   memoryAudit: MemoryAudit | null;
@@ -63,6 +65,7 @@ export function OverviewSection({
   observationTotal,
   pruneDryRun,
   memoryEvents,
+  learningCandidates,
   memoryAccessEvents,
   memoryInjectionPolicy,
   memoryAudit,
@@ -71,6 +74,7 @@ export function OverviewSection({
 }: OverviewSectionProps) {
   const { accentValue } = useAccentColor();
   const latestEvent = memoryEvents[0];
+  const latestLearningCandidate = learningCandidates[0];
   const latestAccess = memoryAccessEvents[0];
   const storageIssues =
     storageIssueCount(memoryAudit?.storage.facts) + storageIssueCount(memoryAudit?.storage.observations);
@@ -110,6 +114,7 @@ export function OverviewSection({
           value={pruneDryRun?.summary.total ?? 0}
           note="archive candidates matching the current cleanup rule"
         />
+        <MetricRow label="Learning" value={learningCandidates.length} note="reviewable policy, skill, and prompt candidates" />
         <MetricRow label="Log" value={memoryEvents.length} note="recent memory writes and automation outcomes loaded" />
       </box>
 
@@ -122,6 +127,7 @@ export function OverviewSection({
         <text><span fg={colors.text.secondary}>Facts</span><span fg={colors.text.disabled}> to edit durable truth</span></text>
         <text><span fg={colors.text.secondary}>Patterns</span><span fg={colors.text.disabled}> to inspect derived memory and provenance</span></text>
         <text><span fg={colors.text.secondary}>Cleanup</span><span fg={colors.text.disabled}> to archive low-value patterns in bulk</span></text>
+        <text><span fg={colors.text.secondary}>Learning</span><span fg={colors.text.disabled}> to review proposed durable improvements</span></text>
         <text><span fg={colors.text.secondary}>Log</span><span fg={colors.text.disabled}> to answer why memory changed</span></text>
       </box>
 
@@ -149,6 +155,19 @@ export function OverviewSection({
           </text>
         ) : (
           <text><span fg={colors.text.disabled}>No context injections loaded</span></text>
+        )}
+      </box>
+
+      <box flexDirection="column" marginTop={1}>
+        <text><span fg={colors.text.muted}>LATEST LEARNING</span></text>
+        {latestLearningCandidate ? (
+          <text>
+            <span fg={colors.text.secondary}>{latestLearningCandidate.status}</span>
+            <span fg={colors.text.disabled}> {"\u2502"} {latestLearningCandidate.change_type}</span>
+            <span fg={colors.text.disabled}> {"\u2502"} {truncateText(latestLearningCandidate.proposal, width - 24)}</span>
+          </text>
+        ) : (
+          <text><span fg={colors.text.disabled}>No learning candidates loaded</span></text>
         )}
       </box>
 

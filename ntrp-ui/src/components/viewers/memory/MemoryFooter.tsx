@@ -2,7 +2,7 @@ import React from "react";
 import { Hints } from "../../ui/index.js";
 import type { RecallInspectTabState } from "../../../hooks/useRecallInspectTab.js";
 
-type TabType = "overview" | "recall" | "context" | "profile" | "facts" | "observations" | "prune" | "events";
+type TabType = "overview" | "recall" | "context" | "profile" | "facts" | "observations" | "prune" | "learning" | "events";
 
 interface MemoryFooterProps {
   activeTab: TabType;
@@ -11,13 +11,14 @@ interface MemoryFooterProps {
   factsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean; metadataSuggestion: unknown };
   obsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean };
   pruneTab: { focusPane: string; searchMode: boolean; confirmApply: "selected" | "all" | null };
+  learningTab: { focusPane: string; searchMode: boolean };
   accessTab: { focusPane: string; searchMode: boolean };
   eventsTab: { focusPane: string; searchMode: boolean };
 }
 
-export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTab, pruneTab, accessTab, eventsTab }: MemoryFooterProps): React.ReactNode {
+export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTab, pruneTab, learningTab, accessTab, eventsTab }: MemoryFooterProps): React.ReactNode {
   if (activeTab === "overview") {
-    return <Hints items={[["1-8", "tabs"], ["r", "refresh"], ["q", "close"]]} />;
+    return <Hints items={[["1-9", "tabs"], ["r", "refresh"], ["q", "close"]]} />;
   }
 
   if (activeTab === "recall") {
@@ -57,6 +58,14 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
     }
     if (eventsTab.searchMode) return <Hints items={[["type", "search"], ["esc", "clear/exit"], ["enter", "done"]]} />;
     return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["x", "target"], ["u", "actor"], ["v", "action"], ["o", "sort"], ["r", "refresh"]]} />;
+  }
+
+  if (activeTab === "learning") {
+    if (learningTab.focusPane === "details") {
+      return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ["a", "approve"], ["d", "reject"], ["r", "refresh"]]} />;
+    }
+    if (learningTab.searchMode) return <Hints items={[["type", "search"], ["esc", "clear/exit"], ["enter", "done"]]} />;
+    return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["s", "status"], ["v", "type"], ["a", "approve"], ["d", "reject"], ["o", "sort"], ["r", "refresh"]]} />;
   }
 
   const tab = activeTab === "facts" ? factsTab : obsTab;

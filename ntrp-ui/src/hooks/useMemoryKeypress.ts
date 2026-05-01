@@ -8,6 +8,7 @@ import type { ObservationsTabState } from "./useObservationsTab.js";
 import type { PruneTabState } from "./usePruneTab.js";
 import type { MemoryEventsTabState } from "./useMemoryEventsTab.js";
 import type { MemoryAccessTabState } from "./useMemoryAccessTab.js";
+import type { LearningTabState } from "./useLearningTab.js";
 import type { RecallInspectTabState } from "./useRecallInspectTab.js";
 import {
   updateFact,
@@ -17,14 +18,16 @@ import {
   updateObservation,
   deleteObservation,
   applyMemoryPrune,
+  updateLearningCandidateStatus,
   type Fact,
   type FactDetails,
+  type LearningCandidate,
   type Observation,
   type ObservationDetails,
   type MemoryPruneDryRun,
 } from "../api/client.js";
 
-type TabType = "overview" | "recall" | "context" | "profile" | "facts" | "observations" | "prune" | "events";
+type TabType = "overview" | "recall" | "context" | "profile" | "facts" | "observations" | "prune" | "learning" | "events";
 
 interface UseMemoryKeypressOptions {
   activeTab: TabType;
@@ -34,12 +37,14 @@ interface UseMemoryKeypressOptions {
   factsTab: FactsTabState;
   obsTab: ObservationsTabState;
   pruneTab: PruneTabState;
+  learningTab: LearningTabState;
   pruneDryRun: MemoryPruneDryRun | null;
   accessTab: MemoryAccessTabState;
   eventsTab: MemoryEventsTabState;
   config: Config;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
   setObservations: React.Dispatch<React.SetStateAction<Observation[]>>;
+  setLearningCandidates: React.Dispatch<React.SetStateAction<LearningCandidate[]>>;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
   reload: () => void;
   onClose: () => void;
@@ -61,12 +66,14 @@ export function useMemoryKeypress({
   factsTab,
   obsTab,
   pruneTab,
+  learningTab,
   pruneDryRun,
   accessTab,
   eventsTab,
   config,
   setFacts,
   setObservations,
+  setLearningCandidates,
   setError,
   reload,
   onClose,
@@ -331,6 +338,35 @@ export function useMemoryKeypress({
         }
       }
 
+      if (activeTab === "learning" && !learningTab.searchMode && learningTab.selectedCandidate) {
+        if (key.name === "a" && learningTab.selectedCandidate.status !== "approved") {
+          setSaving(true);
+          updateLearningCandidateStatus(config, learningTab.selectedCandidate.id, "approved")
+            .then((result) => {
+              setLearningCandidates((prev: LearningCandidate[]) =>
+                prev.map((candidate) => (candidate.id === result.candidate.id ? result.candidate : candidate))
+              );
+              reload();
+            })
+            .catch((e: unknown) => setError(`Approve failed: ${e}`))
+            .finally(() => setSaving(false));
+          return;
+        }
+        if (key.name === "d" && learningTab.selectedCandidate.status !== "rejected") {
+          setSaving(true);
+          updateLearningCandidateStatus(config, learningTab.selectedCandidate.id, "rejected")
+            .then((result) => {
+              setLearningCandidates((prev: LearningCandidate[]) =>
+                prev.map((candidate) => (candidate.id === result.candidate.id ? result.candidate : candidate))
+              );
+              reload();
+            })
+            .catch((e: unknown) => setError(`Reject failed: ${e}`))
+            .finally(() => setSaving(false));
+          return;
+        }
+      }
+
       if (activeTab === "recall") {
         if (key.name === "escape") {
           onClose();
@@ -347,7 +383,8 @@ export function useMemoryKeypress({
       if (key.name === "5") { setActiveTab("facts"); return; }
       if (key.name === "6") { setActiveTab("observations"); return; }
       if (key.name === "7") { setActiveTab("prune"); return; }
-      if (key.name === "8") { setActiveTab("events"); return; }
+      if (key.name === "8") { setActiveTab("learning"); return; }
+      if (key.name === "9") { setActiveTab("events"); return; }
       if (key.name === "r") { reload(); return; }
 
       if (key.name === "escape" || key.name === "q") {
@@ -355,7 +392,7 @@ export function useMemoryKeypress({
           onClose();
           return;
         }
-        const tab = activeTab === "context" ? accessTab : activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : eventsTab;
+        const tab = activeTab === "context" ? accessTab : activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : activeTab === "learning" ? learningTab : eventsTab;
         if (tab.searchMode) {
           tab.handleKeys(key);
           return;
@@ -377,12 +414,13 @@ export function useMemoryKeypress({
       if (activeTab === "overview") { return; }
       if (activeTab === "context") { accessTab.handleKeys(key); return; }
       if (activeTab === "profile") { profileTab.handleKeys(key); return; }
+      if (activeTab === "learning") { learningTab.handleKeys(key); return; }
       if (activeTab === "events") { eventsTab.handleKeys(key); return; }
       if (activeTab === "prune") { pruneTab.handleKeys(key); return; }
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
-    [activeTab, recallTab, profileTab, factsTab, obsTab, pruneTab, pruneDryRun, accessTab, eventsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setError, queryClient]
+    [activeTab, recallTab, profileTab, factsTab, obsTab, pruneTab, learningTab, pruneDryRun, accessTab, eventsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setLearningCandidates, setError, queryClient]
   );
 
   useKeypress(handleKeypress, { isActive: true });

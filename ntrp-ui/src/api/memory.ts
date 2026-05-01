@@ -176,6 +176,35 @@ export interface MemoryEvent {
   details: Record<string, unknown>;
 }
 
+export interface LearningEvent {
+  id: number;
+  created_at: string;
+  source_type: string;
+  source_id: string | null;
+  scope: string;
+  signal: string;
+  evidence_ids: string[];
+  outcome: string;
+  details: Record<string, unknown>;
+}
+
+export interface LearningCandidate {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  status: string;
+  change_type: string;
+  target_key: string;
+  proposal: string;
+  rationale: string;
+  evidence_event_ids: number[];
+  expected_metric: string | null;
+  policy_version: string;
+  applied_at: string | null;
+  reverted_at: string | null;
+  details: Record<string, unknown>;
+}
+
 export interface MemoryAccessEvent {
   id: number;
   created_at: string;
@@ -455,6 +484,28 @@ export async function applyMemoryPrune(
 
 export async function getMemoryEvents(config: Config, limit = 100): Promise<{ events: MemoryEvent[] }> {
   return api.get<{ events: MemoryEvent[] }>(`${config.serverUrl}/memory/events?limit=${limit}`);
+}
+
+export async function getLearningEvents(config: Config, limit = 100): Promise<{ events: LearningEvent[] }> {
+  return api.get<{ events: LearningEvent[] }>(`${config.serverUrl}/memory/learning/events?limit=${limit}`);
+}
+
+export async function getLearningCandidates(
+  config: Config,
+  limit = 100
+): Promise<{ candidates: LearningCandidate[] }> {
+  return api.get<{ candidates: LearningCandidate[] }>(`${config.serverUrl}/memory/learning/candidates?limit=${limit}`);
+}
+
+export async function updateLearningCandidateStatus(
+  config: Config,
+  candidateId: number,
+  status: string
+): Promise<{ candidate: LearningCandidate }> {
+  return api.patch<{ candidate: LearningCandidate }>(
+    `${config.serverUrl}/memory/learning/candidates/${candidateId}/status`,
+    { status }
+  );
 }
 
 export async function getMemoryAccessEvents(config: Config, limit = 100): Promise<{ events: MemoryAccessEvent[] }> {
