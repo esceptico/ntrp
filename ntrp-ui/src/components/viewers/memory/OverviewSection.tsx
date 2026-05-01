@@ -1,5 +1,4 @@
 import type {
-  Fact,
   LearningCandidate,
   MemoryAccessEvent,
   MemoryAudit,
@@ -15,7 +14,6 @@ import { truncateText } from "../../../lib/utils.js";
 import { colors } from "../../ui/index.js";
 
 interface OverviewSectionProps {
-  profileFacts: Fact[];
   memoryProfilePolicy: MemoryProfilePolicyPreview | null;
   factTotal: number;
   observationTotal: number;
@@ -121,7 +119,6 @@ function relationIssueCount(relations: Record<string, number> | undefined): numb
 }
 
 export function OverviewSection({
-  profileFacts,
   memoryProfilePolicy,
   factTotal,
   observationTotal,
@@ -158,16 +155,16 @@ export function OverviewSection({
         segments={[
           { text: "memory overview", fg: accentValue, width: 16 },
           { text: " | ", fg: colors.text.disabled, width: 3 },
-          { text: "facts are truth, patterns are derived, sent memory is runtime evidence", fg: colors.text.secondary },
+          { text: "patterns are prompt memory; facts are evidence; sent memory is runtime proof", fg: colors.text.secondary },
         ]}
       />
 
       <box flexDirection="column" marginTop={2}>
         <OverviewLine width={textWidth} segments={[{ text: "ATTENTION", fg: accentValue }]} />
         <MetricRow
-          label="Profile review"
+          label="Durable review"
           value={profileReviewCount}
-          note={topProfileReview ? profileReviewLabel || "review profile memory" : "clean"}
+          note={topProfileReview ? profileReviewLabel || "review durable memory" : "clean"}
           width={textWidth}
         />
         <MetricRow
@@ -198,9 +195,8 @@ export function OverviewSection({
 
       <box flexDirection="column" marginTop={2}>
         <OverviewLine width={textWidth} segments={[{ text: "INVENTORY", fg: accentValue }]} />
-        <MetricRow label="Profile" value={profileFacts.length} note="always-on facts shown to the agent first" width={textWidth} />
         <MetricRow label="Facts" value={factTotal} note="source-of-truth memory records" width={textWidth} />
-        <MetricRow label="Patterns" value={observationTotal} note="derived summaries with supporting facts" width={textWidth} />
+        <MetricRow label="Patterns" value={observationTotal} note="contextual summaries with supporting facts" width={textWidth} />
         <MetricRow label="Sent" value={memoryAccessEvents.length} note="recent memory bundles injected into prompts/tools" width={textWidth} />
         <MetricRow label="Audit" value={memoryEvents.length} note="recent memory writes and automation outcomes loaded" width={textWidth} />
         {!compact && (
@@ -221,22 +217,21 @@ export function OverviewSection({
               actions={[
                 ["2", "Search", "test recall"],
                 ["3", "Sent", "model memory"],
-                ["4", "Profile", "always-on"],
+                ["4", "Facts", "evidence"],
               ]}
             />
             <CompactActionRow
               width={textWidth}
               actions={[
-                ["5", "Facts", "edit truth"],
-                ["6", "Patterns", "derived"],
-                ["7", "Cleanup", "archive"],
+                ["5", "Patterns", "prompt"],
+                ["6", "Cleanup", "archive"],
+                ["7", "Improve", "proposals"],
               ]}
             />
             <CompactActionRow
               width={textWidth}
               actions={[
-                ["8", "Improve", "proposals"],
-                ["9", "Audit", "history"],
+                ["8", "Audit", "history"],
               ]}
             />
           </>
@@ -245,12 +240,11 @@ export function OverviewSection({
             <ActionRow keyName="1" label="Home" note="memory health and navigation map" width={textWidth} />
             <ActionRow keyName="2" label="Search" note="debug query-time memory retrieval" width={textWidth} />
             <ActionRow keyName="3" label="Sent" note="inspect what memory reached the model" width={textWidth} />
-            <ActionRow keyName="4" label="Profile" note="edit always-visible facts" width={textWidth} />
-            <ActionRow keyName="5" label="Facts" note="edit durable truth" width={textWidth} />
-            <ActionRow keyName="6" label="Patterns" note="inspect derived memory and provenance" width={textWidth} />
-            <ActionRow keyName="7" label="Cleanup" note="archive low-value patterns in bulk" width={textWidth} />
-            <ActionRow keyName="8" label="Improve" note="review proposed durable improvements" width={textWidth} />
-            <ActionRow keyName="9" label="Audit" note="answer why memory changed" width={textWidth} />
+            <ActionRow keyName="4" label="Facts" note="inspect or edit source evidence" width={textWidth} />
+            <ActionRow keyName="5" label="Patterns" note="inspect contextual summaries and provenance" width={textWidth} />
+            <ActionRow keyName="6" label="Cleanup" note="archive low-value patterns in bulk" width={textWidth} />
+            <ActionRow keyName="7" label="Improve" note="review proposed durable improvements" width={textWidth} />
+            <ActionRow keyName="8" label="Audit" note="answer why memory changed" width={textWidth} />
           </>
         )}
       </box>

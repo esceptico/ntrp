@@ -1,7 +1,7 @@
 import React from "react";
 import { Hints } from "../../ui/index.js";
 import type { RecallInspectTabState } from "../../../hooks/useRecallInspectTab.js";
-import type { MemoryTabType } from "../../../lib/memoryTabs.js";
+import { MEMORY_TABS, type MemoryTabType } from "../../../lib/memoryTabs.js";
 import {
   canApplyLearningCandidate,
   canApproveLearningCandidate,
@@ -12,7 +12,6 @@ import {
 interface MemoryFooterProps {
   activeTab: MemoryTabType;
   recallTab: RecallInspectTabState;
-  profileTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean; metadataSuggestion: unknown };
   factsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean; metadataSuggestion: unknown };
   obsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean };
   pruneTab: { focusPane: string; searchMode: boolean; confirmApply: "selected" | "all" | null };
@@ -27,28 +26,15 @@ interface MemoryFooterProps {
   eventsTab: { focusPane: string; searchMode: boolean };
 }
 
-export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTab, pruneTab, learningTab, accessTab, eventsTab }: MemoryFooterProps): React.ReactNode {
+export function MemoryFooter({ activeTab, recallTab, factsTab, obsTab, pruneTab, learningTab, accessTab, eventsTab }: MemoryFooterProps): React.ReactNode {
   if (activeTab === "overview") {
-    return <Hints items={[["1-9", "tabs"], ["r", "refresh"], ["q", "close"]]} />;
+    return <Hints items={[[`1-${MEMORY_TABS.length}`, "tabs"], ["r", "refresh"], ["q", "close"]]} />;
   }
 
   if (activeTab === "recall") {
     const hints: [string, string][] = [["enter", "inspect"], ["↑↓", "scroll"], ["^u", "clear"], ["esc", "close"]];
     if (recallTab.loading) hints.unshift(["...", "running"]);
     return <Hints items={hints} />;
-  }
-
-  if (activeTab === "profile") {
-    if (profileTab.editMode) return <Hints items={[["^s", "save"], ["esc", "cancel"], ["←→", "cursor"]]} />;
-    if (profileTab.confirmDelete) return <Hints items={[["y", "confirm"], ["any", "cancel"]]} />;
-    if (profileTab.focusPane === "details") {
-      const detailHints: [string, string][] = [["↑↓", "navigate"], ["tab", "list"], ["enter", "expand"], ["e", "edit"], ["g", "suggest"]];
-      if (profileTab.metadataSuggestion) detailHints.push(["a", "apply"]);
-      detailHints.push(["d", "del"], ["r", "refresh"]);
-      return <Hints items={detailHints} />;
-    }
-    if (profileTab.searchMode) return <Hints items={[["type", "search"], ["esc", "clear/exit"], ["enter", "done"]]} />;
-    return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["e", "edit"], ["g", "suggest"], ["d", "del"], ["o", "sort"], ["r", "refresh"]]} />;
   }
 
   if (activeTab === "prune") {

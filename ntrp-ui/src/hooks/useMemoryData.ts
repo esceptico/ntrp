@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { Config } from "../types.js";
 import {
   getFacts,
-  getMemoryProfile,
   getMemoryProfilePolicyPreview,
   getObservations,
   getMemoryPruneDryRun,
@@ -29,7 +28,6 @@ import {
 interface UseMemoryDataResult {
   facts: Fact[];
   factTotal: number;
-  profileFacts: Fact[];
   memoryProfilePolicy: MemoryProfilePolicyPreview | null;
   observations: Observation[];
   observationTotal: number;
@@ -46,7 +44,6 @@ interface UseMemoryDataResult {
   backgroundLoading: boolean;
   error: string | null;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
-  setProfileFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
   setObservations: React.Dispatch<React.SetStateAction<Observation[]>>;
   setLearningCandidates: React.Dispatch<React.SetStateAction<LearningCandidate[]>>;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
@@ -59,7 +56,6 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
   const [error, setError] = useState<string | null>(null);
   const [facts, setFacts] = useState<Fact[]>([]);
   const [factTotal, setFactTotal] = useState(0);
-  const [profileFacts, setProfileFacts] = useState<Fact[]>([]);
   const [memoryProfilePolicy, setMemoryProfilePolicy] = useState<MemoryProfilePolicyPreview | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [observationTotal, setObservationTotal] = useState(0);
@@ -98,12 +94,6 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
             setFactTotal(data.total || 0);
           })
           .catch((e: unknown) => reportError("Facts", e)),
-        getMemoryProfile(config, 20)
-          .then((data) => {
-            if (!isCurrent()) return;
-            setProfileFacts(data.facts || []);
-          })
-          .catch((e: unknown) => reportError("Profile", e)),
         getObservations(config, 100, observationFilters)
           .then((data) => {
             if (!isCurrent()) return;
@@ -149,7 +139,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
             if (!isCurrent()) return;
             setMemoryProfilePolicy(data);
           })
-          .catch((e: unknown) => reportError("Profile policy", e)),
+          .catch((e: unknown) => reportError("Durable memory policy", e)),
         getMemoryPruneDryRun(config)
           .then((data) => {
             if (!isCurrent()) return;
@@ -191,7 +181,6 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
   return {
     facts,
     factTotal,
-    profileFacts,
     memoryProfilePolicy,
     observations,
     observationTotal,
@@ -208,7 +197,6 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
     backgroundLoading,
     error,
     setFacts,
-    setProfileFacts,
     setObservations,
     setLearningCandidates,
     setError,

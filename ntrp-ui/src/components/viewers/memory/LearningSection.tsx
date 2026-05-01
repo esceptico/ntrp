@@ -125,8 +125,8 @@ function proposalTitle(candidate: LearningCandidate, events: LearningEvent[]): s
   const lane = learningLane(candidate.change_type, candidate.target_key);
   if (lane === "automation") return "Automation issue needs review";
   if (candidate.change_type === "prune_rule") return "Cleanup rule needs review";
-  if (candidate.change_type === "profile_rule") return "Profile memory needs review";
-  if (candidate.change_type === "supersession_review") return "Profile conflict needs review";
+  if (candidate.change_type === "profile_rule") return "Durable memory needs review";
+  if (candidate.change_type === "supersession_review") return "Durable fact conflict needs review";
   if (candidate.target_key.includes("injection")) return "Sent memory behavior needs review";
   if (candidate.target_key.includes("recall")) return "Memory search behavior needs review";
   if (candidate.target_key.includes("compression")) return "Pattern compression needs review";

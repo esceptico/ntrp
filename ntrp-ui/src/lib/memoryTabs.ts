@@ -2,7 +2,6 @@ export const MEMORY_TABS = [
   "overview",
   "recall",
   "context",
-  "profile",
   "facts",
   "observations",
   "prune",
@@ -39,23 +38,17 @@ export const MEMORY_TAB_COPY: Record<
     title: "Sent",
     description: "memory bundles that reached prompts or tools",
   },
-  profile: {
-    wide: "Profile",
-    narrow: "Prof",
-    title: "Profile",
-    description: "always-on identity, preference, and constraint facts",
-  },
   facts: {
     wide: "Facts",
     narrow: "Facts",
     title: "Facts",
-    description: "direct durable memory records",
+    description: "source evidence, not the prompt-facing memory layer",
   },
   observations: {
     wide: "Patterns",
     narrow: "Pat",
     title: "Patterns",
-    description: "derived summaries backed by facts",
+    description: "contextual summaries backed by facts",
   },
   prune: {
     wide: "Cleanup",
