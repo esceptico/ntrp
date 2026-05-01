@@ -62,10 +62,10 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
 
   if (activeTab === "learning") {
     if (learningTab.focusPane === "details") {
-      return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ["a", "approve"], ["d", "reject"], ["r", "refresh"]]} />;
+      return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ["a", "approve"], ["d", "reject"], ["p", "scan"], ["r", "refresh"]]} />;
     }
     if (learningTab.searchMode) return <Hints items={[["type", "search"], ["esc", "clear/exit"], ["enter", "done"]]} />;
-    return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["s", "status"], ["v", "type"], ["a", "approve"], ["d", "reject"], ["o", "sort"], ["r", "refresh"]]} />;
+    return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["s", "status"], ["v", "type"], ["p", "scan"], ["a", "approve"], ["d", "reject"], ["o", "sort"], ["r", "refresh"]]} />;
   }
 
   const tab = activeTab === "facts" ? factsTab : obsTab;

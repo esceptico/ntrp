@@ -205,6 +205,13 @@ export interface LearningCandidate {
   details: Record<string, unknown>;
 }
 
+export interface LearningProposalResult {
+  proposals_considered: number;
+  created_events: LearningEvent[];
+  created_candidates: LearningCandidate[];
+  skipped_candidates: LearningCandidate[];
+}
+
 export interface MemoryAccessEvent {
   id: number;
   created_at: string;
@@ -506,6 +513,10 @@ export async function updateLearningCandidateStatus(
     `${config.serverUrl}/memory/learning/candidates/${candidateId}/status`,
     { status }
   );
+}
+
+export async function proposeLearningCandidates(config: Config): Promise<LearningProposalResult> {
+  return api.post<LearningProposalResult>(`${config.serverUrl}/memory/learning/propose`, {});
 }
 
 export async function getMemoryAccessEvents(config: Config, limit = 100): Promise<{ events: MemoryAccessEvent[] }> {

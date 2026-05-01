@@ -25,6 +25,7 @@ from ntrp.server.schemas import (
     MemoryPruneDryRunRequest,
     MemoryRecallInspectRequest,
     MemoryRepairEmbeddingsRequest,
+    ProposeLearningCandidatesRequest,
     UpdateFactMetadataRequest,
     UpdateFactRequest,
     UpdateLearningCandidateStatusRequest,
@@ -598,6 +599,27 @@ async def update_learning_candidate_status(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return {"candidate": _learning_candidate_payload(candidate)}
+
+
+@router.post("/memory/learning/propose")
+async def propose_learning_candidates(
+    request: ProposeLearningCandidatesRequest,
+    svc: MemoryService = Depends(require_memory),
+):
+    result = await svc.learning.propose_from_memory_policy(
+        access_limit=request.access_limit,
+        injection_char_budget=request.injection_char_budget,
+        profile_limit=request.profile_limit,
+        prune_older_than_days=request.prune_older_than_days,
+        prune_max_sources=request.prune_max_sources,
+        prune_limit=request.prune_limit,
+    )
+    return {
+        "proposals_considered": result.proposals_considered,
+        "created_events": [_learning_event_payload(event) for event in result.created_events],
+        "created_candidates": [_learning_candidate_payload(candidate) for candidate in result.created_candidates],
+        "skipped_candidates": [_learning_candidate_payload(candidate) for candidate in result.skipped_candidates],
+    }
 
 
 @router.post("/memory/recall/inspect")

@@ -772,6 +772,49 @@ class TestMemoryAuditAPI:
         assert [row["id"] for row in list_response.json()["candidates"]] == [candidate["id"]]
 
     @pytest.mark.asyncio
+    async def test_learning_policy_proposal_scan_is_deduplicated(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        access_event = await test_runtime.memory.access_events.create(
+            source="chat_prompt",
+            injected_fact_ids=[1],
+            formatted_chars=120,
+            policy_version="memory.access.v1",
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        first = await test_client.post(
+            "/memory/learning/propose",
+            json={"injection_char_budget": 80, "prune_limit": 1},
+        )
+
+        assert first.status_code == 200
+        body = first.json()
+        assert body["proposals_considered"] == 1
+        assert len(body["created_events"]) == 1
+        assert len(body["created_candidates"]) == 1
+        assert body["created_events"][0]["evidence_ids"] == [f"memory_access_event:{access_event.id}"]
+
+        candidate = body["created_candidates"][0]
+        assert candidate["change_type"] == "injection_rule"
+        assert candidate["target_key"] == "memory.injection.budget"
+        assert candidate["policy_version"] == "learning.memory_policy.v1"
+        assert candidate["evidence_event_ids"] == [body["created_events"][0]["id"]]
+
+        second = await test_client.post(
+            "/memory/learning/propose",
+            json={"injection_char_budget": 80, "prune_limit": 1},
+        )
+
+        assert second.status_code == 200
+        retry = second.json()
+        assert retry["proposals_considered"] == 1
+        assert retry["created_candidates"] == []
+        assert [row["id"] for row in retry["skipped_candidates"]] == [candidate["id"]]
+
+    @pytest.mark.asyncio
     async def test_repair_embeddings_is_explicit_and_audited(
         self,
         test_client: AsyncClient,

@@ -18,6 +18,7 @@ import {
   updateObservation,
   deleteObservation,
   applyMemoryPrune,
+  proposeLearningCandidates,
   updateLearningCandidateStatus,
   type Fact,
   type FactDetails,
@@ -365,6 +366,15 @@ export function useMemoryKeypress({
             .finally(() => setSaving(false));
           return;
         }
+      }
+
+      if (activeTab === "learning" && !learningTab.searchMode && key.name === "p") {
+        setSaving(true);
+        proposeLearningCandidates(config)
+          .then(() => reload())
+          .catch((e: unknown) => setError(`Proposal scan failed: ${e}`))
+          .finally(() => setSaving(false));
+        return;
       }
 
       if (activeTab === "recall") {

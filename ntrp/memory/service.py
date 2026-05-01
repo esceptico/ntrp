@@ -1,8 +1,12 @@
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from ntrp.logging import get_logger
 from ntrp.memory.audit import (
+    DEFAULT_PRUNE_LIMIT,
+    DEFAULT_PRUNE_MAX_SOURCES,
+    DEFAULT_PRUNE_OLDER_THAN_DAYS,
     memory_audit,
     observation_prune_candidates_by_ids,
     observation_prune_candidates_matching,
@@ -10,7 +14,12 @@ from ntrp.memory.audit import (
 )
 from ntrp.memory.fact_review import FactMetadataSuggestion, suggest_fact_metadata
 from ntrp.memory.facts import PROFILE_FACT_KINDS, FactMemory, SessionMemory
-from ntrp.memory.injection_policy import memory_injection_policy_preview
+from ntrp.memory.injection_policy import DEFAULT_INJECTION_CHAR_BUDGET, memory_injection_policy_preview
+from ntrp.memory.learning_policy import (
+    LEARNING_POLICY_SOURCE_TYPE,
+    LEARNING_POLICY_VERSION,
+    build_memory_policy_proposals,
+)
 from ntrp.memory.models import (
     Dream,
     EntityRef,
@@ -33,6 +42,14 @@ from ntrp.memory.profile_policy import (
 )
 
 _logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class LearningProposalScanResult:
+    proposals_considered: int
+    created_events: list[LearningEvent]
+    created_candidates: list[LearningCandidate]
+    skipped_candidates: list[LearningCandidate]
 
 
 class FactService:
@@ -479,6 +496,90 @@ class LearningService:
             if not candidate:
                 raise KeyError(f"Learning candidate {candidate_id} not found")
             return candidate
+
+    async def propose_from_memory_policy(
+        self,
+        *,
+        access_limit: int = 100,
+        injection_char_budget: int = DEFAULT_INJECTION_CHAR_BUDGET,
+        profile_limit: int = 100,
+        prune_older_than_days: int = DEFAULT_PRUNE_OLDER_THAN_DAYS,
+        prune_max_sources: int = DEFAULT_PRUNE_MAX_SOURCES,
+        prune_limit: int = DEFAULT_PRUNE_LIMIT,
+    ) -> LearningProposalScanResult:
+        injection_events = await self._memory.access_events.list_recent(limit=access_limit)
+        injection_preview = memory_injection_policy_preview(
+            injection_events,
+            char_budget=injection_char_budget,
+        )
+        profile_facts = await self._memory.get_profile(limit=20)
+        review_facts = await self._memory.facts.list_profile_review_candidates(
+            PROFILE_FACT_KINDS,
+            min_salience=2,
+            min_access_count=DEFAULT_PROFILE_REVIEW_ACCESS_COUNT,
+            limit=profile_limit,
+        )
+        profile_preview = profile_policy_preview(
+            profile_facts=profile_facts,
+            review_facts=review_facts,
+            char_budget=DEFAULT_PROFILE_CHAR_BUDGET,
+            fact_char_budget=DEFAULT_PROFILE_FACT_CHAR_BUDGET,
+            review_access_count=DEFAULT_PROFILE_REVIEW_ACCESS_COUNT,
+        )
+        prune_preview = await observation_prune_dry_run(
+            self._memory.observations.read_conn,
+            older_than_days=prune_older_than_days,
+            max_sources=prune_max_sources,
+            limit=prune_limit,
+        )
+        proposals = build_memory_policy_proposals(
+            injection_preview=injection_preview,
+            profile_preview=profile_preview,
+            prune_preview=prune_preview,
+        )
+
+        created_events: list[LearningEvent] = []
+        created_candidates: list[LearningCandidate] = []
+        skipped_candidates: list[LearningCandidate] = []
+
+        async with self._memory.transaction():
+            for proposal in proposals:
+                existing = await self._memory.learning.find_open_candidate(
+                    change_type=proposal.change_type,
+                    target_key=proposal.target_key,
+                )
+                if existing:
+                    skipped_candidates.append(existing)
+                    continue
+
+                event = await self._memory.learning.create_event(
+                    source_type=LEARNING_POLICY_SOURCE_TYPE,
+                    source_id=proposal.source_id,
+                    scope=proposal.scope,
+                    signal=proposal.signal,
+                    evidence_ids=list(proposal.evidence_ids),
+                    outcome="proposed",
+                    details=proposal.details,
+                )
+                candidate = await self._memory.learning.create_candidate(
+                    change_type=proposal.change_type,
+                    target_key=proposal.target_key,
+                    proposal=proposal.proposal,
+                    rationale=proposal.rationale,
+                    evidence_event_ids=[event.id],
+                    expected_metric=proposal.expected_metric,
+                    policy_version=LEARNING_POLICY_VERSION,
+                    details={"source_event_id": event.id, **proposal.details},
+                )
+                created_events.append(event)
+                created_candidates.append(candidate)
+
+        return LearningProposalScanResult(
+            proposals_considered=len(proposals),
+            created_events=created_events,
+            created_candidates=created_candidates,
+            skipped_candidates=skipped_candidates,
+        )
 
 
 class MemoryService:

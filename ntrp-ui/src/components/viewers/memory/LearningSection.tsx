@@ -79,7 +79,7 @@ function CandidateDetails({
   const textWidth = Math.max(10, width - 2);
 
   if (!candidate) {
-    return <text><span fg={colors.text.muted}>No learning candidates</span></text>;
+    return <text><span fg={colors.text.muted}>No learning candidates. Press p to scan memory policy previews.</span></text>;
   }
 
   return (
@@ -165,7 +165,7 @@ export function LearningSection({ tab, totalCount, height, width }: LearningSect
       selectedIndex={tab.selectedIndex}
       renderItem={renderItem}
       getKey={(candidate) => candidate.id}
-      emptyMessage="No learning candidates"
+      emptyMessage="No learning candidates. Press p to scan policy previews."
       searchQuery={tab.searchQuery}
       searchMode={tab.searchMode}
       focusPane={tab.focusPane}

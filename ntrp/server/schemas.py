@@ -344,6 +344,15 @@ class UpdateLearningCandidateStatusRequest(BaseModel):
     status: str = Field(..., min_length=1, max_length=100)
 
 
+class ProposeLearningCandidatesRequest(BaseModel):
+    access_limit: int = Field(default=100, ge=1, le=500)
+    injection_char_budget: int = Field(default=3000, ge=1, le=100_000)
+    profile_limit: int = Field(default=100, ge=1, le=500)
+    prune_older_than_days: int = Field(default=30, ge=1, le=3650)
+    prune_max_sources: int = Field(default=5, ge=0, le=1000)
+    prune_limit: int = Field(default=100, ge=1, le=1000)
+
+
 # --- Automations / notifiers ---
 
 

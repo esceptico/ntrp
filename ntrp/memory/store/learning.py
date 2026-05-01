@@ -40,6 +40,17 @@ _SQL_LIST_LEARNING_CANDIDATES = """
 
 _SQL_GET_LEARNING_CANDIDATE = "SELECT * FROM learning_candidates WHERE id = ?"
 
+_SQL_FIND_OPEN_LEARNING_CANDIDATE = """
+    SELECT * FROM learning_candidates
+    WHERE change_type = ?
+      AND target_key = ?
+      AND status IN ({statuses})
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 1
+"""
+
+OPEN_LEARNING_CANDIDATE_STATUSES = ("proposed", "approved", "applied")
+
 
 def _json_default(value: Any) -> Any:
     if isinstance(value, datetime):
@@ -203,6 +214,24 @@ class LearningRepository:
             (*params, limit, offset),
         )
         return [LearningCandidate.model_validate(_row_dict(row)) for row in rows]
+
+    async def find_open_candidate(
+        self,
+        *,
+        change_type: str,
+        target_key: str,
+        statuses: tuple[str, ...] = OPEN_LEARNING_CANDIDATE_STATUSES,
+    ) -> LearningCandidate | None:
+        for status in statuses:
+            _validate_status(status)
+        placeholders = ", ".join("?" for _ in statuses)
+        rows = await self.read_conn.execute_fetchall(
+            _SQL_FIND_OPEN_LEARNING_CANDIDATE.format(statuses=placeholders),
+            (change_type, target_key, *statuses),
+        )
+        if not rows:
+            return None
+        return LearningCandidate.model_validate(_row_dict(rows[0]))
 
     async def update_candidate_status(self, candidate_id: int, status: str) -> LearningCandidate | None:
         _validate_status(status)
