@@ -152,6 +152,14 @@ export interface MemoryPruneDryRun {
   candidates: MemoryPruneCandidate[];
 }
 
+export interface MemoryPruneApplyResult {
+  status: "archived" | "unchanged";
+  archived: number;
+  archived_ids: number[];
+  skipped_ids: number[];
+  candidates: MemoryPruneCandidate[];
+}
+
 function factQuery(limit: number, filters?: FactFilters): string {
   const params = new URLSearchParams({ limit: String(limit) });
   if (filters?.kind) params.set("kind", filters.kind);
@@ -269,6 +277,18 @@ export async function deleteDream(config: Config, dreamId: number): Promise<{ st
 
 export async function getMemoryPruneDryRun(config: Config): Promise<MemoryPruneDryRun> {
   return api.post<MemoryPruneDryRun>(`${config.serverUrl}/memory/prune/dry-run`, {});
+}
+
+export async function applyMemoryPrune(
+  config: Config,
+  observationIds: number[],
+  criteria: Pick<MemoryPruneCriteria, "older_than_days" | "max_sources">
+): Promise<MemoryPruneApplyResult> {
+  return api.post<MemoryPruneApplyResult>(`${config.serverUrl}/memory/prune/apply`, {
+    observation_ids: observationIds,
+    older_than_days: criteria.older_than_days,
+    max_sources: criteria.max_sources,
+  });
 }
 
 export async function purgeMemory(config: Config): Promise<{ status: string; deleted: Record<string, number> }> {

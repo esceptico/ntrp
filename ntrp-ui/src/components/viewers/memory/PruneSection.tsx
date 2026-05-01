@@ -13,11 +13,13 @@ interface PruneSectionProps {
 }
 
 function PruneDetails({
+  tab,
   dryRun,
   candidate,
   width,
   height,
 }: {
+  tab: PruneTabState;
   dryRun: MemoryPruneDryRun | null;
   candidate: MemoryPruneCandidate | null;
   width: number;
@@ -66,7 +68,14 @@ function PruneDetails({
             </text>
           </box>
           <box marginTop={2}>
-            <text><span fg={colors.text.disabled}>review only; no archive action is wired here</span></text>
+            {tab.confirmApply ? (
+              <text>
+                <span fg={accentValue}>archive this candidate?</span>
+                <span fg={colors.text.disabled}> y confirm / any cancel</span>
+              </text>
+            ) : (
+              <text><span fg={colors.text.disabled}>press a to archive this candidate</span></text>
+            )}
           </box>
         </>
       ) : (
@@ -118,6 +127,7 @@ export function PruneSection({ tab, dryRun, height, width }: PruneSectionProps) 
       totalCount={dryRun?.summary.total}
       details={
         <PruneDetails
+          tab={tab}
           dryRun={dryRun}
           candidate={tab.selectedCandidate}
           width={detailWidth}

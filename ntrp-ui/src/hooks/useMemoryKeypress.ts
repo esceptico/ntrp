@@ -15,11 +15,13 @@ import {
   updateObservation,
   deleteObservation,
   deleteDream,
+  applyMemoryPrune,
   type Fact,
   type FactDetails,
   type Observation,
   type ObservationDetails,
   type Dream,
+  type MemoryPruneDryRun,
 } from "../api/client.js";
 
 type TabType = "facts" | "observations" | "prune" | "dreams";
@@ -30,6 +32,7 @@ interface UseMemoryKeypressOptions {
   factsTab: FactsTabState;
   obsTab: ObservationsTabState;
   pruneTab: PruneTabState;
+  pruneDryRun: MemoryPruneDryRun | null;
   dreamsTab: DreamsTabState;
   config: Config;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
@@ -50,6 +53,7 @@ export function useMemoryKeypress({
   factsTab,
   obsTab,
   pruneTab,
+  pruneDryRun,
   dreamsTab,
   config,
   setFacts,
@@ -309,6 +313,36 @@ export function useMemoryKeypress({
         }
       }
 
+      if (activeTab === "prune" && !pruneTab.searchMode) {
+        if (pruneTab.confirmApply) {
+          const candidate = pruneTab.selectedCandidate;
+          if (key.name === "y" && candidate && pruneDryRun) {
+            setSaving(true);
+            applyMemoryPrune(config, [candidate.id], {
+              older_than_days: pruneDryRun.criteria.older_than_days,
+              max_sources: pruneDryRun.criteria.max_sources,
+            })
+              .then((result) => {
+                pruneTab.setConfirmApply(false);
+                if (result.archived === 0) {
+                  setError("Prune skipped: candidate no longer matches review criteria");
+                }
+                reload();
+              })
+              .catch((e: unknown) => setError(`Prune failed: ${e}`))
+              .finally(() => setSaving(false));
+          } else {
+            pruneTab.setConfirmApply(false);
+          }
+          return;
+        }
+
+        if (key.name === "a" && pruneTab.selectedCandidate) {
+          pruneTab.setConfirmApply(true);
+          return;
+        }
+      }
+
       if (key.name === "1") { setActiveTab("facts"); return; }
       if (key.name === "2") { setActiveTab("observations"); return; }
       if (key.name === "3") { setActiveTab("prune"); return; }
@@ -340,7 +374,7 @@ export function useMemoryKeypress({
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
-    [activeTab, factsTab, obsTab, pruneTab, dreamsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setDreams, setError, queryClient]
+    [activeTab, factsTab, obsTab, pruneTab, pruneDryRun, dreamsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setDreams, setError, queryClient]
   );
 
   useKeypress(handleKeypress, { isActive: true });

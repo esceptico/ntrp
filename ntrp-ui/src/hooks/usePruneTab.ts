@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
 import type { Key } from "./useKeypress.js";
 import { useListDetail, type SortOrder } from "./useListDetail.js";
 import type { MemoryPruneCandidate } from "../api/client.js";
@@ -20,10 +20,12 @@ export interface PruneTabState {
   sortOrder: SortOrder;
   textExpanded: boolean;
   textScrollOffset: number;
+  confirmApply: boolean;
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
   setSelectedIndex: Dispatch<SetStateAction<number>>;
   setFocusPane: (p: "list" | "details") => void;
+  setConfirmApply: Dispatch<SetStateAction<boolean>>;
   resetDetailState: () => void;
 }
 
@@ -31,6 +33,7 @@ export function usePruneTab(
   candidates: MemoryPruneCandidate[],
   contentWidth: number
 ): PruneTabState {
+  const [confirmApply, setConfirmApply] = useState(false);
   const getSectionMaxIndex = useCallback(() => 0, []);
   const getScrollText = useCallback(
     (): string | undefined => undefined,
@@ -57,10 +60,12 @@ export function usePruneTab(
     sortOrder: ld.sortOrder,
     textExpanded: ld.textExpanded,
     textScrollOffset: ld.textScrollOffset,
+    confirmApply,
     handleKeys: ld.handleKeys,
     setSearchQuery: ld.setSearchQuery,
     setSelectedIndex: ld.setSelectedIndex,
     setFocusPane: ld.setFocusPane,
+    setConfirmApply,
     resetDetailState: ld.resetDetailState,
   };
 }

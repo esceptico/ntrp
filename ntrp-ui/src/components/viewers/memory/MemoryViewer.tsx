@@ -41,6 +41,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     factsTab,
     obsTab,
     pruneTab,
+    pruneDryRun,
     dreamsTab,
     config,
     setFacts,
