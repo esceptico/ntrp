@@ -12,6 +12,7 @@ from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationProgressEvent, ToolCallEvent, ToolResultEvent, agent_event_to_sse
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.formatting import format_session_memory
+from ntrp.memory.prefetch import prefetch_memory_context
 from ntrp.server.bus import SessionBus
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
@@ -51,16 +52,29 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
     memory_context = None
     if deps.memory:
         session_memory = await deps.memory.get_session_memory()
-        memory_context = format_session_memory(
+        session_context = format_session_memory(
             profile_facts=session_memory.profile_facts,
             observations=session_memory.observations,
             user_facts=session_memory.user_facts,
         )
-        if memory_context is not None:
+        prefetch_context = await prefetch_memory_context(
+            deps.memory,
+            request.prompt,
+            session_memory,
+            source="operator_prefetch",
+            details={"source_id": request.source_id},
+        )
+        memory_parts = []
+        if session_context is not None:
+            memory_parts.append(session_context)
+        if prefetch_context is not None:
+            memory_parts.append(f"**Relevant now**\n{prefetch_context}")
+        memory_context = "\n\n".join(memory_parts) if memory_parts else None
+        if session_context is not None:
             await deps.memory.record_session_memory_access(
                 source="operator_prompt",
                 memory=session_memory,
-                formatted_chars=len(memory_context),
+                formatted_chars=len(session_context),
                 details={"source_id": request.source_id, "has_context": True},
             )
 

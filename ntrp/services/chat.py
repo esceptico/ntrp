@@ -1,5 +1,4 @@
 import asyncio
-import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -23,9 +22,9 @@ from ntrp.events.sse import (
 )
 from ntrp.llm.models import Provider, get_model
 from ntrp.logging import get_logger
-from ntrp.memory.facts import FactMemory, SessionMemory
-from ntrp.memory.formatting import format_memory_context, format_session_memory
-from ntrp.memory.models import FactContext
+from ntrp.memory.facts import FactMemory
+from ntrp.memory.formatting import format_session_memory
+from ntrp.memory.prefetch import prefetch_memory_context
 from ntrp.notifiers.service import NotifierService
 from ntrp.server.bus import BusRegistry, SessionBus
 from ntrp.server.state import RunRegistry, RunState, RunStatus
@@ -39,11 +38,6 @@ from ntrp.tools.executor import ToolExecutor
 _logger = get_logger(__name__)
 
 INIT_AUTO_APPROVE = {"remember", "forget"}
-MEMORY_PREFETCH_TIMEOUT_SECONDS = 0.75
-MEMORY_PREFETCH_CONTEXT_BUDGET = 1200
-MEMORY_PREFETCH_RECALL_LIMIT = 3
-MEMORY_PREFETCH_MIN_WORDS = 2
-_PREFETCH_WORD_RE = re.compile(r"[A-Za-z0-9_]{3,}")
 
 
 @dataclass(frozen=True)
@@ -146,73 +140,6 @@ def _retain_user_content(messages: list[dict]) -> list[dict]:
     return result
 
 
-def _memory_prefetch_query(user_message: str) -> str | None:
-    query = user_message.strip()
-    if not query or query.startswith("/"):
-        return None
-    if len(_PREFETCH_WORD_RE.findall(query)) < MEMORY_PREFETCH_MIN_WORDS:
-        return None
-    return query[:1000]
-
-
-def _filter_prefetch_context(context: FactContext, session_memory: SessionMemory) -> FactContext:
-    session_fact_ids = {fact.id for fact in session_memory.profile_facts}
-    session_fact_ids.update(fact.id for fact in session_memory.user_facts)
-    session_observation_ids = {observation.id for observation in session_memory.observations}
-    for observation in session_memory.observations:
-        session_fact_ids.update(observation.source_fact_ids)
-
-    return context.model_copy(
-        update={
-            "facts": [fact for fact in context.facts if fact.id not in session_fact_ids],
-            "observations": [
-                observation for observation in context.observations if observation.id not in session_observation_ids
-            ],
-            "bundled_sources": {
-                observation_id: [fact for fact in facts if fact.id not in session_fact_ids]
-                for observation_id, facts in context.bundled_sources.items()
-                if observation_id not in session_observation_ids
-            },
-        }
-    )
-
-
-async def _prefetch_memory_context(memory: FactMemory, user_message: str, session_memory: SessionMemory) -> str | None:
-    query = _memory_prefetch_query(user_message)
-    if query is None:
-        return None
-    try:
-        context = await asyncio.wait_for(
-            memory.inspect_recall(query=query, limit=MEMORY_PREFETCH_RECALL_LIMIT),
-            timeout=MEMORY_PREFETCH_TIMEOUT_SECONDS,
-        )
-    except TimeoutError:
-        _logger.debug("Memory prefetch timed out")
-        return None
-    except Exception as e:
-        _logger.warning("Memory prefetch failed: %s", e)
-        return None
-
-    context = _filter_prefetch_context(context, session_memory)
-    rendered = format_memory_context(
-        query_facts=context.facts,
-        query_observations=context.observations,
-        bundled_sources=context.bundled_sources,
-        budget=MEMORY_PREFETCH_CONTEXT_BUDGET,
-    )
-    if rendered is None:
-        return None
-
-    await memory.record_context_access(
-        source="chat_prefetch",
-        query=query,
-        context=context,
-        formatted_chars=len(rendered),
-        details={"timeout_seconds": MEMORY_PREFETCH_TIMEOUT_SECONDS},
-    )
-    return rendered
-
-
 async def _prepare_messages(
     deps: ChatDeps,
     messages: list[dict],
@@ -229,7 +156,12 @@ async def _prepare_messages(
             observations=session_memory.observations,
             user_facts=session_memory.user_facts,
         )
-        prefetch_context = await _prefetch_memory_context(deps.memory, user_message, session_memory)
+        prefetch_context = await prefetch_memory_context(
+            deps.memory,
+            user_message,
+            session_memory,
+            source="chat_prefetch",
+        )
         memory_parts = []
         if session_context is not None:
             memory_parts.append(session_context)

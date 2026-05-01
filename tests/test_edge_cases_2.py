@@ -13,7 +13,8 @@ from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
 from ntrp.memory.facts import SessionMemory
 from ntrp.memory.models import Fact, FactContext, Observation, SourceType
-from ntrp.services.chat import _filter_prefetch_context, _memory_prefetch_query, _retain_user_content, _time_gap_note
+from ntrp.memory.prefetch import filter_prefetch_context, memory_prefetch_query
+from ntrp.services.chat import _retain_user_content, _time_gap_note
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
@@ -104,10 +105,10 @@ def _observation(obs_id: int, summary: str, source_fact_ids: list[int]) -> Obser
 
 
 def test_memory_prefetch_query_is_conservative():
-    assert _memory_prefetch_query("") is None
-    assert _memory_prefetch_query("/memory") is None
-    assert _memory_prefetch_query("ok") is None
-    assert _memory_prefetch_query("check alice project") == "check alice project"
+    assert memory_prefetch_query("") is None
+    assert memory_prefetch_query("/memory") is None
+    assert memory_prefetch_query("ok") is None
+    assert memory_prefetch_query("check alice project") == "check alice project"
 
 
 def test_filter_prefetch_context_removes_session_memory_duplicates():
@@ -128,7 +129,7 @@ def test_filter_prefetch_context_removes_session_memory_duplicates():
         },
     )
 
-    filtered = _filter_prefetch_context(context, session_memory)
+    filtered = filter_prefetch_context(context, session_memory)
 
     assert [fact.id for fact in filtered.facts] == [4]
     assert [obs.id for obs in filtered.observations] == [11]

@@ -730,6 +730,7 @@ Implementation status:
 2026-05-01: learning review scan proposes skill-note review candidates from explicit skill-scoped learning events with direct evidence ids; it never writes skill files.
 2026-05-01: learning review scan surfaces aggregate profile-fact supersession review instead of auto-mutating contradictory facts.
 2026-05-01: manual fact/pattern edits, deletes, and metadata changes now emit `memory_feedback` learning events with direct memory-event provenance.
+2026-05-01: operator automations now reuse bounded memory prefetch (`operator_prefetch`) so scheduled tasks get task-specific context without growing always-visible memory.
 2026-05-01: Memory UI has a Learning tab for candidate review and approve/reject status changes.
 ```
 
