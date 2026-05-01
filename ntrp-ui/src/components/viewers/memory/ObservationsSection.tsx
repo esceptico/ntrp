@@ -13,6 +13,22 @@ interface ObservationsSectionProps {
   saving: boolean;
 }
 
+function patternProducerLabel(obs: Observation): string {
+  const createdBy = obs.created_by || "legacy";
+  switch (createdBy) {
+    case "consolidation":
+      return "auto";
+    case "temporal":
+      return "temporal";
+    case "manual":
+      return "manual";
+    case "legacy":
+      return "legacy";
+    default:
+      return createdBy;
+  }
+}
+
 export function ObservationsSection({ tab, height, width, saving }: ObservationsSectionProps) {
   const { accentValue } = useAccentColor();
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
@@ -28,9 +44,10 @@ export function ObservationsSection({ tab, height, width, saving }: Observations
           <span fg={ctx.colors.text}>{truncateText(obs.summary, textWidth)}</span>
         </text>
         <text>
-          <span fg={ctx.isSelected ? accentValue : tagColor}>[{obs.evidence_count}]</span>
-          <span fg={tagColor}> {"\u00D7"}{obs.access_count}</span>
-          <span fg={tagColor}> [{shortTime(obs.created_at)}]</span>
+          <span fg={ctx.isSelected ? accentValue : tagColor}>{obs.evidence_count} facts</span>
+          <span fg={tagColor}> · used {obs.access_count}</span>
+          <span fg={tagColor}> · {patternProducerLabel(obs)}</span>
+          <span fg={tagColor}> · {shortTime(obs.created_at)}</span>
           {obs.archived_at && <span fg={colors.status.error}> archived</span>}
         </text>
       </box>

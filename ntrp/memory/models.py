@@ -116,6 +116,8 @@ class Observation(_MemoryModel):
     last_accessed_at: datetime
     access_count: int
     archived_at: datetime | None = None
+    created_by: str = "legacy"
+    policy_version: str = "legacy"
 
     @property
     def evidence_count(self) -> int:

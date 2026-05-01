@@ -5,6 +5,8 @@ import type { MemoryPruneCandidate } from "../api/client.js";
 
 export type { SortOrder };
 
+export type PruneConfirmMode = "selected" | "all" | null;
+
 const filterCandidate = (candidate: MemoryPruneCandidate, q: string) =>
   candidate.summary.toLowerCase().includes(q) ||
   candidate.reason.toLowerCase().includes(q) ||
@@ -20,12 +22,12 @@ export interface PruneTabState {
   sortOrder: SortOrder;
   textExpanded: boolean;
   textScrollOffset: number;
-  confirmApply: boolean;
+  confirmApply: PruneConfirmMode;
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
   setSelectedIndex: Dispatch<SetStateAction<number>>;
   setFocusPane: (p: "list" | "details") => void;
-  setConfirmApply: Dispatch<SetStateAction<boolean>>;
+  setConfirmApply: Dispatch<SetStateAction<PruneConfirmMode>>;
   resetDetailState: () => void;
 }
 
@@ -33,7 +35,7 @@ export function usePruneTab(
   candidates: MemoryPruneCandidate[],
   contentWidth: number
 ): PruneTabState {
-  const [confirmApply, setConfirmApply] = useState(false);
+  const [confirmApply, setConfirmApply] = useState<PruneConfirmMode>(null);
   const getSectionMaxIndex = useCallback(() => 0, []);
   const getScrollText = useCallback(
     (): string | undefined => undefined,

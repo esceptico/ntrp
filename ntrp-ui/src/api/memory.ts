@@ -93,6 +93,8 @@ export interface Observation {
   updated_at: string;
   last_accessed_at: string;
   archived_at: string | null;
+  created_by: string;
+  policy_version: string;
 }
 
 export type ObservationStatus = "active" | "archived" | "all";
@@ -245,6 +247,10 @@ export async function getStats(config: Config): Promise<Stats> {
   return api.get<Stats>(`${config.serverUrl}/stats`);
 }
 
+export async function getMemoryProfile(config: Config, limit = 20): Promise<{ facts: Fact[] }> {
+  return api.get<{ facts: Fact[] }>(`${config.serverUrl}/memory/profile?limit=${limit}`);
+}
+
 export async function getObservations(config: Config, limit = 50, filters?: ObservationFilters): Promise<{
   observations: Observation[];
   total: number;
@@ -296,10 +302,12 @@ export async function getMemoryPruneDryRun(config: Config): Promise<MemoryPruneD
 export async function applyMemoryPrune(
   config: Config,
   observationIds: number[],
-  criteria: Pick<MemoryPruneCriteria, "older_than_days" | "max_sources">
+  criteria: Pick<MemoryPruneCriteria, "older_than_days" | "max_sources">,
+  allMatching = false
 ): Promise<MemoryPruneApplyResult> {
   return api.post<MemoryPruneApplyResult>(`${config.serverUrl}/memory/prune/apply`, {
     observation_ids: observationIds,
+    all_matching: allMatching,
     older_than_days: criteria.older_than_days,
     max_sources: criteria.max_sources,
   });

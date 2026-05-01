@@ -106,6 +106,8 @@ async def temporal_consolidation_pass(
                     summary=action.text,
                     embedding=embedding,
                     source_fact_id=source_fact_id,
+                    created_by="temporal",
+                    policy_version="memory.temporal.v1",
                 )
                 if len(action.source_fact_ids) > 1:
                     await obs_repo.add_source_facts(obs.id, action.source_fact_ids[1:])

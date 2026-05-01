@@ -35,13 +35,13 @@ function PruneDetails({
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       <text>
-        <span fg={accentValue}>dry-run</span>
+        <span fg={accentValue}>cleanup candidates</span>
         <span fg={colors.text.disabled}> {"\u2502"} older than {dryRun.criteria.older_than_days}d</span>
         <span fg={colors.text.disabled}> {"\u2502"} support {"<="} {dryRun.criteria.max_sources}</span>
       </text>
       <box marginTop={1}>
         <text>
-          <span fg={colors.text.secondary}>{dryRun.summary.total} candidates</span>
+          <span fg={colors.text.secondary}>{dryRun.summary.total} matching patterns</span>
           <span fg={colors.text.disabled}> {"\u2502"} {dryRun.summary.empty_sources} no sources</span>
           <span fg={colors.text.disabled}> {"\u2502"} {dryRun.summary.over_1000_chars} long</span>
         </text>
@@ -68,13 +68,18 @@ function PruneDetails({
             </text>
           </box>
           <box marginTop={2}>
-            {tab.confirmApply ? (
+            {tab.confirmApply === "selected" ? (
               <text>
                 <span fg={accentValue}>archive this candidate?</span>
                 <span fg={colors.text.disabled}> y confirm / any cancel</span>
               </text>
+            ) : tab.confirmApply === "all" ? (
+              <text>
+                <span fg={accentValue}>archive all {dryRun.summary.total} matching candidates?</span>
+                <span fg={colors.text.disabled}> y confirm / any cancel</span>
+              </text>
             ) : (
-              <text><span fg={colors.text.disabled}>press a to archive this candidate</span></text>
+              <text><span fg={colors.text.disabled}>a archives selected · A archives all matching</span></text>
             )}
           </box>
         </>
@@ -102,9 +107,9 @@ export function PruneSection({ tab, dryRun, height, width }: PruneSectionProps) 
           <span fg={ctx.colors.text}>{truncateText(candidate.summary, textWidth)}</span>
         </text>
         <text>
-          <span fg={ctx.isSelected ? accentValue : tagColor}>[{candidate.evidence_count}]</span>
-          <span fg={tagColor}> {candidate.chars}c</span>
-          <span fg={tagColor}> [{shortTime(candidate.created_at)}]</span>
+          <span fg={ctx.isSelected ? accentValue : tagColor}>{candidate.evidence_count} facts</span>
+          <span fg={tagColor}> · {candidate.chars} chars</span>
+          <span fg={tagColor}> · {shortTime(candidate.created_at)}</span>
         </text>
       </box>
     );

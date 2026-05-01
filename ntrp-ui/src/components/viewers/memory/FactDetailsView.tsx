@@ -111,6 +111,13 @@ export function FactDetailsView({
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
+      <box marginBottom={1}>
+        <text>
+          <span fg={accentValue}>fact #{fact.id}</span>
+          <span fg={colors.text.disabled}> {"\u2502"} source of truth</span>
+        </text>
+      </box>
+
       {/* Full text */}
       <box>
         <ExpandableText
@@ -128,11 +135,11 @@ export function FactDetailsView({
         <text>
           <span fg={typeColor}>{typeLabel}</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
-          <span fg={labelColor}>s{fact.salience}</span>
+          <span fg={labelColor}>salience {fact.salience}</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
-          <span fg={labelColor}>{Math.round(fact.confidence * 100)}%</span>
+          <span fg={labelColor}>confidence {Math.round(fact.confidence * 100)}%</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
-          <span fg={labelColor}>{"\u00D7"}{fact.access_count}</span>
+          <span fg={labelColor}>used {fact.access_count}</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
           <span fg={labelColor}>{formatTimeAgo(fact.created_at)}</span>
         </text>

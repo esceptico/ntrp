@@ -5,7 +5,6 @@ import { useTextInput } from "./useTextInput.js";
 import type { Config } from "../types.js";
 import type { FactsTabState } from "./useFactsTab.js";
 import type { ObservationsTabState } from "./useObservationsTab.js";
-import type { DreamsTabState } from "./useDreamsTab.js";
 import type { PruneTabState } from "./usePruneTab.js";
 import type { MemoryEventsTabState } from "./useMemoryEventsTab.js";
 import {
@@ -15,31 +14,28 @@ import {
   deleteFact,
   updateObservation,
   deleteObservation,
-  deleteDream,
   applyMemoryPrune,
   type Fact,
   type FactDetails,
   type Observation,
   type ObservationDetails,
-  type Dream,
   type MemoryPruneDryRun,
 } from "../api/client.js";
 
-type TabType = "facts" | "observations" | "prune" | "events" | "dreams";
+type TabType = "profile" | "facts" | "observations" | "prune" | "events";
 
 interface UseMemoryKeypressOptions {
   activeTab: TabType;
   setActiveTab: React.Dispatch<React.SetStateAction<TabType>>;
+  profileTab: FactsTabState;
   factsTab: FactsTabState;
   obsTab: ObservationsTabState;
   pruneTab: PruneTabState;
   pruneDryRun: MemoryPruneDryRun | null;
   eventsTab: MemoryEventsTabState;
-  dreamsTab: DreamsTabState;
   config: Config;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
   setObservations: React.Dispatch<React.SetStateAction<Observation[]>>;
-  setDreams: React.Dispatch<React.SetStateAction<Dream[]>>;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
   reload: () => void;
   onClose: () => void;
@@ -49,19 +45,22 @@ interface UseMemoryKeypressResult {
   saving: boolean;
 }
 
+function isUpperA(key: Key): boolean {
+  return key.sequence === "A" || (key.name === "a" && key.shift);
+}
+
 export function useMemoryKeypress({
   activeTab,
   setActiveTab,
+  profileTab,
   factsTab,
   obsTab,
   pruneTab,
   pruneDryRun,
   eventsTab,
-  dreamsTab,
   config,
   setFacts,
   setObservations,
-  setDreams,
   setError,
   reload,
   onClose,
@@ -281,52 +280,28 @@ export function useMemoryKeypress({
         }
       }
 
-      // Dreams tab — delete only (no edit)
-      if (activeTab === "dreams" && dreamsTab.focusPane === "details" && dreamsTab.dreamDetails) {
-        if (dreamsTab.confirmDelete) {
-          if (key.name === "y") {
-            setSaving(true);
-            deleteDream(config, dreamsTab.dreamDetails.dream.id)
-              .then(() => {
-                setDreams((prev: Dream[]) => prev.filter((d) => d.id !== dreamsTab.dreamDetails?.dream.id));
-                dreamsTab.setConfirmDelete(false);
-                dreamsTab.setFocusPane("list");
-                dreamsTab.resetDetailState();
-              })
-              .catch((e: unknown) => setError(`Delete failed: ${e}`))
-              .finally(() => setSaving(false));
-          } else {
-            dreamsTab.setConfirmDelete(false);
-          }
-          return;
-        }
-
-        if (key.name === "d" || key.name === "delete") {
-          dreamsTab.setConfirmDelete(true);
-          return;
-        }
-      }
-
-      if (activeTab === "dreams" && dreamsTab.focusPane === "list") {
-        const selectedDream = dreamsTab.filteredDreams[dreamsTab.selectedIndex];
-        if (selectedDream && (key.name === "d" || key.name === "delete") && dreamsTab.dreamDetails) {
-          dreamsTab.setFocusPane("details");
-          dreamsTab.setConfirmDelete(true);
-          return;
-        }
-      }
-
       if (activeTab === "prune" && !pruneTab.searchMode) {
         if (pruneTab.confirmApply) {
           const candidate = pruneTab.selectedCandidate;
-          if (key.name === "y" && candidate && pruneDryRun) {
+          if (key.name === "y" && pruneDryRun) {
+            const archiveAll = pruneTab.confirmApply === "all";
+            const observationIds = archiveAll ? [] : candidate ? [candidate.id] : [];
+            if (!archiveAll && observationIds.length === 0) {
+              pruneTab.setConfirmApply(null);
+              return;
+            }
             setSaving(true);
-            applyMemoryPrune(config, [candidate.id], {
-              older_than_days: pruneDryRun.criteria.older_than_days,
-              max_sources: pruneDryRun.criteria.max_sources,
-            })
+            applyMemoryPrune(
+              config,
+              observationIds,
+              {
+                older_than_days: pruneDryRun.criteria.older_than_days,
+                max_sources: pruneDryRun.criteria.max_sources,
+              },
+              archiveAll,
+            )
               .then((result) => {
-                pruneTab.setConfirmApply(false);
+                pruneTab.setConfirmApply(null);
                 if (result.archived === 0) {
                   setError("Prune skipped: candidate no longer matches review criteria");
                 }
@@ -335,26 +310,30 @@ export function useMemoryKeypress({
               .catch((e: unknown) => setError(`Prune failed: ${e}`))
               .finally(() => setSaving(false));
           } else {
-            pruneTab.setConfirmApply(false);
+            pruneTab.setConfirmApply(null);
           }
           return;
         }
 
+        if (isUpperA(key) && pruneDryRun?.summary.total) {
+          pruneTab.setConfirmApply("all");
+          return;
+        }
         if (key.name === "a" && pruneTab.selectedCandidate) {
-          pruneTab.setConfirmApply(true);
+          pruneTab.setConfirmApply("selected");
           return;
         }
       }
 
-      if (key.name === "1") { setActiveTab("facts"); return; }
-      if (key.name === "2") { setActiveTab("observations"); return; }
-      if (key.name === "3") { setActiveTab("prune"); return; }
-      if (key.name === "4") { setActiveTab("events"); return; }
-      if (key.name === "5") { setActiveTab("dreams"); return; }
+      if (key.name === "1") { setActiveTab("profile"); return; }
+      if (key.name === "2") { setActiveTab("facts"); return; }
+      if (key.name === "3") { setActiveTab("observations"); return; }
+      if (key.name === "4") { setActiveTab("prune"); return; }
+      if (key.name === "5") { setActiveTab("events"); return; }
       if (key.name === "r") { reload(); return; }
 
       if (key.name === "escape" || key.name === "q") {
-        const tab = activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : activeTab === "events" ? eventsTab : dreamsTab;
+        const tab = activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : eventsTab;
         if (tab.searchMode) {
           tab.handleKeys(key);
           return;
@@ -373,13 +352,13 @@ export function useMemoryKeypress({
         return;
       }
 
-      if (activeTab === "dreams") { dreamsTab.handleKeys(key); return; }
+      if (activeTab === "profile") { profileTab.handleKeys(key); return; }
       if (activeTab === "events") { eventsTab.handleKeys(key); return; }
       if (activeTab === "prune") { pruneTab.handleKeys(key); return; }
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
-    [activeTab, factsTab, obsTab, pruneTab, pruneDryRun, eventsTab, dreamsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setDreams, setError, queryClient]
+    [activeTab, profileTab, factsTab, obsTab, pruneTab, pruneDryRun, eventsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setError, queryClient]
   );
 
   useKeypress(handleKeypress, { isActive: true });

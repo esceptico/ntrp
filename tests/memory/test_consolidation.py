@@ -15,7 +15,7 @@ from ntrp.memory.consolidation import (
     apply_consolidation,
     get_consolidation_decisions,
 )
-from ntrp.memory.models import Fact, HistoryEntry, Observation, SourceType
+from ntrp.memory.models import Fact, FactKind, HistoryEntry, Observation, SourceType
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
@@ -181,6 +181,25 @@ class TestExecuteAction:
         obs = await obs_repo.get(result.observation_id)
         assert obs.summary == "Alice is a Python developer"
         assert obs.evidence_count == 1
+        assert obs.created_by == "consolidation"
+        assert obs.policy_version == "memory.pattern.v2"
+
+    @pytest.mark.asyncio
+    async def test_chat_note_create_is_gated(self, obs_repo: ObservationRepository, fact_repo: FactRepository):
+        fact = await fact_repo.create(
+            text="Low-salience chat note",
+            source_type=SourceType.CHAT,
+            embedding=mock_embedding("chat note"),
+            kind=FactKind.NOTE,
+            salience=0,
+        )
+        action = ConsolidationAction(action="create", text="Inflated pattern")
+
+        result = await apply_consolidation(fact, action, fact_repo, obs_repo, mock_embedding("pattern"))
+
+        assert result.action == "skipped"
+        assert result.reason == "create_gate:chat_note_low_salience"
+        assert await obs_repo.count() == 0
 
     @pytest.mark.asyncio
     async def test_update_action(self, obs_repo: ObservationRepository, fact_repo: FactRepository):

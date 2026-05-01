@@ -122,3 +122,68 @@ async def test_migrate_v6_backfills_generated_memory_provenance(tmp_path: Path):
     assert [(row["dream_id"], row["fact_id"]) for row in dream_rows] == [(20, 2)]
 
     await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_migrate_v8_adds_observation_policy_metadata(tmp_path: Path):
+    conn = await aiosqlite.connect(tmp_path / "memory.db")
+    conn.row_factory = aiosqlite.Row
+    await conn.executescript("""
+        CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+        INSERT INTO meta (key, value) VALUES ('schema_version', '7');
+
+        CREATE TABLE observations (
+            id INTEGER PRIMARY KEY,
+            summary TEXT NOT NULL,
+            source_fact_ids TEXT DEFAULT '[]',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO observations (id, summary) VALUES (1, 'Legacy pattern');
+    """)
+
+    await run_migrations(conn)
+
+    columns = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(observations)")}
+    assert {"created_by", "policy_version"}.issubset(columns)
+
+    rows = await conn.execute_fetchall("SELECT created_by, policy_version FROM observations WHERE id = 1")
+    assert dict(rows[0]) == {"created_by": "legacy", "policy_version": "legacy"}
+
+    version = await conn.execute_fetchall("SELECT value FROM meta WHERE key = 'schema_version'")
+    assert version[0][0] == str(CURRENT_VERSION)
+
+    await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_init_schema_migrates_existing_v7_observations(tmp_path: Path):
+    conn = await database.connect(tmp_path / "memory.db", vec=True)
+    await conn.executescript("""
+        CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+        INSERT INTO meta (key, value) VALUES ('schema_version', '7');
+
+        CREATE TABLE observations (
+            id INTEGER PRIMARY KEY,
+            summary TEXT NOT NULL,
+            embedding BLOB,
+            source_fact_ids TEXT DEFAULT '[]',
+            history TEXT DEFAULT '[]',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            access_count INTEGER DEFAULT 0,
+            archived_at TIMESTAMP
+        );
+        INSERT INTO observations (id, summary) VALUES (1, 'Legacy pattern');
+    """)
+
+    db = GraphDatabase(conn, TEST_EMBEDDING_DIM)
+    await db.init_schema()
+
+    columns = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(observations)")}
+    assert {"created_by", "policy_version"}.issubset(columns)
+
+    indexes = {row["name"] for row in await conn.execute_fetchall("PRAGMA index_list(observations)")}
+    assert "idx_observations_policy" in indexes
+
+    await conn.close()

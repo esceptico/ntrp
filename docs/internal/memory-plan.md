@@ -365,6 +365,28 @@ Do not add many observation types. Observations are derived. If they become comp
 
 ## Phase 5: Observation Creation Policy
 
+Status:
+
+```text
+migration v8 adds observations.created_by and observations.policy_version
+new/updated consolidation patterns are stamped with memory.pattern.v2
+temporal patterns are stamped with memory.temporal.v1
+legacy patterns backfill as created_by=legacy, policy_version=legacy
+per-fact consolidation now blocks only narrow low-value creates:
+  - temporary facts
+  - low-salience chat notes
+updates still apply, and temporal multi-fact pattern creation is unchanged
+skipped pattern creates are aggregated into one memory event per pass
+```
+
+Real-data migration check on a copy of `~/.ntrp/memory.db`:
+
+```text
+schema_version: 8
+observations: 6,528
+legacy/legacy observations: 6,528
+```
+
 Current consolidation is too eager. New policy:
 
 ```text
@@ -812,10 +834,21 @@ The first code slices in this direction are intentionally boring:
 
 ### Proposed Memory Viewer
 
+Status:
+
+```text
+Profile tab added as a read-only projection over source facts
+Pattern rows/details expose creator and policy metadata
+top-level tabs are now Profile, Facts, Patterns, Cleanup, Log
+Cleanup can archive the selected candidate or all currently matching candidates
+Dreams are hidden from the main memory nav for now
+Overview and Recall Inspector are still pending
+```
+
 Replace the current 3-tab shape with:
 
 ```text
-Overview | Profile | Facts | Patterns | Prune | Events
+Overview | Profile | Facts | Patterns | Cleanup | Log
 ```
 
 Optional/secondary:
@@ -985,7 +1018,7 @@ open support fact
 mark noisy/wrong
 ```
 
-### Prune
+### Cleanup
 
 Purpose:
 
@@ -1017,7 +1050,7 @@ open item details
 
 This is where trust comes from. Auto-cleanup without a review screen will feel like data loss.
 
-### Events
+### Log
 
 Purpose:
 

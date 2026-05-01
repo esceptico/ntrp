@@ -10,9 +10,10 @@ interface FactsSectionProps {
   height: number;
   width: number;
   saving: boolean;
+  emptyMessage?: string;
 }
 
-export function FactsSection({ tab, height, width, saving }: FactsSectionProps) {
+export function FactsSection({ tab, height, width, saving, emptyMessage = "No facts match filters" }: FactsSectionProps) {
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
   const detailWidth = Math.max(0, width - listWidth - 1);
 
@@ -33,7 +34,7 @@ export function FactsSection({ tab, height, width, saving }: FactsSectionProps) 
         </text>
         <text>
           <span fg={tagColor}>
-            {fact.kind} · {fact.source_type} · s{fact.salience} · {status} · {shortTime(fact.created_at)}
+            {fact.kind} · {fact.source_type} · salience {fact.salience} · {status} · {shortTime(fact.created_at)}
           </span>
         </text>
       </box>
@@ -46,7 +47,7 @@ export function FactsSection({ tab, height, width, saving }: FactsSectionProps) 
       selectedIndex={tab.selectedIndex}
       renderItem={renderItem}
       getKey={(f) => f.id}
-      emptyMessage="No facts match filters"
+      emptyMessage={emptyMessage}
       searchQuery={tab.searchQuery}
       searchMode={tab.searchMode}
       focusPane={tab.focusPane}

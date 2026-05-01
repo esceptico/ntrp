@@ -70,6 +70,8 @@ export function ObservationDetailsView({
 
   const sectionFocused = (section: ObsDetailSection) => isFocused && focusedSection === section;
   const textWidth = width - 2;
+  const createdBy = observation.created_by || "legacy";
+  const policyVersion = observation.policy_version || "legacy";
 
   if (confirmDelete) {
     return <DeleteConfirmation width={width} height={height} message={`Delete this pattern? This will remove the pattern and ${details.supporting_facts.length} supporting fact references.`} />;
@@ -99,6 +101,13 @@ export function ObservationDetailsView({
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
+      <box marginBottom={1}>
+        <text>
+          <span fg={accentValue}>pattern #{observation.id}</span>
+          <span fg={colors.text.disabled}> {"\u2502"} derived from supporting facts</span>
+        </text>
+      </box>
+
       {/* Full text */}
       <box>
         <ExpandableText
@@ -116,9 +125,9 @@ export function ObservationDetailsView({
         <text>
           <span fg={accentValue}>pattern</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
-          <span fg={labelColor}>{observation.evidence_count} facts</span>
+          <span fg={labelColor}>support {observation.evidence_count} facts</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
-          <span fg={labelColor}>{"\u00D7"}{observation.access_count}</span>
+          <span fg={labelColor}>used {observation.access_count}</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
           <span fg={labelColor}>created {formatTimeAgo(observation.created_at)}</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
@@ -129,6 +138,16 @@ export function ObservationDetailsView({
               <span fg={colors.status.error}>archived</span>
             </>
           )}
+        </text>
+      </box>
+
+      <box marginTop={1}>
+        <text>
+          <span fg={colors.text.muted}>created by </span>
+          <span fg={labelColor}>{createdBy}</span>
+          <span fg={colors.text.disabled}> {"\u2502"} </span>
+          <span fg={colors.text.muted}>policy </span>
+          <span fg={labelColor}>{truncateText(policyVersion, Math.max(8, textWidth - createdBy.length - 21))}</span>
         </text>
       </box>
 

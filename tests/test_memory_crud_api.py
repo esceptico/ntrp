@@ -640,6 +640,59 @@ class TestMemoryAuditAPI:
         assert event["policy_version"] == "memory.prune.v1"
         assert event["details"]["ids"] == [sample_observation]
 
+    @pytest.mark.asyncio
+    async def test_prune_apply_can_archive_all_matching_candidates(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+        sample_observation: int,
+    ):
+        recent = await test_runtime.memory.observations.create(
+            summary="Recent pattern should not be archived by bulk prune",
+            embedding=mock_embedding("recent pattern"),
+        )
+        old = (datetime.now(UTC) - timedelta(days=31)).isoformat()
+        await test_runtime.memory.db.conn.execute(
+            "UPDATE observations SET created_at = ?, updated_at = ? WHERE id = ?",
+            (old, old, sample_observation),
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.post(
+            "/memory/prune/apply",
+            json={
+                "all_matching": True,
+                "older_than_days": 30,
+                "max_sources": 5,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["archived"] == 1
+        assert data["archived_ids"] == [sample_observation]
+        assert data["skipped_ids"] == []
+
+        archived = await test_runtime.memory.observations.get(sample_observation)
+        not_archived = await test_runtime.memory.observations.get(recent.id)
+        assert archived.archived_at is not None
+        assert not_archived.archived_at is None
+
+        events = await test_client.get("/memory/events", params={"action": "observations.archived"})
+        assert events.status_code == 200
+        event = events.json()["events"][0]
+        assert event["details"]["all_matching"] is True
+
+    @pytest.mark.asyncio
+    async def test_prune_apply_requires_ids_unless_all_matching(self, test_client: AsyncClient):
+        response = await test_client.post(
+            "/memory/prune/apply",
+            json={"older_than_days": 30, "max_sources": 5},
+        )
+
+        assert response.status_code == 422
+        assert "observation_ids required" in response.json()["detail"]
+
 
 class TestMemoryDisabled:
     """Test error handling when memory is disabled"""

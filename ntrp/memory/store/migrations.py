@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 7
+CURRENT_VERSION = 8
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -224,6 +224,25 @@ async def _migrate_v7(conn: aiosqlite.Connection) -> None:
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_events_action ON memory_events(action)")
 
 
+async def _migrate_v8(conn: aiosqlite.Connection) -> None:
+    """Add lightweight observation policy metadata."""
+    _logger.info("Migration v8: adding observation policy metadata")
+
+    if not await _table_exists(conn, "observations"):
+        return
+
+    existing = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(observations)")}
+    columns = (
+        ("created_by", "TEXT NOT NULL DEFAULT 'legacy'"),
+        ("policy_version", "TEXT NOT NULL DEFAULT 'legacy'"),
+    )
+    for name, definition in columns:
+        if name not in existing:
+            await conn.execute(f"ALTER TABLE observations ADD COLUMN {name} {definition}")
+
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_observations_policy ON observations(policy_version)")
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
@@ -232,6 +251,7 @@ _MIGRATIONS: list[tuple[int, callable]] = [
     (5, _migrate_v5),
     (6, _migrate_v6),
     (7, _migrate_v7),
+    (8, _migrate_v8),
 ]
 
 

@@ -46,13 +46,15 @@ function EventDetails({
   const textWidth = Math.max(10, width - 2);
 
   if (!event) {
-    return <text><span fg={colors.text.muted}>No memory events</span></text>;
+    return <text><span fg={colors.text.muted}>No log entries</span></text>;
   }
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       <text>
-        <span fg={accentValue}>{event.action}</span>
+        <span fg={accentValue}>log #{event.id}</span>
+        <span fg={colors.text.disabled}> {"\u2502"} </span>
+        <span fg={colors.text.secondary}>{event.action}</span>
         <span fg={colors.text.disabled}> {"\u2502"} {event.actor}</span>
         <span fg={colors.text.disabled}> {"\u2502"} {formatTimeAgo(event.created_at)}</span>
       </text>
@@ -121,7 +123,7 @@ export function MemoryEventsSection({ tab, totalCount, height, width }: MemoryEv
       selectedIndex={tab.selectedIndex}
       renderItem={renderItem}
       getKey={(event) => event.id}
-      emptyMessage="No memory events"
+      emptyMessage="No log entries"
       searchQuery={tab.searchQuery}
       searchMode={tab.searchMode}
       focusPane={tab.focusPane}

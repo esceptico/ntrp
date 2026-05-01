@@ -2,15 +2,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { Config } from "../types.js";
 import {
   getFacts,
+  getMemoryProfile,
   getObservations,
-  getDreams,
   getMemoryPruneDryRun,
   getMemoryEvents,
   type Fact,
   type FactFilters,
   type Observation,
   type ObservationFilters,
-  type Dream,
   type MemoryPruneDryRun,
   type MemoryEvent,
 } from "../api/client.js";
@@ -18,16 +17,15 @@ import {
 interface UseMemoryDataResult {
   facts: Fact[];
   factTotal: number;
+  profileFacts: Fact[];
   observations: Observation[];
   observationTotal: number;
-  dreams: Dream[];
   pruneDryRun: MemoryPruneDryRun | null;
   memoryEvents: MemoryEvent[];
   loading: boolean;
   error: string | null;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
   setObservations: React.Dispatch<React.SetStateAction<Observation[]>>;
-  setDreams: React.Dispatch<React.SetStateAction<Dream[]>>;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
   reload: () => void;
 }
@@ -37,9 +35,9 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
   const [error, setError] = useState<string | null>(null);
   const [facts, setFacts] = useState<Fact[]>([]);
   const [factTotal, setFactTotal] = useState(0);
+  const [profileFacts, setProfileFacts] = useState<Fact[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [observationTotal, setObservationTotal] = useState(0);
-  const [dreams, setDreams] = useState<Dream[]>([]);
   const [pruneDryRun, setPruneDryRun] = useState<MemoryPruneDryRun | null>(null);
   const [memoryEvents, setMemoryEvents] = useState<MemoryEvent[]>([]);
   const [fetchCount, setFetchCount] = useState(0);
@@ -52,19 +50,19 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
 
     (async () => {
       try {
-        const [factsData, obsData, dreamsData, pruneData, eventsData] = await Promise.all([
+        const [factsData, profileData, obsData, pruneData, eventsData] = await Promise.all([
           getFacts(config, 200, factFilters),
+          getMemoryProfile(config, 20),
           getObservations(config, 100, observationFilters),
-          getDreams(config, 50),
           getMemoryPruneDryRun(config),
           getMemoryEvents(config, 100),
         ]);
         if (fetchIdRef.current !== id) return;
         setFacts(factsData.facts || []);
         setFactTotal(factsData.total || 0);
+        setProfileFacts(profileData.facts || []);
         setObservations(obsData.observations || []);
         setObservationTotal(obsData.total || 0);
-        setDreams(dreamsData.dreams || []);
         setPruneDryRun(pruneData);
         setMemoryEvents(eventsData.events || []);
       } catch (e) {
@@ -83,16 +81,15 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
   return {
     facts,
     factTotal,
+    profileFacts,
     observations,
     observationTotal,
-    dreams,
     pruneDryRun,
     memoryEvents,
     loading,
     error,
     setFacts,
     setObservations,
-    setDreams,
     setError,
     reload,
   };

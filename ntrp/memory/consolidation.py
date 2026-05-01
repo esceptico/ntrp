@@ -12,12 +12,14 @@ from ntrp.constants import (
 )
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
-from ntrp.memory.models import Embedding, Fact, Observation
+from ntrp.memory.models import Embedding, Fact, FactKind, Observation, SourceType
 from ntrp.memory.prompts import CONSOLIDATION_PROMPT
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
 
 _logger = get_logger(__name__)
+
+PATTERN_POLICY_VERSION = "memory.pattern.v2"
 
 
 class ConsolidationAction(BaseModel):
@@ -60,11 +62,24 @@ async def apply_consolidation(
     if action.action == "skip":
         return ConsolidationResult(action="skipped", reason=action.reason)
 
+    if action.action == "create":
+        allowed, reason = _can_create_observation_from_fact(fact)
+        if not allowed:
+            return ConsolidationResult(action="skipped", reason=f"create_gate:{reason}")
+
     result = await _execute_action(action, fact, fact_repo, obs_repo, embedding)
     if not result:
         return ConsolidationResult(action="skipped", reason="action_failed")
 
     return result
+
+
+def _can_create_observation_from_fact(fact: Fact) -> tuple[bool, str]:
+    if fact.kind == FactKind.TEMPORARY:
+        return False, "temporary_fact"
+    if fact.source_type == SourceType.CHAT and fact.kind == FactKind.NOTE and fact.salience <= 0:
+        return False, "chat_note_low_salience"
+    return True, "allowed"
 
 
 async def _llm_consolidation_decisions(
@@ -131,6 +146,7 @@ async def _execute_action(
             embedding=embedding,
             new_fact_id=fact.id,
             reason=action.reason or "",
+            policy_version=PATTERN_POLICY_VERSION,
         )
         if obs:
             if fact_entity_ids:
@@ -150,6 +166,8 @@ async def _execute_action(
             summary=action.text,
             embedding=embedding,
             source_fact_id=fact.id,
+            created_by="consolidation",
+            policy_version=PATTERN_POLICY_VERSION,
         )
         if fact_entity_ids:
             await obs_repo.link_entities(obs.id, fact_entity_ids)

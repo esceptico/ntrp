@@ -30,10 +30,14 @@ class TestObservationCRUD:
         assert obs.summary == "Test observation"
         assert obs.source_fact_ids == []
         assert obs.history == []
+        assert obs.created_by == "manual"
+        assert obs.policy_version == "manual"
 
         retrieved = await repo.get(obs.id)
         assert retrieved is not None
         assert retrieved.summary == "Test observation"
+        assert retrieved.created_by == "manual"
+        assert retrieved.policy_version == "manual"
 
     @pytest.mark.asyncio
     async def test_get_nonexistent(self, repo: ObservationRepository):
@@ -113,6 +117,8 @@ class TestUpdate:
 
         assert updated is not None
         assert updated.summary == "Updated"
+        assert updated.created_by == "manual"
+        assert updated.policy_version == "manual"
 
     @pytest.mark.asyncio
     async def test_update_adds_fact_and_history(self, repo: ObservationRepository, fact_repo: FactRepository):

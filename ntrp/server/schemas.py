@@ -302,7 +302,8 @@ class MemoryPruneDryRunRequest(BaseModel):
 
 
 class MemoryPruneApplyRequest(BaseModel):
-    observation_ids: list[ObservationId] = Field(..., min_length=1, max_length=1000)
+    observation_ids: list[ObservationId] = Field(default_factory=list, max_length=1000)
+    all_matching: bool = False
     older_than_days: int = Field(default=30, ge=1, le=3650)
     max_sources: int = Field(default=5, ge=0, le=1000)
 

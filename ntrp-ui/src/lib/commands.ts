@@ -8,7 +8,7 @@ export const COMMANDS = [
   { name: "delete", description: "Delete a session" },
   { name: "init", description: "Scan connected data and learn about you" },
   { name: "index", description: "Re-index memory for semantic search" },
-  { name: "memory", description: "View memory (facts, observations)" },
+  { name: "memory", description: "View memory profile, facts, patterns, cleanup, and log" },
   { name: "automations", description: "View and manage automations" },
   { name: "theme", description: "Choose a theme" },
   { name: "connect", description: "Manage LLM providers" },

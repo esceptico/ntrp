@@ -49,6 +49,8 @@ def _observation_payload(observation: Observation) -> dict:
         "updated_at": observation.updated_at.isoformat(),
         "last_accessed_at": observation.last_accessed_at.isoformat(),
         "archived_at": observation.archived_at.isoformat() if observation.archived_at else None,
+        "created_by": observation.created_by,
+        "policy_version": observation.policy_version,
     }
 
 
@@ -388,8 +390,11 @@ async def prune_memory_dry_run(request: MemoryPruneDryRunRequest, svc: MemorySer
 
 @router.post("/memory/prune/apply")
 async def apply_memory_prune(request: MemoryPruneApplyRequest, svc: MemoryService = Depends(require_memory)):
+    if not request.all_matching and not request.observation_ids:
+        raise HTTPException(status_code=422, detail="observation_ids required unless all_matching is true")
     return await svc.prune_observations_apply(
         observation_ids=request.observation_ids,
+        all_matching=request.all_matching,
         older_than_days=request.older_than_days,
         max_sources=request.max_sources,
     )

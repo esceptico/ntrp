@@ -2,7 +2,12 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 from ntrp.logging import get_logger
-from ntrp.memory.audit import memory_audit, observation_prune_candidates_by_ids, observation_prune_dry_run
+from ntrp.memory.audit import (
+    memory_audit,
+    observation_prune_candidates_by_ids,
+    observation_prune_candidates_matching,
+    observation_prune_dry_run,
+)
 from ntrp.memory.fact_review import FactMetadataSuggestion, suggest_fact_metadata
 from ntrp.memory.facts import PROFILE_FACT_KINDS, FactMemory
 from ntrp.memory.models import Dream, EntityRef, Fact, FactKind, MemoryEvent, Observation, SourceType
@@ -391,21 +396,29 @@ class MemoryService:
         self,
         *,
         observation_ids: list[int],
+        all_matching: bool = False,
         older_than_days: int = 30,
         max_sources: int = 5,
     ) -> dict:
         requested_ids = list(dict.fromkeys(observation_ids))
         async with self.memory.transaction():
-            candidates = await observation_prune_candidates_by_ids(
-                self.memory.observations.conn,
-                requested_ids,
-                older_than_days=older_than_days,
-                max_sources=max_sources,
-            )
+            if all_matching:
+                candidates = await observation_prune_candidates_matching(
+                    self.memory.observations.conn,
+                    older_than_days=older_than_days,
+                    max_sources=max_sources,
+                )
+            else:
+                candidates = await observation_prune_candidates_by_ids(
+                    self.memory.observations.conn,
+                    requested_ids,
+                    older_than_days=older_than_days,
+                    max_sources=max_sources,
+                )
             archive_ids = [row["id"] for row in candidates]
             archived = await self.memory.observations.archive_batch(archive_ids)
             archive_id_set = set(archive_ids)
-            skipped_ids = [obs_id for obs_id in requested_ids if obs_id not in archive_id_set]
+            skipped_ids = [] if all_matching else [obs_id for obs_id in requested_ids if obs_id not in archive_id_set]
             if archived:
                 await self.memory.events.create(
                     actor="user",
@@ -417,6 +430,7 @@ class MemoryService:
                         "ids": archive_ids,
                         "requested_ids": requested_ids,
                         "skipped_ids": skipped_ids,
+                        "all_matching": all_matching,
                         "criteria": {
                             "older_than_days": older_than_days,
                             "max_sources": max_sources,

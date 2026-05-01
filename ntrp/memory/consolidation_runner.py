@@ -7,7 +7,7 @@ from typing import Any
 from ntrp.constants import CONSOLIDATION_PASS_TIMEOUT
 from ntrp.embedder import Embedder
 from ntrp.logging import get_logger
-from ntrp.memory.consolidation import apply_consolidation, get_consolidation_decisions
+from ntrp.memory.consolidation import PATTERN_POLICY_VERSION, apply_consolidation, get_consolidation_decisions
 from ntrp.memory.decay import should_archive_fact, should_archive_observation
 from ntrp.memory.dreams import run_dream_pass
 from ntrp.memory.fact_merge import fact_merge_pass
@@ -112,11 +112,15 @@ class ConsolidationRunner:
         async with self._transaction():
             count = 0
             obs_created = 0
+            create_gate_skips: dict[str, int] = {}
             for fact, precomputed in decisions:
                 if not await self.facts.get(fact.id):
                     continue
                 for action, embedding in precomputed:
                     result = await apply_consolidation(fact, action, self.facts, self.observations, embedding)
+                    if result.reason and result.reason.startswith("create_gate:"):
+                        reason = result.reason.removeprefix("create_gate:")
+                        create_gate_skips[reason] = create_gate_skips.get(reason, 0) + 1
                     if result.observation_id and result.action in {"created", "updated"} and self.events:
                         await self.events.create(
                             actor="automation",
@@ -126,13 +130,22 @@ class ConsolidationRunner:
                             source_type=fact.source_type.value,
                             source_ref=fact.source_ref,
                             reason=result.reason or "fact consolidation",
-                            policy_version="memory.consolidation.v1",
+                            policy_version=PATTERN_POLICY_VERSION,
                             details={"source_fact_id": fact.id},
                         )
                     if result.action == "created":
                         obs_created += 1
                 await self.facts.mark_consolidated(fact.id)
                 count += 1
+            if create_gate_skips and self.events:
+                await self.events.create(
+                    actor="automation",
+                    action="observations.create_skipped",
+                    target_type="observation_batch",
+                    reason="pattern create gate",
+                    policy_version=PATTERN_POLICY_VERSION,
+                    details={"reasons": create_gate_skips, "count": sum(create_gate_skips.values())},
+                )
 
         if count > 0:
             _logger.info("Consolidated %d facts", count)

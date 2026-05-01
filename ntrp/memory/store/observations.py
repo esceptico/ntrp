@@ -57,14 +57,15 @@ _SQL_DELETE_OBS_ENTITY_REFS = "DELETE FROM obs_entity_refs WHERE observation_id 
 _SQL_INSERT_OBSERVATION = """
     INSERT INTO observations (
         summary, embedding, source_fact_ids, history,
-        created_at, updated_at, last_accessed_at, access_count
+        created_at, updated_at, last_accessed_at, access_count,
+        created_by, policy_version
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SQL_UPDATE_OBSERVATION = """
     UPDATE observations
-    SET summary = ?, embedding = ?, source_fact_ids = ?, history = ?, updated_at = ?
+    SET summary = ?, embedding = ?, source_fact_ids = ?, history = ?, updated_at = ?, policy_version = ?
     WHERE id = ?
 """
 
@@ -177,6 +178,8 @@ class ObservationRepository:
         summary: str,
         embedding: Embedding | None = None,
         source_fact_id: int | None = None,
+        created_by: str = "manual",
+        policy_version: str = "manual",
     ) -> Observation:
         now = datetime.now(UTC)
         source_fact_ids = [source_fact_id] if source_fact_id else []
@@ -193,6 +196,8 @@ class ObservationRepository:
                 now.isoformat(),
                 now.isoformat(),
                 0,
+                created_by,
+                policy_version,
             ),
         )
         obs_id = cursor.lastrowid
@@ -212,6 +217,8 @@ class ObservationRepository:
             updated_at=now,
             last_accessed_at=now,
             access_count=0,
+            created_by=created_by,
+            policy_version=policy_version,
         )
 
     async def get(self, observation_id: int) -> Observation | None:
@@ -235,6 +242,7 @@ class ObservationRepository:
         embedding: Embedding | None = None,
         new_fact_id: int | None = None,
         reason: str = "",
+        policy_version: str = "manual",
     ) -> Observation | None:
         now = datetime.now(UTC)
         obs = await self.get(observation_id)
@@ -265,6 +273,7 @@ class ObservationRepository:
                 json.dumps(source_fact_ids),
                 json.dumps([_history_to_dict(h) for h in history]),
                 now.isoformat(),
+                policy_version,
                 observation_id,
             ),
         )
@@ -286,6 +295,8 @@ class ObservationRepository:
             updated_at=now,
             last_accessed_at=obs.last_accessed_at,
             access_count=obs.access_count,
+            created_by=obs.created_by,
+            policy_version=policy_version,
         )
 
     async def reinforce(self, observation_ids: Sequence[int]) -> None:
@@ -358,6 +369,7 @@ class ObservationRepository:
         merged_text: str,
         embedding: "Embedding",
         reason: str = "",
+        policy_version: str = "memory.observation_merge.v1",
     ) -> Observation | None:
         keeper = await self.get(keeper_id)
         removed = await self.get(removed_id)
@@ -395,6 +407,7 @@ class ObservationRepository:
                 json.dumps(merged_fids),
                 json.dumps([_history_to_dict(h) for h in history]),
                 now.isoformat(),
+                policy_version,
                 keeper_id,
             ),
         )
@@ -425,6 +438,8 @@ class ObservationRepository:
             updated_at=now,
             last_accessed_at=keeper.last_accessed_at,
             access_count=keeper.access_count,
+            created_by=keeper.created_by,
+            policy_version=policy_version,
         )
 
     async def list_recent(self, limit: int = 100) -> list[Observation]:

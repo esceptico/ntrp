@@ -17,7 +17,9 @@ CREATE TABLE IF NOT EXISTS observations (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     access_count INTEGER DEFAULT 0,
-    archived_at TIMESTAMP
+    archived_at TIMESTAMP,
+    created_by TEXT NOT NULL DEFAULT 'legacy',
+    policy_version TEXT NOT NULL DEFAULT 'legacy'
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
