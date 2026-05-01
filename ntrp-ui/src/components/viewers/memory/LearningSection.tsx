@@ -2,7 +2,8 @@ import type { LearningCandidate, LearningEvent } from "../../../api/client.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import type { LearningTabState } from "../../../hooks/useLearningTab.js";
 import { formatTimeAgo, shortTime } from "../../../lib/format.js";
-import { cleanLearningText, learningDetailRows, summarizeLearningEvidence } from "../../../lib/memoryLearningDetails.js";
+import { cleanLearningText, learningDetailRows } from "../../../lib/memoryLearningDetails.js";
+import { wrapText } from "../../../lib/utils.js";
 import {
   canApplyLearningCandidate,
   canApproveLearningCandidate,
@@ -51,57 +52,67 @@ function laneColor(lane: string, accent: string): string {
   }
 }
 
-function DetailsSummary({ details, width }: { details: Record<string, unknown>; width: number }) {
-  const rows = learningDetailRows(details);
-  if (rows.length === 0) {
-    return null;
-  }
-
-  return (
-    <box marginTop={2} flexDirection="column">
-      <text><span fg={colors.text.muted}>Source summary</span></text>
-      {rows.map((row, index) => (
-        <text key={index}>
-          <span fg={colors.text.muted}>{row.label} </span>
-          <span fg={colors.text.disabled}>{truncateText(row.value, Math.max(8, width - row.label.length - 1))}</span>
-        </text>
-      ))}
-    </box>
-  );
-}
-
 function evidenceSourceLabel(event: LearningEvent): string {
   const source = event.source_type.replaceAll("_", " ");
   if (event.scope && event.scope !== event.source_type) return `${source} / ${event.scope}`;
   return source;
 }
 
-function EvidenceList({ events, width }: { events: LearningEvent[]; width: number }) {
-  if (events.length === 0) {
-    return <text><span fg={colors.text.disabled}>No evidence loaded for this proposal.</span></text>;
-  }
+function DetailsSummary({ details, width }: { details: Record<string, unknown>; width: number }) {
+  const rows = learningDetailRows(details).slice(0, 3);
+  if (rows.length === 0) return null;
+
+  return (
+    <box marginTop={1} flexDirection="column">
+      <text><span fg={colors.text.muted}>Signals</span></text>
+      {rows.map((row, index) => (
+        <text key={index}>
+          <span fg={colors.text.secondary}>{row.label}</span>
+          <span fg={colors.text.disabled}> {"\u2502"} {truncateText(row.value, Math.max(8, width - row.label.length - 3))}</span>
+        </text>
+      ))}
+    </box>
+  );
+}
+
+function WrappedText({
+  text,
+  width,
+  fg,
+  maxLines,
+}: {
+  text: string;
+  width: number;
+  fg: string;
+  maxLines?: number;
+}) {
+  const lines = wrapText(text, width);
+  const visible = maxLines === undefined ? lines : lines.slice(0, maxLines);
+  const hidden = maxLines === undefined ? 0 : Math.max(0, lines.length - maxLines);
+
   return (
     <box flexDirection="column">
-      {events.slice(0, 4).map((event) => (
-        <box key={event.id} flexDirection="column" marginBottom={1}>
-          <text>
-            <span fg={colors.text.secondary}>{evidenceSourceLabel(event)}</span>
-            <span fg={colors.text.disabled}> {"\u2502"} {truncateText(cleanLearningText(event.signal), width - 20)}</span>
-          </text>
-          {event.evidence_ids.length > 0 && (
-            <text>
-              <span fg={colors.text.muted}>  based on </span>
-              <span fg={colors.text.disabled}>
-                {truncateText(summarizeLearningEvidence(event.evidence_ids), width - 11)}
-              </span>
-            </text>
-          )}
-        </box>
+      {visible.map((line, index) => (
+        <text key={index}><span fg={fg}>{line}</span></text>
       ))}
-      {events.length > 4 && (
-        <text><span fg={colors.text.disabled}>... +{events.length - 4} more evidence events</span></text>
+      {hidden > 0 && (
+        <text><span fg={colors.text.disabled}>... +{hidden} more lines</span></text>
       )}
     </box>
+  );
+}
+
+function EvidenceSummary({ events, width }: { events: LearningEvent[]; width: number }) {
+  const event = events[0];
+  if (!event) {
+    return <text><span fg={colors.text.disabled}>No evidence loaded.</span></text>;
+  }
+
+  return (
+    <text>
+      <span fg={colors.text.secondary}>{truncateText(evidenceSourceLabel(event), Math.min(28, width))}</span>
+      <span fg={colors.text.disabled}> {"\u2502"} {events.length} source{events.length === 1 ? "" : "s"}</span>
+    </text>
   );
 }
 
@@ -251,6 +262,8 @@ function CandidateDetails({
   const title = proposalTitle(candidate, events);
   const action = actionText(candidate);
   const hint = actionHint(candidate);
+  const evidenceText = primaryEvidenceText(candidate, events);
+  const showEvidence = evidenceText !== candidate.proposal;
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
@@ -264,34 +277,40 @@ function CandidateDetails({
       </text>
 
       <box marginTop={1} flexDirection="column">
-        <text>
-          <span fg={colors.text.muted}>What happened</span>
-        </text>
-        <text>
-          <span fg={colors.text.secondary}>{truncateText(primaryEvidenceText(candidate, events), textWidth)}</span>
-        </text>
+        <text><span fg={colors.text.muted}>Proposed note</span></text>
+        <WrappedText text={candidate.proposal} width={textWidth} fg={colors.text.primary} />
       </box>
 
       <box marginTop={1} flexDirection="column">
-        <text>
-          <span fg={colors.text.muted}>What would change</span>
-        </text>
-        <text>
-          <span fg={colors.text.secondary}>{truncateText(learningTargetLabel(candidate.target_key), textWidth)}</span>
-        </text>
-        <text>
-          <span fg={colors.text.disabled}>{truncateText(impactText(candidate), textWidth)}</span>
-        </text>
+        <text><span fg={colors.text.muted}>Why ntrp proposed it</span></text>
+        <WrappedText text={cleanLearningText(candidate.rationale)} width={textWidth} fg={colors.text.secondary} maxLines={3} />
       </box>
 
+      {showEvidence && (
+        <box marginTop={1} flexDirection="column">
+          <text><span fg={colors.text.muted}>Evidence</span></text>
+          <WrappedText text={evidenceText} width={textWidth} fg={colors.text.disabled} maxLines={2} />
+          <EvidenceSummary events={events} width={textWidth} />
+        </box>
+      )}
+
       <box marginTop={1} flexDirection="column">
-        <text><span fg={colors.text.muted}>What you can do</span></text>
-        <text><span fg={colors.text.secondary}>{truncateText(action, textWidth)}</span></text>
-        {hint && (
-          <text>
-            <span fg={colors.text.disabled}>{hint}</span>
-          </text>
-        )}
+        <text><span fg={colors.text.muted}>Impact</span></text>
+        <text><span fg={colors.text.secondary}>{truncateText(learningTargetLabel(candidate.target_key), textWidth)}</span></text>
+        <WrappedText text={impactText(candidate)} width={textWidth} fg={colors.text.disabled} maxLines={2} />
+      </box>
+
+      {candidate.expected_metric && (
+        <box marginTop={1} flexDirection="column">
+          <text><span fg={colors.text.muted}>Success</span></text>
+          <WrappedText text={candidate.expected_metric} width={textWidth} fg={colors.text.disabled} maxLines={2} />
+        </box>
+      )}
+
+      <box marginTop={1} flexDirection="column">
+        <text><span fg={colors.text.muted}>Decision</span></text>
+        <WrappedText text={action} width={textWidth} fg={colors.text.secondary} maxLines={2} />
+        {hint && <text><span fg={colors.text.disabled}>{hint}</span></text>}
       </box>
 
       {confirmStatus && (
@@ -310,28 +329,6 @@ function CandidateDetails({
           <text><span fg={colors.text.disabled}>press y to confirm, n or esc to cancel</span></text>
         </box>
       )}
-
-      <box marginTop={1} flexDirection="column">
-        <text><span fg={colors.text.muted}>Proposed note</span></text>
-        <text><span fg={colors.text.secondary}>{truncateText(candidate.proposal, textWidth)}</span></text>
-      </box>
-
-      <box marginTop={1} flexDirection="column">
-        <text><span fg={colors.text.muted}>Why ntrp proposed it</span></text>
-        <text><span fg={colors.text.disabled}>{truncateText(cleanLearningText(candidate.rationale), textWidth)}</span></text>
-      </box>
-
-      {candidate.expected_metric && (
-        <box marginTop={1} flexDirection="column">
-          <text><span fg={colors.text.muted}>Success would look like</span></text>
-          <text><span fg={colors.text.disabled}>{truncateText(candidate.expected_metric, textWidth)}</span></text>
-        </box>
-      )}
-
-      <box marginTop={2} flexDirection="column">
-        <text><span fg={colors.text.muted}>Evidence</span></text>
-        <EvidenceList events={events} width={textWidth} />
-      </box>
 
       <DetailsSummary details={candidate.details} width={textWidth} />
     </box>
