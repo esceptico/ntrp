@@ -1,4 +1,12 @@
-import type { Fact, MemoryAccessEvent, MemoryAudit, MemoryEvent, MemoryPruneDryRun, MemoryStorageHealth } from "../../../api/client.js";
+import type {
+  Fact,
+  MemoryAccessEvent,
+  MemoryAudit,
+  MemoryEvent,
+  MemoryInjectionPolicyPreview,
+  MemoryPruneDryRun,
+  MemoryStorageHealth,
+} from "../../../api/client.js";
 import { colors } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import { formatTimeAgo } from "../../../lib/format.js";
@@ -11,6 +19,7 @@ interface OverviewSectionProps {
   pruneDryRun: MemoryPruneDryRun | null;
   memoryEvents: MemoryEvent[];
   memoryAccessEvents: MemoryAccessEvent[];
+  memoryInjectionPolicy: MemoryInjectionPolicyPreview | null;
   memoryAudit: MemoryAudit | null;
   height: number;
   width: number;
@@ -44,6 +53,7 @@ export function OverviewSection({
   pruneDryRun,
   memoryEvents,
   memoryAccessEvents,
+  memoryInjectionPolicy,
   memoryAudit,
   height,
   width,
@@ -67,6 +77,11 @@ export function OverviewSection({
         <MetricRow label="Profile" value={profileFacts.length} note="always-on facts shown to the agent first" />
         <MetricRow label="Recall" value="query" note="inspect retrieved context before it reaches the agent" />
         <MetricRow label="Used" value={memoryAccessEvents.length} note="recent memory bundles injected into prompts/tools" />
+        <MetricRow
+          label="Policy"
+          value={memoryInjectionPolicy?.summary.candidates ?? 0}
+          note="recent injected-memory bundles worth reviewing"
+        />
         <MetricRow label="Facts" value={factTotal} note="source-of-truth memory records" />
         <MetricRow label="Patterns" value={observationTotal} note="derived summaries with supporting facts" />
         <MetricRow label="Embeddings" value={missingEmbeddings} note="active rows missing vectors" />
@@ -84,6 +99,7 @@ export function OverviewSection({
         <text><span fg={colors.text.muted}>OPEN NEXT</span></text>
         <text><span fg={colors.text.secondary}>Recall</span><span fg={colors.text.disabled}> to debug query-time memory retrieval</span></text>
         <text><span fg={colors.text.secondary}>Used</span><span fg={colors.text.disabled}> to inspect what memory reached the model</span></text>
+        <text><span fg={colors.text.secondary}>Policy</span><span fg={colors.text.disabled}> flags appear inside Used when context looks noisy</span></text>
         <text><span fg={colors.text.secondary}>Profile</span><span fg={colors.text.disabled}> for what the agent should always know</span></text>
         <text><span fg={colors.text.secondary}>Facts</span><span fg={colors.text.disabled}> to edit durable truth</span></text>
         <text><span fg={colors.text.secondary}>Patterns</span><span fg={colors.text.disabled}> to inspect derived memory and provenance</span></text>

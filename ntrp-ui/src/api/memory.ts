@@ -193,6 +193,38 @@ export interface MemoryAccessEvent {
   details: Record<string, unknown>;
 }
 
+export type MemoryInjectionPolicyReason = "empty_recall" | "over_budget" | "pattern_heavy";
+
+export interface MemoryInjectionPolicyCandidate {
+  access_event_id: number;
+  created_at: string;
+  source: string;
+  query: string | null;
+  formatted_chars: number;
+  fact_count: number;
+  pattern_count: number;
+  reasons: MemoryInjectionPolicyReason[];
+  recommendation: string;
+}
+
+export interface MemoryInjectionPolicyPreview {
+  policy: {
+    char_budget: number;
+    version: string;
+  };
+  summary: {
+    events: number;
+    sources: Record<string, number>;
+    average_chars: number;
+    max_chars: number;
+    empty_recalls: number;
+    over_budget: number;
+    pattern_heavy: number;
+    candidates: number;
+  };
+  candidates: MemoryInjectionPolicyCandidate[];
+}
+
 export interface MemoryStorageHealth {
   vec_rows: number;
   missing_vec_rows: number;
@@ -390,6 +422,13 @@ export async function getMemoryEvents(config: Config, limit = 100): Promise<{ ev
 
 export async function getMemoryAccessEvents(config: Config, limit = 100): Promise<{ events: MemoryAccessEvent[] }> {
   return api.get<{ events: MemoryAccessEvent[] }>(`${config.serverUrl}/memory/access/events?limit=${limit}`);
+}
+
+export async function getMemoryInjectionPolicyPreview(
+  config: Config,
+  limit = 100
+): Promise<MemoryInjectionPolicyPreview> {
+  return api.get<MemoryInjectionPolicyPreview>(`${config.serverUrl}/memory/injection-policy/preview?limit=${limit}`);
 }
 
 export async function getMemoryAudit(config: Config): Promise<MemoryAudit> {

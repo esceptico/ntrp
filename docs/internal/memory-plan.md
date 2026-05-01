@@ -36,6 +36,7 @@ Implemented on 2026-05-01:
 backup: backups/memory-20260501-012739.db
 GET  /memory/audit
 POST /memory/prune/dry-run
+GET  /memory/injection-policy/preview
 ```
 
 The first implementation is read-only:
@@ -68,6 +69,14 @@ observations/dreams without source facts
 source refs pointing at missing facts
 source refs pointing at archived facts
 duplicate source refs
+```
+
+The injection policy preview is also read-only. It scans recent memory access events and flags:
+
+```text
+empty recall queries
+context bundles above the configured character budget
+pattern-heavy bundles where derived observations dominate source facts
 ```
 
 ## Target Model

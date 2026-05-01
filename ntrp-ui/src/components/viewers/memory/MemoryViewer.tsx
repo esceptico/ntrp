@@ -60,7 +60,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const [factFilters, setFactFilters] = useState<FactFilters>({ status: "active" });
   const [observationFilters, setObservationFilters] = useState<ObservationFilters>({ status: "active" });
 
-  const { facts, factTotal, profileFacts, observations, observationTotal, pruneDryRun, memoryEvents, memoryAccessEvents, memoryAudit, loading, error, setFacts, setObservations, setError, reload } =
+  const { facts, factTotal, profileFacts, observations, observationTotal, pruneDryRun, memoryEvents, memoryAccessEvents, memoryInjectionPolicy, memoryAudit, loading, error, setFacts, setObservations, setError, reload } =
     useMemoryData(config, factFilters, observationFilters);
 
   const profileTab = useFactsTab(config, profileFacts, 80, profileFilters, setProfileFilters, profileFacts.length);
@@ -149,6 +149,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
           : activeTab === "context"
           ? [
               `source: ${accessTab.sourceFilter === "all" ? "all" : memoryAccessSourceLabel(accessTab.sourceFilter)}`,
+              `flags: ${memoryInjectionPolicy?.summary.candidates ?? 0}`,
               `loaded: ${memoryAccessEvents.length}`,
             ].join(" · ")
           : activeTab === "profile"
@@ -209,6 +210,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 pruneDryRun={pruneDryRun}
                 memoryEvents={memoryEvents}
                 memoryAccessEvents={memoryAccessEvents}
+                memoryInjectionPolicy={memoryInjectionPolicy}
                 memoryAudit={memoryAudit}
                 height={sectionHeight}
                 width={width}
@@ -220,7 +222,13 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
             )}
 
             {activeTab === "context" && (
-              <MemoryAccessSection tab={accessTab} totalCount={memoryAccessEvents.length} height={sectionHeight} width={width} />
+              <MemoryAccessSection
+                tab={accessTab}
+                totalCount={memoryAccessEvents.length}
+                policyPreview={memoryInjectionPolicy}
+                height={sectionHeight}
+                width={width}
+              />
             )}
 
             {activeTab === "profile" && (

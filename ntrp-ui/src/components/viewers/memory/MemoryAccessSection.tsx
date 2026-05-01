@@ -1,4 +1,9 @@
-import type { MemoryAccessEvent } from "../../../api/client.js";
+import type {
+  MemoryAccessEvent,
+  MemoryInjectionPolicyCandidate,
+  MemoryInjectionPolicyPreview,
+  MemoryInjectionPolicyReason,
+} from "../../../api/client.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import type { MemoryAccessTabState } from "../../../hooks/useMemoryAccessTab.js";
 import { formatTimeAgo, shortTime } from "../../../lib/format.js";
@@ -9,8 +14,23 @@ import { ListDetailSection } from "./ListDetailSection.js";
 interface MemoryAccessSectionProps {
   tab: MemoryAccessTabState;
   totalCount: number;
+  policyPreview: MemoryInjectionPolicyPreview | null;
   height: number;
   width: number;
+}
+
+const REASON_LABELS: Record<MemoryInjectionPolicyReason, string> = {
+  empty_recall: "empty recall",
+  over_budget: "over budget",
+  pattern_heavy: "pattern-heavy",
+};
+
+function reasonLabel(reason: MemoryInjectionPolicyReason): string {
+  return REASON_LABELS[reason] ?? reason;
+}
+
+function reasonsLabel(reasons: MemoryInjectionPolicyReason[]): string {
+  return reasons.map(reasonLabel).join(", ");
 }
 
 function idsLabel(ids: number[], width: number): string {
@@ -37,10 +57,12 @@ function DetailsJson({ details, width }: { details: Record<string, unknown>; wid
 
 function AccessDetails({
   event,
+  candidate,
   width,
   height,
 }: {
   event: MemoryAccessEvent | null;
+  candidate: MemoryInjectionPolicyCandidate | null;
   width: number;
   height: number;
 }) {
@@ -107,6 +129,19 @@ function AccessDetails({
         )}
       </box>
 
+      {candidate && (
+        <box marginTop={1} flexDirection="column">
+          <text>
+            <span fg={accentValue}>policy flag </span>
+            <span fg={colors.text.secondary}>{reasonsLabel(candidate.reasons)}</span>
+          </text>
+          <text>
+            <span fg={colors.text.muted}>next </span>
+            <span fg={colors.text.disabled}>{truncateText(candidate.recommendation, textWidth - 5)}</span>
+          </text>
+        </box>
+      )}
+
       <box marginTop={1} flexDirection="column">
         <text>
           <span fg={colors.text.muted}>fact ids </span>
@@ -132,16 +167,24 @@ function AccessDetails({
   );
 }
 
-export function MemoryAccessSection({ tab, totalCount, height, width }: MemoryAccessSectionProps) {
+export function MemoryAccessSection({ tab, totalCount, policyPreview, height, width }: MemoryAccessSectionProps) {
   const { accentValue } = useAccentColor();
   const listWidth = Math.min(48, Math.max(32, Math.floor(width * 0.42)));
   const detailWidth = Math.max(0, width - listWidth - 1);
+  const candidatesByEventId = new Map(
+    (policyPreview?.candidates ?? []).map((candidate) => [candidate.access_event_id, candidate])
+  );
 
   const renderItem = (event: MemoryAccessEvent, ctx: RenderItemContext) => {
     const textWidth = listWidth - 4;
     const tagColor = ctx.isSelected ? colors.text.secondary : colors.text.disabled;
     const query = event.query ? truncateText(event.query, textWidth) : "prompt context";
     const injected = `${event.injected_fact_ids.length}f/${event.injected_observation_ids.length}p`;
+    const sourceLabel = memoryAccessSourceLabel(event.source);
+    const createdAt = shortTime(event.created_at);
+    const flagWidth = Math.max(0, textWidth - sourceLabel.length - injected.length - createdAt.length - 6);
+    const candidate = candidatesByEventId.get(event.id);
+    const flag = candidate && flagWidth > 4 ? ` ! ${truncateText(reasonsLabel(candidate.reasons), flagWidth - 3)}` : "";
 
     return (
       <box flexDirection="column" marginBottom={1}>
@@ -149,9 +192,10 @@ export function MemoryAccessSection({ tab, totalCount, height, width }: MemoryAc
           <span fg={ctx.colors.text}>{query}</span>
         </text>
         <text>
-          <span fg={ctx.isSelected ? accentValue : tagColor}>{memoryAccessSourceLabel(event.source)}</span>
+          <span fg={ctx.isSelected ? accentValue : tagColor}>{sourceLabel}</span>
           <span fg={tagColor}> {injected}</span>
-          <span fg={tagColor}> [{shortTime(event.created_at)}]</span>
+          <span fg={tagColor}> [{createdAt}]</span>
+          {flag && <span fg={ctx.isSelected ? accentValue : colors.status.warning}>{flag}</span>}
         </text>
       </box>
     );
@@ -172,7 +216,14 @@ export function MemoryAccessSection({ tab, totalCount, height, width }: MemoryAc
       itemHeight={3}
       onItemClick={tab.setSelectedIndex}
       totalCount={totalCount}
-      details={<AccessDetails event={tab.selectedEvent} width={detailWidth} height={height} />}
+      details={
+        <AccessDetails
+          event={tab.selectedEvent}
+          candidate={tab.selectedEvent ? candidatesByEventId.get(tab.selectedEvent.id) ?? null : null}
+          width={detailWidth}
+          height={height}
+        />
+      }
     />
   );
 }

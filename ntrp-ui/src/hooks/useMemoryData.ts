@@ -7,6 +7,7 @@ import {
   getMemoryPruneDryRun,
   getMemoryEvents,
   getMemoryAccessEvents,
+  getMemoryInjectionPolicyPreview,
   getMemoryAudit,
   type Fact,
   type FactFilters,
@@ -15,6 +16,7 @@ import {
   type MemoryPruneDryRun,
   type MemoryEvent,
   type MemoryAccessEvent,
+  type MemoryInjectionPolicyPreview,
   type MemoryAudit,
 } from "../api/client.js";
 
@@ -27,6 +29,7 @@ interface UseMemoryDataResult {
   pruneDryRun: MemoryPruneDryRun | null;
   memoryEvents: MemoryEvent[];
   memoryAccessEvents: MemoryAccessEvent[];
+  memoryInjectionPolicy: MemoryInjectionPolicyPreview | null;
   memoryAudit: MemoryAudit | null;
   loading: boolean;
   error: string | null;
@@ -47,6 +50,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
   const [pruneDryRun, setPruneDryRun] = useState<MemoryPruneDryRun | null>(null);
   const [memoryEvents, setMemoryEvents] = useState<MemoryEvent[]>([]);
   const [memoryAccessEvents, setMemoryAccessEvents] = useState<MemoryAccessEvent[]>([]);
+  const [memoryInjectionPolicy, setMemoryInjectionPolicy] = useState<MemoryInjectionPolicyPreview | null>(null);
   const [memoryAudit, setMemoryAudit] = useState<MemoryAudit | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -58,13 +62,14 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
 
     (async () => {
       try {
-        const [factsData, profileData, obsData, pruneData, eventsData, accessData, auditData] = await Promise.all([
+        const [factsData, profileData, obsData, pruneData, eventsData, accessData, policyData, auditData] = await Promise.all([
           getFacts(config, 200, factFilters),
           getMemoryProfile(config, 20),
           getObservations(config, 100, observationFilters),
           getMemoryPruneDryRun(config),
           getMemoryEvents(config, 100),
           getMemoryAccessEvents(config, 100),
+          getMemoryInjectionPolicyPreview(config, 100),
           getMemoryAudit(config),
         ]);
         if (fetchIdRef.current !== id) return;
@@ -76,6 +81,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
         setPruneDryRun(pruneData);
         setMemoryEvents(eventsData.events || []);
         setMemoryAccessEvents(accessData.events || []);
+        setMemoryInjectionPolicy(policyData);
         setMemoryAudit(auditData);
       } catch (e) {
         if (fetchIdRef.current !== id) return;
@@ -99,6 +105,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
     pruneDryRun,
     memoryEvents,
     memoryAccessEvents,
+    memoryInjectionPolicy,
     memoryAudit,
     loading,
     error,

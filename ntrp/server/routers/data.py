@@ -403,6 +403,15 @@ async def get_memory_access_events(
     return {"events": [_memory_access_event_payload(event) for event in events]}
 
 
+@router.get("/memory/injection-policy/preview")
+async def get_memory_injection_policy_preview(
+    limit: int = Query(default=100, ge=1, le=500),
+    char_budget: int = Query(default=3000, ge=1, le=50000),
+    svc: MemoryService = Depends(require_memory),
+):
+    return await svc.access_events.policy_preview(limit=limit, char_budget=char_budget)
+
+
 @router.get("/memory/profile")
 async def get_memory_profile(
     limit: int = Query(default=6, ge=1, le=50),

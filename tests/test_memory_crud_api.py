@@ -655,6 +655,41 @@ class TestMemoryAuditAPI:
         assert event["details"] == {"has_context": True}
 
     @pytest.mark.asyncio
+    async def test_memory_injection_policy_preview_flags_recent_access_events(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        await test_runtime.memory.access_events.create(
+            source="recall_tool",
+            query="missing project fact",
+            formatted_chars=0,
+            policy_version="memory.access.v1",
+        )
+        await test_runtime.memory.access_events.create(
+            source="chat_prompt",
+            injected_fact_ids=[1],
+            injected_observation_ids=[10, 11, 12, 13],
+            formatted_chars=120,
+            policy_version="memory.access.v1",
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.get("/memory/injection-policy/preview", params={"char_budget": 80})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["policy"]["char_budget"] == 80
+        assert data["summary"]["events"] == 2
+        assert data["summary"]["empty_recalls"] == 1
+        assert data["summary"]["over_budget"] == 1
+        assert data["summary"]["pattern_heavy"] == 1
+
+        reasons_by_source = {candidate["source"]: candidate["reasons"] for candidate in data["candidates"]}
+        assert reasons_by_source["recall_tool"] == ["empty_recall"]
+        assert reasons_by_source["chat_prompt"] == ["over_budget", "pattern_heavy"]
+
+    @pytest.mark.asyncio
     async def test_repair_embeddings_is_explicit_and_audited(
         self,
         test_client: AsyncClient,

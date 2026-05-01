@@ -10,6 +10,7 @@ from ntrp.memory.audit import (
 )
 from ntrp.memory.fact_review import FactMetadataSuggestion, suggest_fact_metadata
 from ntrp.memory.facts import PROFILE_FACT_KINDS, FactMemory, SessionMemory
+from ntrp.memory.injection_policy import memory_injection_policy_preview
 from ntrp.memory.models import (
     Dream,
     EntityRef,
@@ -370,6 +371,15 @@ class MemoryAccessEventService:
             offset=offset,
             source=source,
         )
+
+    async def policy_preview(
+        self,
+        *,
+        limit: int = 100,
+        char_budget: int = 3000,
+    ) -> dict:
+        events = await self._memory.access_events.list_recent(limit=limit)
+        return memory_injection_policy_preview(events, char_budget=char_budget)
 
 
 class MemoryService:
