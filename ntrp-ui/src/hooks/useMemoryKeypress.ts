@@ -7,6 +7,7 @@ import type { FactsTabState } from "./useFactsTab.js";
 import type { ObservationsTabState } from "./useObservationsTab.js";
 import type { DreamsTabState } from "./useDreamsTab.js";
 import type { PruneTabState } from "./usePruneTab.js";
+import type { MemoryEventsTabState } from "./useMemoryEventsTab.js";
 import {
   updateFact,
   updateFactMetadata,
@@ -24,7 +25,7 @@ import {
   type MemoryPruneDryRun,
 } from "../api/client.js";
 
-type TabType = "facts" | "observations" | "prune" | "dreams";
+type TabType = "facts" | "observations" | "prune" | "events" | "dreams";
 
 interface UseMemoryKeypressOptions {
   activeTab: TabType;
@@ -33,6 +34,7 @@ interface UseMemoryKeypressOptions {
   obsTab: ObservationsTabState;
   pruneTab: PruneTabState;
   pruneDryRun: MemoryPruneDryRun | null;
+  eventsTab: MemoryEventsTabState;
   dreamsTab: DreamsTabState;
   config: Config;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
@@ -54,6 +56,7 @@ export function useMemoryKeypress({
   obsTab,
   pruneTab,
   pruneDryRun,
+  eventsTab,
   dreamsTab,
   config,
   setFacts,
@@ -346,11 +349,12 @@ export function useMemoryKeypress({
       if (key.name === "1") { setActiveTab("facts"); return; }
       if (key.name === "2") { setActiveTab("observations"); return; }
       if (key.name === "3") { setActiveTab("prune"); return; }
-      if (key.name === "4") { setActiveTab("dreams"); return; }
+      if (key.name === "4") { setActiveTab("events"); return; }
+      if (key.name === "5") { setActiveTab("dreams"); return; }
       if (key.name === "r") { reload(); return; }
 
       if (key.name === "escape" || key.name === "q") {
-        const tab = activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : dreamsTab;
+        const tab = activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : activeTab === "events" ? eventsTab : dreamsTab;
         if (tab.searchMode) {
           tab.handleKeys(key);
           return;
@@ -370,11 +374,12 @@ export function useMemoryKeypress({
       }
 
       if (activeTab === "dreams") { dreamsTab.handleKeys(key); return; }
+      if (activeTab === "events") { eventsTab.handleKeys(key); return; }
       if (activeTab === "prune") { pruneTab.handleKeys(key); return; }
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
-    [activeTab, factsTab, obsTab, pruneTab, pruneDryRun, dreamsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setDreams, setError, queryClient]
+    [activeTab, factsTab, obsTab, pruneTab, pruneDryRun, eventsTab, dreamsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setDreams, setError, queryClient]
   );
 
   useKeypress(handleKeypress, { isActive: true });

@@ -160,6 +160,20 @@ export interface MemoryPruneApplyResult {
   candidates: MemoryPruneCandidate[];
 }
 
+export interface MemoryEvent {
+  id: number;
+  created_at: string;
+  actor: string;
+  action: string;
+  target_type: string;
+  target_id: number | null;
+  source_type: string | null;
+  source_ref: string | null;
+  reason: string | null;
+  policy_version: string;
+  details: Record<string, unknown>;
+}
+
 function factQuery(limit: number, filters?: FactFilters): string {
   const params = new URLSearchParams({ limit: String(limit) });
   if (filters?.kind) params.set("kind", filters.kind);
@@ -289,6 +303,10 @@ export async function applyMemoryPrune(
     older_than_days: criteria.older_than_days,
     max_sources: criteria.max_sources,
   });
+}
+
+export async function getMemoryEvents(config: Config, limit = 100): Promise<{ events: MemoryEvent[] }> {
+  return api.get<{ events: MemoryEvent[] }>(`${config.serverUrl}/memory/events?limit=${limit}`);
 }
 
 export async function purgeMemory(config: Config): Promise<{ status: string; deleted: Record<string, number> }> {

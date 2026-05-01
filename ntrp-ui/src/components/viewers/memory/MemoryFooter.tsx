@@ -1,17 +1,18 @@
 import React from "react";
 import { Hints } from "../../ui/index.js";
 
-type TabType = "facts" | "observations" | "prune" | "dreams";
+type TabType = "facts" | "observations" | "prune" | "events" | "dreams";
 
 interface MemoryFooterProps {
   activeTab: TabType;
   factsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean; metadataSuggestion: unknown };
   obsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean };
   pruneTab: { focusPane: string; searchMode: boolean; confirmApply: boolean };
+  eventsTab: { focusPane: string; searchMode: boolean };
   dreamsTab: { confirmDelete: boolean; focusPane: string; searchMode: boolean };
 }
 
-export function MemoryFooter({ activeTab, factsTab, obsTab, pruneTab, dreamsTab }: MemoryFooterProps): React.ReactNode {
+export function MemoryFooter({ activeTab, factsTab, obsTab, pruneTab, eventsTab, dreamsTab }: MemoryFooterProps): React.ReactNode {
   if (activeTab === "prune") {
     if (pruneTab.confirmApply) return <Hints items={[["y", "confirm"], ["any", "cancel"]]} />;
     if (pruneTab.focusPane === "details") {
@@ -19,6 +20,14 @@ export function MemoryFooter({ activeTab, factsTab, obsTab, pruneTab, dreamsTab 
     }
     if (pruneTab.searchMode) return <Hints items={[["type", "search"], ["esc", "clear/exit"], ["enter", "done"]]} />;
     return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["a", "archive"], ["o", "sort"], ["r", "refresh"]]} />;
+  }
+
+  if (activeTab === "events") {
+    if (eventsTab.focusPane === "details") {
+      return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ["r", "refresh"]]} />;
+    }
+    if (eventsTab.searchMode) return <Hints items={[["type", "search"], ["esc", "clear/exit"], ["enter", "done"]]} />;
+    return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["x", "target"], ["u", "actor"], ["v", "action"], ["o", "sort"], ["r", "refresh"]]} />;
   }
 
   if (activeTab === "dreams") {
