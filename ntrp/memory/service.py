@@ -57,6 +57,36 @@ class LearningProposalScanResult:
     skipped_candidates: list[LearningCandidate]
 
 
+async def _record_memory_feedback(
+    memory: FactMemory,
+    event: MemoryEvent,
+    *,
+    scope: str,
+    signal: str,
+    outcome: str = "corrected",
+    details: dict | None = None,
+) -> None:
+    evidence_ids = [f"memory_event:{event.id}"]
+    if event.target_type and event.target_id is not None:
+        evidence_ids.append(f"{event.target_type}:{event.target_id}")
+
+    await memory.learning.create_event(
+        source_type="memory_feedback",
+        source_id=f"memory_event:{event.id}",
+        scope=scope,
+        signal=signal,
+        evidence_ids=evidence_ids,
+        outcome=outcome,
+        details={
+            "memory_event_id": event.id,
+            "action": event.action,
+            "target_type": event.target_type,
+            "target_id": event.target_id,
+            **(details or {}),
+        },
+    )
+
+
 class FactService:
     def __init__(
         self,
@@ -170,7 +200,7 @@ class FactService:
             fact = await repo.get(fact_id)
             if not fact:
                 raise RuntimeError(f"Fact {fact_id} disappeared during update")
-            await self._memory.events.create(
+            event = await self._memory.events.create(
                 actor="user",
                 action="fact.updated",
                 target_type="fact",
@@ -179,6 +209,13 @@ class FactService:
                 source_ref=old.source_ref,
                 reason="manual fact text edit",
                 policy_version="memory.api.v1",
+                details={"old_chars": len(old.text), "new_chars": len(new_text)},
+            )
+            await _record_memory_feedback(
+                self._memory,
+                event,
+                scope="memory_extraction",
+                signal=f"User edited fact #{fact_id}; future extraction should avoid the previous wording.",
                 details={"old_chars": len(old.text), "new_chars": len(new_text)},
             )
 
@@ -206,7 +243,7 @@ class FactService:
             if not fact:
                 raise RuntimeError(f"Fact {fact_id} disappeared during metadata update")
             if updates:
-                await self._memory.events.create(
+                event = await self._memory.events.create(
                     actor="user",
                     action="fact.metadata_updated",
                     target_type="fact",
@@ -216,6 +253,18 @@ class FactService:
                     reason="manual fact metadata edit",
                     policy_version="memory.api.v1",
                     details={"updates": updates, "fields": sorted(updates)},
+                )
+                scope = (
+                    "profile"
+                    if "superseded_by_fact_id" in updates or fact.kind in PROFILE_FACT_KINDS
+                    else "memory_extraction"
+                )
+                await _record_memory_feedback(
+                    self._memory,
+                    event,
+                    scope=scope,
+                    signal=f"User changed metadata for fact #{fact_id}; memory policy should respect this correction.",
+                    details={"fields": sorted(updates)},
                 )
 
         return fact
@@ -236,7 +285,7 @@ class FactService:
             await self._memory.observations.remove_source_facts([fact_id])
             await self._memory.dreams.remove_source_facts([fact_id])
             await repo.cleanup_orphaned_entities()
-            await self._memory.events.create(
+            event = await self._memory.events.create(
                 actor="user",
                 action="fact.deleted",
                 target_type="fact",
@@ -246,6 +295,14 @@ class FactService:
                 reason="manual fact delete",
                 policy_version="memory.api.v1",
                 details={"entity_refs": entity_refs_count, "kind": fact.kind.value},
+            )
+            await _record_memory_feedback(
+                self._memory,
+                event,
+                scope="prune",
+                signal=f"User deleted fact #{fact_id}; similar memory should be treated as low-quality unless re-confirmed.",
+                outcome="deleted",
+                details={"kind": fact.kind.value},
             )
 
         if self._enqueue_fact_index_delete:
@@ -299,13 +356,24 @@ class ObservationService:
             obs = await obs_repo.update_summary(observation_id, new_summary, new_embedding)
             if not obs:
                 raise RuntimeError(f"Observation {observation_id} disappeared during update")
-            await self._memory.events.create(
+            event = await self._memory.events.create(
                 actor="user",
                 action="observation.updated",
                 target_type="observation",
                 target_id=observation_id,
                 reason="manual pattern summary edit",
                 policy_version="memory.api.v1",
+                details={
+                    "old_chars": len(old.summary),
+                    "new_chars": len(new_summary),
+                    "support_count": len(old.source_fact_ids),
+                },
+            )
+            await _record_memory_feedback(
+                self._memory,
+                event,
+                scope="compression",
+                signal=f"User edited observation #{observation_id}; pattern compression needed correction.",
                 details={
                     "old_chars": len(old.summary),
                     "new_chars": len(new_summary),
@@ -324,13 +392,21 @@ class ObservationService:
                 raise KeyError(f"Observation {observation_id} not found")
 
             await obs_repo.delete(observation_id)
-            await self._memory.events.create(
+            event = await self._memory.events.create(
                 actor="user",
                 action="observation.deleted",
                 target_type="observation",
                 target_id=observation_id,
                 reason="manual pattern delete",
                 policy_version="memory.api.v1",
+                details={"support_count": len(obs.source_fact_ids)},
+            )
+            await _record_memory_feedback(
+                self._memory,
+                event,
+                scope="prune",
+                signal=f"User deleted observation #{observation_id}; similar derived patterns should be treated as low-quality.",
+                outcome="deleted",
                 details={"support_count": len(obs.source_fact_ids)},
             )
 

@@ -303,6 +303,16 @@ class TestFactMetadataAPI:
         event = events.json()["events"][0]
         assert event["details"]["fields"] == ["confidence", "expires_at", "kind", "pinned_at", "salience"]
 
+        learning_events = await test_client.get(
+            "/memory/learning/events",
+            params={"source_type": "memory_feedback"},
+        )
+        assert learning_events.status_code == 200
+        feedback = learning_events.json()["events"][0]
+        assert feedback["scope"] == "profile"
+        assert feedback["evidence_ids"] == [f"memory_event:{event['id']}", f"fact:{sample_fact}"]
+        assert feedback["details"]["action"] == "fact.metadata_updated"
+
     @pytest.mark.asyncio
     async def test_patch_fact_metadata_rejects_missing_superseding_fact(
         self,
