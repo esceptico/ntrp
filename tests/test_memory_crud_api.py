@@ -921,6 +921,67 @@ class TestMemoryAuditAPI:
         ] == []
 
     @pytest.mark.asyncio
+    async def test_learning_review_scan_proposes_memory_feedback_reviews(
+        self,
+        test_client: AsyncClient,
+    ):
+        event_response = await test_client.post(
+            "/memory/learning/events",
+            json={
+                "source_type": "memory_feedback",
+                "source_id": "memory_event:42",
+                "scope": "compression",
+                "signal": "User edited an observation that compressed the supporting facts incorrectly.",
+                "evidence_ids": ["memory_event:42", "observation:7"],
+                "outcome": "corrected",
+                "details": {"action": "observation.updated", "target_type": "observation", "target_id": 7},
+            },
+        )
+        assert event_response.status_code == 200
+        source_event = event_response.json()["event"]
+
+        first = await test_client.post(
+            "/memory/learning/propose",
+            json={
+                "include_skill_notes": False,
+                "access_limit": 1,
+                "profile_limit": 1,
+                "prune_limit": 1,
+                "feedback_event_limit": 10,
+            },
+        )
+
+        assert first.status_code == 200
+        body = first.json()
+        candidates = [
+            candidate for candidate in body["created_candidates"] if candidate["change_type"] == "memory_feedback"
+        ]
+        assert len(candidates) == 1
+        candidate = candidates[0]
+        assert candidate["target_key"] == "memory.observations.compression.feedback"
+        assert candidate["policy_version"] == "learning.memory_feedback.v1"
+        assert candidate["evidence_event_ids"] == [source_event["id"]]
+        assert candidate["details"]["direct_evidence_ids"] == ["memory_event:42", "observation:7"]
+        assert body["created_events"] == []
+
+        second = await test_client.post(
+            "/memory/learning/propose",
+            json={
+                "include_skill_notes": False,
+                "access_limit": 1,
+                "profile_limit": 1,
+                "prune_limit": 1,
+                "feedback_event_limit": 10,
+            },
+        )
+
+        assert second.status_code == 200
+        retry = second.json()
+        assert [
+            candidate for candidate in retry["created_candidates"] if candidate["change_type"] == "memory_feedback"
+        ] == []
+
+    @pytest.mark.asyncio
     async def test_learning_policy_scan_surfaces_supersession_review(
         self,
         test_client: AsyncClient,

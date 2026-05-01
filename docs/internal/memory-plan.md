@@ -722,7 +722,7 @@ Implementation status:
 
 ```text
 2026-05-01: memory_access_events records prompt/tool context access.
-2026-05-01: Memory UI has a Used tab for recent injected bundles.
+2026-05-01: Memory UI has a Sent tab for recent injected bundles.
 2026-05-01: read-only injection and profile policy previews are exposed in API/UI.
 2026-05-01: learning_events and learning_candidates provide the continuous-learning audit spine.
 2026-05-01: learning review scan proposes deduplicated memory-policy candidates from existing telemetry; it never auto-applies them.
@@ -730,6 +730,7 @@ Implementation status:
 2026-05-01: learning review scan proposes skill-note review candidates from explicit skill-scoped learning events with direct evidence ids; it never writes skill files.
 2026-05-01: learning review scan surfaces aggregate profile-fact supersession review instead of auto-mutating contradictory facts.
 2026-05-01: manual fact/pattern edits, deletes, and metadata changes now emit `memory_feedback` learning events with direct memory-event provenance.
+2026-05-01: learning review scan turns memory feedback events into deduplicated review candidates for extraction, profile, compression, and prune policy.
 2026-05-01: operator automations now reuse bounded memory prefetch (`operator_prefetch`) so scheduled tasks get task-specific context without growing always-visible memory.
 2026-05-01: Memory UI has a Learning tab for candidate review and approve/reject status changes.
 ```
@@ -1626,15 +1627,15 @@ when user edits/deletes/pins memory in UI
 Writes:
 
 ```text
-memory_feedback
-  target_type: fact | observation | profile_entry
-  target_id
-  signal: wrong | stale | noisy | useful | pinned | deleted
-  source_ref
-  created_at
+learning_events
+  source_type: memory_feedback
+  scope: profile | memory_extraction | compression | prune
+  signal: explicit user correction signal
+  evidence_ids: memory_event:<id> plus direct fact/observation id
+  outcome: corrected | deleted | wrong | stale | noisy
 ```
 
-Use feedback to tune pruning and retrieval. Do not use it to silently delete source facts.
+Use feedback to propose pruning, extraction, profile, and compression reviews. Do not use it to silently delete source facts.
 
 ## Phase 10: System-Wide Memory Flow
 

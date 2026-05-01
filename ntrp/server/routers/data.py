@@ -615,6 +615,7 @@ async def propose_learning_candidates(
         prune_older_than_days=request.prune_older_than_days,
         prune_max_sources=request.prune_max_sources,
         prune_limit=request.prune_limit,
+        feedback_event_limit=request.feedback_event_limit,
         skill_event_limit=request.skill_event_limit,
         include_skill_notes=request.include_skill_notes,
     )

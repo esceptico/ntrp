@@ -10,6 +10,8 @@ export function learningChangeLabel(changeType: string): string {
       return "prompt";
     case "profile_policy":
       return "profile";
+    case "memory_feedback":
+      return "memory feedback";
     default:
       return changeType.replaceAll("_", " ");
   }

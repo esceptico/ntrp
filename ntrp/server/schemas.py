@@ -351,6 +351,7 @@ class ProposeLearningCandidatesRequest(BaseModel):
     prune_older_than_days: int = Field(default=30, ge=1, le=3650)
     prune_max_sources: int = Field(default=5, ge=0, le=1000)
     prune_limit: int = Field(default=100, ge=1, le=1000)
+    feedback_event_limit: int = Field(default=100, ge=1, le=500)
     skill_event_limit: int = Field(default=100, ge=1, le=500)
     include_skill_notes: bool = True
 

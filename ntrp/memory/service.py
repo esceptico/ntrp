@@ -14,6 +14,12 @@ from ntrp.memory.audit import (
 )
 from ntrp.memory.fact_review import FactMetadataSuggestion, suggest_fact_metadata
 from ntrp.memory.facts import PROFILE_FACT_KINDS, FactMemory, SessionMemory
+from ntrp.memory.feedback_learning import (
+    MEMORY_FEEDBACK_CHANGE_TYPE,
+    MEMORY_FEEDBACK_POLICY_VERSION,
+    MEMORY_FEEDBACK_SOURCE_TYPE,
+    build_memory_feedback_proposals,
+)
 from ntrp.memory.injection_policy import DEFAULT_INJECTION_CHAR_BUDGET, memory_injection_policy_preview
 from ntrp.memory.learning_policy import (
     LEARNING_POLICY_SOURCE_TYPE,
@@ -720,6 +726,58 @@ class LearningService:
             skipped_candidates=skipped_candidates,
         )
 
+    async def propose_from_feedback_events(
+        self,
+        *,
+        event_limit: int = 100,
+    ) -> LearningProposalScanResult:
+        events = await self._memory.learning.list_events(
+            limit=event_limit,
+            source_type=MEMORY_FEEDBACK_SOURCE_TYPE,
+        )
+        existing_feedback_candidates = await self._memory.learning.list_candidates(
+            limit=500,
+            change_type=MEMORY_FEEDBACK_CHANGE_TYPE,
+        )
+        used_event_ids = {
+            event_id for candidate in existing_feedback_candidates for event_id in candidate.evidence_event_ids
+        }
+        proposals = build_memory_feedback_proposals(event for event in events if event.id not in used_event_ids)
+
+        created_events: list[LearningEvent] = []
+        created_candidates: list[LearningCandidate] = []
+        skipped_candidates: list[LearningCandidate] = []
+
+        async with self._memory.transaction():
+            for proposal in proposals:
+                existing = await self._memory.learning.find_open_candidate(
+                    change_type=proposal.change_type,
+                    target_key=proposal.target_key,
+                    statuses=("proposed", "approved"),
+                )
+                if existing:
+                    skipped_candidates.append(existing)
+                    continue
+
+                candidate = await self._memory.learning.create_candidate(
+                    change_type=proposal.change_type,
+                    target_key=proposal.target_key,
+                    proposal=proposal.proposal,
+                    rationale=proposal.rationale,
+                    evidence_event_ids=list(proposal.evidence_event_ids),
+                    expected_metric=proposal.expected_metric,
+                    policy_version=MEMORY_FEEDBACK_POLICY_VERSION,
+                    details=proposal.details,
+                )
+                created_candidates.append(candidate)
+
+        return LearningProposalScanResult(
+            proposals_considered=len(proposals),
+            created_events=created_events,
+            created_candidates=created_candidates,
+            skipped_candidates=skipped_candidates,
+        )
+
     async def propose_review_candidates(
         self,
         *,
@@ -730,6 +788,7 @@ class LearningService:
         prune_max_sources: int = DEFAULT_PRUNE_MAX_SOURCES,
         prune_limit: int = DEFAULT_PRUNE_LIMIT,
         skill_event_limit: int = 100,
+        feedback_event_limit: int = 100,
         include_skill_notes: bool = True,
     ) -> LearningProposalScanResult:
         memory_result = await self.propose_from_memory_policy(
@@ -740,15 +799,37 @@ class LearningService:
             prune_max_sources=prune_max_sources,
             prune_limit=prune_limit,
         )
+        feedback_result = await self.propose_from_feedback_events(event_limit=feedback_event_limit)
         if not include_skill_notes:
-            return memory_result
+            return LearningProposalScanResult(
+                proposals_considered=memory_result.proposals_considered + feedback_result.proposals_considered,
+                created_events=[*memory_result.created_events, *feedback_result.created_events],
+                created_candidates=[*memory_result.created_candidates, *feedback_result.created_candidates],
+                skipped_candidates=[*memory_result.skipped_candidates, *feedback_result.skipped_candidates],
+            )
 
         skill_result = await self.propose_skill_notes_from_events(event_limit=skill_event_limit)
         return LearningProposalScanResult(
-            proposals_considered=memory_result.proposals_considered + skill_result.proposals_considered,
-            created_events=[*memory_result.created_events, *skill_result.created_events],
-            created_candidates=[*memory_result.created_candidates, *skill_result.created_candidates],
-            skipped_candidates=[*memory_result.skipped_candidates, *skill_result.skipped_candidates],
+            proposals_considered=(
+                memory_result.proposals_considered
+                + feedback_result.proposals_considered
+                + skill_result.proposals_considered
+            ),
+            created_events=[
+                *memory_result.created_events,
+                *feedback_result.created_events,
+                *skill_result.created_events,
+            ],
+            created_candidates=[
+                *memory_result.created_candidates,
+                *feedback_result.created_candidates,
+                *skill_result.created_candidates,
+            ],
+            skipped_candidates=[
+                *memory_result.skipped_candidates,
+                *feedback_result.skipped_candidates,
+                *skill_result.skipped_candidates,
+            ],
         )
 
 
