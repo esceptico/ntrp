@@ -34,7 +34,7 @@ export function FactsSection({ tab, height, width, saving, emptyMessage = "No fa
         </text>
         <text>
           <span fg={tagColor}>
-            {fact.kind} · {fact.source_type} · salience {fact.salience} · {status} · {shortTime(fact.created_at)}
+            {fact.kind} · {fact.source_type} · priority {fact.salience} · {status} · {shortTime(fact.created_at)}
           </span>
         </text>
       </box>

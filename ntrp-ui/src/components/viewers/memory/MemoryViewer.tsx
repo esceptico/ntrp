@@ -13,8 +13,9 @@ import { ObservationsSection } from "./ObservationsSection.js";
 import { PruneSection } from "./PruneSection.js";
 import { MemoryEventsSection } from "./MemoryEventsSection.js";
 import { MemoryFooter } from "./MemoryFooter.js";
+import { OverviewSection } from "./OverviewSection.js";
 
-const TABS = ["profile", "facts", "observations", "prune", "events"] as const;
+const TABS = ["overview", "profile", "facts", "observations", "prune", "events"] as const;
 type TabType = (typeof TABS)[number];
 
 interface MemoryViewerProps {
@@ -23,7 +24,7 @@ interface MemoryViewerProps {
 }
 
 export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
-  const [activeTab, setActiveTab] = useState<TabType>("profile");
+  const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [profileFilters, setProfileFilters] = useState<FactFilters>({ status: "active" });
   const [factFilters, setFactFilters] = useState<FactFilters>({ status: "active" });
   const [observationFilters, setObservationFilters] = useState<ObservationFilters>({ status: "active" });
@@ -88,8 +89,10 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     >
       {({ width, height }) => {
         const sectionHeight = height - 2;
-        const tab = activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : eventsTab;
-        const filterDisplay = activeTab === "profile"
+        const tab = activeTab === "overview" ? null : activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : eventsTab;
+        const filterDisplay = activeTab === "overview"
+          ? "Profile · Facts · Patterns · Cleanup · Log"
+          : activeTab === "profile"
           ? `profile facts: ${profileFacts.length}`
           : activeTab === "facts"
           ? [
@@ -119,7 +122,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                   `events: ${memoryEvents.length}`,
                 ].join(" · ")
             : "";
-        const sortDisplay = `sort: ${tab.sortOrder}`;
+        const sortDisplay = tab ? `sort: ${tab.sortOrder}` : "";
 
         return (
           <>
@@ -128,7 +131,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 tabs={TABS}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                labels={{ profile: "Profile", facts: "Facts", observations: "Patterns", prune: "Cleanup", events: "Log" }}
+                labels={{ overview: "Overview", profile: "Profile", facts: "Facts", observations: "Patterns", prune: "Cleanup", events: "Log" }}
               />
               <box flexGrow={1} />
               {filterDisplay && (
@@ -136,8 +139,20 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                   <text><span fg={colors.text.disabled}>{filterDisplay}</span></text>
                 </box>
               )}
-              <text><span fg={colors.text.disabled}>{sortDisplay}</span></text>
+              {sortDisplay && <text><span fg={colors.text.disabled}>{sortDisplay}</span></text>}
             </box>
+
+            {activeTab === "overview" && (
+              <OverviewSection
+                profileFacts={profileFacts}
+                factTotal={factTotal}
+                observationTotal={observationTotal}
+                pruneDryRun={pruneDryRun}
+                memoryEvents={memoryEvents}
+                height={sectionHeight}
+                width={width}
+              />
+            )}
 
             {activeTab === "profile" && (
               <FactsSection tab={profileTab} height={sectionHeight} width={width} saving={saving} emptyMessage="No profile facts yet" />

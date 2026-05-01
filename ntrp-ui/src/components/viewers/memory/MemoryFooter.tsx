@@ -1,7 +1,7 @@
 import React from "react";
 import { Hints } from "../../ui/index.js";
 
-type TabType = "profile" | "facts" | "observations" | "prune" | "events";
+type TabType = "overview" | "profile" | "facts" | "observations" | "prune" | "events";
 
 interface MemoryFooterProps {
   activeTab: TabType;
@@ -13,6 +13,10 @@ interface MemoryFooterProps {
 }
 
 export function MemoryFooter({ activeTab, profileTab, factsTab, obsTab, pruneTab, eventsTab }: MemoryFooterProps): React.ReactNode {
+  if (activeTab === "overview") {
+    return <Hints items={[["1-6", "tabs"], ["r", "refresh"], ["q", "close"]]} />;
+  }
+
   if (activeTab === "profile") {
     if (profileTab.focusPane === "details") {
       return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ["enter", "expand"], ["r", "refresh"]]} />;

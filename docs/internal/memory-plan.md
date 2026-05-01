@@ -839,10 +839,10 @@ Status:
 ```text
 Profile tab added as a read-only projection over source facts
 Pattern rows/details expose creator and policy metadata
-top-level tabs are now Profile, Facts, Patterns, Cleanup, Log
+top-level tabs are now Overview, Profile, Facts, Patterns, Cleanup, Log
 Cleanup can archive the selected candidate or all currently matching candidates
 Dreams are hidden from the main memory nav for now
-Overview and Recall Inspector are still pending
+Recall Inspector is still pending
 ```
 
 Replace the current 3-tab shape with:
