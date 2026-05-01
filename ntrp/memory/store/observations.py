@@ -11,6 +11,12 @@ from ntrp.memory.models import Embedding, HistoryEntry, Observation
 
 _SQL_GET_OBSERVATION = "SELECT * FROM observations WHERE id = ?"
 _SQL_LIST_ALL_WITH_EMBEDDINGS = "SELECT * FROM observations WHERE embedding IS NOT NULL AND archived_at IS NULL"
+_SQL_LIST_MISSING_EMBEDDINGS = """
+    SELECT * FROM observations
+    WHERE embedding IS NULL AND archived_at IS NULL
+    ORDER BY updated_at DESC
+    LIMIT ?
+"""
 _SQL_COUNT_OBSERVATIONS = "SELECT COUNT(*) FROM observations"
 _SQL_LIST_RECENT_OBSERVATIONS = "SELECT * FROM observations WHERE archived_at IS NULL ORDER BY updated_at DESC LIMIT ?"
 _SQL_GET_OBSERVATIONS_BY_IDS = "SELECT * FROM observations WHERE id IN ({placeholders})"
@@ -343,6 +349,10 @@ class ObservationRepository:
 
     async def list_all_with_embeddings(self) -> list[Observation]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_ALL_WITH_EMBEDDINGS)
+        return [Observation.model_validate(_row_dict(r)) for r in rows]
+
+    async def list_missing_embeddings(self, limit: int = 100) -> list[Observation]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_MISSING_EMBEDDINGS, (limit,))
         return [Observation.model_validate(_row_dict(r)) for r in rows]
 
     async def update_summary(self, observation_id: int, summary: str, embedding: Embedding) -> Observation | None:

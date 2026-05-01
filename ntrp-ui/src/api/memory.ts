@@ -186,6 +186,12 @@ export interface MemoryStorageHealth {
 }
 
 export interface MemoryAudit {
+  facts: {
+    no_embedding: number;
+  };
+  observations: {
+    no_embedding: number;
+  };
   storage: {
     facts: MemoryStorageHealth;
     observations: MemoryStorageHealth;
@@ -206,6 +212,14 @@ export interface MemoryRecallInspectResult {
     observations: Observation[];
     user_facts: Fact[];
   };
+}
+
+export interface MemoryRepairEmbeddingsResult {
+  apply: boolean;
+  fact_ids: number[];
+  observation_ids: number[];
+  facts_repaired: number;
+  observations_repaired: number;
 }
 
 function factQuery(limit: number, filters?: FactFilters): string {
@@ -359,6 +373,14 @@ export async function getMemoryEvents(config: Config, limit = 100): Promise<{ ev
 
 export async function getMemoryAudit(config: Config): Promise<MemoryAudit> {
   return api.get<MemoryAudit>(`${config.serverUrl}/memory/audit`);
+}
+
+export async function repairMemoryEmbeddings(
+  config: Config,
+  apply = false,
+  limit = 100
+): Promise<MemoryRepairEmbeddingsResult> {
+  return api.post<MemoryRepairEmbeddingsResult>(`${config.serverUrl}/memory/repair/embeddings`, { apply, limit });
 }
 
 export async function purgeMemory(config: Config): Promise<{ status: string; deleted: Record<string, number> }> {

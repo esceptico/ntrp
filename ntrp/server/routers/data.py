@@ -12,6 +12,7 @@ from ntrp.server.schemas import (
     MemoryRecallInspectRequest,
     MemoryPruneApplyRequest,
     MemoryPruneDryRunRequest,
+    MemoryRepairEmbeddingsRequest,
     UpdateFactMetadataRequest,
     UpdateFactRequest,
     UpdateObservationRequest,
@@ -409,6 +410,14 @@ async def inspect_memory_recall(request: MemoryRecallInspectRequest, svc: Memory
             "user_facts": [_fact_payload(f) for f in session_memory.user_facts],
         },
     }
+
+
+@router.post("/memory/repair/embeddings")
+async def repair_memory_embeddings(
+    request: MemoryRepairEmbeddingsRequest,
+    svc: MemoryService = Depends(require_memory),
+):
+    return await svc.repair_missing_embeddings(limit=request.limit, apply=request.apply)
 
 
 @router.post("/memory/prune/dry-run")

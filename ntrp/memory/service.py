@@ -383,6 +383,9 @@ class MemoryService:
         session_memory = await self.memory.get_session_memory()
         return context, session_memory
 
+    async def repair_missing_embeddings(self, *, limit: int = 100, apply: bool = False) -> dict:
+        return await self.memory.repair_missing_embeddings(limit=limit, apply=apply)
+
     async def prune_observations_dry_run(
         self,
         *,

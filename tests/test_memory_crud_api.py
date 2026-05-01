@@ -595,6 +595,55 @@ class TestMemoryAuditAPI:
         assert stored_obs.access_count == 0
 
     @pytest.mark.asyncio
+    async def test_repair_embeddings_is_explicit_and_audited(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        async def mock_embed(texts: list[str]):
+            return [mock_embedding(text) for text in texts]
+
+        test_runtime.memory.embedder.embed = mock_embed
+
+        fact = await test_runtime.memory.facts.create(
+            text="Fact missing an embedding",
+            source_type=SourceType.EXPLICIT,
+        )
+        obs = await test_runtime.memory.observations.create(
+            summary="Pattern missing an embedding",
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        dry_run = await test_client.post("/memory/repair/embeddings", json={"limit": 10})
+
+        assert dry_run.status_code == 200
+        assert dry_run.json()["apply"] is False
+        assert dry_run.json()["fact_ids"] == [fact.id]
+        assert dry_run.json()["observation_ids"] == [obs.id]
+        assert (await test_runtime.memory.facts.get(fact.id)).embedding is None
+        assert (await test_runtime.memory.observations.get(obs.id)).embedding is None
+
+        applied = await test_client.post(
+            "/memory/repair/embeddings",
+            json={"limit": 10, "apply": True},
+        )
+
+        assert applied.status_code == 200
+        body = applied.json()
+        assert body["facts_repaired"] == 1
+        assert body["observations_repaired"] == 1
+        assert (await test_runtime.memory.facts.get(fact.id)).embedding is not None
+        assert (await test_runtime.memory.observations.get(obs.id)).embedding is not None
+
+        events = await test_client.get("/memory/events", params={"action": "embeddings.repaired"})
+        assert events.status_code == 200
+        event = events.json()["events"][0]
+        assert event["actor"] == "backend"
+        assert event["policy_version"] == "memory.repair.v1"
+        assert event["details"]["fact_ids"] == [fact.id]
+        assert event["details"]["observation_ids"] == [obs.id]
+
+    @pytest.mark.asyncio
     async def test_prune_dry_run_does_not_delete(
         self,
         test_client: AsyncClient,

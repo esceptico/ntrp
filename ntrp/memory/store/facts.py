@@ -248,6 +248,12 @@ _SQL_RESET_CONSOLIDATED = "UPDATE facts SET consolidated_at = NULL WHERE consoli
 _SQL_LIST_ALL_WITH_EMBEDDINGS = (
     "SELECT * FROM facts WHERE embedding IS NOT NULL AND archived_at IS NULL ORDER BY created_at DESC"
 )
+_SQL_LIST_MISSING_EMBEDDINGS = """
+    SELECT * FROM facts
+    WHERE embedding IS NULL AND archived_at IS NULL
+    ORDER BY created_at DESC
+    LIMIT ?
+"""
 _SQL_UPDATE_EMBEDDING = "UPDATE facts SET embedding = ? WHERE id = ?"
 
 
@@ -731,6 +737,10 @@ class FactRepository:
 
     async def list_all_with_embeddings(self) -> list[Fact]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_ALL_WITH_EMBEDDINGS)
+        return [Fact.model_validate(_row_dict(r)) for r in rows]
+
+    async def list_missing_embeddings(self, limit: int = 100) -> list[Fact]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_MISSING_EMBEDDINGS, (limit,))
         return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def archive_batch(self, fact_ids: list[int]) -> int:

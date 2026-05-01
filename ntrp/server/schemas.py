@@ -296,6 +296,11 @@ class MemoryRecallInspectRequest(BaseModel):
     limit: int = Field(default=5, ge=1, le=20)
 
 
+class MemoryRepairEmbeddingsRequest(BaseModel):
+    apply: bool = False
+    limit: int = Field(default=100, ge=1, le=500)
+
+
 class UpdateObservationRequest(BaseModel):
     summary: str = Field(..., min_length=1, max_length=10000)
 

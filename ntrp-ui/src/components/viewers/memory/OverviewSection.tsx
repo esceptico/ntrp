@@ -50,6 +50,7 @@ export function OverviewSection({
   const storageIssues =
     storageIssueCount(memoryAudit?.storage.facts) + storageIssueCount(memoryAudit?.storage.observations);
   const relationIssues = relationIssueCount(memoryAudit?.relations);
+  const missingEmbeddings = (memoryAudit?.facts.no_embedding ?? 0) + (memoryAudit?.observations.no_embedding ?? 0);
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
@@ -63,6 +64,7 @@ export function OverviewSection({
         <MetricRow label="Recall" value="query" note="inspect retrieved context before it reaches the agent" />
         <MetricRow label="Facts" value={factTotal} note="source-of-truth memory records" />
         <MetricRow label="Patterns" value={observationTotal} note="derived summaries with supporting facts" />
+        <MetricRow label="Embeddings" value={missingEmbeddings} note="active rows missing vectors" />
         <MetricRow label="Storage" value={storageIssues} note="vec/FTS index rows needing repair" />
         <MetricRow label="Relations" value={relationIssues} note="orphaned provenance/entity links" />
         <MetricRow

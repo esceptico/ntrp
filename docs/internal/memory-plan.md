@@ -1250,6 +1250,7 @@ Status:
   facts/observations missing or stale vec rows
   facts/observations missing or stale FTS rows
   orphan relation rows for entities, generated-memory provenance, and temporal checkpoints
+POST /memory/repair/embeddings adds dry-run-first missing-embedding repair
 ```
 
 ### 2. Fact Type Backfill

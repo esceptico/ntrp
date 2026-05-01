@@ -63,6 +63,14 @@ class ReembedProgress(TypedDict):
     done: int
 
 
+class RepairEmbeddingsResult(TypedDict):
+    apply: bool
+    fact_ids: list[int]
+    observation_ids: list[int]
+    facts_repaired: int
+    observations_repaired: int
+
+
 class FactMemory:
     def __init__(
         self,
@@ -173,6 +181,45 @@ class FactMemory:
         if self._reembed_task and not self._reembed_task.done():
             self._reembed_task.cancel()
         self._reembed_task = asyncio.create_task(self._run_reembed(embedding, rebuild=rebuild))
+
+    async def repair_missing_embeddings(self, *, limit: int = 100, apply: bool = False) -> RepairEmbeddingsResult:
+        facts = await self.facts.list_missing_embeddings(limit=max(0, limit))
+        observation_limit = max(0, limit - len(facts))
+        observations = await self.observations.list_missing_embeddings(limit=observation_limit)
+
+        result: RepairEmbeddingsResult = {
+            "apply": apply,
+            "fact_ids": [fact.id for fact in facts],
+            "observation_ids": [obs.id for obs in observations],
+            "facts_repaired": 0,
+            "observations_repaired": 0,
+        }
+        if not apply or (not facts and not observations):
+            return result
+
+        fact_embeddings = await self.embedder.embed([fact.text for fact in facts]) if facts else []
+        observation_embeddings = await self.embedder.embed([obs.summary for obs in observations]) if observations else []
+
+        async with self.transaction():
+            for fact, embedding in zip(facts, fact_embeddings, strict=False):
+                await self.facts.update_embedding(fact.id, embedding)
+            for obs, embedding in zip(observations, observation_embeddings, strict=False):
+                await self.observations.update_embedding(obs.id, embedding)
+            await self.events.create(
+                actor="backend",
+                action="embeddings.repaired",
+                target_type="memory",
+                reason="manual missing-embedding repair",
+                policy_version="memory.repair.v1",
+                details={
+                    "fact_ids": result["fact_ids"],
+                    "observation_ids": result["observation_ids"],
+                },
+            )
+
+        result["facts_repaired"] = len(facts)
+        result["observations_repaired"] = len(observations)
+        return result
 
     async def _run_reembed(self, embedding: EmbeddingConfig, *, rebuild: bool = False, batch_size: int = 100) -> None:
         try:
