@@ -7,6 +7,7 @@ import pytest_asyncio
 import ntrp.database as database
 from ntrp.automation.builtins import seed_builtins
 from ntrp.automation.models import Automation
+from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.store import AutomationStore
 from ntrp.automation.triggers import TimeTrigger
 from ntrp.constants import (
@@ -33,6 +34,7 @@ def _automation(
     enabled: bool = True,
     next_run_at: datetime | None = None,
     running_since: datetime | None = None,
+    handler: str | None = None,
 ) -> Automation:
     return Automation(
         task_id=task_id,
@@ -47,6 +49,7 @@ def _automation(
         last_result=None,
         running_since=running_since,
         writable=False,
+        handler=handler,
     )
 
 
@@ -148,3 +151,31 @@ async def test_seed_builtins_splits_memory_jobs(automation_store: AutomationStor
     assert automations[BUILTIN_MEMORY_HEALTH_ID].writable is False
     assert automations[BUILTIN_LEARNING_REVIEW_ID].handler == "learning_review"
     assert automations[BUILTIN_LEARNING_REVIEW_ID].writable is True
+
+
+@pytest.mark.asyncio
+async def test_scheduler_records_failed_automation_learning_event(automation_store: AutomationStore):
+    events = []
+
+    async def record_learning_event(**event):
+        events.append(event)
+
+    async def fail_handler(context):
+        raise RuntimeError("boom")
+
+    scheduler = Scheduler(
+        store=automation_store,
+        build_deps=lambda: None,
+        record_learning_event=record_learning_event,
+    )
+    scheduler.register_handler("fail", fail_handler)
+    automation = _automation("task-fail", handler="fail")
+    await automation_store.save(automation)
+
+    await scheduler._run_and_finalize(automation)
+
+    assert len(events) == 1
+    assert events[0]["source_type"] == "automation_feedback"
+    assert events[0]["scope"] == "automation"
+    assert events[0]["outcome"] == "failed"
+    assert events[0]["evidence_ids"] == ["automation:task-fail"]

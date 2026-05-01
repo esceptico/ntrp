@@ -29,7 +29,12 @@ import {
   type MemoryPruneDryRun,
 } from "../api/client.js";
 import type { MemoryTabType } from "../lib/memoryTabs.js";
-import { canApproveLearningCandidate, canRejectLearningCandidate } from "../lib/memoryLearning.js";
+import {
+  canApplyLearningCandidate,
+  canApproveLearningCandidate,
+  canRejectLearningCandidate,
+  canRevertLearningCandidate,
+} from "../lib/memoryLearning.js";
 
 interface UseMemoryKeypressOptions {
   activeTab: MemoryTabType;
@@ -431,13 +436,22 @@ export function useMemoryKeypress({
         }
         if (
           key.name === "a" &&
-          canApproveLearningCandidate(learningTab.selectedCandidate.status)
+          (
+            canApproveLearningCandidate(learningTab.selectedCandidate.status) ||
+            canApplyLearningCandidate(learningTab.selectedCandidate.status)
+          )
         ) {
-          learningTab.setConfirmStatus("approved");
+          learningTab.setConfirmStatus(
+            canApproveLearningCandidate(learningTab.selectedCandidate.status) ? "approved" : "applied"
+          );
           return;
         }
         if (key.name === "d" && canRejectLearningCandidate(learningTab.selectedCandidate.status)) {
           learningTab.setConfirmStatus("rejected");
+          return;
+        }
+        if (key.name === "z" && canRevertLearningCandidate(learningTab.selectedCandidate.status)) {
+          learningTab.setConfirmStatus("reverted");
           return;
         }
       }

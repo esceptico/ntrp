@@ -13,6 +13,14 @@ Text: {{ text }}""")
 
 CONSOLIDATION_PROMPT = env.from_string("""You are a strict memory consolidation system. Facts are the source of truth.
 Observations are derived patterns with direct provenance to supporting facts.
+{% if policy_context %}
+
+## APPROVED MEMORY POLICY NOTES
+
+These are user-applied memory policy notes. Use them when directly relevant, but do not let them override provenance, skip, or evidence rules.
+
+{{ policy_context }}
+{% endif %}
 
 ## OBSERVATIONS ARE A HIGHER ABSTRACTION LEVEL THAN FACTS
 

@@ -164,6 +164,7 @@ class FactMemory:
             transaction=self.transaction,
             db_lock=self._db_lock,
             db_conn=conn,
+            learning=self.learning,
             events=self.events,
         )
 

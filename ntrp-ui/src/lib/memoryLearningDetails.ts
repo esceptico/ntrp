@@ -33,6 +33,8 @@ export function learningDetailRows(details: Record<string, unknown>): LearningDe
   appendArrayCount(rows, details, "fact_ids", "matched facts");
   appendArrayCount(rows, details, "event_ids", "source events");
   appendEvidenceSummary(rows, details);
+  appendCountMap(rows, details, "outcome_counts", "outcomes");
+  appendCountMap(rows, details, "scope_counts", "scopes");
   appendSampleSignal(rows, details);
   appendString(rows, details, "reason", "reason", titleCase);
   appendString(rows, details, "source", "source", titleCase);
@@ -92,6 +94,21 @@ function appendArrayCount(
 function appendEvidenceSummary(rows: LearningDetailRow[], details: Record<string, unknown>): void {
   const evidenceIds = arrayValue(details, "direct_evidence_ids")?.filter(isString);
   if (evidenceIds?.length) rows.push({ label: "direct evidence", value: summarizeLearningEvidence(evidenceIds) });
+}
+
+function appendCountMap(
+  rows: LearningDetailRow[],
+  details: Record<string, unknown>,
+  key: string,
+  label: string,
+): void {
+  const value = objectValue(details, key);
+  if (!value) return;
+  const items = Object.entries(value)
+    .filter((entry): entry is [string, number] => typeof entry[1] === "number")
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => `${name}: ${count}`);
+  if (items.length) rows.push({ label, value: items.join(", ") });
 }
 
 function appendSampleSignal(rows: LearningDetailRow[], details: Record<string, unknown>): void {

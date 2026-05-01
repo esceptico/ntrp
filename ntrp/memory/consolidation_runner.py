@@ -11,10 +11,12 @@ from ntrp.memory.consolidation import PATTERN_POLICY_VERSION, apply_consolidatio
 from ntrp.memory.decay import should_archive_fact, should_archive_observation
 from ntrp.memory.dreams import run_dream_pass
 from ntrp.memory.fact_merge import fact_merge_pass
+from ntrp.memory.learning_context import get_applied_memory_policy_context
 from ntrp.memory.observation_merge import observation_merge_pass
 from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.events import MemoryEventRepository
 from ntrp.memory.store.facts import FactRepository
+from ntrp.memory.store.learning import LearningRepository
 from ntrp.memory.store.observations import ObservationRepository
 from ntrp.memory.temporal import temporal_consolidation_pass
 
@@ -34,11 +36,13 @@ class ConsolidationRunner:
         transaction: Callable[..., Any],
         db_lock: asyncio.Lock,
         db_conn: Any,
+        learning: LearningRepository,
         events: MemoryEventRepository | None = None,
     ):
         self.facts = facts
         self.observations = observations
         self.dreams = dreams
+        self.learning = learning
         self.embedder = embedder
         self._model_fn = model_fn
         self._transaction = transaction
@@ -112,9 +116,19 @@ class ConsolidationRunner:
                 fact.model_copy(update={"entity_refs": await self.facts.get_entity_refs(fact.id)}) for fact in facts
             ]
 
+        policy_context = await get_applied_memory_policy_context(
+            self,
+            target_prefixes=("memory.observations.", "memory.facts.supersession."),
+        )
         decisions = []
         for fact in facts:
-            actions = await get_consolidation_decisions(fact, self.observations, self.facts, self.model)
+            actions = await get_consolidation_decisions(
+                fact,
+                self.observations,
+                self.facts,
+                self.model,
+                policy_context=policy_context,
+            )
             precomputed = []
             for action in actions:
                 embedding = None

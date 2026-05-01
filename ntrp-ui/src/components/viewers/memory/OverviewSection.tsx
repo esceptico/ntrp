@@ -10,6 +10,7 @@ import type {
   MemoryStorageHealth,
 } from "../../../api/client.js";
 import { useAccentColor } from "../../../hooks/index.js";
+import { learningLane } from "../../../lib/memoryLearning.js";
 import { truncateText } from "../../../lib/utils.js";
 import { colors } from "../../ui/index.js";
 
@@ -148,6 +149,11 @@ export function OverviewSection({
     : "";
   const policyReviewCount = memoryInjectionPolicy?.summary.candidates ?? 0;
   const cleanupCount = pruneDryRun?.summary.total ?? 0;
+  const activeLearningCount = learningCandidates.filter((candidate) =>
+    candidate.status === "applied" ||
+    (learningLane(candidate.change_type, candidate.target_key) === "runtime" && candidate.status === "approved")
+  ).length;
+  const openLearningCount = learningCandidates.filter((candidate) => candidate.status === "proposed").length;
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
@@ -183,7 +189,11 @@ export function OverviewSection({
         <MetricRow
           label="Improve"
           value={learningCandidates.length}
-          note={learningCandidates.length > 0 ? "durable improvement proposals" : "no proposals"}
+          note={
+            learningCandidates.length > 0
+              ? `${openLearningCount} proposed, ${activeLearningCount} active`
+              : "no proposals"
+          }
           width={textWidth}
         />
       </box>

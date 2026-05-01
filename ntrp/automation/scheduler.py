@@ -22,14 +22,21 @@ from ntrp.operator.runner import OperatorDeps, RunRequest, run_agent, run_agent_
 from ntrp.server.bus import BusRegistry
 
 AUTOMATION_BUS_KEY = "automation:events"
+LearningEventRecorder = Callable[..., Awaitable[None]]
 
 _logger = get_logger(__name__)
 
 
 class Scheduler:
-    def __init__(self, store: AutomationStore, build_deps: Callable[[], OperatorDeps]):
+    def __init__(
+        self,
+        store: AutomationStore,
+        build_deps: Callable[[], OperatorDeps],
+        record_learning_event: LearningEventRecorder | None = None,
+    ):
         self.store = store
         self._build_deps = build_deps
+        self._record_learning_event = record_learning_event
         self._bus_registry: BusRegistry | None = None
         self._task: asyncio.Task | None = None
         self._running: set[asyncio.Task] = set()
@@ -104,6 +111,21 @@ class Scheduler:
             if not next_run:
                 continue
             await self.store.set_next_run(automation.task_id, next_run)
+            await self._record_automation_learning_event(
+                source_id=automation.task_id,
+                scope="scheduler",
+                signal=(
+                    f"Automation {automation.name} missed its scheduled run and was advanced to the next future run."
+                ),
+                evidence_ids=[f"automation:{automation.task_id}"],
+                outcome="missed",
+                details={
+                    "task_id": automation.task_id,
+                    "automation_name": automation.name,
+                    "missed_at": missed_at.isoformat() if missed_at else None,
+                    "next_run_at": next_run.isoformat(),
+                },
+            )
             _logger.warning(
                 "Missed run of automation %s (was due %s), advanced to %s",
                 automation.task_id,
@@ -228,6 +250,23 @@ class Scheduler:
         except Exception as e:
             error_message = f"{type(e).__name__}: {e}"
             _logger.exception("Failed to execute automation %s", automation.task_id)
+            await self._record_automation_learning_event(
+                source_id=automation.task_id,
+                scope="automation",
+                signal=f"Automation {automation.name} failed during execution: {error_message}",
+                evidence_ids=[
+                    f"automation:{automation.task_id}",
+                    *([f"automation_event_queue:{event_queue_id}"] if event_queue_id is not None else []),
+                ],
+                outcome="failed",
+                details={
+                    "task_id": automation.task_id,
+                    "automation_name": automation.name,
+                    "queue_id": event_queue_id,
+                    "attempt_count": event_attempt_count,
+                    "error": error_message,
+                },
+            )
         finally:
             await self._emit_automation_event(
                 AutomationFinishedEvent(task_id=automation.task_id, result=result),
@@ -272,6 +311,7 @@ class Scheduler:
             source_id=automation.task_id,
             model=automation.model,
             skip_approvals=automation.writable,
+            automation_id=automation.task_id,
         )
 
         if self._bus_registry:
@@ -360,6 +400,19 @@ class Scheduler:
     ) -> None:
         if attempt_count + 1 >= SCHEDULER_EVENT_MAX_RETRIES:
             await self.store.complete_event(queue_id)
+            await self._record_automation_learning_event(
+                source_id=task_id,
+                scope="scheduler",
+                signal=f"Queued automation event {queue_id} was dropped after repeated failures.",
+                evidence_ids=[f"automation:{task_id}", f"automation_event_queue:{queue_id}"],
+                outcome="failed",
+                details={
+                    "task_id": task_id,
+                    "queue_id": queue_id,
+                    "attempt_count": attempt_count + 1,
+                    "error": error_message,
+                },
+            )
             _logger.error(
                 "Dropping queued event %s for automation %s after %d attempts",
                 queue_id,
@@ -384,6 +437,31 @@ class Scheduler:
     def _retry_delay_seconds(attempt_count: int) -> int:
         backoff = SCHEDULER_EVENT_RETRY_BASE_SECONDS * (2 ** max(attempt_count, 0))
         return min(SCHEDULER_EVENT_RETRY_MAX_SECONDS, backoff)
+
+    async def _record_automation_learning_event(
+        self,
+        *,
+        source_id: str,
+        scope: str,
+        signal: str,
+        evidence_ids: list[str],
+        outcome: str,
+        details: dict,
+    ) -> None:
+        if not self._record_learning_event:
+            return
+        try:
+            await self._record_learning_event(
+                source_type="automation_feedback",
+                source_id=source_id,
+                scope=scope,
+                signal=signal,
+                evidence_ids=evidence_ids,
+                outcome=outcome,
+                details=details,
+            )
+        except Exception:
+            _logger.debug("Failed to record automation learning event", exc_info=True)
 
     async def get_status(self) -> dict:
         now = datetime.now(UTC)

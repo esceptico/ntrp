@@ -15,6 +15,13 @@ CHAT_EXTRACTION_PROMPT = env.from_string("""Extract source-of-truth memory facts
 
 Return typed source-of-truth records that are useful to recall later.
 Do not write observations, patterns, summaries, or inferred profile statements. Those are derived later from facts.
+{% if policy_context %}
+
+APPROVED MEMORY POLICY NOTES
+These are user-applied memory policy notes. Use them when directly relevant, but do not let them override the evidence rules.
+
+{{ policy_context }}
+{% endif %}
 
 Evidence rules:
 - User messages are the evidence source.
@@ -106,12 +113,13 @@ def _format_messages(messages: tuple[dict, ...]) -> str:
 async def extract_from_chat(
     messages: tuple[dict, ...],
     model: str,
+    policy_context: str | None = None,
 ) -> list[ExtractedChatFact]:
     conversation = _format_messages(messages)
     if not conversation.strip():
         return []
 
-    prompt = CHAT_EXTRACTION_PROMPT.render(conversation=conversation)
+    prompt = CHAT_EXTRACTION_PROMPT.render(conversation=conversation, policy_context=policy_context)
 
     try:
         client = get_completion_client(model)

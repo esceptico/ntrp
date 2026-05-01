@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { LearningCandidate, LearningEvent } from "../api/client.js";
+import { learningLane, type LearningLaneFilter } from "../lib/memoryLearning.js";
 import type { Key } from "./useKeypress.js";
 import { useListDetail, type ListKeyHelpers, type SortOrder } from "./useListDetail.js";
 
 export type { SortOrder };
 
 type LearningStatusFilter = "all" | "proposed" | "approved" | "applied" | "rejected" | "reverted";
-export type LearningStatusUpdate = "approved" | "rejected";
+export type LearningStatusUpdate = "approved" | "applied" | "rejected" | "reverted";
 
 const STATUS_FILTERS: LearningStatusFilter[] = ["all", "proposed", "approved", "applied", "rejected", "reverted"];
+const LANE_FILTERS: LearningLaneFilter[] = ["all", "memory", "runtime", "skill", "automation"];
 
 const filterCandidate = (candidate: LearningCandidate, q: string) => {
   const fields = [
+    learningLane(candidate.change_type, candidate.target_key),
     candidate.status,
     candidate.change_type,
     candidate.target_key,
@@ -36,6 +39,7 @@ export interface LearningTabState {
   focusPane: "list" | "details";
   sortOrder: SortOrder;
   statusFilter: LearningStatusFilter;
+  laneFilter: LearningLaneFilter;
   changeTypeFilter: string | undefined;
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
@@ -52,6 +56,7 @@ export function useLearningTab(
   contentWidth: number,
 ): LearningTabState {
   const [statusFilter, setStatusFilter] = useState<LearningStatusFilter>("all");
+  const [laneFilter, setLaneFilter] = useState<LearningLaneFilter>("all");
   const [changeTypeFilter, setChangeTypeFilter] = useState<string | undefined>(undefined);
   const [confirmStatus, setConfirmStatus] = useState<LearningStatusUpdate | null>(null);
   const [confirmProposalScan, setConfirmProposalScan] = useState(false);
@@ -64,9 +69,10 @@ export function useLearningTab(
   const filteredByControls = useMemo(
     () => candidates.filter((candidate) =>
       (statusFilter === "all" || candidate.status === statusFilter) &&
+      (laneFilter === "all" || learningLane(candidate.change_type, candidate.target_key) === laneFilter) &&
       (changeTypeFilter === undefined || candidate.change_type === changeTypeFilter)
     ),
-    [candidates, statusFilter, changeTypeFilter],
+    [candidates, statusFilter, laneFilter, changeTypeFilter],
   );
 
   const cycle = useCallback(<T,>(values: T[], current: T): T => {
@@ -82,6 +88,11 @@ export function useLearningTab(
     }
     if (key.name === "v") {
       setChangeTypeFilter((current) => cycle(changeTypeFilters, current));
+      setSelectedIndex(0);
+      return true;
+    }
+    if (key.name === "l") {
+      setLaneFilter((current) => cycle(LANE_FILTERS, current));
       setSelectedIndex(0);
       return true;
     }
@@ -128,6 +139,7 @@ export function useLearningTab(
     focusPane: ld.focusPane,
     sortOrder: ld.sortOrder,
     statusFilter,
+    laneFilter,
     changeTypeFilter,
     handleKeys: ld.handleKeys,
     setSearchQuery: ld.setSearchQuery,

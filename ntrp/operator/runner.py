@@ -12,7 +12,7 @@ from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationProgressEvent, ToolCallEvent, ToolResultEvent, agent_event_to_sse
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.formatting import format_session_memory_render
-from ntrp.memory.learning_context import get_approved_learning_context
+from ntrp.memory.learning_context import get_applied_automation_policy_context, get_approved_learning_context
 from ntrp.memory.prefetch import prefetch_memory_context
 from ntrp.server.bus import SessionBus
 from ntrp.tools.directives import load_directives
@@ -38,6 +38,7 @@ class RunRequest:
     prompt_suffix: str = ""
     model: str | None = None
     skip_approvals: bool = False
+    automation_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,21 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
                 details={"source_id": request.source_id, "has_context": True},
             )
         learning_context = await get_approved_learning_context(deps.memory)
+        if request.automation_id and (
+            automation_policy := await get_applied_automation_policy_context(
+                deps.memory,
+                automation_id=request.automation_id,
+            )
+        ):
+            learning_context = "\n".join(
+                part
+                for part in (
+                    learning_context,
+                    "Applied automation policy notes:",
+                    automation_policy,
+                )
+                if part
+            )
 
     system_prompt = build_system_prompt(
         source_details=deps.source_details,

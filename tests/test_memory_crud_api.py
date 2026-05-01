@@ -1452,6 +1452,97 @@ class TestMemoryAuditAPI:
         ] == []
 
     @pytest.mark.asyncio
+    async def test_learning_review_scan_proposes_prompt_notes_from_direct_evidence(
+        self,
+        test_client: AsyncClient,
+    ):
+        event_response = await test_client.post(
+            "/memory/learning/events",
+            json={
+                "source_type": "user_correction",
+                "source_id": "msg-runtime-1",
+                "scope": "runtime",
+                "signal": "User corrected how the agent frames approved learning notes.",
+                "evidence_ids": ["message:msg-runtime-1"],
+                "outcome": "corrected",
+                "details": {
+                    "target_key": "prompt.learning_context",
+                    "proposal": "When using approved learning notes, keep them bounded and procedural.",
+                    "expected_metric": "fewer repeated prompt-behavior corrections",
+                },
+            },
+        )
+        assert event_response.status_code == 200
+        source_event = event_response.json()["event"]
+
+        response = await test_client.post(
+            "/memory/learning/propose",
+            json={
+                "access_limit": 1,
+                "profile_limit": 1,
+                "prune_limit": 1,
+                "prompt_event_limit": 10,
+            },
+        )
+
+        assert response.status_code == 200
+        candidates = [
+            candidate for candidate in response.json()["created_candidates"] if candidate["change_type"] == "prompt_note"
+        ]
+        assert len(candidates) == 1
+        candidate = candidates[0]
+        assert candidate["target_key"] == "prompt.learning_context"
+        assert candidate["policy_version"] == "learning.prompt_note.v1"
+        assert candidate["evidence_event_ids"] == [source_event["id"]]
+        assert candidate["details"]["direct_evidence_ids"] == ["message:msg-runtime-1"]
+
+    @pytest.mark.asyncio
+    async def test_learning_review_scan_proposes_automation_rules_from_direct_evidence(
+        self,
+        test_client: AsyncClient,
+    ):
+        event_response = await test_client.post(
+            "/memory/learning/events",
+            json={
+                "source_type": "automation_feedback",
+                "source_id": "builtin:learning-review",
+                "scope": "automation",
+                "signal": "Learning review ran too noisily after routine memory maintenance.",
+                "evidence_ids": ["automation_run:builtin:learning-review"],
+                "outcome": "failed",
+                "details": {
+                    "task_id": "builtin:learning-review",
+                    "proposal": "Review trigger timing and output filtering for the learning-review automation.",
+                },
+            },
+        )
+        assert event_response.status_code == 200
+        source_event = event_response.json()["event"]
+
+        response = await test_client.post(
+            "/memory/learning/propose",
+            json={
+                "access_limit": 1,
+                "profile_limit": 1,
+                "prune_limit": 1,
+                "automation_event_limit": 10,
+            },
+        )
+
+        assert response.status_code == 200
+        candidates = [
+            candidate
+            for candidate in response.json()["created_candidates"]
+            if candidate["change_type"] == "automation_rule"
+        ]
+        assert len(candidates) == 1
+        candidate = candidates[0]
+        assert candidate["target_key"] == "automation.builtin:learning-review"
+        assert candidate["policy_version"] == "learning.automation_rule.v1"
+        assert candidate["evidence_event_ids"] == [source_event["id"]]
+        assert candidate["details"]["direct_evidence_ids"] == ["automation_run:builtin:learning-review"]
+
+    @pytest.mark.asyncio
     async def test_learning_policy_scan_surfaces_supersession_review(
         self,
         test_client: AsyncClient,

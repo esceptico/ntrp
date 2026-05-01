@@ -2,7 +2,12 @@ import React from "react";
 import { Hints } from "../../ui/index.js";
 import type { RecallInspectTabState } from "../../../hooks/useRecallInspectTab.js";
 import type { MemoryTabType } from "../../../lib/memoryTabs.js";
-import { canApproveLearningCandidate, canRejectLearningCandidate } from "../../../lib/memoryLearning.js";
+import {
+  canApplyLearningCandidate,
+  canApproveLearningCandidate,
+  canRejectLearningCandidate,
+  canRevertLearningCandidate,
+} from "../../../lib/memoryLearning.js";
 
 interface MemoryFooterProps {
   activeTab: MemoryTabType;
@@ -14,7 +19,7 @@ interface MemoryFooterProps {
   learningTab: {
     focusPane: string;
     searchMode: boolean;
-    confirmStatus: "approved" | "rejected" | null;
+    confirmStatus: "approved" | "applied" | "rejected" | "reverted" | null;
     confirmProposalScan: boolean;
     selectedCandidate: { status: string } | null;
   };
@@ -76,21 +81,33 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
       return <Hints items={[["y", "create proposals"], ["n/esc", "cancel"]]} />;
     }
     if (learningTab.confirmStatus) {
-      return <Hints items={[["y", learningTab.confirmStatus === "approved" ? "approve" : "reject"], ["n/esc", "cancel"]]} />;
+      const action =
+        learningTab.confirmStatus === "approved"
+          ? "approve"
+          : learningTab.confirmStatus === "applied"
+            ? "apply"
+            : learningTab.confirmStatus === "reverted"
+              ? "revert"
+              : "reject";
+      return <Hints items={[["y", action], ["n/esc", "cancel"]]} />;
     }
     const selectedStatus = learningTab.selectedCandidate?.status;
     const canReview = learningTab.focusPane === "details";
     const canApprove = canReview && canApproveLearningCandidate(selectedStatus);
+    const canApply = canReview && canApplyLearningCandidate(selectedStatus);
     const canReject = canReview && canRejectLearningCandidate(selectedStatus);
+    const canRevert = canReview && canRevertLearningCandidate(selectedStatus);
     const reviewHints: [string, string][] = [];
     if (canApprove) reviewHints.push(["a", "approve"]);
+    if (canApply) reviewHints.push(["a", "apply"]);
     if (canReject) reviewHints.push(["d", "reject"]);
+    if (canRevert) reviewHints.push(["z", "revert"]);
     reviewHints.push(["p", "create proposals"], ["r", "refresh"]);
     if (learningTab.focusPane === "details") {
       return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ...reviewHints]} />;
     }
     if (learningTab.searchMode) return <Hints items={[["type", "search"], ["esc", "clear/exit"], ["enter", "done"]]} />;
-    return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["s", "status"], ["v", "type"], ...reviewHints, ["o", "sort"]]} />;
+    return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["l", "lane"], ["s", "status"], ["v", "type"], ...reviewHints, ["o", "sort"]]} />;
   }
 
   const tab = activeTab === "facts" ? factsTab : obsTab;

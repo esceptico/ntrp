@@ -3,7 +3,13 @@ import { useAccentColor } from "../../../hooks/index.js";
 import type { LearningTabState } from "../../../hooks/useLearningTab.js";
 import { formatTimeAgo, shortTime } from "../../../lib/format.js";
 import { cleanLearningText, learningDetailRows, summarizeLearningEvidence } from "../../../lib/memoryLearningDetails.js";
-import { learningCandidateEffect, learningChangeLabel, learningTargetLabel } from "../../../lib/memoryLearning.js";
+import {
+  learningCandidateEffect,
+  learningChangeLabel,
+  learningLane,
+  learningLaneLabel,
+  learningTargetLabel,
+} from "../../../lib/memoryLearning.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
 import { ListDetailSection, memoryDetailWidth } from "./ListDetailSection.js";
 
@@ -25,6 +31,32 @@ function statusColor(status: string, accent: string): string {
       return colors.text.disabled;
     default:
       return colors.status.warning;
+  }
+}
+
+function lifecycleLabel(status: string): string {
+  switch (status) {
+    case "proposed":
+      return "evidence -> proposed";
+    case "approved":
+      return "evidence -> approved";
+    case "applied":
+      return "evidence -> applied";
+    default:
+      return `evidence -> ${status}`;
+  }
+}
+
+function laneColor(lane: string, accent: string): string {
+  switch (lane) {
+    case "runtime":
+      return accent;
+    case "skill":
+      return colors.status.success;
+    case "automation":
+      return colors.status.warning;
+    default:
+      return colors.text.secondary;
   }
 }
 
@@ -86,7 +118,7 @@ function CandidateDetails({
 }: {
   candidate: LearningCandidate | null;
   events: LearningEvent[];
-  confirmStatus: "approved" | "rejected" | null;
+  confirmStatus: "approved" | "applied" | "rejected" | "reverted" | null;
   confirmProposalScan: boolean;
   width: number;
   height: number;
@@ -107,17 +139,24 @@ function CandidateDetails({
   }
 
   const effect = learningCandidateEffect(candidate.change_type, candidate.status);
+  const lane = learningLane(candidate.change_type, candidate.target_key);
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       <text>
         <span fg={accentValue}>learning proposal</span>
         <span fg={colors.text.disabled}> {"\u2502"} </span>
+        <span fg={laneColor(lane, accentValue)}>{learningLaneLabel(lane)}</span>
+        <span fg={colors.text.disabled}> {"\u2502"} </span>
         <span fg={statusColor(candidate.status, accentValue)}>{candidate.status}</span>
         <span fg={colors.text.disabled}> {"\u2502"} {formatTimeAgo(candidate.created_at)}</span>
       </text>
 
       <box marginTop={1} flexDirection="column">
+        <text>
+          <span fg={colors.text.muted}>lane </span>
+          <span fg={colors.text.secondary}>{learningLaneLabel(lane)}</span>
+        </text>
         <text>
           <span fg={colors.text.muted}>type </span>
           <span fg={colors.text.secondary}>{learningChangeLabel(candidate.change_type)}</span>
@@ -136,6 +175,22 @@ function CandidateDetails({
             <span fg={colors.text.secondary}>{effect}</span>
           </text>
         )}
+        <text>
+          <span fg={colors.text.muted}>lifecycle </span>
+          <span fg={colors.text.disabled}>{lifecycleLabel(candidate.status)}</span>
+        </text>
+        {candidate.applied_at && (
+          <text>
+            <span fg={colors.text.muted}>applied </span>
+            <span fg={colors.text.disabled}>{formatTimeAgo(candidate.applied_at)}</span>
+          </text>
+        )}
+        {candidate.reverted_at && (
+          <text>
+            <span fg={colors.text.muted}>reverted </span>
+            <span fg={colors.text.disabled}>{formatTimeAgo(candidate.reverted_at)}</span>
+          </text>
+        )}
       </box>
 
       {(confirmStatus || confirmProposalScan) && (
@@ -146,7 +201,11 @@ function CandidateDetails({
                 ? "create new learning proposals from review sources?"
                 : confirmStatus === "approved"
                   ? "approve this proposal?"
-                  : "reject this proposal?"}
+                  : confirmStatus === "applied"
+                    ? "apply this proposal?"
+                    : confirmStatus === "reverted"
+                      ? "revert this applied proposal?"
+                      : "reject this proposal?"}
             </span>
           </text>
           <text><span fg={colors.text.disabled}>press y to confirm, n or esc to cancel</span></text>
@@ -191,6 +250,7 @@ export function LearningSection({ tab, totalCount, height, width }: LearningSect
   const renderItem = (candidate: LearningCandidate, ctx: RenderItemContext) => {
     const textWidth = listWidth - 4;
     const tagColor = ctx.isSelected ? colors.text.secondary : colors.text.disabled;
+    const lane = learningLane(candidate.change_type, candidate.target_key);
 
     return (
       <box flexDirection="column" marginBottom={1}>
@@ -198,6 +258,8 @@ export function LearningSection({ tab, totalCount, height, width }: LearningSect
           <span fg={ctx.colors.text}>{truncateText(candidate.proposal, textWidth)}</span>
         </text>
         <text>
+          <span fg={laneColor(lane, accentValue)}>{learningLaneLabel(lane)}</span>
+          <span fg={tagColor}> {"\u2502"} </span>
           <span fg={statusColor(candidate.status, accentValue)}>{candidate.status}</span>
           <span fg={tagColor}> {learningChangeLabel(candidate.change_type)}</span>
           <span fg={tagColor}> [{shortTime(candidate.created_at)}]</span>

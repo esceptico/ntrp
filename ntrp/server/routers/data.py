@@ -636,7 +636,11 @@ async def propose_learning_candidates(
         prune_limit=request.prune_limit,
         feedback_event_limit=request.feedback_event_limit,
         skill_event_limit=request.skill_event_limit,
+        prompt_event_limit=request.prompt_event_limit,
+        automation_event_limit=request.automation_event_limit,
         include_skill_notes=request.include_skill_notes,
+        include_prompt_notes=request.include_prompt_notes,
+        include_automation_rules=request.include_automation_rules,
     )
     return {
         "proposals_considered": result.proposals_considered,

@@ -104,6 +104,15 @@ class TestExtractionCountTrigger:
     @pytest.mark.asyncio
     async def test_count_trigger_extracts(self, memory: FactMemory, automation_store: AutomationStore):
         handler = create_chat_extraction_handler(memory, automation_store)
+        await memory.learning.create_candidate(
+            change_type="memory_feedback",
+            target_key="memory.extraction.feedback",
+            proposal="Do not store current-task implementation details.",
+            rationale="test",
+            policy_version="test",
+            status="applied",
+        )
+        await memory.db.conn.commit()
 
         mock_extract = AsyncMock(return_value=[_fact("User likes Python")])
         with patch("ntrp.memory.extraction_handler.extract_from_chat", mock_extract):
@@ -117,6 +126,8 @@ class TestExtractionCountTrigger:
             )
 
             mock_extract.assert_called_once()
+            assert mock_extract.call_args.kwargs["policy_context"] is not None
+            assert "Do not store current-task implementation details." in mock_extract.call_args.kwargs["policy_context"]
             assert result is not None
             assert "1 facts" in result
 

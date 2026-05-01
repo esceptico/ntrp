@@ -32,6 +32,7 @@ class AutomationRuntime:
         self.scheduler = Scheduler(
             store=stores.automations,
             build_deps=build_operator_deps,
+            record_learning_event=self._record_learning_event,
         )
         self.automation_service = AutomationService(
             store=stores.automations,
@@ -78,6 +79,13 @@ class AutomationRuntime:
         await seed_builtins(self.stores.automations)
         self.scheduler.start()
         self.outbox_runtime.start()
+
+    async def _record_learning_event(self, **event: object) -> None:
+        memory = self.get_memory()
+        if not memory:
+            return
+        await memory.learning.create_event(**event)
+        await memory.db.conn.commit()
 
     def _build_consolidation_handler(self):
         async def handler(context: dict | None) -> str | None:

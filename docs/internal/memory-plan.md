@@ -735,6 +735,11 @@ Implementation status:
 2026-05-01: Memory UI has a Learning tab for candidate review and approve/reject status changes.
 2026-05-01: chat extraction now marks user messages as evidence and assistant messages as context-only before prompting the memory model.
 2026-05-01: approved skill/prompt learning candidates are injected as bounded procedural notes; approval affects behavior without silently editing skill files.
+2026-05-01: learning review scan now covers memory, runtime prompt, skill, and automation lanes through the same review-gated candidate lifecycle.
+2026-05-01: Memory UI exposes learning lanes, runtime effect, and lane filtering so users can see which proposals affect prompts and which remain manual follow-up.
+2026-05-01: applied memory-policy candidates are injected into memory extraction/consolidation prompts as bounded policy notes; they do not mutate stored facts or patterns by themselves.
+2026-05-01: automation failures and missed scheduled runs now emit `automation_feedback` learning events with direct automation evidence ids.
+2026-05-01: applied automation-rule candidates are injected only into matching future automation runs as policy notes; schedules remain explicit user/admin state.
 ```
 
 Rejected for now:
@@ -813,7 +818,7 @@ learning_event
   created_at
   source_type            user_correction | tool_result | task_success | task_failure | repeated_retrieval | prune_review
   source_id              message id, run id, tool call id, memory event id, or review id
-  scope                  memory_extraction | retrieval | injection | compression | profile | skill | prompt
+  scope                  memory_extraction | retrieval | injection | compression | profile | skill | prompt | runtime | automation
   signal                 what happened, in plain text
   evidence_ids           direct source ids, never just a summary
   outcome                success | failure | corrected | ignored | unknown
@@ -822,7 +827,7 @@ learning_candidate
   id
   created_at
   status                 proposed | approved | applied | rejected | reverted
-  change_type            retrieval_rule | injection_rule | compression_rule | prune_rule | supersession_review | skill_note | prompt_note
+  change_type            retrieval_rule | injection_rule | compression_rule | prune_rule | supersession_review | skill_note | prompt_note | automation_rule
   target_key             stable id for the rule/skill/prompt section
   proposal               small text or structured patch
   rationale              why this should help
@@ -837,8 +842,8 @@ Rules:
 
 ```text
 1. Learning candidates are append-only records.
-2. Applying a candidate creates a new policy version.
-3. Reverting switches the active policy version back; it does not delete history.
+2. Applying a candidate activates its bounded policy/prompt note where that lane supports runtime context.
+3. Reverting removes the active policy/prompt note from runtime context; it does not delete history.
 4. A candidate needs direct provenance, not a model-generated story about why it is good.
 5. Self-feedback may propose, but user correction, tool results, replay, or review must validate.
 ```
@@ -875,7 +880,10 @@ Learning tab:
   Reverted
 
 Candidate detail:
+  lane
   proposed change
+  runtime effect
+  lifecycle
   evidence
   expected metric
   current metric if available

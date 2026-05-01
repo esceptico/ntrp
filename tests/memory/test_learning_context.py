@@ -1,7 +1,11 @@
 from datetime import UTC, datetime
 
 from ntrp.core.prompts import build_system_prompt
-from ntrp.memory.learning_context import format_learning_context
+from ntrp.memory.learning_context import (
+    APPLIED_POLICY_CONTEXT_STATUSES,
+    MEMORY_POLICY_CONTEXT_CHANGE_TYPES,
+    format_learning_context,
+)
 from ntrp.memory.models import LearningCandidate
 
 
@@ -43,6 +47,36 @@ def test_learning_context_formats_only_procedural_candidates():
     assert "skill.release: Check rc tags first." in context
     assert "prompt.memory: Treat corrections as evidence." in context
     assert "memory.prune" not in context
+
+
+def test_policy_context_formats_only_applied_policy_candidates():
+    context = format_learning_context(
+        [
+            _candidate(
+                change_type="memory_feedback",
+                target_key="memory.extraction.feedback",
+                proposal="Avoid current-task facts unless explicitly reusable.",
+                status="applied",
+            ),
+            _candidate(
+                change_type="memory_feedback",
+                target_key="memory.prune.feedback",
+                proposal="Review deleted patterns.",
+                status="approved",
+            ),
+            _candidate(
+                change_type="prompt_note",
+                target_key="prompt.memory",
+                proposal="This belongs to runtime prompts.",
+                status="applied",
+            ),
+        ],
+        change_types=MEMORY_POLICY_CONTEXT_CHANGE_TYPES,
+        statuses=APPLIED_POLICY_CONTEXT_STATUSES,
+        target_prefixes=("memory.extraction.",),
+    )
+
+    assert context == "- memory.extraction.feedback: Avoid current-task facts unless explicitly reusable."
 
 
 def test_learning_context_respects_char_budget():

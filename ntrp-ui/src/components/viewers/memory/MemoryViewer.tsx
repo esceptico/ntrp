@@ -221,6 +221,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 ].join(" · ")
             : activeTab === "learning"
               ? [
+                  `lane: ${learningTab.laneFilter}`,
                   `status: ${learningTab.statusFilter}`,
                   `type: ${learningTab.changeTypeFilter ?? "all"}`,
                   `candidates: ${learningCandidates.length}`,

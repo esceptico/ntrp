@@ -354,7 +354,11 @@ class ProposeLearningCandidatesRequest(BaseModel):
     prune_limit: int = Field(default=100, ge=1, le=1000)
     feedback_event_limit: int = Field(default=100, ge=1, le=500)
     skill_event_limit: int = Field(default=100, ge=1, le=500)
+    prompt_event_limit: int = Field(default=100, ge=1, le=500)
+    automation_event_limit: int = Field(default=100, ge=1, le=500)
     include_skill_notes: bool = True
+    include_prompt_notes: bool = True
+    include_automation_rules: bool = True
 
 
 # --- Automations / notifiers ---
