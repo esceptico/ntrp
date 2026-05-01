@@ -24,6 +24,7 @@ from ntrp.memory.injection_policy import DEFAULT_INJECTION_CHAR_BUDGET, memory_i
 from ntrp.memory.learning_policy import (
     LEARNING_POLICY_SOURCE_TYPE,
     LEARNING_POLICY_VERSION,
+    LearningPolicyProposal,
     build_memory_policy_proposals,
 )
 from ntrp.memory.models import (
@@ -47,12 +48,17 @@ from ntrp.memory.profile_policy import (
     profile_policy_preview,
 )
 from ntrp.memory.skill_learning import (
+    SKILL_NOTE_CHANGE_TYPE,
     SKILL_NOTE_POLICY_VERSION,
     SKILL_NOTE_SOURCE_TYPE,
     build_skill_note_proposals,
 )
 
 _logger = get_logger(__name__)
+
+_TARGET_BLOCKING_LEARNING_STATUSES = ("proposed", "approved")
+_ACTIVE_LEARNING_STATUSES = ("proposed", "approved", "applied")
+_HANDLED_LEARNING_STATUSES = ("proposed", "approved", "applied", "rejected", "reverted")
 
 
 @dataclass(frozen=True)
@@ -61,6 +67,12 @@ class LearningProposalScanResult:
     created_events: list[LearningEvent]
     created_candidates: list[LearningCandidate]
     skipped_candidates: list[LearningCandidate]
+
+
+def _evidence_key(evidence_ids: object) -> tuple[str, ...]:
+    if not isinstance(evidence_ids, (list, tuple)):
+        return ()
+    return tuple(sorted(str(evidence_id) for evidence_id in evidence_ids))
 
 
 async def _record_memory_feedback(
@@ -603,6 +615,24 @@ class LearningService:
                 raise KeyError(f"Learning candidate {candidate_id} not found")
             return candidate
 
+    async def _find_handled_memory_policy_candidate(
+        self,
+        proposal: LearningPolicyProposal,
+    ) -> LearningCandidate | None:
+        evidence_key = _evidence_key(proposal.evidence_ids)
+        candidates = await self._memory.learning.list_candidates(
+            limit=500,
+            change_type=proposal.change_type,
+        )
+        for candidate in candidates:
+            if candidate.target_key != proposal.target_key:
+                continue
+            if candidate.status not in _HANDLED_LEARNING_STATUSES:
+                continue
+            if _evidence_key(candidate.details.get("direct_evidence_ids")) == evidence_key:
+                return candidate
+        return None
+
     async def propose_from_memory_policy(
         self,
         *,
@@ -658,9 +688,14 @@ class LearningService:
                 existing = await self._memory.learning.find_open_candidate(
                     change_type=proposal.change_type,
                     target_key=proposal.target_key,
+                    statuses=_TARGET_BLOCKING_LEARNING_STATUSES,
                 )
                 if existing:
                     skipped_candidates.append(existing)
+                    continue
+                handled = await self._find_handled_memory_policy_candidate(proposal)
+                if handled:
+                    skipped_candidates.append(handled)
                     continue
 
                 event = await self._memory.learning.create_event(
@@ -680,7 +715,11 @@ class LearningService:
                     evidence_event_ids=[event.id],
                     expected_metric=proposal.expected_metric,
                     policy_version=LEARNING_POLICY_VERSION,
-                    details={"source_event_id": event.id, **proposal.details},
+                    details={
+                        "source_event_id": event.id,
+                        "direct_evidence_ids": list(proposal.evidence_ids),
+                        **proposal.details,
+                    },
                 )
                 created_events.append(event)
                 created_candidates.append(candidate)
@@ -697,32 +736,35 @@ class LearningService:
         *,
         event_limit: int = 100,
     ) -> LearningProposalScanResult:
-        events = await self._memory.learning.list_events(
+        events = await self._memory.learning.list_unprocessed_events(
+            scanner=SKILL_NOTE_CHANGE_TYPE,
             limit=event_limit,
             scope="skill",
         )
-        existing_skill_notes = await self._memory.learning.list_candidates(
-            limit=500,
-            change_type="skill_note",
-        )
-        used_event_ids = {event_id for candidate in existing_skill_notes for event_id in candidate.evidence_event_ids}
-        proposals = build_skill_note_proposals(
-            event for event in events if event.id not in used_event_ids and event.source_type != SKILL_NOTE_SOURCE_TYPE
-        )
+        proposals = build_skill_note_proposals(event for event in events if event.source_type != SKILL_NOTE_SOURCE_TYPE)
 
         created_events: list[LearningEvent] = []
         created_candidates: list[LearningCandidate] = []
         skipped_candidates: list[LearningCandidate] = []
+        processed_event_ids: set[int] = set()
 
         async with self._memory.transaction():
             for proposal in proposals:
                 existing = await self._memory.learning.find_open_candidate(
                     change_type=proposal.change_type,
                     target_key=proposal.target_key,
-                    statuses=("proposed", "approved"),
+                    statuses=_ACTIVE_LEARNING_STATUSES,
                 )
                 if existing:
                     skipped_candidates.append(existing)
+                    for event_id in proposal.evidence_event_ids:
+                        await self._memory.learning.record_event_processing(
+                            scanner=SKILL_NOTE_CHANGE_TYPE,
+                            event_id=event_id,
+                            candidate_id=existing.id,
+                            decision="deduped",
+                        )
+                        processed_event_ids.add(event_id)
                     continue
 
                 candidate = await self._memory.learning.create_candidate(
@@ -736,6 +778,23 @@ class LearningService:
                     details=proposal.details,
                 )
                 created_candidates.append(candidate)
+                for event_id in proposal.evidence_event_ids:
+                    await self._memory.learning.record_event_processing(
+                        scanner=SKILL_NOTE_CHANGE_TYPE,
+                        event_id=event_id,
+                        candidate_id=candidate.id,
+                        decision="created",
+                    )
+                    processed_event_ids.add(event_id)
+
+            for event in events:
+                if event.id in processed_event_ids:
+                    continue
+                await self._memory.learning.record_event_processing(
+                    scanner=SKILL_NOTE_CHANGE_TYPE,
+                    event_id=event.id,
+                    decision="ignored",
+                )
 
         return LearningProposalScanResult(
             proposals_considered=len(proposals),
@@ -749,32 +808,35 @@ class LearningService:
         *,
         event_limit: int = 100,
     ) -> LearningProposalScanResult:
-        events = await self._memory.learning.list_events(
+        events = await self._memory.learning.list_unprocessed_events(
+            scanner=MEMORY_FEEDBACK_CHANGE_TYPE,
             limit=event_limit,
             source_type=MEMORY_FEEDBACK_SOURCE_TYPE,
         )
-        existing_feedback_candidates = await self._memory.learning.list_candidates(
-            limit=500,
-            change_type=MEMORY_FEEDBACK_CHANGE_TYPE,
-        )
-        used_event_ids = {
-            event_id for candidate in existing_feedback_candidates for event_id in candidate.evidence_event_ids
-        }
-        proposals = build_memory_feedback_proposals(event for event in events if event.id not in used_event_ids)
+        proposals = build_memory_feedback_proposals(events)
 
         created_events: list[LearningEvent] = []
         created_candidates: list[LearningCandidate] = []
         skipped_candidates: list[LearningCandidate] = []
+        processed_event_ids: set[int] = set()
 
         async with self._memory.transaction():
             for proposal in proposals:
                 existing = await self._memory.learning.find_open_candidate(
                     change_type=proposal.change_type,
                     target_key=proposal.target_key,
-                    statuses=("proposed", "approved"),
+                    statuses=_ACTIVE_LEARNING_STATUSES,
                 )
                 if existing:
                     skipped_candidates.append(existing)
+                    for event_id in proposal.evidence_event_ids:
+                        await self._memory.learning.record_event_processing(
+                            scanner=MEMORY_FEEDBACK_CHANGE_TYPE,
+                            event_id=event_id,
+                            candidate_id=existing.id,
+                            decision="deduped",
+                        )
+                        processed_event_ids.add(event_id)
                     continue
 
                 candidate = await self._memory.learning.create_candidate(
@@ -788,6 +850,23 @@ class LearningService:
                     details=proposal.details,
                 )
                 created_candidates.append(candidate)
+                for event_id in proposal.evidence_event_ids:
+                    await self._memory.learning.record_event_processing(
+                        scanner=MEMORY_FEEDBACK_CHANGE_TYPE,
+                        event_id=event_id,
+                        candidate_id=candidate.id,
+                        decision="created",
+                    )
+                    processed_event_ids.add(event_id)
+
+            for event in events:
+                if event.id in processed_event_ids:
+                    continue
+                await self._memory.learning.record_event_processing(
+                    scanner=MEMORY_FEEDBACK_CHANGE_TYPE,
+                    event_id=event.id,
+                    decision="ignored",
+                )
 
         return LearningProposalScanResult(
             proposals_considered=len(proposals),

@@ -23,6 +23,25 @@ _SQL_LIST_LEARNING_EVENTS = """
     LIMIT ? OFFSET ?
 """
 
+_SQL_LIST_UNPROCESSED_LEARNING_EVENTS = """
+    SELECT * FROM learning_events
+    {where}
+    AND NOT EXISTS (
+        SELECT 1 FROM learning_event_processing processing
+        WHERE processing.scanner = ?
+          AND processing.event_id = learning_events.id
+    )
+    ORDER BY id ASC
+    LIMIT ?
+"""
+
+_SQL_RECORD_LEARNING_EVENT_PROCESSING = """
+    INSERT OR REPLACE INTO learning_event_processing (
+        scanner, event_id, candidate_id, decision, processed_at
+    )
+    VALUES (?, ?, ?, ?, ?)
+"""
+
 _SQL_INSERT_LEARNING_CANDIDATE = """
     INSERT INTO learning_candidates (
         created_at, updated_at, status, change_type, target_key, proposal, rationale,
@@ -143,6 +162,43 @@ class LearningRepository:
             (*params, limit, offset),
         )
         return [LearningEvent.model_validate(_row_dict(row)) for row in rows]
+
+    async def list_unprocessed_events(
+        self,
+        *,
+        scanner: str,
+        limit: int = 100,
+        scope: str | None = None,
+        source_type: str | None = None,
+    ) -> list[LearningEvent]:
+        where = []
+        params: list[object] = []
+        if scope is not None:
+            where.append("scope = ?")
+            params.append(scope)
+        if source_type is not None:
+            where.append("source_type = ?")
+            params.append(source_type)
+
+        where_sql = f"WHERE {' AND '.join(where)}" if where else "WHERE 1 = 1"
+        rows = await self.read_conn.execute_fetchall(
+            _SQL_LIST_UNPROCESSED_LEARNING_EVENTS.format(where=where_sql),
+            (*params, scanner, limit),
+        )
+        return [LearningEvent.model_validate(_row_dict(row)) for row in rows]
+
+    async def record_event_processing(
+        self,
+        *,
+        scanner: str,
+        event_id: int,
+        decision: str,
+        candidate_id: int | None = None,
+    ) -> None:
+        await self.conn.execute(
+            _SQL_RECORD_LEARNING_EVENT_PROCESSING,
+            (scanner, event_id, candidate_id, decision, datetime.now(UTC).isoformat()),
+        )
 
     async def create_candidate(
         self,

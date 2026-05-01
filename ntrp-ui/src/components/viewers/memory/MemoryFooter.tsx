@@ -14,6 +14,7 @@ interface MemoryFooterProps {
     focusPane: string;
     searchMode: boolean;
     confirmStatus: "approved" | "rejected" | null;
+    confirmProposalScan: boolean;
     selectedCandidate: { status: string } | null;
   };
   accessTab: { focusPane: string; searchMode: boolean };
@@ -67,8 +68,11 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
   }
 
   if (activeTab === "learning") {
+    if (learningTab.confirmProposalScan) {
+      return <Hints items={[["y", "create proposals"], ["n/esc", "cancel"]]} />;
+    }
     if (learningTab.confirmStatus) {
-      return <Hints items={[["y", "confirm"], ["esc", "cancel"]]} />;
+      return <Hints items={[["y", learningTab.confirmStatus === "approved" ? "approve" : "reject"], ["n/esc", "cancel"]]} />;
     }
     const selectedStatus = learningTab.selectedCandidate?.status;
     const canApprove = !!selectedStatus && selectedStatus !== "approved" && selectedStatus !== "applied";
@@ -76,7 +80,7 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
     const reviewHints: [string, string][] = [];
     if (canApprove) reviewHints.push(["a", "approve"]);
     if (canReject) reviewHints.push(["d", "reject"]);
-    reviewHints.push(["p", "find proposals"], ["r", "refresh"]);
+    reviewHints.push(["p", "create proposals"], ["r", "refresh"]);
     if (learningTab.focusPane === "details") {
       return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ...reviewHints]} />;
     }

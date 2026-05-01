@@ -87,6 +87,7 @@ export function ObservationDetailsView({
             cursorPos={cursorPos}
             onValueChange={setEditText}
             onCursorChange={setCursorPos}
+            width={textWidth}
             placeholder="Type to edit..."
           />
         </box>

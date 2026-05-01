@@ -204,6 +204,17 @@ CREATE INDEX IF NOT EXISTS idx_learning_candidates_status ON learning_candidates
 CREATE INDEX IF NOT EXISTS idx_learning_candidates_change_type ON learning_candidates(change_type);
 CREATE INDEX IF NOT EXISTS idx_learning_candidates_created ON learning_candidates(created_at DESC);
 
+CREATE TABLE IF NOT EXISTS learning_event_processing (
+    scanner TEXT NOT NULL,
+    event_id INTEGER NOT NULL REFERENCES learning_events(id) ON DELETE CASCADE,
+    candidate_id INTEGER REFERENCES learning_candidates(id) ON DELETE SET NULL,
+    decision TEXT NOT NULL,
+    processed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (scanner, event_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_learning_event_processing_event ON learning_event_processing(event_id);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
     text,
     content='facts',
@@ -255,6 +266,7 @@ class GraphDatabase:
         await self.conn.commit()
 
     async def clear_all(self) -> None:
+        await self.conn.execute("DELETE FROM learning_event_processing")
         await self.conn.execute("DELETE FROM learning_candidates")
         await self.conn.execute("DELETE FROM learning_events")
         await self.conn.execute("DELETE FROM dream_facts")

@@ -841,6 +841,7 @@ class TestMemoryAuditAPI:
         assert candidate["target_key"] == "memory.injection.budget"
         assert candidate["policy_version"] == "learning.memory_policy.v1"
         assert candidate["evidence_event_ids"] == [body["created_events"][0]["id"]]
+        assert candidate["details"]["direct_evidence_ids"] == [f"memory_access_event:{access_event.id}"]
 
         second = await test_client.post(
             "/memory/learning/propose",
@@ -866,8 +867,8 @@ class TestMemoryAuditAPI:
 
         assert third.status_code == 200
         rerun = third.json()
-        assert len(rerun["created_candidates"]) == 1
-        assert rerun["created_candidates"][0]["target_key"] == candidate["target_key"]
+        assert rerun["created_candidates"] == []
+        assert [row["id"] for row in rerun["skipped_candidates"]] == [candidate["id"]]
 
     @pytest.mark.asyncio
     async def test_approved_learning_context_filters_injectable_types_before_limit(
@@ -907,6 +908,58 @@ class TestMemoryAuditAPI:
         assert "skill.release: Check release tags first." in context
         assert "prompt.memory: Treat direct user corrections as memory evidence." in context
         assert "memory.feedback" not in context
+
+    @pytest.mark.asyncio
+    async def test_learning_review_scan_processes_skill_event_backlog_oldest_first(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        for index in range(101):
+            await test_runtime.memory.learning.create_event(
+                source_type="user_correction",
+                source_id=f"msg-skill-{index}",
+                scope="skill",
+                signal=f"User corrected workflow {index}.",
+                evidence_ids=[f"message:msg-skill-{index}"],
+                outcome="corrected",
+                details={"skill_name": f"workflow-{index}"},
+            )
+        await test_runtime.memory.db.conn.commit()
+
+        first = await test_client.post(
+            "/memory/learning/propose",
+            json={
+                "include_skill_notes": True,
+                "access_limit": 1,
+                "profile_limit": 1,
+                "prune_limit": 1,
+                "feedback_event_limit": 1,
+                "skill_event_limit": 100,
+            },
+        )
+
+        assert first.status_code == 200
+        created = [row for row in first.json()["created_candidates"] if row["change_type"] == "skill_note"]
+        assert len(created) == 100
+        assert created[0]["target_key"] == "skill.workflow-0"
+
+        second = await test_client.post(
+            "/memory/learning/propose",
+            json={
+                "include_skill_notes": True,
+                "access_limit": 1,
+                "profile_limit": 1,
+                "prune_limit": 1,
+                "feedback_event_limit": 1,
+                "skill_event_limit": 100,
+            },
+        )
+
+        assert second.status_code == 200
+        remaining = [row for row in second.json()["created_candidates"] if row["change_type"] == "skill_note"]
+        assert len(remaining) == 1
+        assert remaining[0]["target_key"] == "skill.workflow-100"
 
     @pytest.mark.asyncio
     async def test_learning_review_scan_proposes_skill_notes_from_direct_evidence(

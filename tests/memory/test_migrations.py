@@ -265,6 +265,11 @@ async def test_migrate_v10_adds_learning_tables(tmp_path: Path):
     indexes = {row["name"] for row in await conn.execute_fetchall("PRAGMA index_list(learning_candidates)")}
     assert {"idx_learning_candidates_status", "idx_learning_candidates_change_type"}.issubset(indexes)
 
+    processing_columns = {
+        row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(learning_event_processing)")
+    }
+    assert {"scanner", "event_id", "candidate_id", "decision", "processed_at"}.issubset(processing_columns)
+
     version = await conn.execute_fetchall("SELECT value FROM meta WHERE key = 'schema_version'")
     assert version[0][0] == str(CURRENT_VERSION)
 

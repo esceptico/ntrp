@@ -30,6 +30,7 @@ export interface LearningTabState {
   selectedCandidate: LearningCandidate | null;
   selectedEvents: LearningEvent[];
   confirmStatus: LearningStatusUpdate | null;
+  confirmProposalScan: boolean;
   searchQuery: string;
   searchMode: boolean;
   focusPane: "list" | "details";
@@ -42,6 +43,7 @@ export interface LearningTabState {
   setFocusPane: (p: "list" | "details") => void;
   resetDetailState: () => void;
   setConfirmStatus: Dispatch<SetStateAction<LearningStatusUpdate | null>>;
+  setConfirmProposalScan: Dispatch<SetStateAction<boolean>>;
 }
 
 export function useLearningTab(
@@ -52,6 +54,7 @@ export function useLearningTab(
   const [statusFilter, setStatusFilter] = useState<LearningStatusFilter>("all");
   const [changeTypeFilter, setChangeTypeFilter] = useState<string | undefined>(undefined);
   const [confirmStatus, setConfirmStatus] = useState<LearningStatusUpdate | null>(null);
+  const [confirmProposalScan, setConfirmProposalScan] = useState(false);
 
   const changeTypeFilters = useMemo(
     () => [undefined, ...Array.from(new Set(candidates.map((candidate) => candidate.change_type))).sort()],
@@ -103,6 +106,7 @@ export function useLearningTab(
   const selectedCandidateId = selectedCandidate?.id;
   useEffect(() => {
     setConfirmStatus(null);
+    setConfirmProposalScan(false);
   }, [selectedCandidateId]);
 
   const eventById = new Map(events.map((event) => [event.id, event]));
@@ -118,6 +122,7 @@ export function useLearningTab(
     selectedCandidate,
     selectedEvents,
     confirmStatus,
+    confirmProposalScan,
     searchQuery: ld.searchQuery,
     searchMode: ld.searchMode,
     focusPane: ld.focusPane,
@@ -130,5 +135,6 @@ export function useLearningTab(
     setFocusPane: ld.setFocusPane,
     resetDetailState: ld.resetDetailState,
     setConfirmStatus,
+    setConfirmProposalScan,
   };
 }

@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 10
+CURRENT_VERSION = 11
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -321,6 +321,41 @@ async def _migrate_v10(conn: aiosqlite.Connection) -> None:
     )
 
 
+async def _migrate_v11(conn: aiosqlite.Connection) -> None:
+    """Add durable learning event processing state."""
+    _logger.info("Migration v11: adding learning event processing table")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS learning_event_processing (
+            scanner TEXT NOT NULL,
+            event_id INTEGER NOT NULL REFERENCES learning_events(id) ON DELETE CASCADE,
+            candidate_id INTEGER REFERENCES learning_candidates(id) ON DELETE SET NULL,
+            decision TEXT NOT NULL,
+            processed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (scanner, event_id)
+        )
+    """)
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learning_event_processing_event ON learning_event_processing(event_id)"
+    )
+
+    await conn.execute("""
+        INSERT OR IGNORE INTO learning_event_processing (scanner, event_id, candidate_id, decision, processed_at)
+        SELECT
+            CASE learning_candidates.change_type
+                WHEN 'skill_note' THEN 'skill_note'
+                WHEN 'memory_feedback' THEN 'memory_feedback'
+            END,
+            CAST(event_id.value AS INTEGER),
+            learning_candidates.id,
+            'backfilled',
+            COALESCE(learning_candidates.updated_at, CURRENT_TIMESTAMP)
+        FROM learning_candidates, json_each(learning_candidates.evidence_event_ids) AS event_id
+        WHERE json_valid(learning_candidates.evidence_event_ids)
+          AND learning_candidates.change_type IN ('skill_note', 'memory_feedback')
+    """)
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
@@ -332,6 +367,7 @@ _MIGRATIONS: list[tuple[int, callable]] = [
     (8, _migrate_v8),
     (9, _migrate_v9),
     (10, _migrate_v10),
+    (11, _migrate_v11),
 ]
 
 

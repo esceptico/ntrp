@@ -371,6 +371,22 @@ export function useMemoryKeypress({
         }
       }
 
+      if (activeTab === "learning" && !learningTab.searchMode && learningTab.confirmProposalScan) {
+        if (key.name === "y") {
+          setSaving(true);
+          proposeLearningCandidates(config)
+            .then(() => {
+              learningTab.setConfirmProposalScan(false);
+              reload();
+            })
+            .catch((e: unknown) => setError(`Proposal scan failed: ${e}`))
+            .finally(() => setSaving(false));
+        } else if (key.name === "n" || key.name === "escape") {
+          learningTab.setConfirmProposalScan(false);
+        }
+        return;
+      }
+
       if (activeTab === "learning" && !learningTab.searchMode && learningTab.selectedCandidate) {
         if (learningTab.confirmStatus) {
           if (key.name === "y") {
@@ -385,7 +401,7 @@ export function useMemoryKeypress({
               })
               .catch((e: unknown) => setError(`Update failed: ${e}`))
               .finally(() => setSaving(false));
-          } else {
+          } else if (key.name === "n" || key.name === "escape") {
             learningTab.setConfirmStatus(null);
           }
           return;
@@ -405,11 +421,7 @@ export function useMemoryKeypress({
       }
 
       if (activeTab === "learning" && !learningTab.searchMode && key.name === "p") {
-        setSaving(true);
-        proposeLearningCandidates(config)
-          .then(() => reload())
-          .catch((e: unknown) => setError(`Proposal scan failed: ${e}`))
-          .finally(() => setSaving(false));
+        learningTab.setConfirmProposalScan(true);
         return;
       }
 

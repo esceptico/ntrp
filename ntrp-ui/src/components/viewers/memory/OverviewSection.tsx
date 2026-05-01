@@ -180,6 +180,7 @@ export function OverviewSection({
 
       <box flexDirection="column" marginTop={2}>
         <OverviewLine width={textWidth} segments={[{ text: "TAB MAP", fg: accentValue }]} />
+        <ActionRow keyName="1" label="Home" note="memory health and navigation map" width={textWidth} />
         <ActionRow keyName="2" label="Search" note="debug query-time memory retrieval" width={textWidth} />
         <ActionRow keyName="3" label="Sent" note="inspect what memory reached the model" width={textWidth} />
         <ActionRow keyName="4" label="Profile" note="edit always-visible facts" width={textWidth} />

@@ -63,7 +63,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     reload,
   } = useMemoryData(config, factFilters, observationFilters);
 
-  const profileTab = useFactsTab(config, profileFacts, 80, profileFilters, setProfileFilters, profileFacts.length);
+  const profileTab = useFactsTab(config, profileFacts, 80, profileFilters, setProfileFilters, profileFacts.length, false);
   const factsTab = useFactsTab(config, facts, 80, factFilters, setFactFilters, factTotal);
   const obsTab = useObservationsTab(config, observations, 80, observationFilters, setObservationFilters, observationTotal);
   const pruneTab = usePruneTab(pruneDryRun?.candidates ?? [], 80);

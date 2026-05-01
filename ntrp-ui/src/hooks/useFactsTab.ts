@@ -82,7 +82,8 @@ export function useFactsTab(
   contentWidth: number,
   filters: FactFilters,
   setFilters: Dispatch<SetStateAction<FactFilters>>,
-  factTotal: number
+  factTotal: number,
+  enableFilters = true,
 ): FactsTabState {
   const [metadataSuggestion, setMetadataSuggestion] = useState<FactMetadataSuggestion | null>(null);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
@@ -95,6 +96,7 @@ export function useFactsTab(
   }, []);
 
   const onListKey = useCallback((key: Key, { setSelectedIndex }: ListKeyHelpers) => {
+    if (!enableFilters) return false;
     if (key.name === "s") {
       setFilters((current) => ({ ...current, sourceType: cycle(SOURCE_FILTERS, current.sourceType) }));
       setSelectedIndex(0);
@@ -116,7 +118,7 @@ export function useFactsTab(
       return true;
     }
     return false;
-  }, [cycle, setFilters]);
+  }, [cycle, enableFilters, setFilters]);
 
   const getSectionMaxIndex = useCallback(
     (section: number) => getFactSectionMaxIndex(detailsRef.current, section as FactDetailSection),

@@ -79,19 +79,31 @@ function EvidenceList({ events, width }: { events: LearningEvent[]; width: numbe
 function CandidateDetails({
   candidate,
   events,
+  confirmStatus,
+  confirmProposalScan,
   width,
   height,
 }: {
   candidate: LearningCandidate | null;
   events: LearningEvent[];
+  confirmStatus: "approved" | "rejected" | null;
+  confirmProposalScan: boolean;
   width: number;
   height: number;
 }) {
   const { accentValue } = useAccentColor();
   const textWidth = Math.max(10, width - 2);
 
+  if (!candidate && !confirmProposalScan) {
+    return <text><span fg={colors.text.muted}>No learning candidates. Press p to create proposals from review sources.</span></text>;
+  }
   if (!candidate) {
-    return <text><span fg={colors.text.muted}>No learning candidates. Press p to scan review sources.</span></text>;
+    return (
+      <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
+        <text><span fg={colors.status.warning}>create new learning proposals from review sources?</span></text>
+        <text><span fg={colors.text.disabled}>press y to confirm, n or esc to cancel</span></text>
+      </box>
+    );
   }
 
   const effect = learningCandidateEffect(candidate.change_type, candidate.status);
@@ -125,6 +137,21 @@ function CandidateDetails({
           </text>
         )}
       </box>
+
+      {(confirmStatus || confirmProposalScan) && (
+        <box marginTop={1} flexDirection="column">
+          <text>
+            <span fg={colors.status.warning}>
+              {confirmProposalScan
+                ? "create new learning proposals from review sources?"
+                : confirmStatus === "approved"
+                  ? "approve this proposal?"
+                  : "reject this proposal?"}
+            </span>
+          </text>
+          <text><span fg={colors.text.disabled}>press y to confirm, n or esc to cancel</span></text>
+        </box>
+      )}
 
       <box marginTop={1} flexDirection="column">
         <text><span fg={colors.text.muted}>PROPOSAL</span></text>
@@ -185,7 +212,7 @@ export function LearningSection({ tab, totalCount, height, width }: LearningSect
       selectedIndex={tab.selectedIndex}
       renderItem={renderItem}
       getKey={(candidate) => candidate.id}
-      emptyMessage="No learning candidates. Press p to scan review sources."
+      emptyMessage="No learning candidates. Press p to create proposals from review sources."
       searchQuery={tab.searchQuery}
       searchMode={tab.searchMode}
       focusPane={tab.focusPane}
@@ -198,6 +225,8 @@ export function LearningSection({ tab, totalCount, height, width }: LearningSect
         <CandidateDetails
           candidate={tab.selectedCandidate}
           events={tab.selectedEvents}
+          confirmStatus={tab.confirmStatus}
+          confirmProposalScan={tab.confirmProposalScan}
           width={detailWidth}
           height={height}
         />

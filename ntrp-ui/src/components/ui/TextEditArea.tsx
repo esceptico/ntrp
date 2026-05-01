@@ -5,13 +5,24 @@ interface TextEditAreaProps {
   cursorPos: number;
   onValueChange: (value: string | ((prev: string) => string)) => void;
   onCursorChange: (pos: number | ((prev: number) => number)) => void;
+  width?: number;
   placeholder?: string;
   showCursor?: boolean;
+}
+
+function lineWindow(line: string, cursorCol: number, width: number): { start: number; text: string } {
+  const safeWidth = Math.max(1, width);
+  if (line.length <= safeWidth && cursorCol < safeWidth) {
+    return { start: 0, text: line };
+  }
+  const start = Math.max(0, cursorCol - Math.floor(safeWidth * 0.65));
+  return { start, text: line.slice(start, start + safeWidth) };
 }
 
 export function TextEditArea({
   value,
   cursorPos,
+  width,
   placeholder = "Type to edit...",
   showCursor = true,
 }: TextEditAreaProps) {
@@ -39,10 +50,12 @@ export function TextEditArea({
         </text>
       ) : (
         lines.map((line, idx) => {
+          const visible = width ? lineWindow(line, idx === cursorLine ? cursorCol : 0, width) : { start: 0, text: line };
           if (showCursor && idx === cursorLine) {
-            const beforeCursor = line.slice(0, cursorCol);
+            const visibleCursorCol = Math.max(0, cursorCol - visible.start);
+            const beforeCursor = visible.text.slice(0, visibleCursorCol);
             const atCursor = line[cursorCol] || " ";
-            const afterCursor = line.slice(cursorCol + 1);
+            const afterCursor = visible.text.slice(visibleCursorCol + 1);
             return (
               <text key={idx}>
                 <span fg={colors.text.primary}>{beforeCursor}</span>
@@ -53,7 +66,7 @@ export function TextEditArea({
           }
           return (
             <text key={idx}>
-              <span fg={colors.text.primary}>{line || " "}</span>
+              <span fg={colors.text.primary}>{visible.text || " "}</span>
             </text>
           );
         })
