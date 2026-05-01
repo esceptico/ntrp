@@ -1,3 +1,5 @@
+from dataclasses import dataclass, field
+
 from ntrp.memory.models import Fact, FactKind, Observation, SourceType
 
 MEMORY_CONTEXT_CHAR_BUDGET = 3000
@@ -8,6 +10,22 @@ PROFILE_SECTIONS = (
     (FactKind.RELATIONSHIP, "**Relationships**"),
     (FactKind.CONSTRAINT, "**Standing constraints**"),
 )
+
+
+@dataclass(frozen=True)
+class MemoryContextRender:
+    text: str
+    fact_ids: list[int] = field(default_factory=list)
+    observation_ids: list[int] = field(default_factory=list)
+    bundled_fact_ids: list[int] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class _TrackedItem:
+    text: str
+    fact_ids: tuple[int, ...] = ()
+    observation_ids: tuple[int, ...] = ()
+    bundled_fact_ids: tuple[int, ...] = ()
 
 
 def _source_label(fact: Fact) -> str:
@@ -42,34 +60,61 @@ def _profile_sections(profile_facts: list[Fact]) -> list[tuple[str, list[str]]]:
     return sections
 
 
-def _format_sections(
-    sections: list[tuple[str, list[str]]],
+def _dedupe(ids: list[int]) -> list[int]:
+    return list(dict.fromkeys(ids))
+
+
+def _collect_render(lines: list[str], items: list[_TrackedItem]) -> MemoryContextRender | None:
+    text = "\n".join(lines)
+    if not text:
+        return None
+    return MemoryContextRender(
+        text=text,
+        fact_ids=_dedupe([fact_id for item in items for fact_id in item.fact_ids]),
+        observation_ids=_dedupe([obs_id for item in items for obs_id in item.observation_ids]),
+        bundled_fact_ids=_dedupe([fact_id for item in items for fact_id in item.bundled_fact_ids]),
+    )
+
+
+def _format_tracked_sections(
+    sections: list[tuple[str, list[_TrackedItem]]],
     budget: int = MEMORY_CONTEXT_CHAR_BUDGET,
-) -> str:
+) -> MemoryContextRender | None:
     lines: list[str] = []
+    included: list[_TrackedItem] = []
     for header, items in sections:
-        section_lines = [header] + items
+        section_lines = [header] + [item.text for item in items]
         section_text = "\n".join(section_lines)
         if budget - len(section_text) < 0:
-            # Section doesn't fit whole — add items individually
             budget -= len(header) + 1
-            added = []
+            added: list[_TrackedItem] = []
             for item in items:
-                if budget - len(item) - 1 < 0:
+                if budget - len(item.text) - 1 < 0:
                     break
                 added.append(item)
-                budget -= len(item) + 1
+                budget -= len(item.text) + 1
             if added:
                 if lines:
                     lines.append("")
                 lines.append(header)
-                lines.extend(added)
+                lines.extend(item.text for item in added)
+                included.extend(added)
             continue
         if lines:
             lines.append("")
         lines.extend(section_lines)
+        included.extend(items)
         budget -= len(section_text) + 1
-    return "\n".join(lines)
+    return _collect_render(lines, included)
+
+
+def _format_sections(
+    sections: list[tuple[str, list[str]]],
+    budget: int = MEMORY_CONTEXT_CHAR_BUDGET,
+) -> str:
+    tracked = [(header, [_TrackedItem(text=item) for item in items]) for header, items in sections]
+    render = _format_tracked_sections(tracked, budget=budget)
+    return render.text if render else ""
 
 
 def format_session_memory(
@@ -88,6 +133,36 @@ def format_session_memory(
     if user_facts:
         sections.append(("**About user**", [f"- {f.text}" for f in user_facts]))
     return _format_sections(sections)
+
+
+def format_session_memory_render(
+    profile_facts: list[Fact] | None = None,
+    observations: list[Observation] | None = None,
+    user_facts: list[Fact] | None = None,
+) -> MemoryContextRender | None:
+    if not profile_facts and not observations and not user_facts:
+        return None
+    sections: list[tuple[str, list[_TrackedItem]]] = []
+    if profile_facts:
+        for kind, header in PROFILE_SECTIONS:
+            items = [
+                _TrackedItem(text=f"- {fact.text}", fact_ids=(fact.id,))
+                for fact in profile_facts
+                if fact.kind == kind
+            ]
+            if items:
+                sections.append((header, items))
+    if observations:
+        sections.append((
+            "**Patterns**",
+            [_TrackedItem(text=_format_observation(obs), observation_ids=(obs.id,)) for obs in observations],
+        ))
+    if user_facts:
+        sections.append((
+            "**About user**",
+            [_TrackedItem(text=f"- {fact.text}", fact_ids=(fact.id,)) for fact in user_facts],
+        ))
+    return _format_tracked_sections(sections)
 
 
 def format_memory_context(
@@ -120,3 +195,35 @@ def format_memory_context(
         sections.append(("**Relevant**", [f"- {f.text}{_source_label(f)}" for f in query_facts]))
 
     return _format_sections(sections, budget=budget)
+
+
+def format_memory_context_render(
+    query_facts: list[Fact] | None = None,
+    query_observations: list[Observation] | None = None,
+    bundled_sources: dict[int, list[Fact]] | None = None,
+    budget: int = MEMORY_CONTEXT_CHAR_BUDGET,
+) -> MemoryContextRender | None:
+    if not query_facts and not query_observations:
+        return None
+
+    sections: list[tuple[str, list[_TrackedItem]]] = []
+
+    if query_observations:
+        obs_items: list[_TrackedItem] = []
+        for obs in query_observations:
+            sources = (bundled_sources or {}).get(obs.id, [])
+            bundled_ids = tuple(fact.id for fact in sources[:5])
+            text = _format_bundled_observation(obs, sources) if sources else _format_observation(obs)
+            obs_items.append(_TrackedItem(text=text, observation_ids=(obs.id,), fact_ids=bundled_ids, bundled_fact_ids=bundled_ids))
+        sections.append(("**Patterns**", obs_items))
+
+    if query_facts:
+        sections.append((
+            "**Relevant**",
+            [
+                _TrackedItem(text=f"- {fact.text}{_source_label(fact)}", fact_ids=(fact.id,))
+                for fact in query_facts
+            ],
+        ))
+
+    return _format_tracked_sections(sections, budget=budget)

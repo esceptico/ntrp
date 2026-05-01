@@ -2,7 +2,7 @@ import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Self, TypedDict
@@ -79,6 +79,14 @@ def _session_fact_ids(memory: SessionMemory) -> list[int]:
     ids = [fact.id for fact in memory.profile_facts]
     ids.extend(fact.id for fact in memory.user_facts)
     return _dedupe_ids(ids)
+
+
+def _is_active_fact(fact: Fact, now: datetime | None = None) -> bool:
+    if fact.archived_at is not None or fact.superseded_by_fact_id is not None:
+        return False
+    if fact.expires_at is None:
+        return True
+    return fact.expires_at > (now or datetime.now(UTC))
 
 
 def _storage_issue_count(storage: dict[str, object]) -> int:
@@ -435,27 +443,23 @@ class FactMemory:
         limit: int = RECALL_SEARCH_LIMIT,
         query_time: datetime | None = None,
     ) -> FactContext:
-        query_embedding = await self.embedder.embed_one(query)
-
-        context = await retrieve_with_observations(
-            self.facts,
-            self.observations,
-            query,
-            query_embedding,
-            seed_limit=limit,
-            query_time=query_time,
-        )
-
-        async with self.transaction():
-            if context.facts:
-                await self.facts.reinforce([f.id for f in context.facts])
-            if context.observations:
-                await self.observations.reinforce([o.id for o in context.observations])
-                displayed_fact_ids = [f.id for facts in context.bundled_sources.values() for f in facts]
-                if displayed_fact_ids:
-                    await self.facts.reinforce(displayed_fact_ids)
-
+        context = await self.inspect_recall(query=query, limit=limit, query_time=query_time)
+        fact_ids = _context_fact_ids(context)
+        observation_ids = _context_observation_ids(context)
+        await self.reinforce_accessed_memory(fact_ids=fact_ids, observation_ids=observation_ids)
         return context
+
+    async def reinforce_accessed_memory(
+        self,
+        *,
+        fact_ids: list[int],
+        observation_ids: list[int],
+    ) -> None:
+        async with self.transaction():
+            if fact_ids:
+                await self.facts.reinforce(fact_ids)
+            if observation_ids:
+                await self.observations.reinforce(observation_ids)
 
     async def inspect_recall(
         self,
@@ -480,19 +484,34 @@ class FactMemory:
         context: FactContext,
         query: str | None = None,
         formatted_chars: int = 0,
+        injected_fact_ids: list[int] | None = None,
+        injected_observation_ids: list[int] | None = None,
+        bundled_fact_ids: list[int] | None = None,
         details: dict[str, object] | None = None,
     ) -> None:
         fact_ids = _context_fact_ids(context)
         observation_ids = _context_observation_ids(context)
-        bundled_ids = _dedupe_ids([fact.id for facts in context.bundled_sources.values() for fact in facts])
+        injected_fact_ids = _dedupe_ids(injected_fact_ids) if injected_fact_ids is not None else fact_ids
+        injected_observation_ids = (
+            _dedupe_ids(injected_observation_ids) if injected_observation_ids is not None else observation_ids
+        )
+        bundled_ids = (
+            _dedupe_ids(bundled_fact_ids)
+            if bundled_fact_ids is not None
+            else _dedupe_ids([fact.id for facts in context.bundled_sources.values() for fact in facts])
+        )
+        omitted_fact_ids = [fact_id for fact_id in fact_ids if fact_id not in set(injected_fact_ids)]
+        omitted_observation_ids = [obs_id for obs_id in observation_ids if obs_id not in set(injected_observation_ids)]
         async with self.transaction():
             await self.access_events.create(
                 source=source,
                 query=query,
                 retrieved_fact_ids=fact_ids,
                 retrieved_observation_ids=observation_ids,
-                injected_fact_ids=fact_ids,
-                injected_observation_ids=observation_ids,
+                injected_fact_ids=injected_fact_ids,
+                injected_observation_ids=injected_observation_ids,
+                omitted_fact_ids=omitted_fact_ids,
+                omitted_observation_ids=omitted_observation_ids,
                 bundled_fact_ids=bundled_ids,
                 formatted_chars=formatted_chars,
                 policy_version="memory.access.v1",
@@ -505,17 +524,27 @@ class FactMemory:
         source: str,
         memory: SessionMemory,
         formatted_chars: int = 0,
+        injected_fact_ids: list[int] | None = None,
+        injected_observation_ids: list[int] | None = None,
         details: dict[str, object] | None = None,
     ) -> None:
         fact_ids = _session_fact_ids(memory)
         observation_ids = _dedupe_ids([observation.id for observation in memory.observations])
+        injected_fact_ids = _dedupe_ids(injected_fact_ids) if injected_fact_ids is not None else fact_ids
+        injected_observation_ids = (
+            _dedupe_ids(injected_observation_ids) if injected_observation_ids is not None else observation_ids
+        )
+        omitted_fact_ids = [fact_id for fact_id in fact_ids if fact_id not in set(injected_fact_ids)]
+        omitted_observation_ids = [obs_id for obs_id in observation_ids if obs_id not in set(injected_observation_ids)]
         async with self.transaction():
             await self.access_events.create(
                 source=source,
                 retrieved_fact_ids=fact_ids,
                 retrieved_observation_ids=observation_ids,
-                injected_fact_ids=fact_ids,
-                injected_observation_ids=observation_ids,
+                injected_fact_ids=injected_fact_ids,
+                injected_observation_ids=injected_observation_ids,
+                omitted_fact_ids=omitted_fact_ids,
+                omitted_observation_ids=omitted_observation_ids,
                 formatted_chars=formatted_chars,
                 policy_version="memory.access.v1",
                 details=details,
@@ -588,6 +617,15 @@ class FactMemory:
     ) -> SessionMemory:
         if user_entity := await self.facts.get_entity_by_name(USER_ENTITY_NAME):
             raw_obs = await self.observations.get_for_entity(user_entity.id, limit=20)
+            source_ids = _dedupe_ids([fact_id for obs in raw_obs for fact_id in obs.source_fact_ids])
+            source_facts = await self.facts.get_batch(source_ids)
+            active_source_ids = {
+                fact_id for fact_id, fact in source_facts.items() if _is_active_fact(fact)
+            }
+            raw_obs = [
+                obs for obs in raw_obs
+                if len([fact_id for fact_id in obs.source_fact_ids if fact_id in active_source_ids]) >= 2
+            ]
             scored_obs = sorted(
                 raw_obs,
                 key=lambda o: decay_score(o.last_accessed_at, o.access_count),

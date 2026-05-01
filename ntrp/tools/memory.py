@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from ntrp.memory.formatting import format_memory_context
+from ntrp.memory.formatting import format_memory_context_render
 from ntrp.memory.models import FactKind, SourceType
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
@@ -93,8 +93,8 @@ class RecallInput(BaseModel):
 
 async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
     memory = execution.ctx.services["memory"]
-    context = await memory.recall(query=args.query, limit=args.limit)
-    formatted = format_memory_context(
+    context = await memory.inspect_recall(query=args.query, limit=args.limit)
+    rendered = format_memory_context_render(
         query_facts=context.facts,
         query_observations=context.observations,
         bundled_sources=context.bundled_sources,
@@ -103,13 +103,20 @@ async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
         source="recall_tool",
         query=args.query,
         context=context,
-        formatted_chars=len(formatted or ""),
-        details={"limit": args.limit, "has_context": formatted is not None},
+        formatted_chars=len(rendered.text) if rendered else 0,
+        injected_fact_ids=rendered.fact_ids if rendered else [],
+        injected_observation_ids=rendered.observation_ids if rendered else [],
+        bundled_fact_ids=rendered.bundled_fact_ids if rendered else [],
+        details={"limit": args.limit, "has_context": rendered is not None},
     )
-    if formatted:
+    if rendered:
+        await memory.reinforce_accessed_memory(
+            fact_ids=rendered.fact_ids,
+            observation_ids=rendered.observation_ids,
+        )
         obs_count = len(context.observations)
         fact_count = len(context.facts)
-        return ToolResult(content=formatted, preview=f"{obs_count} patterns, {fact_count} facts")
+        return ToolResult(content=rendered.text, preview=f"{obs_count} patterns, {fact_count} facts")
     return ToolResult(
         content="No memory found for this query. Try broader terms or use remember() to store facts first.",
         preview="0 facts",

@@ -99,6 +99,8 @@ _SQL_GET_FACTS_FOR_ENTITY = """
     FROM facts f
     JOIN entity_refs er ON f.id = er.fact_id
     WHERE f.archived_at IS NULL
+      AND f.superseded_by_fact_id IS NULL
+      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
       AND (er.entity_id = (SELECT id FROM entities WHERE name = ? COLLATE NOCASE)
            OR (er.entity_id IS NULL AND er.name = ? COLLATE NOCASE))
     ORDER BY f.access_count DESC, f.created_at DESC

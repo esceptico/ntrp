@@ -76,8 +76,9 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
       return <Hints items={[["y", learningTab.confirmStatus === "approved" ? "approve" : "reject"], ["n/esc", "cancel"]]} />;
     }
     const selectedStatus = learningTab.selectedCandidate?.status;
-    const canApprove = canApproveLearningCandidate(selectedStatus);
-    const canReject = canRejectLearningCandidate(selectedStatus);
+    const canReview = learningTab.focusPane === "details";
+    const canApprove = canReview && canApproveLearningCandidate(selectedStatus);
+    const canReject = canReview && canRejectLearningCandidate(selectedStatus);
     const reviewHints: [string, string][] = [];
     if (canApprove) reviewHints.push(["a", "approve"]);
     if (canReject) reviewHints.push(["d", "reject"]);

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from ntrp.memory.formatting import format_memory_context, format_session_memory
+from ntrp.memory.formatting import format_memory_context, format_memory_context_render, format_session_memory
 from ntrp.memory.models import Fact, FactContext, FactKind, Observation, SourceType
 
 
@@ -72,6 +72,40 @@ class TestFormatMemoryContext:
         assert "**Relevant**" in result
         assert "Likes coffee" in result
         assert "Morning person" in result
+
+    def test_render_tracks_only_items_that_fit_budget(self):
+        context = FactContext(
+            facts=[
+                make_fact(1, "short"),
+                make_fact(2, "this fact is too long to fit in the remaining tiny budget"),
+            ],
+            observations=[],
+        )
+
+        render = format_memory_context_render(
+            query_facts=context.facts,
+            query_observations=context.observations,
+            budget=64,
+        )
+
+        assert render is not None
+        assert render.fact_ids == [1]
+        assert "short" in render.text
+        assert "too long" not in render.text
+
+    def test_render_tracks_bundled_observation_sources(self):
+        observation = make_observation(3, "User likes reliable memory")
+        source = make_fact(4, "User asked for direct provenance")
+        render = format_memory_context_render(
+            query_facts=[],
+            query_observations=[observation],
+            bundled_sources={observation.id: [source]},
+        )
+
+        assert render is not None
+        assert render.observation_ids == [3]
+        assert render.fact_ids == [4]
+        assert render.bundled_fact_ids == [4]
 
 
 class TestFormatSessionMemory:

@@ -13,7 +13,7 @@ from ntrp.config import Config
 from ntrp.context.models import SessionState
 from ntrp.memory.fact_review import FactMetadataSuggestion
 from ntrp.memory.learning_context import get_approved_learning_context
-from ntrp.memory.models import FactKind, SourceType
+from ntrp.memory.models import FactContext, FactKind, SourceType
 from ntrp.server.app import app
 from ntrp.server.runtime import Runtime
 from ntrp.settings import hash_api_key
@@ -633,6 +633,85 @@ class TestMemoryAuditAPI:
         assert stored_obs.access_count == 0
 
     @pytest.mark.asyncio
+    async def test_recall_bundles_exclude_superseded_sources(self, test_client: AsyncClient, test_runtime: Runtime):
+        stale = await test_runtime.memory.facts.create(
+            text="User uses the old memory workflow",
+            source_type=SourceType.EXPLICIT,
+            embedding=mock_embedding("old memory workflow"),
+        )
+        current = await test_runtime.memory.facts.create(
+            text="User uses the current memory workflow",
+            source_type=SourceType.EXPLICIT,
+            embedding=mock_embedding("current memory workflow"),
+        )
+        obs = await test_runtime.memory.observations.create(
+            summary="User has a memory workflow",
+            embedding=mock_embedding("memory workflow"),
+            source_fact_id=stale.id,
+        )
+        await test_runtime.memory.facts.update_metadata(stale.id, {"superseded_by_fact_id": current.id})
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.post(
+            "/memory/recall/inspect",
+            json={"query": "memory workflow", "limit": 5},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert any(row["id"] == obs.id for row in data["observations"])
+        assert str(obs.id) not in data["bundled_sources"]
+
+    @pytest.mark.asyncio
+    async def test_session_memory_filters_low_support_patterns_and_stale_entity_facts(
+        self,
+        test_runtime: Runtime,
+    ):
+        repo = test_runtime.memory.facts
+        user = await repo.create_entity("User")
+        active_a = await repo.create("User works on memory UX", SourceType.EXPLICIT, kind=FactKind.NOTE)
+        active_b = await repo.create("User reviews memory provenance", SourceType.EXPLICIT, kind=FactKind.NOTE)
+        single = await repo.create("User mentioned one-off memory detail", SourceType.EXPLICIT, kind=FactKind.NOTE)
+        expired = await repo.create(
+            "User temporary memory fact expired",
+            SourceType.EXPLICIT,
+            kind=FactKind.NOTE,
+            expires_at=datetime.now(UTC) - timedelta(days=1),
+        )
+        current = await repo.create("User current project is ntrp", SourceType.EXPLICIT, kind=FactKind.NOTE)
+        superseded = await repo.create(
+            "User old project is something else",
+            SourceType.EXPLICIT,
+            kind=FactKind.NOTE,
+            superseded_by_fact_id=current.id,
+        )
+        for fact in (active_a, active_b, single, expired, current, superseded):
+            await repo.add_entity_ref(fact.id, "User", user.id)
+
+        weak_obs = await test_runtime.memory.observations.create(
+            summary="Weak one-fact user pattern",
+            embedding=mock_embedding("weak user pattern"),
+            source_fact_id=single.id,
+        )
+        strong_obs = await test_runtime.memory.observations.create(
+            summary="Strong user memory pattern",
+            embedding=mock_embedding("strong user memory pattern"),
+            source_fact_id=active_a.id,
+        )
+        await test_runtime.memory.observations.add_source_facts(strong_obs.id, [active_b.id])
+        await test_runtime.memory.observations.link_entities(weak_obs.id, [user.id])
+        await test_runtime.memory.observations.link_entities(strong_obs.id, [user.id])
+        await test_runtime.memory.db.conn.commit()
+
+        session = await test_runtime.memory.get_session_memory(user_limit=20)
+
+        assert [obs.id for obs in session.observations] == [strong_obs.id]
+        session_fact_ids = {fact.id for fact in session.user_facts}
+        assert current.id in session_fact_ids
+        assert expired.id not in session_fact_ids
+        assert superseded.id not in session_fact_ids
+
+    @pytest.mark.asyncio
     async def test_recall_tool_records_access_event(self, test_client: AsyncClient, test_runtime: Runtime):
         fact = await test_runtime.memory.facts.create(
             text="User is tuning retrieval telemetry",
@@ -692,6 +771,41 @@ class TestMemoryAuditAPI:
         assert event["query"] is None
         assert event["details"] == {"has_context": True}
         assert payload["facts"][0]["text"] == "User prefers visible memory provenance"
+
+    @pytest.mark.asyncio
+    async def test_memory_access_records_omitted_records(self, test_client: AsyncClient, test_runtime: Runtime):
+        injected = await test_runtime.memory.remember(
+            text="Injected memory should be visible",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.NOTE,
+        )
+        omitted = await test_runtime.memory.remember(
+            text="Omitted memory should remain inspectable",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.NOTE,
+        )
+        context = FactContext(facts=[injected.fact, omitted.fact], observations=[])
+
+        await test_runtime.memory.record_context_access(
+            source="recall_tool",
+            query="telemetry",
+            context=context,
+            formatted_chars=20,
+            injected_fact_ids=[injected.fact.id],
+            injected_observation_ids=[],
+        )
+
+        response = await test_client.get(
+            "/memory/access/events",
+            params={"source": "recall_tool", "include_records": True},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        event = payload["events"][0]
+        assert event["retrieved_fact_ids"] == [injected.fact.id, omitted.fact.id]
+        assert event["injected_fact_ids"] == [injected.fact.id]
+        assert event["omitted_fact_ids"] == [omitted.fact.id]
+        assert {fact["id"] for fact in payload["facts"]} == {injected.fact.id, omitted.fact.id}
 
     @pytest.mark.asyncio
     async def test_memory_injection_policy_preview_flags_recent_access_events(

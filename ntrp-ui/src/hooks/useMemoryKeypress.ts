@@ -404,7 +404,12 @@ export function useMemoryKeypress({
         return;
       }
 
-      if (activeTab === "learning" && !learningTab.searchMode && learningTab.selectedCandidate) {
+      if (
+        activeTab === "learning" &&
+        !learningTab.searchMode &&
+        learningTab.focusPane === "details" &&
+        learningTab.selectedCandidate
+      ) {
         if (learningTab.confirmStatus) {
           if (key.name === "y") {
             setSaving(true);

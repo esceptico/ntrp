@@ -11,7 +11,7 @@ from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationProgressEvent, ToolCallEvent, ToolResultEvent, agent_event_to_sse
 from ntrp.memory.facts import FactMemory
-from ntrp.memory.formatting import format_session_memory
+from ntrp.memory.formatting import format_session_memory_render
 from ntrp.memory.learning_context import get_approved_learning_context
 from ntrp.memory.prefetch import prefetch_memory_context
 from ntrp.server.bus import SessionBus
@@ -54,7 +54,7 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
     learning_context = None
     if deps.memory:
         session_memory = await deps.memory.get_session_memory()
-        session_context = format_session_memory(
+        session_render = format_session_memory_render(
             profile_facts=session_memory.profile_facts,
             observations=session_memory.observations,
             user_facts=session_memory.user_facts,
@@ -67,16 +67,18 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
             details={"source_id": request.source_id},
         )
         memory_parts = []
-        if session_context is not None:
-            memory_parts.append(session_context)
+        if session_render is not None:
+            memory_parts.append(session_render.text)
         if prefetch_context is not None:
             memory_parts.append(f"**Relevant now**\n{prefetch_context}")
         memory_context = "\n\n".join(memory_parts) if memory_parts else None
-        if session_context is not None:
+        if session_render is not None:
             await deps.memory.record_session_memory_access(
                 source="operator_prompt",
                 memory=session_memory,
-                formatted_chars=len(session_context),
+                formatted_chars=len(session_render.text),
+                injected_fact_ids=session_render.fact_ids,
+                injected_observation_ids=session_render.observation_ids,
                 details={"source_id": request.source_id, "has_context": True},
             )
         learning_context = await get_approved_learning_context(deps.memory)

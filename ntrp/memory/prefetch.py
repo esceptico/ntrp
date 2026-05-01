@@ -4,7 +4,7 @@ from typing import Any
 
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory, SessionMemory
-from ntrp.memory.formatting import format_memory_context
+from ntrp.memory.formatting import format_memory_context_render
 from ntrp.memory.models import FactContext
 
 _logger = get_logger(__name__)
@@ -74,7 +74,7 @@ async def prefetch_memory_context(
         return None
 
     context = filter_prefetch_context(context, session_memory)
-    rendered = format_memory_context(
+    rendered = format_memory_context_render(
         query_facts=context.facts,
         query_observations=context.observations,
         bundled_sources=context.bundled_sources,
@@ -87,7 +87,10 @@ async def prefetch_memory_context(
         source=source,
         query=query,
         context=context,
-        formatted_chars=len(rendered),
+        formatted_chars=len(rendered.text),
+        injected_fact_ids=rendered.fact_ids,
+        injected_observation_ids=rendered.observation_ids,
+        bundled_fact_ids=rendered.bundled_fact_ids,
         details={"timeout_seconds": timeout_seconds, **(details or {})},
     )
-    return rendered
+    return rendered.text

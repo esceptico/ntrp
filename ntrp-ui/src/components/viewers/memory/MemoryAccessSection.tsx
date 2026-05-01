@@ -214,6 +214,20 @@ function AccessDetails({
         getText={(fact) => fact.text}
         width={textWidth}
       />
+      <MemoryTextList
+        title="omitted facts"
+        ids={event.omitted_fact_ids}
+        records={factsById}
+        getText={(fact) => fact.text}
+        width={textWidth}
+      />
+      <MemoryTextList
+        title="omitted patterns"
+        ids={event.omitted_observation_ids}
+        records={observationsById}
+        getText={(observation) => observation.summary}
+        width={textWidth}
+      />
 
       <box marginTop={2} flexDirection="column">
         <text><span fg={colors.text.muted}>RUN METADATA</span></text>

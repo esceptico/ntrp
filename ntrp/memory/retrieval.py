@@ -421,7 +421,7 @@ async def retrieve_with_observations(
             source_facts = [
                 display_facts[fid]
                 for fid in display_ids_per_obs[obs.id]
-                if fid in display_facts and display_facts[fid].archived_at is None
+                if fid in display_facts and _is_recallable_fact(display_facts[fid], query_time)
             ]
             if source_facts:
                 bundled_sources[obs.id] = source_facts

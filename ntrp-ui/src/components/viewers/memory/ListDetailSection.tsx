@@ -87,7 +87,7 @@ export function ListDetailSection<T>({
   );
 
   const main = (
-    <box flexDirection="column" marginTop={2}>
+    <box flexDirection="column">
       {details}
     </box>
   );

@@ -508,9 +508,13 @@ class MemoryAccessEventService:
         fact_ids: set[int] = set()
         observation_ids: set[int] = set()
         for event in events:
+            fact_ids.update(event.retrieved_fact_ids)
             fact_ids.update(event.injected_fact_ids)
+            fact_ids.update(event.omitted_fact_ids)
             fact_ids.update(event.bundled_fact_ids)
+            observation_ids.update(event.retrieved_observation_ids)
             observation_ids.update(event.injected_observation_ids)
+            observation_ids.update(event.omitted_observation_ids)
         facts = await self._memory.facts.get_batch(sorted(fact_ids))
         observations = await self._memory.observations.get_batch(sorted(observation_ids))
         return events, facts, observations
