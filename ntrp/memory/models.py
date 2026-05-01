@@ -268,6 +268,71 @@ class MemoryAccessEvent(_FrozenModel):
         return data
 
 
+class LearningEvent(_FrozenModel):
+    id: int
+    created_at: datetime
+    source_type: str
+    source_id: str | None = None
+    scope: str
+    signal: str
+    evidence_ids: list[str] = []
+    outcome: str = "unknown"
+    details: dict[str, Any] = {}
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _parse_created_at(cls, v: Any) -> datetime | None:
+        return _parse_datetime(v)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_json_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        evidence_ids = data.get("evidence_ids")
+        if isinstance(evidence_ids, str):
+            data["evidence_ids"] = json.loads(evidence_ids) if evidence_ids else []
+        details = data.get("details")
+        if isinstance(details, str):
+            data["details"] = json.loads(details) if details else {}
+        return data
+
+
+class LearningCandidate(_FrozenModel):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    status: str
+    change_type: str
+    target_key: str
+    proposal: str
+    rationale: str
+    evidence_event_ids: list[int] = []
+    expected_metric: str | None = None
+    policy_version: str
+    applied_at: datetime | None = None
+    reverted_at: datetime | None = None
+    details: dict[str, Any] = {}
+
+    @field_validator("created_at", "updated_at", "applied_at", "reverted_at", mode="before")
+    @classmethod
+    def _parse_timestamps(cls, v: Any) -> datetime | None:
+        return _parse_datetime(v)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_json_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        evidence_event_ids = data.get("evidence_event_ids")
+        if isinstance(evidence_event_ids, str):
+            data["evidence_event_ids"] = json.loads(evidence_event_ids) if evidence_event_ids else []
+        details = data.get("details")
+        if isinstance(details, str):
+            data["details"] = json.loads(details) if details else {}
+        return data
+
+
 class FactContext(_FrozenModel):
     facts: list[Fact]
     observations: list[Observation] = []

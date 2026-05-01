@@ -17,6 +17,8 @@ from ntrp.memory.models import (
     Fact,
     FactContext,
     FactKind,
+    LearningCandidate,
+    LearningEvent,
     MemoryAccessEvent,
     MemoryEvent,
     Observation,
@@ -389,6 +391,96 @@ class MemoryAccessEventService:
         return memory_injection_policy_preview(events, char_budget=char_budget)
 
 
+class LearningService:
+    def __init__(self, memory: FactMemory):
+        self._memory = memory
+
+    async def create_event(
+        self,
+        *,
+        source_type: str,
+        scope: str,
+        signal: str,
+        source_id: str | None = None,
+        evidence_ids: list[str] | None = None,
+        outcome: str = "unknown",
+        details: dict | None = None,
+    ) -> LearningEvent:
+        async with self._memory.transaction():
+            return await self._memory.learning.create_event(
+                source_type=source_type,
+                source_id=source_id,
+                scope=scope,
+                signal=signal,
+                evidence_ids=evidence_ids,
+                outcome=outcome,
+                details=details,
+            )
+
+    async def list_events(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        scope: str | None = None,
+        source_type: str | None = None,
+    ) -> list[LearningEvent]:
+        return await self._memory.learning.list_events(
+            limit=limit,
+            offset=offset,
+            scope=scope,
+            source_type=source_type,
+        )
+
+    async def create_candidate(
+        self,
+        *,
+        change_type: str,
+        target_key: str,
+        proposal: str,
+        rationale: str,
+        evidence_event_ids: list[int] | None = None,
+        expected_metric: str | None = None,
+        policy_version: str,
+        status: str = "proposed",
+        details: dict | None = None,
+    ) -> LearningCandidate:
+        async with self._memory.transaction():
+            return await self._memory.learning.create_candidate(
+                change_type=change_type,
+                target_key=target_key,
+                proposal=proposal,
+                rationale=rationale,
+                evidence_event_ids=evidence_event_ids,
+                expected_metric=expected_metric,
+                policy_version=policy_version,
+                status=status,
+                details=details,
+            )
+
+    async def list_candidates(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        status: str | None = None,
+        change_type: str | None = None,
+    ) -> list[LearningCandidate]:
+        return await self._memory.learning.list_candidates(
+            limit=limit,
+            offset=offset,
+            status=status,
+            change_type=change_type,
+        )
+
+    async def update_candidate_status(self, candidate_id: int, status: str) -> LearningCandidate:
+        async with self._memory.transaction():
+            candidate = await self._memory.learning.update_candidate_status(candidate_id, status)
+            if not candidate:
+                raise KeyError(f"Learning candidate {candidate_id} not found")
+            return candidate
+
+
 class MemoryService:
     def __init__(
         self,
@@ -404,6 +496,7 @@ class MemoryService:
         self.dreams = DreamService(memory)
         self.events = MemoryEventService(memory)
         self.access_events = MemoryAccessEventService(memory)
+        self.learning = LearningService(memory)
 
     @property
     def is_consolidating(self) -> bool:

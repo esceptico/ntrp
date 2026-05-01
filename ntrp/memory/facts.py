@@ -34,6 +34,7 @@ from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.events import MemoryEventRepository
 from ntrp.memory.store.facts import FactRepository
+from ntrp.memory.store.learning import LearningRepository
 from ntrp.memory.store.observations import ObservationRepository
 
 _logger = get_logger(__name__)
@@ -128,6 +129,7 @@ class FactMemory:
         self.dreams = DreamRepository(conn, read_conn)
         self.events = MemoryEventRepository(conn, read_conn)
         self.access_events = MemoryAccessEventRepository(conn, read_conn)
+        self.learning = LearningRepository(conn, read_conn)
         self.embedder = embedder or Embedder(embedding)
         self.extractor = extractor or Extractor(model)
         self._enqueue_fact_index_upsert = enqueue_fact_index_upsert

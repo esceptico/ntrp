@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 9
+CURRENT_VERSION = 10
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -271,6 +271,56 @@ async def _migrate_v9(conn: aiosqlite.Connection) -> None:
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_access_events_source ON memory_access_events(source)")
 
 
+async def _migrate_v10(conn: aiosqlite.Connection) -> None:
+    """Add continuous-learning event and candidate logs."""
+    _logger.info("Migration v10: adding continuous-learning tables")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS learning_events (
+            id INTEGER PRIMARY KEY,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            source_type TEXT NOT NULL,
+            source_id TEXT,
+            scope TEXT NOT NULL,
+            signal TEXT NOT NULL,
+            evidence_ids TEXT NOT NULL DEFAULT '[]',
+            outcome TEXT NOT NULL DEFAULT 'unknown',
+            details TEXT NOT NULL DEFAULT '{}'
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_learning_events_created ON learning_events(created_at DESC)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_learning_events_scope ON learning_events(scope)")
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learning_events_source ON learning_events(source_type, source_id)"
+    )
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS learning_candidates (
+            id INTEGER PRIMARY KEY,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            status TEXT NOT NULL DEFAULT 'proposed',
+            change_type TEXT NOT NULL,
+            target_key TEXT NOT NULL,
+            proposal TEXT NOT NULL,
+            rationale TEXT NOT NULL,
+            evidence_event_ids TEXT NOT NULL DEFAULT '[]',
+            expected_metric TEXT,
+            policy_version TEXT NOT NULL,
+            applied_at TIMESTAMP,
+            reverted_at TIMESTAMP,
+            details TEXT NOT NULL DEFAULT '{}'
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_learning_candidates_status ON learning_candidates(status)")
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learning_candidates_change_type ON learning_candidates(change_type)"
+    )
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learning_candidates_created ON learning_candidates(created_at DESC)"
+    )
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
@@ -281,6 +331,7 @@ _MIGRATIONS: list[tuple[int, callable]] = [
     (7, _migrate_v7),
     (8, _migrate_v8),
     (9, _migrate_v9),
+    (10, _migrate_v10),
 ]
 
 

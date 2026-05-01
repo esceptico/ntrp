@@ -38,6 +38,8 @@ GET  /memory/audit
 POST /memory/prune/dry-run
 GET  /memory/injection-policy/preview
 GET  /memory/profile/policy/preview
+GET  /memory/learning/events
+GET  /memory/learning/candidates
 ```
 
 The first implementation is read-only:
@@ -87,6 +89,15 @@ pinned, important, or useful-and-repeatedly-used facts that are not profile kind
 profile facts that are too long for always-on memory
 profile facts with low confidence
 ```
+
+Continuous learning now has append-only storage primitives:
+
+```text
+learning_events      direct evidence signals such as corrections, tool results, task outcomes
+learning_candidates  proposed policy/skill/prompt changes with status and rollback metadata
+```
+
+No candidate is auto-applied. The first contract is provenance and reviewability.
 
 ## Target Model
 
@@ -713,6 +724,7 @@ Implementation status:
 2026-05-01: memory_access_events records prompt/tool context access.
 2026-05-01: Memory UI has a Used tab for recent injected bundles.
 2026-05-01: read-only injection and profile policy previews are exposed in API/UI.
+2026-05-01: learning_events and learning_candidates provide the continuous-learning audit spine.
 ```
 
 Rejected for now:

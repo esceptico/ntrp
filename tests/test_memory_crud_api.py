@@ -725,6 +725,53 @@ class TestMemoryAuditAPI:
         assert data["issues"][0]["reasons"] == ["profile_overlong", "profile_low_confidence"]
 
     @pytest.mark.asyncio
+    async def test_learning_event_and_candidate_api(self, test_client: AsyncClient):
+        event_response = await test_client.post(
+            "/memory/learning/events",
+            json={
+                "source_type": "user_correction",
+                "source_id": "msg-1",
+                "scope": "skill",
+                "signal": "User corrected the agent's release command workflow.",
+                "evidence_ids": ["message:msg-1"],
+                "outcome": "corrected",
+                "details": {"session_id": "test"},
+            },
+        )
+        assert event_response.status_code == 200
+        event = event_response.json()["event"]
+        assert event["scope"] == "skill"
+        assert event["evidence_ids"] == ["message:msg-1"]
+
+        candidate_response = await test_client.post(
+            "/memory/learning/candidates",
+            json={
+                "change_type": "skill_note",
+                "target_key": "release-workflow",
+                "proposal": "Add a note to check prerelease tags before running release.",
+                "rationale": "The user corrected this workflow during a release task.",
+                "evidence_event_ids": [event["id"]],
+                "expected_metric": "fewer release command corrections",
+                "policy_version": "learning.manual.v1",
+            },
+        )
+        assert candidate_response.status_code == 200
+        candidate = candidate_response.json()["candidate"]
+        assert candidate["status"] == "proposed"
+        assert candidate["evidence_event_ids"] == [event["id"]]
+
+        status_response = await test_client.patch(
+            f"/memory/learning/candidates/{candidate['id']}/status",
+            json={"status": "approved"},
+        )
+        assert status_response.status_code == 200
+        assert status_response.json()["candidate"]["status"] == "approved"
+
+        list_response = await test_client.get("/memory/learning/candidates", params={"status": "approved"})
+        assert list_response.status_code == 200
+        assert [row["id"] for row in list_response.json()["candidates"]] == [candidate["id"]]
+
+    @pytest.mark.asyncio
     async def test_repair_embeddings_is_explicit_and_audited(
         self,
         test_client: AsyncClient,

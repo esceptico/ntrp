@@ -318,6 +318,32 @@ class MemoryPruneApplyRequest(BaseModel):
     max_sources: int = Field(default=5, ge=0, le=1000)
 
 
+class CreateLearningEventRequest(BaseModel):
+    source_type: str = Field(..., min_length=1, max_length=100)
+    source_id: str | None = Field(default=None, max_length=200)
+    scope: str = Field(..., min_length=1, max_length=100)
+    signal: str = Field(..., min_length=1, max_length=5000)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=100)
+    outcome: str = Field(default="unknown", min_length=1, max_length=100)
+    details: dict = Field(default_factory=dict)
+
+
+class CreateLearningCandidateRequest(BaseModel):
+    change_type: str = Field(..., min_length=1, max_length=100)
+    target_key: str = Field(..., min_length=1, max_length=200)
+    proposal: str = Field(..., min_length=1, max_length=10000)
+    rationale: str = Field(..., min_length=1, max_length=10000)
+    evidence_event_ids: list[int] = Field(default_factory=list, max_length=100)
+    expected_metric: str | None = Field(default=None, max_length=1000)
+    policy_version: str = Field(..., min_length=1, max_length=100)
+    status: str = Field(default="proposed", min_length=1, max_length=100)
+    details: dict = Field(default_factory=dict)
+
+
+class UpdateLearningCandidateStatusRequest(BaseModel):
+    status: str = Field(..., min_length=1, max_length=100)
+
+
 # --- Automations / notifiers ---
 
 

@@ -4,11 +4,22 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.memory.formatting import format_memory_context, format_session_memory
-from ntrp.memory.models import Fact, FactKind, MemoryAccessEvent, MemoryEvent, Observation, SourceType
+from ntrp.memory.models import (
+    Fact,
+    FactKind,
+    LearningCandidate,
+    LearningEvent,
+    MemoryAccessEvent,
+    MemoryEvent,
+    Observation,
+    SourceType,
+)
 from ntrp.memory.profile_policy import ProfilePolicyItem
 from ntrp.memory.service import MemoryService
 from ntrp.server.deps import require_memory
 from ntrp.server.schemas import (
+    CreateLearningCandidateRequest,
+    CreateLearningEventRequest,
     FactKindReviewSuggestionRequest,
     MemoryPruneApplyRequest,
     MemoryPruneDryRunRequest,
@@ -16,6 +27,7 @@ from ntrp.server.schemas import (
     MemoryRepairEmbeddingsRequest,
     UpdateFactMetadataRequest,
     UpdateFactRequest,
+    UpdateLearningCandidateStatusRequest,
     UpdateObservationRequest,
 )
 
@@ -98,6 +110,39 @@ def _profile_policy_item_payload(item: ProfilePolicyItem) -> dict:
         "fact": _fact_payload(item.fact),
         "reasons": list(item.reasons),
         "recommendation": item.recommendation,
+    }
+
+
+def _learning_event_payload(event: LearningEvent) -> dict:
+    return {
+        "id": event.id,
+        "created_at": event.created_at.isoformat(),
+        "source_type": event.source_type,
+        "source_id": event.source_id,
+        "scope": event.scope,
+        "signal": event.signal,
+        "evidence_ids": event.evidence_ids,
+        "outcome": event.outcome,
+        "details": event.details,
+    }
+
+
+def _learning_candidate_payload(candidate: LearningCandidate) -> dict:
+    return {
+        "id": candidate.id,
+        "created_at": candidate.created_at.isoformat(),
+        "updated_at": candidate.updated_at.isoformat(),
+        "status": candidate.status,
+        "change_type": candidate.change_type,
+        "target_key": candidate.target_key,
+        "proposal": candidate.proposal,
+        "rationale": candidate.rationale,
+        "evidence_event_ids": candidate.evidence_event_ids,
+        "expected_metric": candidate.expected_metric,
+        "policy_version": candidate.policy_version,
+        "applied_at": candidate.applied_at.isoformat() if candidate.applied_at else None,
+        "reverted_at": candidate.reverted_at.isoformat() if candidate.reverted_at else None,
+        "details": candidate.details,
     }
 
 
@@ -462,6 +507,97 @@ async def get_memory_profile_policy_preview(
         "candidates": [_profile_policy_item_payload(item) for item in preview.candidates],
         "issues": [_profile_policy_item_payload(item) for item in preview.issues],
     }
+
+
+@router.post("/memory/learning/events")
+async def create_learning_event(
+    request: CreateLearningEventRequest,
+    svc: MemoryService = Depends(require_memory),
+):
+    event = await svc.learning.create_event(
+        source_type=request.source_type,
+        source_id=request.source_id,
+        scope=request.scope,
+        signal=request.signal,
+        evidence_ids=request.evidence_ids,
+        outcome=request.outcome,
+        details=request.details,
+    )
+    return {"event": _learning_event_payload(event)}
+
+
+@router.get("/memory/learning/events")
+async def get_learning_events(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    scope: str | None = Query(default=None, min_length=1),
+    source_type: str | None = Query(default=None, min_length=1),
+    svc: MemoryService = Depends(require_memory),
+):
+    events = await svc.learning.list_events(
+        limit=limit,
+        offset=offset,
+        scope=scope,
+        source_type=source_type,
+    )
+    return {"events": [_learning_event_payload(event) for event in events]}
+
+
+@router.post("/memory/learning/candidates")
+async def create_learning_candidate(
+    request: CreateLearningCandidateRequest,
+    svc: MemoryService = Depends(require_memory),
+):
+    try:
+        candidate = await svc.learning.create_candidate(
+            change_type=request.change_type,
+            target_key=request.target_key,
+            proposal=request.proposal,
+            rationale=request.rationale,
+            evidence_event_ids=request.evidence_event_ids,
+            expected_metric=request.expected_metric,
+            policy_version=request.policy_version,
+            status=request.status,
+            details=request.details,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"candidate": _learning_candidate_payload(candidate)}
+
+
+@router.get("/memory/learning/candidates")
+async def get_learning_candidates(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    status: str | None = Query(default=None, min_length=1),
+    change_type: str | None = Query(default=None, min_length=1),
+    svc: MemoryService = Depends(require_memory),
+):
+    try:
+        candidates = await svc.learning.list_candidates(
+            limit=limit,
+            offset=offset,
+            status=status,
+            change_type=change_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"candidates": [_learning_candidate_payload(candidate) for candidate in candidates]}
+
+
+@router.patch("/memory/learning/candidates/{candidate_id}/status")
+async def update_learning_candidate_status(
+    candidate_id: int,
+    request: UpdateLearningCandidateStatusRequest,
+    svc: MemoryService = Depends(require_memory),
+):
+    try:
+        candidate = await svc.learning.update_candidate_status(candidate_id, request.status)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Learning candidate not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"candidate": _learning_candidate_payload(candidate)}
 
 
 @router.post("/memory/recall/inspect")

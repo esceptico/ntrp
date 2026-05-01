@@ -223,3 +223,49 @@ async def test_migrate_v9_adds_memory_access_events(tmp_path: Path):
     assert version[0][0] == str(CURRENT_VERSION)
 
     await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_migrate_v10_adds_learning_tables(tmp_path: Path):
+    conn = await aiosqlite.connect(tmp_path / "memory.db")
+    conn.row_factory = aiosqlite.Row
+    await conn.executescript("""
+        CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+        INSERT INTO meta (key, value) VALUES ('schema_version', '9');
+    """)
+
+    await run_migrations(conn)
+
+    event_columns = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(learning_events)")}
+    assert {
+        "source_type",
+        "source_id",
+        "scope",
+        "signal",
+        "evidence_ids",
+        "outcome",
+        "details",
+    }.issubset(event_columns)
+
+    candidate_columns = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(learning_candidates)")}
+    assert {
+        "status",
+        "change_type",
+        "target_key",
+        "proposal",
+        "rationale",
+        "evidence_event_ids",
+        "expected_metric",
+        "policy_version",
+        "applied_at",
+        "reverted_at",
+        "details",
+    }.issubset(candidate_columns)
+
+    indexes = {row["name"] for row in await conn.execute_fetchall("PRAGMA index_list(learning_candidates)")}
+    assert {"idx_learning_candidates_status", "idx_learning_candidates_change_type"}.issubset(indexes)
+
+    version = await conn.execute_fetchall("SELECT value FROM meta WHERE key = 'schema_version'")
+    assert version[0][0] == str(CURRENT_VERSION)
+
+    await conn.close()

@@ -167,6 +167,43 @@ CREATE TABLE IF NOT EXISTS memory_access_events (
 CREATE INDEX IF NOT EXISTS idx_memory_access_events_created ON memory_access_events(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_memory_access_events_source ON memory_access_events(source);
 
+CREATE TABLE IF NOT EXISTS learning_events (
+    id INTEGER PRIMARY KEY,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    source_type TEXT NOT NULL,
+    source_id TEXT,
+    scope TEXT NOT NULL,
+    signal TEXT NOT NULL,
+    evidence_ids TEXT NOT NULL DEFAULT '[]',
+    outcome TEXT NOT NULL DEFAULT 'unknown',
+    details TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_learning_events_created ON learning_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_learning_events_scope ON learning_events(scope);
+CREATE INDEX IF NOT EXISTS idx_learning_events_source ON learning_events(source_type, source_id);
+
+CREATE TABLE IF NOT EXISTS learning_candidates (
+    id INTEGER PRIMARY KEY,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status TEXT NOT NULL DEFAULT 'proposed',
+    change_type TEXT NOT NULL,
+    target_key TEXT NOT NULL,
+    proposal TEXT NOT NULL,
+    rationale TEXT NOT NULL,
+    evidence_event_ids TEXT NOT NULL DEFAULT '[]',
+    expected_metric TEXT,
+    policy_version TEXT NOT NULL,
+    applied_at TIMESTAMP,
+    reverted_at TIMESTAMP,
+    details TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_learning_candidates_status ON learning_candidates(status);
+CREATE INDEX IF NOT EXISTS idx_learning_candidates_change_type ON learning_candidates(change_type);
+CREATE INDEX IF NOT EXISTS idx_learning_candidates_created ON learning_candidates(created_at DESC);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
     text,
     content='facts',
@@ -218,6 +255,8 @@ class GraphDatabase:
         await self.conn.commit()
 
     async def clear_all(self) -> None:
+        await self.conn.execute("DELETE FROM learning_candidates")
+        await self.conn.execute("DELETE FROM learning_events")
         await self.conn.execute("DELETE FROM dream_facts")
         await self.conn.execute("DELETE FROM dreams")
         await self.conn.execute("DELETE FROM memory_access_events")
