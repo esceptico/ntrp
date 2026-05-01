@@ -13,6 +13,7 @@ from ntrp.memory.dreams import run_dream_pass
 from ntrp.memory.fact_merge import fact_merge_pass
 from ntrp.memory.observation_merge import observation_merge_pass
 from ntrp.memory.store.dreams import DreamRepository
+from ntrp.memory.store.events import MemoryEventRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
 from ntrp.memory.temporal import temporal_consolidation_pass
@@ -33,6 +34,7 @@ class ConsolidationRunner:
         transaction: Callable[..., Any],
         db_lock: asyncio.Lock,
         db_conn: Any,
+        events: MemoryEventRepository | None = None,
     ):
         self.facts = facts
         self.observations = observations
@@ -42,6 +44,7 @@ class ConsolidationRunner:
         self._transaction = transaction
         self._db_lock = db_lock
         self._db_conn = db_conn
+        self.events = events
 
         self.dreams_enabled: bool = False
         self._running: bool = False
@@ -114,6 +117,18 @@ class ConsolidationRunner:
                     continue
                 for action, embedding in precomputed:
                     result = await apply_consolidation(fact, action, self.facts, self.observations, embedding)
+                    if result.observation_id and result.action in {"created", "updated"} and self.events:
+                        await self.events.create(
+                            actor="automation",
+                            action=f"observation.{result.action}",
+                            target_type="observation",
+                            target_id=result.observation_id,
+                            source_type=fact.source_type.value,
+                            source_ref=fact.source_ref,
+                            reason=result.reason or "fact consolidation",
+                            policy_version="memory.consolidation.v1",
+                            details={"source_fact_id": fact.id},
+                        )
                     if result.action == "created":
                         obs_created += 1
                 await self.facts.mark_consolidated(fact.id)
@@ -232,6 +247,15 @@ class ConsolidationRunner:
             if archive_ids:
                 async with self._transaction():
                     archived_facts = await self.facts.archive_batch(archive_ids)
+                    if self.events and archived_facts:
+                        await self.events.create(
+                            actor="automation",
+                            action="facts.archived",
+                            target_type="fact_batch",
+                            reason="decay archival pass",
+                            policy_version="memory.decay.v1",
+                            details={"ids": archive_ids, "count": archived_facts},
+                        )
 
             archived_obs = 0
             obs_candidates = await self.observations.list_archival_candidates(limit=100)
@@ -243,6 +267,15 @@ class ConsolidationRunner:
             if obs_archive_ids:
                 async with self._transaction():
                     archived_obs = await self.observations.archive_batch(obs_archive_ids)
+                    if self.events and archived_obs:
+                        await self.events.create(
+                            actor="automation",
+                            action="observations.archived",
+                            target_type="observation_batch",
+                            reason="decay archival pass",
+                            policy_version="memory.decay.v1",
+                            details={"ids": obs_archive_ids, "count": archived_obs},
+                        )
 
             if archived_facts or archived_obs:
                 _logger.info("Archival pass: %d facts, %d observations archived", archived_facts, archived_obs)

@@ -137,6 +137,14 @@ class TestFactCRUD:
         assert isinstance(entity_refs, list)
         assert all("name" in e and "entity_id" in e for e in entity_refs)
 
+        events = await test_client.get("/memory/events", params={"target_type": "fact", "target_id": sample_fact})
+        assert events.status_code == 200
+        latest = events.json()["events"][0]
+        assert latest["action"] == "fact.updated"
+        assert latest["actor"] == "user"
+        assert latest["policy_version"] == "memory.api.v1"
+        assert latest["details"]["old_chars"] > 0
+
     @pytest.mark.asyncio
     async def test_patch_fact_marks_for_reconsolidation(
         self, test_client: AsyncClient, sample_fact: int, test_runtime: Runtime
@@ -282,6 +290,14 @@ class TestFactMetadataAPI:
         assert fact["confidence"] == 0.8
         assert fact["expires_at"] == expires_at
         assert fact["pinned_at"] is not None
+
+        events = await test_client.get(
+            "/memory/events",
+            params={"target_type": "fact", "target_id": sample_fact, "action": "fact.metadata_updated"},
+        )
+        assert events.status_code == 200
+        event = events.json()["events"][0]
+        assert event["details"]["fields"] == ["confidence", "expires_at", "kind", "pinned_at", "salience"]
 
     @pytest.mark.asyncio
     async def test_patch_fact_metadata_rejects_missing_superseding_fact(
@@ -447,6 +463,15 @@ class TestObservationCRUD:
         assert "evidence_count" in obs
         assert "updated_at" in obs
 
+        events = await test_client.get(
+            "/memory/events",
+            params={"target_type": "observation", "target_id": sample_observation},
+        )
+        assert events.status_code == 200
+        latest = events.json()["events"][0]
+        assert latest["action"] == "observation.updated"
+        assert latest["details"]["support_count"] == 1
+
     @pytest.mark.asyncio
     async def test_patch_observation_preserves_facts(
         self, test_client: AsyncClient, sample_observation: int, test_runtime: Runtime
@@ -509,6 +534,19 @@ class TestMemoryAuditAPI:
         assert "provenance" in data
 
     @pytest.mark.asyncio
+    async def test_memory_events_list_remember_provenance(self, test_client: AsyncClient, sample_fact: int):
+        response = await test_client.get("/memory/events", params={"target_type": "fact", "target_id": sample_fact})
+
+        assert response.status_code == 200
+        events = response.json()["events"]
+        assert events
+        created = next(event for event in events if event["action"] == "fact.created")
+        assert created["actor"] == "backend"
+        assert created["reason"] == "remembered fact"
+        assert created["policy_version"] == "memory.remember.v1"
+        assert created["details"]["kind"] == "note"
+
+    @pytest.mark.asyncio
     async def test_memory_profile(self, test_client: AsyncClient, test_runtime: Runtime):
         fact = await test_runtime.memory.facts.create(
             "User prefers concise status updates",
@@ -557,6 +595,51 @@ class TestMemoryAuditAPI:
         obs = await test_runtime.memory.observations.get(sample_observation)
         assert obs is not None
 
+    @pytest.mark.asyncio
+    async def test_prune_apply_archives_only_matching_candidates(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+        sample_observation: int,
+    ):
+        recent = await test_runtime.memory.observations.create(
+            summary="Recent pattern should not be archived",
+            embedding=mock_embedding("recent pattern"),
+        )
+        old = (datetime.now(UTC) - timedelta(days=31)).isoformat()
+        await test_runtime.memory.db.conn.execute(
+            "UPDATE observations SET created_at = ?, updated_at = ? WHERE id = ?",
+            (old, old, sample_observation),
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.post(
+            "/memory/prune/apply",
+            json={
+                "observation_ids": [sample_observation, recent.id],
+                "older_than_days": 30,
+                "max_sources": 5,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["archived"] == 1
+        assert data["archived_ids"] == [sample_observation]
+        assert data["skipped_ids"] == [recent.id]
+
+        archived = await test_runtime.memory.observations.get(sample_observation)
+        not_archived = await test_runtime.memory.observations.get(recent.id)
+        assert archived.archived_at is not None
+        assert not_archived.archived_at is None
+
+        events = await test_client.get("/memory/events", params={"action": "observations.archived"})
+        assert events.status_code == 200
+        event = events.json()["events"][0]
+        assert event["actor"] == "user"
+        assert event["policy_version"] == "memory.prune.v1"
+        assert event["details"]["ids"] == [sample_observation]
+
 
 class TestMemoryDisabled:
     """Test error handling when memory is disabled"""
@@ -596,11 +679,13 @@ class TestMemoryDisabled:
                 client.patch("/observations/1", json={"summary": "test"}),
                 client.delete("/observations/1"),
                 client.get("/memory/audit"),
+                client.get("/memory/events"),
                 client.get("/memory/facts/kind-review"),
                 client.post("/memory/facts/kind-review/suggestions", json={}),
                 client.get("/memory/supersession/candidates"),
                 client.get("/memory/profile"),
                 client.post("/memory/prune/dry-run", json={}),
+                client.post("/memory/prune/apply", json={"observation_ids": [1]}),
             )
 
             assert all(r.status_code == 503 for r in responses)

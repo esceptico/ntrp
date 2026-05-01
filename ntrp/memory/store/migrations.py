@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 6
+CURRENT_VERSION = 7
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -200,6 +200,30 @@ async def _migrate_v6(conn: aiosqlite.Connection) -> None:
         """)
 
 
+async def _migrate_v7(conn: aiosqlite.Connection) -> None:
+    """Add memory event log for provenance and automation audit."""
+    _logger.info("Migration v7: adding memory event log")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS memory_events (
+            id INTEGER PRIMARY KEY,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            actor TEXT NOT NULL,
+            action TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id INTEGER,
+            source_type TEXT,
+            source_ref TEXT,
+            reason TEXT,
+            policy_version TEXT NOT NULL,
+            details TEXT NOT NULL DEFAULT '{}'
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_events_created ON memory_events(created_at DESC)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_events_target ON memory_events(target_type, target_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_events_action ON memory_events(action)")
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
@@ -207,6 +231,7 @@ _MIGRATIONS: list[tuple[int, callable]] = [
     (4, _migrate_v4),
     (5, _migrate_v5),
     (6, _migrate_v6),
+    (7, _migrate_v7),
 ]
 
 

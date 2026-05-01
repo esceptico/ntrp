@@ -203,6 +203,25 @@ class Dream(_FrozenModel):
         return data
 
 
+class MemoryEvent(_FrozenModel):
+    id: int
+    created_at: datetime
+    actor: str
+    action: str
+    target_type: str
+    target_id: int | None = None
+    source_type: str | None = None
+    source_ref: str | None = None
+    reason: str | None = None
+    policy_version: str
+    details: dict[str, Any] = {}
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _parse_created_at(cls, v: Any) -> datetime | None:
+        return _parse_datetime(v)
+
+
 class FactContext(_FrozenModel):
     facts: list[Fact]
     observations: list[Observation] = []

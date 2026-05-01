@@ -3,11 +3,12 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ntrp.memory.models import Fact, FactKind, Observation, SourceType
+from ntrp.memory.models import Fact, FactKind, MemoryEvent, Observation, SourceType
 from ntrp.memory.service import MemoryService
 from ntrp.server.deps import require_memory
 from ntrp.server.schemas import (
     FactKindReviewSuggestionRequest,
+    MemoryPruneApplyRequest,
     MemoryPruneDryRunRequest,
     UpdateFactMetadataRequest,
     UpdateFactRequest,
@@ -48,6 +49,22 @@ def _observation_payload(observation: Observation) -> dict:
         "updated_at": observation.updated_at.isoformat(),
         "last_accessed_at": observation.last_accessed_at.isoformat(),
         "archived_at": observation.archived_at.isoformat() if observation.archived_at else None,
+    }
+
+
+def _memory_event_payload(event: MemoryEvent) -> dict:
+    return {
+        "id": event.id,
+        "created_at": event.created_at.isoformat(),
+        "actor": event.actor,
+        "action": event.action,
+        "target_type": event.target_type,
+        "target_id": event.target_id,
+        "source_type": event.source_type,
+        "source_ref": event.source_ref,
+        "reason": event.reason,
+        "policy_version": event.policy_version,
+        "details": event.details,
     }
 
 
@@ -332,6 +349,25 @@ async def get_memory_audit(svc: MemoryService = Depends(require_memory)):
     return await svc.audit()
 
 
+@router.get("/memory/events")
+async def get_event_log(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    target_type: str | None = Query(default=None, min_length=1),
+    target_id: int | None = Query(default=None, ge=1),
+    action: str | None = Query(default=None, min_length=1),
+    svc: MemoryService = Depends(require_memory),
+):
+    events = await svc.events.list_recent(
+        limit=limit,
+        offset=offset,
+        target_type=target_type,
+        target_id=target_id,
+        action=action,
+    )
+    return {"events": [_memory_event_payload(event) for event in events]}
+
+
 @router.get("/memory/profile")
 async def get_memory_profile(
     limit: int = Query(default=6, ge=1, le=50),
@@ -347,6 +383,15 @@ async def prune_memory_dry_run(request: MemoryPruneDryRunRequest, svc: MemorySer
         older_than_days=request.older_than_days,
         max_sources=request.max_sources,
         limit=request.limit,
+    )
+
+
+@router.post("/memory/prune/apply")
+async def apply_memory_prune(request: MemoryPruneApplyRequest, svc: MemoryService = Depends(require_memory)):
+    return await svc.prune_observations_apply(
+        observation_ids=request.observation_ids,
+        older_than_days=request.older_than_days,
+        max_sources=request.max_sources,
     )
 
 

@@ -2,10 +2,10 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 from ntrp.logging import get_logger
-from ntrp.memory.audit import memory_audit, observation_prune_dry_run
+from ntrp.memory.audit import memory_audit, observation_prune_candidates_by_ids, observation_prune_dry_run
 from ntrp.memory.fact_review import FactMetadataSuggestion, suggest_fact_metadata
 from ntrp.memory.facts import PROFILE_FACT_KINDS, FactMemory
-from ntrp.memory.models import Dream, EntityRef, Fact, FactKind, Observation, SourceType
+from ntrp.memory.models import Dream, EntityRef, Fact, FactKind, MemoryEvent, Observation, SourceType
 
 _logger = get_logger(__name__)
 
@@ -109,7 +109,8 @@ class FactService:
         async with self._memory.transaction():
             repo = self._memory.facts
 
-            if not (await repo.get(fact_id)):
+            old = await repo.get(fact_id)
+            if not old:
                 raise KeyError(f"Fact {fact_id} not found")
 
             new_embedding = await self._memory.embedder.embed_one(new_text)
@@ -120,6 +121,19 @@ class FactService:
             await self._memory._process_extraction(fact_id, extraction)
 
             fact = await repo.get(fact_id)
+            if not fact:
+                raise RuntimeError(f"Fact {fact_id} disappeared during update")
+            await self._memory.events.create(
+                actor="user",
+                action="fact.updated",
+                target_type="fact",
+                target_id=fact_id,
+                source_type=old.source_type.value,
+                source_ref=old.source_ref,
+                reason="manual fact text edit",
+                policy_version="memory.api.v1",
+                details={"old_chars": len(old.text), "new_chars": len(new_text)},
+            )
 
         if self._enqueue_fact_index_upsert:
             await self._enqueue_fact_index_upsert(fact_id, new_text)
@@ -130,7 +144,8 @@ class FactService:
     async def update_metadata(self, fact_id: int, updates: dict[str, object]) -> Fact:
         async with self._memory.transaction():
             repo = self._memory.facts
-            if not (await repo.get(fact_id)):
+            old = await repo.get(fact_id)
+            if not old:
                 raise KeyError(f"Fact {fact_id} not found")
 
             superseded_by = updates.get("superseded_by_fact_id")
@@ -141,6 +156,20 @@ class FactService:
                     raise ValueError("superseding fact not found")
 
             fact = await repo.update_metadata(fact_id, updates)
+            if not fact:
+                raise RuntimeError(f"Fact {fact_id} disappeared during metadata update")
+            if updates:
+                await self._memory.events.create(
+                    actor="user",
+                    action="fact.metadata_updated",
+                    target_type="fact",
+                    target_id=fact_id,
+                    source_type=old.source_type.value,
+                    source_ref=old.source_ref,
+                    reason="manual fact metadata edit",
+                    policy_version="memory.api.v1",
+                    details={"updates": updates, "fields": sorted(updates)},
+                )
 
         return fact
 
@@ -151,7 +180,8 @@ class FactService:
         async with self._memory.transaction():
             repo = self._memory.facts
 
-            if not (await repo.get(fact_id)):
+            fact = await repo.get(fact_id)
+            if not fact:
                 raise KeyError(f"Fact {fact_id} not found")
 
             entity_refs_count = await repo.count_entity_refs(fact_id)
@@ -159,6 +189,17 @@ class FactService:
             await self._memory.observations.remove_source_facts([fact_id])
             await self._memory.dreams.remove_source_facts([fact_id])
             await repo.cleanup_orphaned_entities()
+            await self._memory.events.create(
+                actor="user",
+                action="fact.deleted",
+                target_type="fact",
+                target_id=fact_id,
+                source_type=fact.source_type.value,
+                source_ref=fact.source_ref,
+                reason="manual fact delete",
+                policy_version="memory.api.v1",
+                details={"entity_refs": entity_refs_count, "kind": fact.kind.value},
+            )
 
         if self._enqueue_fact_index_delete:
             await self._enqueue_fact_index_delete(fact_id)
@@ -202,11 +243,27 @@ class ObservationService:
         async with self._memory.transaction():
             obs_repo = self._memory.observations
 
-            if not (await obs_repo.get(observation_id)):
+            old = await obs_repo.get(observation_id)
+            if not old:
                 raise KeyError(f"Observation {observation_id} not found")
 
             new_embedding = await self._memory.embedder.embed_one(new_summary)
             obs = await obs_repo.update_summary(observation_id, new_summary, new_embedding)
+            if not obs:
+                raise RuntimeError(f"Observation {observation_id} disappeared during update")
+            await self._memory.events.create(
+                actor="user",
+                action="observation.updated",
+                target_type="observation",
+                target_id=observation_id,
+                reason="manual pattern summary edit",
+                policy_version="memory.api.v1",
+                details={
+                    "old_chars": len(old.summary),
+                    "new_chars": len(new_summary),
+                    "support_count": len(old.source_fact_ids),
+                },
+            )
 
         return obs
 
@@ -214,10 +271,20 @@ class ObservationService:
         async with self._memory.transaction():
             obs_repo = self._memory.observations
 
-            if not (await obs_repo.get(observation_id)):
+            obs = await obs_repo.get(observation_id)
+            if not obs:
                 raise KeyError(f"Observation {observation_id} not found")
 
             await obs_repo.delete(observation_id)
+            await self._memory.events.create(
+                actor="user",
+                action="observation.deleted",
+                target_type="observation",
+                target_id=observation_id,
+                reason="manual pattern delete",
+                policy_version="memory.api.v1",
+                details={"support_count": len(obs.source_fact_ids)},
+            )
 
 
 class DreamService:
@@ -234,10 +301,42 @@ class DreamService:
         return dream, list(facts_by_id.values())
 
     async def delete(self, dream_id: int) -> None:
-        if not (await self._memory.dreams.get(dream_id)):
+        dream = await self._memory.dreams.get(dream_id)
+        if not dream:
             raise KeyError(f"Dream {dream_id} not found")
         async with self._memory.transaction():
             await self._memory.dreams.delete(dream_id)
+            await self._memory.events.create(
+                actor="user",
+                action="dream.deleted",
+                target_type="dream",
+                target_id=dream_id,
+                reason="manual dream delete",
+                policy_version="memory.api.v1",
+                details={"support_count": len(dream.source_fact_ids)},
+            )
+
+
+class MemoryEventService:
+    def __init__(self, memory: FactMemory):
+        self._memory = memory
+
+    async def list_recent(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        target_type: str | None = None,
+        target_id: int | None = None,
+        action: str | None = None,
+    ) -> list[MemoryEvent]:
+        return await self._memory.events.list_recent(
+            limit=limit,
+            offset=offset,
+            target_type=target_type,
+            target_id=target_id,
+            action=action,
+        )
 
 
 class MemoryService:
@@ -253,6 +352,7 @@ class MemoryService:
         self.facts = FactService(memory, enqueue_fact_index_upsert, enqueue_fact_index_delete)
         self.observations = ObservationService(memory)
         self.dreams = DreamService(memory)
+        self.events = MemoryEventService(memory)
 
     @property
     def is_consolidating(self) -> bool:
@@ -286,6 +386,51 @@ class MemoryService:
             max_sources=max_sources,
             limit=limit,
         )
+
+    async def prune_observations_apply(
+        self,
+        *,
+        observation_ids: list[int],
+        older_than_days: int = 30,
+        max_sources: int = 5,
+    ) -> dict:
+        requested_ids = list(dict.fromkeys(observation_ids))
+        async with self.memory.transaction():
+            candidates = await observation_prune_candidates_by_ids(
+                self.memory.observations.conn,
+                requested_ids,
+                older_than_days=older_than_days,
+                max_sources=max_sources,
+            )
+            archive_ids = [row["id"] for row in candidates]
+            archived = await self.memory.observations.archive_batch(archive_ids)
+            archive_id_set = set(archive_ids)
+            skipped_ids = [obs_id for obs_id in requested_ids if obs_id not in archive_id_set]
+            if archived:
+                await self.memory.events.create(
+                    actor="user",
+                    action="observations.archived",
+                    target_type="observation_batch",
+                    reason="manual prune apply",
+                    policy_version="memory.prune.v1",
+                    details={
+                        "ids": archive_ids,
+                        "requested_ids": requested_ids,
+                        "skipped_ids": skipped_ids,
+                        "criteria": {
+                            "older_than_days": older_than_days,
+                            "max_sources": max_sources,
+                        },
+                    },
+                )
+
+        return {
+            "status": "archived" if archived else "unchanged",
+            "archived": archived,
+            "archived_ids": archive_ids,
+            "skipped_ids": skipped_ids,
+            "candidates": candidates,
+        }
 
     async def count_unconsolidated(self) -> int:
         return await self.memory.facts.count_unconsolidated()

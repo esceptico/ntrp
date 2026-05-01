@@ -70,6 +70,7 @@ class ChatRunsStatusResponse(BaseModel):
 
 OutboxEventId = Annotated[int, Field(gt=0)]
 FactId = Annotated[int, Field(gt=0)]
+ObservationId = Annotated[int, Field(gt=0)]
 
 
 class ReplayOutboxRequest(BaseModel):
@@ -298,6 +299,12 @@ class MemoryPruneDryRunRequest(BaseModel):
     older_than_days: int = Field(default=30, ge=1, le=3650)
     max_sources: int = Field(default=5, ge=0, le=1000)
     limit: int = Field(default=100, ge=1, le=1000)
+
+
+class MemoryPruneApplyRequest(BaseModel):
+    observation_ids: list[ObservationId] = Field(..., min_length=1, max_length=1000)
+    older_than_days: int = Field(default=30, ge=1, le=3650)
+    max_sources: int = Field(default=5, ge=0, le=1000)
 
 
 # --- Automations / notifiers ---

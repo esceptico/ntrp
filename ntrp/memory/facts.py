@@ -30,6 +30,7 @@ from ntrp.memory.models import ExtractedEntity, ExtractionResult, Fact, FactCont
 from ntrp.memory.retrieval import retrieve_with_observations
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.dreams import DreamRepository
+from ntrp.memory.store.events import MemoryEventRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
 
@@ -78,6 +79,7 @@ class FactMemory:
         self.facts = FactRepository(conn, read_conn)
         self.observations = ObservationRepository(conn, read_conn)
         self.dreams = DreamRepository(conn, read_conn)
+        self.events = MemoryEventRepository(conn, read_conn)
         self.embedder = embedder or Embedder(embedding)
         self.extractor = extractor or Extractor(model)
         self._enqueue_fact_index_upsert = enqueue_fact_index_upsert
@@ -95,6 +97,7 @@ class FactMemory:
             transaction=self.transaction,
             db_lock=self._db_lock,
             db_conn=conn,
+            events=self.events,
         )
 
     @asynccontextmanager
@@ -278,6 +281,24 @@ class FactMemory:
                 expires_at=expires_at,
             )
             entities_extracted = await self._process_extraction(fact.id, extraction)
+            await self.events.create(
+                actor="backend",
+                action="fact.created",
+                target_type="fact",
+                target_id=fact.id,
+                source_type=source_type.value,
+                source_ref=source_ref,
+                reason="remembered fact",
+                policy_version="memory.remember.v1",
+                details={
+                    "kind": kind.value,
+                    "salience": salience,
+                    "confidence": confidence,
+                    "expires_at": expires_at,
+                    "happened_at": happened_at,
+                    "entity_count": len(entities_extracted),
+                },
+            )
 
         if self._enqueue_fact_index_upsert:
             await self._enqueue_fact_index_upsert(fact.id, text)
@@ -339,6 +360,15 @@ class FactMemory:
                 if score >= FORGET_SIMILARITY_THRESHOLD:
                     await self.facts.delete(fact.id)
                     deleted_ids.append(fact.id)
+                    await self.events.create(
+                        actor="backend",
+                        action="fact.deleted",
+                        target_type="fact",
+                        target_id=fact.id,
+                        reason="forget query matched threshold",
+                        policy_version="memory.forget.v1",
+                        details={"score": round(float(score), 4)},
+                    )
                     count += 1
             if count > 0:
                 await self.observations.remove_source_facts(deleted_ids)
@@ -415,6 +445,14 @@ class FactMemory:
         async with self.transaction():
             obs_count = await self.observations.clear_all()
             facts_reset = await self.facts.reset_consolidated()
+            await self.events.create(
+                actor="backend",
+                action="observations.cleared",
+                target_type="observation",
+                reason="clear observations",
+                policy_version="memory.clear_observations.v1",
+                details={"observations_deleted": obs_count, "facts_reset": facts_reset},
+            )
             return {"observations_deleted": obs_count, "facts_reset": facts_reset}
 
     async def clear(self) -> dict[str, int]:

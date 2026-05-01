@@ -14,6 +14,11 @@ def test_backend_persistence_tables_are_only_referenced_by_owner_modules():
         "automation_count_state": {Path("ntrp/automation/store.py")},
         "chat_extraction_state": {Path("ntrp/automation/store.py")},
         "monitor_state": {Path("ntrp/monitor/store.py")},
+        "memory_events": {
+            Path("ntrp/memory/store/base.py"),
+            Path("ntrp/memory/store/events.py"),
+            Path("ntrp/memory/store/migrations.py"),
+        },
     }
 
     violations: list[str] = []

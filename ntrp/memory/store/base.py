@@ -127,6 +127,24 @@ CREATE TABLE IF NOT EXISTS dream_facts (
 
 CREATE INDEX IF NOT EXISTS idx_dream_facts_fact ON dream_facts(fact_id);
 
+CREATE TABLE IF NOT EXISTS memory_events (
+    id INTEGER PRIMARY KEY,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actor TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_id INTEGER,
+    source_type TEXT,
+    source_ref TEXT,
+    reason TEXT,
+    policy_version TEXT NOT NULL,
+    details TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_events_created ON memory_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_events_target ON memory_events(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_memory_events_action ON memory_events(action);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
     text,
     content='facts',
@@ -180,6 +198,7 @@ class GraphDatabase:
     async def clear_all(self) -> None:
         await self.conn.execute("DELETE FROM dream_facts")
         await self.conn.execute("DELETE FROM dreams")
+        await self.conn.execute("DELETE FROM memory_events")
         await self.conn.execute("DELETE FROM temporal_checkpoints")
         await self.conn.execute("DELETE FROM obs_entity_refs")
         await self.conn.execute("DELETE FROM observation_facts")

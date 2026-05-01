@@ -302,3 +302,43 @@ async def observation_prune_dry_run(
         "summary": summary,
         "candidates": candidates,
     }
+
+
+async def observation_prune_candidates_by_ids(
+    conn: aiosqlite.Connection,
+    observation_ids: list[int],
+    *,
+    older_than_days: int = DEFAULT_PRUNE_OLDER_THAN_DAYS,
+    max_sources: int = DEFAULT_PRUNE_MAX_SOURCES,
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """Return requested observation IDs that still satisfy the prune rule."""
+
+    if not observation_ids:
+        return []
+
+    now = now or datetime.now(UTC)
+    cutoff = now - timedelta(days=older_than_days)
+    placeholders = ",".join("?" * len(observation_ids))
+    return await _all(
+        conn,
+        f"""
+        SELECT
+            id,
+            summary,
+            created_at,
+            updated_at,
+            access_count,
+            COALESCE(json_array_length(source_fact_ids), 0) AS evidence_count,
+            length(summary) AS chars,
+            'zero_access_low_support' AS reason
+        FROM observations
+        WHERE id IN ({placeholders})
+          AND archived_at IS NULL
+          AND access_count = 0
+          AND created_at < ?
+          AND COALESCE(json_array_length(source_fact_ids), 0) <= ?
+        ORDER BY created_at ASC
+        """,
+        (*observation_ids, cutoff.isoformat(), max_sources),
+    )

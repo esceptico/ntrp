@@ -603,22 +603,77 @@ skills/rules      higher-compression procedural memory, not truth
 | Hierarchical Persona Induction, Bian Que | User/profile patterns must stay evidence-aligned. A correction should update both the derived memory and the procedural rule/skill that caused the mistake. |
 | AEL "less is more" | Do not ship a maximal memory architecture first. Nail facts, provenance, simple retrieval, and simple reflection before adding planners, judges, or RL policy loops. |
 
-#### Paper status
+#### Direct-source paper pass, 2026-05-01
 
-The current implementation is deliberately limited to review/provenance UI. It does not depend on reproducing any paper algorithm yet. Before implementing algorithmic memory policy, read these papers directly rather than relying only on sweep summaries:
+The current implementation is deliberately limited to review/provenance UI. It does not depend on reproducing any paper algorithm yet.
 
-| Topic | Papers / sources to read directly before implementation | Why it matters |
+The direct-source pass confirms the boring direction: fix the data shape first, make provenance mandatory, then add small background policies with dry-runs and metrics. Do not build a memory research framework inside the product.
+
+| Source | Useful idea for ntrp | What not to copy |
 | --- | --- | --- |
-| Capture and consolidation | Mem0 token-efficient algorithm, OpenClaw Dreaming notes, MuninnDB Dream Engine | Defines append-only capture, async consolidation, and dry-run dream/prune behavior. |
-| Write gates and memory CRUD policy | MemReader-4B, DeltaMem, Response-Utility Selection | Needed before adding automatic pattern/fact write policy. |
-| Task segmentation and observation compression | FOCAL, StructMem, GAM, ADEMA, TACO | Needed before changing how observations are generated from sessions. |
-| Forgetting and tiers | FSFM, Adaptive Memory Crystallization, IE-as-Cache, ZenBrain | Needed before enabling automatic archive/delete behavior. |
-| Compression/promotions | Experience Compression Spectrum, ContextWeaver, PhysNote | Needed before promoting raw events to facts, patterns, or skills. |
-| External validation | SkillLearnBench, AJ-Bench, VLAA-GUI, AgentSearchBench | Needed before trusting self-review, skill promotion, or pattern ranking. |
-| Injection control | SRA-Bench, Decoupled Memory Control, SAGER | Needed before changing retrieval/injection policy. |
-| Typed memory and provenance | Memanto, WUPHF, Anthropic CMA memory | Needed before adding more schema/index infrastructure. |
-| Evidence-aligned profile/persona | Hierarchical Persona Induction, Bian Que | Needed before turning patterns into profile/persona memory. |
-| Architecture sanity check | AEL | Needed before adding complex planner/judge/RL machinery. |
+| Mem0 token-efficient memory algorithm, <https://mem0.ai/blog/mem0-the-token-efficient-memory-algorithm> | ADD-only extraction, async memory processing, multi-signal retrieval, and explicit token/latency measurement. Agent-generated facts are first-class, not ignored. | Do not hide policy inside a black-box memory service. Keep local facts auditable. |
+| Mem0 state of AI agent memory, <https://mem0.ai/blog/state-of-ai-agent-memory-2026> | Memory quality needs accuracy, token cost, and latency metrics. Full-context memory is a benchmark ceiling, not a production design. | Do not optimize recall alone and pretend the system is good. |
+| FOCAL, <https://arxiv.org/abs/2604.19541> | Filter noisy streams before summarization, attribute events to tasks, and isolate task memory to avoid cross-task pollution. | Do not add a multi-agent logging stack before we have explicit task/session segments. |
+| RUMS, <https://arxiv.org/abs/2604.14473> | Similarity is not enough. Inject memory only when it changes or sharpens the response. | Do not implement mutual-information machinery now. Start with retrieved/injected/used/corrected telemetry. |
+| SRA-Bench, <https://arxiv.org/abs/2604.24594> | Retrieval and incorporation are separate problems. The system must decide whether a skill or memory should be loaded at all. | Do not enumerate every memory/skill in context because retrieval exists. |
+| SkillLearnBench, <https://arxiv.org/abs/2604.20087> | Continual learning needs external feedback. Self-feedback alone can drift; reusable workflows learn better than open-ended vibes. | Do not auto-promote skills or rules from self-review. Require evidence. |
+| TACO, <https://arxiv.org/abs/2604.19572> | Terminal agents benefit from learned compression rules over observations. Rules should preserve task-relevant output and drop low-value noise. | Do not let learned compression rules rewrite source facts. Compression is a view/policy layer. |
+| AEL, <https://arxiv.org/abs/2604.21725> | Split fast runtime memory use from slow reflection. The useful result is "less is more": memory plus reflection helped, extra planner/tool/skill mechanisms degraded. | Do not add planners, judges, RL loops, or per-tool policy knobs until simple memory telemetry proves the need. |
+| FSFM, <https://arxiv.org/abs/2604.20300> | Forgetting has distinct classes: passive decay, active deletion, safety-triggered forgetting, and adaptive reinforcement. | Do not collapse all cleanup into one "old/noisy" flag. |
+| Memanto, <https://arxiv.org/abs/2604.22085> | Typed semantic memory, temporal versioning, conflict resolution, and lower-complexity retrieval can beat graph-heavy designs. | Do not add graph theater before typed facts, time, and conflict state are boring. |
+| ContextWeaver, <https://arxiv.org/abs/2604.23069> | Preserve dependency structure and execution feedback, not just summaries. This matters for multi-step tool work. | Do not turn this into a generic graph database. Store direct evidence and dependency ids. |
+| AJ-Bench, <https://arxiv.org/abs/2604.18240> | Evaluation should acquire verifiable evidence from the environment, not just ask another model to judge. | Do not trust an LLM-only reviewer for promotion or cleanup. |
+
+Deferred direct reads before implementation:
+
+```text
+DeltaMem, StructMem, ADEMA, ZenBrain, PhysNote, Experience Compression Spectrum,
+Hierarchical Persona Induction, Bian Que, Decoupled Memory Control, SAGER,
+WUPHF, Anthropic CMA memory.
+```
+
+These can influence later policy, but they should not block the next implementation slice unless the slice touches their domain.
+
+#### Implementation gates
+
+No automatic archive/apply until:
+
+```text
+1. prune dry-run exists in UI
+2. candidate reasons are explicit
+3. affected item details show direct provenance
+4. apply writes are archive/supersede-only, never hard-delete
+5. apply endpoint has tests against real-ish memory data
+6. memory event log records who/what/why/policy_version
+```
+
+No automatic pattern creation rewrite until:
+
+```text
+1. source_fact_ids are mandatory
+2. task/session segment boundaries are explicit
+3. pattern has created_by, policy_version, support_count, and confidence basis
+4. pattern correction creates/supersedes facts or marks the pattern stale
+5. no pattern can become profile truth without an explicit fact update
+```
+
+No retrieval/injection rewrite until:
+
+```text
+1. telemetry records retrieved, injected, omitted, used, corrected, and stale
+2. baseline token/latency/answer-quality counters exist
+3. profile, facts, patterns, and skills have separate budgets
+4. the UI can inspect the final injected context bundle
+```
+
+No profile/persona promotion until:
+
+```text
+1. profile rows point to source facts
+2. corrections supersede the source fact or exclude it from profile
+3. contradictory facts are visible, not silently overwritten
+4. user-facing delete/archive remains stronger than automation
+```
 
 #### Practical implications
 
@@ -631,6 +686,89 @@ events      raw-ish append log for reconstruction, audit, and future consolidati
 ```
 
 Do not make observations a second editable truth store. They are derived artifacts over fact provenance. If the user corrects a pattern, the correction should either create/update facts or mark the pattern as wrong/stale; it should not silently rewrite history.
+
+### Continuous Learning
+
+Continuous learning is allowed only as a small, auditable improvement loop. It is not "the agent edits itself". It is a background system that proposes versioned policy changes from evidence, validates them, and keeps rollback cheap.
+
+The data model should be explicit:
+
+```text
+learning_event
+  id
+  created_at
+  source_type            user_correction | tool_result | task_success | task_failure | repeated_retrieval | prune_review
+  source_id              message id, run id, tool call id, memory event id, or review id
+  scope                  memory_extraction | retrieval | injection | compression | profile | skill | prompt
+  signal                 what happened, in plain text
+  evidence_ids           direct source ids, never just a summary
+  outcome                success | failure | corrected | ignored | unknown
+
+learning_candidate
+  id
+  created_at
+  status                 proposed | approved | applied | rejected | reverted
+  change_type            retrieval_rule | injection_rule | compression_rule | prune_rule | skill_note | prompt_note
+  target_key             stable id for the rule/skill/prompt section
+  proposal               small text or structured patch
+  rationale              why this should help
+  evidence_event_ids
+  expected_metric        fewer tokens, fewer stale injections, better task success, less user correction
+  policy_version
+  applied_at
+  reverted_at
+```
+
+Rules:
+
+```text
+1. Learning candidates are append-only records.
+2. Applying a candidate creates a new policy version.
+3. Reverting switches the active policy version back; it does not delete history.
+4. A candidate needs direct provenance, not a model-generated story about why it is good.
+5. Self-feedback may propose, but user correction, tool results, replay, or review must validate.
+```
+
+Good automatic-improvement targets:
+
+```text
+retrieval ranking weights
+memory injection budgets
+compression rules for noisy tool output
+prune/archive thresholds
+prefetch templates for recurring workflows
+skill activation hints
+```
+
+Bad automatic-improvement targets:
+
+```text
+profile truth
+system prompt authority
+tool permissions
+hard deletion
+unreviewed skill creation
+unreviewed code changes
+```
+
+The continuous-learning UI should be boring:
+
+```text
+Learning tab:
+  Proposed
+  Applied
+  Rejected
+  Reverted
+
+Candidate detail:
+  proposed change
+  evidence
+  expected metric
+  current metric if available
+  approve / reject / revert
+```
+
+This gives us auto-improvement without hardcoding one magical "evolve memory" path. Policies can evolve, but every change has provenance, status, version, and rollback.
 
 Live ntrp sample from `~/.ntrp/memory.db` after the first cleanup work:
 
@@ -667,7 +805,9 @@ The first code slices in this direction are intentionally boring:
 ```text
 1. Make Patterns visible, filterable, and provenance-backed.
 2. Make prune candidates visible as a dry-run review tab.
-3. Defer archive/apply writes until the review surface is boring.
+3. Add memory_events audit log for manual writes, remember(), consolidation, and decay archives.
+4. Add prune apply writes only for still-valid dry-run candidates.
+5. Defer broader automatic writes until the review surface is boring.
 ```
 
 ### Proposed Memory Viewer
