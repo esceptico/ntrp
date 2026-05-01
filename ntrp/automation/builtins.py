@@ -8,11 +8,13 @@ from ntrp.automation.triggers import CountTrigger, IdleTrigger, TimeTrigger, Tri
 from ntrp.constants import (
     BUILTIN_CHAT_EXTRACTION_ID,
     BUILTIN_CONSOLIDATION_ID,
+    BUILTIN_LEARNING_REVIEW_ID,
     BUILTIN_MEMORY_HEALTH_ID,
     BUILTIN_MEMORY_MAINTENANCE_ID,
     DEFAULT_CONSOLIDATION_COOLDOWN_MINUTES,
     DEFAULT_CONSOLIDATION_IDLE_MINUTES,
     DEFAULT_EXTRACTION_IDLE_MINUTES,
+    DEFAULT_LEARNING_REVIEW_COOLDOWN_MINUTES,
     DEFAULT_MEMORY_HEALTH_COOLDOWN_MINUTES,
     DEFAULT_MEMORY_MAINTENANCE_COOLDOWN_MINUTES,
     EXTRACTION_EVERY_N_TURNS,
@@ -80,6 +82,17 @@ BUILTINS = [
         handler="memory_health",
         cooldown_minutes=DEFAULT_MEMORY_HEALTH_COOLDOWN_MINUTES,
         writable=False,
+    ),
+    BuiltinSpec(
+        task_id=BUILTIN_LEARNING_REVIEW_ID,
+        name="Learning Review Scan",
+        description="Propose reviewable policy improvements from memory telemetry",
+        triggers=[
+            TimeTrigger(at="04:30", days="daily"),
+        ],
+        handler="learning_review",
+        cooldown_minutes=DEFAULT_LEARNING_REVIEW_COOLDOWN_MINUTES,
+        writable=True,
     ),
 ]
 

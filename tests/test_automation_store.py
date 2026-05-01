@@ -12,6 +12,7 @@ from ntrp.automation.triggers import TimeTrigger
 from ntrp.constants import (
     BUILTIN_CHAT_EXTRACTION_ID,
     BUILTIN_CONSOLIDATION_ID,
+    BUILTIN_LEARNING_REVIEW_ID,
     BUILTIN_MEMORY_HEALTH_ID,
     BUILTIN_MEMORY_MAINTENANCE_ID,
 )
@@ -138,9 +139,12 @@ async def test_seed_builtins_splits_memory_jobs(automation_store: AutomationStor
         BUILTIN_CONSOLIDATION_ID,
         BUILTIN_MEMORY_MAINTENANCE_ID,
         BUILTIN_MEMORY_HEALTH_ID,
+        BUILTIN_LEARNING_REVIEW_ID,
     } <= set(automations)
     assert automations[BUILTIN_CONSOLIDATION_ID].handler == "consolidation"
     assert automations[BUILTIN_MEMORY_MAINTENANCE_ID].handler == "memory_maintenance"
     assert automations[BUILTIN_MEMORY_MAINTENANCE_ID].writable is True
     assert automations[BUILTIN_MEMORY_HEALTH_ID].handler == "memory_health"
     assert automations[BUILTIN_MEMORY_HEALTH_ID].writable is False
+    assert automations[BUILTIN_LEARNING_REVIEW_ID].handler == "learning_review"
+    assert automations[BUILTIN_LEARNING_REVIEW_ID].writable is True
