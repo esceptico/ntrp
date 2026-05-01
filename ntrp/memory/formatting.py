@@ -94,6 +94,7 @@ def format_memory_context(
     query_facts: list[Fact] | None = None,
     query_observations: list[Observation] | None = None,
     bundled_sources: dict[int, list[Fact]] | None = None,
+    budget: int = MEMORY_CONTEXT_CHAR_BUDGET,
 ) -> str | None:
     """Format full memory context (used by recall tool).
 
@@ -118,4 +119,4 @@ def format_memory_context(
     if query_facts:
         sections.append(("**Relevant**", [f"- {f.text}{_source_label(f)}" for f in query_facts]))
 
-    return _format_sections(sections)
+    return _format_sections(sections, budget=budget)

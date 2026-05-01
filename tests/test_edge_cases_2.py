@@ -11,7 +11,9 @@ import ntrp.database as database
 from ntrp.agent import Agent
 from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
-from ntrp.services.chat import _retain_user_content, _time_gap_note
+from ntrp.memory.facts import SessionMemory
+from ntrp.memory.models import Fact, FactContext, Observation, SourceType
+from ntrp.services.chat import _filter_prefetch_context, _memory_prefetch_query, _retain_user_content, _time_gap_note
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext, ToolExecution
 from ntrp.tools.core.registry import ToolRegistry
@@ -68,6 +70,69 @@ def test_time_gap_note_long_gap():
     assert result is not None
     assert result["content_type"] == "time_since_last_message"
     assert "hour" in result["content"]
+
+
+def _fact(fact_id: int, text: str) -> Fact:
+    now = datetime.now(UTC)
+    return Fact(
+        id=fact_id,
+        text=text,
+        embedding=None,
+        source_type=SourceType.EXPLICIT,
+        source_ref=None,
+        created_at=now,
+        happened_at=None,
+        last_accessed_at=now,
+        access_count=0,
+    )
+
+
+def _observation(obs_id: int, summary: str, source_fact_ids: list[int]) -> Observation:
+    now = datetime.now(UTC)
+    return Observation(
+        id=obs_id,
+        summary=summary,
+        embedding=None,
+        evidence_count=len(source_fact_ids),
+        source_fact_ids=source_fact_ids,
+        history=[],
+        created_at=now,
+        updated_at=now,
+        last_accessed_at=now,
+        access_count=0,
+    )
+
+
+def test_memory_prefetch_query_is_conservative():
+    assert _memory_prefetch_query("") is None
+    assert _memory_prefetch_query("/memory") is None
+    assert _memory_prefetch_query("ok") is None
+    assert _memory_prefetch_query("check alice project") == "check alice project"
+
+
+def test_filter_prefetch_context_removes_session_memory_duplicates():
+    profile_fact = _fact(1, "User prefers concise replies")
+    user_fact = _fact(2, "User works on ntrp")
+    session_observation = _observation(10, "User often reviews backend architecture", [3])
+    session_memory = SessionMemory(
+        observations=[session_observation],
+        profile_facts=[profile_fact],
+        user_facts=[user_fact],
+    )
+    context = FactContext(
+        facts=[profile_fact, user_fact, _fact(4, "Alice owns the launch doc")],
+        observations=[session_observation, _observation(11, "Alice appears in project work", [4])],
+        bundled_sources={
+            10: [_fact(3, "Session source")],
+            11: [_fact(4, "Alice owns the launch doc")],
+        },
+    )
+
+    filtered = _filter_prefetch_context(context, session_memory)
+
+    assert [fact.id for fact in filtered.facts] == [4]
+    assert [obs.id for obs in filtered.observations] == [11]
+    assert list(filtered.bundled_sources) == [11]
 
 
 # --- Read connection sees committed writes ---
