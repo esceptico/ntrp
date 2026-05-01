@@ -7,6 +7,7 @@ from ntrp.logging import get_logger
 from ntrp.memory.chat_extraction import extract_from_chat
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.models import SourceType
+from ntrp.memory.source_refs import chat_segment_ref
 
 _logger = get_logger(__name__)
 
@@ -44,7 +45,7 @@ def create_chat_extraction_handler(memory: FactMemory, store: AutomationStore) -
             return None
 
         _logger.info("Extracted %d facts from chat (session %s)", len(facts), sid[:8])
-        source_ref = f"{sid}:{context_start}-{len(messages)}"
+        source_ref = chat_segment_ref(sid, context_start, len(messages))
         for fact in facts:
             await memory.remember(
                 text=fact.text,

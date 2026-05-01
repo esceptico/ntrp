@@ -225,6 +225,7 @@ class TestExtractionRemember:
         assert by_text["User prefers dark mode"].kind == FactKind.PREFERENCE
         assert by_text["User prefers dark mode"].salience == 1
         assert by_text["User works at Acme"].kind == FactKind.IDENTITY
+        assert by_text["User prefers dark mode"].source_ref == "chat:sess-1:0-6"
 
         refs = await memory.facts.get_entity_refs(by_text["User works at Acme"].id)
         assert {ref.name for ref in refs} == {"User", "Acme"}

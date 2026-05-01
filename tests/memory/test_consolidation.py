@@ -627,6 +627,7 @@ class TestTemporalConsolidation:
         fact = await fact_repo.create(
             text="User prefers raw SQL",
             source_type=SourceType.EXPLICIT,
+            source_ref="chat:session-a:0-12",
             embedding=mock_embedding("raw sql"),
         )
 
@@ -640,6 +641,8 @@ class TestTemporalConsolidation:
         prompt_content = mock_client.completion.call_args[1]["messages"][0]["content"]
         assert "SKIP ATOMIC DURABLE FACTS" in prompt_content
         assert "PROVENANCE" in prompt_content
+        assert "TASK / SESSION BOUNDARIES" in prompt_content
+        assert "chat:session-a:0-12" in prompt_content
         assert "single preference" in prompt_content
 
     @pytest.mark.asyncio

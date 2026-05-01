@@ -91,7 +91,7 @@ async def _llm_consolidation_decisions(
     observations_json = await _format_observations(candidates, fact_repo)
 
     prompt = CONSOLIDATION_PROMPT.render(
-        fact_text=fact.text,
+        fact_json=json.dumps(_format_fact(fact), indent=2),
         observations_json=observations_json,
     )
 
@@ -194,6 +194,8 @@ async def _format_observations(
                 source_facts.append(
                     {
                         "text": fact.text,
+                        "source_type": fact.source_type.value,
+                        "source_ref": fact.source_ref,
                         "happened_at": fact.happened_at.isoformat() if fact.happened_at else None,
                         "created_at": fact.created_at.isoformat() if fact.created_at else None,
                     }
@@ -227,3 +229,15 @@ async def _format_observations(
         obs_list.append(entry)
 
     return json.dumps(obs_list, indent=2)
+
+
+def _format_fact(fact: Fact) -> dict:
+    return {
+        "id": fact.id,
+        "text": fact.text,
+        "kind": fact.kind.value,
+        "source_type": fact.source_type.value,
+        "source_ref": fact.source_ref,
+        "happened_at": fact.happened_at.isoformat() if fact.happened_at else None,
+        "created_at": fact.created_at.isoformat() if fact.created_at else None,
+    }

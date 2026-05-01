@@ -52,6 +52,16 @@ Source facts include `happened_at` timestamps showing when events actually occur
 - A fact with a later `happened_at` generally reflects the current state; earlier facts are historical context
 - Use the observation's `history` field to understand how it evolved — avoid repeating transitions already captured
 
+## TASK / SESSION BOUNDARIES
+
+Source facts include `source_type` and `source_ref`.
+For chat facts, `source_ref` is a chat segment: `chat:<session_id>:<message_start>-<message_end>`.
+
+- Same segment means the facts came from the same local conversation window.
+- Different segments are allowed to support the same durable pattern only when they share the same concrete entity/topic.
+- Never turn one short debugging/task segment into a global user pattern.
+- If source refs point at unrelated sessions/tasks, skip instead of synthesizing a broad observation.
+
 ## CONTRADICTION HANDLING
 
 When facts contradict, preserve history in the observation:
@@ -104,7 +114,8 @@ If you cannot explain how the new fact directly supports the observation, skip.
 
 ---
 
-NEW FACT: {{ fact_text }}
+NEW FACT:
+{{ fact_json }}
 
 EXISTING OBSERVATIONS (with source facts):
 {{ observations_json }}
