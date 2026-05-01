@@ -372,30 +372,34 @@ export function useMemoryKeypress({
       }
 
       if (activeTab === "learning" && !learningTab.searchMode && learningTab.selectedCandidate) {
-        if (key.name === "a" && learningTab.selectedCandidate.status !== "approved") {
-          setSaving(true);
-          updateLearningCandidateStatus(config, learningTab.selectedCandidate.id, "approved")
-            .then((result) => {
-              setLearningCandidates((prev: LearningCandidate[]) =>
-                prev.map((candidate) => (candidate.id === result.candidate.id ? result.candidate : candidate))
-              );
-              reload();
-            })
-            .catch((e: unknown) => setError(`Approve failed: ${e}`))
-            .finally(() => setSaving(false));
+        if (learningTab.confirmStatus) {
+          if (key.name === "y") {
+            setSaving(true);
+            updateLearningCandidateStatus(config, learningTab.selectedCandidate.id, learningTab.confirmStatus)
+              .then((result) => {
+                setLearningCandidates((prev: LearningCandidate[]) =>
+                  prev.map((candidate) => (candidate.id === result.candidate.id ? result.candidate : candidate))
+                );
+                learningTab.setConfirmStatus(null);
+                reload();
+              })
+              .catch((e: unknown) => setError(`Update failed: ${e}`))
+              .finally(() => setSaving(false));
+          } else {
+            learningTab.setConfirmStatus(null);
+          }
+          return;
+        }
+        if (
+          key.name === "a" &&
+          learningTab.selectedCandidate.status !== "approved" &&
+          learningTab.selectedCandidate.status !== "applied"
+        ) {
+          learningTab.setConfirmStatus("approved");
           return;
         }
         if (key.name === "d" && learningTab.selectedCandidate.status !== "rejected") {
-          setSaving(true);
-          updateLearningCandidateStatus(config, learningTab.selectedCandidate.id, "rejected")
-            .then((result) => {
-              setLearningCandidates((prev: LearningCandidate[]) =>
-                prev.map((candidate) => (candidate.id === result.candidate.id ? result.candidate : candidate))
-              );
-              reload();
-            })
-            .catch((e: unknown) => setError(`Reject failed: ${e}`))
-            .finally(() => setSaving(false));
+          learningTab.setConfirmStatus("rejected");
           return;
         }
       }

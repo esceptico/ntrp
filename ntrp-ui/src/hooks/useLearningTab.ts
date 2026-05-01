@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { LearningCandidate, LearningEvent } from "../api/client.js";
 import type { Key } from "./useKeypress.js";
 import { useListDetail, type ListKeyHelpers, type SortOrder } from "./useListDetail.js";
@@ -6,6 +6,7 @@ import { useListDetail, type ListKeyHelpers, type SortOrder } from "./useListDet
 export type { SortOrder };
 
 type LearningStatusFilter = "all" | "proposed" | "approved" | "applied" | "rejected" | "reverted";
+export type LearningStatusUpdate = "approved" | "rejected";
 
 const STATUS_FILTERS: LearningStatusFilter[] = ["all", "proposed", "approved", "applied", "rejected", "reverted"];
 
@@ -28,6 +29,7 @@ export interface LearningTabState {
   selectedIndex: number;
   selectedCandidate: LearningCandidate | null;
   selectedEvents: LearningEvent[];
+  confirmStatus: LearningStatusUpdate | null;
   searchQuery: string;
   searchMode: boolean;
   focusPane: "list" | "details";
@@ -39,6 +41,7 @@ export interface LearningTabState {
   setSelectedIndex: Dispatch<SetStateAction<number>>;
   setFocusPane: (p: "list" | "details") => void;
   resetDetailState: () => void;
+  setConfirmStatus: Dispatch<SetStateAction<LearningStatusUpdate | null>>;
 }
 
 export function useLearningTab(
@@ -48,6 +51,7 @@ export function useLearningTab(
 ): LearningTabState {
   const [statusFilter, setStatusFilter] = useState<LearningStatusFilter>("all");
   const [changeTypeFilter, setChangeTypeFilter] = useState<string | undefined>(undefined);
+  const [confirmStatus, setConfirmStatus] = useState<LearningStatusUpdate | null>(null);
 
   const changeTypeFilters = useMemo(
     () => [undefined, ...Array.from(new Set(candidates.map((candidate) => candidate.change_type))).sort()],
@@ -96,6 +100,11 @@ export function useLearningTab(
   });
 
   const selectedCandidate = ld.filtered[ld.selectedIndex] ?? null;
+  const selectedCandidateId = selectedCandidate?.id;
+  useEffect(() => {
+    setConfirmStatus(null);
+  }, [selectedCandidateId]);
+
   const eventById = new Map(events.map((event) => [event.id, event]));
   const selectedEvents = selectedCandidate
     ? selectedCandidate.evidence_event_ids
@@ -108,6 +117,7 @@ export function useLearningTab(
     selectedIndex: ld.selectedIndex,
     selectedCandidate,
     selectedEvents,
+    confirmStatus,
     searchQuery: ld.searchQuery,
     searchMode: ld.searchMode,
     focusPane: ld.focusPane,
@@ -119,5 +129,6 @@ export function useLearningTab(
     setSelectedIndex: ld.setSelectedIndex,
     setFocusPane: ld.setFocusPane,
     resetDetailState: ld.resetDetailState,
+    setConfirmStatus,
   };
 }

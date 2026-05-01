@@ -10,7 +10,12 @@ interface MemoryFooterProps {
   factsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean; metadataSuggestion: unknown };
   obsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean };
   pruneTab: { focusPane: string; searchMode: boolean; confirmApply: "selected" | "all" | null };
-  learningTab: { focusPane: string; searchMode: boolean };
+  learningTab: {
+    focusPane: string;
+    searchMode: boolean;
+    confirmStatus: "approved" | "rejected" | null;
+    selectedCandidate: { status: string } | null;
+  };
   accessTab: { focusPane: string; searchMode: boolean };
   eventsTab: { focusPane: string; searchMode: boolean };
 }
@@ -62,11 +67,21 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
   }
 
   if (activeTab === "learning") {
+    if (learningTab.confirmStatus) {
+      return <Hints items={[["y", "confirm"], ["esc", "cancel"]]} />;
+    }
+    const selectedStatus = learningTab.selectedCandidate?.status;
+    const canApprove = !!selectedStatus && selectedStatus !== "approved" && selectedStatus !== "applied";
+    const canReject = !!selectedStatus && selectedStatus !== "rejected";
+    const reviewHints: [string, string][] = [];
+    if (canApprove) reviewHints.push(["a", "approve"]);
+    if (canReject) reviewHints.push(["d", "reject"]);
+    reviewHints.push(["p", "find proposals"], ["r", "refresh"]);
     if (learningTab.focusPane === "details") {
-      return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ["a", "approve"], ["d", "reject"], ["p", "scan"], ["r", "refresh"]]} />;
+      return <Hints items={[["↑↓", "navigate"], ["tab", "list"], ...reviewHints]} />;
     }
     if (learningTab.searchMode) return <Hints items={[["type", "search"], ["esc", "clear/exit"], ["enter", "done"]]} />;
-    return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["s", "status"], ["v", "type"], ["p", "scan"], ["a", "approve"], ["d", "reject"], ["o", "sort"], ["r", "refresh"]]} />;
+    return <Hints items={[["↑↓", "navigate"], ["tab", "details"], ["/", "search"], ["s", "status"], ["v", "type"], ...reviewHints, ["o", "sort"]]} />;
   }
 
   const tab = activeTab === "facts" ? factsTab : obsTab;

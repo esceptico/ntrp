@@ -111,7 +111,7 @@ function CandidateDetails({
           <span fg={colors.text.secondary}>{learningChangeLabel(candidate.change_type)}</span>
         </text>
         <text>
-          <span fg={colors.text.muted}>target </span>
+          <span fg={colors.text.muted}>applies to </span>
           <span fg={colors.text.secondary}>{truncateText(candidate.target_key, textWidth - 8)}</span>
         </text>
         <text>

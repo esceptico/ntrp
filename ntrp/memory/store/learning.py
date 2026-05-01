@@ -49,7 +49,7 @@ _SQL_FIND_OPEN_LEARNING_CANDIDATE = """
     LIMIT 1
 """
 
-OPEN_LEARNING_CANDIDATE_STATUSES = ("proposed", "approved", "applied")
+OPEN_LEARNING_CANDIDATE_STATUSES = ("proposed", "approved")
 
 
 def _json_default(value: Any) -> Any:

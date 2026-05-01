@@ -2,6 +2,7 @@ from ntrp.memory.facts import FactMemory
 from ntrp.memory.models import LearningCandidate
 
 APPROVED_LEARNING_CONTEXT_CHANGE_TYPES = frozenset({"skill_note", "prompt_note"})
+APPROVED_LEARNING_CONTEXT_STATUSES = ("approved", "applied")
 DEFAULT_LEARNING_CONTEXT_LIMIT = 8
 DEFAULT_LEARNING_CONTEXT_CHAR_BUDGET = 1200
 
@@ -14,7 +15,8 @@ def format_learning_context(
     lines = [
         f"- {candidate.target_key}: {candidate.proposal}"
         for candidate in candidates
-        if candidate.change_type in APPROVED_LEARNING_CONTEXT_CHANGE_TYPES
+        if candidate.status in APPROVED_LEARNING_CONTEXT_STATUSES
+        and candidate.change_type in APPROVED_LEARNING_CONTEXT_CHANGE_TYPES
     ]
     if not lines:
         return None
@@ -48,8 +50,16 @@ async def get_approved_learning_context(
     limit: int = DEFAULT_LEARNING_CONTEXT_LIMIT,
     char_budget: int = DEFAULT_LEARNING_CONTEXT_CHAR_BUDGET,
 ) -> str | None:
-    candidates = await memory.learning.list_candidates(
-        limit=limit,
-        status="approved",
-    )
-    return format_learning_context(candidates, char_budget=char_budget)
+    candidates: list[LearningCandidate] = []
+    for status in APPROVED_LEARNING_CONTEXT_STATUSES:
+        for change_type in APPROVED_LEARNING_CONTEXT_CHANGE_TYPES:
+            candidates.extend(
+                await memory.learning.list_candidates(
+                    limit=limit,
+                    status=status,
+                    change_type=change_type,
+                )
+            )
+
+    candidates.sort(key=lambda candidate: (candidate.created_at, candidate.id), reverse=True)
+    return format_learning_context(candidates[:limit], char_budget=char_budget)

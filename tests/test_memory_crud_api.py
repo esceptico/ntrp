@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from ntrp.config import Config
 from ntrp.context.models import SessionState
 from ntrp.memory.fact_review import FactMetadataSuggestion
+from ntrp.memory.learning_context import get_approved_learning_context
 from ntrp.memory.models import FactKind, SourceType
 from ntrp.server.app import app
 from ntrp.server.runtime import Runtime
@@ -851,6 +852,61 @@ class TestMemoryAuditAPI:
         assert retry["proposals_considered"] == 1
         assert retry["created_candidates"] == []
         assert [row["id"] for row in retry["skipped_candidates"]] == [candidate["id"]]
+
+        applied = await test_client.patch(
+            f"/memory/learning/candidates/{candidate['id']}/status",
+            json={"status": "applied"},
+        )
+        assert applied.status_code == 200
+
+        third = await test_client.post(
+            "/memory/learning/propose",
+            json={"injection_char_budget": 80, "prune_limit": 1},
+        )
+
+        assert third.status_code == 200
+        rerun = third.json()
+        assert len(rerun["created_candidates"]) == 1
+        assert rerun["created_candidates"][0]["target_key"] == candidate["target_key"]
+
+    @pytest.mark.asyncio
+    async def test_approved_learning_context_filters_injectable_types_before_limit(
+        self,
+        test_runtime: Runtime,
+    ):
+        await test_runtime.memory.learning.create_candidate(
+            change_type="skill_note",
+            target_key="skill.release",
+            proposal="Check release tags first.",
+            rationale="User corrected the release workflow.",
+            policy_version="learning.test.v1",
+            status="approved",
+        )
+        await test_runtime.memory.learning.create_candidate(
+            change_type="prompt_note",
+            target_key="prompt.memory",
+            proposal="Treat direct user corrections as memory evidence.",
+            rationale="User corrected memory behavior.",
+            policy_version="learning.test.v1",
+            status="applied",
+        )
+        for index in range(10):
+            await test_runtime.memory.learning.create_candidate(
+                change_type="memory_feedback",
+                target_key=f"memory.feedback.{index}",
+                proposal="Manual follow-up only.",
+                rationale="This is not prompt-injectable.",
+                policy_version="learning.test.v1",
+                status="approved",
+            )
+        await test_runtime.memory.db.conn.commit()
+
+        context = await get_approved_learning_context(test_runtime.memory, limit=2)
+
+        assert context is not None
+        assert "skill.release: Check release tags first." in context
+        assert "prompt.memory: Treat direct user corrections as memory evidence." in context
+        assert "memory.feedback" not in context
 
     @pytest.mark.asyncio
     async def test_learning_review_scan_proposes_skill_notes_from_direct_evidence(

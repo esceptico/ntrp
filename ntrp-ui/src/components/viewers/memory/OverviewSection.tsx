@@ -88,12 +88,13 @@ function MetricRow({ label, value, note, width }: { label: string; value: string
   );
 }
 
-function ActionRow({ label, note, width }: { label: string; note: string; width: number }) {
+function ActionRow({ keyName, label, note, width }: { keyName: string; label: string; note: string; width: number }) {
   return (
     <OverviewLine
       width={width}
       segments={[
-        { text: label, fg: colors.text.secondary, width: 9 },
+        { text: keyName, fg: colors.text.primary, width: 3 },
+        { text: label, fg: colors.text.secondary, width: 10 },
         { text: note, fg: colors.text.secondary },
       ]}
     />
@@ -178,15 +179,15 @@ export function OverviewSection({
       </box>
 
       <box flexDirection="column" marginTop={2}>
-        <OverviewLine width={textWidth} segments={[{ text: "OPEN NEXT", fg: accentValue }]} />
-        <ActionRow label="Search" note="debug query-time memory retrieval" width={textWidth} />
-        <ActionRow label="Sent" note="inspect what memory reached the model" width={textWidth} />
-        <ActionRow label="Profile" note="edit always-visible facts" width={textWidth} />
-        <ActionRow label="Facts" note="edit durable truth" width={textWidth} />
-        <ActionRow label="Patterns" note="inspect derived memory and provenance" width={textWidth} />
-        <ActionRow label="Cleanup" note="archive low-value patterns in bulk" width={textWidth} />
-        <ActionRow label="Improve" note="review proposed durable improvements" width={textWidth} />
-        <ActionRow label="Audit" note="answer why memory changed" width={textWidth} />
+        <OverviewLine width={textWidth} segments={[{ text: "TAB MAP", fg: accentValue }]} />
+        <ActionRow keyName="2" label="Search" note="debug query-time memory retrieval" width={textWidth} />
+        <ActionRow keyName="3" label="Sent" note="inspect what memory reached the model" width={textWidth} />
+        <ActionRow keyName="4" label="Profile" note="edit always-visible facts" width={textWidth} />
+        <ActionRow keyName="5" label="Facts" note="edit durable truth" width={textWidth} />
+        <ActionRow keyName="6" label="Patterns" note="inspect derived memory and provenance" width={textWidth} />
+        <ActionRow keyName="7" label="Cleanup" note="archive low-value patterns in bulk" width={textWidth} />
+        <ActionRow keyName="8" label="Improve" note="review proposed durable improvements" width={textWidth} />
+        <ActionRow keyName="9" label="Audit" note="answer why memory changed" width={textWidth} />
       </box>
 
       <box flexDirection="column" marginTop={2}>

@@ -18,9 +18,17 @@ export function learningChangeLabel(changeType: string): string {
 }
 
 export function learningCandidateEffect(changeType: string, status: string): string | null {
-  if (status !== "approved") return null;
+  if (status === "rejected" || status === "reverted") return "not used";
+  if (status !== "approved" && status !== "applied") return learningApprovalEffect(changeType);
   if (changeType === "skill_note" || changeType === "prompt_note") {
     return "active in future prompts";
   }
-  return "approved for manual follow-up";
+  return "accepted for manual follow-up";
+}
+
+export function learningApprovalEffect(changeType: string): string {
+  if (changeType === "skill_note" || changeType === "prompt_note") {
+    return "approval adds this to future prompts";
+  }
+  return "approval records manual follow-up; it does not change runtime";
 }
