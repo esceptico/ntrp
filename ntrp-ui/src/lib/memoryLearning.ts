@@ -16,3 +16,11 @@ export function learningChangeLabel(changeType: string): string {
       return changeType.replaceAll("_", " ");
   }
 }
+
+export function learningCandidateEffect(changeType: string, status: string): string | null {
+  if (status !== "approved") return null;
+  if (changeType === "skill_note" || changeType === "prompt_note") {
+    return "active in future prompts";
+  }
+  return "approved for manual follow-up";
+}

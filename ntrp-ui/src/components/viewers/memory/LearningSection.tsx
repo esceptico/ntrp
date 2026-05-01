@@ -2,7 +2,7 @@ import type { LearningCandidate, LearningEvent } from "../../../api/client.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import type { LearningTabState } from "../../../hooks/useLearningTab.js";
 import { formatTimeAgo, shortTime } from "../../../lib/format.js";
-import { learningChangeLabel } from "../../../lib/memoryLearning.js";
+import { learningCandidateEffect, learningChangeLabel } from "../../../lib/memoryLearning.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
 import { ListDetailSection } from "./ListDetailSection.js";
 
@@ -93,6 +93,8 @@ function CandidateDetails({
     return <text><span fg={colors.text.muted}>No learning candidates. Press p to scan review sources.</span></text>;
   }
 
+  const effect = learningCandidateEffect(candidate.change_type, candidate.status);
+
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       <text>
@@ -115,6 +117,12 @@ function CandidateDetails({
           <span fg={colors.text.muted}>policy </span>
           <span fg={colors.text.secondary}>{candidate.policy_version}</span>
         </text>
+        {effect && (
+          <text>
+            <span fg={colors.text.muted}>effect </span>
+            <span fg={colors.text.secondary}>{effect}</span>
+          </text>
+        )}
       </box>
 
       <box marginTop={1} flexDirection="column">
