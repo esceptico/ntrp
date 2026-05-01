@@ -35,6 +35,7 @@ from ntrp.memory.models import (
     FactKind,
     FactLifetime,
     Observation,
+    ProfileEntry,
     SourceType,
 )
 from ntrp.memory.retrieval import retrieve_with_observations
@@ -45,6 +46,7 @@ from ntrp.memory.store.events import MemoryEventRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.learning import LearningRepository
 from ntrp.memory.store.observations import ObservationRepository
+from ntrp.memory.store.profile import ProfileRepository
 
 _logger = get_logger(__name__)
 
@@ -66,7 +68,7 @@ class RememberFactResult(BaseModel):
 @dataclass(frozen=True)
 class SessionMemory:
     observations: list[Observation]
-    profile_facts: list[Fact]
+    profile_entries: list[ProfileEntry]
     user_facts: list[Fact]
 
 
@@ -85,8 +87,14 @@ def _context_observation_ids(context: FactContext) -> list[int]:
 
 
 def _session_fact_ids(memory: SessionMemory) -> list[int]:
-    ids = [fact.id for fact in memory.profile_facts]
+    ids = [fact_id for entry in memory.profile_entries for fact_id in entry.source_fact_ids]
     ids.extend(fact.id for fact in memory.user_facts)
+    return _dedupe_ids(ids)
+
+
+def _session_observation_ids(memory: SessionMemory) -> list[int]:
+    ids = [observation.id for observation in memory.observations]
+    ids.extend(obs_id for entry in memory.profile_entries for obs_id in entry.source_observation_ids)
     return _dedupe_ids(ids)
 
 
@@ -143,6 +151,7 @@ class FactMemory:
         self.db = GraphDatabase(conn, embedding.dim)
         self.facts = FactRepository(conn, read_conn)
         self.observations = ObservationRepository(conn, read_conn)
+        self.profile = ProfileRepository(conn, read_conn)
         self.dreams = DreamRepository(conn, read_conn)
         self.events = MemoryEventRepository(conn, read_conn)
         self.access_events = MemoryAccessEventRepository(conn, read_conn)
@@ -547,7 +556,7 @@ class FactMemory:
         details: dict[str, object] | None = None,
     ) -> None:
         fact_ids = _session_fact_ids(memory)
-        observation_ids = _dedupe_ids([observation.id for observation in memory.observations])
+        observation_ids = _session_observation_ids(memory)
         injected_fact_ids = _dedupe_ids(injected_fact_ids) if injected_fact_ids is not None else fact_ids
         injected_observation_ids = (
             _dedupe_ids(injected_observation_ids) if injected_observation_ids is not None else observation_ids
@@ -625,19 +634,26 @@ class FactMemory:
     async def count(self) -> int:
         return await self.facts.count()
 
-    async def get_profile(self, limit: int = SYSTEM_PROMPT_PROFILE_LIMIT) -> list[Fact]:
+    async def get_profile(self, limit: int = SYSTEM_PROMPT_PROFILE_LIMIT) -> list[ProfileEntry]:
+        return await self.get_profile_entries(limit=limit)
+
+    async def get_raw_profile_facts(self, limit: int = SYSTEM_PROMPT_PROFILE_LIMIT) -> list[Fact]:
         return await self.facts.list_profile_facts_for_entity(
             USER_ENTITY_NAME,
             PROFILE_FACT_KINDS,
             limit=limit,
         )
 
+    async def get_profile_entries(self, limit: int = SYSTEM_PROMPT_PROFILE_LIMIT) -> list[ProfileEntry]:
+        return await self.profile.list_active(limit=limit)
+
     async def get_session_memory(
         self,
         user_limit: int = 0,
         profile_limit: int = SYSTEM_PROMPT_PROFILE_LIMIT,
+        include_observations: bool = True,
     ) -> SessionMemory:
-        if user_entity := await self.facts.get_entity_by_name(USER_ENTITY_NAME):
+        if include_observations and (user_entity := await self.facts.get_entity_by_name(USER_ENTITY_NAME)):
             raw_obs = await self.observations.get_for_entity(user_entity.id, limit=20)
             source_ids = _dedupe_ids([fact_id for obs in raw_obs for fact_id in obs.source_fact_ids])
             source_facts = await self.facts.get_batch(source_ids)
@@ -657,12 +673,13 @@ class FactMemory:
         else:
             observations = []
 
-        profile_facts = await self.get_profile(limit=profile_limit)
+        profile_entries = await self.get_profile_entries(limit=profile_limit)
 
         exclude_ids: set[int] = set()
         for obs in observations:
             exclude_ids.update(obs.source_fact_ids)
-        exclude_ids.update(f.id for f in profile_facts)
+        for entry in profile_entries:
+            exclude_ids.update(entry.source_fact_ids)
 
         if user_limit > 0:
             all_user_facts = await self.facts.get_facts_for_entity(USER_ENTITY_NAME, limit=user_limit + len(exclude_ids))
@@ -670,11 +687,11 @@ class FactMemory:
         else:
             user_facts = []
 
-        return SessionMemory(observations=observations, profile_facts=profile_facts, user_facts=user_facts)
+        return SessionMemory(observations=observations, profile_entries=profile_entries, user_facts=user_facts)
 
     async def get_context(self, user_limit: int = 10) -> tuple[list[Observation], list[Fact]]:
         session_memory = await self.get_session_memory(user_limit=user_limit)
-        return session_memory.observations, [*session_memory.profile_facts, *session_memory.user_facts]
+        return session_memory.observations, session_memory.user_facts
 
     async def clear_observations(self) -> dict[str, int]:
         async with self.transaction():

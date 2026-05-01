@@ -1,6 +1,6 @@
 ---
 title: "Memory"
-description: "CRUD operations for facts, observations, and dreams."
+description: "CRUD operations for facts, profile entries, observations, and dreams."
 ---
 
 ## Facts
@@ -34,6 +34,51 @@ curl -X PATCH http://localhost:6877/facts/42 \
 
 ```bash
 curl -X DELETE http://localhost:6877/facts/42 \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+## Profile Entries
+
+Profile entries are curated always-visible memory. They are separate from raw facts and keep direct provenance through source fact or observation ids.
+
+### List profile entries
+
+```bash
+curl http://localhost:6877/memory/profile \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### Create profile entry
+
+```bash
+curl -X POST http://localhost:6877/memory/profile \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"kind":"preference","summary":"User prefers direct engineering feedback.","source_fact_ids":[42]}'
+```
+
+### Get profile entry
+
+```bash
+curl http://localhost:6877/memory/profile/7 \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Returns the entry with its source facts and source patterns.
+
+### Update profile entry
+
+```bash
+curl -X PATCH http://localhost:6877/memory/profile/7 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"summary":"User prefers concise, direct engineering feedback."}'
+```
+
+### Archive profile entry
+
+```bash
+curl -X DELETE http://localhost:6877/memory/profile/7 \
   -H "Authorization: Bearer $API_KEY"
 ```
 

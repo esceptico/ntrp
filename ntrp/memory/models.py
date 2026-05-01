@@ -133,6 +133,36 @@ class Observation(_MemoryModel):
         return _parse_datetime(v)
 
 
+class ProfileEntry(_FrozenModel):
+    id: int
+    kind: FactKind
+    summary: str
+    source_fact_ids: list[int] = []
+    source_observation_ids: list[int] = []
+    created_at: datetime
+    updated_at: datetime
+    archived_at: datetime | None = None
+    created_by: str = "manual"
+    policy_version: str = "manual"
+    confidence: float = 1.0
+
+    @field_validator("created_at", "updated_at", "archived_at", mode="before")
+    @classmethod
+    def _parse_dt(cls, v: Any) -> datetime | None:
+        return _parse_datetime(v)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_json_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        for name in ("source_fact_ids", "source_observation_ids"):
+            raw = data.get(name)
+            if isinstance(raw, str):
+                data[name] = json.loads(raw) if raw else []
+        return data
+
+
 class Fact(_MemoryModel):
     id: int
     text: str

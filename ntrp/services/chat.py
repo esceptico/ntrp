@@ -24,7 +24,7 @@ from ntrp.llm.models import Provider, get_model
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.learning_context import get_approved_learning_context
-from ntrp.memory.prefetch import prefetch_memory_context
+from ntrp.memory.prefetch import build_memory_prompt_context
 from ntrp.notifiers.service import NotifierService
 from ntrp.server.bus import BusRegistry, SessionBus
 from ntrp.server.state import RunRegistry, RunState, RunStatus
@@ -150,7 +150,7 @@ async def _prepare_messages(
 ) -> list[dict]:
     memory_context = None
     if deps.memory:
-        memory_context = await prefetch_memory_context(
+        memory_context = await build_memory_prompt_context(
             deps.memory,
             user_message,
             source="chat_prefetch",

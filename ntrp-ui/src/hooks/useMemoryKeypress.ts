@@ -4,8 +4,10 @@ import { useKeypress, type Key } from "./useKeypress.js";
 import { useTextInput } from "./useTextInput.js";
 import type { Config } from "../types.js";
 import type { FactsTabState } from "./useFactsTab.js";
+import type { ProfileTabState } from "./useProfileTab.js";
 import type { ObservationsTabState } from "./useObservationsTab.js";
 import { OBS_SECTIONS } from "../components/viewers/memory/ObservationDetailsView.js";
+import { PROFILE_SECTIONS } from "../components/viewers/memory/ProfileDetailsView.js";
 import type { PruneTabState } from "./usePruneTab.js";
 import type { MemoryEventsTabState } from "./useMemoryEventsTab.js";
 import type { MemoryAccessTabState } from "./useMemoryAccessTab.js";
@@ -16,6 +18,8 @@ import {
   updateFactMetadata,
   suggestFactMetadata,
   deleteFact,
+  updateProfileEntry,
+  deleteProfileEntry,
   updateObservation,
   deleteObservation,
   applyMemoryPrune,
@@ -26,6 +30,8 @@ import {
   type LearningCandidate,
   type Observation,
   type ObservationDetails,
+  type ProfileEntry,
+  type ProfileEntryDetails,
   type MemoryPruneDryRun,
 } from "../api/client.js";
 import { MEMORY_TABS, type MemoryTabType } from "../lib/memoryTabs.js";
@@ -40,7 +46,7 @@ interface UseMemoryKeypressOptions {
   activeTab: MemoryTabType;
   setActiveTab: React.Dispatch<React.SetStateAction<MemoryTabType>>;
   recallTab: RecallInspectTabState;
-  profileTab: FactsTabState;
+  profileTab: ProfileTabState;
   factsTab: FactsTabState;
   obsTab: ObservationsTabState;
   pruneTab: PruneTabState;
@@ -50,7 +56,7 @@ interface UseMemoryKeypressOptions {
   eventsTab: MemoryEventsTabState;
   config: Config;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
-  setProfileFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
+  setProfileEntries: React.Dispatch<React.SetStateAction<ProfileEntry[]>>;
   setObservations: React.Dispatch<React.SetStateAction<Observation[]>>;
   setLearningCandidates: React.Dispatch<React.SetStateAction<LearningCandidate[]>>;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
@@ -82,7 +88,7 @@ export function useMemoryKeypress({
   eventsTab,
   config,
   setFacts,
-  setProfileFacts,
+  setProfileEntries,
   setObservations,
   setLearningCandidates,
   setError,
@@ -115,10 +121,8 @@ export function useMemoryKeypress({
 
   const handleKeypress = useCallback(
     (key: Key) => {
-      const activeFactTab =
-        activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : null;
-      const setActiveFacts = activeTab === "profile" ? setProfileFacts : setFacts;
-      const activeFactTextInput = activeTab === "profile" ? profileTextInput : factsTextInput;
+      const activeFactTab = activeTab === "facts" ? factsTab : null;
+      const setActiveFacts = setFacts;
       const openFact = (fact: Fact) => {
         setFacts((prev) => [fact, ...prev.filter((candidate) => candidate.id !== fact.id)]);
         factsTab.setSearchQuery("");
@@ -141,6 +145,99 @@ export function useMemoryKeypress({
       if (activeSearchTab?.searchMode) {
         activeSearchTab.handleKeys(key);
         return;
+      }
+
+      if (activeTab === "profile" && profileTab.focusPane === "details" && profileTab.entryDetails) {
+        if (key.name === "return" && profileTab.detailSection === PROFILE_SECTIONS.FACTS) {
+          const fact = profileTab.entryDetails.source_facts[profileTab.factsIndex];
+          if (fact) {
+            openFact(fact);
+            return;
+          }
+        }
+
+        if (profileTab.confirmDelete) {
+          if (key.name === "y") {
+            setSaving(true);
+            deleteProfileEntry(config, profileTab.entryDetails.entry.id)
+              .then(() => {
+                setProfileEntries((prev: ProfileEntry[]) =>
+                  prev.filter((entry) => entry.id !== profileTab.entryDetails?.entry.id)
+                );
+                profileTab.setConfirmDelete(false);
+                profileTab.setFocusPane("list");
+                profileTab.resetDetailState();
+                reload();
+              })
+              .catch((e: unknown) => setError(`Archive failed: ${e}`))
+              .finally(() => setSaving(false));
+          } else {
+            profileTab.setConfirmDelete(false);
+          }
+          return;
+        }
+
+        if (profileTab.editMode) {
+          if (key.ctrl && key.name === "s") {
+            setSaving(true);
+            updateProfileEntry(config, profileTab.entryDetails.entry.id, { summary: profileTab.editText })
+              .then((result) => {
+                setProfileEntries((prev: ProfileEntry[]) =>
+                  prev.map((entry) => (entry.id === result.entry.id ? result.entry : entry))
+                );
+                queryClient.setQueryData<ProfileEntryDetails>(
+                  ["profileEntryDetails", result.entry.id],
+                  (prev) => prev ? { ...prev, entry: result.entry } : prev,
+                );
+                profileTab.setEditMode(false);
+                profileTab.setEditText("");
+                profileTab.setCursorPos(0);
+                reload();
+              })
+              .catch((e: unknown) => setError(`Save failed: ${e}`))
+              .finally(() => setSaving(false));
+            return;
+          }
+          if (key.name === "escape") {
+            profileTab.setEditMode(false);
+            profileTab.setEditText("");
+            profileTab.setCursorPos(0);
+            return;
+          }
+          if (profileTextInput.handleKey(key)) {
+            return;
+          }
+          return;
+        }
+
+        if (key.name === "e") {
+          profileTab.setEditMode(true);
+          profileTab.setEditText(profileTab.entryDetails.entry.summary);
+          profileTab.setCursorPos(profileTab.entryDetails.entry.summary.length);
+          return;
+        }
+        if (key.name === "d" || key.name === "delete") {
+          profileTab.setConfirmDelete(true);
+          return;
+        }
+      }
+
+      if (activeTab === "profile" && profileTab.focusPane === "list" && profileTab.filteredEntries.length > 0) {
+        const selectedEntry = profileTab.filteredEntries[profileTab.selectedIndex];
+        if (selectedEntry) {
+          if (key.name === "e") {
+            profileTab.setFocusPane("details");
+            profileTab.setEditMode(true);
+            profileTab.setEditText(selectedEntry.summary);
+            profileTab.setCursorPos(selectedEntry.summary.length);
+            return;
+          }
+          if ((key.name === "d" || key.name === "delete") && profileTab.entryDetails) {
+            profileTab.setFocusPane("details");
+            profileTab.setConfirmDelete(true);
+            return;
+          }
+        }
       }
 
       if (activeFactTab?.focusPane === "details" && activeFactTab.factDetails) {
@@ -189,7 +286,7 @@ export function useMemoryKeypress({
             activeFactTab.setCursorPos(0);
             return;
           }
-          if (activeFactTextInput.handleKey(key)) {
+          if (factsTextInput.handleKey(key)) {
             return;
           }
           return;
@@ -201,7 +298,7 @@ export function useMemoryKeypress({
           activeFactTab.setCursorPos(activeFactTab.factDetails.fact.text.length);
           return;
         }
-        if ((activeTab === "facts" || activeTab === "profile") && key.name === "g") {
+        if (key.name === "g") {
           activeFactTab.setSuggestionLoading(true);
           activeFactTab.setSuggestionError(null);
           activeFactTab.setMetadataSuggestion(null);
@@ -215,7 +312,7 @@ export function useMemoryKeypress({
             .finally(() => activeFactTab.setSuggestionLoading(false));
           return;
         }
-        if ((activeTab === "facts" || activeTab === "profile") && key.name === "a" && activeFactTab.metadataSuggestion) {
+        if (key.name === "a" && activeFactTab.metadataSuggestion) {
           setSaving(true);
           updateFactMetadata(config, activeFactTab.factDetails.fact.id, {
             kind: activeFactTab.metadataSuggestion.kind,
@@ -523,7 +620,7 @@ export function useMemoryKeypress({
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
-    [activeTab, setActiveTab, recallTab, profileTab, factsTab, obsTab, pruneTab, learningTab, pruneDryRun, accessTab, eventsTab, onClose, reload, config, profileTextInput, factsTextInput, obsTextInput, setSaving, setProfileFacts, setFacts, setObservations, setLearningCandidates, setError, queryClient]
+    [activeTab, setActiveTab, recallTab, profileTab, factsTab, obsTab, pruneTab, learningTab, pruneDryRun, accessTab, eventsTab, onClose, reload, config, profileTextInput, factsTextInput, obsTextInput, setSaving, setProfileEntries, setFacts, setObservations, setLearningCandidates, setError, queryClient]
   );
 
   useKeypress(handleKeypress, { isActive: true });

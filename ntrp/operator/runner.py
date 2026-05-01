@@ -12,7 +12,7 @@ from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationProgressEvent, ToolCallEvent, ToolResultEvent, agent_event_to_sse
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.learning_context import get_applied_automation_policy_context, get_approved_learning_context
-from ntrp.memory.prefetch import prefetch_memory_context
+from ntrp.memory.prefetch import build_memory_prompt_context
 from ntrp.server.bus import SessionBus
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
@@ -53,7 +53,7 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
     memory_context = None
     learning_context = None
     if deps.memory:
-        memory_context = await prefetch_memory_context(
+        memory_context = await build_memory_prompt_context(
             deps.memory,
             request.prompt,
             source="operator_prefetch",

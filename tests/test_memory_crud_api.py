@@ -588,22 +588,40 @@ class TestMemoryAuditAPI:
 
     @pytest.mark.asyncio
     async def test_memory_profile(self, test_client: AsyncClient, test_runtime: Runtime):
-        user = await test_runtime.memory.facts.create_entity("User")
         fact = await test_runtime.memory.facts.create(
             "User prefers concise status updates",
             SourceType.EXPLICIT,
             kind=FactKind.PREFERENCE,
             salience=2,
         )
-        await test_runtime.memory.facts.add_entity_ref(fact.id, "User", user.id)
+        create_response = await test_client.post(
+            "/memory/profile",
+            json={
+                "kind": "preference",
+                "summary": "User prefers concise status updates",
+                "source_fact_ids": [fact.id],
+            },
+        )
+        assert create_response.status_code == 200
         await test_runtime.memory.db.conn.commit()
 
         response = await test_client.get("/memory/profile")
 
         assert response.status_code == 200
         data = response.json()
-        assert [row["id"] for row in data["facts"]] == [fact.id]
-        assert data["facts"][0]["kind"] == "preference"
+        assert [row["summary"] for row in data["entries"]] == ["User prefers concise status updates"]
+        assert data["entries"][0]["kind"] == "preference"
+        assert data["entries"][0]["source_fact_ids"] == [fact.id]
+
+    @pytest.mark.asyncio
+    async def test_memory_profile_requires_direct_provenance(self, test_client: AsyncClient):
+        response = await test_client.post(
+            "/memory/profile",
+            json={"kind": "preference", "summary": "Ungrounded profile entry"},
+        )
+
+        assert response.status_code == 400
+        assert "requires source" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_recall_inspect_is_read_only(self, test_client: AsyncClient, test_runtime: Runtime):
@@ -766,12 +784,19 @@ class TestMemoryAuditAPI:
         )
         await test_runtime.memory.observations.add_source_facts(observation.id, [source_b.id])
         await test_runtime.memory.observations.link_entities(observation.id, [user.id])
+        await test_runtime.memory.profile.create(
+            kind=FactKind.PREFERENCE,
+            summary="User prefers concise memory context",
+            source_fact_ids=[user_fact.id],
+            created_by="test",
+            policy_version="test",
+        )
         await test_runtime.memory.db.conn.commit()
 
         session = await test_runtime.memory.get_session_memory()
 
         assert [obs.id for obs in session.observations] == [observation.id]
-        assert [fact.id for fact in session.profile_facts] == [user_fact.id]
+        assert [entry.summary for entry in session.profile_entries] == ["User prefers concise memory context"]
         assert session.user_facts == []
 
     @pytest.mark.asyncio
@@ -814,6 +839,14 @@ class TestMemoryAuditAPI:
             kind=FactKind.PREFERENCE,
             entity_names=["User"],
         )
+        await test_runtime.memory.profile.create(
+            kind=FactKind.PREFERENCE,
+            summary="User prefers visible memory provenance",
+            source_fact_ids=[result.fact.id],
+            created_by="test",
+            policy_version="test",
+        )
+        await test_runtime.memory.db.conn.commit()
         session_memory = await test_runtime.memory.get_session_memory()
 
         await test_runtime.memory.record_session_memory_access(

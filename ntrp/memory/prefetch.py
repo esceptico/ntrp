@@ -4,7 +4,7 @@ from typing import Any
 
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory, SessionMemory
-from ntrp.memory.formatting import format_memory_context_render, model_memory_context
+from ntrp.memory.formatting import format_memory_context_render, format_session_memory_render, model_memory_context
 from ntrp.memory.models import FactContext
 
 _logger = get_logger(__name__)
@@ -26,9 +26,12 @@ def memory_prefetch_query(user_message: str) -> str | None:
 
 
 def filter_prefetch_context(context: FactContext, session_memory: SessionMemory) -> FactContext:
-    session_fact_ids = {fact.id for fact in session_memory.profile_facts}
+    session_fact_ids = {fact_id for entry in session_memory.profile_entries for fact_id in entry.source_fact_ids}
     session_fact_ids.update(fact.id for fact in session_memory.user_facts)
     session_observation_ids = {observation.id for observation in session_memory.observations}
+    session_observation_ids.update(
+        obs_id for entry in session_memory.profile_entries for obs_id in entry.source_observation_ids
+    )
     for observation in session_memory.observations:
         session_fact_ids.update(observation.source_fact_ids)
 
@@ -96,3 +99,37 @@ async def prefetch_memory_context(
         details={"timeout_seconds": timeout_seconds, **(details or {})},
     )
     return rendered.text
+
+
+async def build_memory_prompt_context(
+    memory: FactMemory,
+    user_message: str,
+    *,
+    source: str,
+    details: dict[str, Any] | None = None,
+) -> str | None:
+    """Build prompt memory from curated profile plus query-time prefetch."""
+    session_memory = await memory.get_session_memory(include_observations=False)
+    profile_render = format_session_memory_render(profile_entries=session_memory.profile_entries)
+    profile_text = profile_render.text if profile_render else None
+
+    if profile_render is not None:
+        await memory.record_session_memory_access(
+            source=source,
+            memory=session_memory,
+            formatted_chars=len(profile_render.text),
+            injected_fact_ids=profile_render.fact_ids,
+            injected_observation_ids=profile_render.observation_ids,
+            details={**(details or {}), "layer": "profile"},
+        )
+
+    prefetch_text = await prefetch_memory_context(
+        memory,
+        user_message,
+        session_memory=session_memory,
+        source=source,
+        details={**(details or {}), "layer": "prefetch"},
+    )
+
+    parts = [part for part in (profile_text, prefetch_text) if part]
+    return "\n\n".join(parts) if parts else None

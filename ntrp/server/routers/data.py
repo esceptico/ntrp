@@ -13,6 +13,7 @@ from ntrp.memory.models import (
     MemoryAccessEvent,
     MemoryEvent,
     Observation,
+    ProfileEntry,
     SourceType,
 )
 from ntrp.memory.profile_policy import ProfilePolicyItem
@@ -21,6 +22,7 @@ from ntrp.server.deps import require_memory
 from ntrp.server.schemas import (
     CreateLearningCandidateRequest,
     CreateLearningEventRequest,
+    CreateProfileEntryRequest,
     FactKindReviewSuggestionRequest,
     MemoryPruneApplyRequest,
     MemoryPruneDryRunRequest,
@@ -31,6 +33,7 @@ from ntrp.server.schemas import (
     UpdateFactRequest,
     UpdateLearningCandidateStatusRequest,
     UpdateObservationRequest,
+    UpdateProfileEntryRequest,
 )
 
 router = APIRouter(tags=["data"])
@@ -70,6 +73,22 @@ def _observation_payload(observation: Observation) -> dict:
         "archived_at": observation.archived_at.isoformat() if observation.archived_at else None,
         "created_by": observation.created_by,
         "policy_version": observation.policy_version,
+    }
+
+
+def _profile_entry_payload(entry: ProfileEntry) -> dict:
+    return {
+        "id": entry.id,
+        "kind": entry.kind,
+        "summary": entry.summary,
+        "source_fact_ids": entry.source_fact_ids,
+        "source_observation_ids": entry.source_observation_ids,
+        "created_at": entry.created_at.isoformat(),
+        "updated_at": entry.updated_at.isoformat(),
+        "archived_at": entry.archived_at.isoformat() if entry.archived_at else None,
+        "created_by": entry.created_by,
+        "policy_version": entry.policy_version,
+        "confidence": entry.confidence,
     }
 
 
@@ -493,8 +512,26 @@ async def get_memory_profile(
     limit: int = Query(default=6, ge=1, le=50),
     svc: MemoryService = Depends(require_memory),
 ):
-    facts = await svc.profile(limit=limit)
-    return {"facts": [_fact_payload(f) for f in facts]}
+    entries = await svc.profile(limit=limit)
+    return {"entries": [_profile_entry_payload(entry) for entry in entries]}
+
+
+@router.post("/memory/profile")
+async def create_memory_profile_entry(
+    request: CreateProfileEntryRequest,
+    svc: MemoryService = Depends(require_memory),
+):
+    try:
+        entry = await svc.create_profile_entry(
+            kind=request.kind,
+            summary=request.summary,
+            source_fact_ids=list(request.source_fact_ids),
+            source_observation_ids=list(request.source_observation_ids),
+            confidence=request.confidence,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"entry": _profile_entry_payload(entry)}
 
 
 @router.get("/memory/profile/policy/preview")
@@ -529,6 +566,58 @@ async def get_memory_profile_policy_preview(
         "candidates": [_profile_policy_item_payload(item) for item in preview.candidates],
         "issues": [_profile_policy_item_payload(item) for item in preview.issues],
     }
+
+
+@router.get("/memory/profile/{entry_id}")
+async def get_memory_profile_entry(
+    entry_id: int,
+    svc: MemoryService = Depends(require_memory),
+):
+    try:
+        entry, facts, observations = await svc.profile_details(entry_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {
+        "entry": _profile_entry_payload(entry),
+        "source_facts": [_fact_payload(fact) for fact in facts],
+        "source_observations": [_observation_payload(observation) for observation in observations],
+    }
+
+
+@router.patch("/memory/profile/{entry_id}")
+async def update_memory_profile_entry(
+    entry_id: int,
+    request: UpdateProfileEntryRequest,
+    svc: MemoryService = Depends(require_memory),
+):
+    try:
+        entry = await svc.update_profile_entry(
+            entry_id,
+            kind=request.kind,
+            summary=request.summary,
+            source_fact_ids=list(request.source_fact_ids) if request.source_fact_ids is not None else None,
+            source_observation_ids=(
+                list(request.source_observation_ids) if request.source_observation_ids is not None else None
+            ),
+            confidence=request.confidence,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"entry": _profile_entry_payload(entry)}
+
+
+@router.delete("/memory/profile/{entry_id}")
+async def delete_memory_profile_entry(
+    entry_id: int,
+    svc: MemoryService = Depends(require_memory),
+):
+    try:
+        await svc.delete_profile_entry(entry_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"status": "archived", "entry_id": entry_id}
 
 
 @router.post("/memory/learning/events")

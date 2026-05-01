@@ -20,7 +20,7 @@ from ntrp.memory.automation_learning import (
     build_automation_rule_proposals,
 )
 from ntrp.memory.fact_review import FactMetadataSuggestion, suggest_fact_metadata
-from ntrp.memory.facts import PROFILE_FACT_KINDS, FactMemory, SessionMemory
+from ntrp.memory.facts import PROFILE_FACT_KINDS, FactMemory
 from ntrp.memory.feedback_learning import (
     MEMORY_FEEDBACK_CHANGE_TYPE,
     MEMORY_FEEDBACK_POLICY_VERSION,
@@ -46,6 +46,7 @@ from ntrp.memory.models import (
     MemoryAccessEvent,
     MemoryEvent,
     Observation,
+    ProfileEntry,
     SourceType,
 )
 from ntrp.memory.profile_policy import (
@@ -985,8 +986,147 @@ class MemoryService:
     async def audit(self) -> dict:
         return await memory_audit(self.memory.facts.read_conn)
 
-    async def profile(self, limit: int = 6) -> list[Fact]:
-        return await self.memory.get_profile(limit=limit)
+    async def profile(self, limit: int = 6) -> list[ProfileEntry]:
+        return await self.memory.get_profile_entries(limit=limit)
+
+    async def profile_details(self, entry_id: int) -> tuple[ProfileEntry, list[Fact], list[Observation]]:
+        entry = await self.memory.profile.get(entry_id)
+        if entry is None or entry.archived_at is not None:
+            raise LookupError("Profile entry not found")
+        facts_by_id = await self.memory.facts.get_batch(entry.source_fact_ids)
+        observations_by_id = await self.memory.observations.get_batch(entry.source_observation_ids)
+        facts = [facts_by_id[fact_id] for fact_id in entry.source_fact_ids if fact_id in facts_by_id]
+        observations = [
+            observations_by_id[obs_id]
+            for obs_id in entry.source_observation_ids
+            if obs_id in observations_by_id
+        ]
+        return entry, facts, observations
+
+    async def _validate_profile_sources(
+        self,
+        source_fact_ids: list[int],
+        source_observation_ids: list[int],
+    ) -> None:
+        if not source_fact_ids and not source_observation_ids:
+            raise ValueError("Profile entry requires source fact or pattern provenance")
+
+        facts_by_id = await self.memory.facts.get_batch(source_fact_ids)
+        missing_fact_ids = [fact_id for fact_id in source_fact_ids if fact_id not in facts_by_id]
+        observations_by_id = await self.memory.observations.get_batch(source_observation_ids)
+        missing_observation_ids = [
+            observation_id
+            for observation_id in source_observation_ids
+            if observation_id not in observations_by_id
+        ]
+        if missing_fact_ids or missing_observation_ids:
+            raise ValueError(
+                f"Missing profile sources: facts={missing_fact_ids}, patterns={missing_observation_ids}"
+            )
+
+    async def create_profile_entry(
+        self,
+        *,
+        kind: FactKind,
+        summary: str,
+        source_fact_ids: list[int],
+        source_observation_ids: list[int],
+        confidence: float,
+    ) -> ProfileEntry:
+        await self._validate_profile_sources(source_fact_ids, source_observation_ids)
+        async with self.memory.transaction():
+            entry = await self.memory.profile.create(
+                kind=kind,
+                summary=summary,
+                source_fact_ids=source_fact_ids,
+                source_observation_ids=source_observation_ids,
+                created_by="user",
+                policy_version="memory.profile.manual.v1",
+                confidence=confidence,
+            )
+            await self.memory.events.create(
+                actor="user",
+                action="profile_entry.created",
+                target_type="profile_entry",
+                target_id=entry.id,
+                reason="manual profile entry",
+                policy_version="memory.profile.manual.v1",
+                details={
+                    "kind": kind.value,
+                    "source_fact_ids": source_fact_ids,
+                    "source_observation_ids": source_observation_ids,
+                },
+            )
+            return entry
+
+    async def update_profile_entry(
+        self,
+        entry_id: int,
+        *,
+        kind: FactKind | None = None,
+        summary: str | None = None,
+        source_fact_ids: list[int] | None = None,
+        source_observation_ids: list[int] | None = None,
+        confidence: float | None = None,
+    ) -> ProfileEntry:
+        existing = await self.memory.profile.get(entry_id)
+        if existing is None or existing.archived_at is not None:
+            raise LookupError("Profile entry not found")
+        next_kind = kind or existing.kind
+        next_summary = summary if summary is not None else existing.summary
+        next_fact_ids = source_fact_ids if source_fact_ids is not None else existing.source_fact_ids
+        next_observation_ids = (
+            source_observation_ids if source_observation_ids is not None else existing.source_observation_ids
+        )
+        next_confidence = confidence if confidence is not None else existing.confidence
+        await self._validate_profile_sources(next_fact_ids, next_observation_ids)
+
+        async with self.memory.transaction():
+            entry = await self.memory.profile.update(
+                entry_id,
+                kind=next_kind,
+                summary=next_summary,
+                source_fact_ids=next_fact_ids,
+                source_observation_ids=next_observation_ids,
+                policy_version="memory.profile.manual.v1",
+                confidence=next_confidence,
+            )
+            if entry is None:
+                raise LookupError("Profile entry not found")
+            await self.memory.events.create(
+                actor="user",
+                action="profile_entry.updated",
+                target_type="profile_entry",
+                target_id=entry.id,
+                reason="manual profile entry update",
+                policy_version="memory.profile.manual.v1",
+                details={
+                    "old_summary": existing.summary,
+                    "new_summary": entry.summary,
+                    "kind": entry.kind.value,
+                    "source_fact_ids": entry.source_fact_ids,
+                    "source_observation_ids": entry.source_observation_ids,
+                },
+            )
+            return entry
+
+    async def delete_profile_entry(self, entry_id: int) -> None:
+        existing = await self.memory.profile.get(entry_id)
+        if existing is None or existing.archived_at is not None:
+            raise LookupError("Profile entry not found")
+        async with self.memory.transaction():
+            archived = await self.memory.profile.archive(entry_id)
+            if not archived:
+                raise LookupError("Profile entry not found")
+            await self.memory.events.create(
+                actor="user",
+                action="profile_entry.archived",
+                target_type="profile_entry",
+                target_id=entry_id,
+                reason="manual profile entry archival",
+                policy_version="memory.profile.manual.v1",
+                details={"summary": existing.summary, "kind": existing.kind.value},
+            )
 
     async def profile_policy_preview(
         self,
@@ -997,7 +1137,7 @@ class MemoryService:
         fact_char_budget: int = DEFAULT_PROFILE_FACT_CHAR_BUDGET,
         review_access_count: int = DEFAULT_PROFILE_REVIEW_ACCESS_COUNT,
     ) -> ProfilePolicyPreview:
-        profile_facts = await self.memory.get_profile(limit=profile_limit)
+        profile_facts = await self.memory.get_raw_profile_facts(limit=profile_limit)
         review_facts = await self.memory.facts.list_profile_review_candidates(
             PROFILE_FACT_KINDS,
             min_salience=2,

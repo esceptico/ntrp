@@ -71,6 +71,7 @@ class ChatRunsStatusResponse(BaseModel):
 OutboxEventId = Annotated[int, Field(gt=0)]
 FactId = Annotated[int, Field(gt=0)]
 ObservationId = Annotated[int, Field(gt=0)]
+ProfileEntryId = Annotated[int, Field(gt=0)]
 
 
 class ReplayOutboxRequest(BaseModel):
@@ -295,6 +296,22 @@ class FactKindReviewSuggestionRequest(BaseModel):
 class MemoryRecallInspectRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
     limit: int = Field(default=5, ge=1, le=20)
+
+
+class CreateProfileEntryRequest(BaseModel):
+    kind: FactKind
+    summary: str = Field(..., min_length=1, max_length=2000)
+    source_fact_ids: list[FactId] = Field(default_factory=list, max_length=100)
+    source_observation_ids: list[ObservationId] = Field(default_factory=list, max_length=100)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class UpdateProfileEntryRequest(BaseModel):
+    kind: FactKind | None = None
+    summary: str | None = Field(default=None, min_length=1, max_length=2000)
+    source_fact_ids: list[FactId] | None = Field(default=None, max_length=100)
+    source_observation_ids: list[ObservationId] | None = Field(default=None, max_length=100)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class MemoryRepairEmbeddingsRequest(BaseModel):

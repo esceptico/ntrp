@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from ntrp.memory.formatting import format_memory_context, format_memory_context_render, format_session_memory
-from ntrp.memory.models import Fact, FactContext, FactKind, Observation, SourceType
+from ntrp.memory.models import Fact, FactContext, FactKind, Observation, ProfileEntry, SourceType
 
 
 def make_fact(id: int, text: str, kind: FactKind = FactKind.NOTE) -> Fact:
@@ -34,6 +34,19 @@ def make_observation(id: int, summary: str) -> Observation:
         updated_at=now,
         last_accessed_at=now,
         access_count=0,
+    )
+
+
+def make_profile_entry(id: int, summary: str, kind: FactKind, source_fact_ids: list[int] | None = None) -> ProfileEntry:
+    now = datetime.now()
+    return ProfileEntry(
+        id=id,
+        summary=summary,
+        kind=kind,
+        source_fact_ids=source_fact_ids or [],
+        source_observation_ids=[],
+        created_at=now,
+        updated_at=now,
     )
 
 
@@ -137,11 +150,11 @@ class TestFormatMemoryContext:
 
 
 class TestFormatSessionMemory:
-    def test_profile_facts_are_sectioned(self):
+    def test_profile_entries_are_sectioned(self):
         result = format_session_memory(
-            profile_facts=[
-                make_fact(1, "User is Timur", FactKind.IDENTITY),
-                make_fact(2, "User prefers terse updates", FactKind.PREFERENCE),
+            profile_entries=[
+                make_profile_entry(1, "User is Timur", FactKind.IDENTITY, [1]),
+                make_profile_entry(2, "User prefers terse updates", FactKind.PREFERENCE, [2]),
             ],
             observations=[make_observation(4, "User is improving memory quality")],
             user_facts=[make_fact(3, "Legacy user fact")],

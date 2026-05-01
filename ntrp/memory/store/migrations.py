@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 14
+CURRENT_VERSION = 15
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -425,6 +425,29 @@ async def _migrate_v14(conn: aiosqlite.Connection) -> None:
     """)
 
 
+async def _migrate_v15(conn: aiosqlite.Connection) -> None:
+    """Add explicit curated profile entries."""
+    _logger.info("Migration v15: adding curated profile entries")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS profile_entries (
+            id INTEGER PRIMARY KEY,
+            kind TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            source_fact_ids TEXT NOT NULL DEFAULT '[]',
+            source_observation_ids TEXT NOT NULL DEFAULT '[]',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            archived_at TIMESTAMP,
+            created_by TEXT NOT NULL DEFAULT 'manual',
+            policy_version TEXT NOT NULL DEFAULT 'manual',
+            confidence REAL NOT NULL DEFAULT 1.0
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_profile_entries_active ON profile_entries(archived_at, updated_at DESC)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_profile_entries_kind ON profile_entries(kind)")
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
@@ -440,6 +463,7 @@ _MIGRATIONS: list[tuple[int, callable]] = [
     (12, _migrate_v12),
     (13, _migrate_v13),
     (14, _migrate_v14),
+    (15, _migrate_v15),
 ]
 
 

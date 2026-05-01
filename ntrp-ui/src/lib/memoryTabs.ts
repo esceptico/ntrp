@@ -43,7 +43,7 @@ export const MEMORY_TAB_COPY: Record<
     wide: "Profile",
     narrow: "Prof",
     title: "Profile",
-    description: "explicit always-profile facts",
+    description: "curated core memory that is always visible",
   },
   facts: {
     wide: "Facts",

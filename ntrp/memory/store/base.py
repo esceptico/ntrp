@@ -120,6 +120,23 @@ CREATE TABLE IF NOT EXISTS observation_facts (
 
 CREATE INDEX IF NOT EXISTS idx_observation_facts_fact ON observation_facts(fact_id);
 
+CREATE TABLE IF NOT EXISTS profile_entries (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    source_fact_ids TEXT NOT NULL DEFAULT '[]',
+    source_observation_ids TEXT NOT NULL DEFAULT '[]',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    archived_at TIMESTAMP,
+    created_by TEXT NOT NULL DEFAULT 'manual',
+    policy_version TEXT NOT NULL DEFAULT 'manual',
+    confidence REAL NOT NULL DEFAULT 1.0
+);
+
+CREATE INDEX IF NOT EXISTS idx_profile_entries_active ON profile_entries(archived_at, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_profile_entries_kind ON profile_entries(kind);
+
 CREATE TABLE IF NOT EXISTS dream_facts (
     dream_id INTEGER NOT NULL REFERENCES dreams(id) ON DELETE CASCADE,
     fact_id INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
@@ -279,6 +296,7 @@ class GraphDatabase:
         await self.conn.execute("DELETE FROM learning_candidate_events")
         await self.conn.execute("DELETE FROM learning_candidates")
         await self.conn.execute("DELETE FROM learning_events")
+        await self.conn.execute("DELETE FROM profile_entries")
         await self.conn.execute("DELETE FROM dream_facts")
         await self.conn.execute("DELETE FROM dreams")
         await self.conn.execute("DELETE FROM memory_access_events")

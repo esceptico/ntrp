@@ -82,7 +82,7 @@ context bundles above the configured character budget
 pattern-heavy bundles where derived observations dominate source facts
 ```
 
-The profile policy preview is also read-only. It keeps profile as a projection over source facts and flags:
+The legacy profile policy preview is also read-only. It scans source facts that might deserve explicit profile review and flags:
 
 ```text
 pinned, important, or useful-and-repeatedly-used facts that are not profile kinds yet
@@ -104,8 +104,8 @@ No candidate is auto-applied. The first contract is provenance and reviewability
 The memory system should have four clear layers:
 
 ```text
-typed facts        source of truth
-profile view       stable, small, always-on user memory
+typed facts        source-of-truth evidence
+profile entries    curated, small, always-on core memory
 observations       derived patterns, aggressively prunable
 prefetch context   per-turn query-specific context
 ```
@@ -113,9 +113,17 @@ prefetch context   per-turn query-specific context
 Rules:
 
 - Facts are the durable source of truth.
-- Profile is a projection over facts, not a second place to manually edit truth.
-- Observations are derived summaries/patterns. They can be deleted or regenerated.
+- Profile entries are explicit core memory records with direct fact/pattern provenance. They are not inferred by "mentions User".
+- Observations are derived summaries/patterns. They can be deleted or regenerated from facts.
 - Prefetch is a delivery mechanism, not a storage layer.
+
+Grounding:
+
+- Letta/MemGPT separates always-in-context core memory blocks from out-of-context recall/archival memory.
+- Generative Agents separates raw experience records from higher-level reflections and dynamic retrieval.
+- A-MEM argues for evolving structured memory notes with links/provenance, not a flat pile of facts.
+
+The implementation consequence is simple: `/memory/profile` must return curated `profile_entries`, not raw facts filtered by `entity_refs(User)`.
 
 ## Provenance Invariant
 
@@ -132,7 +140,7 @@ This applies to:
 ```text
 observations / patterns
 dreams / cross-domain insights
-profile entries if profile is materialized
+profile entries
 session digests if they are later added
 ```
 
@@ -294,25 +302,28 @@ Extraction policy:
 Status:
 
 ```text
-read-only profile projection added over typed facts
-GET /memory/profile returns profile-worthy facts
-system prompt memory can format profile sections separately from legacy user facts
-no materialized profile table yet
+profile_entries table added
+GET /memory/profile returns curated profile entries
+POST/PATCH/DELETE /memory/profile manages explicit profile entries
+session memory formatter uses profile entries, not raw facts
 ```
 
 Profile should answer: "What should the assistant always know about the user?"
 
-Do not create a separate editable profile table first. Start with a projection over typed facts:
+Do not infer profile by filtering facts that mention `User`. That produced a random list of raw facts, not a profile.
+
+Profile entries are curated records:
 
 ```text
-profile facts =
-  active facts
-  WHERE kind IN ('identity', 'preference', 'relationship', 'constraint')
-  AND archived_at IS NULL
-  AND superseded_by_fact_id IS NULL
-  AND (expires_at IS NULL OR expires_at > now)
-  ORDER BY pinned_at DESC, salience DESC, access_count DESC, created_at DESC
-  LIMIT small budget
+profile_entries
+  id
+  kind
+  summary
+  source_fact_ids
+  source_observation_ids
+  created_by
+  policy_version
+  confidence
 ```
 
 Then format into sections:
@@ -324,20 +335,7 @@ Relationships
 Standing constraints
 ```
 
-Only materialize a `profile_entries` cache if the projection becomes too slow or needs manual UI editing.
-
-If materialized later:
-
-```text
-profile_entries
-  key TEXT PRIMARY KEY
-  fact_id INTEGER NOT NULL REFERENCES facts(id)
-  section TEXT NOT NULL
-  text TEXT NOT NULL
-  updated_at TIMESTAMP NOT NULL
-```
-
-The source of truth remains the fact. The profile row is a cache/projection.
+Source facts remain the truth. Profile entries are prompt-facing core memory backed by direct provenance.
 
 ## Phase 4: Generated Memory Provenance
 
@@ -1012,24 +1010,21 @@ Each row should show:
 
 ```text
 text
-source fact id
 kind
-salience
-pinned/prioritized state
+confidence
+source fact/pattern counts
 last changed
 ```
 
 Actions:
 
 ```text
-pin / unpin
-archive source fact
-edit source fact
+edit profile entry
+archive profile entry
 open provenance
-exclude from profile
 ```
 
-Important: editing profile should edit/supersede the source fact, not create a second source of truth.
+Important: profile edits must keep provenance. Facts/patterns remain available as evidence; archiving a profile entry must not delete its sources.
 
 ### Facts
 
@@ -1248,6 +1243,9 @@ API additions:
 ```text
 GET /memory/audit
 GET /memory/profile
+POST /memory/profile
+PATCH /memory/profile/{id}
+DELETE /memory/profile/{id}
 GET /memory/facts/kind-review
 POST /memory/facts/kind-review/suggestions
 GET /facts?kind=&source_type=&status=&accessed=&entity=&limit=&offset=
@@ -1286,7 +1284,7 @@ clear low-value observations by dry-run batch
 ```text
 no graph visualization in v1
 no fancy memory map
-no separate profile editor that bypasses facts
+no profile entry without direct provenance
 no auto-prune without dry-run review
 no huge prompt/debug dumps by default
 ```

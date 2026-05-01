@@ -13,7 +13,7 @@ from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
 from ntrp.memory.facts import SessionMemory
 from ntrp.memory.formatting import model_memory_context
-from ntrp.memory.models import Fact, FactContext, Observation, SourceType
+from ntrp.memory.models import Fact, FactContext, FactKind, Observation, ProfileEntry, SourceType
 from ntrp.memory.prefetch import (
     filter_prefetch_context,
     memory_prefetch_query,
@@ -109,6 +109,19 @@ def _observation(obs_id: int, summary: str, source_fact_ids: list[int]) -> Obser
     )
 
 
+def _profile_entry(entry_id: int, summary: str, source_fact_ids: list[int]) -> ProfileEntry:
+    now = datetime.now(UTC)
+    return ProfileEntry(
+        id=entry_id,
+        kind=FactKind.PREFERENCE,
+        summary=summary,
+        source_fact_ids=source_fact_ids,
+        source_observation_ids=[],
+        created_at=now,
+        updated_at=now,
+    )
+
+
 def test_memory_prefetch_query_is_conservative():
     assert memory_prefetch_query("") is None
     assert memory_prefetch_query("/memory") is None
@@ -118,11 +131,12 @@ def test_memory_prefetch_query_is_conservative():
 
 def test_filter_prefetch_context_removes_session_memory_duplicates():
     profile_fact = _fact(1, "User prefers concise replies")
+    profile_entry = _profile_entry(20, "User prefers concise replies", [profile_fact.id])
     user_fact = _fact(2, "User works on ntrp")
     session_observation = _observation(10, "User often reviews backend architecture", [3])
     session_memory = SessionMemory(
         observations=[session_observation],
-        profile_facts=[profile_fact],
+        profile_entries=[profile_entry],
         user_facts=[user_fact],
     )
     context = FactContext(

@@ -118,6 +118,34 @@ export interface ObservationDetails {
   missing_source_fact_ids: number[];
 }
 
+export interface ProfileEntry {
+  id: number;
+  kind: FactKind;
+  summary: string;
+  source_fact_ids: number[];
+  source_observation_ids: number[];
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+  created_by: string;
+  policy_version: string;
+  confidence: number;
+}
+
+export interface ProfileEntryDetails {
+  entry: ProfileEntry;
+  source_facts: Fact[];
+  source_observations: Observation[];
+}
+
+export interface ProfileEntryUpdate {
+  kind?: FactKind;
+  summary?: string;
+  source_fact_ids?: number[];
+  source_observation_ids?: number[];
+  confidence?: number;
+}
+
 export interface Dream {
   id: number;
   bridge: string;
@@ -379,8 +407,31 @@ export async function getStats(config: Config): Promise<Stats> {
   return api.get<Stats>(`${config.serverUrl}/stats`);
 }
 
-export async function getMemoryProfile(config: Config, limit = 20): Promise<{ facts: Fact[] }> {
-  return api.get<{ facts: Fact[] }>(`${config.serverUrl}/memory/profile?limit=${limit}`);
+export async function getMemoryProfile(config: Config, limit = 20): Promise<{ entries: ProfileEntry[] }> {
+  return api.get<{ entries: ProfileEntry[] }>(`${config.serverUrl}/memory/profile?limit=${limit}`);
+}
+
+export async function getProfileEntryDetails(
+  config: Config,
+  entryId: number,
+  signal?: AbortSignal
+): Promise<ProfileEntryDetails> {
+  return api.get<ProfileEntryDetails>(`${config.serverUrl}/memory/profile/${entryId}`, { signal });
+}
+
+export async function updateProfileEntry(
+  config: Config,
+  entryId: number,
+  update: ProfileEntryUpdate
+): Promise<{ entry: ProfileEntry }> {
+  return api.patch<{ entry: ProfileEntry }>(`${config.serverUrl}/memory/profile/${entryId}`, update);
+}
+
+export async function deleteProfileEntry(
+  config: Config,
+  entryId: number
+): Promise<{ status: string; entry_id: number }> {
+  return api.delete(`${config.serverUrl}/memory/profile/${entryId}`);
 }
 
 export async function inspectMemoryRecall(
