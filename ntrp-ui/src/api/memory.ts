@@ -176,6 +176,23 @@ export interface MemoryEvent {
   details: Record<string, unknown>;
 }
 
+export interface MemoryStorageHealth {
+  vec_rows: number;
+  missing_vec_rows: number;
+  stale_vec_rows: number;
+  fts_rows: number;
+  missing_fts_rows: number;
+  stale_fts_rows: number;
+}
+
+export interface MemoryAudit {
+  storage: {
+    facts: MemoryStorageHealth;
+    observations: MemoryStorageHealth;
+  };
+  relations: Record<string, number>;
+}
+
 export interface MemoryRecallInspectResult {
   query: string;
   limit: number;
@@ -338,6 +355,10 @@ export async function applyMemoryPrune(
 
 export async function getMemoryEvents(config: Config, limit = 100): Promise<{ events: MemoryEvent[] }> {
   return api.get<{ events: MemoryEvent[] }>(`${config.serverUrl}/memory/events?limit=${limit}`);
+}
+
+export async function getMemoryAudit(config: Config): Promise<MemoryAudit> {
+  return api.get<MemoryAudit>(`${config.serverUrl}/memory/audit`);
 }
 
 export async function purgeMemory(config: Config): Promise<{ status: string; deleted: Record<string, number> }> {

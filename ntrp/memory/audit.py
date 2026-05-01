@@ -105,6 +105,123 @@ async def _source_provenance(
     return result
 
 
+async def _search_storage_health(
+    conn: aiosqlite.Connection,
+    *,
+    table: str,
+    id_column: str,
+    vec_table: str,
+    vec_id_column: str,
+    fts_table: str,
+) -> dict[str, Any]:
+    return await _one(
+        conn,
+        f"""
+        SELECT
+            (SELECT COUNT(*) FROM {vec_table}) AS vec_rows,
+            (
+                SELECT COUNT(*)
+                FROM {table} records
+                LEFT JOIN {vec_table} vec ON vec.{vec_id_column} = records.{id_column}
+                WHERE records.archived_at IS NULL
+                  AND records.embedding IS NOT NULL
+                  AND vec.{vec_id_column} IS NULL
+            ) AS missing_vec_rows,
+            (
+                SELECT COUNT(*)
+                FROM {vec_table} vec
+                LEFT JOIN {table} records ON records.{id_column} = vec.{vec_id_column}
+                WHERE records.{id_column} IS NULL
+                   OR records.archived_at IS NOT NULL
+                   OR records.embedding IS NULL
+            ) AS stale_vec_rows,
+            (SELECT COUNT(*) FROM {fts_table}) AS fts_rows,
+            (
+                SELECT COUNT(*)
+                FROM {table} records
+                LEFT JOIN {fts_table} fts ON fts.rowid = records.{id_column}
+                WHERE fts.rowid IS NULL
+            ) AS missing_fts_rows,
+            (
+                SELECT COUNT(*)
+                FROM {fts_table} fts
+                LEFT JOIN {table} records ON records.{id_column} = fts.rowid
+                WHERE records.{id_column} IS NULL
+            ) AS stale_fts_rows
+        """,
+    )
+
+
+async def _relation_integrity(conn: aiosqlite.Connection) -> dict[str, Any]:
+    return await _one(
+        conn,
+        """
+        SELECT
+            (
+                SELECT COUNT(*)
+                FROM entity_refs er
+                LEFT JOIN facts f ON f.id = er.fact_id
+                WHERE f.id IS NULL
+            ) AS entity_refs_missing_fact,
+            (
+                SELECT COUNT(*)
+                FROM entity_refs er
+                LEFT JOIN entities e ON e.id = er.entity_id
+                WHERE er.entity_id IS NOT NULL AND e.id IS NULL
+            ) AS entity_refs_missing_entity,
+            (
+                SELECT COUNT(*)
+                FROM obs_entity_refs oer
+                LEFT JOIN observations o ON o.id = oer.observation_id
+                WHERE o.id IS NULL
+            ) AS obs_entity_refs_missing_observation,
+            (
+                SELECT COUNT(*)
+                FROM obs_entity_refs oer
+                LEFT JOIN entities e ON e.id = oer.entity_id
+                WHERE e.id IS NULL
+            ) AS obs_entity_refs_missing_entity,
+            (
+                SELECT COUNT(*)
+                FROM observation_facts rel
+                LEFT JOIN observations o ON o.id = rel.observation_id
+                WHERE o.id IS NULL
+            ) AS observation_facts_missing_observation,
+            (
+                SELECT COUNT(*)
+                FROM observation_facts rel
+                LEFT JOIN facts f ON f.id = rel.fact_id
+                WHERE f.id IS NULL
+            ) AS observation_facts_missing_fact,
+            (
+                SELECT COUNT(*)
+                FROM dream_facts rel
+                LEFT JOIN dreams d ON d.id = rel.dream_id
+                WHERE d.id IS NULL
+            ) AS dream_facts_missing_dream,
+            (
+                SELECT COUNT(*)
+                FROM dream_facts rel
+                LEFT JOIN facts f ON f.id = rel.fact_id
+                WHERE f.id IS NULL
+            ) AS dream_facts_missing_fact,
+            (
+                SELECT COUNT(*)
+                FROM temporal_checkpoints tc
+                LEFT JOIN entities e ON e.id = tc.entity_id
+                WHERE e.id IS NULL
+            ) AS temporal_checkpoints_missing_entity,
+            (
+                SELECT COUNT(*)
+                FROM entities e
+                WHERE NOT EXISTS (SELECT 1 FROM entity_refs er WHERE er.entity_id = e.id)
+                  AND NOT EXISTS (SELECT 1 FROM obs_entity_refs oer WHERE oer.entity_id = e.id)
+                  AND NOT EXISTS (SELECT 1 FROM temporal_checkpoints tc WHERE tc.entity_id = e.id)
+            ) AS orphan_entities
+        """,
+    )
+
+
 async def memory_audit(conn: aiosqlite.Connection) -> dict[str, Any]:
     """Read-only health snapshot for the memory database."""
 
@@ -226,6 +343,24 @@ async def memory_audit(conn: aiosqlite.Connection) -> dict[str, Any]:
             relation_id_column="dream_id",
         ),
     }
+    storage = {
+        "facts": await _search_storage_health(
+            conn,
+            table="facts",
+            id_column="id",
+            vec_table="facts_vec",
+            vec_id_column="fact_id",
+            fts_table="facts_fts",
+        ),
+        "observations": await _search_storage_health(
+            conn,
+            table="observations",
+            id_column="id",
+            vec_table="observations_vec",
+            vec_id_column="observation_id",
+            fts_table="observations_fts",
+        ),
+    }
 
     return {
         "facts": facts,
@@ -237,6 +372,8 @@ async def memory_audit(conn: aiosqlite.Connection) -> dict[str, Any]:
         "top_entities": top_entities,
         "temporal": temporal,
         "provenance": provenance,
+        "storage": storage,
+        "relations": await _relation_integrity(conn),
     }
 
 

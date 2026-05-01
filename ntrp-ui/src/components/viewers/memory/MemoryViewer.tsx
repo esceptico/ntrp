@@ -31,7 +31,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const [factFilters, setFactFilters] = useState<FactFilters>({ status: "active" });
   const [observationFilters, setObservationFilters] = useState<ObservationFilters>({ status: "active" });
 
-  const { facts, factTotal, profileFacts, observations, observationTotal, pruneDryRun, memoryEvents, loading, error, setFacts, setObservations, setError, reload } =
+  const { facts, factTotal, profileFacts, observations, observationTotal, pruneDryRun, memoryEvents, memoryAudit, loading, error, setFacts, setObservations, setError, reload } =
     useMemoryData(config, factFilters, observationFilters);
 
   const profileTab = useFactsTab(config, profileFacts, 80, profileFilters, setProfileFilters, profileFacts.length);
@@ -158,6 +158,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 observationTotal={observationTotal}
                 pruneDryRun={pruneDryRun}
                 memoryEvents={memoryEvents}
+                memoryAudit={memoryAudit}
                 height={sectionHeight}
                 width={width}
               />

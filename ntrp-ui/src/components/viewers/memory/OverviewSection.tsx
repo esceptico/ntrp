@@ -1,4 +1,4 @@
-import type { Fact, MemoryEvent, MemoryPruneDryRun } from "../../../api/client.js";
+import type { Fact, MemoryAudit, MemoryEvent, MemoryPruneDryRun, MemoryStorageHealth } from "../../../api/client.js";
 import { colors } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import { formatTimeAgo } from "../../../lib/format.js";
@@ -9,6 +9,7 @@ interface OverviewSectionProps {
   observationTotal: number;
   pruneDryRun: MemoryPruneDryRun | null;
   memoryEvents: MemoryEvent[];
+  memoryAudit: MemoryAudit | null;
   height: number;
   width: number;
 }
@@ -24,17 +25,31 @@ function MetricRow({ label, value, note }: { label: string; value: string | numb
   );
 }
 
+function storageIssueCount(storage: MemoryStorageHealth | undefined): number {
+  if (!storage) return 0;
+  return storage.missing_vec_rows + storage.stale_vec_rows + storage.missing_fts_rows + storage.stale_fts_rows;
+}
+
+function relationIssueCount(relations: Record<string, number> | undefined): number {
+  if (!relations) return 0;
+  return Object.values(relations).reduce((sum, value) => sum + value, 0);
+}
+
 export function OverviewSection({
   profileFacts,
   factTotal,
   observationTotal,
   pruneDryRun,
   memoryEvents,
+  memoryAudit,
   height,
   width,
 }: OverviewSectionProps) {
   const { accentValue } = useAccentColor();
   const latestEvent = memoryEvents[0];
+  const storageIssues =
+    storageIssueCount(memoryAudit?.storage.facts) + storageIssueCount(memoryAudit?.storage.observations);
+  const relationIssues = relationIssueCount(memoryAudit?.relations);
 
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
@@ -48,6 +63,8 @@ export function OverviewSection({
         <MetricRow label="Recall" value="query" note="inspect retrieved context before it reaches the agent" />
         <MetricRow label="Facts" value={factTotal} note="source-of-truth memory records" />
         <MetricRow label="Patterns" value={observationTotal} note="derived summaries with supporting facts" />
+        <MetricRow label="Storage" value={storageIssues} note="vec/FTS index rows needing repair" />
+        <MetricRow label="Relations" value={relationIssues} note="orphaned provenance/entity links" />
         <MetricRow
           label="Cleanup"
           value={pruneDryRun?.summary.total ?? 0}

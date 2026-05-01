@@ -1243,6 +1243,15 @@ no writes
 
 This should exist before any auto-pruning. Show numbers or stop pretending the cleanup is safe.
 
+Status:
+
+```text
+/memory/audit now reports storage integrity:
+  facts/observations missing or stale vec rows
+  facts/observations missing or stale FTS rows
+  orphan relation rows for entities, generated-memory provenance, and temporal checkpoints
+```
+
 ### 2. Fact Type Backfill
 
 Purpose:

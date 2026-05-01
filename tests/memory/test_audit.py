@@ -9,6 +9,7 @@ from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
+from tests.conftest import mock_embedding
 
 
 @pytest_asyncio.fixture
@@ -70,6 +71,12 @@ class TestMemoryAudit:
         assert by_kind["preference"]["active"] == 1
         assert by_kind["preference"]["pinned_active"] == 0
 
+        assert audit["storage"]["facts"]["fts_rows"] == 2
+        assert audit["storage"]["facts"]["missing_fts_rows"] == 0
+        assert audit["storage"]["observations"]["fts_rows"] == 2
+        assert audit["storage"]["observations"]["missing_fts_rows"] == 0
+        assert audit["relations"]["orphan_entities"] == 0
+
     @pytest.mark.asyncio
     async def test_reports_generated_memory_provenance(
         self,
@@ -109,6 +116,48 @@ class TestMemoryAudit:
         assert dream_provenance["missing_source_refs"] == 1
         assert dream_provenance["archived_source_refs"] == 1
         assert dream_provenance["relation_refs"] == 2
+
+    @pytest.mark.asyncio
+    async def test_reports_search_storage_integrity(
+        self,
+        db: GraphDatabase,
+        fact_repo: FactRepository,
+        obs_repo: ObservationRepository,
+    ):
+        missing_vec_fact = await fact_repo.create(
+            "Fact with missing vec row",
+            SourceType.EXPLICIT,
+            embedding=mock_embedding("missing fact vec"),
+        )
+        stale_vec_fact = await fact_repo.create(
+            "Archived fact with stale vec row",
+            SourceType.EXPLICIT,
+            embedding=mock_embedding("stale fact vec"),
+        )
+        missing_vec_obs = await obs_repo.create(
+            "Observation with missing vec row",
+            embedding=mock_embedding("missing observation vec"),
+        )
+        stale_vec_obs = await obs_repo.create(
+            "Archived observation with stale vec row",
+            embedding=mock_embedding("stale observation vec"),
+        )
+
+        archived_at = datetime.now(UTC).isoformat()
+        await db.conn.execute("DELETE FROM facts_vec WHERE fact_id = ?", (missing_vec_fact.id,))
+        await db.conn.execute("UPDATE facts SET archived_at = ? WHERE id = ?", (archived_at, stale_vec_fact.id))
+        await db.conn.execute("DELETE FROM observations_vec WHERE observation_id = ?", (missing_vec_obs.id,))
+        await db.conn.execute(
+            "UPDATE observations SET archived_at = ? WHERE id = ?",
+            (archived_at, stale_vec_obs.id),
+        )
+
+        audit = await memory_audit(db.conn)
+
+        assert audit["storage"]["facts"]["missing_vec_rows"] == 1
+        assert audit["storage"]["facts"]["stale_vec_rows"] == 1
+        assert audit["storage"]["observations"]["missing_vec_rows"] == 1
+        assert audit["storage"]["observations"]["stale_vec_rows"] == 1
 
 
 class TestObservationPruneDryRun:
