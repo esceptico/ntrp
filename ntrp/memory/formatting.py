@@ -26,6 +26,7 @@ class _TrackedItem:
     fact_ids: tuple[int, ...] = ()
     observation_ids: tuple[int, ...] = ()
     bundled_fact_ids: tuple[int, ...] = ()
+    allow_clip: bool = False
 
 
 def _source_label(fact: Fact) -> str:
@@ -47,6 +48,25 @@ def _format_bundled_observation(obs: Observation, source_facts: list[Fact]) -> s
     return "\n".join(lines)
 
 
+def _tracked_bundled_observation(obs: Observation, source_facts: list[Fact]) -> list[_TrackedItem]:
+    items = [
+        _TrackedItem(
+            text=f"- {obs.summary} ({obs.evidence_count} sources)",
+            observation_ids=(obs.id,),
+            allow_clip=True,
+        )
+    ]
+    items.extend(
+        _TrackedItem(
+            text=f"  - {fact.text}{_source_label(fact)}",
+            fact_ids=(fact.id,),
+            bundled_fact_ids=(fact.id,),
+        )
+        for fact in source_facts[:5]
+    )
+    return items
+
+
 def _format_observation(obs: Observation) -> str:
     return f"- {obs.summary}"
 
@@ -62,6 +82,31 @@ def _profile_sections(profile_facts: list[Fact]) -> list[tuple[str, list[str]]]:
 
 def _dedupe(ids: list[int]) -> list[int]:
     return list(dict.fromkeys(ids))
+
+
+def _clip_text(text: str, budget: int) -> str | None:
+    if budget <= 0:
+        return None
+    if len(text) <= budget:
+        return text
+    if budget <= 3:
+        return "." * budget
+    return text[: budget - 3].rstrip() + "..."
+
+
+def _clip_item(item: _TrackedItem, budget: int) -> _TrackedItem | None:
+    if not item.allow_clip and len(item.text) > budget:
+        return None
+    text = _clip_text(item.text, budget)
+    if text is None:
+        return None
+    return _TrackedItem(
+        text=text,
+        fact_ids=item.fact_ids,
+        observation_ids=item.observation_ids,
+        bundled_fact_ids=item.bundled_fact_ids,
+        allow_clip=item.allow_clip,
+    )
 
 
 def _collect_render(lines: list[str], items: list[_TrackedItem]) -> MemoryContextRender | None:
@@ -89,10 +134,16 @@ def _format_tracked_sections(
             budget -= len(header) + 1
             added: list[_TrackedItem] = []
             for item in items:
-                if budget - len(item.text) - 1 < 0:
+                item_budget = budget - 1
+                if item_budget < 1:
                     break
-                added.append(item)
-                budget -= len(item.text) + 1
+                fitted = _clip_item(item, item_budget)
+                if fitted is None:
+                    break
+                added.append(fitted)
+                budget -= len(fitted.text) + 1
+                if fitted.text != item.text:
+                    break
             if added:
                 if lines:
                     lines.append("")
@@ -212,9 +263,10 @@ def format_memory_context_render(
         obs_items: list[_TrackedItem] = []
         for obs in query_observations:
             sources = (bundled_sources or {}).get(obs.id, [])
-            bundled_ids = tuple(fact.id for fact in sources[:5])
-            text = _format_bundled_observation(obs, sources) if sources else _format_observation(obs)
-            obs_items.append(_TrackedItem(text=text, observation_ids=(obs.id,), fact_ids=bundled_ids, bundled_fact_ids=bundled_ids))
+            if sources:
+                obs_items.extend(_tracked_bundled_observation(obs, sources))
+            else:
+                obs_items.append(_TrackedItem(text=_format_observation(obs), observation_ids=(obs.id,), allow_clip=True))
         sections.append(("**Patterns**", obs_items))
 
     if query_facts:

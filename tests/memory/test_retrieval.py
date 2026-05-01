@@ -10,6 +10,7 @@ from ntrp.memory.retrieval import (
     retrieve_facts,
     retrieve_with_observations,
     score_fact,
+    score_query_fact,
 )
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.facts import FactRepository
@@ -172,6 +173,35 @@ class TestScoreFact:
         )
 
         assert score_fact(fact, 1.0) > 0
+
+    def test_query_score_keeps_relevance_above_access_lifecycle(self):
+        now = datetime.now(UTC)
+        old_relevant = Fact(
+            id=1,
+            text="old but exact",
+            embedding=None,
+            source_type=SourceType.EXPLICIT,
+            source_ref=None,
+            created_at=now - timedelta(days=90),
+            happened_at=now - timedelta(days=90),
+            last_accessed_at=now - timedelta(days=90),
+            access_count=0,
+            consolidated_at=None,
+        )
+        recent_popular = Fact(
+            id=2,
+            text="recent but weaker",
+            embedding=None,
+            source_type=SourceType.EXPLICIT,
+            source_ref=None,
+            created_at=now,
+            happened_at=now,
+            last_accessed_at=now,
+            access_count=50,
+            consolidated_at=None,
+        )
+
+        assert score_query_fact(old_relevant, 1.0) > score_query_fact(recent_popular, 0.5)
 
 
 class TestHybridSearch:
@@ -366,6 +396,32 @@ class TestRetrieveWithObservations:
 
         assert len(context.observations) >= 1
         assert context.bundled_sources[context.observations[0].id][0].id == fact.id
+
+    @pytest.mark.asyncio
+    async def test_retrieves_observation_through_matching_source_fact(
+        self,
+        repo: FactRepository,
+        obs_repo: ObservationRepository,
+    ):
+        source = await repo.create(
+            text="raw facts consolidate into observations for prompt memory",
+            source_type=SourceType.EXPLICIT,
+        )
+        observation = await obs_repo.create(
+            summary="Two-layer memory architecture keeps substrate separate from prompt context",
+            embedding=mock_embedding("unrelated vector"),
+            source_fact_id=source.id,
+        )
+
+        context = await retrieve_with_observations(
+            repo,
+            obs_repo,
+            "raw facts consolidated observations",
+            mock_embedding("different vector"),
+            seed_limit=5,
+        )
+
+        assert observation.id in [obs.id for obs in context.observations]
 
     @pytest.mark.asyncio
     async def test_observations_sorted_by_score(self, repo: FactRepository, obs_repo: ObservationRepository):

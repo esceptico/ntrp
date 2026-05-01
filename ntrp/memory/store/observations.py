@@ -20,6 +20,14 @@ _SQL_LIST_MISSING_EMBEDDINGS = """
 _SQL_COUNT_OBSERVATIONS = "SELECT COUNT(*) FROM observations"
 _SQL_LIST_RECENT_OBSERVATIONS = "SELECT * FROM observations WHERE archived_at IS NULL ORDER BY updated_at DESC LIMIT ?"
 _SQL_GET_OBSERVATIONS_BY_IDS = "SELECT * FROM observations WHERE id IN ({placeholders})"
+_SQL_GET_OBSERVATIONS_FOR_FACTS = """
+    SELECT DISTINCT o.*
+    FROM observations o
+    JOIN observation_facts of ON o.id = of.observation_id
+    WHERE of.fact_id IN ({placeholders})
+      AND o.archived_at IS NULL
+    LIMIT ?
+"""
 
 _SQL_SEARCH_OBSERVATIONS_FTS = """
     SELECT o.*
@@ -240,6 +248,24 @@ class ObservationRepository:
             observation_ids,
         )
         return {r["id"]: Observation.model_validate(_row_dict(r)) for r in rows}
+
+    async def get_for_fact_ids(self, fact_ids: list[int], limit: int = 20) -> list[Observation]:
+        if not fact_ids:
+            return []
+        placeholders = ",".join("?" * len(fact_ids))
+        rows = await self.read_conn.execute_fetchall(
+            _SQL_GET_OBSERVATIONS_FOR_FACTS.format(placeholders=placeholders),
+            (*fact_ids, limit),
+        )
+        observations = [Observation.model_validate(_row_dict(r)) for r in rows]
+        fact_rank = {fact_id: index for index, fact_id in enumerate(fact_ids)}
+        observations.sort(
+            key=lambda obs: min(
+                (fact_rank[fact_id] for fact_id in obs.source_fact_ids if fact_id in fact_rank),
+                default=len(fact_rank),
+            )
+        )
+        return observations[:limit]
 
     async def update(
         self,

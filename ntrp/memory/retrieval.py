@@ -264,6 +264,18 @@ def score_fact(
     return score
 
 
+def score_query_fact(fact: Fact, base_score: float) -> float:
+    """Score a fact for query-time retrieval.
+
+    Access count and age are lifecycle signals. They should not outrank a
+    semantically stronger match when building context for the current request.
+    """
+    score = base_score
+    if fact.consolidated_at is not None:
+        score *= CONSOLIDATED_FACT_RECALL_WEIGHT
+    return score
+
+
 def _is_recallable_fact(fact: Fact, now: datetime | None = None) -> bool:
     if fact.archived_at is not None or fact.superseded_by_fact_id is not None:
         return False
@@ -335,11 +347,12 @@ async def retrieve_facts(
             if fid not in base_scores:
                 base_scores[fid] = base
 
-    # Apply decay/recency on top of base scores
+    # Apply query-time scoring. Lifecycle decay is intentionally not used here:
+    # retrieval should answer the current query, not replay recently accessed memory.
     scored: list[tuple[Fact, float]] = []
     for fid, base in base_scores.items():
         if fid in facts_by_id:
-            scored.append((facts_by_id[fid], score_fact(facts_by_id[fid], base, query_time)))
+            scored.append((facts_by_id[fid], score_query_fact(facts_by_id[fid], base)))
 
     scored.sort(key=lambda x: x[1], reverse=True)
     return FactContext(facts=[f for f, _ in scored[:ENTITY_EXPANSION_MAX_FACTS]])
@@ -366,9 +379,7 @@ def _score_observation(
     base_score: float,
     query_time: datetime | None = None,
 ) -> float:
-    d = decay_score(obs.last_accessed_at, obs.access_count)
-    r = recency_boost(obs.updated_at, reference_time=query_time)
-    return base_score * d * r
+    return base_score
 
 
 BUNDLED_DISPLAY_LIMIT = 5  # max source facts fetched per observation for display
@@ -386,6 +397,17 @@ async def retrieve_with_observations(
     obs_rrf = await _observation_hybrid_search(obs_repo, query_text, query_embedding, RECALL_OBSERVATION_LIMIT)
 
     obs_by_id = await obs_repo.get_batch(list(obs_rrf.keys()))
+
+    # Exact source-fact matches are direct evidence for their consolidated observations.
+    # This lets a query hit the substrate and still surface the derived memory layer.
+    lexical_source_facts = await repo.search_facts_fts(query_text, RECALL_OBSERVATION_LIMIT * RRF_OVERFETCH_FACTOR)
+    evidence_observations = await obs_repo.get_for_fact_ids(
+        [fact.id for fact in lexical_source_facts],
+        limit=RECALL_OBSERVATION_LIMIT,
+    )
+    for obs in evidence_observations:
+        obs_by_id.setdefault(obs.id, obs)
+
     obs_by_id = {oid: o for oid, o in obs_by_id.items() if o.archived_at is None}
 
     all_source_ids = {fact_id for obs in obs_by_id.values() for fact_id in obs.source_fact_ids}
@@ -406,7 +428,8 @@ async def retrieve_with_observations(
         obs_scores[oid] = _score_observation(obs_by_id[oid], base, query_time)
 
     top_obs_ids = [oid for oid, _ in heapq.nlargest(RECALL_OBSERVATION_LIMIT, obs_scores.items(), key=lambda x: x[1])]
-    observations = [obs_by_id[oid] for oid in top_obs_ids]
+    ordered_obs_ids = list(dict.fromkeys([obs.id for obs in evidence_observations] + top_obs_ids))
+    observations = [obs_by_id[oid] for oid in ordered_obs_ids if oid in obs_by_id][:RECALL_OBSERVATION_LIMIT]
 
     # --- Phase 2: Bundle source facts ---
     # Exclusion set: ALL source fact IDs (prevents duplicates in standalone facts)

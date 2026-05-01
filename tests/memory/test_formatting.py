@@ -107,6 +107,34 @@ class TestFormatMemoryContext:
         assert render.fact_ids == [4]
         assert render.bundled_fact_ids == [4]
 
+    def test_render_keeps_observation_when_sources_do_not_fit_budget(self):
+        observation = make_observation(3, "User wants consolidated observations in prompt memory")
+        source = make_fact(4, "User provided a very long source fact that should not evict the observation summary")
+        render = format_memory_context_render(
+            query_facts=[],
+            query_observations=[observation],
+            bundled_sources={observation.id: [source]},
+            budget=96,
+        )
+
+        assert render is not None
+        assert render.observation_ids == [3]
+        assert render.fact_ids == []
+        assert "consolidated observations" in render.text
+        assert "very long source fact" not in render.text
+
+    def test_render_clips_oversized_observation_instead_of_dropping_context(self):
+        observation = make_observation(3, "User wants " + "consolidated observations " * 20)
+        render = format_memory_context_render(
+            query_facts=[],
+            query_observations=[observation],
+            budget=80,
+        )
+
+        assert render is not None
+        assert render.observation_ids == [3]
+        assert render.text.endswith("...")
+
 
 class TestFormatSessionMemory:
     def test_profile_facts_are_sectioned(self):
