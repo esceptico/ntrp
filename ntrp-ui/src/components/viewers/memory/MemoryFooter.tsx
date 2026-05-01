@@ -12,6 +12,7 @@ import {
 interface MemoryFooterProps {
   activeTab: MemoryTabType;
   recallTab: RecallInspectTabState;
+  profileTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean; metadataSuggestion: unknown };
   factsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean; metadataSuggestion: unknown };
   obsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean };
   pruneTab: { focusPane: string; searchMode: boolean; confirmApply: "selected" | "all" | null };
@@ -26,7 +27,7 @@ interface MemoryFooterProps {
   eventsTab: { focusPane: string; searchMode: boolean };
 }
 
-export function MemoryFooter({ activeTab, recallTab, factsTab, obsTab, pruneTab, learningTab, accessTab, eventsTab }: MemoryFooterProps): React.ReactNode {
+export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTab, pruneTab, learningTab, accessTab, eventsTab }: MemoryFooterProps): React.ReactNode {
   if (activeTab === "overview") {
     return <Hints items={[[`1-${MEMORY_TABS.length}`, "tabs"], ["r", "refresh"], ["q", "close"]]} />;
   }
@@ -92,15 +93,16 @@ export function MemoryFooter({ activeTab, recallTab, factsTab, obsTab, pruneTab,
     return <Hints items={[["↑↓", "select"], ["/", "search"], ["l", "lane"], ["s", "status"], ["v", "type"], ...reviewHints, ["p", "scan"], ["r", "refresh"], ["o", "sort"]]} />;
   }
 
-  const tab = activeTab === "facts" ? factsTab : obsTab;
+  const tab = activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : obsTab;
+  const factLikeTab = activeTab === "profile" || activeTab === "facts";
 
   if (tab.editMode) return <Hints items={[["^s", "save"], ["esc", "cancel"], ["←→", "cursor"]]} />;
   if (tab.confirmDelete) return <Hints items={[["y", "confirm"], ["any", "cancel"]]} />;
   if (tab.focusPane === "details") {
     const detailHints: [string, string][] = [["↑↓", "navigate"], ["tab", "list"], ["enter", activeTab === "observations" ? "open/expand" : "expand"], ["e", "edit"]];
-    if (activeTab === "facts") {
+    if (factLikeTab) {
       detailHints.push(["g", "suggest"]);
-      if (factsTab.metadataSuggestion) detailHints.push(["a", "apply"]);
+      if ((activeTab === "profile" ? profileTab : factsTab).metadataSuggestion) detailHints.push(["a", "apply"]);
     }
     detailHints.push(["d", "del"]);
     return <Hints items={detailHints} />;
@@ -118,11 +120,11 @@ export function MemoryFooter({ activeTab, recallTab, factsTab, obsTab, pruneTab,
       ["x", "status"] as [string, string],
       ["s", "source"] as [string, string],
       ["u", "used"] as [string, string],
-    ] : [
+    ] : activeTab === "observations" ? [
       ["x", "status"] as [string, string],
       ["u", "used"] as [string, string],
       ["v", "support"] as [string, string],
-    ]),
+    ] : []),
     ["o", "sort"],
   ];
   return <Hints items={listHints} />;

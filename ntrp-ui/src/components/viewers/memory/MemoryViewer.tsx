@@ -35,12 +35,14 @@ interface MemoryViewerProps {
 export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const contentWidth = useContentWidth();
   const [activeTab, setActiveTab] = useState<MemoryTabType>("overview");
+  const [profileFilters, setProfileFilters] = useState<FactFilters>({ status: "active" });
   const [factFilters, setFactFilters] = useState<FactFilters>({ status: "active" });
   const [observationFilters, setObservationFilters] = useState<ObservationFilters>({ status: "active" });
 
   const {
     facts,
     factTotal,
+    profileFacts,
     observations,
     observationTotal,
     pruneDryRun,
@@ -56,12 +58,22 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     backgroundLoading,
     error,
     setFacts,
+    setProfileFacts,
     setObservations,
     setLearningCandidates,
     setError,
     reload,
   } = useMemoryData(config, factFilters, observationFilters);
 
+  const profileTab = useFactsTab(
+    config,
+    profileFacts,
+    contentWidth,
+    profileFilters,
+    setProfileFilters,
+    profileFacts.length,
+    false,
+  );
   const factsTab = useFactsTab(config, facts, contentWidth, factFilters, setFactFilters, factTotal);
   const obsTab = useObservationsTab(config, observations, contentWidth, observationFilters, setObservationFilters, observationTotal);
   const pruneTab = usePruneTab(pruneDryRun?.candidates ?? [], contentWidth);
@@ -78,6 +90,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     activeTab,
     setActiveTab,
     recallTab,
+    profileTab,
     factsTab,
     obsTab,
     pruneTab,
@@ -87,6 +100,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     eventsTab,
     config,
     setFacts,
+    setProfileFacts,
     setObservations,
     setLearningCandidates,
     setError,
@@ -103,6 +117,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
         <MemoryFooter
           activeTab={activeTab}
           recallTab={recallTab}
+          profileTab={profileTab}
           factsTab={factsTab}
           obsTab={obsTab}
           pruneTab={pruneTab}
@@ -120,15 +135,17 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
             ? null
             : activeTab === "context"
               ? accessTab
-              : activeTab === "facts"
-                ? factsTab
-                : activeTab === "observations"
-                  ? obsTab
-                  : activeTab === "prune"
-                    ? pruneTab
-                    : activeTab === "learning"
-                      ? learningTab
-                      : eventsTab;
+              : activeTab === "profile"
+                ? profileTab
+                : activeTab === "facts"
+                  ? factsTab
+                  : activeTab === "observations"
+                    ? obsTab
+                    : activeTab === "prune"
+                      ? pruneTab
+                      : activeTab === "learning"
+                        ? learningTab
+                        : eventsTab;
         const filterDisplay = activeTab === "overview"
           ? `${factTotal} facts · ${observationTotal} patterns · ${learningSummary.needsAction} learning`
           : activeTab === "recall"
@@ -140,6 +157,11 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
               `source: ${accessTab.sourceFilter === "all" ? "all" : memoryAccessSourceLabel(accessTab.sourceFilter)}`,
               `policy flags: ${memoryInjectionPolicy?.summary.candidates ?? 0}`,
               `loaded: ${memoryAccessEvents.length}`,
+            ].join(" · ")
+          : activeTab === "profile"
+          ? [
+              `always-profile: ${profileFacts.length}`,
+              "explicit",
             ].join(" · ")
           : activeTab === "facts"
           ? [
@@ -226,6 +248,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 memoryEvents={memoryEvents}
                 learningCandidates={learningCandidates}
                 memoryAccessEvents={memoryAccessEvents}
+                profileCount={profileFacts.length}
                 memoryInjectionPolicy={memoryInjectionPolicy}
                 memoryAudit={memoryAudit}
                 height={sectionHeight}
@@ -242,10 +265,20 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 tab={accessTab}
                 totalCount={memoryAccessEvents.length}
                 policyPreview={memoryInjectionPolicy}
-                facts={[...facts, ...memoryAccessFacts]}
+                facts={[...profileFacts, ...facts, ...memoryAccessFacts]}
                 observations={[...observations, ...memoryAccessObservations]}
                 height={sectionHeight}
                 width={width}
+              />
+            )}
+
+            {activeTab === "profile" && (
+              <FactsSection
+                tab={profileTab}
+                height={sectionHeight}
+                width={width}
+                saving={saving}
+                emptyMessage="No explicit profile facts"
               />
             )}
 

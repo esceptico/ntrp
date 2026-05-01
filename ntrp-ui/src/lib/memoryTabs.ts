@@ -2,6 +2,7 @@ export const MEMORY_TABS = [
   "overview",
   "recall",
   "context",
+  "profile",
   "facts",
   "observations",
   "prune",
@@ -37,6 +38,12 @@ export const MEMORY_TAB_COPY: Record<
     narrow: "Sent",
     title: "Sent",
     description: "memory bundles that reached prompts or tools",
+  },
+  profile: {
+    wide: "Profile",
+    narrow: "Prof",
+    title: "Profile",
+    description: "explicit always-profile facts",
   },
   facts: {
     wide: "Facts",

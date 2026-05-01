@@ -379,6 +379,10 @@ export async function getStats(config: Config): Promise<Stats> {
   return api.get<Stats>(`${config.serverUrl}/stats`);
 }
 
+export async function getMemoryProfile(config: Config, limit = 20): Promise<{ facts: Fact[] }> {
+  return api.get<{ facts: Fact[] }>(`${config.serverUrl}/memory/profile?limit=${limit}`);
+}
+
 export async function inspectMemoryRecall(
   config: Config,
   query: string,

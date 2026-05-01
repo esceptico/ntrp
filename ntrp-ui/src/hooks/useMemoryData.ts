@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { Config } from "../types.js";
 import {
   getFacts,
+  getMemoryProfile,
   getObservations,
   getMemoryPruneDryRun,
   getMemoryEvents,
@@ -26,6 +27,7 @@ import {
 interface UseMemoryDataResult {
   facts: Fact[];
   factTotal: number;
+  profileFacts: Fact[];
   observations: Observation[];
   observationTotal: number;
   pruneDryRun: MemoryPruneDryRun | null;
@@ -41,6 +43,7 @@ interface UseMemoryDataResult {
   backgroundLoading: boolean;
   error: string | null;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
+  setProfileFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
   setObservations: React.Dispatch<React.SetStateAction<Observation[]>>;
   setLearningCandidates: React.Dispatch<React.SetStateAction<LearningCandidate[]>>;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
@@ -53,6 +56,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
   const [error, setError] = useState<string | null>(null);
   const [facts, setFacts] = useState<Fact[]>([]);
   const [factTotal, setFactTotal] = useState(0);
+  const [profileFacts, setProfileFacts] = useState<Fact[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [observationTotal, setObservationTotal] = useState(0);
   const [pruneDryRun, setPruneDryRun] = useState<MemoryPruneDryRun | null>(null);
@@ -90,6 +94,12 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
             setFactTotal(data.total || 0);
           })
           .catch((e: unknown) => reportError("Facts", e)),
+        getMemoryProfile(config, 20)
+          .then((data) => {
+            if (!isCurrent()) return;
+            setProfileFacts(data.facts || []);
+          })
+          .catch((e: unknown) => reportError("Profile", e)),
         getObservations(config, 100, observationFilters)
           .then((data) => {
             if (!isCurrent()) return;
@@ -171,6 +181,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
   return {
     facts,
     factTotal,
+    profileFacts,
     observations,
     observationTotal,
     pruneDryRun,
@@ -186,6 +197,7 @@ export function useMemoryData(config: Config, factFilters?: FactFilters, observa
     backgroundLoading,
     error,
     setFacts,
+    setProfileFacts,
     setObservations,
     setLearningCandidates,
     setError,
