@@ -70,7 +70,7 @@ function AccessDetails({
   const textWidth = Math.max(10, width - 2);
 
   if (!event) {
-    return <text><span fg={colors.text.muted}>No used-memory records</span></text>;
+    return <text><span fg={colors.text.muted}>No sent-memory records</span></text>;
   }
 
   const retrievedFacts = event.retrieved_fact_ids.length;
@@ -83,7 +83,7 @@ function AccessDetails({
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       <text>
-        <span fg={accentValue}>used #{event.id}</span>
+        <span fg={accentValue}>sent #{event.id}</span>
         <span fg={colors.text.disabled}> {"\u2502"} </span>
         <span fg={colors.text.secondary}>{memoryAccessSourceLabel(event.source)}</span>
         <span fg={colors.text.disabled}> {"\u2502"} {formatTimeAgo(event.created_at)}</span>
@@ -207,7 +207,7 @@ export function MemoryAccessSection({ tab, totalCount, policyPreview, height, wi
       selectedIndex={tab.selectedIndex}
       renderItem={renderItem}
       getKey={(event) => event.id}
-      emptyMessage="No used-memory records"
+      emptyMessage="No sent-memory records"
       searchQuery={tab.searchQuery}
       searchMode={tab.searchMode}
       focusPane={tab.focusPane}

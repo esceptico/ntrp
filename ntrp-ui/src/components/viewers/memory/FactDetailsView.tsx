@@ -135,7 +135,7 @@ export function FactDetailsView({
         <text>
           <span fg={typeColor}>{typeLabel}</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
-          <span fg={labelColor}>priority {fact.salience}</span>
+          <span fg={labelColor}>importance {fact.salience}/2</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
           <span fg={labelColor}>confidence {Math.round(fact.confidence * 100)}%</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
@@ -164,7 +164,7 @@ export function FactDetailsView({
               <text>
                 <span fg={accentValue}>{metadataSuggestion.kind}</span>
                 <span fg={colors.text.disabled}> · </span>
-                <span fg={colors.text.secondary}>priority {metadataSuggestion.salience}</span>
+                <span fg={colors.text.secondary}>importance {metadataSuggestion.salience}/2</span>
                 <span fg={colors.text.disabled}> · </span>
                 <span fg={colors.text.secondary}>{Math.round(metadataSuggestion.confidence * 100)}%</span>
               </text>

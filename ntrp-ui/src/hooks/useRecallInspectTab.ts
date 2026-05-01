@@ -36,7 +36,7 @@ export function useRecallInspectTab(config: Config): RecallInspectTabState {
         setResult(data);
         setScrollOffset(0);
       })
-      .catch((e: unknown) => setError(`Recall inspect failed: ${e}`))
+      .catch((e: unknown) => setError(`Search failed: ${e}`))
       .finally(() => setLoading(false));
   }, [config, query, loading]);
 

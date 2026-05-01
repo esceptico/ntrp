@@ -16,7 +16,7 @@ function windowText(value: string, cursorPos: number, maxWidth: number): { text:
 }
 
 function wrappedLines(text: string | null, width: number): string[] {
-  if (!text) return ["No recall matches"];
+  if (!text) return ["No memory matches"];
   return text.split("\n").flatMap((line) => (line ? wrapText(line, width) : [""]));
 }
 
@@ -59,11 +59,11 @@ export function RecallInspectSection({ tab, height, width }: RecallInspectSectio
   return (
     <box flexDirection="column" width={width} height={height} paddingLeft={1} paddingRight={1} overflow="hidden">
       <box flexDirection="row">
-        <text><span fg={colors.text.muted}>QUERY</span><span fg={colors.text.disabled}> </span></text>
+        <text><span fg={colors.text.muted}>SEARCH</span><span fg={colors.text.disabled}> </span></text>
         <TextInputField
           value={queryWindow.text}
           cursorPos={queryWindow.cursor}
-          placeholder="memory recall query"
+          placeholder="memory query"
           textColor={colors.text.primary}
         />
       </box>
@@ -75,7 +75,7 @@ export function RecallInspectSection({ tab, height, width }: RecallInspectSectio
           <text><span fg={colors.status.error}>{truncateText(tab.error, contentWidth)}</span></text>
         ) : result ? (
           <text>
-            <span fg={colors.text.secondary}>recall</span>
+            <span fg={colors.text.secondary}>search result</span>
             <span fg={colors.text.disabled}> | </span>
             <span fg={colors.text.muted}>{result.observations.length} patterns</span>
             <span fg={colors.text.disabled}> | </span>
@@ -86,7 +86,7 @@ export function RecallInspectSection({ tab, height, width }: RecallInspectSectio
             <span fg={colors.text.muted}>{result.session.observations.length} patterns</span>
           </text>
         ) : (
-          <text><span fg={colors.text.disabled}>No recall inspection yet</span></text>
+          <text><span fg={colors.text.disabled}>Enter a query to test retrieval</span></text>
         )}
       </box>
 

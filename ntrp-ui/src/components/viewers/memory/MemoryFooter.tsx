@@ -1,11 +1,10 @@
 import React from "react";
 import { Hints } from "../../ui/index.js";
 import type { RecallInspectTabState } from "../../../hooks/useRecallInspectTab.js";
-
-type TabType = "overview" | "recall" | "context" | "profile" | "facts" | "observations" | "prune" | "learning" | "events";
+import type { MemoryTabType } from "../../../lib/memoryTabs.js";
 
 interface MemoryFooterProps {
-  activeTab: TabType;
+  activeTab: MemoryTabType;
   recallTab: RecallInspectTabState;
   profileTab: { focusPane: string; searchMode: boolean };
   factsTab: { editMode: boolean; confirmDelete: boolean; focusPane: string; searchMode: boolean; metadataSuggestion: unknown };

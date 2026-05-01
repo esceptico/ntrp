@@ -27,12 +27,11 @@ import {
   type ObservationDetails,
   type MemoryPruneDryRun,
 } from "../api/client.js";
-
-type TabType = "overview" | "recall" | "context" | "profile" | "facts" | "observations" | "prune" | "learning" | "events";
+import type { MemoryTabType } from "../lib/memoryTabs.js";
 
 interface UseMemoryKeypressOptions {
-  activeTab: TabType;
-  setActiveTab: React.Dispatch<React.SetStateAction<TabType>>;
+  activeTab: MemoryTabType;
+  setActiveTab: React.Dispatch<React.SetStateAction<MemoryTabType>>;
   recallTab: RecallInspectTabState;
   profileTab: FactsTabState;
   factsTab: FactsTabState;

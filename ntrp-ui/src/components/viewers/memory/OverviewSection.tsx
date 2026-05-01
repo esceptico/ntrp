@@ -13,6 +13,7 @@ import { colors, truncateText } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import { formatTimeAgo } from "../../../lib/format.js";
 import { memoryAccessSourceLabel } from "../../../lib/memoryAccess.js";
+import { learningChangeLabel } from "../../../lib/memoryLearning.js";
 
 interface OverviewSectionProps {
   profileFacts: Fact[];
@@ -91,14 +92,14 @@ export function OverviewSection({
     <box flexDirection="column" width={width} height={height} paddingLeft={1} overflow="hidden">
       <text>
         <span fg={accentValue}>memory overview</span>
-        <span fg={colors.text.disabled}> {"\u2502"} current health and control surface</span>
+        <span fg={colors.text.disabled}> {"\u2502"} facts are truth, patterns are derived, sent memory is runtime evidence</span>
       </text>
 
       <box flexDirection="column" marginTop={2}>
         <MetricRow label="Profile" value={profileFacts.length} note="always-on facts shown to the agent first" />
         <MetricRow label="Profile review" value={profileReviewCount} note="profile candidates and quality flags" />
-        <MetricRow label="Recall" value="query" note="inspect retrieved context before it reaches the agent" />
-        <MetricRow label="Used" value={memoryAccessEvents.length} note="recent memory bundles injected into prompts/tools" />
+        <MetricRow label="Search" value="query" note="test retrieval before it reaches the agent" />
+        <MetricRow label="Sent" value={memoryAccessEvents.length} note="recent memory bundles injected into prompts/tools" />
         <MetricRow
           label="Policy"
           value={memoryInjectionPolicy?.summary.candidates ?? 0}
@@ -114,21 +115,21 @@ export function OverviewSection({
           value={pruneDryRun?.summary.total ?? 0}
           note="archive candidates matching the current cleanup rule"
         />
-        <MetricRow label="Learning" value={learningCandidates.length} note="reviewable policy, skill, and prompt candidates" />
-        <MetricRow label="Log" value={memoryEvents.length} note="recent memory writes and automation outcomes loaded" />
+        <MetricRow label="Improve" value={learningCandidates.length} note="reviewable policy, skill, and prompt candidates" />
+        <MetricRow label="Audit" value={memoryEvents.length} note="recent memory writes and automation outcomes loaded" />
       </box>
 
       <box flexDirection="column" marginTop={2}>
         <text><span fg={colors.text.muted}>OPEN NEXT</span></text>
-        <text><span fg={colors.text.secondary}>Recall</span><span fg={colors.text.disabled}> to debug query-time memory retrieval</span></text>
-        <text><span fg={colors.text.secondary}>Used</span><span fg={colors.text.disabled}> to inspect what memory reached the model</span></text>
-        <text><span fg={colors.text.secondary}>Policy</span><span fg={colors.text.disabled}> flags appear inside Used when context looks noisy</span></text>
+        <text><span fg={colors.text.secondary}>Search</span><span fg={colors.text.disabled}> to debug query-time memory retrieval</span></text>
+        <text><span fg={colors.text.secondary}>Sent</span><span fg={colors.text.disabled}> to inspect what memory reached the model</span></text>
+        <text><span fg={colors.text.secondary}>Sent flags</span><span fg={colors.text.disabled}> show noisy or empty context bundles</span></text>
         <text><span fg={colors.text.secondary}>Profile</span><span fg={colors.text.disabled}> for what the agent should always know</span></text>
         <text><span fg={colors.text.secondary}>Facts</span><span fg={colors.text.disabled}> to edit durable truth</span></text>
         <text><span fg={colors.text.secondary}>Patterns</span><span fg={colors.text.disabled}> to inspect derived memory and provenance</span></text>
         <text><span fg={colors.text.secondary}>Cleanup</span><span fg={colors.text.disabled}> to archive low-value patterns in bulk</span></text>
-        <text><span fg={colors.text.secondary}>Learning</span><span fg={colors.text.disabled}> to review proposed durable improvements</span></text>
-        <text><span fg={colors.text.secondary}>Log</span><span fg={colors.text.disabled}> to answer why memory changed</span></text>
+        <text><span fg={colors.text.secondary}>Improve</span><span fg={colors.text.disabled}> to review proposed durable improvements</span></text>
+        <text><span fg={colors.text.secondary}>Audit</span><span fg={colors.text.disabled}> to answer why memory changed</span></text>
       </box>
 
       <box flexDirection="column" marginTop={2}>
@@ -145,7 +146,7 @@ export function OverviewSection({
       </box>
 
       <box flexDirection="column" marginTop={1}>
-        <text><span fg={colors.text.muted}>LATEST USED MEMORY</span></text>
+        <text><span fg={colors.text.muted}>LATEST SENT MEMORY</span></text>
         {latestAccess ? (
           <text>
             <span fg={colors.text.secondary}>{memoryAccessSourceLabel(latestAccess.source)}</span>
@@ -163,7 +164,7 @@ export function OverviewSection({
         {latestLearningCandidate ? (
           <text>
             <span fg={colors.text.secondary}>{latestLearningCandidate.status}</span>
-            <span fg={colors.text.disabled}> {"\u2502"} {latestLearningCandidate.change_type}</span>
+            <span fg={colors.text.disabled}> {"\u2502"} {learningChangeLabel(latestLearningCandidate.change_type)}</span>
             <span fg={colors.text.disabled}> {"\u2502"} {truncateText(latestLearningCandidate.proposal, width - 24)}</span>
           </text>
         ) : (

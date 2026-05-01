@@ -10,8 +10,9 @@ import { useLearningTab } from "../../../hooks/useLearningTab.js";
 import { useMemoryData } from "../../../hooks/useMemoryData.js";
 import { useMemoryKeypress } from "../../../hooks/useMemoryKeypress.js";
 import { useRecallInspectTab } from "../../../hooks/useRecallInspectTab.js";
-import { Dialog, Loading, Tabs, colors } from "../../ui/index.js";
+import { Dialog, Loading, Tabs, colors, truncateText } from "../../ui/index.js";
 import { memoryAccessSourceLabel } from "../../../lib/memoryAccess.js";
+import { MEMORY_TABS, MEMORY_TAB_COPY, memoryTabLabels, type MemoryTabType } from "../../../lib/memoryTabs.js";
 import { FactsSection } from "./FactsSection.js";
 import { LearningSection } from "./LearningSection.js";
 import { MemoryAccessSection } from "./MemoryAccessSection.js";
@@ -22,8 +23,6 @@ import { MemoryFooter } from "./MemoryFooter.js";
 import { OverviewSection } from "./OverviewSection.js";
 import { RecallInspectSection } from "./RecallInspectSection.js";
 
-const TABS = ["overview", "recall", "context", "profile", "facts", "observations", "prune", "learning", "events"] as const;
-type TabType = (typeof TABS)[number];
 type SortableTab = { sortOrder: string };
 
 interface MemoryViewerProps {
@@ -31,35 +30,8 @@ interface MemoryViewerProps {
   onClose: () => void;
 }
 
-function tabLabels(width: number): Record<TabType, string> {
-  if (width < 95) {
-    return {
-      overview: "Home",
-      recall: "Query",
-      context: "Used",
-      profile: "Prof",
-      facts: "Facts",
-      observations: "Pat",
-      prune: "Clean",
-      learning: "Learn",
-      events: "Log",
-    };
-  }
-  return {
-    overview: "Overview",
-    recall: "Recall",
-    context: "Used",
-    profile: "Profile",
-    facts: "Facts",
-    observations: "Patterns",
-    prune: "Cleanup",
-    learning: "Learning",
-    events: "Log",
-  };
-}
-
 export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
-  const [activeTab, setActiveTab] = useState<TabType>("overview");
+  const [activeTab, setActiveTab] = useState<MemoryTabType>("overview");
   const [profileFilters, setProfileFilters] = useState<FactFilters>({ status: "active" });
   const [factFilters, setFactFilters] = useState<FactFilters>({ status: "active" });
   const [observationFilters, setObservationFilters] = useState<ObservationFilters>({ status: "active" });
@@ -153,7 +125,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
       }
     >
       {({ width, height }) => {
-        const sectionHeight = height - 2;
+        const sectionHeight = Math.max(1, height - 4);
         const tab: SortableTab | null =
           activeTab === "overview" || activeTab === "recall"
             ? null
@@ -171,7 +143,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                         ? learningTab
                         : eventsTab;
         const filterDisplay = activeTab === "overview"
-          ? "Recall · Used · Profile · Facts · Patterns · Cleanup · Learning · Log"
+          ? `${factTotal} facts · ${observationTotal} patterns · ${learningCandidates.length} proposals`
           : activeTab === "recall"
           ? recallTab.result
             ? `${recallTab.result.observations.length} patterns · ${recallTab.result.facts.length} facts`
@@ -179,7 +151,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
           : activeTab === "context"
           ? [
               `source: ${accessTab.sourceFilter === "all" ? "all" : memoryAccessSourceLabel(accessTab.sourceFilter)}`,
-              `flags: ${memoryInjectionPolicy?.summary.candidates ?? 0}`,
+              `policy flags: ${memoryInjectionPolicy?.summary.candidates ?? 0}`,
               `loaded: ${memoryAccessEvents.length}`,
             ].join(" · ")
           : activeTab === "profile"
@@ -223,23 +195,34 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                 ].join(" · ")
             : "";
         const sortDisplay = tab ? `sort: ${tab.sortOrder}` : "";
+        const statusDisplay = [filterDisplay, sortDisplay].filter(Boolean).join(" · ");
+        const copy = MEMORY_TAB_COPY[activeTab];
+        const copyWidth = Math.max(1, Math.min(width, Math.max(24, Math.floor(width * 0.58))));
+        const copyDescriptionWidth = Math.max(8, copyWidth - copy.title.length - 3);
+        const statusWidth = Math.max(0, width - copyWidth - 4);
 
         return (
           <>
             <box flexDirection="row" marginBottom={1} marginTop={1}>
               <Tabs
-                tabs={TABS}
+                tabs={MEMORY_TABS}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                labels={tabLabels(width)}
+                labels={memoryTabLabels(width)}
               />
+            </box>
+
+            <box flexDirection="row" marginBottom={1}>
+              <box width={copyWidth}>
+                <text>
+                  <span fg={colors.text.secondary}>{copy.title}</span>
+                  <span fg={colors.text.disabled}> {"\u2502"} {truncateText(copy.description, copyDescriptionWidth)}</span>
+                </text>
+              </box>
               <box flexGrow={1} />
-              {filterDisplay && (
-                <box marginRight={3}>
-                  <text><span fg={colors.text.disabled}>{filterDisplay}</span></text>
-                </box>
+              {statusDisplay && statusWidth > 12 && (
+                <text><span fg={colors.text.disabled}>{truncateText(statusDisplay, statusWidth)}</span></text>
               )}
-              {sortDisplay && <text><span fg={colors.text.disabled}>{sortDisplay}</span></text>}
             </box>
 
             {activeTab === "overview" && (

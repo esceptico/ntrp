@@ -2,6 +2,7 @@ import type { LearningCandidate, LearningEvent } from "../../../api/client.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import type { LearningTabState } from "../../../hooks/useLearningTab.js";
 import { formatTimeAgo, shortTime } from "../../../lib/format.js";
+import { learningChangeLabel } from "../../../lib/memoryLearning.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
 import { ListDetailSection } from "./ListDetailSection.js";
 
@@ -104,7 +105,7 @@ function CandidateDetails({
       <box marginTop={1} flexDirection="column">
         <text>
           <span fg={colors.text.muted}>type </span>
-          <span fg={colors.text.secondary}>{candidate.change_type}</span>
+          <span fg={colors.text.secondary}>{learningChangeLabel(candidate.change_type)}</span>
         </text>
         <text>
           <span fg={colors.text.muted}>target </span>
@@ -162,7 +163,7 @@ export function LearningSection({ tab, totalCount, height, width }: LearningSect
         </text>
         <text>
           <span fg={statusColor(candidate.status, accentValue)}>{candidate.status}</span>
-          <span fg={tagColor}> {candidate.change_type}</span>
+          <span fg={tagColor}> {learningChangeLabel(candidate.change_type)}</span>
           <span fg={tagColor}> [{shortTime(candidate.created_at)}]</span>
         </text>
       </box>
