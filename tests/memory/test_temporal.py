@@ -217,6 +217,54 @@ class TestTemporalPass:
         assert obs_count == 0
 
     @pytest.mark.asyncio
+    async def test_invalid_source_fact_ids_are_rejected(
+        self,
+        fact_repo: FactRepository,
+        obs_repo: ObservationRepository,
+    ):
+        """Temporal observations need enough source facts from the reviewed entity window."""
+        embed_fn = AsyncMock(return_value=mock_embedding("test"))
+
+        entity = await fact_repo.create_entity("User")
+        now = datetime.now(UTC)
+        facts = []
+        for i in range(4):
+            fact = await fact_repo.create(
+                text=f"User sleep note {i}",
+                source_type=SourceType.EXPLICIT,
+                embedding=mock_embedding(f"sleep {i}"),
+                happened_at=now - timedelta(days=i),
+            )
+            await fact_repo.add_entity_ref(fact.id, "User", entity.id)
+            facts.append(fact)
+
+        await fact_repo.conn.commit()
+
+        mock_client = AsyncMock()
+        mock_client.completion.return_value = mock_llm_response(
+            json.dumps(
+                {
+                    "actions": [
+                        {
+                            "action": "create",
+                            "text": "User has a sleep pattern",
+                            "reason": "claimed evidence includes invalid ids",
+                            "source_fact_ids": [facts[0].id, 999_999, facts[1].id],
+                        }
+                    ]
+                }
+            )
+        )
+        with patch("ntrp.memory.temporal.get_completion_client", return_value=mock_client):
+            created = await temporal_consolidation_pass(
+                fact_repo, obs_repo, "test-model", embed_fn, days=30, min_facts=3
+            )
+
+        assert created == 0
+        assert await obs_repo.count() == 0
+        embed_fn.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_ignores_entities_below_threshold(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
         """Entities with fewer facts than min_facts are skipped entirely."""
         embed_fn = AsyncMock(return_value=mock_embedding("test"))

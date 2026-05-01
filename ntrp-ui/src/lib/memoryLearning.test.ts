@@ -5,12 +5,19 @@ import {
   learningApprovalEffect,
   learningCandidateEffect,
   learningChangeLabel,
+  learningTargetLabel,
 } from "./memoryLearning.js";
 
 test("labels memory learning change types for humans", () => {
   expect(learningChangeLabel("skill_note")).toBe("skill note");
   expect(learningChangeLabel("memory_feedback")).toBe("memory feedback");
   expect(learningChangeLabel("custom_rule_name")).toBe("custom rule name");
+});
+
+test("labels memory learning targets for humans", () => {
+  expect(learningTargetLabel("memory.injection.budget")).toBe("memory injection budget");
+  expect(learningTargetLabel("memory.observations.compression.feedback")).toBe("pattern compression feedback");
+  expect(learningTargetLabel("skill.release-workflow")).toBe("skill: release workflow");
 });
 
 test("describes approved learning effects", () => {

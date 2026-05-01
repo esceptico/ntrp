@@ -78,7 +78,12 @@ export const MEMORY_TAB_COPY: Record<
 };
 
 export function memoryTabLabels(width: number): Record<MemoryTabType, string> {
-  const key = width < 95 ? "narrow" : "wide";
+  if (width < 82) {
+    return Object.fromEntries(
+      MEMORY_TABS.map((tab, index) => [tab, String(index + 1)])
+    ) as Record<MemoryTabType, string>;
+  }
+  const key = width < 110 ? "narrow" : "wide";
   return Object.fromEntries(
     MEMORY_TABS.map((tab) => [tab, MEMORY_TAB_COPY[tab][key]])
   ) as Record<MemoryTabType, string>;

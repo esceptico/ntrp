@@ -351,7 +351,7 @@ class TestRetrieveWithObservations:
     @pytest.mark.asyncio
     async def test_retrieves_facts_and_observations(self, repo: FactRepository, obs_repo: ObservationRepository):
         emb = mock_embedding("morning routine")
-        await repo.create(
+        fact = await repo.create(
             text="I wake up early",
             source_type=SourceType.EXPLICIT,
             embedding=emb,
@@ -359,18 +359,21 @@ class TestRetrieveWithObservations:
         await obs_repo.create(
             summary="Prefers morning activities",
             embedding=emb,
+            source_fact_id=fact.id,
         )
 
         context = await retrieve_with_observations(repo, obs_repo, "morning routine", emb, seed_limit=5)
 
-        assert len(context.facts) >= 1
         assert len(context.observations) >= 1
+        assert context.bundled_sources[context.observations[0].id][0].id == fact.id
 
     @pytest.mark.asyncio
     async def test_observations_sorted_by_score(self, repo: FactRepository, obs_repo: ObservationRepository):
         emb = mock_embedding("test")
-        await obs_repo.create(summary="Obs 1", embedding=emb)
-        await obs_repo.create(summary="Obs 2", embedding=emb)
+        fact_1 = await repo.create(text="Source fact 1", source_type=SourceType.EXPLICIT, embedding=emb)
+        fact_2 = await repo.create(text="Source fact 2", source_type=SourceType.EXPLICIT, embedding=emb)
+        await obs_repo.create(summary="Obs 1", embedding=emb, source_fact_id=fact_1.id)
+        await obs_repo.create(summary="Obs 2", embedding=emb, source_fact_id=fact_2.id)
 
         context = await retrieve_with_observations(repo, obs_repo, "test", emb, seed_limit=5)
 

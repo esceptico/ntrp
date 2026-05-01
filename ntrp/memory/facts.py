@@ -369,7 +369,12 @@ class FactMemory:
             extraction = ExtractionResult(entities=[ExtractedEntity(name=name) for name in entity_names])
 
         async with self.transaction():
-            if similar := await self.facts.search_facts_vector(embedding, limit=1):
+            similar = [
+                (fact, similarity)
+                for fact, similarity in await self.facts.search_facts_vector(embedding, limit=5)
+                if _is_active_fact(fact)
+            ]
+            if similar:
                 existing_fact, similarity = similar[0]
                 text_ratio = SequenceMatcher(None, text.lower(), existing_fact.text.lower()).ratio()
                 is_dup = text_ratio >= FACT_DEDUP_TEXT_RATIO or similarity >= FACT_DEDUP_EMBEDDING_SIMILARITY

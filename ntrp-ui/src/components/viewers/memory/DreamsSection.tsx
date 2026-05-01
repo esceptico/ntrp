@@ -4,7 +4,7 @@ import { useAccentColor } from "../../../hooks/index.js";
 import { shortTime } from "../../../lib/format.js";
 import type { DreamsTabState } from "../../../hooks/useDreamsTab.js";
 import { DreamDetailsView } from "./DreamDetailsView.js";
-import { ListDetailSection } from "./ListDetailSection.js";
+import { ListDetailSection, memoryDetailWidth } from "./ListDetailSection.js";
 
 interface DreamsSectionProps {
   tab: DreamsTabState;
@@ -15,7 +15,7 @@ interface DreamsSectionProps {
 export function DreamsSection({ tab, height, width }: DreamsSectionProps) {
   const { accentValue } = useAccentColor();
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
-  const detailWidth = Math.max(0, width - listWidth - 1);
+  const detailWidth = memoryDetailWidth(width, listWidth);
 
   const renderItem = (dream: Dream, ctx: RenderItemContext) => {
     const textWidth = listWidth - 4;

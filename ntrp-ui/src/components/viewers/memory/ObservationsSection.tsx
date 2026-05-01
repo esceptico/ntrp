@@ -4,7 +4,7 @@ import { useAccentColor } from "../../../hooks/index.js";
 import { shortTime } from "../../../lib/format.js";
 import type { ObservationsTabState } from "../../../hooks/useObservationsTab.js";
 import { ObservationDetailsView } from "./ObservationDetailsView.js";
-import { ListDetailSection } from "./ListDetailSection.js";
+import { ListDetailSection, memoryDetailWidth } from "./ListDetailSection.js";
 
 interface ObservationsSectionProps {
   tab: ObservationsTabState;
@@ -32,7 +32,7 @@ function patternProducerLabel(obs: Observation): string {
 export function ObservationsSection({ tab, height, width, saving }: ObservationsSectionProps) {
   const { accentValue } = useAccentColor();
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
-  const detailWidth = Math.max(0, width - listWidth - 1);
+  const detailWidth = memoryDetailWidth(width, listWidth);
 
   const renderItem = (obs: Observation, ctx: RenderItemContext) => {
     const textWidth = listWidth - 4;

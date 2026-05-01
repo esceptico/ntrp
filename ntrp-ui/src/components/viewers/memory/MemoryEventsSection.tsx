@@ -4,7 +4,7 @@ import type { MemoryEventsTabState } from "../../../hooks/useMemoryEventsTab.js"
 import { formatTimeAgo, shortTime } from "../../../lib/format.js";
 import { memoryMetadataRows } from "../../../lib/memoryMetadata.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
-import { ListDetailSection } from "./ListDetailSection.js";
+import { ListDetailSection, memoryDetailWidth } from "./ListDetailSection.js";
 
 interface MemoryEventsSectionProps {
   tab: MemoryEventsTabState;
@@ -98,7 +98,7 @@ function EventDetails({
 export function MemoryEventsSection({ tab, totalCount, height, width }: MemoryEventsSectionProps) {
   const { accentValue } = useAccentColor();
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
-  const detailWidth = Math.max(0, width - listWidth - 1);
+  const detailWidth = memoryDetailWidth(width, listWidth);
 
   const renderItem = (event: MemoryEvent, ctx: RenderItemContext) => {
     const textWidth = listWidth - 4;

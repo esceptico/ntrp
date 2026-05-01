@@ -79,7 +79,7 @@ def _can_create_observation_from_fact(fact: Fact) -> tuple[bool, str]:
         return False, "temporary_fact"
     if fact.source_type == SourceType.CHAT and fact.kind == FactKind.NOTE and fact.salience <= 0:
         return False, "chat_note_low_salience"
-    return True, "allowed"
+    return False, "single_fact_pattern"
 
 
 async def _llm_consolidation_decisions(

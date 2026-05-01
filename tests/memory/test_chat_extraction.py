@@ -39,8 +39,8 @@ SAMPLE_MESSAGES = (
 class TestFormatMessages:
     def test_basic_formatting(self):
         result = _format_messages(SAMPLE_MESSAGES)
-        assert "user: I decided to use Postgres" in result
-        assert "assistant: Good choice" in result
+        assert "USER (evidence): I decided to use Postgres" in result
+        assert "ASSISTANT (context only): Good choice" in result
 
     def test_skips_tool_messages(self):
         messages = (
@@ -50,8 +50,8 @@ class TestFormatMessages:
         )
         result = _format_messages(messages)
         assert "tool output" not in result
-        assert "user: hello" in result
-        assert "assistant: response" in result
+        assert "USER (evidence): hello" in result
+        assert "ASSISTANT (context only): response" in result
 
     def test_skips_session_handoff(self):
         messages = (
@@ -60,7 +60,7 @@ class TestFormatMessages:
         )
         result = _format_messages(messages)
         assert "Session State Handoff" not in result
-        assert "user: continuing now" in result
+        assert "USER (evidence): continuing now" in result
 
     def test_skips_empty_content(self):
         messages = (
@@ -68,7 +68,7 @@ class TestFormatMessages:
             {"role": "assistant", "content": "response"},
         )
         result = _format_messages(messages)
-        assert result == "assistant: response"
+        assert result == "ASSISTANT (context only): response"
 
     def test_skips_non_string_content(self):
         messages = (
@@ -76,7 +76,7 @@ class TestFormatMessages:
             {"role": "assistant", "content": "response"},
         )
         result = _format_messages(messages)
-        assert result == "assistant: response"
+        assert result == "ASSISTANT (context only): response"
 
     def test_empty_messages(self):
         result = _format_messages(())

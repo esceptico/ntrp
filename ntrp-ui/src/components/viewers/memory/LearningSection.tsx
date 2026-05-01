@@ -3,9 +3,9 @@ import { useAccentColor } from "../../../hooks/index.js";
 import type { LearningTabState } from "../../../hooks/useLearningTab.js";
 import { formatTimeAgo, shortTime } from "../../../lib/format.js";
 import { cleanLearningText, learningDetailRows, summarizeLearningEvidence } from "../../../lib/memoryLearningDetails.js";
-import { learningCandidateEffect, learningChangeLabel } from "../../../lib/memoryLearning.js";
+import { learningCandidateEffect, learningChangeLabel, learningTargetLabel } from "../../../lib/memoryLearning.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
-import { ListDetailSection } from "./ListDetailSection.js";
+import { ListDetailSection, memoryDetailWidth } from "./ListDetailSection.js";
 
 interface LearningSectionProps {
   tab: LearningTabState;
@@ -124,7 +124,7 @@ function CandidateDetails({
         </text>
         <text>
           <span fg={colors.text.muted}>applies to </span>
-          <span fg={colors.text.secondary}>{truncateText(candidate.target_key, textWidth - 8)}</span>
+          <span fg={colors.text.secondary}>{truncateText(learningTargetLabel(candidate.target_key), textWidth - 11)}</span>
         </text>
         <text>
           <span fg={colors.text.muted}>policy </span>
@@ -186,7 +186,7 @@ function CandidateDetails({
 export function LearningSection({ tab, totalCount, height, width }: LearningSectionProps) {
   const { accentValue } = useAccentColor();
   const listWidth = Math.min(48, Math.max(32, Math.floor(width * 0.42)));
-  const detailWidth = Math.max(0, width - listWidth - 1);
+  const detailWidth = memoryDetailWidth(width, listWidth);
 
   const renderItem = (candidate: LearningCandidate, ctx: RenderItemContext) => {
     const textWidth = listWidth - 4;

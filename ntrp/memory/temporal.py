@@ -77,9 +77,19 @@ async def temporal_consolidation_pass(
         # Pre-compute embeddings + dedup checks outside atomic block
         to_create: list[tuple[TemporalAction, Embedding]] = []
         to_reinforce: list[tuple[int, list[int]]] = []  # (obs_id, fact_ids)
+        valid_fact_ids = {fact.id for fact in facts}
         for action in actions:
             if action.action != "create" or not action.text:
                 continue
+            source_fact_ids = [fact_id for fact_id in action.source_fact_ids if fact_id in valid_fact_ids]
+            if len(source_fact_ids) < min_facts:
+                _logger.info(
+                    "Temporal: skipped %s candidate with %d valid source facts",
+                    entity_name,
+                    len(source_fact_ids),
+                )
+                continue
+            action = action.model_copy(update={"source_fact_ids": source_fact_ids})
             embedding = await embed_fn(action.text)
             similar = await obs_repo.search_vector(embedding, limit=1)
             if similar and similar[0][1] >= OBSERVATION_MERGE_SIMILARITY_THRESHOLD:

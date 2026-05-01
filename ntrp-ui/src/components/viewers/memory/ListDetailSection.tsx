@@ -24,6 +24,17 @@ interface ListDetailSectionProps<T> {
   totalCount?: number;
 }
 
+const MIN_DETAIL_WIDTH = 24;
+
+function splitDetailWidth(width: number, listWidth: number): number {
+  return Math.max(0, width - listWidth - 1);
+}
+
+export function memoryDetailWidth(width: number, listWidth: number): number {
+  const splitWidth = splitDetailWidth(width, listWidth);
+  return splitWidth < MIN_DETAIL_WIDTH ? width : splitWidth;
+}
+
 export function ListDetailSection<T>({
   items,
   selectedIndex,
@@ -42,6 +53,7 @@ export function ListDetailSection<T>({
   totalCount,
 }: ListDetailSectionProps<T>) {
   const listWidth = providedListWidth ?? Math.min(45, Math.max(30, Math.floor(width * 0.4)));
+  const compact = splitDetailWidth(width, listWidth) < MIN_DETAIL_WIDTH;
   const availableLines = Math.max(1, height - 4);
   const visibleLines = Math.max(1, Math.floor(availableLines / itemHeight));
 
@@ -91,6 +103,14 @@ export function ListDetailSection<T>({
       {details}
     </box>
   );
+
+  if (compact) {
+    return (
+      <box width={width} height={height} overflow="hidden">
+        {focusPane === "details" ? main : sidebar}
+      </box>
+    );
+  }
 
   return (
     <SplitView sidebarWidth={listWidth} sidebar={sidebar} main={main} width={width} height={height} />

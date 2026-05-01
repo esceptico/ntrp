@@ -287,10 +287,10 @@ class TestConsolidateFact:
         assert updated.consolidated_at is not None
 
     @pytest.mark.asyncio
-    async def test_fact_creates_synthesized_observation(
+    async def test_fact_create_is_gated_as_single_source_pattern(
         self, fact_repo: FactRepository, obs_repo: ObservationRepository
     ):
-        """Fact creates a synthesized observation (higher-level than fact)."""
+        """Single facts remain source-of-truth records; patterns need multi-fact evidence."""
         fact = await fact_repo.create(
             text="Alice prefers Python",
             source_type=SourceType.EXPLICIT,
@@ -317,14 +317,9 @@ class TestConsolidateFact:
         with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
             result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embedding)
 
-        assert result.action == "created"
-        assert result.observation_id is not None
-
-        obs = await obs_repo.get(result.observation_id)
-        assert obs.summary == "Alice is a Python-focused developer"
-
-        obs_count = await obs_repo.count()
-        assert obs_count == 1
+        assert result.action == "skipped"
+        assert result.reason == "create_gate:single_fact_pattern"
+        assert await obs_repo.count() == 0
 
     @pytest.mark.asyncio
     async def test_fact_updates_existing_observation(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
@@ -417,10 +412,10 @@ class TestConsolidateFact:
         assert "previously" in updated_obs.summary or "Google" in updated_obs.summary
 
     @pytest.mark.asyncio
-    async def test_different_topics_create_separate_observations(
+    async def test_different_topic_single_fact_create_is_gated(
         self, fact_repo: FactRepository, obs_repo: ObservationRepository
     ):
-        """Different topics for same person create separate observations."""
+        """Per-fact consolidation may update patterns, but it does not create one-fact patterns."""
         emb_work = mock_embedding("alice work")
         f1 = await fact_repo.create(
             text="Alice works at Google",
@@ -456,10 +451,11 @@ class TestConsolidateFact:
         with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
             result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embedding)
 
-        assert result.action == "created"
+        assert result.action == "skipped"
+        assert result.reason == "create_gate:single_fact_pattern"
 
         obs_count = await obs_repo.count()
-        assert obs_count == 2
+        assert obs_count == 1
 
     @pytest.mark.asyncio
     async def test_invalid_json_falls_back_to_none(self, fact_repo: FactRepository, obs_repo: ObservationRepository):

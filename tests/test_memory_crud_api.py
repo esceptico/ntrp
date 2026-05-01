@@ -659,8 +659,25 @@ class TestMemoryAuditAPI:
 
         assert response.status_code == 200
         data = response.json()
-        assert any(row["id"] == obs.id for row in data["observations"])
+        assert all(row["id"] != obs.id for row in data["observations"])
         assert str(obs.id) not in data["bundled_sources"]
+
+    @pytest.mark.asyncio
+    async def test_recall_excludes_patterns_without_sources(self, test_client: AsyncClient, test_runtime: Runtime):
+        obs = await test_runtime.memory.observations.create(
+            summary="User has an unsupported memory workflow pattern",
+            embedding=mock_embedding("unsupported memory workflow"),
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.post(
+            "/memory/recall/inspect",
+            json={"query": "unsupported memory workflow", "limit": 5},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert all(row["id"] != obs.id for row in data["observations"])
 
     @pytest.mark.asyncio
     async def test_session_memory_filters_low_support_patterns_and_stale_entity_facts(
@@ -841,6 +858,30 @@ class TestMemoryAuditAPI:
         reasons_by_source = {candidate["source"]: candidate["reasons"] for candidate in data["candidates"]}
         assert reasons_by_source["recall_tool"] == ["empty_recall"]
         assert reasons_by_source["chat_prompt"] == ["over_budget", "pattern_heavy"]
+
+    @pytest.mark.asyncio
+    async def test_memory_injection_policy_uses_rendered_not_retrieved_counts(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        await test_runtime.memory.access_events.create(
+            source="chat_prompt",
+            retrieved_observation_ids=[10, 11, 12, 13],
+            injected_fact_ids=[1],
+            injected_observation_ids=[10],
+            omitted_observation_ids=[11, 12, 13],
+            formatted_chars=40,
+            policy_version="memory.access.v1",
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.get("/memory/injection-policy/preview", params={"char_budget": 80})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["summary"]["pattern_heavy"] == 0
+        assert data["candidates"] == []
 
     @pytest.mark.asyncio
     async def test_profile_policy_preview_flags_review_candidates_and_profile_issues(

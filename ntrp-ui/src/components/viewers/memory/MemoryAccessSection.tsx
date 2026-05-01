@@ -12,7 +12,7 @@ import { formatTimeAgo, shortTime } from "../../../lib/format.js";
 import { memoryAccessSourceLabel } from "../../../lib/memoryAccess.js";
 import { memoryMetadataRows } from "../../../lib/memoryMetadata.js";
 import { colors, truncateText, type RenderItemContext } from "../../ui/index.js";
-import { ListDetailSection } from "./ListDetailSection.js";
+import { ListDetailSection, memoryDetailWidth } from "./ListDetailSection.js";
 
 interface MemoryAccessSectionProps {
   tab: MemoryAccessTabState;
@@ -240,7 +240,7 @@ function AccessDetails({
 export function MemoryAccessSection({ tab, totalCount, policyPreview, facts, observations, height, width }: MemoryAccessSectionProps) {
   const { accentValue } = useAccentColor();
   const listWidth = Math.min(48, Math.max(32, Math.floor(width * 0.42)));
-  const detailWidth = Math.max(0, width - listWidth - 1);
+  const detailWidth = memoryDetailWidth(width, listWidth);
   const factsById = new Map(facts.map((fact) => [fact.id, fact]));
   const observationsById = new Map(observations.map((observation) => [observation.id, observation]));
   const candidatesByEventId = new Map(

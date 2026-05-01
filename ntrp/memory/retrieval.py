@@ -388,6 +388,17 @@ async def retrieve_with_observations(
     obs_by_id = await obs_repo.get_batch(list(obs_rrf.keys()))
     obs_by_id = {oid: o for oid, o in obs_by_id.items() if o.archived_at is None}
 
+    all_source_ids = {fact_id for obs in obs_by_id.values() for fact_id in obs.source_fact_ids}
+    source_facts = await repo.get_batch(list(all_source_ids)) if all_source_ids else {}
+    active_source_ids = {
+        fact_id for fact_id, fact in source_facts.items() if _is_recallable_fact(fact, query_time)
+    }
+    obs_by_id = {
+        oid: obs
+        for oid, obs in obs_by_id.items()
+        if any(fact_id in active_source_ids for fact_id in obs.source_fact_ids)
+    }
+
     obs_scores: dict[int, float] = {}
     for oid, base in obs_rrf.items():
         if oid not in obs_by_id:
@@ -401,7 +412,7 @@ async def retrieve_with_observations(
     # Exclusion set: ALL source fact IDs (prevents duplicates in standalone facts)
     bundled_fact_ids: set[int] = set()
     for obs in observations:
-        bundled_fact_ids.update(obs.source_fact_ids)
+        bundled_fact_ids.update(fact_id for fact_id in obs.source_fact_ids if fact_id in active_source_ids)
 
     # Display: fetch only the most recent N source facts per observation
     all_display_ids: set[int] = set()

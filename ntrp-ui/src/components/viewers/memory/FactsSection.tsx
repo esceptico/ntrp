@@ -3,7 +3,7 @@ import { colors, truncateText, type RenderItemContext } from "../../ui/index.js"
 import { shortTime } from "../../../lib/format.js";
 import type { FactsTabState } from "../../../hooks/useFactsTab.js";
 import { FactDetailsView } from "./FactDetailsView.js";
-import { ListDetailSection } from "./ListDetailSection.js";
+import { ListDetailSection, memoryDetailWidth } from "./ListDetailSection.js";
 
 interface FactsSectionProps {
   tab: FactsTabState;
@@ -15,7 +15,7 @@ interface FactsSectionProps {
 
 export function FactsSection({ tab, height, width, saving, emptyMessage = "No facts match filters" }: FactsSectionProps) {
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
-  const detailWidth = Math.max(0, width - listWidth - 1);
+  const detailWidth = memoryDetailWidth(width, listWidth);
 
   const renderItem = (fact: Fact, ctx: RenderItemContext) => {
     const textWidth = listWidth - 4;

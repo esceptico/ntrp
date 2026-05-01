@@ -3,7 +3,7 @@ import { colors, truncateText, type RenderItemContext } from "../../ui/index.js"
 import { useAccentColor } from "../../../hooks/index.js";
 import { formatTimeAgo, shortTime } from "../../../lib/format.js";
 import type { PruneTabState } from "../../../hooks/usePruneTab.js";
-import { ListDetailSection } from "./ListDetailSection.js";
+import { ListDetailSection, memoryDetailWidth } from "./ListDetailSection.js";
 
 interface PruneSectionProps {
   tab: PruneTabState;
@@ -95,7 +95,7 @@ function PruneDetails({
 export function PruneSection({ tab, dryRun, height, width }: PruneSectionProps) {
   const { accentValue } = useAccentColor();
   const listWidth = Math.min(45, Math.max(30, Math.floor(width * 0.4)));
-  const detailWidth = Math.max(0, width - listWidth - 1);
+  const detailWidth = memoryDetailWidth(width, listWidth);
 
   const renderItem = (candidate: MemoryPruneCandidate, ctx: RenderItemContext) => {
     const textWidth = listWidth - 4;
