@@ -56,6 +56,13 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
             observations=session_memory.observations,
             user_facts=session_memory.user_facts,
         )
+        if memory_context is not None:
+            await deps.memory.record_session_memory_access(
+                source="operator_prompt",
+                memory=session_memory,
+                formatted_chars=len(memory_context),
+                details={"source_id": request.source_id, "has_context": True},
+            )
 
     system_prompt = build_system_prompt(
         source_details=deps.source_details,

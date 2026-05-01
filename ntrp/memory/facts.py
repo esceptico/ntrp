@@ -28,6 +28,7 @@ from ntrp.memory.decay import decay_score
 from ntrp.memory.extraction import Extractor
 from ntrp.memory.models import ExtractedEntity, ExtractionResult, Fact, FactContext, FactKind, Observation, SourceType
 from ntrp.memory.retrieval import retrieve_with_observations
+from ntrp.memory.store.access_events import MemoryAccessEventRepository
 from ntrp.memory.store.base import GraphDatabase
 from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.events import MemoryEventRepository
@@ -56,6 +57,26 @@ class SessionMemory:
     observations: list[Observation]
     profile_facts: list[Fact]
     user_facts: list[Fact]
+
+
+def _dedupe_ids(ids: Sequence[int]) -> list[int]:
+    return list(dict.fromkeys(ids))
+
+
+def _context_fact_ids(context: FactContext) -> list[int]:
+    ids = [fact.id for fact in context.facts]
+    ids.extend(fact.id for facts in context.bundled_sources.values() for fact in facts)
+    return _dedupe_ids(ids)
+
+
+def _context_observation_ids(context: FactContext) -> list[int]:
+    return _dedupe_ids([observation.id for observation in context.observations])
+
+
+def _session_fact_ids(memory: SessionMemory) -> list[int]:
+    ids = [fact.id for fact in memory.profile_facts]
+    ids.extend(fact.id for fact in memory.user_facts)
+    return _dedupe_ids(ids)
 
 
 class ReembedProgress(TypedDict):
@@ -88,6 +109,7 @@ class FactMemory:
         self.observations = ObservationRepository(conn, read_conn)
         self.dreams = DreamRepository(conn, read_conn)
         self.events = MemoryEventRepository(conn, read_conn)
+        self.access_events = MemoryAccessEventRepository(conn, read_conn)
         self.embedder = embedder or Embedder(embedding)
         self.extractor = extractor or Extractor(model)
         self._enqueue_fact_index_upsert = enqueue_fact_index_upsert
@@ -198,7 +220,9 @@ class FactMemory:
             return result
 
         fact_embeddings = await self.embedder.embed([fact.text for fact in facts]) if facts else []
-        observation_embeddings = await self.embedder.embed([obs.summary for obs in observations]) if observations else []
+        observation_embeddings = (
+            await self.embedder.embed([obs.summary for obs in observations]) if observations else []
+        )
 
         async with self.transaction():
             for fact, embedding in zip(facts, fact_embeddings, strict=False):
@@ -411,6 +435,54 @@ class FactMemory:
             seed_limit=limit,
             query_time=query_time,
         )
+
+    async def record_context_access(
+        self,
+        *,
+        source: str,
+        context: FactContext,
+        query: str | None = None,
+        formatted_chars: int = 0,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        fact_ids = _context_fact_ids(context)
+        observation_ids = _context_observation_ids(context)
+        bundled_ids = _dedupe_ids([fact.id for facts in context.bundled_sources.values() for fact in facts])
+        async with self.transaction():
+            await self.access_events.create(
+                source=source,
+                query=query,
+                retrieved_fact_ids=fact_ids,
+                retrieved_observation_ids=observation_ids,
+                injected_fact_ids=fact_ids,
+                injected_observation_ids=observation_ids,
+                bundled_fact_ids=bundled_ids,
+                formatted_chars=formatted_chars,
+                policy_version="memory.access.v1",
+                details=details,
+            )
+
+    async def record_session_memory_access(
+        self,
+        *,
+        source: str,
+        memory: SessionMemory,
+        formatted_chars: int = 0,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        fact_ids = _session_fact_ids(memory)
+        observation_ids = _dedupe_ids([observation.id for observation in memory.observations])
+        async with self.transaction():
+            await self.access_events.create(
+                source=source,
+                retrieved_fact_ids=fact_ids,
+                retrieved_observation_ids=observation_ids,
+                injected_fact_ids=fact_ids,
+                injected_observation_ids=observation_ids,
+                formatted_chars=formatted_chars,
+                policy_version="memory.access.v1",
+                details=details,
+            )
 
     async def forget(self, query: str) -> int:
         query_embedding = await self.embedder.embed_one(query)

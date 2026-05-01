@@ -4,14 +4,14 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.memory.formatting import format_memory_context, format_session_memory
-from ntrp.memory.models import Fact, FactKind, MemoryEvent, Observation, SourceType
+from ntrp.memory.models import Fact, FactKind, MemoryAccessEvent, MemoryEvent, Observation, SourceType
 from ntrp.memory.service import MemoryService
 from ntrp.server.deps import require_memory
 from ntrp.server.schemas import (
     FactKindReviewSuggestionRequest,
-    MemoryRecallInspectRequest,
     MemoryPruneApplyRequest,
     MemoryPruneDryRunRequest,
+    MemoryRecallInspectRequest,
     MemoryRepairEmbeddingsRequest,
     UpdateFactMetadataRequest,
     UpdateFactRequest,
@@ -68,6 +68,25 @@ def _memory_event_payload(event: MemoryEvent) -> dict:
         "source_type": event.source_type,
         "source_ref": event.source_ref,
         "reason": event.reason,
+        "policy_version": event.policy_version,
+        "details": event.details,
+    }
+
+
+def _memory_access_event_payload(event: MemoryAccessEvent) -> dict:
+    return {
+        "id": event.id,
+        "created_at": event.created_at.isoformat(),
+        "source": event.source,
+        "query": event.query,
+        "retrieved_fact_ids": event.retrieved_fact_ids,
+        "retrieved_observation_ids": event.retrieved_observation_ids,
+        "injected_fact_ids": event.injected_fact_ids,
+        "injected_observation_ids": event.injected_observation_ids,
+        "omitted_fact_ids": event.omitted_fact_ids,
+        "omitted_observation_ids": event.omitted_observation_ids,
+        "bundled_fact_ids": event.bundled_fact_ids,
+        "formatted_chars": event.formatted_chars,
         "policy_version": event.policy_version,
         "details": event.details,
     }
@@ -371,6 +390,17 @@ async def get_event_log(
         action=action,
     )
     return {"events": [_memory_event_payload(event) for event in events]}
+
+
+@router.get("/memory/access/events")
+async def get_memory_access_events(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    source: str | None = Query(default=None, min_length=1),
+    svc: MemoryService = Depends(require_memory),
+):
+    events = await svc.access_events.list_recent(limit=limit, offset=offset, source=source)
+    return {"events": [_memory_access_event_payload(event) for event in events]}
 
 
 @router.get("/memory/profile")

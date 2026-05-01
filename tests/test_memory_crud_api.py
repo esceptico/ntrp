@@ -10,11 +10,15 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from ntrp.config import Config
+from ntrp.context.models import SessionState
 from ntrp.memory.fact_review import FactMetadataSuggestion
 from ntrp.memory.models import FactKind, SourceType
 from ntrp.server.app import app
 from ntrp.server.runtime import Runtime
 from ntrp.settings import hash_api_key
+from ntrp.tools.core.context import IOBridge, RunContext, ToolContext, ToolExecution
+from ntrp.tools.memory import RecallInput
+from ntrp.tools.memory import recall as recall_tool
 from tests.conftest import TEST_EMBEDDING_DIM, mock_embedding
 
 
@@ -593,6 +597,62 @@ class TestMemoryAuditAPI:
         stored_obs = await test_runtime.memory.observations.get(obs.id)
         assert stored_fact.access_count == 0
         assert stored_obs.access_count == 0
+
+    @pytest.mark.asyncio
+    async def test_recall_tool_records_access_event(self, test_client: AsyncClient, test_runtime: Runtime):
+        fact = await test_runtime.memory.facts.create(
+            text="User is tuning retrieval telemetry",
+            source_type=SourceType.EXPLICIT,
+            embedding=mock_embedding("retrieval telemetry"),
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        execution = ToolExecution(
+            tool_id="test-tool",
+            tool_name="recall",
+            ctx=ToolContext(
+                session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+                registry=None,
+                run=RunContext(run_id="test"),
+                io=IOBridge(),
+                services={"memory": test_runtime.memory},
+            ),
+        )
+
+        result = await recall_tool(execution, RecallInput(query="retrieval telemetry", limit=5))
+
+        assert "retrieval telemetry" in result.content
+        response = await test_client.get("/memory/access/events", params={"source": "recall_tool"})
+        assert response.status_code == 200
+        events = response.json()["events"]
+        assert events[0]["query"] == "retrieval telemetry"
+        assert fact.id in events[0]["injected_fact_ids"]
+        assert events[0]["formatted_chars"] > 0
+        assert events[0]["policy_version"] == "memory.access.v1"
+
+    @pytest.mark.asyncio
+    async def test_session_memory_records_access_event(self, test_client: AsyncClient, test_runtime: Runtime):
+        result = await test_runtime.memory.remember(
+            text="User prefers visible memory provenance",
+            source_type=SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+            entity_names=["User"],
+        )
+        session_memory = await test_runtime.memory.get_session_memory()
+
+        await test_runtime.memory.record_session_memory_access(
+            source="chat_prompt",
+            memory=session_memory,
+            formatted_chars=42,
+            details={"has_context": True},
+        )
+
+        response = await test_client.get("/memory/access/events", params={"source": "chat_prompt"})
+        assert response.status_code == 200
+        event = response.json()["events"][0]
+        assert result.fact.id in event["injected_fact_ids"]
+        assert event["query"] is None
+        assert event["details"] == {"has_context": True}
 
     @pytest.mark.asyncio
     async def test_repair_embeddings_is_explicit_and_audited(

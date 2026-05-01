@@ -224,6 +224,50 @@ class MemoryEvent(_FrozenModel):
         return _parse_datetime(v)
 
 
+class MemoryAccessEvent(_FrozenModel):
+    id: int
+    created_at: datetime
+    source: str
+    query: str | None = None
+    retrieved_fact_ids: list[int] = []
+    retrieved_observation_ids: list[int] = []
+    injected_fact_ids: list[int] = []
+    injected_observation_ids: list[int] = []
+    omitted_fact_ids: list[int] = []
+    omitted_observation_ids: list[int] = []
+    bundled_fact_ids: list[int] = []
+    formatted_chars: int = 0
+    policy_version: str
+    details: dict[str, Any] = {}
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _parse_created_at(cls, v: Any) -> datetime | None:
+        return _parse_datetime(v)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_json_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        for name in (
+            "retrieved_fact_ids",
+            "retrieved_observation_ids",
+            "injected_fact_ids",
+            "injected_observation_ids",
+            "omitted_fact_ids",
+            "omitted_observation_ids",
+            "bundled_fact_ids",
+        ):
+            raw = data.get(name)
+            if isinstance(raw, str):
+                data[name] = json.loads(raw)
+        details = data.get("details")
+        if isinstance(details, str):
+            data["details"] = json.loads(details) if details else {}
+        return data
+
+
 class FactContext(_FrozenModel):
     facts: list[Fact]
     observations: list[Observation] = []

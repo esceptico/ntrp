@@ -187,3 +187,39 @@ async def test_init_schema_migrates_existing_v7_observations(tmp_path: Path):
     assert "idx_observations_policy" in indexes
 
     await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_migrate_v9_adds_memory_access_events(tmp_path: Path):
+    conn = await aiosqlite.connect(tmp_path / "memory.db")
+    conn.row_factory = aiosqlite.Row
+    await conn.executescript("""
+        CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+        INSERT INTO meta (key, value) VALUES ('schema_version', '8');
+    """)
+
+    await run_migrations(conn)
+
+    columns = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(memory_access_events)")}
+    assert {
+        "source",
+        "query",
+        "retrieved_fact_ids",
+        "retrieved_observation_ids",
+        "injected_fact_ids",
+        "injected_observation_ids",
+        "omitted_fact_ids",
+        "omitted_observation_ids",
+        "bundled_fact_ids",
+        "formatted_chars",
+        "policy_version",
+        "details",
+    }.issubset(columns)
+
+    indexes = {row["name"] for row in await conn.execute_fetchall("PRAGMA index_list(memory_access_events)")}
+    assert {"idx_memory_access_events_created", "idx_memory_access_events_source"}.issubset(indexes)
+
+    version = await conn.execute_fetchall("SELECT value FROM meta WHERE key = 'schema_version'")
+    assert version[0][0] == str(CURRENT_VERSION)
+
+    await conn.close()

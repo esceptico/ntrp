@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 8
+CURRENT_VERSION = 9
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -243,6 +243,34 @@ async def _migrate_v8(conn: aiosqlite.Connection) -> None:
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_observations_policy ON observations(policy_version)")
 
 
+async def _migrate_v9(conn: aiosqlite.Connection) -> None:
+    """Add model-facing memory access telemetry."""
+    _logger.info("Migration v9: adding memory access telemetry")
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS memory_access_events (
+            id INTEGER PRIMARY KEY,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            source TEXT NOT NULL,
+            query TEXT,
+            retrieved_fact_ids TEXT NOT NULL DEFAULT '[]',
+            retrieved_observation_ids TEXT NOT NULL DEFAULT '[]',
+            injected_fact_ids TEXT NOT NULL DEFAULT '[]',
+            injected_observation_ids TEXT NOT NULL DEFAULT '[]',
+            omitted_fact_ids TEXT NOT NULL DEFAULT '[]',
+            omitted_observation_ids TEXT NOT NULL DEFAULT '[]',
+            bundled_fact_ids TEXT NOT NULL DEFAULT '[]',
+            formatted_chars INTEGER NOT NULL DEFAULT 0,
+            policy_version TEXT NOT NULL,
+            details TEXT NOT NULL DEFAULT '{}'
+        )
+    """)
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_access_events_created ON memory_access_events(created_at DESC)"
+    )
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_access_events_source ON memory_access_events(source)")
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
@@ -252,6 +280,7 @@ _MIGRATIONS: list[tuple[int, callable]] = [
     (6, _migrate_v6),
     (7, _migrate_v7),
     (8, _migrate_v8),
+    (9, _migrate_v9),
 ]
 
 

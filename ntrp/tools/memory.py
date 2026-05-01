@@ -99,6 +99,13 @@ async def recall(execution: ToolExecution, args: RecallInput) -> ToolResult:
         query_observations=context.observations,
         bundled_sources=context.bundled_sources,
     )
+    await memory.record_context_access(
+        source="recall_tool",
+        query=args.query,
+        context=context,
+        formatted_chars=len(formatted or ""),
+        details={"limit": args.limit, "has_context": formatted is not None},
+    )
     if formatted:
         obs_count = len(context.observations)
         fact_count = len(context.facts)

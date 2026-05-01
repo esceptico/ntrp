@@ -10,7 +10,17 @@ from ntrp.memory.audit import (
 )
 from ntrp.memory.fact_review import FactMetadataSuggestion, suggest_fact_metadata
 from ntrp.memory.facts import PROFILE_FACT_KINDS, FactMemory, SessionMemory
-from ntrp.memory.models import Dream, EntityRef, Fact, FactContext, FactKind, MemoryEvent, Observation, SourceType
+from ntrp.memory.models import (
+    Dream,
+    EntityRef,
+    Fact,
+    FactContext,
+    FactKind,
+    MemoryAccessEvent,
+    MemoryEvent,
+    Observation,
+    SourceType,
+)
 
 _logger = get_logger(__name__)
 
@@ -344,6 +354,24 @@ class MemoryEventService:
         )
 
 
+class MemoryAccessEventService:
+    def __init__(self, memory: FactMemory):
+        self._memory = memory
+
+    async def list_recent(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        source: str | None = None,
+    ) -> list[MemoryAccessEvent]:
+        return await self._memory.access_events.list_recent(
+            limit=limit,
+            offset=offset,
+            source=source,
+        )
+
+
 class MemoryService:
     def __init__(
         self,
@@ -358,6 +386,7 @@ class MemoryService:
         self.observations = ObservationService(memory)
         self.dreams = DreamService(memory)
         self.events = MemoryEventService(memory)
+        self.access_events = MemoryAccessEventService(memory)
 
     @property
     def is_consolidating(self) -> bool:

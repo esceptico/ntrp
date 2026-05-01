@@ -155,6 +155,13 @@ async def _prepare_messages(
             observations=session_memory.observations,
             user_facts=session_memory.user_facts,
         )
+        if memory_context is not None:
+            await deps.memory.record_session_memory_access(
+                source="chat_prompt",
+                memory=session_memory,
+                formatted_chars=len(memory_context),
+                details={"has_context": True},
+            )
 
     skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None
     directives = load_directives()
