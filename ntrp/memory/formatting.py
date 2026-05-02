@@ -11,6 +11,9 @@ PROFILE_SECTIONS = (
     (FactKind.CONSTRAINT, "**Standing constraints**"),
 )
 
+CONTEXTUAL_MEMORY_HEADER = "**Contextual memory**"
+DIRECT_FACTS_HEADER = "**Direct facts**"
+
 
 @dataclass(frozen=True)
 class MemoryContextRender:
@@ -47,30 +50,22 @@ def _source_label(fact: Fact) -> str:
     return ""
 
 
-def _format_bundled_observation(obs: Observation, source_facts: list[Fact]) -> str:
-    lines = [f"- {obs.summary} ({obs.evidence_count} sources)"]
-    for fact in source_facts[:5]:
-        lines.append(f"  - {fact.text}{_source_label(fact)}")
-    return "\n".join(lines)
+def _format_observation_with_support(obs: Observation) -> str:
+    if obs.evidence_count <= 0:
+        return f"- {obs.summary}"
+    source_label = "source" if obs.evidence_count == 1 else "sources"
+    return f"- {obs.summary} ({obs.evidence_count} {source_label})"
 
 
 def _tracked_bundled_observation(obs: Observation, source_facts: list[Fact]) -> list[_TrackedItem]:
-    items = [
+    return [
         _TrackedItem(
-            text=f"- {obs.summary} ({obs.evidence_count} sources)",
+            text=_format_observation_with_support(obs),
             observation_ids=(obs.id,),
+            bundled_fact_ids=tuple(fact.id for fact in source_facts),
             allow_clip=True,
         )
     ]
-    items.extend(
-        _TrackedItem(
-            text=f"  - {fact.text}{_source_label(fact)}",
-            fact_ids=(fact.id,),
-            bundled_fact_ids=(fact.id,),
-        )
-        for fact in source_facts[:5]
-    )
-    return items
 
 
 def _format_observation(obs: Observation) -> str:
@@ -184,11 +179,11 @@ def format_session_memory(
         return None
     sections: list[tuple[str, list[str]]] = []
     if observations:
-        sections.append(("**Patterns**", [_format_observation(obs) for obs in observations]))
+        sections.append((CONTEXTUAL_MEMORY_HEADER, [_format_observation_with_support(obs) for obs in observations]))
     if profile_entries:
         sections.extend(_profile_sections(profile_entries))
     if user_facts:
-        sections.append(("**About user**", [f"- {f.text}" for f in user_facts]))
+        sections.append((DIRECT_FACTS_HEADER, [f"- {f.text}" for f in user_facts]))
     return _format_sections(sections)
 
 
@@ -202,8 +197,16 @@ def format_session_memory_render(
     sections: list[tuple[str, list[_TrackedItem]]] = []
     if observations:
         sections.append((
-            "**Patterns**",
-            [_TrackedItem(text=_format_observation(obs), observation_ids=(obs.id,)) for obs in observations],
+            CONTEXTUAL_MEMORY_HEADER,
+            [
+                _TrackedItem(
+                    text=_format_observation_with_support(obs),
+                    observation_ids=(obs.id,),
+                    bundled_fact_ids=tuple(obs.source_fact_ids),
+                    allow_clip=True,
+                )
+                for obs in observations
+            ],
         ))
     if profile_entries:
         for kind, header in PROFILE_SECTIONS:
@@ -220,7 +223,7 @@ def format_session_memory_render(
                 sections.append((header, items))
     if user_facts:
         sections.append((
-            "**About user**",
+            DIRECT_FACTS_HEADER,
             [_TrackedItem(text=f"- {fact.text}", fact_ids=(fact.id,)) for fact in user_facts],
         ))
     return _format_tracked_sections(sections)
@@ -234,8 +237,9 @@ def format_memory_context(
 ) -> str | None:
     """Format full memory context (used by recall tool).
 
-    Observations are primary, with source facts bundled as evidence.
-    Standalone facts fill gaps for unconsolidated content.
+    Observations are primary. Source facts are kept as provenance metadata,
+    not dumped into the model-facing text. Standalone facts fill gaps only
+    when no consolidated observation matched.
     """
     if not query_facts and not query_observations:
         return None
@@ -243,17 +247,10 @@ def format_memory_context(
     sections: list[tuple[str, list[str]]] = []
 
     if query_observations:
-        obs_items = []
-        for obs in query_observations:
-            sources = (bundled_sources or {}).get(obs.id, [])
-            if sources:
-                obs_items.append(_format_bundled_observation(obs, sources))
-            else:
-                obs_items.append(_format_observation(obs))
-        sections.append(("**Patterns**", obs_items))
+        sections.append((CONTEXTUAL_MEMORY_HEADER, [_format_observation_with_support(obs) for obs in query_observations]))
 
-    if query_facts:
-        sections.append(("**Relevant**", [f"- {f.text}{_source_label(f)}" for f in query_facts]))
+    if query_facts and not query_observations:
+        sections.append((DIRECT_FACTS_HEADER, [f"- {f.text}{_source_label(f)}" for f in query_facts]))
 
     return _format_sections(sections, budget=budget)
 
@@ -276,12 +273,19 @@ def format_memory_context_render(
             if sources:
                 obs_items.extend(_tracked_bundled_observation(obs, sources))
             else:
-                obs_items.append(_TrackedItem(text=_format_observation(obs), observation_ids=(obs.id,), allow_clip=True))
-        sections.append(("**Patterns**", obs_items))
+                obs_items.append(
+                    _TrackedItem(
+                        text=_format_observation_with_support(obs),
+                        observation_ids=(obs.id,),
+                        bundled_fact_ids=tuple(obs.source_fact_ids),
+                        allow_clip=True,
+                    )
+                )
+        sections.append((CONTEXTUAL_MEMORY_HEADER, obs_items))
 
-    if query_facts:
+    if query_facts and not query_observations:
         sections.append((
-            "**Relevant**",
+            DIRECT_FACTS_HEADER,
             [
                 _TrackedItem(text=f"- {fact.text}{_source_label(fact)}", fact_ids=(fact.id,))
                 for fact in query_facts

@@ -107,8 +107,14 @@ async def build_memory_prompt_context(
     *,
     source: str,
     details: dict[str, Any] | None = None,
+    include_prefetch: bool = False,
 ) -> str | None:
-    """Build prompt memory from curated profile plus query-time prefetch."""
+    """Build prompt memory from curated always-on profile entries.
+
+    Query-time recall is intentionally explicit. Using the latest user message
+    as an automatic search query turns weak turns like "repeat it" into noisy
+    memory dumps.
+    """
     session_memory = await memory.get_session_memory(include_observations=False)
     profile_render = format_session_memory_render(profile_entries=session_memory.profile_entries)
     profile_text = profile_render.text if profile_render else None
@@ -123,13 +129,15 @@ async def build_memory_prompt_context(
             details={**(details or {}), "layer": "profile"},
         )
 
-    prefetch_text = await prefetch_memory_context(
-        memory,
-        user_message,
-        session_memory=session_memory,
-        source=source,
-        details={**(details or {}), "layer": "prefetch"},
-    )
+    prefetch_text = None
+    if include_prefetch:
+        prefetch_text = await prefetch_memory_context(
+            memory,
+            user_message,
+            session_memory=session_memory,
+            source=source,
+            details={**(details or {}), "layer": "prefetch"},
+        )
 
     parts = [part for part in (profile_text, prefetch_text) if part]
     return "\n\n".join(parts) if parts else None

@@ -64,8 +64,9 @@ export function RecallInspectSection({ tab, height, width }: RecallInspectSectio
         <TextInputField
           value={queryWindow.text}
           cursorPos={queryWindow.cursor}
-          placeholder="memory query"
-          textColor={colors.text.primary}
+          placeholder={tab.inputActive ? "memory query" : "press enter to edit query"}
+          showCursor={tab.inputActive}
+          textColor={tab.inputActive ? colors.text.primary : colors.text.secondary}
         />
       </box>
 

@@ -56,7 +56,7 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
         memory_context = await build_memory_prompt_context(
             deps.memory,
             request.prompt,
-            source="operator_prefetch",
+            source="operator_prompt",
             details={"source_id": request.source_id},
         )
         learning_context = await get_approved_learning_context(deps.memory)

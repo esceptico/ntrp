@@ -91,6 +91,7 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
     pruneDryRun,
     accessTab,
     eventsTab,
+    profileEntries,
     config,
     setFacts,
     setProfileEntries,

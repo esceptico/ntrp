@@ -624,6 +624,29 @@ class TestMemoryAuditAPI:
         assert "requires source" in response.json()["detail"]
 
     @pytest.mark.asyncio
+    async def test_memory_profile_rejects_non_profile_kinds(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        fact = await test_runtime.memory.facts.create(
+            "User is working on a temporary project note",
+            SourceType.EXPLICIT,
+            kind=FactKind.PROJECT,
+        )
+        response = await test_client.post(
+            "/memory/profile",
+            json={
+                "kind": "project",
+                "summary": "User is working on a temporary project note",
+                "source_fact_ids": [fact.id],
+            },
+        )
+
+        assert response.status_code == 400
+        assert "identity, preference, relationship, or constraint" in response.json()["detail"]
+
+    @pytest.mark.asyncio
     async def test_recall_inspect_is_read_only(self, test_client: AsyncClient, test_runtime: Runtime):
         fact = await test_runtime.memory.facts.create(
             text="User prefers SQLite-backed memory retrieval",

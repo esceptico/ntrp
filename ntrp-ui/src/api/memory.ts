@@ -146,6 +146,14 @@ export interface ProfileEntryUpdate {
   confidence?: number;
 }
 
+export interface ProfileEntryCreate {
+  kind: FactKind;
+  summary: string;
+  source_fact_ids: number[];
+  source_observation_ids?: number[];
+  confidence?: number;
+}
+
 export interface Dream {
   id: number;
   bridge: string;
@@ -417,6 +425,13 @@ export async function getProfileEntryDetails(
   signal?: AbortSignal
 ): Promise<ProfileEntryDetails> {
   return api.get<ProfileEntryDetails>(`${config.serverUrl}/memory/profile/${entryId}`, { signal });
+}
+
+export async function createProfileEntry(
+  config: Config,
+  entry: ProfileEntryCreate
+): Promise<{ entry: ProfileEntry }> {
+  return api.post<{ entry: ProfileEntry }>(`${config.serverUrl}/memory/profile`, entry);
 }
 
 export async function updateProfileEntry(

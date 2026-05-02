@@ -153,7 +153,7 @@ async def _prepare_messages(
         memory_context = await build_memory_prompt_context(
             deps.memory,
             user_message,
-            source="chat_prefetch",
+            source="chat_prompt",
         )
 
     skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None

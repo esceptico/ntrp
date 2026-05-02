@@ -64,6 +64,7 @@ export function ProfileDetailsView({
       <box flexDirection="column" paddingLeft={1}>
         <text><span fg={colors.text.muted}>No profile entries yet.</span></text>
         <text><span fg={colors.text.disabled}>Profile is curated core memory, not raw facts.</span></text>
+        <text><span fg={colors.text.disabled}>Go to Facts and press p on a durable core fact to promote it.</span></text>
       </box>
     );
   }

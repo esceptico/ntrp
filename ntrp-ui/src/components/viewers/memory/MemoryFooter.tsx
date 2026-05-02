@@ -33,7 +33,9 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
   }
 
   if (activeTab === "recall") {
-    const hints: [string, string][] = [["enter", "inspect"], ["↑↓", "scroll"], ["^u", "clear"], ["esc", "close"]];
+    const hints: [string, string][] = recallTab.inputActive
+      ? [["type", "query"], ["enter", "inspect"], ["esc", "done"], ["^u", "clear"]]
+      : [["enter", "edit query"], ["↑↓", "scroll"], ["^u", "clear"], ["esc", "close"]];
     if (recallTab.loading) hints.unshift(["...", "running"]);
     return <Hints items={hints} />;
   }
@@ -101,6 +103,7 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
   if (tab.focusPane === "details") {
     const detailHints: [string, string][] = [["↑↓", "navigate"], ["tab", "list"], ["enter", activeTab === "observations" ? "open/expand" : "expand"], ["e", "edit"]];
     if (factLikeTab) {
+      detailHints.push(["p", "profile"]);
       detailHints.push(["g", "suggest"]);
       if (factsTab.metadataSuggestion) detailHints.push(["a", "apply"]);
     }
@@ -113,6 +116,7 @@ export function MemoryFooter({ activeTab, recallTab, profileTab, factsTab, obsTa
     ["tab", "details"],
     ["/", "search"],
     ["e", "edit"],
+    ...(activeTab === "facts" ? [["p", "profile"] as [string, string]] : []),
     ["d", "del"],
     ...(activeTab === "facts" ? [
       ["m", "kind"] as [string, string],

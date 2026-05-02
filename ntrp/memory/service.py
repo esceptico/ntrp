@@ -1033,6 +1033,8 @@ class MemoryService:
         source_observation_ids: list[int],
         confidence: float,
     ) -> ProfileEntry:
+        if kind not in PROFILE_FACT_KINDS:
+            raise ValueError("Profile entry kind must be identity, preference, relationship, or constraint")
         await self._validate_profile_sources(source_fact_ids, source_observation_ids)
         async with self.memory.transaction():
             entry = await self.memory.profile.create(
@@ -1079,6 +1081,8 @@ class MemoryService:
             source_observation_ids if source_observation_ids is not None else existing.source_observation_ids
         )
         next_confidence = confidence if confidence is not None else existing.confidence
+        if next_kind not in PROFILE_FACT_KINDS:
+            raise ValueError("Profile entry kind must be identity, preference, relationship, or constraint")
         await self._validate_profile_sources(next_fact_ids, next_observation_ids)
 
         async with self.memory.transaction():

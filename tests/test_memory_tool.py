@@ -114,7 +114,8 @@ async def test_recall_tool_uses_observations_as_model_facing_layer():
     result = await recall(_execution(memory), RecallInput(query="memory quality"))
 
     assert "consolidated observations" in result.content
-    assert "raw facts are noisy" in result.content
+    assert "raw facts are noisy" not in result.content
     assert result.preview == "1 patterns, 0 facts"
-    assert memory.recorded["injected_fact_ids"] == [fact.id]
+    assert memory.recorded["injected_fact_ids"] == []
     assert memory.recorded["injected_observation_ids"] == [observation.id]
+    assert memory.recorded["bundled_fact_ids"] == [fact.id]

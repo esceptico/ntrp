@@ -21,14 +21,14 @@ def make_fact(id: int, text: str, kind: FactKind = FactKind.NOTE) -> Fact:
     )
 
 
-def make_observation(id: int, summary: str) -> Observation:
+def make_observation(id: int, summary: str, source_fact_ids: list[int] | None = None) -> Observation:
     now = datetime.now()
     return Observation(
         id=id,
         summary=summary,
         embedding=None,
-        evidence_count=1,
-        source_fact_ids=[],
+        evidence_count=len(source_fact_ids or [0]),
+        source_fact_ids=source_fact_ids or [],
         history=[],
         created_at=now,
         updated_at=now,
@@ -61,9 +61,9 @@ class TestFormatMemoryContext:
             observations=[],
         )
         result = format_memory_context(query_facts=context.facts, query_observations=context.observations)
-        assert "**Relevant**" in result
+        assert "**Direct facts**" in result
         assert "Alice works at Google" in result
-        assert "**Patterns**" not in result
+        assert "**Contextual memory**" not in result
 
     def test_observations_only(self):
         context = FactContext(
@@ -71,19 +71,19 @@ class TestFormatMemoryContext:
             observations=[make_observation(1, "Prefers Python for data analysis")],
         )
         result = format_memory_context(query_facts=context.facts, query_observations=context.observations)
-        assert "**Patterns**" in result
+        assert "**Contextual memory**" in result
         assert "Prefers Python" in result
-        assert "**Relevant**" not in result
+        assert "**Direct facts**" not in result
 
-    def test_both_facts_and_observations(self):
+    def test_observations_suppress_standalone_fact_dump(self):
         context = FactContext(
             facts=[make_fact(1, "Likes coffee")],
             observations=[make_observation(1, "Morning person")],
         )
         result = format_memory_context(query_facts=context.facts, query_observations=context.observations)
-        assert "**Patterns**" in result
-        assert "**Relevant**" in result
-        assert "Likes coffee" in result
+        assert "**Contextual memory**" in result
+        assert "**Direct facts**" not in result
+        assert "Likes coffee" not in result
         assert "Morning person" in result
 
     def test_render_tracks_only_items_that_fit_budget(self):
@@ -107,7 +107,7 @@ class TestFormatMemoryContext:
         assert "too long" not in render.text
 
     def test_render_tracks_bundled_observation_sources(self):
-        observation = make_observation(3, "User likes reliable memory")
+        observation = make_observation(3, "User likes reliable memory", [4])
         source = make_fact(4, "User asked for direct provenance")
         render = format_memory_context_render(
             query_facts=[],
@@ -117,8 +117,10 @@ class TestFormatMemoryContext:
 
         assert render is not None
         assert render.observation_ids == [3]
-        assert render.fact_ids == [4]
+        assert render.fact_ids == []
         assert render.bundled_fact_ids == [4]
+        assert "1 source" in render.text
+        assert "User asked for direct provenance" not in render.text
 
     def test_render_keeps_observation_when_sources_do_not_fit_budget(self):
         observation = make_observation(3, "User wants consolidated observations in prompt memory")
@@ -133,6 +135,7 @@ class TestFormatMemoryContext:
         assert render is not None
         assert render.observation_ids == [3]
         assert render.fact_ids == []
+        assert render.bundled_fact_ids == [4]
         assert "consolidated observations" in render.text
         assert "very long source fact" not in render.text
 
@@ -160,10 +163,10 @@ class TestFormatSessionMemory:
             user_facts=[make_fact(3, "Legacy user fact")],
         )
 
-        assert result.index("**Patterns**") < result.index("**Identity**")
+        assert result.index("**Contextual memory**") < result.index("**Identity**")
         assert "**Identity**" in result
         assert "**Preferences**" in result
-        assert "**About user**" in result
+        assert "**Direct facts**" in result
         assert "User is improving memory quality" in result
         assert "User is Timur" in result
         assert "User prefers terse updates" in result

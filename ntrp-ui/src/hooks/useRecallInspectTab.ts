@@ -7,6 +7,7 @@ import type { Key } from "./useKeypress.js";
 export interface RecallInspectTabState {
   query: string;
   cursorPos: number;
+  inputActive: boolean;
   result: MemoryRecallInspectResult | null;
   loading: boolean;
   error: string | null;
@@ -18,6 +19,7 @@ export interface RecallInspectTabState {
 export function useRecallInspectTab(config: Config): RecallInspectTabState {
   const [query, setQuery] = useState("");
   const [cursorPos, setCursorPos] = useState(0);
+  const [inputActive, setInputActive] = useState(false);
   const [result, setResult] = useState<MemoryRecallInspectResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +44,34 @@ export function useRecallInspectTab(config: Config): RecallInspectTabState {
 
   const handleKeys = useCallback(
     (key: Key) => {
+      if (!inputActive) {
+        if (key.name === "return" || key.sequence === "/") {
+          setInputActive(true);
+          return;
+        }
+        if (key.name === "up") {
+          setScrollOffset((value) => Math.max(0, value - 1));
+          return;
+        }
+        if (key.name === "down") {
+          setScrollOffset((value) => value + 1);
+          return;
+        }
+        if (key.ctrl && key.name === "u") {
+          setQuery("");
+          setCursorPos(0);
+          setError(null);
+        }
+        return;
+      }
+
+      if (key.name === "escape") {
+        setInputActive(false);
+        return;
+      }
       if (key.name === "return") {
         run();
+        setInputActive(false);
         return;
       }
       if (key.name === "up") {
@@ -62,12 +90,13 @@ export function useRecallInspectTab(config: Config): RecallInspectTabState {
       }
       textInput.handleKey(key);
     },
-    [run, textInput],
+    [inputActive, run, textInput],
   );
 
   return {
     query,
     cursorPos,
+    inputActive,
     result,
     loading,
     error,

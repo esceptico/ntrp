@@ -15,6 +15,7 @@ from ntrp.memory.facts import SessionMemory
 from ntrp.memory.formatting import model_memory_context
 from ntrp.memory.models import Fact, FactContext, FactKind, Observation, ProfileEntry, SourceType
 from ntrp.memory.prefetch import (
+    build_memory_prompt_context,
     filter_prefetch_context,
     memory_prefetch_query,
     prefetch_memory_context,
@@ -197,11 +198,31 @@ async def test_prefetch_memory_context_can_be_prompt_context_without_session_sna
     rendered = await prefetch_memory_context(memory, "how should memory work now", source="chat_prefetch")
 
     assert rendered is not None
-    assert "**Patterns**" in rendered
+    assert "**Contextual memory**" in rendered
     assert "contextual consolidated observations" in rendered
-    assert "raw atomic prompt memory" in rendered
+    assert "raw atomic prompt memory" not in rendered
     assert memory.recorded["injected_observation_ids"] == [observation.id]
     assert memory.recorded["bundled_fact_ids"] == [fact.id]
+
+
+@pytest.mark.asyncio
+async def test_prompt_memory_does_not_auto_recall_from_weak_user_turn():
+    class Memory:
+        inspected = False
+
+        async def get_session_memory(self, **kwargs):
+            return SessionMemory(observations=[], profile_entries=[], user_facts=[])
+
+        async def inspect_recall(self, **kwargs):
+            self.inspected = True
+            raise AssertionError("prompt memory should not run implicit recall")
+
+    memory = Memory()
+
+    rendered = await build_memory_prompt_context(memory, "yeah print it pls", source="chat_prompt")
+
+    assert rendered is None
+    assert memory.inspected is False
 
 
 # --- Read connection sees committed writes ---

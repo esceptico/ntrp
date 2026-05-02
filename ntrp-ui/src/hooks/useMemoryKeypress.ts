@@ -18,6 +18,7 @@ import {
   updateFactMetadata,
   suggestFactMetadata,
   deleteFact,
+  createProfileEntry,
   updateProfileEntry,
   deleteProfileEntry,
   updateObservation,
@@ -54,6 +55,7 @@ interface UseMemoryKeypressOptions {
   pruneDryRun: MemoryPruneDryRun | null;
   accessTab: MemoryAccessTabState;
   eventsTab: MemoryEventsTabState;
+  profileEntries: ProfileEntry[];
   config: Config;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
   setProfileEntries: React.Dispatch<React.SetStateAction<ProfileEntry[]>>;
@@ -72,6 +74,8 @@ function isUpperA(key: Key): boolean {
   return key.sequence === "A" || (key.name === "a" && key.shift);
 }
 
+const PROFILE_ENTRY_KINDS = new Set(["identity", "preference", "relationship", "constraint"]);
+
 type SearchModeTab = { searchMode: boolean; handleKeys: (key: Key) => void };
 
 export function useMemoryKeypress({
@@ -86,6 +90,7 @@ export function useMemoryKeypress({
   pruneDryRun,
   accessTab,
   eventsTab,
+  profileEntries,
   config,
   setFacts,
   setProfileEntries,
@@ -132,6 +137,56 @@ export function useMemoryKeypress({
         factsTab.setFocusPane("details");
         setActiveTab("facts");
       };
+      const promoteFactToProfile = (fact: Fact) => {
+        if (!PROFILE_ENTRY_KINDS.has(fact.kind)) {
+          setError("Profile entries need identity, preference, relationship, or constraint facts. Reclassify the fact first.");
+          return;
+        }
+        if (fact.lifetime !== "durable") {
+          setError("Profile entries need durable facts. Reclassify the fact lifetime first.");
+          return;
+        }
+        if (fact.archived_at || fact.superseded_by_fact_id) {
+          setError("Only active facts can be promoted to profile.");
+          return;
+        }
+
+        const existingIndex = profileEntries.findIndex((entry) => entry.source_fact_ids.includes(fact.id));
+        if (existingIndex >= 0) {
+          profileTab.setSearchQuery("");
+          profileTab.setSelectedIndex(existingIndex);
+          profileTab.setFocusPane("details");
+          profileTab.resetDetailState();
+          setActiveTab("profile");
+          return;
+        }
+
+        setSaving(true);
+        createProfileEntry(config, {
+          kind: fact.kind,
+          summary: fact.text,
+          source_fact_ids: [fact.id],
+          confidence: fact.confidence,
+        })
+          .then((result) => {
+            setProfileEntries((prev: ProfileEntry[]) => [
+              result.entry,
+              ...prev.filter((entry) => entry.id !== result.entry.id),
+            ]);
+            queryClient.setQueryData<ProfileEntryDetails>(
+              ["profileEntryDetails", result.entry.id],
+              { entry: result.entry, source_facts: [fact], source_observations: [] },
+            );
+            profileTab.setSearchQuery("");
+            profileTab.setSelectedIndex(0);
+            profileTab.setFocusPane("details");
+            profileTab.resetDetailState();
+            setActiveTab("profile");
+            reload();
+          })
+          .catch((e: unknown) => setError(`Profile promotion failed: ${e}`))
+          .finally(() => setSaving(false));
+      };
       const activeSearchTab: SearchModeTab | null =
         activeTab === "context" ? accessTab :
         activeTab === "profile" ? profileTab :
@@ -141,6 +196,11 @@ export function useMemoryKeypress({
         activeTab === "learning" ? learningTab :
         activeTab === "events" ? eventsTab :
         null;
+
+      if (activeTab === "recall" && recallTab.inputActive) {
+        recallTab.handleKeys(key);
+        return;
+      }
 
       if (activeSearchTab?.searchMode) {
         activeSearchTab.handleKeys(key);
@@ -298,6 +358,10 @@ export function useMemoryKeypress({
           activeFactTab.setCursorPos(activeFactTab.factDetails.fact.text.length);
           return;
         }
+        if (key.name === "p") {
+          promoteFactToProfile(activeFactTab.factDetails.fact);
+          return;
+        }
         if (key.name === "g") {
           activeFactTab.setSuggestionLoading(true);
           activeFactTab.setSuggestionError(null);
@@ -352,6 +416,10 @@ export function useMemoryKeypress({
           if ((key.name === "d" || key.name === "delete") && activeFactTab.factDetails) {
             activeFactTab.setFocusPane("details");
             activeFactTab.setConfirmDelete(true);
+            return;
+          }
+          if (key.name === "p") {
+            promoteFactToProfile(selectedFact);
             return;
           }
         }
@@ -561,18 +629,18 @@ export function useMemoryKeypress({
         return;
       }
 
+      const numericTab = Number(key.name);
+      if (Number.isInteger(numericTab) && numericTab >= 1 && numericTab <= MEMORY_TABS.length) {
+        setActiveTab(MEMORY_TABS[numericTab - 1]);
+        return;
+      }
+
       if (activeTab === "recall") {
         if (key.name === "escape") {
           onClose();
           return;
         }
         recallTab.handleKeys(key);
-        return;
-      }
-
-      const numericTab = Number(key.name);
-      if (Number.isInteger(numericTab) && numericTab >= 1 && numericTab <= MEMORY_TABS.length) {
-        setActiveTab(MEMORY_TABS[numericTab - 1]);
         return;
       }
 
@@ -620,7 +688,7 @@ export function useMemoryKeypress({
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
-    [activeTab, setActiveTab, recallTab, profileTab, factsTab, obsTab, pruneTab, learningTab, pruneDryRun, accessTab, eventsTab, onClose, reload, config, profileTextInput, factsTextInput, obsTextInput, setSaving, setProfileEntries, setFacts, setObservations, setLearningCandidates, setError, queryClient]
+    [activeTab, setActiveTab, recallTab, profileTab, factsTab, obsTab, pruneTab, learningTab, pruneDryRun, accessTab, eventsTab, profileEntries, onClose, reload, config, profileTextInput, factsTextInput, obsTextInput, setSaving, setProfileEntries, setFacts, setObservations, setLearningCandidates, setError, queryClient]
   );
 
   useKeypress(handleKeypress, { isActive: true });
