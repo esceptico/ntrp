@@ -17,6 +17,7 @@ from ntrp.agent import (
 from ntrp.core.content import render_context
 from ntrp.llm.base import CompletionClient, EmbeddingClient
 from ntrp.llm.models import Provider, get_model
+from ntrp.llm.openai_responses import parse_responses_response, prepare_responses_request, stream_responses_completion
 from ntrp.llm.utils import blocks_to_text
 
 
@@ -85,6 +86,35 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
 
         return request
 
+    def _uses_responses_api(self, tools: list[dict] | None, reasoning_effort: str | None) -> bool:
+        return self._native_openai and bool(tools) and reasoning_effort is not None
+
+    def _prepare_responses(
+        self,
+        messages: list[dict],
+        model: str,
+        tools: list[dict] | None,
+        tool_choice: str | dict | None,
+        temperature: float | None,
+        max_tokens: int | None,
+        reasoning_effort: str | None,
+        response_format: type[BaseModel] | None,
+        **kwargs,
+    ) -> dict:
+        return prepare_responses_request(
+            messages=messages,
+            model=model,
+            tools=tools,
+            tool_choice=tool_choice,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            reasoning_effort=reasoning_effort,
+            response_format=response_format,
+            allow_sampling_options=True,
+            store=False,
+            **kwargs,
+        )
+
     def _apply_reasoning_effort(self, request: dict, model: str, effort: str | None) -> None:
         if effort is None:
             return
@@ -112,6 +142,21 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         response_format: type[BaseModel] | None = None,
         **kwargs,
     ) -> CompletionResponse:
+        if self._uses_responses_api(tools, reasoning_effort):
+            request = self._prepare_responses(
+                messages,
+                model,
+                tools,
+                tool_choice,
+                temperature,
+                max_tokens,
+                reasoning_effort,
+                response_format,
+                **kwargs,
+            )
+            response = await self._client.responses.create(**request)
+            return parse_responses_response(response, model)
+
         request = self._prepare(
             messages,
             model,
@@ -138,6 +183,23 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         response_format: type[BaseModel] | None = None,
         **kwargs,
     ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
+        if self._uses_responses_api(tools, reasoning_effort):
+            request = self._prepare_responses(
+                messages,
+                model,
+                tools,
+                tool_choice,
+                temperature,
+                max_tokens,
+                reasoning_effort,
+                response_format,
+                **kwargs,
+            )
+            request["stream"] = True
+            async for item in stream_responses_completion(self._client, request, model=model):
+                yield item
+            return
+
         request = self._prepare(
             messages,
             model,
