@@ -14,16 +14,21 @@ ntrp resolves configuration in this order (highest priority first):
 
 ## LLM providers
 
-Set at least one provider API key. ntrp auto-selects models based on what's available.
+Set at least one provider API key, or connect the OpenAI Codex provider with browser sign-in from the TUI. ntrp auto-selects models based on what's available.
 
-| Env var | Chat model | Memory model | Embedding model |
-|---------|-----------|-------------|----------------|
-| `ANTHROPIC_API_KEY` | claude-sonnet-4-6 | claude-sonnet-4-6 | — |
-| `OPENAI_API_KEY` | gpt-5.2 | gpt-5.2 | text-embedding-3-small |
-| `GEMINI_API_KEY` | gemini-3.1-pro-preview | gemini-3-flash-preview | gemini-embedding-001 |
+| Provider | Setup | Chat model | Memory model | Embedding model |
+|----------|-------|------------|--------------|-----------------|
+| Anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4-6 | claude-sonnet-4-6 | — |
+| OpenAI API | `OPENAI_API_KEY` | gpt-5.2 | gpt-5.2 | text-embedding-3-small |
+| OpenAI Codex | Browser sign-in in `/connect` or `/settings` | openai-codex/gpt-5.5 | openai-codex/gpt-5.4-mini | — |
+| Google | `GEMINI_API_KEY` | gemini-3.1-pro-preview | gemini-3-flash-preview | gemini-embedding-001 |
 
 <Note>
 Claude Pro/Max OAuth is not supported. We will not integrate it until Anthropic officially allows third-party applications to use subscription-based OAuth.
+</Note>
+
+<Note>
+OpenAI Codex uses OpenAI browser sign-in, not an API key. Tokens are stored locally in `~/.ntrp/openai-codex-auth.json` with `0600` permissions and refreshed automatically.
 </Note>
 
 Override auto-detection with explicit model IDs:
@@ -67,6 +72,10 @@ export NTRP_EMBEDDING_MODEL=text-embedding-3-small
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NTRP_MAX_DEPTH` | `8` | Max agentic recursion depth |
+| `NTRP_REASONING_EFFORT` | unset | Optional model-specific reasoning effort, e.g. `low`, `medium`, `high`, `xhigh`, or whatever the selected model advertises |
+| `NTRP_DEFERRED_TOOLS` | `true` | Hide infrequent integration/action tool schemas until the agent loads them with `load_tools` |
+
+Deferred tools reduce prompt size and improve cache stability. Gmail, calendar, Slack, automation, background-task, notification, directive, and MCP tools are loaded on demand. Always-visible tools include shell/file access, memory recall/write tools, web search/fetch, research, skills, current time, and `load_tools` itself.
 
 ## Authentication
 

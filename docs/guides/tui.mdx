@@ -13,7 +13,7 @@ On first launch (or after `/logout`), the TUI shows a **CONNECT** dialog asking 
 | `Enter` | Connect |
 | `Ctrl+C` | Exit |
 
-After connecting, if no LLM provider is configured, a **provider onboarding** dialog appears where you can connect a provider and choose a default model.
+After connecting, if no LLM provider is configured, a **provider onboarding** dialog appears where you can connect a provider and choose a default model. OpenAI supports both API-key setup and browser sign-in through the OpenAI Codex provider.
 
 ## Keyboard shortcuts
 
@@ -53,7 +53,7 @@ Click on list items to select them. Works across all list views: sidebar session
 | `/delete [query]` | Delete a session |
 | `/init` | Scan sources and learn about you |
 | `/index` | Re-index memory for semantic search |
-| `/memory` | View memory (facts, observations) |
+| `/memory` | View memory, profile, retrieval, cleanup, and learning proposals |
 | `/automations` | View and manage automations |
 | `/retry` | Revert last message and resend |
 | `/undo` | Revert last message |
@@ -85,9 +85,9 @@ Settings are organized into these sections:
 | Section | What's in it |
 |---------|-------------|
 | **Connection** | Server address, token streaming toggle |
-| **API Keys** | Model provider credentials (Claude, OpenAI, Gemini) |
+| **API Keys** | Model provider credentials and OpenAI browser sign-in |
 | **Sources** | Data source toggles (Google, web search, Slack) |
-| **Memory** | Consolidation interval, dream generation |
+| **Memory** | Persistent memory and consolidation settings |
 | **Instructions** | System prompt and directives |
 | **Context** | Compression thresholds, message limits, summary tokens |
 | **Agent** | Subagent depth, exploration settings |
@@ -98,7 +98,17 @@ Settings are organized into these sections:
 
 ### Memory viewer (`/memory`)
 
-Browse facts, observations, and dreams. Edit or delete entries.
+Inspect and control the memory system. The main tabs are:
+
+- **Home**: health, counts, and next actions
+- **Search**: query-time recall inspector
+- **Sent**: memory bundles recently injected into prompts or tools
+- **Profile**: curated always-visible memory
+- **Facts**: source-of-truth memory records
+- **Patterns**: derived summaries with supporting facts
+- **Cleanup**: dry-run archival candidates
+- **Improve**: review-gated continual-learning proposals
+- **Audit**: memory write and automation outcome history
 
 ### Automations viewer (`/automations`)
 
@@ -125,9 +135,9 @@ The sidebar (toggle with `Ctrl+L`) shows:
 
 - Server URL and version
 - Current models
-- Context usage (token bar)
+- Context usage (token bar plus visible/total/deferred/loaded tool counts)
 - Session cost tracking
-- Memory stats (facts, observations, dreams — opt-in)
+- Memory stats and optional memory-review notifications
 - Connected sources
 - Upcoming automations
 - Recent sessions

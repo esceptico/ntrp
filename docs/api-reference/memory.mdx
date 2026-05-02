@@ -1,7 +1,14 @@
 ---
 title: "Memory"
-description: "CRUD operations for facts, profile entries, observations, and dreams."
+description: "CRUD operations for facts, profile entries, patterns, learning proposals, and memory health."
 ---
+
+## Mental model
+
+- **Facts** are source-of-truth memory records.
+- **Profile entries** are curated always-visible memory with direct provenance.
+- **Patterns** are derived memory over supporting facts. The API still uses the historical `/observations` route name.
+- **Learning candidates** are reviewable continual-learning proposals.
 
 ## Facts
 
@@ -82,25 +89,27 @@ curl -X DELETE http://localhost:6877/memory/profile/7 \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-## Observations
+## Patterns
 
-### List observations
+Patterns are stored behind the historical `observations` API names.
+
+### List patterns
 
 ```bash
 curl http://localhost:6877/observations \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-### Get observation
+### Get pattern
 
 ```bash
 curl http://localhost:6877/observations/7 \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-Returns the observation with its supporting facts.
+Returns the pattern with its supporting facts.
 
-### Update observation
+### Update pattern
 
 ```bash
 curl -X PATCH http://localhost:6877/observations/7 \
@@ -109,34 +118,36 @@ curl -X PATCH http://localhost:6877/observations/7 \
   -d '{"summary": "Updated observation"}'
 ```
 
-### Delete observation
+### Delete pattern
 
 ```bash
 curl -X DELETE http://localhost:6877/observations/7 \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-## Dreams
+## Learning candidates
 
-### List dreams
+Create reviewable continual-learning candidates from recent memory feedback and runtime evidence:
 
 ```bash
-curl http://localhost:6877/dreams \
+curl -X POST http://localhost:6877/memory/learning/propose \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-### Get dream
+List candidates:
 
 ```bash
-curl http://localhost:6877/dreams/3 \
+curl http://localhost:6877/memory/learning/candidates \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-### Delete dream
+Update a candidate status:
 
 ```bash
-curl -X DELETE http://localhost:6877/dreams/3 \
-  -H "Authorization: Bearer $API_KEY"
+curl -X PATCH http://localhost:6877/memory/learning/candidates/12/status \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"approved"}'
 ```
 
 ## Stats
@@ -154,6 +165,38 @@ curl http://localhost:6877/stats \
 }
 ```
 
+## Audit and cleanup
+
+Inspect memory health:
+
+```bash
+curl http://localhost:6877/memory/audit \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Preview cleanup before applying it:
+
+```bash
+curl -X POST http://localhost:6877/memory/prune/dry-run \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Apply cleanup after reviewing the dry run:
+
+```bash
+curl -X POST http://localhost:6877/memory/prune/apply \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Inspect what memory would be retrieved for a query:
+
+```bash
+curl -X POST http://localhost:6877/memory/recall/inspect \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"what should the agent know about my backend architecture preferences?"}'
+```
+
 ## Purge
 
 Delete all memory data:
@@ -163,7 +206,7 @@ curl -X POST http://localhost:6877/memory/clear \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-Clear only observations (keep facts):
+Clear only patterns (keep facts):
 
 ```bash
 curl -X POST http://localhost:6877/memory/observations/clear \

@@ -95,7 +95,7 @@ curl http://localhost:6877/providers \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-Returns all providers (Anthropic, OpenAI, Google, OpenRouter, Custom) with connection status, available models, and masked API key hints.
+Returns all providers (Anthropic, OpenAI, OpenAI Codex, Google, OpenRouter, Custom) with connection status, available models, auth type, and masked API key hints.
 
 ### Connect provider
 
@@ -104,6 +104,20 @@ curl -X POST http://localhost:6877/providers/openai/connect \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"api_key": "sk-...", "chat_model": "gpt-5.2"}'
+```
+
+OpenAI Codex uses browser OAuth instead of an API-key connect request:
+
+```bash
+curl -X POST http://localhost:6877/providers/openai-codex/oauth/browser/start \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+Poll status while the browser flow is pending:
+
+```bash
+curl http://localhost:6877/providers/openai-codex/oauth/status \
+  -H "Authorization: Bearer $API_KEY"
 ```
 
 ### Disconnect provider

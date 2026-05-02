@@ -7,6 +7,8 @@ description: "All tools available to the ntrp agent."
 
 Tools are capabilities the agent can invoke during a conversation. Some tools require your approval before executing (marked with 🔒).
 
+Some tool schemas are **deferred**. Deferred tools are known to the agent, but their full schemas are hidden until the agent calls `load_tools`. This keeps the prompt smaller and avoids carrying Gmail, calendar, Slack, MCP, automation, background, notification, and directive tools in every turn. Loading a tool only makes it callable on the next model step; it does not execute the tool or bypass approvals.
+
 ## System & files
 
 | Tool | Description | Approval |
@@ -15,12 +17,17 @@ Tools are capabilities the agent can invoke during a conversation. Some tools re
 | `read_file` | Read file contents (supports `~` expansion) | — |
 | `current_time` | Get current date and time | — |
 | `research` | Spawn a research agent with all read-only tools (`depth`: quick/normal/deep) | — |
+| `load_tools` | Load deferred tool schemas by group or exact name | — |
 | `background` | Spawn an autonomous background agent for long-running tasks | — |
 | `set_directives` | Set persistent behavioral directives injected into the system prompt | 🔒 |
+
+`background` and `set_directives` are deferred. The agent should first load `background` or `directives` when those capabilities are needed.
 
 ## Email
 
 Requires Gmail to be connected.
+
+Deferred group: `email`.
 
 | Tool | Description | Approval |
 |------|-------------|----------|
@@ -31,6 +38,8 @@ Requires Gmail to be connected.
 ## Calendar
 
 Requires Google Calendar to be connected.
+
+Deferred group: `calendar`.
 
 | Tool | Description | Approval |
 |------|-------------|----------|
@@ -56,7 +65,26 @@ Web search uses `WEB_SEARCH` mode (`auto`, `exa`, `ddgs`, `none`). `EXA_API_KEY`
 | `web_search` | Search the web | — |
 | `web_fetch` | Fetch content from a URL | — |
 
+## Slack
+
+Requires Slack to be connected.
+
+Deferred group: `slack`.
+
+| Tool | Description | Approval |
+|------|-------------|----------|
+| `slack_search` | Search Slack messages | — |
+| `slack_channel` | Read recent channel history | — |
+| `slack_thread` | Read a message thread | — |
+| `slack_channels` | List accessible channels | — |
+| `slack_dms` | List open direct messages | — |
+| `slack_dm` | Read a direct message conversation | — |
+| `slack_users` | Search workspace members | — |
+| `slack_user` | Read a user profile | — |
+
 ## Automations
+
+Deferred group: `automations`.
 
 | Tool | Description | Approval |
 |------|-------------|----------|
@@ -69,6 +97,8 @@ Web search uses `WEB_SEARCH` mode (`auto`, `exa`, `ddgs`, `none`). `EXA_API_KEY`
 
 ## Background tasks
 
+Deferred group: `background`.
+
 | Tool | Description | Approval |
 |------|-------------|----------|
 | `cancel_background_task` | Cancel a running background task by ID | 🔒 |
@@ -79,9 +109,28 @@ Background tasks are spawned via the `background` tool. Results are delivered au
 
 ## Notifications
 
+Deferred group: `notifications`.
+
 | Tool | Description | Approval |
 |------|-------------|----------|
 | `notify` | Send a notification | 🔒 |
+
+## MCP tools
+
+Connected MCP server tools are deferred by server. Use `load_tools(group="mcp:<server>")`, for example `load_tools(group="mcp:obsidian")`. MCP tools still keep their own approval/mutation behavior after loading.
+
+## Deferred loading examples
+
+| Need | Load call |
+|------|-----------|
+| Search Gmail | `load_tools(group="email")` |
+| Read or edit calendar | `load_tools(group="calendar")` |
+| Search Slack | `load_tools(group="slack")` |
+| Manage automations | `load_tools(group="automations")` |
+| Spawn or inspect background work | `load_tools(group="background")` |
+| Send a notification | `load_tools(group="notifications")` |
+| Update standing directives | `load_tools(group="directives")` |
+| Use an MCP server | `load_tools(group="mcp:<server>")` |
 
 ## Skills
 

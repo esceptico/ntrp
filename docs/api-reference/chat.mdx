@@ -98,7 +98,7 @@ curl -X POST http://localhost:6877/cancel \
 
 ## Context usage
 
-Get current token usage for the session.
+Get current token and tool-schema usage for the session. During an active run, tool counts reflect the tools visible to that run after deferred loading.
 
 ```bash
 curl http://localhost:6877/context \
@@ -107,12 +107,21 @@ curl http://localhost:6877/context \
 
 ```json
 {
-  "total_tokens": 12500,
-  "model_limit": 200000,
+  "model": "claude-sonnet-4-6",
+  "limit": 200000,
+  "total": 12500,
   "message_count": 15,
-  "tool_count": 8
+  "tool_count": 46,
+  "visible_tool_count": 18,
+  "deferred_tool_count": 28,
+  "loaded_tool_count": 2
 }
 ```
+
+- `tool_count`: total tools available after provider/service capability filtering.
+- `visible_tool_count`: schemas currently sent to the model.
+- `deferred_tool_count`: tools hidden until `load_tools` is called.
+- `loaded_tool_count`: deferred tools loaded in the active run. This resets after compaction.
 
 ## Compact context
 

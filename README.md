@@ -4,34 +4,16 @@
 
 I built this for myself. ADHD and scattered attention meant I kept losing track of things (e.g. what I said, what I planned, what I was supposed to follow up on). So I made an assistant that hooks into my stuff and actually remembers.
 
-![](docs/internal/images/screen1.png)
-![](docs/internal/images/screen2.png)
+![ntrp terminal UI](docs/internal/images/main.png)
 
 ## What it does
 
 - **Persistent memory**: learns facts and patterns across conversations, consolidates them over time
 - **Scheduled tasks**: morning briefings, daily reviews, health tracking – runs autonomously on a schedule
 - **Connected sources**: Gmail, Google Calendar, Slack, web search, MCP tools
+- **Lean tool context**: loads infrequent tools on demand so the model does not carry every schema in every turn
 - **Shell access**: runs commands, manages files, sends emails
-- **Any LLM**: Claude, GPT, Gemini built-in; OpenRouter, Ollama, vLLM, or any OpenAI-compatible endpoint via custom models
-
-<details>
-<summary>Memory</summary>
-
-![](docs/internal/images/memory.png)
-</details>
-
-<details>
-<summary>Schedules</summary>
-
-![](docs/internal/images/schedules.png)
-</details>
-
-<details>
-<summary>Connections</summary>
-
-![](docs/internal/images/sources.png)
-</details>
+- **Any LLM**: Claude, GPT, Gemini built-in; OpenAI API keys or OpenAI account sign-in; OpenRouter, Ollama, vLLM, or any OpenAI-compatible endpoint via custom models
 
 ## Install
 

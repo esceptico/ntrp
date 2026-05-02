@@ -39,6 +39,19 @@ class Integration:
 
 That's it. The registry handles tool registration, notifier class lookup, service endpoint listing, sidebar rendering, and hot reload.
 
+## Deferred tool loading
+
+Integration tools can be hidden from the model until needed. `ToolExecutor` still registers every tool, but `DeferredToolsModelRequestMiddleware` filters the schemas sent to the model. The agent can make a deferred group visible for the next model step by calling `load_tools`.
+
+Deferred source ids are declared in `ntrp/tools/deferred.py`. Native integration ids such as `gmail`, `calendar`, and `slack` are deferred there; internal integrations use underscore ids such as `_automation`, `_background`, `_notifications`, and `_directives`. MCP tools are deferred by server with groups like `mcp:obsidian`.
+
+When adding a new integration, decide deliberately:
+
+- Frequent, small, generally useful tools should stay always visible.
+- Large external-source toolsets should usually be deferred by integration id.
+- Mutating tools still need `approval=` or `mutates=True`; deferred loading does not replace approval.
+- If the integration is deferred, make sure `GROUP_ALIASES` and `GROUP_DESCRIPTIONS` describe how the model should load it.
+
 ## Example: minimal integration
 
 ```python

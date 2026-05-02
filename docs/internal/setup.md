@@ -15,7 +15,7 @@ bun install -g ntrp-cli # or: npx ntrp-cli
 
 ## Quick Start
 
-Create `~/.ntrp/.env` with at least one LLM provider key and the model variables. See [.env.example](../.env.example) for all options.
+Create `~/.ntrp/.env` with at least one LLM provider key and the model variables, or connect OpenAI Codex with browser sign-in from the TUI. See [.env.example](../.env.example) for all options.
 
 ```bash
 mkdir -p ~/.ntrp
@@ -29,6 +29,24 @@ ntrp                # terminal UI (separate terminal) – paste the key on first
 ```
 
 Config priority: environment variables > CWD `.env` > `~/.ntrp/.env` > defaults.
+
+## OpenAI Account Sign-In
+
+OpenAI can be used in two ways:
+
+- `OPENAI_API_KEY` for normal platform API billing and embeddings.
+- OpenAI Codex browser sign-in for account/subscription-backed models.
+
+Choose **OpenAI Codex** in provider onboarding, `/connect`, or `/settings`. ntrp starts a local callback server on `localhost:1455`, opens the OpenAI authorization page, and stores refreshable tokens in `~/.ntrp/openai-codex-auth.json`.
+
+Default Codex models:
+
+```
+chat   openai-codex/gpt-5.5
+memory openai-codex/gpt-5.4-mini
+```
+
+For GPT reasoning models with tools, ntrp uses the Responses API request shape internally. This avoids the `reasoning_effort` + function tools limitation in Chat Completions.
 
 ## Custom Models
 
@@ -167,6 +185,12 @@ Controls when and how conversation context is compressed to stay within model li
 | Consolidation interval | `consolidation_interval` | `30` | Minutes between memory consolidation runs |
 
 Compaction triggers when either the message count exceeds `max_messages` or actual input tokens exceed `compression_threshold` × model context limit. The most recent `compression_keep_ratio` fraction of messages is preserved, and older messages are replaced with an LLM-generated summary capped at `summary_max_tokens`.
+
+## Deferred Tools
+
+`NTRP_DEFERRED_TOOLS=true` by default. Deferred loading keeps infrequent tool schemas out of the prompt until needed. The model always sees `load_tools`; Gmail, calendar, Slack, automation, background task, notification, directive, and MCP tools are loaded by group on demand.
+
+Compaction unloads deferred tools so a long session does not keep carrying stale schemas forever. The sidebar context box shows visible/total tools plus loaded/deferred counts for the active run.
 
 ## Docker
 

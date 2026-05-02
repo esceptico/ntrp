@@ -5,89 +5,137 @@ description: "How ntrp builds and maintains persistent memory."
 
 ## Overview
 
-ntrp's memory system stores knowledge as a graph of **facts**, **observations**, and **dreams**. Unlike simple chat history, this is structured long-term memory that grows, consolidates, and surfaces relevant context automatically.
-
-## Data model
+ntrp keeps memory in layers instead of treating every extracted sentence as always-visible profile context.
 
 ```
-Facts ────────► Observations
-  │                  │
-  └──── Entities ────┘
-
-Dreams (cross-domain insights)
+source facts  ->  patterns  ->  profile entries
+      |              |              |
+      v              v              v
+ searchable      derived        small always-on
+ evidence        context        core memory
 ```
 
-### Facts
+- **Facts** are the source-of-truth records extracted from chats, tools, and connected sources.
+- **Patterns** are derived summaries over facts. In the API they are still called `observations`, but the UI calls them patterns because they are not raw truth.
+- **Profile entries** are the only always-visible memory surface. They are curated, budgeted, and backed by direct fact or pattern provenance.
+- **Learning proposals** are review-gated policy, prompt, skill, automation, or memory improvements. They never auto-apply silently.
 
-Atomic pieces of information extracted from conversations and sources.
+Dreams are optional experimental cross-domain insights and are not part of the default memory navigation.
 
-> "Alice joined the backend team in March 2025"
+## Facts
 
-Each fact has:
-- Vector embedding for semantic search
-- Timestamps (`created_at`, `happened_at`)
-- Access tracking with decay (less-accessed facts fade)
-- Entity references (people, projects, places)
+Facts are durable evidence records. They carry text, source metadata, timestamps, entities, embeddings, access counts, and lifecycle state.
 
-### Observations
+Facts should answer: "what concrete thing did ntrp observe or store?"
 
-Higher-level patterns synthesized from multiple facts.
+Examples:
 
-> "Alice transitioned from mobile to backend development, taking on infrastructure responsibilities"
+- "The user prefers direct engineering feedback."
+- "The Dex automation table mutation issue was discussed on May 1, 2026."
+- "A calendar event named `morning briefing` runs daily at 08:00."
 
-Observations track their source facts and maintain a change history as new evidence arrives.
+Facts are searchable and editable, but they are not automatically promoted into the prompt just because they mention the user.
 
-### Dreams
+## Patterns
 
-Cross-domain insights that connect seemingly unrelated facts.
+Patterns are derived context built from supporting facts. They compress repeated or related evidence into a higher-level statement.
 
-> "Pattern: work stress correlates with reduced exercise frequency"
+Patterns should answer: "what trend, repeated behavior, or durable relationship is supported by multiple facts?"
 
-Generated during weekly consolidation by clustering facts across domains. Dreams are disabled by default — enable them in **Settings > Memory**.
+Examples:
 
-## Write path
+- "The user tends to reject broad agent abstractions unless the data flow becomes simpler."
+- "Recent backend work focused on reducing tool-schema prompt cost through deferred loading."
+
+Patterns keep links to their source facts. They can be archived or regenerated without deleting the underlying evidence.
+
+## Profile Entries
+
+Profile entries are curated core memory shown to the agent by default. They should stay small and directly useful across unrelated sessions.
+
+Profile entries should answer: "what should the agent almost always know before responding?"
+
+Good profile entries:
+
+- Stable identity, preference, relationship, or standing constraint.
+- Short enough to fit in the always-on memory budget.
+- Backed by source fact ids or pattern ids.
+
+Bad profile entries:
+
+- One-off tasks, current debugging state, temporary plans, or raw extracted facts.
+- Generated summaries without direct provenance.
+- Large biographies or project dumps.
+
+## Write Path
 
 When ntrp learns something new:
 
-1. **Extract** — fact is created from conversation or source data
-2. **Embed** — vector encoding for similarity search
-3. **Link** — entities extracted and connected in the knowledge graph
-4. **Queue** — fact queued for consolidation
+1. **Extract** durable source facts from user-visible evidence.
+2. **Embed and index** facts for semantic and full-text retrieval.
+3. **Link** entities and provenance.
+4. **Consolidate** facts into patterns when there is enough support.
+5. **Propose** profile or policy changes when memory feedback suggests a durable improvement.
+
+Profile changes and continual-learning proposals stay review-gated. The system can propose them, but the user can inspect, approve, reject, edit, or archive them from the memory UI.
 
 ## Consolidation
 
-Consolidation now runs as a builtin automation with dual triggers: every 30 minutes and after 5 minutes of idle time (configurable in **Settings > Memory**).
+Consolidation runs as a builtin automation with dual triggers: periodically and after idle time.
 
-1. **Per-fact** — search for similar observations, decide whether to update existing or create new
-2. **Temporal pass** — find trends and transitions across an entity's facts
-3. **Observation merge** — deduplicate similar observations (cosine > 0.90)
-4. **Fact merge** — deduplicate near-identical facts
-5. **Dream pass** — cluster facts, discover cross-domain patterns
-6. **Archival pass** — archive old, low-value facts that have been consolidated
+It performs narrow jobs:
 
-### Extraction
+- merge near-duplicate facts
+- update or create supported patterns
+- archive stale low-value records after dry-run review
+- repair stale search indexes and missing embeddings
+- record audit events for memory writes and automation outcomes
 
-Fact extraction from conversations is also a builtin automation. It fires every 10 user messages or after 5 minutes of idle time, extracting durable facts from the conversation without running a full agent loop.
-
-Both builtin automations are visible in the automations viewer under the **Internal** tab.
-
-## Archival
-
-Facts and observations that have been fully consolidated, have low access decay, and exceed an age threshold are automatically archived. Archived items are excluded from retrieval but not deleted — they can be restored if needed.
+The goal is not to grow memory forever. The goal is better compression with clear provenance.
 
 ## Retrieval
 
-When you ask ntrp something, it retrieves context in two phases:
+For each prompt, ntrp combines:
 
-1. **Observations** — vector + full-text hybrid search, top 5 results
-2. **Facts** — vector + FTS, reranked (consolidated and archived facts excluded)
+1. profile entries that are always-on and budgeted
+2. query-specific memory prefetch from facts and patterns
+3. access telemetry showing which memory was retrieved, injected, omitted, or later corrected
 
-This gives the agent both high-level understanding (observations) and specific details (facts).
+This keeps profile memory small while still allowing context-specific recall.
 
-## Tools
+## Continual Learning
 
-The agent uses these tools to interact with memory:
+The learning loop observes explicit feedback and runtime evidence, then creates reviewable proposals.
 
-- **remember** — store a fact (requires approval)
-- **recall** — semantic search across facts and observations
-- **forget** — delete facts matching a query
+Current lanes include:
+
+- **memory**: extraction, profile, compression, or cleanup policy notes
+- **prompt**: bounded runtime prompt notes
+- **skill**: proposed procedural skill improvements
+- **automation**: automation scheduling or prompt behavior notes
+
+Applying a proposal activates a bounded note for its lane. It does not rewrite source facts, edit skill files, or change schedules without an explicit action.
+
+## TUI
+
+Open `/memory` to inspect and control memory.
+
+![Memory patterns viewer](../internal/images/memory-patterns.png)
+
+- **Home**: health, counts, and next actions
+- **Search**: inspect query-time retrieval before it reaches the agent
+- **Sent**: see what memory was injected into recent prompts/tools
+- **Profile**: edit always-visible profile entries
+- **Facts**: browse and edit source-of-truth records
+- **Patterns**: inspect derived memory and supporting facts
+- **Cleanup**: dry-run archival candidates before applying cleanup
+- **Improve**: review continual-learning proposals
+- **Audit**: answer why memory changed
+
+![Memory learning proposals](../internal/images/memory-learning.png)
+
+## Agent Tools
+
+- `remember`: store a durable fact with approval
+- `recall`: search facts and patterns
+- `forget`: delete or archive matching memory with approval

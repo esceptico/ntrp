@@ -7,7 +7,7 @@ description: "Get ntrp running in 5 minutes."
 
 - Python 3.13+ with [uv](https://docs.astral.sh/uv/)
 - [Bun](https://bun.sh) runtime
-- An LLM provider: Anthropic, OpenAI, or Google — can be configured during setup
+- An LLM provider: Anthropic, OpenAI, Google, or OpenAI account sign-in — can be configured during setup
 
 ## Install
 
@@ -32,9 +32,9 @@ description: "Get ntrp running in 5 minutes."
 
 <Steps>
 
-### Set your LLM provider key (optional)
+### Set your LLM provider (optional)
 
-You can export a provider API key now, or configure it interactively in the TUI after connecting.
+You can export a provider API key now, or configure a provider interactively in the TUI after connecting. OpenAI can be used either with an API key or with browser sign-in through the OpenAI Codex provider.
 
 ```bash
 # Pick one (or skip and configure in the TUI):
@@ -42,6 +42,8 @@ export ANTHROPIC_API_KEY=sk-ant-...
 export OPENAI_API_KEY=sk-...
 export GEMINI_API_KEY=...
 ```
+
+If you want to use an OpenAI subscription/account instead of an API key, skip the key export and choose **OpenAI Codex** in provider onboarding. ntrp opens a browser sign-in and stores refreshable OAuth tokens in `~/.ntrp/openai-codex-auth.json`.
 
 ### Start the server
 
