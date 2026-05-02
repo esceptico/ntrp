@@ -51,6 +51,7 @@ class Agent:
         parent_id: str | None = None,
         tool_choice: ToolChoice = ToolChoiceMode.AUTO,
         reasoning_effort: str | None = None,
+        prompt_cache_key: str | None = None,
         hooks: AgentHooks | None = None,
         model_request_middlewares: Sequence[ModelRequestMiddleware] = (),
     ):
@@ -63,6 +64,7 @@ class Agent:
         self.parent_id = parent_id
         self.tool_choice = tool_choice
         self.reasoning_effort = reasoning_effort
+        self.prompt_cache_key = prompt_cache_key
         self.hooks = hooks or AgentHooks()
         self.model_request_middlewares = tuple(model_request_middlewares)
         self._runner = ToolRunner(executor=executor, depth=current_depth, parent_id=parent_id)
@@ -179,6 +181,8 @@ class Agent:
             kwargs = {"tool_choice": tool_choice}
             if reasoning_effort is not None:
                 kwargs["reasoning_effort"] = reasoning_effort
+            if self.prompt_cache_key is not None:
+                kwargs["prompt_cache_key"] = self.prompt_cache_key
             async for item in self.client.stream(messages, model, tools, **kwargs):
                 if isinstance(item, str):
                     yield TextDelta(depth=self.current_depth, parent_id=self.parent_id, content=item)

@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { useRenderer } from "@opentui/react";
 import { useKeypress, type Key } from "../hooks/useKeypress.js";
 import { useOnboardingState } from "../hooks/useOnboardingState.js";
-import { ProviderList, ApiKeyStep, ModelSelect, CustomModelForm } from "./onboarding/index.js";
+import { ProviderList, ApiKeyStep, OAuthStep, ModelSelect, CustomModelForm } from "./onboarding/index.js";
 import type { Config } from "../types.js";
 
 interface ProviderOnboardingProps {
@@ -21,7 +21,7 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
   }, [renderer]);
 
   useKeypress(handleCtrlC, { isActive: true });
-  useKeypress(state.handleKeypress, { isActive: state.step === "apiKey" || state.step === "customModel" });
+  useKeypress(state.handleKeypress, { isActive: state.step === "apiKey" || state.step === "oauth" || state.step === "customModel" });
 
   if (state.step === "providers") {
     return (
@@ -30,6 +30,7 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
         hasConnected={state.hasConnected}
         closable={closable}
         saving={state.saving}
+        error={state.error}
         isActive={state.step === "providers"}
         onSelect={state.handleSelectProvider}
         onClose={onClose}
@@ -44,6 +45,19 @@ export function ProviderOnboarding({ config, closable = false, onClose, onDone }
         providerName={state.selectedProvider?.name ?? ""}
         apiKeyValue={state.apiKeyValue}
         apiKeyCursor={state.apiKeyCursor}
+        saving={state.saving}
+        error={state.error}
+        onBack={state.goBack}
+      />
+    );
+  }
+
+  if (state.step === "oauth") {
+    return (
+      <OAuthStep
+        providerName={state.selectedProvider?.name ?? ""}
+        url={state.oauthUrl}
+        instructions={state.oauthInstructions}
         saving={state.saving}
         error={state.error}
         onBack={state.goBack}

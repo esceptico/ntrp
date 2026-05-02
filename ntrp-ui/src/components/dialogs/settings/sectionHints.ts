@@ -49,9 +49,12 @@ function getApiKeysHints(state: UseSettingsStateResult): HintPair[] {
     }
     const hints: HintPair[] = [["↑↓", "navigate"]];
     if (current.connected && !current.from_env) {
-      hints.push(["enter", "edit"], ["d", "disconnect"]);
+      if (current.auth_type !== "oauth") hints.push(["enter", "edit"]);
+      hints.push(["d", "disconnect"]);
     } else if (current.from_env) {
       // no action hints - set via env
+    } else if (current.auth_type === "oauth") {
+      hints.push(["enter", "sign in"]);
     } else {
       hints.push(["enter", "add key"]);
     }

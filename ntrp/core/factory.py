@@ -83,6 +83,7 @@ def create_agent(
         model=config.model,
         max_depth=config.max_depth,
         reasoning_effort=config.reasoning_effort,
+        prompt_cache_key=session_state.session_id,
         hooks=AgentHooks(),
         model_request_middlewares=(CompactionModelRequestMiddleware(compactor=config.compactor),),
     )

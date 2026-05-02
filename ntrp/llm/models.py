@@ -32,6 +32,7 @@ def _read_models_json() -> dict | None:
 class Provider(Enum):
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
+    OPENAI_CODEX = "openai-codex"
     GOOGLE = "google"
     OPENROUTER = "openrouter"
     CUSTOM = "custom"
@@ -86,12 +87,20 @@ DEFAULTS = [
     ),
     # --- OpenAI ---
     Model(
+        "gpt-5.5",
+        provider=Provider.OPENAI,
+        max_context_tokens=1_050_000,
+        max_output_tokens=128_000,
+        pricing=Pricing(price_in=5, price_out=30),
+        reasoning_efforts=("none", "low", "medium", "high", "xhigh"),
+    ),
+    Model(
         "gpt-5.4",
         provider=Provider.OPENAI,
         max_context_tokens=1_050_000,
         max_output_tokens=128_000,
         pricing=Pricing(price_in=2.50, price_out=15),
-        reasoning_efforts=("minimal", "low", "medium", "high", "xhigh"),
+        reasoning_efforts=("none", "low", "medium", "high", "xhigh"),
     ),
     Model(
         "gpt-5.4-mini",
@@ -99,7 +108,7 @@ DEFAULTS = [
         max_context_tokens=400_000,
         max_output_tokens=128_000,
         pricing=Pricing(price_in=0.75, price_out=4.50),
-        reasoning_efforts=("minimal", "low", "medium", "high", "xhigh"),
+        reasoning_efforts=("none", "low", "medium", "high", "xhigh"),
     ),
     Model(
         "gpt-5.4-nano",
@@ -107,7 +116,7 @@ DEFAULTS = [
         max_context_tokens=400_000,
         max_output_tokens=128_000,
         pricing=Pricing(price_in=0.20, price_out=1.25),
-        reasoning_efforts=("minimal", "low", "medium", "high"),
+        reasoning_efforts=("none", "low", "medium", "high"),
     ),
     Model(
         "gpt-5.2",
@@ -116,6 +125,42 @@ DEFAULTS = [
         max_output_tokens=16384,
         pricing=Pricing(price_in=1.75, price_out=14),
         reasoning_efforts=("minimal", "low", "medium", "high", "xhigh"),
+    ),
+    # --- OpenAI account auth via Codex endpoint ---
+    Model(
+        "openai-codex/gpt-5.5",
+        provider=Provider.OPENAI_CODEX,
+        max_context_tokens=272_000,
+        max_output_tokens=128_000,
+        reasoning_efforts=("low", "medium", "high", "xhigh"),
+    ),
+    Model(
+        "openai-codex/gpt-5.4",
+        provider=Provider.OPENAI_CODEX,
+        max_context_tokens=272_000,
+        max_output_tokens=128_000,
+        reasoning_efforts=("low", "medium", "high", "xhigh"),
+    ),
+    Model(
+        "openai-codex/gpt-5.4-mini",
+        provider=Provider.OPENAI_CODEX,
+        max_context_tokens=272_000,
+        max_output_tokens=128_000,
+        reasoning_efforts=("low", "medium", "high", "xhigh"),
+    ),
+    Model(
+        "openai-codex/gpt-5.3-codex",
+        provider=Provider.OPENAI_CODEX,
+        max_context_tokens=272_000,
+        max_output_tokens=128_000,
+        reasoning_efforts=("low", "medium", "high", "xhigh"),
+    ),
+    Model(
+        "openai-codex/gpt-5.2",
+        provider=Provider.OPENAI_CODEX,
+        max_context_tokens=272_000,
+        max_output_tokens=128_000,
+        reasoning_efforts=("low", "medium", "high", "xhigh"),
     ),
     # --- Google ---
     Model(

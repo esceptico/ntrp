@@ -5,6 +5,7 @@ from ntrp.llm.base import CompletionClient, EmbeddingClient
 from ntrp.llm.gemini import GeminiClient
 from ntrp.llm.models import Provider, get_embedding_model, get_embedding_models, get_model, get_models
 from ntrp.llm.openai import OpenAIClient
+from ntrp.llm.openai_codex import OpenAICodexClient
 from ntrp.settings import load_user_settings
 
 _completion_clients: dict[str, CompletionClient] = {}
@@ -45,6 +46,8 @@ def get_completion_client(model_id: str) -> CompletionClient:
         match model.provider:
             case Provider.OPENAI:
                 _completion_clients[cache_key] = OpenAIClient(api_key=key)
+            case Provider.OPENAI_CODEX:
+                _completion_clients[cache_key] = OpenAICodexClient()
             case Provider.GOOGLE:
                 _completion_clients[cache_key] = GeminiClient(api_key=key)
             case Provider.OPENROUTER:

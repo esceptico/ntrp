@@ -25,6 +25,7 @@ class Message:
     content: str | None
     tool_calls: list[ToolCall] | None
     reasoning_content: str | None
+    reasoning_encrypted_content: str | None = None
 
 
 @dataclass(frozen=True)

@@ -9,6 +9,7 @@ interface CredentialItem {
   connected: boolean;
   key_hint?: string | null;
   from_env?: boolean;
+  auth_type?: "api_key" | "oauth";
 }
 
 interface CredentialSectionProps<T extends CredentialItem> {
@@ -28,6 +29,9 @@ function DefaultStatus({ item }: { item: CredentialItem }) {
         {item.from_env && <span fg={colors.text.muted}>{" (env)"}</span>}
       </text>
     );
+  }
+  if (item.auth_type === "oauth") {
+    return <text><span fg={colors.text.disabled}>press enter to sign in</span></text>;
   }
   return <text><span fg={colors.text.disabled}>not connected</span></text>;
 }
@@ -67,11 +71,18 @@ export function CredentialSection<T extends CredentialItem>({
                 <text><span fg={colors.status.warning}>Disconnect {item.name}? (y/n)</span></text>
               </box>
             )}
+            {selected && item.auth_type === "oauth" && s.oauthPendingId === item.id && (
+              <box marginLeft={4} flexDirection="column">
+                {s.notice && <text><span fg={colors.status.warning}>{s.notice}</span></text>}
+                {s.oauthUrl && <text><span fg={colors.text.disabled}>{s.oauthUrl}</span></text>}
+              </box>
+            )}
           </box>
         );
       })}
 
       {s.error && <StatusMessage color={colors.status.error}>{s.error}</StatusMessage>}
+      {s.notice && !s.oauthPendingId && <StatusMessage color={colors.text.muted}>{s.notice}</StatusMessage>}
       {s.saving && <StatusMessage color={colors.text.muted}>Saving...</StatusMessage>}
     </box>
   );

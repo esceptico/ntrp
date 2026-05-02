@@ -72,6 +72,16 @@ class ConfigService:
 
         await self._with_rollback(mutate)
 
+    async def clear_provider_models(self, provider: Provider) -> None:
+        provider_models = get_models_by_provider(provider)
+
+        def mutate(settings: dict) -> None:
+            for key in ("chat_model", "research_model", "memory_model"):
+                if (val := settings.get(key)) and val in provider_models:
+                    settings.pop(key)
+
+        await self._with_rollback(mutate)
+
     def _valid_service_ids(self) -> set[str]:
         from ntrp.integrations import ALL_INTEGRATIONS
 

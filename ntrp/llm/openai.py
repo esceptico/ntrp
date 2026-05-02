@@ -78,6 +78,9 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         if extra := kwargs.get("extra_body"):
             request["extra_body"] = dict(extra)
 
+        if self._native_openai and (prompt_cache_key := kwargs.get("prompt_cache_key")):
+            request["prompt_cache_key"] = prompt_cache_key
+
         self._apply_reasoning_effort(request, model, reasoning_effort)
 
         return request

@@ -27,6 +27,9 @@ function renderProviderStatus(provider: ProviderInfo, _selected: boolean) {
       </text>
     );
   }
+  if (provider.auth_type === "oauth") {
+    return <text><span fg={colors.text.disabled}>browser sign-in</span></text>;
+  }
   return <text><span fg={colors.text.disabled}>not connected</span></text>;
 }
 
@@ -38,7 +41,7 @@ export function ApiKeysSection({ providers, accent }: ApiKeysSectionProps) {
         accent={accent}
         labelWidth={28}
         renderStatus={renderProviderStatus}
-        isEditable={(p) => p.id !== "custom"}
+        isEditable={(p) => p.id !== "custom" && p.auth_type !== "oauth"}
       />
     </box>
   );

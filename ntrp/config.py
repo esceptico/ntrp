@@ -36,6 +36,9 @@ MODEL_DEFAULTS = {
     "gemini_api_key": ("gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-embedding-001"),
 }
 
+OPENAI_CODEX_DEFAULT_CHAT = "openai-codex/gpt-5.5"
+OPENAI_CODEX_DEFAULT_MEMORY = "openai-codex/gpt-5.4-mini"
+
 PERSIST_KEYS = frozenset(
     {
         "chat_model",
@@ -57,6 +60,12 @@ PERSIST_KEYS = frozenset(
         "web_search",
     }
 )
+
+
+def _has_openai_codex_auth() -> bool:
+    from ntrp.llm.openai_codex_auth import is_authenticated
+
+    return is_authenticated()
 
 
 # --- Config ---
@@ -145,10 +154,14 @@ class Config(BaseSettings):
             return
         for field, (chat, memory, _) in MODEL_DEFAULTS.items():
             if getattr(self, field, None):
-                self.chat_model = chat
+                object.__setattr__(self, "chat_model", chat)
                 if not self.memory_model:
-                    self.memory_model = memory
+                    object.__setattr__(self, "memory_model", memory)
                 return
+        if _has_openai_codex_auth():
+            if not self.memory_model:
+                object.__setattr__(self, "memory_model", OPENAI_CODEX_DEFAULT_MEMORY)
+            object.__setattr__(self, "chat_model", OPENAI_CODEX_DEFAULT_CHAT)
 
     def _fill_model_fallbacks(self) -> None:
         if not self.memory_model and self.chat_model:
@@ -200,7 +213,13 @@ class Config(BaseSettings):
 
     @property
     def has_providers(self) -> bool:
-        return bool(self.anthropic_api_key or self.openai_api_key or self.gemini_api_key or self.openrouter_api_key)
+        return bool(
+            self.anthropic_api_key
+            or self.openai_api_key
+            or self.gemini_api_key
+            or self.openrouter_api_key
+            or _has_openai_codex_auth()
+        )
 
     @property
     def has_any_model(self) -> bool:

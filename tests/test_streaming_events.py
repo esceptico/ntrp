@@ -28,8 +28,11 @@ def test_reasoning_sse_preserves_nested_scope():
 
 @pytest.mark.asyncio
 async def test_research_child_reasoning_is_not_emitted_to_parent(monkeypatch):
+    prompt_cache_keys = []
+
     class FakeLLM:
-        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None):
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            prompt_cache_keys.append(prompt_cache_key)
             yield ReasoningContentDelta("internal research thought")
             yield make_text_response("child answer", model=model)
 
@@ -61,3 +64,5 @@ async def test_research_child_reasoning_is_not_emitted_to_parent(monkeypatch):
 
     assert result == "child answer"
     assert emitted == []
+    assert len(prompt_cache_keys) == 1
+    assert prompt_cache_keys[0].startswith("test::")

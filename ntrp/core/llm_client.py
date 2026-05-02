@@ -30,15 +30,20 @@ class NtrpLLMClient:
         tools: list[dict],
         tool_choice: ToolChoice | None = None,
         reasoning_effort: str | None = None,
+        prompt_cache_key: str | None = None,
     ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]:
         client = get_completion_client(model)
         reasoning_effort = self._supported_reasoning_effort(model, reasoning_effort)
+        kwargs = {}
+        if prompt_cache_key is not None:
+            kwargs["prompt_cache_key"] = prompt_cache_key
         async for item in client.stream_completion(
             model=model,
             messages=messages,
             tools=tools,
             tool_choice=_tool_choice_to_str(tool_choice),
             reasoning_effort=reasoning_effort,
+            **kwargs,
         ):
             yield item
 

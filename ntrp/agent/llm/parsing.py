@@ -25,6 +25,8 @@ def normalize_assistant_message(message: Message) -> dict:
         sanitized["tool_calls"] = tool_calls
     if message.reasoning_content:
         sanitized["reasoning_content"] = message.reasoning_content
+    if message.reasoning_encrypted_content:
+        sanitized["reasoning_encrypted_content"] = message.reasoning_encrypted_content
     return sanitized
 
 

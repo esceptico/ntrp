@@ -218,9 +218,24 @@ export interface TokenUsage {
   cache_write: number;
   cost: number;
   lastCost: number;
+  lastPrompt: number;
+  lastCompletion: number;
+  lastCacheRead: number;
+  lastCacheWrite: number;
 }
 
-export const ZERO_USAGE: Readonly<TokenUsage> = Object.freeze({ prompt: 0, completion: 0, cache_read: 0, cache_write: 0, cost: 0, lastCost: 0 });
+export const ZERO_USAGE: Readonly<TokenUsage> = Object.freeze({
+  prompt: 0,
+  completion: 0,
+  cache_read: 0,
+  cache_write: 0,
+  cost: 0,
+  lastCost: 0,
+  lastPrompt: 0,
+  lastCompletion: 0,
+  lastCacheRead: 0,
+  lastCacheWrite: 0,
+});
 
 export interface Config {
   serverUrl: string;

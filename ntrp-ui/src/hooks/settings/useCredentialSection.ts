@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTextInput } from "../useTextInput.js";
 import type { Key } from "../useKeypress.js";
 import { handleListNav } from "../keyUtils.js";
@@ -7,6 +7,7 @@ export interface CredentialItem {
   id: string;
   connected: boolean;
   from_env?: boolean;
+  auth_type?: "api_key" | "oauth";
 }
 
 export interface UseCredentialSectionResult<T extends CredentialItem> {
@@ -17,6 +18,9 @@ export interface UseCredentialSectionResult<T extends CredentialItem> {
   keyCursor: number;
   saving: boolean;
   error: string | null;
+  notice: string | null;
+  oauthUrl: string | null;
+  oauthPendingId: string | null;
   confirmDisconnect: boolean;
   refresh: () => void;
   handleKeypress: (key: Key) => void;
@@ -27,6 +31,7 @@ export interface UseCredentialSectionResult<T extends CredentialItem> {
 interface Options<T extends CredentialItem> {
   fetchItems: () => Promise<T[]>;
   connect: (id: string, key: string) => Promise<unknown>;
+  startOAuth?: (id: string) => Promise<{ url: string; instructions?: string; opened?: boolean }>;
   disconnect: (id: string) => Promise<unknown>;
   canEdit?: (item: T) => boolean;
   canDisconnect?: (item: T) => boolean;
@@ -37,6 +42,7 @@ interface Options<T extends CredentialItem> {
 export function useCredentialSection<T extends CredentialItem>({
   fetchItems,
   connect,
+  startOAuth,
   disconnect,
   canEdit = (item) => !item.from_env,
   canDisconnect = (item) => item.connected && !item.from_env,
@@ -50,6 +56,9 @@ export function useCredentialSection<T extends CredentialItem>({
   const [keyCursor, setKeyCursor] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [oauthUrl, setOauthUrl] = useState<string | null>(null);
+  const [oauthPendingId, setOauthPendingId] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   const { handleKey: handleKeyInput } = useTextInput({
@@ -69,6 +78,25 @@ export function useCredentialSection<T extends CredentialItem>({
     }
   }, [onChanged]);
 
+  useEffect(() => {
+    if (!oauthPendingId) return;
+    const timer = setInterval(() => {
+      fetchItems()
+        .then((fresh) => {
+          setItems(fresh);
+          const item = fresh.find((entry) => entry.id === oauthPendingId);
+          if (item?.connected) {
+            setOauthPendingId(null);
+            setOauthUrl(null);
+            setNotice("Connected");
+            void notifyChanged();
+          }
+        })
+        .catch(() => {});
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [fetchItems, notifyChanged, oauthPendingId]);
+
   const handleSave = useCallback(async () => {
     if (saving) return;
     const key = keyValue.trim();
@@ -83,12 +111,33 @@ export function useCredentialSection<T extends CredentialItem>({
       setEditing(false);
       setKeyValue("");
       setKeyCursor(0);
+      setNotice("Connected");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to connect");
     } finally {
       setSaving(false);
     }
   }, [saving, keyValue, items, selectedIndex, connect, refresh, notifyChanged]);
+
+  const handleOAuthStart = useCallback(async () => {
+    if (saving || !startOAuth) return;
+    const item = items[selectedIndex];
+    if (!item) return;
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    setOauthUrl(null);
+    try {
+      const result = await startOAuth(item.id);
+      setOauthPendingId(item.id);
+      setOauthUrl(result.url);
+      setNotice(result.instructions ?? (result.opened ? "Browser sign-in started" : "Open the sign-in URL"));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start sign-in");
+    } finally {
+      setSaving(false);
+    }
+  }, [saving, startOAuth, items, selectedIndex]);
 
   const handleDisconnect = useCallback(async () => {
     if (saving) return;
@@ -100,6 +149,7 @@ export function useCredentialSection<T extends CredentialItem>({
       await disconnect(item.id);
       refresh();
       await notifyChanged();
+      setNotice("Disconnected");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to disconnect");
     } finally {
@@ -138,6 +188,8 @@ export function useCredentialSection<T extends CredentialItem>({
       const item = items[selectedIndex];
       if (item && onEnter?.(item)) {
         // handled by custom onEnter
+      } else if (item?.auth_type === "oauth" && !item.connected && startOAuth) {
+        handleOAuthStart();
       } else if (item && canEdit(item)) {
         setKeyValue("");
         setKeyCursor(0);
@@ -152,12 +204,12 @@ export function useCredentialSection<T extends CredentialItem>({
     }
   }, [
     confirmDisconnect, editing, items, selectedIndex,
-    handleDisconnect, handleSave, handleKeyInput, canEdit, canDisconnect, onEnter,
+    handleDisconnect, handleSave, handleKeyInput, handleOAuthStart, canEdit, canDisconnect, onEnter, startOAuth,
   ]);
 
   return {
     items, selectedIndex, editing, keyValue, keyCursor,
-    saving, error, confirmDisconnect, refresh,
+    saving, error, notice, oauthUrl, oauthPendingId, confirmDisconnect, refresh,
     handleKeypress, isEditing, cancelEdit,
   };
 }

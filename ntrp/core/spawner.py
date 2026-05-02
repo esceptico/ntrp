@@ -106,6 +106,7 @@ def create_spawn_fn(
             current_depth=current_depth + 1,
             parent_id=parent_id,
             reasoning_effort=reasoning_effort,
+            prompt_cache_key=child_state.session_id,
         )
 
         child_messages = [

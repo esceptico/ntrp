@@ -297,6 +297,10 @@ export function useStreaming({
             cache_write: s.usage.cache_write + (event.usage.cache_write || 0),
             cost: s.usage.cost + (event.usage.cost || 0),
             lastCost: event.usage.cost || 0,
+            lastPrompt: event.usage.prompt,
+            lastCompletion: event.usage.completion,
+            lastCacheRead: event.usage.cache_read || 0,
+            lastCacheWrite: event.usage.cache_write || 0,
           };
           s.pendingApproval = null;
           s.status = Status.IDLE;

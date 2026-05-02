@@ -189,3 +189,4 @@ async def test_create_agent_returns_agent_with_hooks():
     assert hasattr(agent, "hooks")
     assert isinstance(agent.hooks, AgentHooks)
     assert agent.model_request_middlewares
+    assert agent.prompt_cache_key == "test"

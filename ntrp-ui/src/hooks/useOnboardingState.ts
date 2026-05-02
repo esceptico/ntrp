@@ -2,10 +2,18 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useTextInput } from "./useTextInput.js";
 import type { Key } from "./useKeypress.js";
 import { CUSTOM_PRESETS, CUSTOM_FIELDS, type CustomField } from "../components/onboarding/index.js";
-import { getProviders, connectProvider, updateConfig, addCustomModel, type ProviderInfo } from "../api/client.js";
+import {
+  getProviders,
+  connectProvider,
+  startProviderOAuth,
+  getProviderOAuthStatus,
+  updateConfig,
+  addCustomModel,
+  type ProviderInfo,
+} from "../api/client.js";
 import type { Config } from "../types.js";
 
-type Step = "providers" | "apiKey" | "modelSelect" | "customModel";
+type Step = "providers" | "apiKey" | "oauth" | "modelSelect" | "customModel";
 
 export function getStringModels(provider: ProviderInfo | null | undefined): string[] {
   if (!provider?.models || !Array.isArray(provider.models)) return [];
@@ -25,6 +33,8 @@ export function useOnboardingState({ config, closable, onClose, onDone }: UseOnb
   const [selectedProvider, setSelectedProvider] = useState<ProviderInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [oauthUrl, setOauthUrl] = useState<string | null>(null);
+  const [oauthInstructions, setOauthInstructions] = useState<string | null>(null);
 
   // API key input
   const [apiKeyValue, setApiKeyValue] = useState("");
@@ -77,6 +87,28 @@ export function useOnboardingState({ config, closable, onClose, onDone }: UseOnb
     setStep("modelSelect");
   }, []);
 
+  useEffect(() => {
+    if (step !== "oauth" || !selectedProvider) return;
+    const timer = setInterval(() => {
+      getProviderOAuthStatus(config, selectedProvider.id)
+        .then(async (status) => {
+          if (!status.connected) {
+            if (status.error) setError(status.error);
+            return;
+          }
+          const fresh = await refreshProviders();
+          const provider = fresh.find(p => p.id === selectedProvider.id);
+          if (hasConnected) {
+            setStep("providers");
+          } else {
+            showModels(provider);
+          }
+        })
+        .catch(() => {});
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [config, hasConnected, refreshProviders, selectedProvider, showModels, step]);
+
   const goBack = useCallback(() => setStep("providers"), []);
 
   const handleSelectProvider = useCallback(async (providerId: string) => {
@@ -105,6 +137,18 @@ export function useOnboardingState({ config, closable, onClose, onDone }: UseOnb
 
     if (provider.connected) {
       showModels(provider);
+    } else if (provider.auth_type === "oauth") {
+      setSaving(true);
+      try {
+        const result = await startProviderOAuth(config, provider.id);
+        setOauthUrl(result.url);
+        setOauthInstructions(result.instructions ?? "Complete authorization in your browser.");
+        setStep("oauth");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to start sign-in");
+      } finally {
+        setSaving(false);
+      }
     } else {
       setApiKeyValue("");
       setApiKeyCursor(0);
@@ -195,6 +239,11 @@ export function useOnboardingState({ config, closable, onClose, onDone }: UseOnb
         return;
       }
 
+      if (step === "oauth") {
+        if (key.name === "escape") { setStep("providers"); return; }
+        return;
+      }
+
       if (step === "customModel") {
         if (key.name === "escape") { setStep("providers"); return; }
 
@@ -256,6 +305,8 @@ export function useOnboardingState({ config, closable, onClose, onDone }: UseOnb
     selectedProvider,
     error,
     saving,
+    oauthUrl,
+    oauthInstructions,
     hasConnected,
 
     apiKeyValue,

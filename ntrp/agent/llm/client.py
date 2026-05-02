@@ -13,6 +13,7 @@ class LLMClient(Protocol):
         tools: list[dict],
         tool_choice: ToolChoice | None = None,
         reasoning_effort: str | None = None,
+        prompt_cache_key: str | None = None,
     ) -> AsyncGenerator[str | ReasoningContentDelta | CompletionResponse]: ...
 
     async def complete(
