@@ -44,6 +44,9 @@ class RunContext:
     max_depth: int = 0
     extra_auto_approve: set[str] = field(default_factory=set)
     research_model: str | None = None
+    deferred_tools_enabled: bool = False
+    loaded_tools: set[str] = field(default_factory=set)
+    allowed_tool_names: set[str] | None = None
 
 
 @dataclass

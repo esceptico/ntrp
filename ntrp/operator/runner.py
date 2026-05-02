@@ -14,6 +14,7 @@ from ntrp.memory.facts import FactMemory
 from ntrp.memory.learning_context import get_applied_automation_policy_context, get_approved_learning_context
 from ntrp.memory.prefetch import build_memory_prompt_context
 from ntrp.server.bus import SessionBus
+from ntrp.tools.deferred import build_deferred_tools_prompt_for_schemas
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
 
@@ -76,23 +77,31 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
                 if part
             )
 
-    system_prompt = build_system_prompt(
-        source_details=deps.source_details,
-        memory_context=memory_context,
-        learning_context=learning_context,
-        directives=load_directives(),
-        notifiers=deps.notifiers or None,
-    )
-    system_prompt += request.prompt_suffix
-
-    session_state = deps.create_session()
-    session_state.skip_approvals = request.skip_approvals
     executor = deps.executor
     tools = executor.get_tools() if request.writable else executor.get_tools(mutates=False)
 
     agent_config = deps.config
     if request.model:
         agent_config = replace(deps.config, model=request.model)
+
+    deferred_tools_context = (
+        build_deferred_tools_prompt_for_schemas(executor.registry, frozenset(executor.tool_services), tools)
+        if agent_config.deferred_tools
+        else None
+    )
+
+    system_prompt = build_system_prompt(
+        source_details=deps.source_details,
+        memory_context=memory_context,
+        learning_context=learning_context,
+        directives=load_directives(),
+        notifiers=deps.notifiers or None,
+        deferred_tools_context=deferred_tools_context,
+    )
+    system_prompt += request.prompt_suffix
+
+    session_state = deps.create_session()
+    session_state.skip_approvals = request.skip_approvals
 
     agent = create_agent(
         executor=executor,

@@ -64,7 +64,7 @@ class ToolExecutor:
                     _logger.warning("%s tool %r skipped — conflicts with existing tool", source, name)
                     continue
                 raise ValueError(f"duplicate tool name from {source}: {name}")
-            self.registry.register(name, tool)
+            self.registry.register(name, tool, source=source)
             if not source.startswith("_"):
                 _logger.info("Loaded %s tool: %s", source, name)
 

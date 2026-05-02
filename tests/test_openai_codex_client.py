@@ -80,7 +80,7 @@ def test_prepare_responses_request_uses_codex_model_and_response_shapes():
         model="openai-codex/gpt-5.4",
         tools=[{"type": "function", "function": {"name": "Read", "parameters": {"type": "object"}}}],
         tool_choice={"type": "function", "function": {"name": "Read"}},
-        temperature=None,
+        temperature=0.3,
         max_tokens=100,
         reasoning_effort="high",
         response_format=_Structured,
@@ -89,6 +89,7 @@ def test_prepare_responses_request_uses_codex_model_and_response_shapes():
 
     assert request["model"] == "gpt-5.4"
     assert request["store"] is False
+    assert "temperature" not in request
     assert "max_output_tokens" not in request
     assert request["instructions"] == "system"
     assert request["input"][0]["content"] == [{"type": "input_text", "text": "hi"}]

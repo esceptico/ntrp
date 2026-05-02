@@ -26,6 +26,10 @@ function ContextBar({ total, limit, width }: { total: number | null; limit: numb
 }
 
 export function ContextSection({ context, width }: { context: NonNullable<SidebarData["context"]>; width: number }) {
+  const visibleTools = context.visible_tool_count ?? context.tool_count;
+  const deferredTools = context.deferred_tool_count ?? 0;
+  const loadedTools = context.loaded_tool_count ?? 0;
+
   return (
     <box flexDirection="column">
       <SectionHeader label="CONTEXT" />
@@ -34,7 +38,10 @@ export function ContextSection({ context, width }: { context: NonNullable<Sideba
         <span fg={D()}>{formatTokens(context.total)} / {formatTokens(context.limit)}</span>
       </text>
       <text>
-        <span fg={D()}>{context.message_count} msgs  {context.tool_count} tools</span>
+        <span fg={D()}>{context.message_count} msgs  tools {visibleTools}/{context.tool_count}</span>
+      </text>
+      <text>
+        <span fg={D()}>loaded {loadedTools}  deferred {deferredTools}</span>
       </text>
     </box>
   );

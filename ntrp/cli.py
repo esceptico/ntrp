@@ -16,6 +16,7 @@ from ntrp.memory.learning_context import get_approved_learning_context
 from ntrp.server.runtime import Runtime
 from ntrp.settings import generate_api_key, load_user_settings, save_user_settings
 from ntrp.tools.core.context import IOBridge
+from ntrp.tools.deferred import build_deferred_tools_prompt_for_schemas
 
 console = Console()
 
@@ -111,21 +112,27 @@ async def _run_headless(prompt: str):
     await runtime.connect()
 
     try:
+        config = AgentConfig.from_config(runtime.config)
+        tools = runtime.executor.get_tools()
+        deferred_tools_context = (
+            build_deferred_tools_prompt_for_schemas(runtime.executor.registry, frozenset(runtime.executor.tool_services), tools)
+            if config.deferred_tools
+            else None
+        )
         system_prompt = build_system_prompt(
             source_details={},
             memory_context=None,
             learning_context=await get_approved_learning_context(runtime.memory) if runtime.memory else None,
+            deferred_tools_context=deferred_tools_context,
         )
 
         run_id = generate_slug(2)
         session_state = runtime.session_service.create()
 
-        config = AgentConfig.from_config(runtime.config)
-
         agent = create_agent(
             executor=runtime.executor,
             config=config,
-            tools=runtime.executor.get_tools(),
+            tools=tools,
             session_state=session_state,
             run_id=run_id,
             io=IOBridge(),

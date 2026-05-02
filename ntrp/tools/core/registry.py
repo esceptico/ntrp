@@ -9,22 +9,28 @@ from ntrp.tools.core.middleware import DEFAULT_TOOL_MIDDLEWARE, ToolCall, ToolMi
 class ToolRegistry:
     def __init__(self, middlewares: Sequence[ToolMiddleware] = DEFAULT_TOOL_MIDDLEWARE):
         self._tools: dict[str, Tool] = {}
+        self._sources: dict[str, str] = {}
         self._middlewares = tuple(middlewares)
 
-    def register(self, name: str, tool: Tool) -> None:
+    def register(self, name: str, tool: Tool, *, source: str = "unknown") -> None:
         if name in self._tools:
             raise ValueError(f"duplicate tool name: {name}")
         self._tools[name] = tool
+        self._sources[name] = source
 
     def copy_with(self, extra_tools: dict[str, Tool]) -> Self:
         registry = ToolRegistry(middlewares=self._middlewares)
         registry._tools = dict(self._tools)
+        registry._sources = dict(self._sources)
         for name, tool in extra_tools.items():
             registry.register(name, tool)
         return registry
 
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
+
+    def get_source(self, name: str) -> str | None:
+        return self._sources.get(name)
 
     async def execute(self, name: str, execution: ToolExecution, arguments: dict[str, Any]) -> ToolResult:
         tool = self._tools[name]

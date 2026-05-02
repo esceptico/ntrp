@@ -58,6 +58,7 @@ PERSIST_KEYS = frozenset(
         "summary_max_tokens",
         "mcp_servers",
         "web_search",
+        "deferred_tools",
     }
 )
 
@@ -120,6 +121,7 @@ class Config(BaseSettings):
     # Agent
     max_depth: int = 8
     reasoning_effort: str | None = None
+    deferred_tools: bool = True
 
     # Context compaction
     compression_threshold: float = 0.8

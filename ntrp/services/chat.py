@@ -32,6 +32,7 @@ from ntrp.server.stream import run_agent_loop
 from ntrp.services.session import SessionService
 from ntrp.skills.registry import SkillRegistry
 from ntrp.tools.core.context import IOBridge
+from ntrp.tools.deferred import build_deferred_tools_prompt_for_schemas
 from ntrp.tools.directives import load_directives
 from ntrp.tools.executor import ToolExecutor
 
@@ -144,6 +145,7 @@ async def _prepare_messages(
     deps: ChatDeps,
     messages: list[dict],
     user_message: str,
+    tools: list[dict],
     last_activity: datetime | None = None,
     images: list[dict] | None = None,
     context: list[dict] | None = None,
@@ -161,6 +163,11 @@ async def _prepare_messages(
     directives = load_directives()
 
     notifiers = deps.notifier_service.list_summary() if deps.notifier_service else None
+    deferred_tools_context = (
+        build_deferred_tools_prompt_for_schemas(deps.executor.registry, frozenset(deps.executor.tool_services), tools)
+        if deps.agent_config.deferred_tools
+        else None
+    )
 
     system_blocks = build_system_blocks(
         source_details={},
@@ -169,6 +176,7 @@ async def _prepare_messages(
         learning_context=learning_context,
         directives=directives,
         notifiers=notifiers,
+        deferred_tools_context=deferred_tools_context,
         use_cache_control=_is_anthropic(deps.chat_model),
     )
 
@@ -223,8 +231,15 @@ async def prepare_chat(
     if not session_state.name and not is_init and name_candidate and not name_candidate.startswith("/"):
         session_state.name = name_candidate[:50]
 
+    tools = deps.executor.get_tools()
     messages = await _prepare_messages(
-        deps, messages, user_message, last_activity=session_state.last_activity, images=images, context=context
+        deps,
+        messages,
+        user_message,
+        tools,
+        last_activity=session_state.last_activity,
+        images=images,
+        context=context,
     )
 
     run = registry.create_run(session_state.session_id)
@@ -235,7 +250,7 @@ async def prepare_chat(
         session_state=session_state,
         is_init=is_init,
         executor=deps.executor,
-        tools=deps.executor.get_tools(),
+        tools=tools,
         config=deps.agent_config,
         available_integrations=deps.available_integrations,
         integration_errors=deps.integration_errors,
@@ -401,6 +416,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             io=io,
             extra_auto_approve=INIT_AUTO_APPROVE if ctx.is_init else None,
             background_tasks=bg_registry,
+            loaded_tools=run.loaded_tools,
         )
         agent.hooks.on_response = tracker.track
 

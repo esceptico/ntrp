@@ -5,6 +5,7 @@ from ntrp.agent import ToolMeta, ToolResult
 from ntrp.agent.ledger import SharedLedger
 from ntrp.constants import NTRP_TMP_BASE, OFFLOAD_PREVIEW_LINES, OFFLOAD_THRESHOLD
 from ntrp.tools.core.context import ToolContext, ToolExecution
+from ntrp.tools.deferred import is_deferred_tool
 from ntrp.tools.executor import ToolExecutor
 
 
@@ -22,6 +23,20 @@ class NtrpToolExecutor:
             return ToolResult(
                 content=f"Unknown tool: {name}. Check available tools in the system prompt.",
                 preview="Unknown tool",
+            )
+
+        if (
+            self._ctx.run.deferred_tools_enabled
+            and is_deferred_tool(name, self._executor.registry)
+            and name not in self._ctx.run.loaded_tools
+        ):
+            return ToolResult(
+                content=(
+                    f"Tool {name!r} is deferred and has not been loaded in this run. "
+                    f"Call load_tools(names=[{name!r}]) or load_tools(group=...) first, then retry."
+                ),
+                preview="Tool not loaded",
+                is_error=True,
             )
 
         if self._ledger and not tool.mutates and not tool.volatile:

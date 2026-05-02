@@ -22,6 +22,7 @@ from ntrp.tools.background import (
     list_background_tasks_tool,
 )
 from ntrp.tools.bash import bash_tool
+from ntrp.tools.deferred import load_tools_tool
 from ntrp.tools.directives import set_directives_tool
 from ntrp.tools.files import read_file_tool
 from ntrp.tools.memory import forget_tool, recall_tool, remember_tool
@@ -36,9 +37,8 @@ SYSTEM = Integration(
         "bash": bash_tool,
         "read_file": read_file_tool,
         "current_time": current_time_tool,
-        "set_directives": set_directives_tool,
-        "notify": notify_tool,
         "research": research_tool,
+        "load_tools": load_tools_tool,
     },
 )
 
@@ -72,10 +72,22 @@ BACKGROUND = Integration(
     },
 )
 
+NOTIFICATIONS = Integration(
+    id="_notifications",
+    label="Notifications",
+    tools={"notify": notify_tool},
+)
+
+DIRECTIVES = Integration(
+    id="_directives",
+    label="Directives",
+    tools={"set_directives": set_directives_tool},
+)
+
 SKILLS = Integration(
     id="_skills",
     label="Skills",
     tools={"use_skill": use_skill_tool},
 )
 
-CORE_INTEGRATIONS = [SYSTEM, MEMORY_TOOLS, AUTOMATION, BACKGROUND, SKILLS]
+CORE_INTEGRATIONS = [SYSTEM, MEMORY_TOOLS, AUTOMATION, BACKGROUND, NOTIFICATIONS, DIRECTIVES, SKILLS]

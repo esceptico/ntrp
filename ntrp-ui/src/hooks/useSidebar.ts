@@ -13,6 +13,9 @@ export interface SidebarData {
     limit: number;
     message_count: number;
     tool_count: number;
+    visible_tool_count: number;
+    deferred_tool_count: number;
+    loaded_tool_count: number;
   } | null;
   nextAutomations: Automation[];
   sessions: SessionListItem[];

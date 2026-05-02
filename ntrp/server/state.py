@@ -27,6 +27,7 @@ class RunState:
     approval_queue: asyncio.Queue[dict] | None = None
     task: asyncio.Task | None = None
     inject_queue: list[dict] = field(default_factory=list)
+    loaded_tools: set[str] = field(default_factory=set)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     cancelled: bool = False

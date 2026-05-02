@@ -212,9 +212,9 @@ class OpenAICodexClient(CompletionClient):
         if tools:
             request["tools"] = [self._convert_tool(tool) for tool in tools]
             request["tool_choice"] = self._convert_tool_choice(tool_choice)
-        if temperature is not None:
-            request["temperature"] = temperature
-        # The ChatGPT Codex endpoint rejects max_output_tokens even though public Responses accepts it.
+        # The ChatGPT Codex endpoint rejects sampling/token knobs that public
+        # OpenAI APIs may accept.
+        _ = temperature
         _ = max_tokens
         if reasoning_effort is not None:
             request["reasoning"] = {"effort": reasoning_effort, "summary": "auto"}

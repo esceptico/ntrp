@@ -12,8 +12,10 @@ export async function getContextUsage(config: Config, sessionId?: string): Promi
   total: number | null;
   message_count: number;
   tool_count: number;
+  visible_tool_count: number;
+  deferred_tool_count: number;
+  loaded_tool_count: number;
 }> {
   const params = sessionId ? `?session_id=${sessionId}` : "";
   return api.get(`${config.serverUrl}/context${params}`);
 }
-

@@ -15,12 +15,14 @@ from ntrp.agent import (
 )
 from ntrp.constants import SUBAGENT_DEFAULT_TIMEOUT
 from ntrp.context.models import SessionState
+from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddleware
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.llm_client import llm_client
 from ntrp.core.tool_executor import NtrpToolExecutor
 from ntrp.events.sse import BackgroundTaskEvent, SSEEvent, agent_events_to_sse
 from ntrp.logging import get_logger
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
+from ntrp.tools.deferred import append_deferred_tools_prompt, tool_schema_names
 from ntrp.tools.executor import ToolExecutor
 
 _logger = get_logger(__name__)
@@ -62,6 +64,7 @@ def create_spawn_fn(
         background: bool = False,
     ) -> str:
         filtered_tools = tools or executor.get_tools()
+        allowed_tool_names = tool_schema_names(filtered_tools)
         child_state = _create_session_state(calling_ctx, isolation)
         child_model = model_override or model
 
@@ -71,6 +74,9 @@ def create_spawn_fn(
             max_depth=max_depth,
             extra_auto_approve=calling_ctx.run.extra_auto_approve,
             research_model=calling_ctx.run.research_model,
+            deferred_tools_enabled=calling_ctx.run.deferred_tools_enabled,
+            loaded_tools=set(calling_ctx.run.loaded_tools),
+            allowed_tool_names=allowed_tool_names,
         )
 
         if background or silent:
@@ -96,6 +102,13 @@ def create_spawn_fn(
         )
 
         child_executor = NtrpToolExecutor(executor, child_ctx, ledger=calling_ctx.ledger)
+        child_system_prompt = append_deferred_tools_prompt(
+            system_prompt,
+            executor.registry,
+            frozenset(child_ctx.services),
+            filtered_tools,
+            enabled=child_run.deferred_tools_enabled,
+        )
 
         sub_agent = Agent(
             tools=filtered_tools,
@@ -107,10 +120,17 @@ def create_spawn_fn(
             parent_id=parent_id,
             reasoning_effort=reasoning_effort,
             prompt_cache_key=child_state.session_id,
+            model_request_middlewares=(
+                DeferredToolsModelRequestMiddleware(
+                    registry=executor.registry,
+                    run=child_run,
+                    get_services=lambda: child_ctx.services,
+                ),
+            ),
         )
 
         child_messages = [
-            {"role": Role.SYSTEM, "content": system_prompt},
+            {"role": Role.SYSTEM, "content": child_system_prompt},
             {"role": Role.USER, "content": task},
         ]
 

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import replace
 
 from ntrp.agent.model_request import ModelRequest, ModelRequestNext
@@ -8,8 +9,10 @@ class CompactionModelRequestMiddleware:
     def __init__(
         self,
         compactor: Compactor | None = None,
+        on_compact: Callable[[], None] | None = None,
     ):
         self.compactor = compactor
+        self.on_compact = on_compact
 
     async def __call__(self, request: ModelRequest, next_request: ModelRequestNext) -> ModelRequest:
         prepared = await next_request(request)
@@ -21,4 +24,6 @@ class CompactionModelRequestMiddleware:
         if compacted is None:
             return prepared
 
+        if self.on_compact:
+            self.on_compact()
         return replace(prepared, messages=compacted)

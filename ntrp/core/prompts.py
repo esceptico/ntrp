@@ -31,26 +31,28 @@ Facts are evidence. Consolidated observations/patterns are the primary model-fac
 Only remember explicit facts useful in 6 months: identity, preferences, relationships, expertise, durable decisions, significant events. Temporary facts need an expiry.
 Skip ephemeral noise: billing alerts, CI failures, token events, connection requests, transient notifications, current implementation chores, and one-off reactions.
 
-**Data** — emails, calendar, web_search. Each takes an optional query: omit for recent items, provide to search. Always use before reading.
+**Tool loading** — Some integration/action tools are deferred. Use `load_tools` proactively when the user needs email, calendar, Slack, automation, background, notification, directives, or MCP-backed capabilities. Loading tools does not execute them; it only makes them callable on the next model step. Do not ask the user whether to load tools.
 
-**Read** — read_email, read_file, web_fetch. Use after finding items for full content.
+**Data** — web_search/web_fetch are always available for external web info. Email, calendar, Slack, automation, and MCP tools may be deferred; load the relevant group first, then search/list/read before acting.
 
-**Email** — send_email. Requires approval.
+**Read** — read_file and web_fetch are always available. Deferred read tools like read_email/slack_thread become callable after loading their group.
 
-**Calendar** — create_calendar_event, edit_calendar_event, delete_calendar_event. Require approval.
+**Actions** — write/action tools such as send_email, create/edit/delete calendar events, automation changes, and mutating MCP tools require approval after loading.
 
-**Utility** — research (spawn research agent for multi-source investigation), bash (shell commands), background (spawn a background agent for long-running tasks), cancel_background_task, list_background_tasks, get_background_result, current_time (current date/time).
+**Utility** — research (spawn research agent for multi-source investigation), bash (shell commands), current_time (current date/time), load_tools (load deferred tool groups/names).
 
-**Background tasks** — background(task) spawns an autonomous agent that runs in the background with full tool access. Use it for long-running work: builds, installs, deep research, multi-step operations. You will be automatically notified when the task completes — results are injected directly into the conversation. Do NOT poll list_background_tasks in a loop. Check once if needed, then continue with other work or respond to the user while waiting. Use get_background_result(task_id) to read a completed task's full output.
+**Background tasks** — background tools are deferred. Load the background group when a task should run autonomously while the main chat continues, or when you need to cancel/list/read a background task. Do NOT poll list_background_tasks in a loop. Check once if needed, then continue with other work or respond to the user while waiting.
 
-**Directives** — set_directives updates persistent rules injected into your system prompt. When the user tells you how to behave, what to do or avoid, or asks you to change your style/tone — call set_directives. Read current directives first, then write the full updated version.
+**Notifications** — notify is deferred. Load the notifications group only when the user explicitly asks to be notified or a background/automation flow needs to alert them.
 
-**Automations** — create_automation (time-scheduled or event-triggered agent tasks), list_automations, delete_automation, get_automation_result (last execution output). Automations run autonomously with full tool access.
+**Directives** — set_directives is deferred. Load the directives group when the user tells you how to behave, what to do or avoid, or asks you to change your style/tone. Read current directives first, then write the full updated version.
+
+**Automations** — automation tools are deferred. Load the automations group when the user asks to create/list/update/delete/run scheduled or event-triggered tasks.
 
 ## MEMORY
 
 recall() = search your full memory. MEMORY CONTEXT above is curated and incomplete — recall() finds contextual observations when the current task needs them.
-When in doubt, recall() first. emails/calendar/web_search = finding new external info.
+When in doubt, recall() first. web_search = external web info; email/calendar/Slack are deferred data sources, so load the relevant group before using them.
 Facts connect by semantic similarity, temporal proximity, shared entities.
 Do not remember more just to make context richer. Remember only direct evidence that can support future recall or consolidation."""
 
@@ -127,6 +129,11 @@ STATIC_BLOCK = env.from_string("""{{ base_prompt }}
 **Calendar**{{ " — " + (sources.calendar.accounts | join(", ")) if sources.calendar.accounts }}
 {%- endif %}
 {% endfor %}
+{% if deferred_tools_context %}
+
+## DEFERRED TOOLS
+{{ deferred_tools_context }}
+{% endif %}
 {% if notifiers %}
 
 ## NOTIFIERS
@@ -234,6 +241,7 @@ def build_system_blocks(
     learning_context: str | None = None,
     directives: str | None = None,
     notifiers: list[str] | None = None,
+    deferred_tools_context: str | None = None,
     use_cache_control: bool = False,
 ) -> list[dict]:
     """Build system prompt as a list of content blocks.
@@ -252,6 +260,7 @@ def build_system_blocks(
         skills_xml=skills_context,
         learning_context=learning_context,
         notifiers=notifiers,
+        deferred_tools_context=deferred_tools_context,
     )
     static_block: dict = {"type": "text", "text": static}
     if use_cache_control:
@@ -285,6 +294,7 @@ def build_system_prompt(
     learning_context: str | None = None,
     directives: str | None = None,
     notifiers: list[str] | None = None,
+    deferred_tools_context: str | None = None,
 ) -> str:
     """Build system prompt as a single string (for non-chat callers like scheduler/CLI)."""
     blocks = build_system_blocks(
@@ -294,5 +304,6 @@ def build_system_prompt(
         learning_context=learning_context,
         directives=directives,
         notifiers=notifiers,
+        deferred_tools_context=deferred_tools_context,
     )
     return "\n\n".join(b["text"] for b in blocks)
