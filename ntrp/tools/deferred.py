@@ -1,6 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 
+from jinja2 import Environment
 from pydantic import BaseModel, Field, model_validator
 
 from ntrp.tools.core import ToolResult, tool
@@ -58,6 +59,53 @@ GROUP_DESCRIPTIONS: dict[str, str] = {
     "_file_actions": "Write or edit local files. Use after inspecting files with read_file/list_files/find_files/search_text and deciding an exact file change is needed.",
     "mcp": "Connected MCP server tools. Use for external apps/servers not covered by core tools. Load by server, e.g. mcp:obsidian.",
 }
+
+DEFERRED_GROUP_ORDER = (
+    "gmail",
+    "calendar",
+    "slack",
+    "_automation",
+    "_background",
+    "_notifications",
+    "_directives",
+    "_file_actions",
+)
+
+DEFERRED_GROUP_LABELS = {
+    "gmail": "email",
+    "_automation": "automations",
+    "_background": "background",
+    "_notifications": "notifications",
+    "_directives": "directives",
+    "_file_actions": "files",
+}
+
+_env = Environment(trim_blocks=True, lstrip_blocks=True)
+
+_DEFERRED_TOOLS_TEMPLATE = _env.from_string("""Some integration/action tools are deferred to reduce prompt noise. Use `load_tools` before calling tools from these groups. Load tools proactively when the user's request needs the capability; do not ask whether to load them.
+
+{% for group in groups %}
+<deferred_tool_group name="{{ group.label }}" load_group="{{ group.label }}">
+{{ group.description }}
+Tools: {{ group.tool_names | join(", ") }}.
+{% if group.requires_approval %}
+Write/action tools require approval after loading.
+{% endif %}
+</deferred_tool_group>
+{% if not loop.last or mcp_servers %}
+
+{% endif %}
+{% endfor %}
+{% if mcp_servers %}
+<deferred_tool_group name="mcp" load_group="mcp:<server>">
+{{ mcp_description }}
+Connected MCP servers:
+{% for server in mcp_servers %}
+- {{ server.name }}: load with `load_tools(group="mcp:{{ server.name }}")`. Tools: {{ server.tools_text }}.
+{% endfor %}
+</deferred_tool_group>
+{% endif %}"""
+)
 
 
 def is_deferred_tool(name: str, registry: ToolRegistry) -> bool:
@@ -166,6 +214,34 @@ def visible_tool_names(
     return names
 
 
+def _deferred_prompt_groups(catalog: DeferredCatalog, registry: ToolRegistry) -> list[dict]:
+    groups: list[dict] = []
+    for source in DEFERRED_GROUP_ORDER:
+        names = catalog.by_group.get(source)
+        if not names:
+            continue
+        groups.append(
+            {
+                "label": DEFERRED_GROUP_LABELS.get(source, source),
+                "description": GROUP_DESCRIPTIONS[source],
+                "tool_names": names,
+                "requires_approval": any((registry.get(name) and registry.get(name).mutates) for name in names),
+            }
+        )
+    return groups
+
+
+def _mcp_prompt_servers(catalog: DeferredCatalog) -> list[dict]:
+    servers: list[dict] = []
+    for server, names in catalog.mcp_by_server.items():
+        if len(names) <= 12:
+            tools_text = ", ".join(names)
+        else:
+            tools_text = ", ".join(names[:10]) + f", ... ({len(names)} tools total)"
+        servers.append({"name": server, "tools_text": tools_text})
+    return servers
+
+
 def build_deferred_tools_prompt(
     registry: ToolRegistry,
     capabilities: frozenset[str],
@@ -176,54 +252,11 @@ def build_deferred_tools_prompt(
     if not catalog.by_group:
         return None
 
-    lines = [
-        "Some integration/action tools are deferred to reduce prompt noise. Use `load_tools` before calling tools from these groups. Load tools proactively when the user's request needs the capability; do not ask whether to load them.",
-        "",
-    ]
-
-    labels = {
-        "gmail": "email",
-        "_automation": "automations",
-        "_background": "background",
-        "_notifications": "notifications",
-        "_directives": "directives",
-        "_file_actions": "files",
-    }
-    for source in (
-        "gmail",
-        "calendar",
-        "slack",
-        "_automation",
-        "_background",
-        "_notifications",
-        "_directives",
-        "_file_actions",
-    ):
-        names = catalog.by_group.get(source)
-        if not names:
-            continue
-        label = labels.get(source, source)
-        lines.append(f'<deferred_tool_group name="{label}" load_group="{label}">')
-        lines.append(GROUP_DESCRIPTIONS[source])
-        lines.append("Tools: " + ", ".join(names) + ".")
-        if any((registry.get(n) and registry.get(n).mutates) for n in names):
-            lines.append("Write/action tools require approval after loading.")
-        lines.append("</deferred_tool_group>")
-        lines.append("")
-
-    if catalog.mcp_by_server:
-        lines.append('<deferred_tool_group name="mcp" load_group="mcp:<server>">')
-        lines.append(GROUP_DESCRIPTIONS["mcp"])
-        lines.append("Connected MCP servers:")
-        for server, names in catalog.mcp_by_server.items():
-            if len(names) <= 12:
-                tool_part = ", ".join(names)
-            else:
-                tool_part = ", ".join(names[:10]) + f", ... ({len(names)} tools total)"
-            lines.append(f'- {server}: load with `load_tools(group="mcp:{server}")`. Tools: {tool_part}.')
-        lines.append("</deferred_tool_group>")
-
-    return "\n".join(lines).strip()
+    return _DEFERRED_TOOLS_TEMPLATE.render(
+        groups=_deferred_prompt_groups(catalog, registry),
+        mcp_description=GROUP_DESCRIPTIONS["mcp"],
+        mcp_servers=_mcp_prompt_servers(catalog),
+    ).strip()
 
 
 def build_deferred_tools_prompt_for_schemas(
