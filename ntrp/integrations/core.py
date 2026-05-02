@@ -24,7 +24,14 @@ from ntrp.tools.background import (
 from ntrp.tools.bash import bash_tool
 from ntrp.tools.deferred import load_tools_tool
 from ntrp.tools.directives import set_directives_tool
-from ntrp.tools.files import read_file_tool
+from ntrp.tools.files import (
+    edit_file_tool,
+    find_files_tool,
+    list_files_tool,
+    read_file_tool,
+    search_text_tool,
+    write_file_tool,
+)
 from ntrp.tools.memory import forget_tool, recall_tool, remember_tool
 from ntrp.tools.notify import notify_tool
 from ntrp.tools.research import research_tool
@@ -36,6 +43,11 @@ SYSTEM = Integration(
     tools={
         "bash": bash_tool,
         "read_file": read_file_tool,
+        "list_files": list_files_tool,
+        "find_files": find_files_tool,
+        "search_text": search_text_tool,
+        "write_file": write_file_tool,
+        "edit_file": edit_file_tool,
         "current_time": current_time_tool,
         "research": research_tool,
         "load_tools": load_tools_tool,

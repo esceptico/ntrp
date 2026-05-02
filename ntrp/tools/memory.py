@@ -19,7 +19,7 @@ WHEN TO USE:
 The system prompt has contextual memory only — recall() searches the full store when this turn needs more.
 
 PREFER recall() FOR: Known facts, user preferences, stored knowledge, past context
-PREFER search() FOR: Finding new info in email, files, or web pages"""
+PREFER source tools FOR: Finding new info in email, files, or web pages; use search_text/read_file for local files"""
 
 FORGET_DESCRIPTION = "Delete facts from memory by semantic search."
 

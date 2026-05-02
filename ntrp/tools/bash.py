@@ -80,12 +80,14 @@ BASH_DESCRIPTION = """Execute a bash command in the user's shell.
 Each command runs in a fresh subprocess — no state (env vars, shell functions, cwd) persists between calls. Commands run in the server's working directory by default. Use the working_dir parameter to run in a different directory instead of 'cd'.
 
 PREFER OTHER TOOLS:
-- For searching files: use search() instead of grep/find
+- For listing/finding files: use list_files() or find_files()
+- For searching file content: use search_text()
 - For reading files: use read_file()
+- For editing/writing files: load the files group, then use edit_file() or write_file()
 
 USE bash FOR:
 - System commands: git, npm, pip, brew
-- File operations: mkdir, cp, mv, direct file edits (with permission when needed)
+- File operations that do not have a native tool yet: mkdir, cp, mv
 - Checking system state: pwd, whoami, date
 
 Destructive commands (rm -rf) are blocked. Non-safe commands require approval."""

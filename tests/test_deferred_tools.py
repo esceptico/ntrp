@@ -31,7 +31,19 @@ async def fake_echo(execution: ToolExecution, args: SearchInput) -> ToolResult:
 def _registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register("load_tools", load_tools_tool, source="_system")
-    registry.register("echo", tool(description="Always visible echo", input_model=SearchInput, execute=fake_echo), source="_system")
+    registry.register(
+        "echo", tool(description="Always visible echo", input_model=SearchInput, execute=fake_echo), source="_system"
+    )
+    registry.register(
+        "write_file",
+        tool(description="Write a local file", input_model=SearchInput, mutates=True, execute=fake_search),
+        source="_system",
+    )
+    registry.register(
+        "edit_file",
+        tool(description="Edit a local file", input_model=SearchInput, mutates=True, execute=fake_search),
+        source="_system",
+    )
     registry.register(
         "background",
         tool(description="Spawn a background agent", input_model=SearchInput, execute=fake_search),
@@ -44,7 +56,12 @@ def _registry() -> ToolRegistry:
     )
     registry.register(
         "set_directives",
-        tool(description="Update persistent behavior directives", input_model=SearchInput, mutates=True, execute=fake_search),
+        tool(
+            description="Update persistent behavior directives",
+            input_model=SearchInput,
+            mutates=True,
+            execute=fake_search,
+        ),
         source="_directives",
     )
     registry.register(
@@ -86,6 +103,8 @@ async def test_deferred_middleware_hides_then_reveals_loaded_tools():
     names = {t["function"]["name"] for t in prepared.tools}
     assert "load_tools" in names
     assert "echo" in names
+    assert "write_file" not in names
+    assert "edit_file" not in names
     assert "background" not in names
     assert "notify" not in names
     assert "set_directives" not in names
@@ -178,6 +197,9 @@ def test_deferred_prompt_lists_groups_and_tools():
     assert "notify" in prompt
     assert 'name="directives"' in prompt
     assert "set_directives" in prompt
+    assert 'name="files"' in prompt
+    assert "write_file" in prompt
+    assert "edit_file" in prompt
     assert "load_tools" in prompt
 
 
@@ -198,6 +220,7 @@ def test_deferred_prompt_respects_allowed_tool_schemas():
     assert "background" not in prompt
     assert "notify" not in prompt
     assert "set_directives" not in prompt
+    assert "write_file" not in prompt
 
 
 @pytest.mark.asyncio
@@ -233,6 +256,28 @@ async def test_background_notifications_and_directives_load_by_group_aliases():
     assert "background" in run.loaded_tools
     assert "notify" in run.loaded_tools
     assert "set_directives" in run.loaded_tools
+
+
+@pytest.mark.asyncio
+async def test_file_actions_load_by_files_group():
+    registry = _registry()
+    run = RunContext(run_id="run", deferred_tools_enabled=True)
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=registry,
+        run=run,
+        io=IOBridge(),
+    )
+
+    result = await registry.execute(
+        "load_tools",
+        ToolExecution(tool_id="call_files", tool_name="load_tools", ctx=ctx),
+        {"group": "files"},
+    )
+
+    assert not result.is_error
+    assert "write_file" in run.loaded_tools
+    assert "edit_file" in run.loaded_tools
 
 
 @pytest.mark.asyncio

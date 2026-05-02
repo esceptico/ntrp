@@ -11,6 +11,11 @@ DEFERRED_SOURCES = frozenset(
     {"gmail", "calendar", "slack", "_automation", "_background", "_notifications", "_directives", "mcp"}
 )
 
+DEFERRED_TOOL_GROUP_BY_NAME = {
+    "write_file": "_file_actions",
+    "edit_file": "_file_actions",
+}
+
 GROUP_ALIASES: dict[str, str] = {
     "email": "gmail",
     "emails": "gmail",
@@ -35,6 +40,10 @@ GROUP_ALIASES: dict[str, str] = {
     "directive": "_directives",
     "rules": "_directives",
     "behavior": "_directives",
+    "file": "_file_actions",
+    "files": "_file_actions",
+    "file_actions": "_file_actions",
+    "filesystem": "_file_actions",
     "mcp": "mcp",
 }
 
@@ -46,11 +55,14 @@ GROUP_DESCRIPTIONS: dict[str, str] = {
     "_background": "Spawn, inspect, cancel, or read background agents. Use for long-running research/work that should continue while the main chat moves on.",
     "_notifications": "Send a user-facing notification. Use when the user explicitly asks to be notified or an automation/background flow needs to alert them.",
     "_directives": "Update persistent behavior directives injected into the system prompt. Use when the user asks to change standing behavior, tone, or operating rules.",
+    "_file_actions": "Write or edit local files. Use after inspecting files with read_file/list_files/find_files/search_text and deciding an exact file change is needed.",
     "mcp": "Connected MCP server tools. Use for external apps/servers not covered by core tools. Load by server, e.g. mcp:obsidian.",
 }
 
 
 def is_deferred_tool(name: str, registry: ToolRegistry) -> bool:
+    if name in DEFERRED_TOOL_GROUP_BY_NAME:
+        return True
     source = registry.get_source(name)
     return source in DEFERRED_SOURCES
 
@@ -107,9 +119,10 @@ def build_deferred_catalog(
         if not tool_obj.requires.issubset(capabilities):
             continue
         source = registry.get_source(name)
-        if source not in DEFERRED_SOURCES:
+        group = DEFERRED_TOOL_GROUP_BY_NAME.get(name, source)
+        if group not in DEFERRED_SOURCES and name not in DEFERRED_TOOL_GROUP_BY_NAME:
             continue
-        by_group[source].append(name)
+        by_group[group].append(name)
         if source == "mcp":
             server = _mcp_server_from_name(name) or "default"
             mcp_by_server[server].append(name)
@@ -119,7 +132,9 @@ def build_deferred_catalog(
     )
 
 
-def initial_loaded_tool_names(registry: ToolRegistry, capabilities: frozenset[str], *, mutates: bool | None = None) -> set[str]:
+def initial_loaded_tool_names(
+    registry: ToolRegistry, capabilities: frozenset[str], *, mutates: bool | None = None
+) -> set[str]:
     names: set[str] = set()
     for name, tool_obj in registry.tools.items():
         if mutates is not None and tool_obj.mutates != mutates:
@@ -172,8 +187,18 @@ def build_deferred_tools_prompt(
         "_background": "background",
         "_notifications": "notifications",
         "_directives": "directives",
+        "_file_actions": "files",
     }
-    for source in ("gmail", "calendar", "slack", "_automation", "_background", "_notifications", "_directives"):
+    for source in (
+        "gmail",
+        "calendar",
+        "slack",
+        "_automation",
+        "_background",
+        "_notifications",
+        "_directives",
+        "_file_actions",
+    ):
         names = catalog.by_group.get(source)
         if not names:
             continue
@@ -234,7 +259,7 @@ def append_deferred_tools_prompt(
 class LoadToolsInput(BaseModel):
     group: str | None = Field(
         default=None,
-        description="Deferred group to load, e.g. 'email', 'calendar', 'slack', 'automations', 'background', 'notifications', 'directives', or 'mcp:obsidian'.",
+        description="Deferred group to load, e.g. 'email', 'calendar', 'slack', 'automations', 'background', 'notifications', 'directives', 'files', or 'mcp:obsidian'.",
     )
     names: list[str] | None = Field(
         default=None,
@@ -274,7 +299,7 @@ def _names_for_group(
 
     names = catalog.by_group.get(normalized, [])
     if not names:
-        groups = ["email", "calendar", "slack", "automations", "background", "notifications", "directives"]
+        groups = ["email", "calendar", "slack", "automations", "background", "notifications", "directives", "files"]
         groups.extend(f"mcp:{s}" for s in sorted(catalog.mcp_by_server))
         return [], "No deferred group {group!r}. Available groups: {groups}.".format(
             group=group,
@@ -360,7 +385,12 @@ async def load_tools(execution: ToolExecution, args: LoadToolsInput) -> ToolResu
     if not lines:
         lines.append("No tools loaded.")
 
-    is_error = bool(errors or unknown or unavailable or not_allowed) and not loaded_now and not already_loaded and not already_available
+    is_error = (
+        bool(errors or unknown or unavailable or not_allowed)
+        and not loaded_now
+        and not already_loaded
+        and not already_available
+    )
     preview = f"Loaded {len(loaded_now)}" if loaded_now else "No tools loaded"
     return ToolResult(content="\n".join(lines), preview=preview, is_error=is_error)
 
@@ -372,7 +402,7 @@ load_tools_tool = tool(
         "Use proactively when the user's request needs a deferred capability listed in the DEFERRED TOOLS prompt section. "
         "Loading tools does not execute them; it only makes them callable on the next model step. "
         "Examples: group='slack', group='email', group='calendar', group='automations', group='background', "
-        "group='notifications', group='directives', group='mcp:obsidian', "
+        "group='notifications', group='directives', group='files', group='mcp:obsidian', "
         "or names=['slack_search','slack_thread']."
     ),
     input_model=LoadToolsInput,
