@@ -18,6 +18,19 @@ export type { SessionNotification };
 const BACKGROUND_ACTIVITY_MIN_INTERVAL_MS = 500;
 const BACKGROUND_ACTIVITY_MAX_ITEMS = 20;
 
+function isNestedReasoningEvent(event: ServerEvent): boolean {
+  switch (event.type) {
+    case "REASONING_START":
+    case "REASONING_MESSAGE_START":
+    case "REASONING_MESSAGE_CONTENT":
+    case "REASONING_MESSAGE_END":
+    case "REASONING_END":
+      return (event.depth ?? 0) > 0 || Boolean(event.parent_id);
+    default:
+      return false;
+  }
+}
+
 interface UseStreamingOptions {
   config: Config;
   sessionId: string | null;
@@ -88,6 +101,10 @@ export function useStreaming({
   handleEventRef.current = async (targetId: string, event: ServerEvent) => {
     const viewedId = store.getState().viewedId;
 
+    if (isNestedReasoningEvent(event)) {
+      return;
+    }
+
     if (event.type === "background_task" && event.status === "activity") {
       const detail = event.detail;
       if (!detail) return;
@@ -111,6 +128,8 @@ export function useStreaming({
         return;
       }
       mutateSession(targetId, (s) => {
+        s.isStreaming = true;
+        if (s.status === Status.IDLE) s.status = Status.THINKING;
         s.pendingText = isDelta ? s.pendingText + event.content : event.content;
       });
       return;
@@ -130,6 +149,11 @@ export function useStreaming({
       switch (event.type) {
         case "run_started":
           s.runId = event.run_id;
+          s.isStreaming = true;
+          s.status = Status.THINKING;
+          if (targetId !== viewedId) {
+            s.notification = "streaming";
+          }
           if (targetId === viewedId) {
             onSessionInfoRef.current?.({
               session_id: event.session_id,
@@ -150,12 +174,16 @@ export function useStreaming({
           break;
 
         case "REASONING_MESSAGE_START":
+          s.isStreaming = true;
+          if (s.status === Status.IDLE) s.status = Status.THINKING;
           if (!s.messages.some((m) => m.id === event.messageId)) {
             addMessageToSession(s, { id: event.messageId, role: "thinking", content: "" });
           }
           break;
 
         case "REASONING_MESSAGE_CONTENT": {
+          s.isStreaming = true;
+          if (s.status === Status.IDLE) s.status = Status.THINKING;
           const index = s.messages.findIndex((m) => m.id === event.messageId);
           if (index === -1) {
             addMessageToSession(s, {
@@ -187,8 +215,12 @@ export function useStreaming({
         }
 
         case "tool_call": {
+          s.isStreaming = true;
           s.currentDepth = event.depth;
           s.status = Status.TOOL;
+          if (targetId !== viewedId) {
+            s.notification = "streaming";
+          }
           const description = truncateText(event.description, MAX_TOOL_DESCRIPTION_CHARS, 'end');
           s.tools.descriptions.set(event.tool_id, description);
           s.tools.startTimes.set(event.tool_id, Date.now());

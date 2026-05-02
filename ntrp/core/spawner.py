@@ -2,18 +2,30 @@ import asyncio
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from ntrp.agent import Agent, Result, Role, ToolCompleted, ToolStarted
+from ntrp.agent import (
+    Agent,
+    ReasoningBlock,
+    ReasoningDelta,
+    ReasoningEnded,
+    ReasoningStarted,
+    Result,
+    Role,
+    ToolCompleted,
+    ToolStarted,
+)
 from ntrp.constants import SUBAGENT_DEFAULT_TIMEOUT
 from ntrp.context.models import SessionState
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.llm_client import llm_client
 from ntrp.core.tool_executor import NtrpToolExecutor
-from ntrp.events.sse import BackgroundTaskEvent, agent_event_to_sse
+from ntrp.events.sse import BackgroundTaskEvent, SSEEvent, agent_events_to_sse
 from ntrp.logging import get_logger
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 from ntrp.tools.executor import ToolExecutor
 
 _logger = get_logger(__name__)
+
+_REASONING_EVENTS = (ReasoningBlock, ReasoningStarted, ReasoningDelta, ReasoningEnded)
 
 
 def _create_session_state(calling_ctx: ToolContext, isolation: IsolationLevel) -> SessionState:
@@ -103,18 +115,24 @@ def create_spawn_fn(
 
         parent_emit = calling_ctx.io.emit if not silent else None
 
-        async def _stream_to(to_event) -> str:
+        def _foreground_child_events(event) -> tuple[SSEEvent, ...]:
+            if isinstance(event, _REASONING_EVENTS):
+                return ()
+            return agent_events_to_sse(event)
+
+        async def _stream_to(to_events) -> str:
             text = ""
             async for event in sub_agent.stream(child_messages):
                 if isinstance(event, Result):
                     text = event.text
-                elif parent_emit and (out := to_event(event)):
-                    await parent_emit(out)
+                elif parent_emit:
+                    for out in to_events(event):
+                        await parent_emit(out)
             return text
 
         if not background:
             try:
-                return await asyncio.wait_for(_stream_to(agent_event_to_sse), timeout=timeout)
+                return await asyncio.wait_for(_stream_to(_foreground_child_events), timeout=timeout)
             except TimeoutError:
                 return f"Error: Sub-agent timed out after {timeout}s"
 
@@ -122,18 +140,18 @@ def create_spawn_fn(
         task_id = registry.generate_id()
         label = task[:80]
 
-        def _to_bg_event(event):
+        def _to_bg_events(event):
             if isinstance(event, ToolStarted):
                 detail = event.display_name or event.name
             elif isinstance(event, ToolCompleted):
                 detail = f"{event.display_name or event.name}: {event.preview}"
             else:
-                return None
-            return BackgroundTaskEvent(task_id=task_id, command=label, status="activity", detail=detail)
+                return ()
+            return (BackgroundTaskEvent(task_id=task_id, command=label, status="activity", detail=detail),)
 
         async def _run_background():
             try:
-                result = await asyncio.wait_for(_stream_to(_to_bg_event), timeout=timeout)
+                result = await asyncio.wait_for(_stream_to(_to_bg_events), timeout=timeout)
                 status = "completed"
             except asyncio.CancelledError:
                 return

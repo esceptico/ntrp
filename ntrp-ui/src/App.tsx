@@ -337,7 +337,9 @@ function AppContent({
   );
   const lastVisibleRole = visibleMessages[visibleMessages.length - 1]?.role;
   const liveToolMargin = lastVisibleRole && lastVisibleRole !== "tool" && lastVisibleRole !== "tool_chain" ? 1 : 0;
-  const showLiveStatus = status === Status.COMPRESSING || (isStreaming && !pendingText.trimStart());
+  const hasRunningTool = toolChain.some((item) => item.status === "running");
+  const showLiveStatus = status === Status.COMPRESSING
+    || (isStreaming && (!pendingText.trimStart() || hasRunningTool || status === Status.TOOL));
 
   const cycleIdRef = useRef<string | null>(null);
 

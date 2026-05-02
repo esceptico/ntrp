@@ -203,6 +203,8 @@ class TextMessageEndEvent(SSEEvent):
 class ReasoningStartEvent(SSEEvent):
     type: EventType = field(default=EventType.REASONING_START, init=False)
     messageId: str
+    depth: int = 0
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -210,6 +212,8 @@ class ReasoningMessageStartEvent(SSEEvent):
     type: EventType = field(default=EventType.REASONING_MESSAGE_START, init=False)
     messageId: str
     role: str = "reasoning"
+    depth: int = 0
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -217,18 +221,24 @@ class ReasoningMessageContentEvent(SSEEvent):
     type: EventType = field(default=EventType.REASONING_MESSAGE_CONTENT, init=False)
     messageId: str
     delta: str
+    depth: int = 0
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
 class ReasoningMessageEndEvent(SSEEvent):
     type: EventType = field(default=EventType.REASONING_MESSAGE_END, init=False)
     messageId: str
+    depth: int = 0
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
 class ReasoningEndEvent(SSEEvent):
     type: EventType = field(default=EventType.REASONING_END, init=False)
     messageId: str
+    depth: int = 0
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -257,23 +267,23 @@ def agent_events_to_sse(event) -> tuple[SSEEvent, ...]:
             message_id = f"reasoning-{uuid4().hex[:10]}"
             content = event.content.strip()
             return (
-                ReasoningStartEvent(messageId=message_id),
-                ReasoningMessageStartEvent(messageId=message_id),
-                ReasoningMessageContentEvent(messageId=message_id, delta=content),
-                ReasoningMessageEndEvent(messageId=message_id),
-                ReasoningEndEvent(messageId=message_id),
+                ReasoningStartEvent(messageId=message_id, **base),
+                ReasoningMessageStartEvent(messageId=message_id, **base),
+                ReasoningMessageContentEvent(messageId=message_id, delta=content, **base),
+                ReasoningMessageEndEvent(messageId=message_id, **base),
+                ReasoningEndEvent(messageId=message_id, **base),
             )
         case ReasoningStarted():
             return (
-                ReasoningStartEvent(messageId=event.message_id),
-                ReasoningMessageStartEvent(messageId=event.message_id),
+                ReasoningStartEvent(messageId=event.message_id, **base),
+                ReasoningMessageStartEvent(messageId=event.message_id, **base),
             )
         case ReasoningDelta():
-            return (ReasoningMessageContentEvent(messageId=event.message_id, delta=event.content),)
+            return (ReasoningMessageContentEvent(messageId=event.message_id, delta=event.content, **base),)
         case ReasoningEnded():
             return (
-                ReasoningMessageEndEvent(messageId=event.message_id),
-                ReasoningEndEvent(messageId=event.message_id),
+                ReasoningMessageEndEvent(messageId=event.message_id, **base),
+                ReasoningEndEvent(messageId=event.message_id, **base),
             )
         case ToolStarted():
             return (

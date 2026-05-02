@@ -8,28 +8,38 @@ export interface ThinkingEvent {
 export interface ReasoningStartEvent {
   type: "REASONING_START";
   messageId: string;
+  depth?: number;
+  parent_id?: string | null;
 }
 
 export interface ReasoningMessageStartEvent {
   type: "REASONING_MESSAGE_START";
   messageId: string;
   role: "reasoning";
+  depth?: number;
+  parent_id?: string | null;
 }
 
 export interface ReasoningMessageContentEvent {
   type: "REASONING_MESSAGE_CONTENT";
   messageId: string;
   delta: string;
+  depth?: number;
+  parent_id?: string | null;
 }
 
 export interface ReasoningMessageEndEvent {
   type: "REASONING_MESSAGE_END";
   messageId: string;
+  depth?: number;
+  parent_id?: string | null;
 }
 
 export interface ReasoningEndEvent {
   type: "REASONING_END";
   messageId: string;
+  depth?: number;
+  parent_id?: string | null;
 }
 
 export interface TextEvent {
