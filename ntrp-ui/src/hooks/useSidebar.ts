@@ -39,12 +39,16 @@ function nextAutomations(automations: Automation[]): Automation[] {
     .slice(0, 5);
 }
 
-async function loadMemorySidebar(config: Config, includeStats: boolean): Promise<{
+async function loadMemorySidebar(config: Config, enabled: boolean): Promise<{
   memoryStats: Stats | null;
   learningCandidates: LearningCandidate[];
 }> {
+  if (!enabled) {
+    return { memoryStats: null, learningCandidates: [] };
+  }
+
   const [memoryStats, learningResult] = await Promise.all([
-    includeStats ? getStats(config).catch(() => null) : null,
+    getStats(config).catch(() => null),
     getLearningCandidates(config, 40).catch(() => ({ candidates: [] as LearningCandidate[] })),
   ]);
   return {

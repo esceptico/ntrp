@@ -33,7 +33,7 @@ export const Sidebar = React.memo(function Sidebar({ config, serverConfig, serve
   const { accentValue } = useAccentColor();
   const contentWidth = width - 2;
   const learningSummary = summarizeLearningCandidates(data.learningCandidates);
-  const showMemory = (sections.memory_stats && data.memoryStats) || learningSummary.needsAction > 0;
+  const showMemory = sections.memory_stats && (Boolean(data.memoryStats) || learningSummary.total > 0);
 
   return (
     <scrollbox

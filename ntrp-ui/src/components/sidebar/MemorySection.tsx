@@ -1,6 +1,5 @@
 import React from "react";
 import type { LearningCandidate, Stats } from "../../api/memory.js";
-import { useAccentColor } from "../../hooks/index.js";
 import { summarizeLearningCandidates } from "../../lib/memoryLearning.js";
 import { truncateText } from "../../lib/utils.js";
 import { colors } from "../ui/colors.js";
@@ -12,9 +11,30 @@ interface MemorySectionProps {
   width: number;
 }
 
+const LABEL_WIDTH = 9;
+
 function formatCount(value: number): string {
   if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
   return String(value);
+}
+
+function MemoryRow({
+  label,
+  value,
+  width,
+  valueColor = S(),
+}: {
+  label: string;
+  value: string;
+  width: number;
+  valueColor?: string;
+}) {
+  return (
+    <text>
+      <span fg={D()}>{label.padEnd(LABEL_WIDTH)}</span>
+      <span fg={valueColor}>{truncateText(value, Math.max(1, width - LABEL_WIDTH))}</span>
+    </text>
+  );
 }
 
 function laneSummary(summary: ReturnType<typeof summarizeLearningCandidates>): string {
@@ -31,38 +51,28 @@ function laneSummary(summary: ReturnType<typeof summarizeLearningCandidates>): s
 }
 
 export function MemorySection({ stats, learningCandidates, width }: MemorySectionProps) {
-  const { accentValue } = useAccentColor();
   const summary = summarizeLearningCandidates(learningCandidates);
-  const notificationColor = summary.needsAction > 0 ? colors.status.warning : colors.status.success;
-  const notification =
+  const laneLine = laneSummary(summary);
+  const learningLine =
     summary.needsAction > 0
       ? `${summary.proposed} review · ${summary.readyToApply} apply`
       : summary.active > 0
-        ? `${summary.active} active · clean`
+        ? `${summary.active} active`
         : "clean";
-  const laneLine = laneSummary(summary);
 
   return (
     <box flexDirection="column">
       <SectionHeader label="MEMORY" />
-      {stats && (
-        <text>
-          <span fg={S()}>{formatCount(stats.fact_count)}</span>
-          <span fg={D()}> facts · </span>
-          <span fg={S()}>{formatCount(stats.observation_count)}</span>
-          <span fg={D()}> patterns</span>
-        </text>
-      )}
-      <text>
-        <span fg={summary.needsAction > 0 ? accentValue : notificationColor}>learn </span>
-        <span fg={summary.needsAction > 0 ? colors.text.secondary : D()}>
-          {truncateText(notification, Math.max(8, width - 6))}
-        </span>
-      </text>
+      {stats && <MemoryRow label="facts" value={formatCount(stats.fact_count)} width={width} />}
+      {stats && <MemoryRow label="patterns" value={formatCount(stats.observation_count)} width={width} />}
+      <MemoryRow
+        label="learning"
+        value={learningLine}
+        width={width}
+        valueColor={summary.needsAction > 0 ? colors.status.warning : S()}
+      />
       {laneLine && (
-        <text>
-          <span fg={D()}>{truncateText(laneLine, width)}</span>
-        </text>
+        <MemoryRow label="lanes" value={laneLine} width={width} valueColor={D()} />
       )}
     </box>
   );
