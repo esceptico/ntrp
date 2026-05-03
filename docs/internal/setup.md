@@ -15,11 +15,11 @@ bun install -g ntrp-cli # or: npx ntrp-cli
 
 ## Quick Start
 
-Create `~/.ntrp/.env` with at least one LLM provider key and the model variables, or connect OpenAI Codex with browser sign-in from the TUI. See [.env.example](../.env.example) for all options.
+Create `~/.ntrp/.env` or repo-root `.env` with at least one LLM provider key and the model variables, or connect OpenAI Codex with browser sign-in from the TUI. See [.env.example](../../.env.example) for all options.
 
 ```bash
 mkdir -p ~/.ntrp
-cp .env.example ~/.ntrp/.env   # if developing from source
+cp .env.example .env   # if developing from source
 # or create ~/.ntrp/.env manually with your keys
 ```
 
@@ -198,6 +198,8 @@ Compaction unloads deferred tools so a long session does not keep carrying stale
 cp .env.example .env   # configure your keys
 docker compose up -d
 ```
+
+The Compose file stays at the repo root because it owns root `.env` interpolation and service orchestration. The backend image definition lives at `apps/server/Dockerfile`.
 
 Data (sessions, memory, search index) is persisted in the `ntrp-data` volume, mapped to `~/.ntrp` inside the container. The server runs as a non-root user and is available at `http://localhost:6877` (or `NTRP_PORT`).
 

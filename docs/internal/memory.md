@@ -131,7 +131,7 @@ SQLite with WAL mode. Vector search via `sqlite-vec` (cosine distance). Full-tex
 ## File Map
 
 ```
-ntrp/memory/
+apps/server/ntrp/memory/
   facts.py              FactMemory: main interface, consolidation loop
   consolidation.py      per-fact LLM consolidation into observations
   temporal.py           temporal pattern detection pass

@@ -1,8 +1,6 @@
 # ntrp
 
-**ntrp** is entropy – the measure of disorder in a system. Your calendar, emails, memory, half-remembered conversations – it all accumulates. This project exists to reduce it.
-
-I built this for myself. ADHD and scattered attention meant I kept losing track of things (e.g. what I said, what I planned, what I was supposed to follow up on). So I made an assistant that hooks into my stuff and actually remembers.
+**ntrp** is entropy - the measure of disorder in a system. Your calendar, emails, memory, half-remembered conversations - it all accumulates. This project exists to reduce it.
 
 ![ntrp terminal UI](docs/internal/images/main.png)
 
@@ -29,15 +27,35 @@ ntrp                # terminal UI (separate terminal) – paste the key on first
 
 Full setup guide, integrations, and API reference at **[docs.ntrp.io](https://docs.ntrp.io)**.
 
+## Common Commands
+
+This repo uses [`just`](https://github.com/casey/just) as a thin task router:
+
+```bash
+just              # list recipes
+just install      # install server, TUI, and desktop deps
+just server       # run backend from apps/server
+just tui          # run terminal UI
+just desktop      # run desktop client
+just check        # run backend + client checks
+```
+
+## Repo Layout
+
+- `apps/server` - self-contained uv project with backend package, tests, builtin skills, `pyproject.toml`, `uv.lock`, and Dockerfile.
+- `apps/tui` - Bun/OpenTUI terminal client published as `ntrp-cli`.
+- `apps/desktop` - Electron desktop client.
+- `docs` - public docs and internal notes.
+
 ## Releasing
 
 ```bash
-./release patch   # 0.5.2 → 0.5.3
-./release minor   # 0.5.2 → 0.6.0
-./release major   # 0.5.2 → 1.0.0
+./release patch    # 0.5.2 → 0.5.3
+./release minor    # 0.5.2 → 0.6.0
+./release major    # 0.5.2 → 1.0.0
 ./release rc minor # 0.5.2 → 0.6.0-rc.1
-./release rc      # 0.6.0-rc.1 → 0.6.0-rc.2
-./release final   # 0.6.0-rc.2 → 0.6.0
+./release rc       # 0.6.0-rc.1 → 0.6.0-rc.2
+./release final    # 0.6.0-rc.2 → 0.6.0
 ```
 
 Bumps version, creates a PR, merges, tags, and publishes a GitHub release. PyPI and npm packages are published automatically via CI. Release candidates are marked as GitHub prereleases and published to npm under the `rc` dist-tag.

@@ -50,11 +50,20 @@ trap 'git checkout main 2>/dev/null' EXIT
 git checkout main
 git pull origin main
 
-CURRENT=$(grep -m1 '^version' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
-UI_CURRENT=$(grep -m1 '"version":' ntrp-ui/package.json | sed 's/.*"version": "\(.*\)",/\1/')
+SERVER_PACKAGE="apps/server/pyproject.toml"
+UI_PACKAGE="apps/tui/package.json"
+DESKTOP_PACKAGE="apps/desktop/package.json"
+CURRENT=$(grep -m1 '^version' "$SERVER_PACKAGE" | sed 's/version = "\(.*\)"/\1/')
+UI_CURRENT=$(grep -m1 '"version":' "$UI_PACKAGE" | sed 's/.*"version": "\(.*\)",/\1/')
+DESKTOP_CURRENT=$(grep -m1 '"version":' "$DESKTOP_PACKAGE" | sed 's/.*"version": "\(.*\)",/\1/')
 
 if [[ "$CURRENT" != "$UI_CURRENT" ]]; then
-  echo "Error: pyproject.toml version ($CURRENT) does not match ntrp-ui/package.json version ($UI_CURRENT)"
+  echo "Error: ${SERVER_PACKAGE} version ($CURRENT) does not match ${UI_PACKAGE} version ($UI_CURRENT)"
+  exit 1
+fi
+
+if [[ "$CURRENT" != "$DESKTOP_CURRENT" ]]; then
+  echo "Error: ${SERVER_PACKAGE} version ($CURRENT) does not match ${DESKTOP_PACKAGE} version ($DESKTOP_CURRENT)"
   exit 1
 fi
 
@@ -108,10 +117,11 @@ echo "Releasing ${CURRENT} → ${NEXT}"
 
 # Branch, bump, commit, push
 git checkout -b "$BRANCH"
-sed -i '' "s/version = \"${CURRENT}\"/version = \"${NEXT}\"/" pyproject.toml
-sed -i '' "s/\"version\": \"${CURRENT}\"/\"version\": \"${NEXT}\"/" ntrp-ui/package.json
-uv lock
-git add pyproject.toml ntrp-ui/package.json uv.lock
+sed -i '' "s/version = \"${CURRENT}\"/version = \"${NEXT}\"/" "$SERVER_PACKAGE"
+sed -i '' "s/\"version\": \"${CURRENT}\"/\"version\": \"${NEXT}\"/" "$UI_PACKAGE"
+sed -i '' "s/\"version\": \"${CURRENT}\"/\"version\": \"${NEXT}\"/" "$DESKTOP_PACKAGE"
+(cd apps/server && uv lock)
+git add "$SERVER_PACKAGE" "$UI_PACKAGE" "$DESKTOP_PACKAGE" apps/server/uv.lock
 git commit -m "bump to ${NEXT}"
 git push -u origin "$BRANCH"
 

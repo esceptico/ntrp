@@ -8,7 +8,7 @@ description: "Reference for all environment variables and settings."
 ntrp resolves configuration in this order (highest priority first):
 
 1. **Environment variables** — `NTRP_*` prefix or standard provider key names
-2. **`.env` files** — loaded from `~/.ntrp/.env` and `./.env` (project directory)
+2. **`.env` files** — loaded from `~/.ntrp/.env` and `./.env` when developing from source or running Docker Compose
 3. **Settings file** — `~/.ntrp/settings.json` (persisted via TUI settings)
 4. **Auto-detection** — models resolved from available provider keys
 

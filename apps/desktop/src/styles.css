@@ -1,0 +1,292 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  background: #0d0f10;
+  color: #d5d0c8;
+  font-size: 15px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 980px;
+  min-height: 660px;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(50, 94, 140, 0.16), transparent 24rem),
+    #0d0f10;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+#app {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  width: 100vw;
+  height: 100vh;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 28px 18px 18px;
+  border-right: 1px solid #313131;
+  background: rgba(16, 17, 17, 0.92);
+}
+
+.brand,
+.section-title,
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.brand strong {
+  color: #4f9cff;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.brand span,
+small,
+label,
+p {
+  color: #706f6c;
+}
+
+.status {
+  color: #d9793f;
+}
+
+.status.ok {
+  color: #58b99d;
+}
+
+.connection {
+  display: grid;
+  gap: 8px;
+}
+
+label,
+.section-title {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8f8b84;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid #2d2d2b;
+  outline: none;
+  color: #eee8df;
+  background: #171817;
+}
+
+input {
+  height: 34px;
+  padding: 0 10px;
+}
+
+input:focus,
+textarea:focus {
+  border-color: #4f9cff;
+}
+
+.connection button,
+.composer button,
+.section-title button {
+  min-height: 34px;
+  padding: 0 12px;
+  color: #111;
+  background: #d9793f;
+}
+
+.error {
+  margin: 4px 0 0;
+  color: #ff655d;
+}
+
+.session-list {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.session {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 9px 10px;
+  text-align: left;
+  border-left: 2px solid transparent;
+}
+
+.session:hover,
+.session.active {
+  background: #191a19;
+}
+
+.session.active {
+  border-left-color: #d9793f;
+}
+
+.session span,
+.session small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+header {
+  min-height: 78px;
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid #272827;
+}
+
+h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+header p {
+  margin: 5px 0 0;
+  max-width: 60vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-state {
+  color: #8f8b84;
+}
+
+.pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #58b99d;
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+.messages {
+  min-height: 0;
+  overflow: auto;
+  padding: 22px 28px 34px;
+}
+
+.message {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr);
+  gap: 18px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.035);
+}
+
+.message-role {
+  color: #8f8b84;
+  text-transform: lowercase;
+}
+
+.message.user .message-role {
+  color: #d9793f;
+}
+
+.message.assistant .message-role {
+  color: #4f9cff;
+}
+
+.message.reasoning .message-role {
+  color: #58b99d;
+}
+
+.message.tool .message-role {
+  color: #b7a36a;
+}
+
+.message.error .message-role,
+.message.error .message-body {
+  color: #ff655d;
+}
+
+.message.status .message-role {
+  color: #706f6c;
+}
+
+.message-body {
+  min-width: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  color: #d5d0c8;
+}
+
+.message.reasoning .message-body,
+.message.tool .message-body,
+.message.status .message-body {
+  color: #96928c;
+}
+
+.composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 16px 18px 18px;
+  border-top: 1px solid #272827;
+  background: rgba(13, 15, 16, 0.95);
+}
+
+textarea {
+  min-height: 48px;
+  max-height: 180px;
+  resize: vertical;
+  padding: 13px 14px;
+  line-height: 1.45;
+}
+
+.composer button {
+  width: 86px;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}

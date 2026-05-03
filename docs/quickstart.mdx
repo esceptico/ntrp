@@ -22,8 +22,8 @@ description: "Get ntrp running in 5 minutes."
     ```bash
     git clone https://github.com/esceptico/ntrp.git
     cd ntrp
-    uv sync                              # Python backend
-    cd ntrp-ui && bun install && cd ..   # TUI client
+    cd apps/server && uv sync && cd ../..  # Python backend
+    cd apps/tui && bun install && cd ../.. # TUI client
     ```
   </Tab>
 </Tabs>
@@ -50,6 +50,7 @@ If you want to use an OpenAI subscription/account instead of an API key, skip th
 <Tabs>
   <Tab title="From source">
     ```bash
+    cd apps/server
     uv run ntrp-server serve
     ```
   </Tab>
@@ -81,7 +82,7 @@ In a separate terminal:
   </Tab>
   <Tab title="From source">
     ```bash
-    cd ntrp-ui
+    cd apps/tui
     bun run start
     ```
   </Tab>

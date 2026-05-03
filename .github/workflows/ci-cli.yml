@@ -1,29 +1,52 @@
-name: CI CLI
+name: CI Clients
 
 on:
   push:
     branches: [main]
     paths:
-      - "ntrp-ui/**"
+      - "apps/tui/**"
+      - "apps/desktop/**"
   pull_request:
     branches: [main]
     paths:
-      - "ntrp-ui/**"
+      - "apps/tui/**"
+      - "apps/desktop/**"
 
 jobs:
-  build:
+  tui-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version-file: ntrp-ui/package.json
+          bun-version-file: apps/tui/package.json
 
       - name: Install dependencies
-        working-directory: ntrp-ui
+        working-directory: apps/tui
         run: bun install --frozen-lockfile
 
       - name: Build
-        working-directory: ntrp-ui
+        working-directory: apps/tui
+        run: bun run build
+
+  desktop-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: apps/desktop/package.json
+
+      - name: Install dependencies
+        working-directory: apps/desktop
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: apps/desktop
+        run: bun run typecheck
+
+      - name: Build
+        working-directory: apps/desktop
         run: bun run build

@@ -2,7 +2,7 @@ services:
   ntrp-backend:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: apps/server/Dockerfile
     container_name: ntrp-backend
     restart: unless-stopped
     ports:

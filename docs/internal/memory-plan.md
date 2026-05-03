@@ -2,7 +2,7 @@
 
 Date: 2026-05-01
 
-This plan follows from the live DB review of `~/.ntrp/memory.db` and the current `ntrp/memory` implementation.
+This plan follows from the live DB review of `~/.ntrp/memory.db` and the current `apps/server/ntrp/memory` implementation.
 
 ## Baseline
 
@@ -1738,13 +1738,13 @@ recall: facts can be found even when no observation is good
 ntrp:
 
 ```text
-ntrp/memory/facts.py
-ntrp/memory/retrieval.py
-ntrp/memory/consolidation.py
-ntrp/memory/consolidation_runner.py
-ntrp/memory/store/base.py
-ntrp/memory/store/observations.py
-ntrp/memory/chat_extraction.py
+apps/server/ntrp/memory/facts.py
+apps/server/ntrp/memory/retrieval.py
+apps/server/ntrp/memory/consolidation.py
+apps/server/ntrp/memory/consolidation_runner.py
+apps/server/ntrp/memory/store/base.py
+apps/server/ntrp/memory/store/observations.py
+apps/server/ntrp/memory/chat_extraction.py
 ```
 
 Dex prefetch:

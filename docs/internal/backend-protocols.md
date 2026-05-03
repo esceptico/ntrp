@@ -46,9 +46,9 @@ Shutdown is the reverse ownership order: active runs are cancelled, monitor/outb
 
 Source files:
 
-- `ntrp/server/bus.py`
-- `ntrp/server/routers/chat.py`
-- `ntrp/services/chat.py`
+- `apps/server/ntrp/server/bus.py`
+- `apps/server/ntrp/server/routers/chat.py`
+- `apps/server/ntrp/services/chat.py`
 
 The session stream exists only to deliver live UI events to connected clients. It is not a backend event bus.
 
@@ -87,9 +87,9 @@ Use this for live UI updates only. Do not attach domain side effects to this pat
 
 Source files:
 
-- `ntrp/automation/scheduler.py`
-- `ntrp/server/routers/automation.py`
-- `ntrp/server/bus.py`
+- `apps/server/ntrp/automation/scheduler.py`
+- `apps/server/ntrp/server/routers/automation.py`
+- `apps/server/ntrp/server/bus.py`
 
 Automation progress uses the same queue primitive as chat streaming, but with the shared key `automation:events`.
 
@@ -113,11 +113,11 @@ If the stream fails, the automation still runs and final state is persisted thro
 
 Source files:
 
-- `ntrp/outbox/store.py`
-- `ntrp/outbox/worker.py`
-- `ntrp/outbox/events.py`
-- `ntrp/server/runtime/outbox.py`
-- `ntrp/server/runtime/automation.py`
+- `apps/server/ntrp/outbox/store.py`
+- `apps/server/ntrp/outbox/worker.py`
+- `apps/server/ntrp/outbox/events.py`
+- `apps/server/ntrp/server/runtime/outbox.py`
+- `apps/server/ntrp/server/runtime/automation.py`
 
 The outbox owns side effects that should survive a process crash or should not run inline with the producer.
 
@@ -146,7 +146,7 @@ Operational endpoints:
 - `POST /outbox/dead/replay`: moves explicit dead row IDs back to `pending`.
 - `DELETE /outbox/completed`: deletes old completed rows with an age cutoff and limit.
 
-These endpoints live in `ntrp/server/routers/ops.py`.
+These endpoints live in `apps/server/ntrp/server/routers/ops.py`.
 
 Retention:
 
@@ -171,10 +171,10 @@ Use the outbox when a side effect crosses subsystem boundaries and losing it wou
 
 Source files:
 
-- `ntrp/automation/scheduler.py`
-- `ntrp/automation/store.py`
-- `ntrp/automation/triggers.py`
-- `ntrp/automation/builtins.py`
+- `apps/server/ntrp/automation/scheduler.py`
+- `apps/server/ntrp/automation/store.py`
+- `apps/server/ntrp/automation/triggers.py`
+- `apps/server/ntrp/automation/builtins.py`
 
 The scheduler owns automation execution and trigger state. It is not a pub/sub fan-out service; it evaluates triggers against its store and starts automation work.
 
@@ -203,15 +203,15 @@ Operational endpoint:
 
 - `GET /scheduler/status`: scheduler liveness, registered built-in handlers, running task count, automation task summary, event queue summary, count trigger state count, and pending chat extraction count.
 
-This endpoint lives in `ntrp/server/routers/ops.py`.
+This endpoint lives in `apps/server/ntrp/server/routers/ops.py`.
 
 ## Monitor events
 
 Source files:
 
-- `ntrp/monitor/service.py`
-- `ntrp/monitor/calendar.py`
-- `ntrp/server/runtime/automation.py`
+- `apps/server/ntrp/monitor/service.py`
+- `apps/server/ntrp/monitor/calendar.py`
+- `apps/server/ntrp/server/runtime/automation.py`
 
 Monitor providers do not publish to a bus. Runtime wires them directly into the scheduler:
 

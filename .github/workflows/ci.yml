@@ -4,15 +4,11 @@ on:
   push:
     branches: [main]
     paths:
-      - "ntrp/**"
-      - "tests/**"
-      - "pyproject.toml"
+      - "apps/server/**"
   pull_request:
     branches: [main]
     paths:
-      - "ntrp/**"
-      - "tests/**"
-      - "pyproject.toml"
+      - "apps/server/**"
 
 jobs:
   lint:
@@ -27,12 +23,15 @@ jobs:
         run: uv python install 3.13
 
       - name: Install dependencies
+        working-directory: apps/server
         run: uv sync --extra dev
 
       - name: Run ruff check
+        working-directory: apps/server
         run: uv run ruff check .
 
       - name: Run ruff format check
+        working-directory: apps/server
         run: uv run ruff format --check .
 
   test:
@@ -47,7 +46,9 @@ jobs:
         run: uv python install 3.13
 
       - name: Install dependencies
+        working-directory: apps/server
         run: uv sync --extra dev
 
       - name: Run tests
+        working-directory: apps/server
         run: uv run pytest tests/ -v
