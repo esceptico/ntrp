@@ -1,0 +1,169 @@
+import { create } from "zustand";
+import {
+  type AppConfig,
+  type SessionListItem,
+  DEFAULT_CONFIG,
+} from "./api";
+
+export type Role = "user" | "assistant" | "reasoning" | "tool" | "status" | "error";
+
+export interface UiMessage {
+  id: string;
+  role: Role;
+  title?: string;
+  subtitle?: string;
+  content: string;
+}
+
+export interface SessionUsage {
+  lastPrompt: number;
+  totalTokens: number;
+  totalCost: number;
+}
+
+interface State {
+  config: AppConfig;
+  sessions: SessionListItem[];
+  currentSessionId: string | null;
+  messages: Map<string, UiMessage>;
+  order: string[];
+  connected: boolean;
+  running: boolean;
+  error: string | null;
+  draft: string;
+  settingsOpen: boolean;
+  connectionDraft: AppConfig;
+  connectionError: string | null;
+  connectionSaving: boolean;
+  usage: SessionUsage;
+  editingId: string | null;
+}
+
+interface Actions {
+  setConfig: (config: AppConfig) => void;
+  setSessions: (sessions: SessionListItem[]) => void;
+  prependSession: (session: SessionListItem) => void;
+  setCurrentSession: (sessionId: string | null) => void;
+  setHistory: (messages: UiMessage[]) => void;
+  appendMessage: (message: UiMessage) => void;
+  mutateMessage: (id: string, patch: Partial<UiMessage>) => void;
+  truncateFrom: (id: string) => void;
+  setConnected: (connected: boolean) => void;
+  setRunning: (running: boolean) => void;
+  setError: (error: string | null) => void;
+  setDraft: (draft: string) => void;
+  setEditingId: (id: string | null) => void;
+  resetUsage: () => void;
+  accumulateUsage: (usage: { prompt: number; completion: number; cost: number }) => void;
+  openSettings: () => void;
+  closeSettings: () => void;
+  setConnectionDraft: (patch: Partial<AppConfig>) => void;
+  setConnectionError: (error: string | null) => void;
+  setConnectionSaving: (saving: boolean) => void;
+}
+
+const initialUsage: SessionUsage = { lastPrompt: 0, totalTokens: 0, totalCost: 0 };
+
+export const useStore = create<State & Actions>((set) => ({
+  config: { ...DEFAULT_CONFIG },
+  sessions: [],
+  currentSessionId: null,
+  messages: new Map(),
+  order: [],
+  connected: false,
+  running: false,
+  error: null,
+  draft: "",
+  settingsOpen: false,
+  connectionDraft: { ...DEFAULT_CONFIG },
+  connectionError: null,
+  connectionSaving: false,
+  usage: initialUsage,
+  editingId: null,
+
+  setConfig: (config) => set({ config, connectionDraft: { ...config } }),
+  setSessions: (sessions) => set({ sessions }),
+  prependSession: (session) => set((s) => ({ sessions: [session, ...s.sessions] })),
+  setCurrentSession: (currentSessionId) =>
+    set({
+      currentSessionId,
+      messages: new Map(),
+      order: [],
+      usage: initialUsage,
+      editingId: null,
+    }),
+
+  setHistory: (messages) => {
+    const map = new Map<string, UiMessage>();
+    const order: string[] = [];
+    for (const m of messages) {
+      map.set(m.id, m);
+      order.push(m.id);
+    }
+    set({ messages: map, order });
+  },
+
+  appendMessage: (message) =>
+    set((s) => {
+      const messages = new Map(s.messages);
+      messages.set(message.id, message);
+      return { messages, order: [...s.order, message.id] };
+    }),
+
+  mutateMessage: (id, patch) =>
+    set((s) => {
+      const existing = s.messages.get(id);
+      if (!existing) return s;
+      const messages = new Map(s.messages);
+      messages.set(id, { ...existing, ...patch });
+      return { messages };
+    }),
+
+  truncateFrom: (id) =>
+    set((s) => {
+      const idx = s.order.indexOf(id);
+      if (idx < 0) return s;
+      const keep = s.order.slice(0, idx);
+      const messages = new Map<string, UiMessage>();
+      for (const k of keep) {
+        const m = s.messages.get(k);
+        if (m) messages.set(k, m);
+      }
+      return { messages, order: keep };
+    }),
+
+  setConnected: (connected) => set({ connected }),
+  setRunning: (running) => set({ running }),
+  setError: (error) => set({ error }),
+  setDraft: (draft) => set({ draft }),
+  setEditingId: (editingId) => set({ editingId }),
+  resetUsage: () => set({ usage: initialUsage }),
+  accumulateUsage: ({ prompt, completion, cost }) =>
+    set((s) => ({
+      usage: {
+        lastPrompt: prompt,
+        totalTokens: s.usage.totalTokens + prompt + completion,
+        totalCost: s.usage.totalCost + cost,
+      },
+    })),
+
+  openSettings: () =>
+    set((s) => ({
+      settingsOpen: true,
+      connectionDraft: { ...s.config },
+      connectionError: null,
+    })),
+  closeSettings: () =>
+    set((s) => {
+      if (s.connectionSaving) return s;
+      return { settingsOpen: false, connectionError: null };
+    }),
+  setConnectionDraft: (patch) =>
+    set((s) => ({ connectionDraft: { ...s.connectionDraft, ...patch } })),
+  setConnectionError: (connectionError) => set({ connectionError }),
+  setConnectionSaving: (connectionSaving) => set({ connectionSaving }),
+}));
+
+// Helpers for use outside React (e.g. inside event-stream handlers).
+export const getState = useStore.getState;
+export const setState = useStore.setState;
