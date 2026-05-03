@@ -15,6 +15,7 @@ async def list_skills(svc: SkillService = Depends(require_skill_service)):
                 "name": m.name,
                 "description": m.description,
                 "location": m.location,
+                "path": str(m.path / "SKILL.md"),
             }
             for m in svc.list_all()
         ],

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   type AppConfig,
   type SessionListItem,
+  type SkillDescriptor,
   DEFAULT_CONFIG,
 } from "./api";
 
@@ -72,6 +73,10 @@ interface State {
   activeActivityId: string | null;
   currentRunId: string | null;
   skipApprovals: boolean;
+  skills: SkillDescriptor[];
+  commandPickerOpen: boolean;
+  commandPickerIndex: number;
+  selectedSkill: SkillDescriptor | null;
 }
 
 interface Actions {
@@ -101,6 +106,10 @@ interface Actions {
   setCurrentRunId: (runId: string | null) => void;
   setSkipApprovals: (skip: boolean) => void;
   setApprovalStatus: (id: string, status: ApprovalStatus) => void;
+  setSkills: (skills: SkillDescriptor[]) => void;
+  setCommandPickerOpen: (open: boolean) => void;
+  setCommandPickerIndex: (index: number) => void;
+  setSelectedSkill: (skill: SkillDescriptor | null) => void;
 }
 
 const initialUsage: SessionUsage = { lastPrompt: 0, totalTokens: 0, totalCost: 0 };
@@ -124,6 +133,10 @@ export const useStore = create<State & Actions>((set) => ({
   activeActivityId: null,
   currentRunId: null,
   skipApprovals: false,
+  skills: [],
+  commandPickerOpen: false,
+  commandPickerIndex: 0,
+  selectedSkill: null,
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
   setSessions: (sessions) => set({ sessions }),
@@ -250,6 +263,11 @@ export const useStore = create<State & Actions>((set) => ({
       messages.set(id, { ...existing, approval: { ...existing.approval, status } });
       return { messages };
     }),
+
+  setSkills: (skills) => set({ skills }),
+  setCommandPickerOpen: (commandPickerOpen) => set({ commandPickerOpen, commandPickerIndex: 0 }),
+  setCommandPickerIndex: (commandPickerIndex) => set({ commandPickerIndex }),
+  setSelectedSkill: (selectedSkill) => set({ selectedSkill }),
 }));
 
 // Helpers for use outside React (e.g. inside event-stream handlers).

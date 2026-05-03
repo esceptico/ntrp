@@ -235,3 +235,17 @@ export async function submitToolResult(
     body: JSON.stringify(payload),
   });
 }
+
+export interface SkillDescriptor {
+  name: string;
+  description: string;
+  /** Where the skill came from: "builtin", "user", "global", "project". */
+  location?: string;
+  /** Absolute filesystem path to the SKILL.md file (when available). */
+  path?: string;
+}
+
+export async function listSkills(config: AppConfig): Promise<SkillDescriptor[]> {
+  const { skills } = await apiWithConfig<{ skills: SkillDescriptor[] }>(config, "/skills");
+  return skills ?? [];
+}

@@ -18,4 +18,7 @@ contextBridge.exposeInMainWorld("ntrpDesktop", {
       return () => ipcRenderer.off("events:data", listener);
     },
   },
+  shell: {
+    openPath: path => ipcRenderer.invoke("shell:open-path", path),
+  },
 });

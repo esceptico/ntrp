@@ -31,5 +31,10 @@ interface Window {
         }) => void,
       ) => () => void;
     };
+    shell: {
+      /** Opens a file or directory in the OS default application. Resolves
+       *  to "" on success, an error message otherwise. */
+      openPath: (path: string) => Promise<string>;
+    };
   };
 }

@@ -1,8 +1,24 @@
-import { useEffect, useRef } from "react";
-import { ArrowUp, ShieldOff, ShieldCheck, X } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
+import { ArrowUp, ShieldOff, ShieldCheck, Sparkles, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
-import { sendMessage } from "../actions";
+import { isBuiltin, runBuiltinCommand, sendMessage } from "../actions";
+import {
+  CommandPicker,
+  filterCommands,
+  useCommandList,
+  type CommandEntry,
+} from "./CommandPicker";
+
+/** Returns the slash-prefix at the start of `text` if it currently looks like
+ *  a command being composed (no space between the slash and the cursor). */
+function pickerQuery(text: string): string | null {
+  if (!text.startsWith("/")) return null;
+  // Picker stays open while the user is typing the command name (no space yet).
+  const head = text.slice(1);
+  if (head.includes(" ") || head.includes("\n")) return null;
+  return head;
+}
 
 function formatTokens(n: number): string {
   if (n < 1000) return `${n}`;
@@ -48,24 +64,111 @@ export function Composer() {
   const setEditingId = useStore((s) => s.setEditingId);
   const skipApprovals = useStore((s) => s.skipApprovals);
   const setSkipApprovals = useStore((s) => s.setSkipApprovals);
+  const pickerOpen = useStore((s) => s.commandPickerOpen);
+  const pickerIndex = useStore((s) => s.commandPickerIndex);
+  const setPickerOpen = useStore((s) => s.setCommandPickerOpen);
+  const setPickerIndex = useStore((s) => s.setCommandPickerIndex);
+  const skills = useStore((s) => s.skills);
+  const selectedSkill = useStore((s) => s.selectedSkill);
+  const setSelectedSkill = useStore((s) => s.setSelectedSkill);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const query = useMemo(() => pickerQuery(draft), [draft]);
+  const allCommands = useCommandList();
+  const filteredCommands = useMemo(
+    () => (query !== null ? filterCommands(allCommands, query) : []),
+    [allCommands, query],
+  );
+
+  // Track the query for which the user explicitly dismissed the picker (via
+  // Escape). The auto-open effect honors this until the query changes.
+  const dismissedQueryRef = useRef<string | null>(null);
+
+  // Keep picker open state in sync with the textarea contents.
+  useEffect(() => {
+    if (query === null) {
+      dismissedQueryRef.current = null;
+      if (pickerOpen) setPickerOpen(false);
+      return;
+    }
+    if (query === dismissedQueryRef.current) {
+      if (pickerOpen) setPickerOpen(false);
+      return;
+    }
+    if (filteredCommands.length === 0) {
+      if (pickerOpen) setPickerOpen(false);
+      return;
+    }
+    if (!pickerOpen) setPickerOpen(true);
+  }, [query, filteredCommands.length, pickerOpen, setPickerOpen]);
+
   const hasDraft = draft.trim().length > 0;
-  const disabled = running || !connected || !hasDraft;
+  // With a skill attached, the user can submit even with an empty draft
+  // (the skill body alone is the full request).
+  const disabled = running || !connected || (!hasDraft && !selectedSkill);
 
   useEffect(() => {
     if (inputRef.current) resize(inputRef.current);
   }, [draft]);
 
-  function submit() {
-    const text = draft;
-    if (!text.trim()) return;
+  function dispatchCommand(text: string): boolean {
+    // If the text is a slash-command, route it. Returns true if handled.
+    if (!text.startsWith("/")) return false;
+    const [head, ...rest] = text.slice(1).split(" ");
+    const args = rest.join(" ").trim();
+    if (isBuiltin(head)) {
+      void runBuiltinCommand(head, args);
+      return true;
+    }
+    return false; // skill or unknown — let sendMessage forward to server
+  }
+
+  function applyPickerSelection(entry: CommandEntry) {
+    setPickerOpen(false);
     setDraft("");
     if (inputRef.current) {
       inputRef.current.value = "";
       resize(inputRef.current);
     }
-    void sendMessage(text);
+
+    if (entry.kind === "builtin") {
+      // Builtins fire-and-forget.
+      void runBuiltinCommand(entry.name, "");
+      return;
+    }
+
+    // Skills attach as a pill above the textarea so the user can type a
+    // prompt under the skill before sending. Submit assembles
+    // `/<skill-name> <prompt>` and the server's expand_skill_command does
+    // the substitution.
+    const skill = skills.find((s) => s.name === entry.name);
+    if (skill) setSelectedSkill(skill);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
+  function submit() {
+    const text = draft;
+    const skill = selectedSkill;
+    if (!text.trim() && !skill) return;
+
+    setDraft("");
+    setSelectedSkill(null);
+    if (inputRef.current) {
+      inputRef.current.value = "";
+      resize(inputRef.current);
+    }
+    setPickerOpen(false);
+
+    // Pure builtin (no skill attached) — route to the dispatcher.
+    if (!skill && dispatchCommand(text)) return;
+
+    const trimmed = text.trim();
+    const fullText = skill
+      ? trimmed.length > 0
+        ? `/${skill.name} ${trimmed}`
+        : `/${skill.name}`
+      : text;
+    void sendMessage(fullText);
   }
 
   function cancelEdit() {
@@ -84,8 +187,37 @@ export function Composer() {
           e.preventDefault();
           submit();
         }}
-        className="composer-card max-w-[760px] mx-auto flex flex-col border border-line rounded-[14px] bg-surface focus-within:border-line-strong transition-colors"
+        className="composer-card relative max-w-[760px] mx-auto flex flex-col border border-line rounded-[14px] bg-surface focus-within:border-line-strong transition-colors"
       >
+        {pickerOpen && query !== null && (
+          <CommandPicker query={query} onSelect={applyPickerSelection} />
+        )}
+        {selectedSkill && (
+          <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedSkill.path) {
+                  void window.ntrpDesktop?.shell?.openPath(selectedSkill.path);
+                }
+              }}
+              title={selectedSkill.path ?? selectedSkill.name}
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-sunken/80 border border-line-soft text-[11.5px] font-medium text-ink-soft hover:bg-surface-soft hover:border-line transition-colors"
+            >
+              <Sparkles size={11} strokeWidth={2} className="text-accent" />
+              <span className="capitalize">{selectedSkill.name.replace(/[_-]/g, " ")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedSkill(null)}
+              className="grid place-items-center w-5 h-5 rounded-md text-faint hover:bg-surface-soft hover:text-ink transition-colors"
+              title="Detach skill"
+              aria-label="Detach skill"
+            >
+              <X size={11} strokeWidth={2} />
+            </button>
+          </div>
+        )}
         {editingId && (
           <div className="flex items-center gap-2 px-3 py-1.5 border-b border-line-soft text-[11.5px] text-accent-strong bg-accent-soft/40 rounded-t-[14px]">
             <span>Editing previous message — pressing send will replace it.</span>
@@ -106,6 +238,47 @@ export function Composer() {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
+            // Backspace on empty draft + attached skill → detach the skill.
+            if (
+              e.key === "Backspace" &&
+              !pickerOpen &&
+              selectedSkill &&
+              draft.length === 0
+            ) {
+              e.preventDefault();
+              setSelectedSkill(null);
+              return;
+            }
+            if (pickerOpen && filteredCommands.length > 0) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setPickerIndex((pickerIndex + 1) % filteredCommands.length);
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setPickerIndex(
+                  (pickerIndex - 1 + filteredCommands.length) % filteredCommands.length,
+                );
+                return;
+              }
+              if (e.key === "Tab") {
+                e.preventDefault();
+                applyPickerSelection(filteredCommands[pickerIndex]);
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                dismissedQueryRef.current = query;
+                setPickerOpen(false);
+                return;
+              }
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                applyPickerSelection(filteredCommands[pickerIndex]);
+                return;
+              }
+            }
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               submit();

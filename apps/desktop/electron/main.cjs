@@ -289,6 +289,12 @@ app.whenReady().then(() => {
     eventStreams.get(connectionId)?.abort();
     eventStreams.delete(connectionId);
   });
+  ipcMain.handle("shell:open-path", async (event, targetPath) => {
+    assertTrustedSender(event);
+    if (typeof targetPath !== "string" || targetPath.length === 0) return "Invalid path";
+    // shell.openPath returns "" on success, an error string otherwise.
+    return shell.openPath(targetPath);
+  });
 
   createWindow();
 

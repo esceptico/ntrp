@@ -1,11 +1,12 @@
 import { memo, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Brain, Check, ChevronDown, Copy, Pencil, Terminal } from "lucide-react";
+import { Brain, Check, ChevronDown, Copy, Pencil, Sparkles, Terminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type UiMessage } from "../store";
 import { renderMarkdown, escapeHtml } from "../markdown";
 import { ActivityHeader, ActivityTail, ActivityTrace } from "./trace/ActivityTrace";
 import { ApprovalCard } from "./ApprovalCard";
+import type { SkillDescriptor } from "../api";
 
 const EASE = [0.32, 0.72, 0, 1] as const;
 
@@ -92,16 +93,70 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
   );
 }
 
+/** Match a leading `/skill-name` token in user content; return the skill
+ *  descriptor + the remaining text (the user's actual prompt) if the token
+ *  matches a known skill. Returns null otherwise. */
+function detectSkillPrefix(
+  content: string,
+  skills: SkillDescriptor[],
+): { skill: SkillDescriptor; rest: string } | null {
+  if (!content.startsWith("/")) return null;
+  const match = content.match(/^\/([\w-]+)\s*([\s\S]*)$/);
+  if (!match) return null;
+  const [, name, rest = ""] = match;
+  const skill = skills.find((s) => s.name === name);
+  if (!skill) return null;
+  return { skill, rest: rest.trimStart() };
+}
+
+function SkillChip({ skill }: { skill: SkillDescriptor }) {
+  const onClick = () => {
+    if (!skill.path) return;
+    void window.ntrpDesktop?.shell?.openPath(skill.path);
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={skill.path ?? skill.name}
+      disabled={!skill.path}
+      className={clsx(
+        "inline-flex items-center gap-1.5 mt-1 px-2 py-1 rounded-md bg-surface-sunken/80 border border-line-soft",
+        "text-[11.5px] font-medium text-ink-soft transition-colors",
+        skill.path && "hover:bg-surface-soft hover:border-line cursor-pointer",
+      )}
+    >
+      <Sparkles size={11} strokeWidth={2} className="text-accent" />
+      <span className="capitalize">{skill.name.replace(/[_-]/g, " ")}</span>
+    </button>
+  );
+}
+
 const UserMessage = memo(function UserMessage({ id }: { id: string }) {
   const message = useMessage(id);
+  const skills = useStore((s) => s.skills);
   if (!message) return null;
+
+  const skillMatch = useMemo(
+    () => detectSkillPrefix(message.content, skills),
+    [message.content, skills],
+  );
+
+  // When a skill prefix is detected, the bubble shows just the user's prompt
+  // (the part after `/skill-name`) and the chip below identifies the skill.
+  // If the user only typed `/skill-name` with no extra text, the chip stands
+  // alone — no empty bubble.
+  const visibleText = skillMatch ? skillMatch.rest : message.content;
+  const showBubble = visibleText.trim().length > 0;
+
   return (
     <article className="group flex flex-col items-end animate-fade-in" data-id={id}>
-      <div
-        className="max-w-[75%] px-3.5 py-2 rounded-[18px] bg-surface-sunken text-ink text-[13.5px] leading-[1.5] whitespace-pre-wrap break-words text-left"
-      >
-        {message.content || " "}
-      </div>
+      {showBubble && (
+        <div className="max-w-[75%] px-3.5 py-2 rounded-[18px] bg-surface-sunken text-ink text-[13.5px] leading-[1.5] whitespace-pre-wrap break-words text-left">
+          {visibleText}
+        </div>
+      )}
+      {skillMatch && <SkillChip skill={skillMatch.skill} />}
       <MessageActions id={id} role="user" />
     </article>
   );
