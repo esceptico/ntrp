@@ -166,7 +166,7 @@ async def run_agent_streaming(
             else:
                 sse = agent_event_to_sse(item)
                 if isinstance(sse, ToolCallEvent):
-                    label = sse.display_name or sse.name
+                    label = sse.display_name or sse.tool_call_name
                     await bus.emit(AutomationProgressEvent(task_id=task_id, status=f"{label}..."))
                 elif isinstance(sse, ToolResultEvent):
                     label = sse.display_name or sse.name

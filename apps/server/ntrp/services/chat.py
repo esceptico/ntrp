@@ -446,7 +446,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         run.usage = tracker.usage
 
         if result:
-            await bus.emit(TextEvent(content=result))
+            await bus.emit(TextEvent(delta=result))
 
         usage_dict = run.usage.to_dict()
         usage_dict["cost"] = tracker.cost

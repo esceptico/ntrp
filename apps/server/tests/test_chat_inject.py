@@ -19,11 +19,11 @@ def test_message_ingested_event_serialization():
     sse = event.to_sse_string()
     assert "event: message_ingested" in sse
     payload = json.loads(sse.split("data: ", 1)[1].strip())
-    assert payload == {
-        "type": "message_ingested",
-        "client_id": "abc-123",
-        "run_id": "cool-otter",
-    }
+    assert payload["type"] == "message_ingested"
+    assert payload["client_id"] == "abc-123"
+    assert payload["run_id"] == "cool-otter"
+    # AG-UI: every event ships with a timestamp (Unix ms)
+    assert isinstance(payload["timestamp"], int) and payload["timestamp"] > 0
 
 
 def test_chat_request_accepts_client_id():
