@@ -41,6 +41,10 @@ type ServerEvent =
   | { type: "background_task"; command: string; status: string; detail?: string };
 
 const STORAGE_KEY = "ntrp.desktop.config";
+const DEFAULT_CONFIG: AppConfig = {
+  serverUrl: "http://localhost:6877",
+  apiKey: "",
+};
 
 const state: {
   config: AppConfig;
@@ -50,15 +54,17 @@ const state: {
   connected: boolean;
   running: boolean;
   error: string | null;
+  draft: string;
   eventDisconnect?: () => void;
 } = {
-  config: loadConfig(),
+  config: { ...DEFAULT_CONFIG },
   sessions: [],
   currentSessionId: null,
   messages: [],
   connected: false,
   running: false,
   error: null,
+  draft: "",
 };
 
 function getAppRoot(): HTMLDivElement {
@@ -69,20 +75,42 @@ function getAppRoot(): HTMLDivElement {
 
 const appRoot = getAppRoot();
 
-function loadConfig(): AppConfig {
-  const fallback = { serverUrl: "http://localhost:6877", apiKey: "" };
+function loadLegacyConfig(): AppConfig {
   const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return fallback;
+  if (!raw) return { ...DEFAULT_CONFIG };
   try {
-    return { ...fallback, ...JSON.parse(raw) };
+    return normalizeConfig(JSON.parse(raw));
   } catch {
-    return fallback;
+    return { ...DEFAULT_CONFIG };
   }
 }
 
-function saveConfig(config: AppConfig) {
-  state.config = config;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+function normalizeConfig(config: Partial<AppConfig> | null | undefined): AppConfig {
+  return {
+    serverUrl: config?.serverUrl?.trim().replace(/\/$/, "") || DEFAULT_CONFIG.serverUrl,
+    apiKey: config?.apiKey ?? "",
+  };
+}
+
+async function loadInitialConfig(): Promise<AppConfig> {
+  const desktopConfig = window.ntrpDesktop?.config;
+  if (!desktopConfig) return loadLegacyConfig();
+
+  const config = await desktopConfig.get();
+  if (config.apiKey || localStorage.getItem(STORAGE_KEY) === null) return normalizeConfig(config);
+
+  const legacy = loadLegacyConfig();
+  if (legacy.apiKey || legacy.serverUrl !== DEFAULT_CONFIG.serverUrl) {
+    localStorage.removeItem(STORAGE_KEY);
+    return desktopConfig.set(legacy);
+  }
+  return normalizeConfig(config);
+}
+
+async function saveConfig(config: AppConfig) {
+  const normalized = normalizeConfig(config);
+  state.config = window.ntrpDesktop?.config ? await window.ntrpDesktop.config.set(normalized) : normalized;
+  localStorage.removeItem(STORAGE_KEY);
 }
 
 function headers(json = false): HeadersInit {
@@ -206,9 +234,7 @@ function connectEvents(sessionId: string) {
 function appendMessage(message: UiMessage) {
   state.messages = [...state.messages, message];
   render();
-  requestAnimationFrame(() => {
-    document.querySelector(".messages")?.scrollTo({ top: 1_000_000 });
-  });
+  scrollMessagesToBottom();
 }
 
 function appendToLast(role: Role, delta: string, title?: string) {
@@ -216,9 +242,16 @@ function appendToLast(role: Role, delta: string, title?: string) {
   if (last?.role === role && last.title === title) {
     last.content += delta;
     render();
+    scrollMessagesToBottom();
     return;
   }
   appendMessage({ id: crypto.randomUUID(), role, title, content: delta });
+}
+
+function scrollMessagesToBottom() {
+  requestAnimationFrame(() => {
+    document.querySelector(".messages")?.scrollTo({ top: 1_000_000 });
+  });
 }
 
 function handleEvent(event: ServerEvent) {
@@ -353,7 +386,19 @@ function escapeHtml(value: string) {
   });
 }
 
+function resizeComposer(input: HTMLTextAreaElement) {
+  input.style.height = "0px";
+  input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
+}
+
 function render() {
+  const focused = document.activeElement;
+  const focusedId =
+    focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement ? focused.id : null;
+  const selectionStart =
+    focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement ? focused.selectionStart : null;
+  const selectionEnd =
+    focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement ? focused.selectionEnd : null;
   const currentSession = state.sessions.find(session => session.session_id === state.currentSessionId);
   appRoot.innerHTML = `
     <aside class="sidebar">
@@ -404,7 +449,7 @@ function render() {
       </section>
 
       <form class="composer" id="composer">
-        <textarea id="message-input" rows="1" placeholder="Message ntrp..."></textarea>
+        <textarea id="message-input" rows="1" placeholder="Message ntrp...">${escapeHtml(state.draft)}</textarea>
         <button type="submit" ${state.running || !state.connected ? "disabled" : ""}>send</button>
       </form>
     </main>
@@ -413,8 +458,10 @@ function render() {
   document.querySelector<HTMLButtonElement>("#save-config")?.addEventListener("click", () => {
     const serverUrl = document.querySelector<HTMLInputElement>("#server-url")?.value.trim() || state.config.serverUrl;
     const apiKey = document.querySelector<HTMLInputElement>("#api-key")?.value.trim() || "";
-    saveConfig({ serverUrl: serverUrl.replace(/\/$/, ""), apiKey });
-    void refresh();
+    void (async () => {
+      await saveConfig({ serverUrl, apiKey });
+      await refresh();
+    })();
   });
 
   document.querySelector<HTMLButtonElement>("#new-session")?.addEventListener("click", () => void createSession());
@@ -431,9 +478,33 @@ function render() {
     const input = document.querySelector<HTMLTextAreaElement>("#message-input");
     if (!input) return;
     const text = input.value;
+    state.draft = "";
     input.value = "";
+    resizeComposer(input);
     void sendMessage(text);
   });
+
+  const input = document.querySelector<HTMLTextAreaElement>("#message-input");
+  input?.addEventListener("keydown", event => {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    event.preventDefault();
+    input.form?.requestSubmit();
+  });
+  input?.addEventListener("input", () => {
+    state.draft = input.value;
+    resizeComposer(input);
+  });
+  if (input) resizeComposer(input);
+
+  if (focusedId) {
+    const nextFocused = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${focusedId}`);
+    if (nextFocused) {
+      nextFocused.focus();
+      if (selectionStart !== null && selectionEnd !== null) {
+        nextFocused.setSelectionRange(selectionStart, selectionEnd);
+      }
+    }
+  }
 }
 
 function renderMessage(message: UiMessage) {
@@ -446,4 +517,11 @@ function renderMessage(message: UiMessage) {
 }
 
 render();
-void refresh();
+void (async () => {
+  try {
+    state.config = await loadInitialConfig();
+  } catch (error) {
+    state.error = error instanceof Error ? error.message : String(error);
+  }
+  await refresh();
+})();
