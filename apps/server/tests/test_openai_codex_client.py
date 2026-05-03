@@ -117,6 +117,22 @@ def test_prepare_responses_request_uses_codex_model_and_response_shapes():
     assert request["prompt_cache_key"] == "session-1"
 
 
+def test_prepare_responses_request_adds_required_default_instructions():
+    request = OpenAICodexClient()._prepare(
+        messages=[{"role": Role.USER, "content": "return json"}],
+        model="openai-codex/gpt-5.5",
+        tools=None,
+        tool_choice=None,
+        temperature=None,
+        max_tokens=None,
+        reasoning_effort=None,
+        response_format=_Structured,
+    )
+
+    assert request["instructions"]
+    assert request["input"] == [{"role": "user", "content": "return json"}]
+
+
 def test_parse_response_collects_text_reasoning_tools_and_usage():
     parsed = OpenAICodexClient()._parse_response(_Response(), "openai-codex/gpt-5.4")
 

@@ -17,6 +17,7 @@ from ntrp.llm.openai_responses import (
 )
 
 _MODEL_PREFIX = "openai-codex/"
+_DEFAULT_INSTRUCTIONS = "Follow the user's request exactly and return the requested output."
 
 
 class OpenAICodexClient(CompletionClient):
@@ -116,7 +117,7 @@ class OpenAICodexClient(CompletionClient):
         response_format: type[BaseModel] | None,
         **kwargs,
     ) -> dict[str, Any]:
-        return prepare_responses_request(
+        request = prepare_responses_request(
             messages=messages,
             model=self._api_model(model),
             tools=tools,
@@ -129,6 +130,8 @@ class OpenAICodexClient(CompletionClient):
             store=False,
             **kwargs,
         )
+        request.setdefault("instructions", _DEFAULT_INSTRUCTIONS)
+        return request
 
     def _api_model(self, model: str) -> str:
         return model.removeprefix(_MODEL_PREFIX)
