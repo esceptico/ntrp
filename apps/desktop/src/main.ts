@@ -55,6 +55,8 @@ const state: {
   running: boolean;
   error: string | null;
   draft: string;
+  settingsOpen: boolean;
+  connectionDraft: AppConfig;
   eventDisconnect?: () => void;
 } = {
   config: { ...DEFAULT_CONFIG },
@@ -65,6 +67,8 @@ const state: {
   running: false,
   error: null,
   draft: "",
+  settingsOpen: false,
+  connectionDraft: { ...DEFAULT_CONFIG },
 };
 
 function getAppRoot(): HTMLDivElement {
@@ -110,6 +114,7 @@ async function loadInitialConfig(): Promise<AppConfig> {
 async function saveConfig(config: AppConfig) {
   const normalized = normalizeConfig(config);
   state.config = window.ntrpDesktop?.config ? await window.ntrpDesktop.config.set(normalized) : normalized;
+  state.connectionDraft = { ...state.config };
   localStorage.removeItem(STORAGE_KEY);
 }
 
@@ -386,6 +391,10 @@ function escapeHtml(value: string) {
   });
 }
 
+function maskKey(value: string) {
+  return value ? "set" : "not set";
+}
+
 function resizeComposer(input: HTMLTextAreaElement) {
   input.style.height = "0px";
   input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
@@ -410,12 +419,19 @@ function render() {
         <span class="status ${state.connected ? "ok" : "bad"}">${state.connected ? "online" : "offline"}</span>
       </div>
 
-      <section class="connection">
-        <label>server</label>
-        <input id="server-url" value="${escapeHtml(state.config.serverUrl)}" spellcheck="false" />
-        <label>api key</label>
-        <input id="api-key" value="${escapeHtml(state.config.apiKey)}" spellcheck="false" type="password" />
-        <button id="save-config">connect</button>
+      <section class="connection-summary">
+        <div class="section-title">
+          <span>connection</span>
+          <button id="open-settings" type="button">settings</button>
+        </div>
+        <div class="connection-row">
+          <span>server</span>
+          <strong>${escapeHtml(state.config.serverUrl)}</strong>
+        </div>
+        <div class="connection-row">
+          <span>auth</span>
+          <strong>${escapeHtml(maskKey(state.config.apiKey))}</strong>
+        </div>
         ${state.error ? `<p class="error">${escapeHtml(state.error)}</p>` : ""}
       </section>
 
@@ -453,15 +469,39 @@ function render() {
         <button type="submit" ${state.running || !state.connected ? "disabled" : ""}>send</button>
       </form>
     </main>
+
+    ${state.settingsOpen ? renderSettingsDialog() : ""}
   `;
 
-  document.querySelector<HTMLButtonElement>("#save-config")?.addEventListener("click", () => {
-    const serverUrl = document.querySelector<HTMLInputElement>("#server-url")?.value.trim() || state.config.serverUrl;
-    const apiKey = document.querySelector<HTMLInputElement>("#api-key")?.value.trim() || "";
+  document.querySelector<HTMLButtonElement>("#open-settings")?.addEventListener("click", () => {
+    state.connectionDraft = { ...state.config };
+    state.settingsOpen = true;
+    render();
+  });
+
+  document.querySelector<HTMLButtonElement>("#close-settings")?.addEventListener("click", () => {
+    state.settingsOpen = false;
+    render();
+  });
+
+  document.querySelector<HTMLInputElement>("#settings-server-url")?.addEventListener("input", event => {
+    state.connectionDraft.serverUrl = (event.target as HTMLInputElement).value;
+  });
+  document.querySelector<HTMLInputElement>("#settings-api-key")?.addEventListener("input", event => {
+    state.connectionDraft.apiKey = (event.target as HTMLInputElement).value;
+  });
+  document.querySelector<HTMLFormElement>("#connection-form")?.addEventListener("submit", event => {
+    event.preventDefault();
     void (async () => {
-      await saveConfig({ serverUrl, apiKey });
+      await saveConfig(state.connectionDraft);
+      state.settingsOpen = false;
       await refresh();
     })();
+  });
+  document.querySelector<HTMLFormElement>("#connection-form")?.addEventListener("keydown", event => {
+    if (event.key !== "Escape") return;
+    state.settingsOpen = false;
+    render();
   });
 
   document.querySelector<HTMLButtonElement>("#new-session")?.addEventListener("click", () => void createSession());
@@ -496,15 +536,48 @@ function render() {
   });
   if (input) resizeComposer(input);
 
+  let restoredFocus = false;
   if (focusedId) {
     const nextFocused = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${focusedId}`);
     if (nextFocused) {
       nextFocused.focus();
+      restoredFocus = true;
       if (selectionStart !== null && selectionEnd !== null) {
         nextFocused.setSelectionRange(selectionStart, selectionEnd);
       }
     }
   }
+  if (state.settingsOpen && !restoredFocus) {
+    document.querySelector<HTMLInputElement>("#settings-server-url")?.focus();
+  }
+}
+
+function renderSettingsDialog() {
+  return `
+    <div class="modal-backdrop">
+      <form class="modal" id="connection-form">
+        <div class="modal-title">
+          <div>
+            <strong>Connection</strong>
+            <span>local ntrp server</span>
+          </div>
+          <button id="close-settings" type="button">close</button>
+        </div>
+
+        <label for="settings-server-url">server</label>
+        <input id="settings-server-url" value="${escapeHtml(state.connectionDraft.serverUrl)}" spellcheck="false" />
+
+        <label for="settings-api-key">api key</label>
+        <input id="settings-api-key" value="${escapeHtml(state.connectionDraft.apiKey)}" spellcheck="false" type="password" />
+
+        <div class="modal-note">Stored in Electron app data; encrypted with safeStorage when available.</div>
+
+        <div class="modal-actions">
+          <button type="submit">save and reconnect</button>
+        </div>
+      </form>
+    </div>
+  `;
 }
 
 function renderMessage(message: UiMessage) {
@@ -520,6 +593,7 @@ render();
 void (async () => {
   try {
     state.config = await loadInitialConfig();
+    state.connectionDraft = { ...state.config };
   } catch (error) {
     state.error = error instanceof Error ? error.message : String(error);
   }

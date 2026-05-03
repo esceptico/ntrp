@@ -40,6 +40,7 @@ button:disabled {
 }
 
 #app {
+  position: relative;
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
   width: 100vw;
@@ -85,9 +86,25 @@ p {
   color: #58b99d;
 }
 
-.connection {
+.connection-summary {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+}
+
+.connection-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 10px;
+  color: #706f6c;
+}
+
+.connection-row strong {
+  overflow: hidden;
+  color: #d5d0c8;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 label,
@@ -116,7 +133,6 @@ textarea:focus {
   border-color: #4f9cff;
 }
 
-.connection button,
 .composer button,
 .section-title button {
   min-height: 34px;
@@ -279,6 +295,64 @@ textarea {
 
 .composer button {
   width: 86px;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(0, 0, 0, 0.52);
+}
+
+.modal {
+  width: min(560px, 100%);
+  display: grid;
+  gap: 11px;
+  padding: 18px;
+  border: 1px solid #41413e;
+  background: #111211;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
+}
+
+.modal-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 4px;
+}
+
+.modal-title strong {
+  display: block;
+  color: #eee8df;
+  font-size: 17px;
+}
+
+.modal-title span,
+.modal-note {
+  color: #706f6c;
+}
+
+.modal-title button {
+  min-height: 30px;
+  padding: 0 10px;
+  color: #8f8b84;
+  border: 1px solid #2d2d2b;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.modal-actions button {
+  min-height: 34px;
+  padding: 0 12px;
+  color: #111;
+  background: #d9793f;
 }
 
 @keyframes pulse {
