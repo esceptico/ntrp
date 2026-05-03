@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, safeStorage, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, safeStorage, session, shell } = require("electron");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { fileURLToPath } = require("node:url");
 
 const isDev = Boolean(process.env.NTRP_DESKTOP_DEV_SERVER_URL);
 const configFileName = "config.json";
@@ -12,6 +13,37 @@ const defaultConfig = {
 
 function configPath() {
   return path.join(app.getPath("userData"), configFileName);
+}
+
+function rendererIndexPath() {
+  return path.join(__dirname, "../dist/renderer/index.html");
+}
+
+function originOf(value) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function isTrustedSender(event) {
+  const frameUrl = event.senderFrame?.url ?? "";
+  return isTrustedRendererUrl(frameUrl);
+}
+
+function isTrustedRendererUrl(frameUrl) {
+  if (isDev) return originOf(frameUrl) === originOf(process.env.NTRP_DESKTOP_DEV_SERVER_URL);
+  if (!frameUrl.startsWith("file://")) return false;
+  try {
+    return path.normalize(fileURLToPath(frameUrl)) === path.normalize(rendererIndexPath());
+  } catch {
+    return false;
+  }
+}
+
+function assertTrustedSender(event) {
+  if (!isTrustedSender(event)) throw new Error("Untrusted IPC sender");
 }
 
 function normalizeConfig(input) {
@@ -100,21 +132,35 @@ function createWindow() {
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("https://") || url.startsWith("http://")) {
-      shell.openExternal(url);
+      void shell.openExternal(url);
     }
     return { action: "deny" };
+  });
+
+  window.webContents.on("will-navigate", (event, url) => {
+    if (!isTrustedRendererUrl(url)) event.preventDefault();
   });
 
   if (isDev) {
     window.loadURL(process.env.NTRP_DESKTOP_DEV_SERVER_URL);
   } else {
-    window.loadFile(path.join(__dirname, "../dist/renderer/index.html"));
+    window.loadFile(rendererIndexPath());
   }
 }
 
 app.whenReady().then(() => {
-  ipcMain.handle("config:get", () => readConfig());
-  ipcMain.handle("config:set", (_event, config) => writeConfig(config));
+  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false);
+  });
+
+  ipcMain.handle("config:get", event => {
+    assertTrustedSender(event);
+    return readConfig();
+  });
+  ipcMain.handle("config:set", (event, config) => {
+    assertTrustedSender(event);
+    return writeConfig(config);
+  });
 
   createWindow();
 
