@@ -335,6 +335,13 @@ textarea {
   color: #706f6c;
 }
 
+.modal-error {
+  padding: 10px 12px;
+  color: #ff655d;
+  border-left: 3px solid #ff655d;
+  background: rgba(255, 101, 93, 0.08);
+}
+
 .modal-title button {
   min-height: 30px;
   padding: 0 10px;

@@ -57,6 +57,8 @@ const state: {
   draft: string;
   settingsOpen: boolean;
   connectionDraft: AppConfig;
+  connectionError: string | null;
+  connectionSaving: boolean;
   eventDisconnect?: () => void;
 } = {
   config: { ...DEFAULT_CONFIG },
@@ -69,6 +71,8 @@ const state: {
   draft: "",
   settingsOpen: false,
   connectionDraft: { ...DEFAULT_CONFIG },
+  connectionError: null,
+  connectionSaving: false,
 };
 
 function getAppRoot(): HTMLDivElement {
@@ -118,18 +122,22 @@ async function saveConfig(config: AppConfig) {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-function headers(json = false): HeadersInit {
+function headersForConfig(config: AppConfig, json = false): HeadersInit {
   const output: Record<string, string> = {};
   if (json) output["Content-Type"] = "application/json";
-  if (state.config.apiKey) output.Authorization = `Bearer ${state.config.apiKey}`;
+  if (config.apiKey) output.Authorization = `Bearer ${config.apiKey}`;
   return output;
 }
 
-async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${state.config.serverUrl}${path}`, {
+function headers(json = false): HeadersInit {
+  return headersForConfig(state.config, json);
+}
+
+async function apiWithConfig<T>(config: AppConfig, path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${config.serverUrl}${path}`, {
     ...init,
     headers: {
-      ...headers(Boolean(init.body)),
+      ...headersForConfig(config, Boolean(init.body)),
       ...(init.headers ?? {}),
     },
   });
@@ -150,6 +158,16 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     return undefined as T;
   }
   return response.json() as Promise<T>;
+}
+
+async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return apiWithConfig<T>(state.config, path, init);
+}
+
+async function validateConnection(config: AppConfig) {
+  const normalized = normalizeConfig(config);
+  await apiWithConfig(normalized, "/health");
+  await apiWithConfig(normalized, "/sessions");
 }
 
 async function refresh() {
@@ -475,12 +493,15 @@ function render() {
 
   document.querySelector<HTMLButtonElement>("#open-settings")?.addEventListener("click", () => {
     state.connectionDraft = { ...state.config };
+    state.connectionError = null;
     state.settingsOpen = true;
     render();
   });
 
   document.querySelector<HTMLButtonElement>("#close-settings")?.addEventListener("click", () => {
+    if (state.connectionSaving) return;
     state.settingsOpen = false;
+    state.connectionError = null;
     render();
   });
 
@@ -493,14 +514,30 @@ function render() {
   document.querySelector<HTMLFormElement>("#connection-form")?.addEventListener("submit", event => {
     event.preventDefault();
     void (async () => {
-      await saveConfig(state.connectionDraft);
-      state.settingsOpen = false;
-      await refresh();
+      state.connectionSaving = true;
+      state.connectionError = null;
+      render();
+      try {
+        const nextConfig = normalizeConfig(state.connectionDraft);
+        await validateConnection(nextConfig);
+        await saveConfig(nextConfig);
+        state.settingsOpen = false;
+        state.connectionError = null;
+        await refresh();
+      } catch (error) {
+        state.connectionError = error instanceof Error ? error.message : String(error);
+        render();
+      } finally {
+        state.connectionSaving = false;
+        render();
+      }
     })();
   });
   document.querySelector<HTMLFormElement>("#connection-form")?.addEventListener("keydown", event => {
     if (event.key !== "Escape") return;
+    if (state.connectionSaving) return;
     state.settingsOpen = false;
+    state.connectionError = null;
     render();
   });
 
@@ -571,9 +608,12 @@ function renderSettingsDialog() {
         <input id="settings-api-key" value="${escapeHtml(state.connectionDraft.apiKey)}" spellcheck="false" type="password" />
 
         <div class="modal-note">Stored in Electron app data; encrypted with safeStorage when available.</div>
+        ${state.connectionError ? `<div class="modal-error">${escapeHtml(state.connectionError)}</div>` : ""}
 
         <div class="modal-actions">
-          <button type="submit">save and reconnect</button>
+          <button type="submit" ${state.connectionSaving ? "disabled" : ""}>
+            ${state.connectionSaving ? "checking..." : "save and reconnect"}
+          </button>
         </div>
       </form>
     </div>
