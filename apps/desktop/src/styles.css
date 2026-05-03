@@ -20,6 +20,7 @@
 
   --color-ink: #1a1a17;
   --color-ink-soft: #3a3a35;
+  --color-on-ink: #f6f5f2;
   --color-muted: #7c7a72;
   --color-faint: #a8a59c;
   --color-whisper: #c8c5bb;
@@ -70,7 +71,7 @@
 
 /* ─── Base ─────────────────────────────────────────────────── */
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -145,6 +146,8 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .md > *:last-child { margin-bottom: 0; }
 .md p { margin: 0 0 0.6em; }
 .md ul, .md ol { margin: 0.3em 0 0.7em; padding-left: 1.4em; }
+.md ul { list-style: disc outside; }
+.md ol { list-style: decimal outside; }
 .md li { margin: 0.18em 0; }
 .md li > p { margin: 0; }
 .md li::marker { color: var(--color-faint); }
@@ -272,6 +275,21 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 .reasoning-head[data-state="streaming"] svg { color: var(--color-muted); }
 
+/* ─── Diff preview (approval card) ─────────────────────────── */
+.diff-preview {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.diff-preview .diff-line { display: block; padding: 0 8px; min-width: max-content; }
+.diff-preview .diff-add { background: rgba(79, 138, 58, 0.10); color: #2e6620; }
+.diff-preview .diff-del { background: rgba(184, 68, 43, 0.10); color: #8a3220; }
+.diff-preview .diff-hunk { color: var(--color-info); }
+
 /* ─── Reduce motion ────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   * {
@@ -279,4 +297,69 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
+}
+
+/* ─── Dark theme (system preference) ───────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #100f0f;
+    --color-bg-main: #1c1b1a;
+    --color-surface: #1c1b1a;
+    --color-surface-soft: #282726;
+    --color-surface-sunken: #343331;
+    --color-code-bg: #282726;
+
+    --color-line: #343331;
+    --color-line-soft: #2c2b2a;
+    --color-line-strong: #4a4945;
+
+    --color-ink: #cecdc3;
+    --color-ink-soft: #b7b5ac;
+    --color-on-ink: #100f0f;
+    --color-muted: #878580;
+    --color-faint: #575653;
+    --color-whisper: #403e3c;
+
+    --color-accent: #da702c;
+    --color-accent-soft: rgba(218, 112, 44, 0.14);
+    --color-accent-strong: #e78a4d;
+
+    --color-ok: #879a39;
+    --color-ok-soft: rgba(135, 154, 57, 0.14);
+    --color-warn: #d97757;
+    --color-warn-soft: rgba(217, 119, 87, 0.12);
+    --color-bad: #d14d41;
+    --color-bad-soft: rgba(209, 77, 65, 0.14);
+    --color-info: #4385be;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    --shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Brand mark inverts to a light mineral disc on dark */
+  .brand-mark {
+    background: linear-gradient(150deg, #cecdc3 0%, #878580 100%);
+    color: #100f0f;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+
+  /* Nav-row icon squares */
+  .nav-icon {
+    background: var(--color-surface);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 0.5px rgba(255, 255, 255, 0.05);
+  }
+
+  /* Scrollbar thumbs: lighter for visibility */
+  .scroll-thin:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); }
+  .scroll-messages:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); background-clip: padding-box; }
+
+  /* Selection */
+  ::selection { background: rgba(231, 138, 77, 0.28); }
+
+  /* Diff colors */
+  .diff-preview .diff-add { background: rgba(135, 154, 57, 0.16); color: #afc463; }
+  .diff-preview .diff-del { background: rgba(209, 77, 65, 0.16); color: #e58075; }
+  .diff-preview .diff-hunk { color: var(--color-info); }
+  .modal-error span { color: #e58075 !important; }
 }

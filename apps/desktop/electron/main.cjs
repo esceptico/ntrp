@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, safeStorage, session, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, nativeTheme, safeStorage, session, shell } = require("electron");
 const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -229,7 +229,7 @@ function createWindow() {
     minWidth: 980,
     minHeight: 660,
     title: "ntrp",
-    backgroundColor: "#ece9e0",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#100f0f" : "#ece9e0",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 18 },
     vibrancy: "sidebar",

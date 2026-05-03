@@ -11,10 +11,18 @@ export interface SessionListItem {
   message_count: number;
 }
 
+export interface HistoryToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
 export interface HistoryMessage {
   role: "user" | "assistant" | "tool";
   content: string;
   reasoning_content?: string;
+  tool_calls?: HistoryToolCall[];
+  tool_call_id?: string;
 }
 
 export interface HealthCheck {
@@ -32,17 +40,37 @@ export interface ApiBridgeResponse {
   text: string;
 }
 
-export type ServerEvent =
-  | { type: "text"; content: string }
-  | { type: "text_delta"; content: string }
-  | { type: "REASONING_MESSAGE_START"; messageId: string }
-  | { type: "REASONING_MESSAGE_CONTENT"; messageId: string; delta: string }
-  | { type: "tool_call"; tool_id: string; name: string; description?: string }
-  | { type: "tool_result"; tool_id: string; name: string; preview?: string; result?: string }
-  | { type: "run_started"; run_id: string; session_id: string; session_name?: string | null }
-  | { type: "run_finished"; run_id: string; usage?: { prompt: number; completion: number; cache_read: number; cost: number } }
-  | { type: "run_error"; message: string }
-  | { type: "background_task"; command: string; status: string; detail?: string };
+/** AG-UI-shaped event protocol. Every event carries a `timestamp` (Unix ms). */
+type WithTs = { timestamp?: number };
+
+export type ServerEvent = WithTs & (
+  // ─── Run lifecycle ──────────────────────────────────────────────────
+  | { type: "RUN_STARTED"; run_id: string; session_id: string; session_name?: string | null; skip_approvals?: boolean }
+  | { type: "RUN_FINISHED"; run_id: string; usage?: { prompt: number; completion: number; cache_read: number; cost: number } }
+  | { type: "RUN_ERROR"; message: string }
+
+  // ─── Text messages (Start / Content / End) ─────────────────────────
+  | { type: "TEXT_MESSAGE_START"; message_id: string; role?: string }
+  | { type: "TEXT_MESSAGE_CONTENT"; message_id: string; delta: string }
+  | { type: "TEXT_MESSAGE_END"; message_id: string; content?: string }
+
+  // ─── Tool calls (Start / Args / End / Result) ──────────────────────
+  | { type: "TOOL_CALL_START"; tool_call_id: string; tool_call_name: string; description?: string; display_name?: string; parent_message_id?: string | null }
+  | { type: "TOOL_CALL_ARGS"; tool_call_id: string; delta: string }
+  | { type: "TOOL_CALL_END"; tool_call_id: string }
+  | { type: "TOOL_CALL_RESULT"; tool_call_id: string; name: string; content?: string; preview?: string; display_name?: string }
+
+  // ─── Reasoning ─────────────────────────────────────────────────────
+  | { type: "REASONING_START"; message_id: string }
+  | { type: "REASONING_MESSAGE_START"; message_id: string; role?: string }
+  | { type: "REASONING_MESSAGE_CONTENT"; message_id: string; delta: string }
+  | { type: "REASONING_MESSAGE_END"; message_id: string }
+  | { type: "REASONING_END"; message_id: string }
+
+  // ─── ntrp-specific (non-AG-UI canonical) ───────────────────────────
+  | { type: "approval_needed"; tool_id: string; name: string; path?: string | null; diff?: string | null; content_preview?: string | null }
+  | { type: "background_task"; command: string; status: string; detail?: string }
+);
 
 export const STORAGE_KEY = "ntrp.desktop.config";
 
@@ -196,4 +224,14 @@ export async function saveConfig(config: AppConfig): Promise<AppConfig> {
     return saved;
   }
   return normalized;
+}
+
+export async function submitToolResult(
+  config: AppConfig,
+  payload: { run_id: string; tool_id: string; result: string; approved: boolean },
+): Promise<void> {
+  await apiWithConfig(config, "/tools/result", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

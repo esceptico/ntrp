@@ -99,7 +99,7 @@ export function SettingsModal() {
           <button
             type="submit"
             disabled={saving}
-            className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-[#f6f5f2] text-[12.5px] font-medium tracking-[-0.005em] hover:bg-black transition-colors"
+            className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-[12.5px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
           >
             {saving ? "Checking…" : "Save & reconnect"}
           </button>

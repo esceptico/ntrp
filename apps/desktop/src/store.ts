@@ -5,7 +5,36 @@ import {
   DEFAULT_CONFIG,
 } from "./api";
 
-export type Role = "user" | "assistant" | "reasoning" | "tool" | "status" | "error";
+export type Role = "user" | "assistant" | "reasoning" | "tool" | "status" | "error" | "activity" | "approval";
+
+export interface ActivityItem {
+  id: string;
+  kind: string;
+  target: string;
+}
+
+export interface ActivityState {
+  items: ActivityItem[];
+  label: string;
+  done: boolean;
+}
+
+export type ApprovalStatus = "pending" | "approved" | "rejected";
+
+export interface ApprovalState {
+  toolId: string;
+  toolName: string;
+  path?: string;
+  diff?: string;
+  preview?: string;
+  status: ApprovalStatus;
+}
+
+export interface TurnMeta {
+  startedAt: number;
+  endedAt: number | null;
+  durationMs: number | null;
+}
 
 export interface UiMessage {
   id: string;
@@ -13,6 +42,9 @@ export interface UiMessage {
   title?: string;
   subtitle?: string;
   content: string;
+  activity?: ActivityState;
+  approval?: ApprovalState;
+  turn?: TurnMeta;
 }
 
 export interface SessionUsage {
@@ -37,6 +69,9 @@ interface State {
   connectionSaving: boolean;
   usage: SessionUsage;
   editingId: string | null;
+  activeActivityId: string | null;
+  currentRunId: string | null;
+  skipApprovals: boolean;
 }
 
 interface Actions {
@@ -60,6 +95,12 @@ interface Actions {
   setConnectionDraft: (patch: Partial<AppConfig>) => void;
   setConnectionError: (error: string | null) => void;
   setConnectionSaving: (saving: boolean) => void;
+  setActiveActivityId: (id: string | null) => void;
+  appendActivityItem: (activityId: string, item: ActivityItem) => void;
+  finalizeActivity: (activityId: string, label?: string) => void;
+  setCurrentRunId: (runId: string | null) => void;
+  setSkipApprovals: (skip: boolean) => void;
+  setApprovalStatus: (id: string, status: ApprovalStatus) => void;
 }
 
 const initialUsage: SessionUsage = { lastPrompt: 0, totalTokens: 0, totalCost: 0 };
@@ -80,6 +121,9 @@ export const useStore = create<State & Actions>((set) => ({
   connectionSaving: false,
   usage: initialUsage,
   editingId: null,
+  activeActivityId: null,
+  currentRunId: null,
+  skipApprovals: false,
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
   setSessions: (sessions) => set({ sessions }),
@@ -91,6 +135,8 @@ export const useStore = create<State & Actions>((set) => ({
       order: [],
       usage: initialUsage,
       editingId: null,
+      activeActivityId: null,
+      currentRunId: null,
     }),
 
   setHistory: (messages) => {
@@ -122,7 +168,10 @@ export const useStore = create<State & Actions>((set) => ({
   truncateFrom: (id) =>
     set((s) => {
       const idx = s.order.indexOf(id);
-      if (idx < 0) return s;
+      if (idx < 0) {
+        console.warn("[ntrp] truncateFrom: id not found in order", { id, order: s.order });
+        return s;
+      }
       const keep = s.order.slice(0, idx);
       const messages = new Map<string, UiMessage>();
       for (const k of keep) {
@@ -162,6 +211,45 @@ export const useStore = create<State & Actions>((set) => ({
     set((s) => ({ connectionDraft: { ...s.connectionDraft, ...patch } })),
   setConnectionError: (connectionError) => set({ connectionError }),
   setConnectionSaving: (connectionSaving) => set({ connectionSaving }),
+
+  setActiveActivityId: (activeActivityId) => set({ activeActivityId }),
+
+  appendActivityItem: (activityId, item) =>
+    set((s) => {
+      const existing = s.messages.get(activityId);
+      if (!existing || !existing.activity) return s;
+      const messages = new Map(s.messages);
+      const activity = existing.activity;
+      messages.set(activityId, {
+        ...existing,
+        activity: { ...activity, items: [...activity.items, item] },
+      });
+      return { messages };
+    }),
+
+  finalizeActivity: (activityId, label = "Called") =>
+    set((s) => {
+      const existing = s.messages.get(activityId);
+      if (!existing || !existing.activity) return s;
+      const messages = new Map(s.messages);
+      messages.set(activityId, {
+        ...existing,
+        activity: { ...existing.activity, done: true, label },
+      });
+      return { messages };
+    }),
+
+  setCurrentRunId: (currentRunId) => set({ currentRunId }),
+  setSkipApprovals: (skipApprovals) => set({ skipApprovals }),
+
+  setApprovalStatus: (id, status) =>
+    set((s) => {
+      const existing = s.messages.get(id);
+      if (!existing || !existing.approval) return s;
+      const messages = new Map(s.messages);
+      messages.set(id, { ...existing, approval: { ...existing.approval, status } });
+      return { messages };
+    }),
 }));
 
 // Helpers for use outside React (e.g. inside event-stream handlers).

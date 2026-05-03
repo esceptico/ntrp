@@ -1,17 +1,24 @@
 import { memo, useMemo, useState } from "react";
-import { Brain, Check, Copy, Pencil, Terminal } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { Brain, Check, ChevronDown, Copy, Pencil, Terminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type UiMessage } from "../store";
 import { renderMarkdown, escapeHtml } from "../markdown";
+import { ActivityHeader, ActivityTail, ActivityTrace } from "./trace/ActivityTrace";
+import { ApprovalCard } from "./ApprovalCard";
 
-export function Message({ id }: { id: string }) {
+const EASE = [0.32, 0.72, 0, 1] as const;
+
+export function Message({ id, isFinal = true }: { id: string; isFinal?: boolean }) {
   const role = useStore((s) => s.messages.get(id)?.role);
   if (!role) return null;
   switch (role) {
     case "user": return <UserMessage id={id} />;
-    case "assistant": return <AssistantMessage id={id} />;
+    case "assistant": return <AssistantMessage id={id} isFinal={isFinal} />;
     case "reasoning": return <ReasoningMessage id={id} />;
     case "tool": return <ToolMessage id={id} />;
+    case "activity": return <ActivityMessage id={id} />;
+    case "approval": return <ApprovalCard id={id} />;
     case "error": return <ErrorMessage id={id} />;
     case "status": return <StatusMessage id={id} />;
   }
@@ -25,7 +32,7 @@ function useIsLast(id: string): boolean {
   return useStore((s) => s.order[s.order.length - 1] === id);
 }
 
-function MessageActions({ id, role }: { id: string; role: "user" | "assistant" | "reasoning" }) {
+function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -56,7 +63,7 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" |
   return (
     <div
       className={clsx(
-        "flex gap-px mt-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100",
+        "flex gap-px h-6 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150",
         role === "user" && "justify-end",
       )}
     >
@@ -100,7 +107,7 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
   );
 });
 
-const AssistantMessage = memo(function AssistantMessage({ id }: { id: string }) {
+const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: { id: string; isFinal?: boolean }) {
   const message = useMessage(id);
   const html = useMemo(() => (message ? renderMarkdown(message.content) : ""), [message?.content]);
   if (!message) return null;
@@ -110,7 +117,7 @@ const AssistantMessage = memo(function AssistantMessage({ id }: { id: string }) 
         className="md py-0.5 text-[14px] leading-[1.62] text-ink tracking-[-0.005em] break-words"
         dangerouslySetInnerHTML={{ __html: html || "&nbsp;" }}
       />
-      <MessageActions id={id} role="assistant" />
+      {isFinal && <MessageActions id={id} role="assistant" />}
     </article>
   );
 });
@@ -120,23 +127,44 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
   const isLast = useIsLast(id);
   const running = useStore((s) => s.running);
   const html = useMemo(() => (message ? renderMarkdown(message.content) : ""), [message?.content]);
+  const [expanded, setExpanded] = useState(false);
   if (!message) return null;
   const isStreaming = isLast && running;
 
   return (
-    <article className="group grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 my-1 animate-roll-in" data-id={id}>
-      <div
-        className="reasoning-head inline-flex items-center gap-1.5 mb-1.5 text-[12px] font-medium text-muted tracking-[-0.005em]"
+    <article className="grid grid-cols-[minmax(0,1fr)] min-w-0 my-1 animate-roll-in" data-id={id}>
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="reasoning-head self-start inline-flex items-center gap-1.5 text-[12px] font-medium text-muted tracking-[-0.005em] hover:text-ink-soft transition-colors select-none"
         data-state={isStreaming ? "streaming" : "done"}
       >
         <Brain size={12} strokeWidth={1.7} />
         <span>{message.title || "Reasoning"}</span>
-      </div>
-      <div
-        className="md pl-3.5 border-l-2 border-line text-[13px] leading-[1.6] text-muted italic break-words"
-        dangerouslySetInnerHTML={{ __html: html || "&nbsp;" }}
-      />
-      <MessageActions id={id} role="reasoning" />
+        <ChevronDown
+          size={12}
+          strokeWidth={2}
+          className={clsx("transition-transform duration-200", expanded && "rotate-180")}
+        />
+      </button>
+
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.24, ease: EASE }}
+            style={{ overflow: "hidden" }}
+          >
+            <div
+              className="md mt-2 pl-3.5 border-l-2 border-line text-[13px] leading-[1.6] text-muted italic break-words"
+              dangerouslySetInnerHTML={{ __html: html || "&nbsp;" }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </article>
   );
 });
@@ -185,6 +213,32 @@ const ErrorMessage = memo(function ErrorMessage({ id }: { id: string }) {
         className="px-3.5 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.18)] text-bad text-[13px] leading-[1.5] whitespace-pre-wrap break-words"
         dangerouslySetInnerHTML={{ __html: escapeHtml(message.content) }}
       />
+    </article>
+  );
+});
+
+const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
+  const message = useMessage(id);
+  const [expanded, setExpanded] = useState(false);
+  if (!message?.activity || message.activity.items.length === 0) return null;
+  const { items, label, done } = message.activity;
+
+  // While the run is producing tools, show the rolling tail (last 3).
+  // After it's done, collapse by default; the user can click to expand and see the full list.
+  const collapsed = done && !expanded;
+  const max = done && expanded ? undefined : 3;
+
+  return (
+    <article className="grid grid-cols-[minmax(0,1fr)] my-1 animate-roll-in" data-id={id}>
+      <ActivityTrace>
+        <ActivityHeader
+          label={label}
+          count={items.length}
+          onToggle={done ? () => setExpanded((v) => !v) : undefined}
+          expanded={expanded}
+        />
+        <ActivityTail items={items} max={max} collapsed={collapsed} />
+      </ActivityTrace>
     </article>
   );
 });
