@@ -29,6 +29,10 @@ class AuthMiddleware:
             await self.app(scope, receive, send)
             return
 
+        if request.method == "OPTIONS":
+            await self.app(scope, receive, send)
+            return
+
         public_paths = {"/health"}
         if request.url.path not in public_paths:
             token = _extract_bearer_token(request)
