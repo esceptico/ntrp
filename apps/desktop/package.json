@@ -17,8 +17,13 @@
     "node": ">=22"
   },
   "devDependencies": {
+    "@types/dompurify": "^3.2.0",
     "electron": "^39.2.7",
     "typescript": "latest",
     "vite": "^7.2.7"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.2",
+    "marked": "^18.0.3"
   }
 }

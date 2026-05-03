@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, safeStorage, session, shell } = require("electron");
+const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { fileURLToPath } = require("node:url");
@@ -10,6 +11,7 @@ const defaultConfig = {
   serverUrl: "http://localhost:6877",
   apiKey: "",
 };
+const eventStreams = new Map();
 
 function configPath() {
   return path.join(app.getPath("userData"), configFileName);
@@ -50,7 +52,7 @@ function normalizeConfig(input) {
   const serverUrl = typeof input?.serverUrl === "string" ? input.serverUrl.trim().replace(/\/$/, "") : "";
   return {
     serverUrl: serverUrl || defaultConfig.serverUrl,
-    apiKey: typeof input?.apiKey === "string" ? input.apiKey : "",
+    apiKey: typeof input?.apiKey === "string" ? input.apiKey.trim() : "",
   };
 }
 
@@ -113,6 +115,113 @@ async function writeConfig(config) {
   return normalized;
 }
 
+function normalizeApiRequest(input) {
+  const method = typeof input?.method === "string" ? input.method.toUpperCase() : "GET";
+  const allowedMethods = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
+  if (!allowedMethods.has(method)) throw new Error(`Unsupported API method: ${method}`);
+
+  const requestPath = typeof input?.path === "string" ? input.path : "";
+  if (!requestPath.startsWith("/") || requestPath.startsWith("//")) {
+    throw new Error("API path must be relative to the configured server");
+  }
+
+  return {
+    method,
+    path: requestPath,
+    body: typeof input?.body === "string" ? input.body : undefined,
+    timeout: Number.isFinite(input?.timeout) ? Number(input.timeout) : 30_000,
+  };
+}
+
+function apiHeaders(config, body) {
+  const headers = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
+  return headers;
+}
+
+async function apiRequest(configInput, requestInput, signal) {
+  const config = normalizeConfig(configInput);
+  const request = normalizeApiRequest(requestInput);
+  const controller = new AbortController();
+  const timeoutId = request.timeout > 0 ? setTimeout(() => controller.abort(), request.timeout) : null;
+  const signals = [controller.signal];
+  if (signal) signals.push(signal);
+
+  try {
+    const response = await fetch(new URL(request.path, config.serverUrl), {
+      method: request.method,
+      headers: apiHeaders(config, request.body),
+      body: request.body,
+      signal: AbortSignal.any(signals),
+    });
+    const contentType = response.headers.get("content-type") ?? "";
+    const text = await response.text();
+    let data = null;
+    if (contentType.includes("application/json") && text) {
+      data = JSON.parse(text);
+    }
+    return {
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      contentType,
+      data,
+      text,
+    };
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function streamEvents(connectionId, webContents, configInput, sessionId, signal) {
+  const config = normalizeConfig(configInput);
+  try {
+    const response = await fetch(
+      new URL(`/chat/events/${encodeURIComponent(sessionId)}?stream=true`, config.serverUrl),
+      {
+        headers: apiHeaders(config),
+        signal,
+      },
+    );
+    if (!response.ok || !response.body) {
+      throw new Error(`event stream failed: ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (!signal.aborted) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const event = JSON.parse(line.slice(6));
+          if (!webContents.isDestroyed()) {
+            webContents.send("events:data", { connectionId, event });
+          }
+        } catch {
+          // Ignore non-JSON keepalive events.
+        }
+      }
+    }
+  } catch (error) {
+    if (!signal.aborted && !webContents.isDestroyed()) {
+      webContents.send("events:data", {
+        connectionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  } finally {
+    eventStreams.delete(connectionId);
+  }
+}
+
 function createWindow() {
   const window = new BrowserWindow({
     width: 1320,
@@ -120,8 +229,10 @@ function createWindow() {
     minWidth: 980,
     minHeight: 660,
     title: "ntrp",
-    backgroundColor: "#0d0f10",
+    backgroundColor: "#ece9e0",
     titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 18 },
+    vibrancy: "sidebar",
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       nodeIntegration: false,
@@ -160,6 +271,23 @@ app.whenReady().then(() => {
   ipcMain.handle("config:set", (event, config) => {
     assertTrustedSender(event);
     return writeConfig(config);
+  });
+  ipcMain.handle("api:request", (event, config, request) => {
+    assertTrustedSender(event);
+    return apiRequest(config, request);
+  });
+  ipcMain.handle("events:connect", (event, config, sessionId) => {
+    assertTrustedSender(event);
+    const connectionId = crypto.randomUUID();
+    const controller = new AbortController();
+    eventStreams.set(connectionId, controller);
+    void streamEvents(connectionId, event.sender, config, sessionId, controller.signal);
+    return connectionId;
+  });
+  ipcMain.handle("events:disconnect", (event, connectionId) => {
+    assertTrustedSender(event);
+    eventStreams.get(connectionId)?.abort();
+    eventStreams.delete(connectionId);
   });
 
   createWindow();
