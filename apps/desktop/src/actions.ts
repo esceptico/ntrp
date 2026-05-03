@@ -46,9 +46,16 @@ export async function loadHistory(sessionId: string): Promise<void> {
   messages.forEach((msg, index) => {
     if (msg.role === "user") {
       activeActivityId = null;
-      // Historic user messages render flat — we don't have per-event timing
-      // data, so no `Worked for X` collapse for old turns.
-      items.push({ id: `history-${index}`, role: "user", content: msg.content });
+      // Historic user messages don't carry real timing, but we still want
+      // the collapse UI to engage. Stamp the turn as "ended" (so isDone is
+      // true) with a null durationMs (so the header shows "Worked" rather
+      // than a fake "Worked for X").
+      items.push({
+        id: `history-${index}`,
+        role: "user",
+        content: msg.content,
+        turn: { startedAt: 0, endedAt: 0, durationMs: null },
+      });
       return;
     }
 

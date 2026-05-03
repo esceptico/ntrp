@@ -33,8 +33,9 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
     }),
   );
 
-  const isDone = !!turn?.endedAt;
-  const [expanded, setExpanded] = useState(true);
+  const isDone = turn?.endedAt != null;
+  // Default historic turns to collapsed; default in-progress turns to expanded.
+  const [expanded, setExpanded] = useState(!isDone);
 
   // Auto-collapse the moment the run finishes.
   const wasDone = useRef(isDone);
@@ -58,7 +59,11 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
     ? childIds.filter((id) => id !== finalAssistantId)
     : childIds;
   const hasInterim = interimIds.length > 0;
-  const headerLabel = `Worked for ${formatDuration(turn?.durationMs ?? 0)}`;
+  // Live runs have a real durationMs; historic ones don't (we don't persist
+  // turn timing). Show the time when we have it, plain "Worked" otherwise.
+  const headerLabel = turn?.durationMs != null
+    ? `Worked for ${formatDuration(turn.durationMs)}`
+    : "Worked";
 
   return (
     <>
