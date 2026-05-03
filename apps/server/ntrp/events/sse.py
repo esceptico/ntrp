@@ -333,16 +333,12 @@ def agent_events_to_sse(event) -> tuple[SSEEvent, ...]:
                 ),
             )
         case TextBlock():
-            # TextBlock signals a non-streamed final cumulative text. Emit it
-            # as a single CONTENT chunk; the surrounding stream wrapper takes
-            # care of TEXT_MESSAGE_START/END so we don't double-emit.
-            return (
-                TextMessageContentEvent(
-                    message_id=getattr(event, "message_id", "") or "",
-                    delta=event.content,
-                    **base,
-                ),
-            )
+            # TextBlock is the cumulative-final text for a step; the streaming
+            # TextDelta events already carried every chunk over the wire, so
+            # re-emitting here would just duplicate the message client-side.
+            # Other (non-SSE) consumers of agent events can still use
+            # TextBlock — it's only this conversion that drops it.
+            return ()
         case ReasoningBlock():
             message_id = f"reasoning-{uuid4().hex[:10]}"
             content = event.content.strip()

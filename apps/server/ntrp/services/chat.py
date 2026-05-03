@@ -17,7 +17,6 @@ from ntrp.events.sse import (
     RunErrorEvent,
     RunFinishedEvent,
     RunStartedEvent,
-    TextEvent,
     ThinkingEvent,
 )
 from ntrp.llm.models import Provider, get_model
@@ -445,8 +444,11 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
 
         run.usage = tracker.usage
 
-        if result:
-            await bus.emit(TextEvent(delta=result))
+        # Note: we used to emit a final TextEvent with the cumulative
+        # `result` here, which made sense back when the wire had a separate
+        # "final text" event (replace-semantics). Under AG-UI the text was
+        # already streamed through TEXT_MESSAGE_CONTENT deltas — re-emitting
+        # would just duplicate the assistant message in the UI.
 
         usage_dict = run.usage.to_dict()
         usage_dict["cost"] = tracker.cost
