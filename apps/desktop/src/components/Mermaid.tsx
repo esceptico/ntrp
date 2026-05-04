@@ -27,6 +27,7 @@ async function getMermaid(): Promise<typeof import("mermaid").default> {
     const muted = tok("--color-muted");
     const faint = tok("--color-faint");
     const line = tok("--color-line-strong");
+    const surfaceSunken = tok("--color-surface-sunken");
     const onInk = tok("--color-on-ink");
 
     mermaid.initialize({
@@ -68,8 +69,12 @@ async function getMermaid(): Promise<typeof import("mermaid").default> {
         noteBkgColor: "transparent",
         noteBorderColor: line,
         noteTextColor: ink,
-        activationBkgColor: "transparent",
-        activationBorderColor: line,
+        // Activation bar (the rect over a participant's lifeline while
+        // busy). Transparent fill made it almost invisible against the
+        // panel background; a tinted fill + muted border reads as a clear
+        // but unobtrusive bar.
+        activationBkgColor: surfaceSunken,
+        activationBorderColor: muted,
         // mermaid fills the autonumber bubble with `actorTextColor` (dark);
         // the number text needs the contrasting on-ink color to be visible.
         sequenceNumberColor: onInk,
