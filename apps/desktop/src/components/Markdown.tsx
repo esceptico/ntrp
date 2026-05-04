@@ -10,6 +10,7 @@ import javascript from "highlight.js/lib/languages/javascript";
 import json from "highlight.js/lib/languages/json";
 import python from "highlight.js/lib/languages/python";
 import typescript from "highlight.js/lib/languages/typescript";
+import { Mermaid } from "./Mermaid";
 
 const HL_LANGUAGES = {
   json,
@@ -83,6 +84,10 @@ function PreBlock({ children }: { children?: ReactNode }) {
   const className = codeNode?.props.className ?? "";
   const lang = className.match(/(?:^|\s)language-(\S+)/)?.[1] ?? "";
   const rawText = useMemo(() => extractText(codeNode?.props.children), [codeNode]);
+
+  if (lang === "mermaid" && rawText.trim()) {
+    return <Mermaid code={rawText} />;
+  }
 
   return (
     <div className="code-block">
