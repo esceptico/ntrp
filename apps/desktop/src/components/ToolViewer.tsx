@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Copy, X } from "lucide-react";
+import { ArrowRight, Check, Copy, X } from "lucide-react";
 import clsx from "clsx";
-import { useStore } from "../store";
+import { useShallow } from "zustand/react/shallow";
+import { useStore, type ActivityItem } from "../store";
 import { highlight } from "../highlight";
 
 /** Pretty-print JSON; fall back to the raw string when parse fails. The
@@ -24,7 +25,9 @@ export function ToolViewer() {
   const close = useStore((s) => s.setViewingTool);
 
   // Re-read the live item from the store so a streaming result patches in
-  // while the viewer is open.
+  // while the viewer is open. The selector returns a stable reference for
+  // the matching activity item — Zustand's default reference equality is
+  // fine here.
   const live = useStore((s) => {
     if (!item) return null;
     for (const msg of s.messages.values()) {
@@ -34,6 +37,24 @@ export function ToolViewer() {
     }
     return item;
   });
+
+  // Nested tool calls that declared this tool as their parent. Wrapped in
+  // useShallow so a fresh array with the same contents doesn't trigger a
+  // re-render — without that, this selector creates new array on every
+  // store update and we go into an infinite loop.
+  const children = useStore(
+    useShallow((s) => {
+      if (!item) return [] as ActivityItem[];
+      const out: ActivityItem[] = [];
+      for (const msg of s.messages.values()) {
+        if (!msg.activity) continue;
+        for (const it of msg.activity.items) {
+          if (it.parentToolId === item.id) out.push(it);
+        }
+      }
+      return out;
+    }),
+  );
 
   const input = useMemo(() => formatMaybeJson(live?.args), [live?.args]);
   const output = useMemo(() => formatMaybeJson(live?.result), [live?.result]);
@@ -102,10 +123,39 @@ export function ToolViewer() {
             html={outputHtml}
             placeholder={live.result == null ? "Waiting for result…" : "Empty result."}
           />
+          {children.length > 0 && <ChildRuns items={children} />}
         </div>
       </div>
     </div>,
     root,
+  );
+}
+
+function ChildRuns({ items }: { items: ActivityItem[] }) {
+  const setViewing = useStore((s) => s.setViewingTool);
+  return (
+    <section className="grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0">
+      <h3 className="m-0 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint">
+        Child runs
+      </h3>
+      <ul className="grid gap-px m-0 p-0 list-none rounded-[10px] border border-line-soft bg-surface overflow-hidden">
+        {items.map((child) => (
+          <li key={child.id} className="contents">
+            <button
+              type="button"
+              onClick={() => setViewing(child)}
+              className="flex items-baseline gap-2 w-full px-3 py-2 text-left bg-transparent border-0 hover:bg-surface-soft/60 transition-colors"
+            >
+              <ArrowRight size={11} strokeWidth={1.8} className="self-center text-whisper shrink-0" />
+              <span className="text-[12px] font-medium text-ink-soft shrink-0">{child.kind}</span>
+              <span className="text-[11.5px] text-faint font-mono truncate min-w-0 flex-1">
+                {child.target}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

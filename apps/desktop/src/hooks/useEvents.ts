@@ -49,7 +49,7 @@ function enqueueActivityItem(aid: string, item: ActivityItem) {
  *  activity once TOOL_CALL_END arrives. */
 const pendingToolCalls = new Map<
   string,
-  { name: string; description: string; argsBuffer: string }
+  { name: string; description: string; argsBuffer: string; depth: number }
 >();
 
 function handleServerEvent(event: ServerEvent) {
@@ -137,6 +137,7 @@ function handleServerEvent(event: ServerEvent) {
         name: event.tool_call_name,
         description: event.description ?? "",
         argsBuffer: "",
+        depth: event.depth ?? 0,
       });
       return;
     case "TOOL_CALL_ARGS": {
@@ -155,6 +156,7 @@ function handleServerEvent(event: ServerEvent) {
         kind: pending.name,
         target,
         args: pending.argsBuffer,
+        depth: pending.depth || undefined,
       };
       const aid = s.activeActivityId;
       if (!aid) {
@@ -174,7 +176,10 @@ function handleServerEvent(event: ServerEvent) {
     }
     case "TOOL_CALL_RESULT": {
       const result = event.content ?? event.preview ?? "";
-      s.mergeActivityItem(event.tool_call_id, { result });
+      const patch: Partial<ActivityItem> = { result };
+      if (event.parent_id) patch.parentToolId = event.parent_id;
+      if (event.depth != null) patch.depth = event.depth || undefined;
+      s.mergeActivityItem(event.tool_call_id, patch);
       return;
     }
 

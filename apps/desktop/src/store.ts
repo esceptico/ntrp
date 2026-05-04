@@ -16,6 +16,13 @@ export interface ActivityItem {
   target: string;
   args?: string;
   result?: string;
+  /** Nesting depth: 0 = top-level (called by the user-facing agent),
+   *  1 = inside a sub-agent (research → research, etc.). Used purely for
+   *  visualization (indent + chip). */
+  depth?: number;
+  /** Tool-call id of the parent tool whose run produced this call.
+   *  Available for nested calls; lets the inspector group children. */
+  parentToolId?: string;
 }
 
 export interface ActivityState {

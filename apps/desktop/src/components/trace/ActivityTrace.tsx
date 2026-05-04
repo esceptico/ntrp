@@ -14,7 +14,12 @@ export type ActivityItem = {
   target: string;
   args?: string;
   result?: string;
+  depth?: number;
+  parentToolId?: string;
 };
+
+const NEST_PX = 16;
+const MAX_NEST_DEPTH = 4; // visual cap; deeper nesting collapses to the same indent
 
 export function ActivityTrace({ children }: { children: ReactNode }) {
   return (
@@ -92,8 +97,14 @@ export function ActivityTail({
   // Mixing the two caused items to "appear from the center" because the
   // older items (suddenly newly visible when expanding) ran their initial
   // y-translate animation while the container was also growing in height.
+  // Only show top-level tool calls in the tail. Calls a sub-agent makes
+  // (depth > 0) are still kept in the store, but they'd otherwise crowd
+  // the tail into a soup when several sub-agents run in parallel — the
+  // user reaches them by clicking the parent and using "Child runs" in
+  // the inspector.
+  const topLevel = items.filter((it) => (it.depth ?? 0) === 0);
   const rolling = max != null;
-  const visible = rolling ? items.slice(-max) : items;
+  const visible = rolling ? topLevel.slice(-max) : topLevel;
   const targetHeight = rolling ? `${max * ROW_HEIGHT_EM}em` : "auto";
   const setViewingTool = useStore((s) => s.setViewingTool);
 
@@ -147,14 +158,19 @@ function ItemButton({
   item: ActivityItem;
   onOpen: (item: ActivityItem) => void;
 }) {
+  const depth = Math.min(item.depth ?? 0, MAX_NEST_DEPTH);
   return (
     <button
       type="button"
       onClick={() => onOpen(item)}
       title={`${item.kind} — click to inspect`}
-      className="font-mono text-faint truncate text-left bg-transparent border-0 p-0 m-0 hover:text-ink-soft transition-colors cursor-pointer"
+      style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
+      className="flex items-baseline gap-1.5 font-mono text-faint truncate text-left bg-transparent border-0 p-0 m-0 hover:text-ink-soft transition-colors cursor-pointer"
     >
-      {item.target || item.kind}
+      {depth > 0 && (
+        <span className="text-whisper select-none" aria-hidden="true">↳</span>
+      )}
+      <span className="truncate">{item.target || item.kind}</span>
     </button>
   );
 }
