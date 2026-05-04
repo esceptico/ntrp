@@ -80,6 +80,8 @@ export type ServerEvent = WithTs & (
   // ─── ntrp-specific (non-AG-UI canonical) ───────────────────────────
   | { type: "approval_needed"; tool_id: string; name: string; path?: string | null; diff?: string | null; content_preview?: string | null }
   | { type: "background_task"; command: string; status: string; detail?: string }
+  | { type: "compaction_started"; run_id: string }
+  | { type: "compaction_finished"; run_id: string; messages_before: number; messages_after: number }
 );
 
 export const STORAGE_KEY = "ntrp.desktop.config";
@@ -266,6 +268,32 @@ export async function renameSessionApi(
 
 export async function archiveSessionApi(config: AppConfig, sessionId: string): Promise<void> {
   await apiWithConfig(config, `/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+}
+
+export interface ArchivedSession {
+  session_id: string;
+  started_at: string;
+  last_activity: string;
+  name: string | null;
+  archived_at: string;
+  message_count: number;
+}
+
+export async function listArchivedSessionsApi(config: AppConfig): Promise<ArchivedSession[]> {
+  const r = await apiWithConfig<{ sessions: ArchivedSession[] }>(config, "/sessions/archived");
+  return r.sessions;
+}
+
+export async function restoreSessionApi(config: AppConfig, sessionId: string): Promise<void> {
+  await apiWithConfig(config, `/sessions/${encodeURIComponent(sessionId)}/restore`, {
+    method: "POST",
+  });
+}
+
+export async function permanentlyDeleteSessionApi(config: AppConfig, sessionId: string): Promise<void> {
+  await apiWithConfig(config, `/sessions/${encodeURIComponent(sessionId)}/permanent`, {
     method: "DELETE",
   });
 }

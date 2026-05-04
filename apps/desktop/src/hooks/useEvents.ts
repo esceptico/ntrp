@@ -212,6 +212,17 @@ function handleServerEvent(event: ServerEvent) {
         content: event.detail ? `${event.status}: ${event.detail}` : event.status,
       });
       return;
+    case "compaction_started":
+      s.setCompacting(true);
+      return;
+    case "compaction_finished":
+      s.setCompacting(false);
+      s.setLastCompaction({
+        before: event.messages_before,
+        after: event.messages_after,
+        at: ts,
+      });
+      return;
   }
 }
 

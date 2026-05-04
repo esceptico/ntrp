@@ -59,6 +59,8 @@ class EventType(StrEnum):
     MESSAGE_INGESTED = "message_ingested"
     AUTOMATION_PROGRESS = "automation_progress"
     AUTOMATION_FINISHED = "automation_finished"
+    COMPACTION_STARTED = "compaction_started"
+    COMPACTION_FINISHED = "compaction_finished"
 
 
 def _now_ms() -> int:
@@ -296,6 +298,20 @@ class AutomationFinishedEvent(SSEEvent):
     type: EventType = field(default=EventType.AUTOMATION_FINISHED, init=False)
     task_id: str = ""
     result: str | None = None
+
+
+@dataclass(frozen=True)
+class CompactionStartedEvent(SSEEvent):
+    type: EventType = field(default=EventType.COMPACTION_STARTED, init=False)
+    run_id: str = ""
+
+
+@dataclass(frozen=True)
+class CompactionFinishedEvent(SSEEvent):
+    type: EventType = field(default=EventType.COMPACTION_FINISHED, init=False)
+    run_id: str = ""
+    messages_before: int = 0
+    messages_after: int = 0
 
 
 # ─── Aliases (back-compat for existing imports) ───────────────────────

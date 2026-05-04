@@ -195,12 +195,12 @@ class SummaryCompactor:
         self.keep_ratio = keep_ratio
         self.summary_max_tokens = summary_max_tokens
 
-    async def maybe_compact(
+    def should_compact(
         self,
         messages: list[dict],
         model: str,
         last_input_tokens: int | None,
-    ) -> list[dict] | None:
+    ) -> bool:
         if not compact_needed(
             messages,
             model,
@@ -208,6 +208,16 @@ class SummaryCompactor:
             threshold=self.threshold,
             max_messages=self.max_messages,
         ):
+            return False
+        return compactable_range(messages, keep_ratio=self.keep_ratio) is not None
+
+    async def maybe_compact(
+        self,
+        messages: list[dict],
+        model: str,
+        last_input_tokens: int | None,
+    ) -> list[dict] | None:
+        if not self.should_compact(messages, model, last_input_tokens):
             return None
 
         return await compact_messages(

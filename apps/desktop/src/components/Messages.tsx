@@ -4,6 +4,7 @@ import { useStore } from "../store";
 import { EmptyState } from "./EmptyState";
 import { Message } from "./Message";
 import { ThinkingIndicator } from "./ThinkingIndicator";
+import { CompactionIndicator } from "./CompactionIndicator";
 import { TurnGroup } from "./TurnGroup";
 
 function isAtBottom(el: Element, threshold = 64): boolean {
@@ -80,6 +81,7 @@ export function Messages() {
                 ? <TurnGroup key={seg.userId} userId={seg.userId} childIds={seg.childIds} />
                 : <div key="preamble" className="contents">{seg.childIds.map((id) => <Message key={id} id={id} />)}</div>
             )}
+        <CompactionIndicator />
         <ThinkingIndicator />
       </div>
     </div>

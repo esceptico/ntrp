@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 
+from ntrp.events.sse import CompactionFinishedEvent, CompactionStartedEvent
 from ntrp.llm.models import get_model
-from ntrp.server.deps import require_session_service
+from ntrp.server.bus import BusRegistry
+from ntrp.server.deps import get_bus_registry, require_session_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import CompactRequest, UpdateDirectivesRequest
 from ntrp.services.session import SessionService, compact_session
@@ -59,10 +61,22 @@ async def get_context_usage(
 
 
 @router.post("/compact")
-async def compact_context(runtime: Runtime = Depends(get_runtime), req: CompactRequest | None = None):
+async def compact_context(
+    runtime: Runtime = Depends(get_runtime),
+    buses: BusRegistry = Depends(get_bus_registry),
+    req: CompactRequest | None = None,
+):
     session_id = req.session_id if req else None
+
+    data = await runtime.session_service.load(session_id)
+    resolved_session_id = data.state.session_id if data else session_id
+    bus = buses.get_or_create(resolved_session_id) if resolved_session_id else None
+
+    if bus:
+        await bus.emit(CompactionStartedEvent(run_id=""))
+
     try:
-        return await compact_session(
+        result = await compact_session(
             runtime.session_service,
             model=runtime.config.chat_model,
             session_id=session_id,
@@ -70,7 +84,20 @@ async def compact_context(runtime: Runtime = Depends(get_runtime), req: CompactR
             summary_max_tokens=runtime.config.summary_max_tokens,
         )
     except Exception as e:
+        if bus:
+            same = int(len(data.messages) if data else 0)
+            await bus.emit(
+                CompactionFinishedEvent(run_id="", messages_before=same, messages_after=same)
+            )
         raise HTTPException(status_code=500, detail=str(e))
+
+    if bus:
+        before = int(result.get("before_messages", result.get("message_count", 0)) or 0)
+        after = int(result.get("after_messages", result.get("message_count", before)) or before)
+        await bus.emit(
+            CompactionFinishedEvent(run_id="", messages_before=before, messages_after=after)
+        )
+    return result
 
 
 @router.get("/directives")

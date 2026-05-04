@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   type AppConfig,
+  type ArchivedSession,
   type Automation,
   type ModelsResponse,
   type ServerConfig,
@@ -104,6 +105,10 @@ interface State {
   serverModels: ModelsResponse | null;
   automations: Automation[] | null;
   automationsOpen: boolean;
+  archiveOpen: boolean;
+  archivedSessions: ArchivedSession[] | null;
+  compacting: boolean;
+  lastCompaction: { before: number; after: number; at: number } | null;
 }
 
 export interface MarkdownViewState {
@@ -156,6 +161,11 @@ interface Actions {
   setAutomations: (automations: Automation[] | null) => void;
   openAutomations: () => void;
   closeAutomations: () => void;
+  setArchivedSessions: (sessions: ArchivedSession[] | null) => void;
+  openArchive: () => void;
+  closeArchive: () => void;
+  setCompacting: (compacting: boolean) => void;
+  setLastCompaction: (info: State["lastCompaction"]) => void;
 }
 
 const initialUsage: SessionUsage = { lastPrompt: 0, totalTokens: 0, totalCost: 0 };
@@ -190,6 +200,10 @@ export const useStore = create<State & Actions>((set) => ({
   serverModels: null,
   automations: null,
   automationsOpen: false,
+  archiveOpen: false,
+  archivedSessions: null,
+  compacting: false,
+  lastCompaction: null,
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
   setSessions: (sessions) => set({ sessions }),
@@ -203,6 +217,8 @@ export const useStore = create<State & Actions>((set) => ({
       editingId: null,
       activeActivityId: null,
       currentRunId: null,
+      compacting: false,
+      lastCompaction: null,
     }),
 
   setHistory: (messages) => {
@@ -354,6 +370,11 @@ export const useStore = create<State & Actions>((set) => ({
   setAutomations: (automations) => set({ automations }),
   openAutomations: () => set({ automationsOpen: true }),
   closeAutomations: () => set({ automationsOpen: false }),
+  setArchivedSessions: (archivedSessions) => set({ archivedSessions }),
+  openArchive: () => set({ archiveOpen: true }),
+  closeArchive: () => set({ archiveOpen: false }),
+  setCompacting: (compacting) => set({ compacting }),
+  setLastCompaction: (lastCompaction) => set({ lastCompaction }),
 }));
 
 // Helpers for use outside React (e.g. inside event-stream handlers).

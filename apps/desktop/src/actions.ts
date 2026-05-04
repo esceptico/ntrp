@@ -10,11 +10,14 @@ import {
   fetchSkillContent,
   getServerConfig,
   getServerModels,
+  listArchivedSessionsApi,
   listAutomationsApi,
   listSkills,
   loadInitialConfig,
   patchServerConfig,
+  permanentlyDeleteSessionApi,
   renameSessionApi,
+  restoreSessionApi,
   runAutomationApi,
   saveConfig,
   submitToolResult,
@@ -268,6 +271,8 @@ export async function archiveSession(sessionId: string): Promise<void> {
   await archiveSessionApi(s.config, sessionId);
   const remaining = s.sessions.filter((sess) => sess.session_id !== sessionId);
   s.setSessions(remaining);
+  // Invalidate archived list so the next open re-fetches.
+  s.setArchivedSessions(null);
   if (s.currentSessionId === sessionId) {
     if (remaining.length > 0) {
       await switchSession(remaining[0].session_id);
@@ -275,6 +280,34 @@ export async function archiveSession(sessionId: string): Promise<void> {
       await createSession();
     }
   }
+}
+
+export async function fetchArchivedSessions(): Promise<void> {
+  const s = getState();
+  if (!s.connected) return;
+  try {
+    const sessions = await listArchivedSessionsApi(s.config);
+    s.setArchivedSessions(sessions);
+  } catch {
+    s.setArchivedSessions([]);
+  }
+}
+
+export async function restoreArchivedSession(sessionId: string): Promise<void> {
+  const s = getState();
+  await restoreSessionApi(s.config, sessionId);
+  // Move back into the live sessions list — easiest is a refresh of both.
+  const archived = s.archivedSessions ?? [];
+  s.setArchivedSessions(archived.filter((a) => a.session_id !== sessionId));
+  const { sessions } = await apiWithConfig<{ sessions: SessionListItem[] }>(s.config, "/sessions");
+  s.setSessions(sessions);
+}
+
+export async function permanentlyDeleteSession(sessionId: string): Promise<void> {
+  const s = getState();
+  await permanentlyDeleteSessionApi(s.config, sessionId);
+  const archived = s.archivedSessions ?? [];
+  s.setArchivedSessions(archived.filter((a) => a.session_id !== sessionId));
 }
 
 export async function branchAtMessage(messageId: string): Promise<void> {

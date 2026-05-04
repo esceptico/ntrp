@@ -102,6 +102,8 @@ def create_agent(
             CompactionModelRequestMiddleware(
                 compactor=config.compactor,
                 on_compact=run_ctx.loaded_tools.clear,
+                emit=tool_ctx.io.emit,
+                run_id=run_id,
             ),
         ),
     )
