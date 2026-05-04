@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Archive, Pencil, Search, Settings as SettingsIcon, Sparkles, X, Zap } from "lucide-react";
+import { Archive, Brain, Pencil, Search, Settings as SettingsIcon, Sparkles, X, Zap } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
 import { apiWithConfig } from "../api";
@@ -442,6 +442,7 @@ function ContextItem({
 export function Sidebar() {
   const openSettings = useStore((s) => s.openSettings);
   const openAutomations = useStore((s) => s.openAutomations);
+  const openMemory = useStore((s) => s.openMemory);
 
   return (
     <aside className="sidebar flex flex-col">
@@ -456,6 +457,11 @@ export function Sidebar() {
           icon={<Zap size={13} strokeWidth={1.7} />}
           label="Automations"
           onClick={openAutomations}
+        />
+        <NavRow
+          icon={<Brain size={13} strokeWidth={1.7} />}
+          label="Memory"
+          onClick={openMemory}
         />
       </nav>
       <SessionList />

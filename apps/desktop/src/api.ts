@@ -298,6 +298,129 @@ export async function permanentlyDeleteSessionApi(config: AppConfig, sessionId: 
   });
 }
 
+// ─── Memory ──────────────────────────────────────────────────────────
+
+export type FactKind =
+  | "identity"
+  | "preference"
+  | "relationship"
+  | "decision"
+  | "project"
+  | "event"
+  | "artifact"
+  | "procedure"
+  | "constraint"
+  | "note";
+
+export type FactLifetime = "durable" | "temporary";
+export type FactStatus = "active" | "archived" | "superseded" | "expired" | "temporary" | "pinned" | "all";
+
+export interface Fact {
+  id: number;
+  text: string;
+  source_type: string;
+  source_ref: string | null;
+  created_at: string;
+  happened_at: string | null;
+  last_accessed_at: string;
+  access_count: number;
+  consolidated_at: string | null;
+  archived_at: string | null;
+  kind: FactKind;
+  lifetime: FactLifetime;
+  salience: number;
+  confidence: number;
+  expires_at: string | null;
+  pinned_at: string | null;
+  superseded_by_fact_id: number | null;
+}
+
+export interface Observation {
+  id: number;
+  summary: string;
+  evidence_count: number;
+  access_count: number;
+  created_at: string;
+  updated_at: string;
+  last_accessed_at: string;
+  archived_at: string | null;
+  created_by: string | null;
+  policy_version: number | null;
+}
+
+export interface FactListFilters {
+  limit?: number;
+  offset?: number;
+  kind?: FactKind;
+  status?: FactStatus;
+}
+
+export async function listFactsApi(
+  config: AppConfig,
+  filters: FactListFilters = {},
+): Promise<{ facts: Fact[]; total: number }> {
+  const qs = new URLSearchParams();
+  qs.set("limit", String(filters.limit ?? 100));
+  if (filters.offset) qs.set("offset", String(filters.offset));
+  if (filters.kind) qs.set("kind", filters.kind);
+  if (filters.status) qs.set("status", filters.status);
+  return apiWithConfig(config, `/facts?${qs.toString()}`);
+}
+
+export async function updateFactTextApi(config: AppConfig, id: number, text: string): Promise<{ fact: Fact }> {
+  return apiWithConfig(config, `/facts/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ text }),
+  });
+}
+
+export async function deleteFactApi(config: AppConfig, id: number): Promise<void> {
+  await apiWithConfig(config, `/facts/${id}`, { method: "DELETE" });
+}
+
+export interface ObservationListFilters {
+  limit?: number;
+  offset?: number;
+  status?: "active" | "archived" | "all";
+}
+
+export async function listObservationsApi(
+  config: AppConfig,
+  filters: ObservationListFilters = {},
+): Promise<{ observations: Observation[]; total: number }> {
+  const qs = new URLSearchParams();
+  qs.set("limit", String(filters.limit ?? 100));
+  if (filters.offset) qs.set("offset", String(filters.offset));
+  if (filters.status) qs.set("status", filters.status);
+  return apiWithConfig(config, `/observations?${qs.toString()}`);
+}
+
+export async function updateObservationSummaryApi(
+  config: AppConfig,
+  id: number,
+  summary: string,
+): Promise<{ observation: Observation }> {
+  return apiWithConfig(config, `/observations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ summary }),
+  });
+}
+
+export async function deleteObservationApi(config: AppConfig, id: number): Promise<void> {
+  await apiWithConfig(config, `/observations/${id}`, { method: "DELETE" });
+}
+
+export interface ObservationDetail {
+  observation: Observation;
+  supporting_facts: Fact[];
+  source_fact_ids: number[];
+  missing_source_fact_ids: number[];
+}
+
+export async function getObservationApi(config: AppConfig, id: number): Promise<ObservationDetail> {
+  return apiWithConfig(config, `/observations/${id}`);
+}
+
 export async function branchSessionApi(
   config: AppConfig,
   sessionId: string,

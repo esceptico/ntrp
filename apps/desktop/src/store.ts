@@ -109,6 +109,7 @@ interface State {
   archivedSessions: ArchivedSession[] | null;
   compacting: boolean;
   lastCompaction: { before: number; after: number; at: number } | null;
+  memoryOpen: boolean;
 }
 
 export interface MarkdownViewState {
@@ -166,6 +167,8 @@ interface Actions {
   closeArchive: () => void;
   setCompacting: (compacting: boolean) => void;
   setLastCompaction: (info: State["lastCompaction"]) => void;
+  openMemory: () => void;
+  closeMemory: () => void;
 }
 
 const initialUsage: SessionUsage = { lastPrompt: 0, totalTokens: 0, totalCost: 0 };
@@ -204,6 +207,7 @@ export const useStore = create<State & Actions>((set) => ({
   archivedSessions: null,
   compacting: false,
   lastCompaction: null,
+  memoryOpen: false,
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
   setSessions: (sessions) => set({ sessions }),
@@ -375,6 +379,8 @@ export const useStore = create<State & Actions>((set) => ({
   closeArchive: () => set({ archiveOpen: false }),
   setCompacting: (compacting) => set({ compacting }),
   setLastCompaction: (lastCompaction) => set({ lastCompaction }),
+  openMemory: () => set({ memoryOpen: true }),
+  closeMemory: () => set({ memoryOpen: false }),
 }));
 
 // Helpers for use outside React (e.g. inside event-stream handlers).
