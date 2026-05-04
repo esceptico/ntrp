@@ -56,13 +56,6 @@ export async function loadHistory(sessionId: string): Promise<void> {
     }
   }
 
-  // The history endpoint returns the most recent N server messages, so the
-  // from-end position of slice index `i` is identical to its position in
-  // the server's full message list — a stable handle we attach to every UI
-  // item produced from this server message and use later for branching.
-  const sliceLen = messages.length;
-  const fromEndOf = (i: number) => sliceLen - 1 - i;
-
   const items: UiMessage[] = [];
   let activeActivityId: string | null = null;
 
@@ -70,17 +63,18 @@ export async function loadHistory(sessionId: string): Promise<void> {
     items.find((it) => it.id === id && it.role === "activity")?.activity;
 
   messages.forEach((msg, index) => {
-    const serverFromEnd = fromEndOf(index);
+    // Prefer the stable server-issued id; fall back to a positional id for
+    // older sessions whose messages were saved before id-based persistence.
+    const stableId = msg.id ?? `history-${index}`;
 
     if (msg.role === "user") {
       activeActivityId = null;
       items.push({
-        id: `history-${index}`,
+        id: stableId,
         role: "user",
         content: msg.content,
         turn: { startedAt: 0, endedAt: 0, durationMs: null },
         images: msg.images,
-        serverFromEnd,
       });
       return;
     }
@@ -94,33 +88,30 @@ export async function loadHistory(sessionId: string): Promise<void> {
     if (msg.reasoning_content) {
       activeActivityId = null;
       items.push({
-        id: `history-${index}-reasoning`,
+        id: `${stableId}-reasoning`,
         role: "reasoning",
         title: "Reasoning",
         content: msg.reasoning_content,
-        serverFromEnd,
       });
     }
 
     if (msg.content && msg.content.trim().length > 0) {
       activeActivityId = null;
       items.push({
-        id: `history-${index}`,
+        id: stableId,
         role: "assistant",
         content: msg.content,
-        serverFromEnd,
       });
     }
 
     if (msg.tool_calls && msg.tool_calls.length > 0) {
       if (!activeActivityId) {
-        activeActivityId = `history-activity-${index}`;
+        activeActivityId = `${stableId}-activity`;
         items.push({
           id: activeActivityId,
           role: "activity",
           content: "",
           activity: { items: [], label: "Called", done: true },
-          serverFromEnd,
         });
       }
       const activity = findActivity(activeActivityId);
@@ -278,11 +269,11 @@ export async function archiveSession(sessionId: string): Promise<void> {
   }
 }
 
-export async function branchAtFromEnd(fromEndIndex: number): Promise<void> {
+export async function branchAtMessage(messageId: string): Promise<void> {
   const s = getState();
   if (!s.currentSessionId) return;
   const branched = await branchSessionApi(s.config, s.currentSessionId, {
-    from_end_index: fromEndIndex,
+    up_to_message_id: messageId,
   });
   const { sessions } = await apiWithConfig<{ sessions: SessionListItem[] }>(s.config, "/sessions");
   s.setSessions(sessions);

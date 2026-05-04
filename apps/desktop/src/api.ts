@@ -29,6 +29,10 @@ export interface HistoryMessage {
   tool_calls?: HistoryToolCall[];
   tool_call_id?: string;
   images?: HistoryImage[];
+  /** Stable client-side id (the same one we streamed for assistant turns).
+   *  Available for messages saved after id-based persistence landed; older
+   *  sessions may not have it. */
+  id?: string;
 }
 
 export interface HealthCheck {
@@ -269,7 +273,7 @@ export async function archiveSessionApi(config: AppConfig, sessionId: string): P
 export async function branchSessionApi(
   config: AppConfig,
   sessionId: string,
-  payload: { name?: string; from_end_index?: number },
+  payload: { name?: string; up_to_message_id?: string; from_end_index?: number },
 ): Promise<{ session_id: string; name: string | null; started_at: string; last_activity: string }> {
   return apiWithConfig(config, `/sessions/${encodeURIComponent(sessionId)}/branch`, {
     method: "POST",

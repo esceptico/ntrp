@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { type AppConfig, type ServerEvent } from "../api";
 import { getState, setState, useStore, type ActivityItem } from "../store";
-import { loadHistory } from "../actions";
 
 /** End the active activity (if any) and clear the marker. */
 function endActivity(s: ReturnType<typeof getState>) {
@@ -67,11 +66,14 @@ function handleServerEvent(event: ServerEvent) {
       endActivity(s);
       endTurn(s, ts);
       setState({ running: false, currentRunId: null });
-      // Re-pull the saved history so freshly-streamed messages pick up
-      // their server-side from-end position; without this, branching from
-      // the just-finished turn isn't possible until the user navigates
-      // away and back.
-      if (s.currentSessionId) void loadHistory(s.currentSessionId);
+      // We deliberately do NOT call loadHistory here. Refreshing the
+      // history map mid-stream caused two visible bugs: (1) a flicker
+      // where every message remounts as the UUID-keyed live items get
+      // swapped for fresh history-${idx}-keyed ones; (2) the just-
+      // finished assistant turn occasionally vanishing because the
+      // server's save raced the history fetch. The cost is that
+      // branching from the *most recent* turn doesn't light up until
+      // the user navigates away and back — a fair trade.
       return;
     case "RUN_ERROR":
       endActivity(s);
@@ -90,11 +92,14 @@ function handleServerEvent(event: ServerEvent) {
     case "TEXT_MESSAGE_CONTENT": {
       const lastId = s.order[s.order.length - 1];
       const last = lastId ? s.messages.get(lastId) : null;
-      if (last && last.role === "assistant") {
+      if (last && last.role === "assistant" && last.id === event.message_id) {
         s.mutateMessage(last.id, { content: last.content + event.delta });
       } else {
         endActivity(s);
-        s.appendMessage({ id: crypto.randomUUID(), role: "assistant", content: event.delta });
+        // Use the server's stable message id (same one persisted on the
+        // saved message) so branching / edits can reference it directly.
+        const id = event.message_id || crypto.randomUUID();
+        s.appendMessage({ id, role: "assistant", content: event.delta });
       }
       return;
     }

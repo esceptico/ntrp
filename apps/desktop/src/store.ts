@@ -65,13 +65,6 @@ export interface UiMessage {
   approval?: ApprovalState;
   turn?: TurnMeta;
   images?: ImageBlock[];
-  /** Position of the originating server message counted from the end of the
-   *  full message list (0 = the very last message). The same value for the
-   *  UI message and the server message regardless of any history slicing,
-   *  so it doubles as a stable handle for operations like `branch`. Unset
-   *  for purely-local UI messages (status, error, approval) and for live
-   *  streamed messages until the next history refresh. */
-  serverFromEnd?: number;
 }
 
 export interface SessionUsage {

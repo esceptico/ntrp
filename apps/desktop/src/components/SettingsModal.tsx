@@ -55,11 +55,11 @@ export function SettingsModal() {
 
   return createPortal(
     <div
-      className="absolute inset-0 z-50 grid place-items-center p-8 bg-[rgba(28,26,22,0.32)] backdrop-blur-md animate-fade-in"
+      className="absolute inset-0 z-50 grid place-items-center p-8 bg-[rgba(0,0,0,0.32)] backdrop-blur-md animate-fade-in"
       onClick={close}
     >
       <div
-        className="w-[min(820px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-cols-[180px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] rounded-2xl bg-surface shadow-[var(--shadow-pop)] animate-pop-in overflow-hidden"
+        className="w-[min(820px,calc(100vw-80px))] h-[min(620px,calc(100vh-80px))] grid grid-cols-[180px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] rounded-2xl bg-surface shadow-[var(--shadow-pop)] animate-pop-in overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === "Escape" && !saving) close();

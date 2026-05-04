@@ -6,7 +6,7 @@ import { useStore, type UiMessage } from "../store";
 import { ActivityHeader, ActivityTail, ActivityTrace } from "./trace/ActivityTrace";
 import { ApprovalCard } from "./ApprovalCard";
 import type { SkillDescriptor } from "../api";
-import { branchAtFromEnd, viewSkill } from "../actions";
+import { branchAtMessage, viewSkill } from "../actions";
 import { Markdown } from "./Markdown";
 
 const EASE = [0.32, 0.72, 0, 1] as const;
@@ -37,7 +37,6 @@ function useIsLast(id: string): boolean {
 function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }) {
   const [copied, setCopied] = useState(false);
   const [branching, setBranching] = useState(false);
-  const hasFromEnd = useStore((s) => s.messages.get(id)?.serverFromEnd != null);
 
   async function copy() {
     const message = useStore.getState().messages.get(id);
@@ -62,12 +61,9 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
 
   async function branch() {
     if (branching) return;
-    const message = useStore.getState().messages.get(id);
-    const fromEnd = message?.serverFromEnd;
-    if (fromEnd == null) return;
     setBranching(true);
     try {
-      await branchAtFromEnd(fromEnd);
+      await branchAtMessage(id);
     } finally {
       setBranching(false);
     }
@@ -95,8 +91,8 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
         <button
           type="button"
           onClick={() => void branch()}
-          disabled={branching || !hasFromEnd}
-          title={hasFromEnd ? "Branch from this message" : "Branching available after the run finishes"}
+          disabled={branching}
+          title="Branch from this message"
           className="grid place-items-center w-6 h-6 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <GitBranch size={13} strokeWidth={2} />
