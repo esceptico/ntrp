@@ -291,62 +291,75 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .md th { background: var(--color-surface-soft); font-weight: 600; }
 
 /* ─── Mermaid diagrams ─────────────────────────────────────── */
-.mermaid-block {
-  position: relative;
+/* Inline panel: toolbar on top, pan/zoom canvas below. The canvas is the
+   default render — no separate "expand" affordance needed for normal use.
+   Fullscreen variant fills its parent (a portal modal). */
+.mermaid-panel {
+  display: grid;
+  grid-template-rows: auto 1fr;
   margin: 0.6em 0;
-  padding: 18px 16px;
+  height: 480px;
   border: 1px solid var(--color-line-soft);
   border-radius: 12px;
   background: var(--color-code-bg);
-  overflow-x: auto;
-  text-align: center;
+  overflow: hidden;
 }
-.mermaid-block .mermaid-svg svg {
-  max-width: 100%;
-  height: auto;
-  display: inline-block;
-}
-.mermaid-block svg .messageText,
-.mermaid-block svg .actor text,
-.mermaid-block svg .noteText,
-.mermaid-block svg text {
-  font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace !important;
-}
-.mermaid-expand {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
+.mermaid-panel.fullscreen {
+  margin: 0;
+  height: 100%;
+  border-radius: 16px;
+  box-shadow: var(--shadow-pop);
   background: var(--color-surface);
-  border: 1px solid var(--color-line-soft);
+}
+.mermaid-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px 6px 12px;
+  border-bottom: 1px solid var(--color-line-soft);
+  background: var(--color-surface);
+}
+.mermaid-panel-title {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-faint);
+}
+.mermaid-panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.mermaid-panel-zoom {
+  width: 44px;
+  text-align: center;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
   color: var(--color-muted);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  user-select: none;
 }
-.mermaid-block:hover .mermaid-expand,
-.mermaid-expand:focus-visible {
-  opacity: 1;
+.mermaid-panel-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--color-line);
+  margin: 0 4px;
 }
-.mermaid-expand:hover {
-  color: var(--color-ink);
-  border-color: var(--color-line-strong);
+.mermaid-panel-surface {
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  background: var(--color-code-bg);
 }
-.mermaid-viewer-stage svg {
-  max-width: none !important;
-  height: auto;
-  display: block;
+.mermaid-panel-surface.is-dragging { cursor: grabbing; }
+.mermaid-panel-inner {
+  position: absolute;
+  inset: 0;
 }
-.mermaid-viewer-stage svg .messageText,
-.mermaid-viewer-stage svg .actor text,
-.mermaid-viewer-stage svg .noteText,
-.mermaid-viewer-stage svg text {
-  font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace !important;
-}
+.mermaid-panel-inner svg { display: block; }
 .mermaid-loading {
   margin: 0.6em 0;
   padding: 14px 16px;
@@ -364,18 +377,44 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   border-radius: 12px;
   background: var(--color-bad-soft);
 }
+.mermaid-error-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
 .mermaid-error-head {
   font-size: 12px;
   font-weight: 600;
   color: var(--color-bad);
-  margin-bottom: 6px;
 }
+.mermaid-error-copy {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid rgba(184, 68, 43, 0.24);
+  color: var(--color-bad);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.mermaid-error-copy:hover { background: rgba(184, 68, 43, 0.08); }
 .mermaid-error-body {
   margin: 0;
   font-size: 12px;
   color: var(--color-ink-soft);
   white-space: pre-wrap;
   word-break: break-word;
+}
+.mermaid-error-detail {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--color-bad);
+  font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  opacity: 0.8;
 }
 
 /* ─── Tool preview fade ────────────────────────────────────── */

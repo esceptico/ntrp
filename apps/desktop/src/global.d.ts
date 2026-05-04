@@ -36,5 +36,9 @@ interface Window {
        *  to "" on success, an error message otherwise. */
       openPath: (path: string) => Promise<string>;
     };
+    clipboard: {
+      /** Writes text to the system clipboard via Electron's main process. */
+      writeText: (text: string) => Promise<boolean>;
+    };
   };
 }

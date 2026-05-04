@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, nativeTheme, safeStorage, session, shell } = require("electron");
+const { app, BrowserWindow, clipboard, ipcMain, nativeTheme, safeStorage, session, shell } = require("electron");
 const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -294,6 +294,12 @@ app.whenReady().then(() => {
     if (typeof targetPath !== "string" || targetPath.length === 0) return "Invalid path";
     // shell.openPath returns "" on success, an error string otherwise.
     return shell.openPath(targetPath);
+  });
+  ipcMain.handle("clipboard:write", (event, text) => {
+    assertTrustedSender(event);
+    if (typeof text !== "string") return false;
+    clipboard.writeText(text);
+    return true;
   });
 
   createWindow();

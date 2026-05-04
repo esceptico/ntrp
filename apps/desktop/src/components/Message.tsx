@@ -42,13 +42,9 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
   async function copy() {
     const message = useStore.getState().messages.get(id);
     if (!message) return;
-    try {
-      await navigator.clipboard.writeText(message.content);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch {
-      /* ignore */
-    }
+    await window.ntrpDesktop?.clipboard?.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
   }
 
   function edit() {

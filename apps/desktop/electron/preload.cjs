@@ -21,4 +21,7 @@ contextBridge.exposeInMainWorld("ntrpDesktop", {
   shell: {
     openPath: path => ipcRenderer.invoke("shell:open-path", path),
   },
+  clipboard: {
+    writeText: text => ipcRenderer.invoke("clipboard:write", text),
+  },
 });
