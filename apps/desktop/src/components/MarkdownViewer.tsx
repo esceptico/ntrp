@@ -1,9 +1,8 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { ExternalLink, X } from "lucide-react";
 import { useStore } from "../store";
-import { renderMarkdown } from "../markdown";
-import { MarkdownContent } from "./MarkdownContent";
+import { Markdown } from "./Markdown";
 
 /** Generic markdown viewer modal. State lives in the store as `viewingMarkdown`
  *  so any code can pop the viewer with a `setViewingMarkdown({title, content, ...})`
@@ -12,8 +11,6 @@ import { MarkdownContent } from "./MarkdownContent";
 export function MarkdownViewer() {
   const view = useStore((s) => s.viewingMarkdown);
   const close = useStore((s) => s.setViewingMarkdown);
-
-  const html = useMemo(() => (view ? renderMarkdown(view.content) : ""), [view?.content]);
 
   useEffect(() => {
     if (!view) return;
@@ -76,7 +73,7 @@ export function MarkdownViewer() {
           </div>
         </header>
         <div className="overflow-y-auto scroll-thin px-5 py-4">
-          <MarkdownContent html={html} className="text-[14px] leading-[1.6] text-ink" />
+          <Markdown content={view.content} className="text-[14px] leading-[1.6] text-ink" />
         </div>
       </div>
     </div>,

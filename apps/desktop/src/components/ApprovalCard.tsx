@@ -1,29 +1,21 @@
-import { memo, useMemo } from "react";
+import { memo } from "react";
 import { Check, Shield, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
 import { respondToApproval } from "../actions";
-import { escapeHtml } from "../markdown";
 
-function renderDiff(diff: string): string {
-  return diff
-    .split("\n")
-    .map((line) => {
-      const cls =
-        line.startsWith("+++") || line.startsWith("---") ? "diff-line diff-hunk" :
-        line.startsWith("@@") ? "diff-line diff-hunk" :
-        line.startsWith("+") ? "diff-line diff-add" :
-        line.startsWith("-") ? "diff-line diff-del" :
-        "diff-line";
-      return `<span class="${cls}">${escapeHtml(line) || "&nbsp;"}</span>`;
-    })
-    .join("");
+function diffClassFor(line: string): string {
+  if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) {
+    return "diff-line diff-hunk";
+  }
+  if (line.startsWith("+")) return "diff-line diff-add";
+  if (line.startsWith("-")) return "diff-line diff-del";
+  return "diff-line";
 }
 
 export const ApprovalCard = memo(function ApprovalCard({ id }: { id: string }) {
   const message = useStore((s) => s.messages.get(id));
   const approval = message?.approval;
-  const diffHtml = useMemo(() => (approval?.diff ? renderDiff(approval.diff) : ""), [approval?.diff]);
   if (!approval) return null;
 
   const { toolId, toolName, path, preview, status } = approval;
@@ -54,7 +46,13 @@ export const ApprovalCard = memo(function ApprovalCard({ id }: { id: string }) {
 
         {approval.diff && (
           <div className="diff-preview scroll-thin border-b border-line-soft">
-            <div dangerouslySetInnerHTML={{ __html: diffHtml }} />
+            <div>
+              {approval.diff.split("\n").map((line, i) => (
+                <span key={i} className={diffClassFor(line)}>
+                  {line || " "}
+                </span>
+              ))}
+            </div>
           </div>
         )}
 

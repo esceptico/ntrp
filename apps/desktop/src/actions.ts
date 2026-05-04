@@ -1,14 +1,22 @@
 import {
   type AppConfig,
   apiWithConfig,
+  archiveSessionApi,
+  branchSessionApi,
+  cancelRun,
   checkHealth,
   fetchSkillContent,
+  getServerConfig,
+  getServerModels,
   listSkills,
   loadInitialConfig,
+  patchServerConfig,
+  renameSessionApi,
   saveConfig,
   submitToolResult,
   validateConnection,
   type HistoryMessage,
+  type ServerConfigPatch,
   type SessionListItem,
 } from "./api";
 import { getState, type ImageBlock, type UiMessage } from "./store";
@@ -39,6 +47,22 @@ export async function loadHistory(sessionId: string): Promise<void> {
     `/session/history?session_id=${encodeURIComponent(sessionId)}`,
   );
 
+  // Pre-index tool results so we can attach them to their calls regardless
+  // of ordering between the assistant message and its `tool` follow-ups.
+  const resultsById = new Map<string, string>();
+  for (const msg of messages) {
+    if (msg.role === "tool" && msg.tool_call_id) {
+      resultsById.set(msg.tool_call_id, msg.content);
+    }
+  }
+
+  // The history endpoint returns the most recent N server messages, so the
+  // from-end position of slice index `i` is identical to its position in
+  // the server's full message list — a stable handle we attach to every UI
+  // item produced from this server message and use later for branching.
+  const sliceLen = messages.length;
+  const fromEndOf = (i: number) => sliceLen - 1 - i;
+
   const items: UiMessage[] = [];
   let activeActivityId: string | null = null;
 
@@ -46,23 +70,23 @@ export async function loadHistory(sessionId: string): Promise<void> {
     items.find((it) => it.id === id && it.role === "activity")?.activity;
 
   messages.forEach((msg, index) => {
+    const serverFromEnd = fromEndOf(index);
+
     if (msg.role === "user") {
       activeActivityId = null;
-      // Historic user messages don't carry real timing, but we still want
-      // the collapse UI to engage. Stamp the turn as "ended" (so isDone is
-      // true) with a null durationMs (so the header shows "Worked" rather
-      // than a fake "Worked for X").
       items.push({
         id: `history-${index}`,
         role: "user",
         content: msg.content,
         turn: { startedAt: 0, endedAt: 0, durationMs: null },
         images: msg.images,
+        serverFromEnd,
       });
       return;
     }
 
     if (msg.role === "tool") {
+      // Already folded into the matching activity item via resultsById.
       return;
     }
 
@@ -74,12 +98,18 @@ export async function loadHistory(sessionId: string): Promise<void> {
         role: "reasoning",
         title: "Reasoning",
         content: msg.reasoning_content,
+        serverFromEnd,
       });
     }
 
     if (msg.content && msg.content.trim().length > 0) {
       activeActivityId = null;
-      items.push({ id: `history-${index}`, role: "assistant", content: msg.content });
+      items.push({
+        id: `history-${index}`,
+        role: "assistant",
+        content: msg.content,
+        serverFromEnd,
+      });
     }
 
     if (msg.tool_calls && msg.tool_calls.length > 0) {
@@ -90,15 +120,19 @@ export async function loadHistory(sessionId: string): Promise<void> {
           role: "activity",
           content: "",
           activity: { items: [], label: "Called", done: true },
+          serverFromEnd,
         });
       }
       const activity = findActivity(activeActivityId);
       if (activity) {
         for (const tc of msg.tool_calls) {
+          const args = tc.arguments || "";
           activity.items.push({
             id: tc.id,
             kind: tc.name,
-            target: formatCall(tc.name, tc.arguments || "{}"),
+            target: formatCall(tc.name, args || "{}"),
+            args,
+            result: resultsById.get(tc.id),
           });
         }
       }
@@ -141,6 +175,27 @@ export async function bootstrap(): Promise<void> {
   }
   await refresh();
   void fetchSkills();
+  void fetchServerConfig();
+}
+
+export async function fetchServerConfig(): Promise<void> {
+  const s = getState();
+  try {
+    const [cfg, models] = await Promise.all([
+      getServerConfig(s.config),
+      getServerModels(s.config).catch(() => null),
+    ]);
+    s.setServerConfig(cfg);
+    if (models) s.setServerModels(models);
+  } catch {
+    /* server config is optional UI surface — don't surface this error */
+  }
+}
+
+export async function updateServerConfig(patch: ServerConfigPatch): Promise<void> {
+  const s = getState();
+  const next = await patchServerConfig(s.config, patch);
+  s.setServerConfig(next);
 }
 
 export async function fetchSkills(): Promise<void> {
@@ -197,6 +252,43 @@ export async function createSession(): Promise<void> {
   await switchSession(session.session_id);
 }
 
+export async function renameSession(sessionId: string, name: string): Promise<void> {
+  const s = getState();
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  await renameSessionApi(s.config, sessionId, trimmed);
+  s.setSessions(
+    s.sessions.map((sess) =>
+      sess.session_id === sessionId ? { ...sess, name: trimmed } : sess,
+    ),
+  );
+}
+
+export async function archiveSession(sessionId: string): Promise<void> {
+  const s = getState();
+  await archiveSessionApi(s.config, sessionId);
+  const remaining = s.sessions.filter((sess) => sess.session_id !== sessionId);
+  s.setSessions(remaining);
+  if (s.currentSessionId === sessionId) {
+    if (remaining.length > 0) {
+      await switchSession(remaining[0].session_id);
+    } else {
+      await createSession();
+    }
+  }
+}
+
+export async function branchAtFromEnd(fromEndIndex: number): Promise<void> {
+  const s = getState();
+  if (!s.currentSessionId) return;
+  const branched = await branchSessionApi(s.config, s.currentSessionId, {
+    from_end_index: fromEndIndex,
+  });
+  const { sessions } = await apiWithConfig<{ sessions: SessionListItem[] }>(s.config, "/sessions");
+  s.setSessions(sessions);
+  await switchSession(branched.session_id);
+}
+
 export async function sendMessage(text: string, images: ImageBlock[] = []): Promise<void> {
   const s = getState();
   if (!s.currentSessionId) return;
@@ -229,6 +321,21 @@ export async function sendMessage(text: string, images: ImageBlock[] = []): Prom
     });
   } catch (error) {
     s.setRunning(false);
+    s.appendMessage({
+      id: crypto.randomUUID(),
+      role: "error",
+      content: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+export async function stopRun(): Promise<void> {
+  const s = getState();
+  const runId = s.currentRunId;
+  if (!runId) return;
+  try {
+    await cancelRun(s.config, runId);
+  } catch (error) {
     s.appendMessage({
       id: crypto.randomUUID(),
       role: "error",

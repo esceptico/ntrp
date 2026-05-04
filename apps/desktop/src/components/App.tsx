@@ -3,6 +3,7 @@ import { Sidebar } from "./Sidebar";
 import { Chat } from "./Chat";
 import { SettingsModal } from "./SettingsModal";
 import { MarkdownViewer } from "./MarkdownViewer";
+import { ToolViewer } from "./ToolViewer";
 import { Demo as TraceDemo } from "./trace/Demo";
 import { useStore } from "../store";
 import { useEvents } from "../hooks/useEvents";
@@ -40,6 +41,7 @@ export function App() {
       <Chat />
       {settingsOpen && <SettingsModal />}
       <MarkdownViewer />
+      <ToolViewer />
     </>
   );
 }

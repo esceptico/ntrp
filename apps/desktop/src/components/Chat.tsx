@@ -1,7 +1,6 @@
 import { useStore } from "../store";
 import { Messages } from "./Messages";
 import { Composer } from "./Composer";
-import { RunChip } from "./RunChip";
 
 function ChatHeader() {
   const sessionId = useStore((s) => s.currentSessionId);
@@ -21,7 +20,6 @@ function ChatHeader() {
           {meta}
         </span>
       </div>
-      <RunChip />
     </div>
   );
 }

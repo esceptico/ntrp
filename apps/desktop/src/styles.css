@@ -7,23 +7,23 @@
   --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
 
-  --color-bg: #ece9e0;
+  --color-bg: #ebebeb;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-soft: #f0efeb;
-  --color-surface-sunken: #ebe9e3;
-  --color-code-bg: #f3f2ee;
+  --color-surface-soft: #f3f3f3;
+  --color-surface-sunken: #ececec;
+  --color-code-bg: #f4f4f4;
 
-  --color-line: #e3e1da;
-  --color-line-soft: #ecebe5;
-  --color-line-strong: #d6d4cc;
+  --color-line: #e3e3e3;
+  --color-line-soft: #ededed;
+  --color-line-strong: #d4d4d4;
 
-  --color-ink: #1a1a17;
-  --color-ink-soft: #3a3a35;
-  --color-on-ink: #f6f5f2;
-  --color-muted: #7c7a72;
-  --color-faint: #a8a59c;
-  --color-whisper: #c8c5bb;
+  --color-ink: #1a1a1a;
+  --color-ink-soft: #3a3a3a;
+  --color-on-ink: #f5f5f5;
+  --color-muted: #7a7a7a;
+  --color-faint: #a6a6a6;
+  --color-whisper: #c5c5c5;
 
   --color-accent: #b85c1f;
   --color-accent-soft: rgba(184, 92, 31, 0.1);
@@ -37,9 +37,9 @@
   --color-bad-soft: rgba(184, 68, 43, 0.08);
   --color-info: #3d6e9c;
 
-  --shadow-sm: 0 1px 2px rgba(20, 18, 14, 0.04), 0 1px 3px rgba(20, 18, 14, 0.03);
-  --shadow-md: 0 4px 8px rgba(20, 18, 14, 0.05), 0 12px 50px rgba(20, 18, 14, 0.03), 0 0 0 1px rgba(20, 18, 14, 0.04);
-  --shadow-pop: 0 12px 32px rgba(20, 18, 14, 0.12), 0 2px 8px rgba(20, 18, 14, 0.06);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.05), 0 12px 50px rgba(0, 0, 0, 0.03), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
 
   --animate-roll-in: rollIn 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --animate-fade-in: fadeIn 220ms ease-out;
@@ -135,11 +135,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 /* ─── Scrollbars ───────────────────────────────────────────── */
 .scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
 .scroll-thin::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
-.scroll-thin:hover::-webkit-scrollbar-thumb { background: rgba(20, 18, 14, 0.08); }
+.scroll-thin:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.08); }
 
 .scroll-messages::-webkit-scrollbar { width: 10px; }
 .scroll-messages::-webkit-scrollbar-thumb { background: transparent; border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
-.scroll-messages:hover::-webkit-scrollbar-thumb { background: rgba(20, 18, 14, 0.12); background-clip: padding-box; border: 2px solid transparent; }
+.scroll-messages:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.12); background-clip: padding-box; border: 2px solid transparent; }
 
 /* ─── Markdown content ─────────────────────────────────────── */
 .md > *:first-child { margin-top: 0; }
@@ -208,7 +208,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 .md .code-block-copy:hover {
   color: var(--color-ink);
-  background: rgba(20, 18, 14, 0.06);
+  background: rgba(0, 0, 0, 0.06);
 }
 .md .code-block-copy.copied {
   color: var(--color-ok);
@@ -221,6 +221,33 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   border-radius: 0;
 }
 .md pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; color: var(--color-ink); }
+
+/* ─── Syntax highlighting (highlight.js classes) ───────────── */
+:root {
+  --hl-keyword: #6f42c1;
+  --hl-string: #4f8a3a;
+  --hl-number: #b85c1f;
+  --hl-literal: #b85c1f;
+  --hl-comment: #8a8780;
+  --hl-attr: #3d6e9c;
+  --hl-type: #9c4d18;
+  --hl-built-in: #9c4d18;
+  --hl-title: #1a1a1a;
+  --hl-tag: #b8442b;
+  --hl-meta: #8a8780;
+  --hl-symbol: #3d6e9c;
+}
+.hljs { color: var(--color-ink); background: transparent; }
+.hljs-comment, .hljs-quote, .hljs-meta { color: var(--hl-comment); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-section, .hljs-doctag { color: var(--hl-keyword); font-weight: 500; }
+.hljs-string, .hljs-attribute, .hljs-template-tag, .hljs-template-variable, .hljs-regexp, .hljs-addition { color: var(--hl-string); }
+.hljs-number, .hljs-literal { color: var(--hl-number); }
+.hljs-name, .hljs-tag, .hljs-deletion { color: var(--hl-tag); }
+.hljs-attr, .hljs-property, .hljs-variable, .hljs-symbol { color: var(--hl-symbol); }
+.hljs-built_in, .hljs-class .hljs-title, .hljs-title.class_, .hljs-type { color: var(--hl-built-in); font-weight: 500; }
+.hljs-title, .hljs-title.function_, .hljs-function .hljs-title { color: var(--hl-title); font-weight: 500; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }
 .md strong { font-weight: 600; color: var(--color-ink); }
 .md em { font-style: italic; }
 .md a {
@@ -267,19 +294,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .tool-preview-fade {
   mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
   -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
-}
-
-/* ─── Brand mark ───────────────────────────────────────────── */
-.brand-mark {
-  background: linear-gradient(150deg, #1a1a17 0%, #3a3a35 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(20, 18, 14, 0.15);
-  color: var(--color-bg);
-}
-
-/* Plain icons in the sidebar — no chip background, no shadow. */
-
-.connection-pill {
-  box-shadow: var(--shadow-md);
 }
 
 .composer-card {
@@ -382,13 +396,19 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.04);
     --shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.3);
-  }
 
-  /* Brand mark inverts to a light mineral disc on dark */
-  .brand-mark {
-    background: linear-gradient(150deg, #cecdc3 0%, #878580 100%);
-    color: #100f0f;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 2px rgba(0, 0, 0, 0.4);
+    --hl-keyword: #ce9178;
+    --hl-string: #afc463;
+    --hl-number: #e78a4d;
+    --hl-literal: #e78a4d;
+    --hl-comment: #6e6c69;
+    --hl-attr: #7daea3;
+    --hl-type: #d8a657;
+    --hl-built-in: #d8a657;
+    --hl-title: #cecdc3;
+    --hl-tag: #ea6962;
+    --hl-meta: #7c6f64;
+    --hl-symbol: #7daea3;
   }
 
   /* Scrollbar thumbs: lighter for visibility */

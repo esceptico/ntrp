@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import {
   type AppConfig,
+  type ModelsResponse,
+  type ServerConfig,
   type SessionListItem,
   type SkillDescriptor,
   DEFAULT_CONFIG,
@@ -12,6 +14,8 @@ export interface ActivityItem {
   id: string;
   kind: string;
   target: string;
+  args?: string;
+  result?: string;
 }
 
 export interface ActivityState {
@@ -54,6 +58,13 @@ export interface UiMessage {
   approval?: ApprovalState;
   turn?: TurnMeta;
   images?: ImageBlock[];
+  /** Position of the originating server message counted from the end of the
+   *  full message list (0 = the very last message). The same value for the
+   *  UI message and the server message regardless of any history slicing,
+   *  so it doubles as a stable handle for operations like `branch`. Unset
+   *  for purely-local UI messages (status, error, approval) and for live
+   *  streamed messages until the next history refresh. */
+  serverFromEnd?: number;
 }
 
 export interface SessionUsage {
@@ -86,7 +97,10 @@ interface State {
   commandPickerIndex: number;
   selectedSkill: SkillDescriptor | null;
   viewingMarkdown: MarkdownViewState | null;
+  viewingTool: ActivityItem | null;
   pendingImages: ImageBlock[];
+  serverConfig: ServerConfig | null;
+  serverModels: ModelsResponse | null;
 }
 
 export interface MarkdownViewState {
@@ -120,6 +134,7 @@ interface Actions {
   setConnectionSaving: (saving: boolean) => void;
   setActiveActivityId: (id: string | null) => void;
   appendActivityItem: (activityId: string, item: ActivityItem) => void;
+  mergeActivityItem: (itemId: string, patch: Partial<ActivityItem>) => void;
   finalizeActivity: (activityId: string, label?: string) => void;
   setCurrentRunId: (runId: string | null) => void;
   setSkipApprovals: (skip: boolean) => void;
@@ -129,9 +144,12 @@ interface Actions {
   setCommandPickerIndex: (index: number) => void;
   setSelectedSkill: (skill: SkillDescriptor | null) => void;
   setViewingMarkdown: (view: MarkdownViewState | null) => void;
+  setViewingTool: (item: ActivityItem | null) => void;
   addPendingImages: (images: ImageBlock[]) => void;
   removePendingImage: (index: number) => void;
   clearPendingImages: () => void;
+  setServerConfig: (cfg: ServerConfig | null) => void;
+  setServerModels: (models: ModelsResponse | null) => void;
 }
 
 const initialUsage: SessionUsage = { lastPrompt: 0, totalTokens: 0, totalCost: 0 };
@@ -160,7 +178,10 @@ export const useStore = create<State & Actions>((set) => ({
   commandPickerIndex: 0,
   selectedSkill: null,
   viewingMarkdown: null,
+  viewingTool: null,
   pendingImages: [],
+  serverConfig: null,
+  serverModels: null,
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
   setSessions: (sessions) => set({ sessions }),
@@ -264,6 +285,25 @@ export const useStore = create<State & Actions>((set) => ({
       return { messages };
     }),
 
+  mergeActivityItem: (itemId, patch) =>
+    set((s) => {
+      // Tool results may arrive after the next activity has already opened —
+      // scan all activity messages for the matching item id.
+      let touched = false;
+      const messages = new Map(s.messages);
+      for (const [mid, msg] of messages) {
+        if (!msg.activity) continue;
+        const idx = msg.activity.items.findIndex((it) => it.id === itemId);
+        if (idx < 0) continue;
+        const items = msg.activity.items.slice();
+        items[idx] = { ...items[idx], ...patch };
+        messages.set(mid, { ...msg, activity: { ...msg.activity, items } });
+        touched = true;
+        break;
+      }
+      return touched ? { messages } : s;
+    }),
+
   finalizeActivity: (activityId, label = "Called") =>
     set((s) => {
       const existing = s.messages.get(activityId);
@@ -293,12 +333,16 @@ export const useStore = create<State & Actions>((set) => ({
   setCommandPickerIndex: (commandPickerIndex) => set({ commandPickerIndex }),
   setSelectedSkill: (selectedSkill) => set({ selectedSkill }),
   setViewingMarkdown: (viewingMarkdown) => set({ viewingMarkdown }),
+  setViewingTool: (viewingTool) => set({ viewingTool }),
 
   addPendingImages: (images) =>
     set((s) => ({ pendingImages: [...s.pendingImages, ...images] })),
   removePendingImage: (index) =>
     set((s) => ({ pendingImages: s.pendingImages.filter((_, i) => i !== index) })),
   clearPendingImages: () => set({ pendingImages: [] }),
+
+  setServerConfig: (serverConfig) => set({ serverConfig }),
+  setServerModels: (serverModels) => set({ serverModels }),
 }));
 
 // Helpers for use outside React (e.g. inside event-stream handlers).

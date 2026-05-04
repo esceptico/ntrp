@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef } from "react";
-import { ArrowUp, ImagePlus, ShieldOff, ShieldCheck, Sparkles, X } from "lucide-react";
+import { ArrowUp, ImagePlus, ShieldOff, ShieldCheck, Sparkles, Square, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ImageBlock } from "../store";
-import { isBuiltin, runBuiltinCommand, sendMessage, viewSkill } from "../actions";
+import { isBuiltin, runBuiltinCommand, sendMessage, stopRun, viewSkill } from "../actions";
 import {
   CommandPicker,
   filterCommands,
   useCommandList,
   type CommandEntry,
 } from "./CommandPicker";
+import { ModelReasoningChip } from "./ComposerSelectors";
 
 /** Read a single File and return its bytes as base64 + media type. */
 function fileToImageBlock(file: File): Promise<ImageBlock> {
@@ -315,6 +316,12 @@ export function Composer() {
               setSelectedSkill(null);
               return;
             }
+            // Esc cancels an in-flight run when the picker isn't open.
+            if (e.key === "Escape" && !pickerOpen && running) {
+              e.preventDefault();
+              void stopRun();
+              return;
+            }
             if (pickerOpen && filteredCommands.length > 0) {
               if (e.key === "ArrowDown") {
                 e.preventDefault();
@@ -398,14 +405,27 @@ export function Composer() {
           </button>
           <UsageDisplay />
           <span className="flex-1" />
-          <button
-            type="submit"
-            disabled={disabled}
-            aria-label="Send"
-            className="grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-[0_1px_2px_rgba(20,18,14,0.2)] hover:opacity-90 disabled:opacity-40 disabled:shadow-none transition-opacity"
-          >
-            <ArrowUp size={13} strokeWidth={2.4} />
-          </button>
+          <ModelReasoningChip />
+          {running ? (
+            <button
+              type="button"
+              onClick={() => void stopRun()}
+              aria-label="Stop"
+              title="Stop (Esc)"
+              className="grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-[0_1px_2px_rgba(0,0,0,0.2)] hover:opacity-90 transition-opacity"
+            >
+              <Square size={11} strokeWidth={0} fill="currentColor" />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={disabled}
+              aria-label="Send"
+              className="grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-[0_1px_2px_rgba(0,0,0,0.2)] hover:opacity-90 disabled:opacity-40 disabled:shadow-none transition-opacity"
+            >
+              <ArrowUp size={13} strokeWidth={2.4} />
+            </button>
+          )}
         </div>
       </form>
     </div>

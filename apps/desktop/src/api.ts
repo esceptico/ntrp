@@ -242,6 +242,41 @@ export async function submitToolResult(
   });
 }
 
+export async function cancelRun(config: AppConfig, runId: string): Promise<void> {
+  await apiWithConfig(config, "/cancel", {
+    method: "POST",
+    body: JSON.stringify({ run_id: runId }),
+  });
+}
+
+export async function renameSessionApi(
+  config: AppConfig,
+  sessionId: string,
+  name: string,
+): Promise<void> {
+  await apiWithConfig(config, `/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function archiveSessionApi(config: AppConfig, sessionId: string): Promise<void> {
+  await apiWithConfig(config, `/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function branchSessionApi(
+  config: AppConfig,
+  sessionId: string,
+  payload: { name?: string; from_end_index?: number },
+): Promise<{ session_id: string; name: string | null; started_at: string; last_activity: string }> {
+  return apiWithConfig(config, `/sessions/${encodeURIComponent(sessionId)}/branch`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export interface SkillDescriptor {
   name: string;
   description: string;
@@ -265,4 +300,70 @@ export interface SkillContent {
 
 export async function fetchSkillContent(config: AppConfig, name: string): Promise<SkillContent> {
   return apiWithConfig<SkillContent>(config, `/skills/${encodeURIComponent(name)}/content`);
+}
+
+export interface ServerConfig {
+  chat_model: string;
+  research_model: string;
+  memory_model: string;
+  embedding_model: string;
+  web_search: "auto" | "exa" | "ddgs" | "none";
+  web_search_provider: string;
+  google_enabled: boolean;
+  max_depth: number;
+  reasoning_effort: string | null;
+  reasoning_efforts: string[];
+  compression_threshold: number;
+  max_messages: number;
+  compression_keep_ratio: number;
+  summary_max_tokens: number;
+  consolidation_interval: number;
+  memory_enabled: boolean;
+  integrations: Record<string, Record<string, unknown>>;
+}
+
+export interface ModelGroup {
+  provider: string;
+  models: string[];
+}
+
+export interface ModelsResponse {
+  models: string[];
+  groups: ModelGroup[];
+  chat_model: string;
+  research_model: string;
+  memory_model: string;
+}
+
+export async function getServerConfig(config: AppConfig): Promise<ServerConfig> {
+  return apiWithConfig<ServerConfig>(config, "/config");
+}
+
+export async function getServerModels(config: AppConfig): Promise<ModelsResponse> {
+  return apiWithConfig<ModelsResponse>(config, "/models");
+}
+
+export type ServerConfigPatch = Partial<{
+  chat_model: string;
+  research_model: string;
+  memory_model: string;
+  max_depth: number;
+  reasoning_effort: string | null;
+  compression_threshold: number;
+  max_messages: number;
+  compression_keep_ratio: number;
+  summary_max_tokens: number;
+  consolidation_interval: number;
+  web_search: "auto" | "exa" | "ddgs" | "none";
+  integrations: { google?: boolean | null; memory?: boolean | null; dreams?: boolean | null };
+}>;
+
+export async function patchServerConfig(
+  config: AppConfig,
+  patch: ServerConfigPatch,
+): Promise<ServerConfig> {
+  return apiWithConfig<ServerConfig>(config, "/config", {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
 }

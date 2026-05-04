@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { type AppConfig, type ServerEvent } from "../api";
 import { getState, setState, useStore, type ActivityItem } from "../store";
+import { loadHistory } from "../actions";
 
 /** End the active activity (if any) and clear the marker. */
 function endActivity(s: ReturnType<typeof getState>) {
@@ -66,6 +67,11 @@ function handleServerEvent(event: ServerEvent) {
       endActivity(s);
       endTurn(s, ts);
       setState({ running: false, currentRunId: null });
+      // Re-pull the saved history so freshly-streamed messages pick up
+      // their server-side from-end position; without this, branching from
+      // the just-finished turn isn't possible until the user navigates
+      // away and back.
+      if (s.currentSessionId) void loadHistory(s.currentSessionId);
       return;
     case "RUN_ERROR":
       endActivity(s);
@@ -148,6 +154,7 @@ function handleServerEvent(event: ServerEvent) {
         id: event.tool_call_id,
         kind: pending.name,
         target,
+        args: pending.argsBuffer,
       };
       const aid = s.activeActivityId;
       if (!aid) {
@@ -165,10 +172,11 @@ function handleServerEvent(event: ServerEvent) {
       }
       return;
     }
-    case "TOOL_CALL_RESULT":
-      // Fold into the activity's existing item; result content isn't
-      // shown in the rolling tail. Future: store a preview on the item.
+    case "TOOL_CALL_RESULT": {
+      const result = event.content ?? event.preview ?? "";
+      s.mergeActivityItem(event.tool_call_id, { result });
       return;
+    }
 
     // ─── ntrp-specific (non-AG-UI) ───────────────────────────────────
     case "approval_needed":

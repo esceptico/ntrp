@@ -1,14 +1,13 @@
 import { memo, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Brain, Check, ChevronDown, Copy, Pencil, Sparkles, Terminal } from "lucide-react";
+import { Brain, Check, ChevronDown, Copy, GitBranch, Pencil, Sparkles, Terminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type UiMessage } from "../store";
-import { renderMarkdown, escapeHtml } from "../markdown";
 import { ActivityHeader, ActivityTail, ActivityTrace } from "./trace/ActivityTrace";
 import { ApprovalCard } from "./ApprovalCard";
 import type { SkillDescriptor } from "../api";
-import { viewSkill } from "../actions";
-import { MarkdownContent } from "./MarkdownContent";
+import { branchAtFromEnd, viewSkill } from "../actions";
+import { Markdown } from "./Markdown";
 
 const EASE = [0.32, 0.72, 0, 1] as const;
 
@@ -37,6 +36,8 @@ function useIsLast(id: string): boolean {
 
 function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }) {
   const [copied, setCopied] = useState(false);
+  const [branching, setBranching] = useState(false);
+  const hasFromEnd = useStore((s) => s.messages.get(id)?.serverFromEnd != null);
 
   async function copy() {
     const message = useStore.getState().messages.get(id);
@@ -63,6 +64,19 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
     });
   }
 
+  async function branch() {
+    if (branching) return;
+    const message = useStore.getState().messages.get(id);
+    const fromEnd = message?.serverFromEnd;
+    if (fromEnd == null) return;
+    setBranching(true);
+    try {
+      await branchAtFromEnd(fromEnd);
+    } finally {
+      setBranching(false);
+    }
+  }
+
   return (
     <div
       className={clsx(
@@ -81,6 +95,17 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
       >
         {copied ? <Check size={13} strokeWidth={2.4} /> : <Copy size={13} strokeWidth={2} />}
       </button>
+      {role === "assistant" && (
+        <button
+          type="button"
+          onClick={() => void branch()}
+          disabled={branching || !hasFromEnd}
+          title={hasFromEnd ? "Branch from this message" : "Branching available after the run finishes"}
+          className="grid place-items-center w-6 h-6 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <GitBranch size={13} strokeWidth={2} />
+        </button>
+      )}
       {role === "user" && (
         <button
           type="button"
@@ -190,12 +215,11 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
 
 const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: { id: string; isFinal?: boolean }) {
   const message = useMessage(id);
-  const html = useMemo(() => (message ? renderMarkdown(message.content) : ""), [message?.content]);
   if (!message) return null;
   return (
     <article className="group grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 animate-fade-in" data-id={id}>
-      <MarkdownContent
-        html={html}
+      <Markdown
+        content={message.content}
         className="py-0.5 text-[14px] leading-[1.62] text-ink tracking-[-0.005em] break-words"
       />
       {isFinal && <MessageActions id={id} role="assistant" />}
@@ -207,7 +231,6 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
   const message = useMessage(id);
   const isLast = useIsLast(id);
   const running = useStore((s) => s.running);
-  const html = useMemo(() => (message ? renderMarkdown(message.content) : ""), [message?.content]);
   const [expanded, setExpanded] = useState(false);
   if (!message) return null;
   const isStreaming = isLast && running;
@@ -239,8 +262,8 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
             transition={{ duration: 0.24, ease: EASE }}
             style={{ overflow: "hidden" }}
           >
-            <MarkdownContent
-              html={html}
+            <Markdown
+              content={message.content}
               className="mt-2 pl-3.5 border-l-2 border-line text-[13px] leading-[1.6] text-muted italic break-words"
             />
           </motion.div>
@@ -290,10 +313,9 @@ const ErrorMessage = memo(function ErrorMessage({ id }: { id: string }) {
   if (!message) return null;
   return (
     <article className="grid grid-cols-[minmax(0,1fr)] animate-fade-in" data-id={id}>
-      <div
-        className="px-3.5 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.18)] text-bad text-[13px] leading-[1.5] whitespace-pre-wrap break-words"
-        dangerouslySetInnerHTML={{ __html: escapeHtml(message.content) }}
-      />
+      <div className="px-3.5 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.18)] text-bad text-[13px] leading-[1.5] whitespace-pre-wrap break-words">
+        {message.content}
+      </div>
     </article>
   );
 });
@@ -305,9 +327,12 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
   const { items, label, done } = message.activity;
 
   // While the run is producing tools, show the rolling tail (last 3).
-  // After it's done, collapse by default; the user can click to expand and see the full list.
+  // After it's done, switch to a static list with all items and let collapse
+  // just animate the container height — switching modes mid-collapse caused
+  // the items to swap out (43 → 3) before the height finished shrinking,
+  // producing a visible flicker.
   const collapsed = done && !expanded;
-  const max = done && expanded ? undefined : 3;
+  const max = done ? undefined : 3;
 
   return (
     <article className="grid grid-cols-[minmax(0,1fr)] my-1 animate-roll-in" data-id={id}>

@@ -1,28 +1,51 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { Brain, Database, Plug, Sparkles, X, type LucideIcon } from "lucide-react";
+import clsx from "clsx";
 import { useStore } from "../store";
-import { saveAndReconnect } from "../actions";
+import { saveAndReconnect, fetchServerConfig } from "../actions";
+import { ConnectionTab } from "./settings/ConnectionTab";
+import { ModelsTab } from "./settings/ModelsTab";
+import { AgentTab } from "./settings/AgentTab";
+import { ContextTab } from "./settings/ContextTab";
+
+type TabId = "connection" | "models" | "agent" | "context";
+
+interface Tab {
+  id: TabId;
+  label: string;
+  icon: LucideIcon;
+}
+
+const TABS: Tab[] = [
+  { id: "connection", label: "Connection", icon: Plug },
+  { id: "models", label: "Models", icon: Sparkles },
+  { id: "agent", label: "Agent", icon: Brain },
+  { id: "context", label: "Context", icon: Database },
+];
 
 export function SettingsModal() {
-  const draft = useStore((s) => s.connectionDraft);
-  const setConnectionDraft = useStore((s) => s.setConnectionDraft);
-  const error = useStore((s) => s.connectionError);
-  const saving = useStore((s) => s.connectionSaving);
   const closeSettings = useStore((s) => s.closeSettings);
-
+  const saving = useStore((s) => s.connectionSaving);
+  const draft = useStore((s) => s.connectionDraft);
+  const error = useStore((s) => s.connectionError);
+  const setConnectionDraft = useStore((s) => s.setConnectionDraft);
+  const serverConfig = useStore((s) => s.serverConfig);
   const formRef = useRef<HTMLFormElement>(null);
-  const serverInputRef = useRef<HTMLInputElement>(null);
+
+  const [active, setActive] = useState<TabId>("connection");
 
   useEffect(() => {
-    serverInputRef.current?.focus();
+    // Load (or refresh) server config when the modal opens — getting fresh
+    // values is cheap and keeps the form honest.
+    void fetchServerConfig();
   }, []);
 
   function close() {
     if (!saving) closeSettings();
   }
 
-  function submit(event: React.FormEvent) {
+  function submitConnection(event: React.FormEvent) {
     event.preventDefault();
     void saveAndReconnect(draft);
   }
@@ -31,113 +54,89 @@ export function SettingsModal() {
   if (!root) return null;
 
   return createPortal(
-    <div className="absolute inset-0 z-50 grid place-items-center p-8 bg-[rgba(28,26,22,0.32)] backdrop-blur-md animate-fade-in">
-      <form
-        ref={formRef}
-        onSubmit={submit}
+    <div
+      className="absolute inset-0 z-50 grid place-items-center p-8 bg-[rgba(28,26,22,0.32)] backdrop-blur-md animate-fade-in"
+      onClick={close}
+    >
+      <div
+        className="w-[min(820px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-cols-[180px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] rounded-2xl bg-surface shadow-[var(--shadow-pop)] animate-pop-in overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
-          if (e.key === "Escape") close();
+          if (e.key === "Escape" && !saving) close();
         }}
-        className="w-[min(520px,calc(100vw-80px))] grid gap-[18px] p-5 pt-[22px] pb-[18px] rounded-2xl bg-surface shadow-[var(--shadow-pop)] animate-pop-in"
       >
-        <div className="flex items-start justify-between gap-3.5">
-          <div>
-            <span className="block mb-1 text-[10.5px] font-medium uppercase tracking-[0.08em] text-accent">
-              Connection
-            </span>
-            <div className="text-[17px] font-semibold tracking-[-0.015em] text-ink">
-              Connect to ntrp
-            </div>
-            <div className="mt-1 text-[12.5px] text-muted leading-[1.45] max-w-[360px]">
-              Server URL and API key. Stored locally; encrypted with safeStorage when available.
-            </div>
+        <aside className="border-r border-line-soft bg-surface-soft/40 flex flex-col">
+          <div className="px-3 pt-4 pb-2 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint">
+            Settings
           </div>
-          <button
-            type="button"
-            onClick={close}
-            disabled={saving}
-            aria-label="Close"
-            className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
-          >
-            <X size={13} strokeWidth={1.8} />
-          </button>
-        </div>
-
-        <Field
-          label="Server URL"
-          value={draft.serverUrl}
-          onChange={(serverUrl) => setConnectionDraft({ serverUrl })}
-          placeholder="http://localhost:6877"
-          help="The address where your ntrp server is running."
-        />
-
-        <Field
-          label="API key"
-          type="password"
-          value={draft.apiKey}
-          onChange={(apiKey) => setConnectionDraft({ apiKey })}
-          placeholder="ntrp_…"
-          help="From your server config. Used as a Bearer token."
-        />
-
-        {error && (
-          <div className="grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.16)]">
-            <strong className="text-bad text-[12px] font-semibold">Could not connect</strong>
-            <span className="text-[12px] text-[#8a3220] leading-[1.4]">{error}</span>
+          <nav className="flex flex-col gap-px px-2 pb-3">
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = active === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActive(tab.id)}
+                  className={clsx(
+                    "flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] font-medium tracking-[-0.005em] text-left transition-colors",
+                    isActive
+                      ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
+                      : "text-ink-soft hover:bg-surface/60",
+                  )}
+                >
+                  <Icon size={13} strokeWidth={1.7} className="shrink-0" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </nav>
+          <div className="mt-auto px-3 pb-3 text-[10.5px] text-faint">
+            <button
+              type="button"
+              onClick={close}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 text-[12px] text-muted hover:text-ink transition-colors"
+            >
+              Close
+            </button>
           </div>
-        )}
+        </aside>
 
-        <div className="flex items-center gap-2 justify-end pt-1">
-          <button
-            type="button"
-            onClick={close}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-surface text-ink-soft border border-line text-[12.5px] font-medium tracking-[-0.005em] hover:bg-surface-soft hover:border-line-strong transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-[12.5px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
-          >
-            {saving ? "Checking…" : "Save & reconnect"}
-          </button>
+        <div className="grid grid-rows-[auto_minmax(0,1fr)] min-h-0 min-w-0">
+          <header className="flex items-center justify-between gap-2 px-5 pt-4 pb-3 border-b border-line-soft">
+            <div className="text-[16px] font-semibold tracking-[-0.012em] text-ink">
+              {TABS.find((t) => t.id === active)?.label}
+            </div>
+            <button
+              type="button"
+              onClick={close}
+              disabled={saving}
+              aria-label="Close"
+              className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
+            >
+              <X size={13} strokeWidth={1.8} />
+            </button>
+          </header>
+
+          <div className="overflow-y-auto scroll-thin px-5 py-4">
+            {active === "connection" && (
+              <ConnectionTab
+                formRef={formRef}
+                draft={draft}
+                error={error}
+                saving={saving}
+                onUpdate={setConnectionDraft}
+                onSubmit={submitConnection}
+              />
+            )}
+            {active === "models" && <ModelsTab />}
+            {active === "agent" && <AgentTab serverConfig={serverConfig} />}
+            {active === "context" && <ContextTab serverConfig={serverConfig} />}
+          </div>
         </div>
-      </form>
+      </div>
     </div>,
     root,
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  help,
-  type = "text",
-}: {
-  label: string;
-  value: string;
-  onChange: (next: string) => void;
-  placeholder?: string;
-  help?: string;
-  type?: "text" | "password";
-}) {
-  return (
-    <div className="grid gap-1">
-      <label className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        spellCheck={false}
-        autoComplete="off"
-        className="w-full h-9 px-3 border border-line rounded-[9px] bg-surface text-ink text-[13px] outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
-      />
-      {help && <span className="text-[11.5px] text-faint leading-[1.4]">{help}</span>}
-    </div>
   );
 }

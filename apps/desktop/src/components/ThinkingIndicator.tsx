@@ -1,9 +1,10 @@
 import { useStore } from "../store";
 
-/** Inline "thinking" indicator shown at the bottom of the messages list when
- *  the agent is running but hasn't started producing visible output yet
- *  (no assistant text, no reasoning, no tool activity). The shimmer makes it
- *  obvious that something is happening, distinct from idle. */
+/** Inline "Thinking" indicator shown whenever the agent is running but the
+ *  user isn't currently watching tokens stream into an assistant message.
+ *  Reasoning, tool calls, and activity blocks all keep the shimmer visible —
+ *  the only thing that hides it is an actively-streaming assistant turn,
+ *  where the streaming text is its own "something is happening" signal. */
 export function ThinkingIndicator() {
   const running = useStore((s) => s.running);
   const order = useStore((s) => s.order);
@@ -11,13 +12,9 @@ export function ThinkingIndicator() {
 
   if (!running) return null;
 
-  // Only show before the model has produced any visible output for this turn.
-  // Once an assistant/reasoning/activity/tool message has been added, the run
-  // chip in the header is enough — and the activity / reasoning blocks have
-  // their own shimmers.
   const lastId = order[order.length - 1];
   const last = lastId ? messages.get(lastId) : null;
-  if (last && last.role !== "user") return null;
+  if (last?.role === "assistant") return null;
 
   return (
     <div className="flex items-center gap-2 my-1 animate-fade-in">

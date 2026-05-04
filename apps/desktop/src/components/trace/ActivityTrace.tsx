@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { RollingToken } from "./RollingToken";
+import { useStore } from "../../store";
 
 const EASE = [0.32, 0.72, 0, 1] as const;
 const ROW_HEIGHT_EM = 1.55;
@@ -11,6 +12,8 @@ export type ActivityItem = {
   id: string;
   kind: string;
   target: string;
+  args?: string;
+  result?: string;
 };
 
 export function ActivityTrace({ children }: { children: ReactNode }) {
@@ -92,6 +95,7 @@ export function ActivityTail({
   const rolling = max != null;
   const visible = rolling ? items.slice(-max) : items;
   const targetHeight = rolling ? `${max * ROW_HEIGHT_EM}em` : "auto";
+  const setViewingTool = useStore((s) => s.setViewingTool);
 
   return (
     <motion.div
@@ -117,7 +121,7 @@ export function ActivityTail({
               style={{ height: `${ROW_HEIGHT_EM}em` }}
               className="flex items-baseline min-w-0"
             >
-              <span className="font-mono text-faint truncate">{item.target || item.kind}</span>
+              <ItemButton item={item} onOpen={setViewingTool} />
             </motion.div>
           ))}
         </AnimatePresence>
@@ -128,10 +132,29 @@ export function ActivityTail({
             style={{ height: `${ROW_HEIGHT_EM}em` }}
             className="flex items-baseline min-w-0"
           >
-            <span className="font-mono text-faint truncate">{item.target || item.kind}</span>
+            <ItemButton item={item} onOpen={setViewingTool} />
           </div>
         ))
       )}
     </motion.div>
+  );
+}
+
+function ItemButton({
+  item,
+  onOpen,
+}: {
+  item: ActivityItem;
+  onOpen: (item: ActivityItem) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(item)}
+      title={`${item.kind} — click to inspect`}
+      className="font-mono text-faint truncate text-left bg-transparent border-0 p-0 m-0 hover:text-ink-soft transition-colors cursor-pointer"
+    >
+      {item.target || item.kind}
+    </button>
   );
 }
