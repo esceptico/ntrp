@@ -287,6 +287,25 @@ export async function sendMessage(text: string, images: ImageBlock[] = []): Prom
   if (!trimmedText && images.length === 0) return;
 
   if (s.editingId) {
+    // Truncate the *server's* saved message list at the message being
+    // edited too — without this, the agent's next run sees both the
+    // original message and the edit and the chat snowballs.
+    try {
+      await apiWithConfig(s.config, "/session/revert", {
+        method: "POST",
+        body: JSON.stringify({
+          session_id: s.currentSessionId,
+          message_id: s.editingId,
+        }),
+      });
+    } catch (error) {
+      s.appendMessage({
+        id: crypto.randomUUID(),
+        role: "error",
+        content: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
     s.truncateFrom(s.editingId);
     s.setEditingId(null);
   }

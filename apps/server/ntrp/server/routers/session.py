@@ -118,7 +118,8 @@ async def clear_session(svc: SessionService = Depends(require_session_service), 
 async def revert_session(svc: SessionService = Depends(require_session_service), req: RevertRequest | None = None):
     target_id = req.session_id if req else None
     turns = req.turns if req else 1
-    result = await svc.revert(target_id, turns=turns)
+    message_id = req.message_id if req else None
+    result = await svc.revert(target_id, turns=turns, message_id=message_id)
     if not result:
         raise HTTPException(status_code=400, detail="Nothing to revert")
     return result

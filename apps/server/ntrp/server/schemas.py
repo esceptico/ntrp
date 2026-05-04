@@ -250,6 +250,10 @@ class ClearSessionRequest(BaseModel):
 class RevertRequest(BaseModel):
     session_id: str | None = None
     turns: int = Field(1, ge=1)
+    # Preferred over `turns`: revert up to (and including) the message with
+    # this client_id. Used by edit flows so the server-side context is in
+    # sync with the UI before the next /chat/message arrives.
+    message_id: str | None = None
 
 
 class IntegrationToggles(BaseModel):

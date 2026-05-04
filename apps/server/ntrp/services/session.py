@@ -57,18 +57,29 @@ class SessionService:
     async def list_archived(self, limit: int = 20) -> list[dict]:
         return await self.store.list_archived_sessions(limit=limit)
 
-    async def revert(self, session_id: str | None = None, turns: int = 1) -> dict | None:
+    async def revert(
+        self,
+        session_id: str | None = None,
+        turns: int = 1,
+        message_id: str | None = None,
+    ) -> dict | None:
         if not (data := await self.load(session_id)) or not data.messages:
             return None
 
-        target_idx = None
-        seen = 0
-        for i in range(len(data.messages) - 1, -1, -1):
-            if data.messages[i].get("role") == "user":
-                seen += 1
-                if seen >= turns:
+        target_idx: int | None = None
+        if message_id is not None:
+            for i, msg in enumerate(data.messages):
+                if msg.get("client_id") == message_id:
                     target_idx = i
                     break
+        else:
+            seen = 0
+            for i in range(len(data.messages) - 1, -1, -1):
+                if data.messages[i].get("role") == "user":
+                    seen += 1
+                    if seen >= turns:
+                        target_idx = i
+                        break
 
         if target_idx is None:
             return None
