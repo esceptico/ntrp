@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Check, Copy, X } from "lucide-react";
 import clsx from "clsx";
 import { useShallow } from "zustand/react/shallow";
 import { useStore, type ActivityItem } from "../store";
 import { highlight } from "../highlight";
+
+const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
 /** Pretty-print JSON; fall back to the raw string when parse fails. The
  *  `lang` field is set to "json" when we successfully reformatted, so the
@@ -76,57 +79,70 @@ export function ToolViewer() {
     return () => window.removeEventListener("keydown", onKey);
   }, [item, close]);
 
-  if (!item || !live) return null;
   const root = document.querySelector("#app");
   if (!root) return null;
+  const open = !!(item && live);
 
   return createPortal(
-    <div
-      className="absolute inset-0 z-50 grid place-items-center p-8 bg-[rgba(0,0,0,0.32)] backdrop-blur-md animate-fade-in"
-      onClick={() => close(null)}
-    >
-      <div
-        className="w-[min(720px,calc(100vw-80px))] max-w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] rounded-2xl bg-surface shadow-[var(--shadow-pop)] animate-pop-in overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 border-b border-line-soft min-w-0">
-          <div className="min-w-0 flex-1">
-            <div className="text-[16px] font-semibold tracking-[-0.012em] text-ink truncate">
-              {live.kind}
-            </div>
-            {live.target && live.target !== live.kind && (
-              <div className="mt-0.5 text-[11.5px] text-faint font-mono truncate">
-                {live.target}
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => close(null)}
-            aria-label="Close"
-            className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors shrink-0"
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="tool-viewer"
+          className="absolute inset-0 z-50 grid place-items-center p-8 bg-[rgba(0,0,0,0.32)] backdrop-blur-md"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2, ease: MODAL_EASE }}
+          onClick={() => close(null)}
+        >
+          <motion.div
+            className="w-[min(720px,calc(100vw-80px))] max-w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] rounded-2xl bg-surface shadow-[var(--shadow-pop)] overflow-hidden"
+            initial={{ opacity: 0, scale: 0.96, y: 6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 6 }}
+            transition={{ duration: 0.22, ease: MODAL_EASE }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <X size={13} strokeWidth={1.8} />
-          </button>
-        </header>
+            <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 border-b border-line-soft min-w-0">
+              <div className="min-w-0 flex-1">
+                <div className="text-[16px] font-semibold tracking-[-0.012em] text-ink truncate">
+                  {live?.kind}
+                </div>
+                {live?.target && live.target !== live.kind && (
+                  <div className="mt-0.5 text-[11.5px] text-faint font-mono truncate">
+                    {live.target}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => close(null)}
+                aria-label="Close"
+                className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors shrink-0"
+              >
+                <X size={13} strokeWidth={1.8} />
+              </button>
+            </header>
 
-        <div className="overflow-y-auto scroll-thin px-5 py-4 grid grid-cols-[minmax(0,1fr)] gap-4 min-w-0">
-          <Section
-            title="Input"
-            body={input.body}
-            html={inputHtml}
-            placeholder="No input arguments."
-          />
-          <Section
-            title="Output"
-            body={output.body}
-            html={outputHtml}
-            placeholder={live.result == null ? "Waiting for result…" : "Empty result."}
-          />
-          {children.length > 0 && <ChildRuns items={children} />}
-        </div>
-      </div>
-    </div>,
+            <div className="overflow-y-auto scroll-thin px-5 py-4 grid grid-cols-[minmax(0,1fr)] gap-4 min-w-0">
+              <Section
+                title="Input"
+                body={input.body}
+                html={inputHtml}
+                placeholder="No input arguments."
+              />
+              <Section
+                title="Output"
+                body={output.body}
+                html={outputHtml}
+                placeholder={live?.result == null ? "Waiting for result…" : "Empty result."}
+              />
+              {children.length > 0 && <ChildRuns items={children} />}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
     root,
   );
 }

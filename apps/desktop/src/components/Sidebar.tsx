@@ -240,7 +240,7 @@ export function Sidebar() {
         <NavRow icon={<Pencil size={13} strokeWidth={1.7} />} label="New session" onClick={() => void createSession()} />
       </nav>
       <SessionList />
-      <nav className="flex flex-col gap-px px-2.5 pt-1.5 pb-3 border-t border-line-soft">
+      <nav className="flex flex-col gap-px px-2.5 pt-1.5 pb-3">
         <NavRow icon={<SettingsIcon size={13} strokeWidth={1.7} />} label="Settings" onClick={openSettings} />
       </nav>
     </aside>

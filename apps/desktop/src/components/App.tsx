@@ -22,7 +22,6 @@ function useHash(): string {
 export function App() {
   const hash = useHash();
   const currentSessionId = useStore((s) => s.currentSessionId);
-  const settingsOpen = useStore((s) => s.settingsOpen);
 
   useEffect(() => {
     if (hash === "#trace-demo") return;
@@ -39,7 +38,7 @@ export function App() {
     <>
       <Sidebar />
       <Chat />
-      {settingsOpen && <SettingsModal />}
+      <SettingsModal />
       <MarkdownViewer />
       <ToolViewer />
     </>

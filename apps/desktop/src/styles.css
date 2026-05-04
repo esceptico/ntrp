@@ -116,6 +116,13 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .chat-header { -webkit-app-region: drag; }
 .chat-header > * { -webkit-app-region: no-drag; }
 
+/* Anything portaled above the main layout (modals, viewers) must
+   explicitly opt out of the drag region — the sidebar / chat-header
+   "drag" regions otherwise bleed through, and the OS swallows clicks
+   inside the modal as window-drag attempts. */
+#app > div.absolute.inset-0 { -webkit-app-region: no-drag; }
+#app > div.absolute.inset-0 * { -webkit-app-region: no-drag; }
+
 /* ─── Shimmer text ─────────────────────────────────────────── */
 .shimmer-text {
   background: linear-gradient(
@@ -332,6 +339,13 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   align-items: center;
   gap: 2px;
 }
+/* Route pointer events on every descendant past the toolbar button so
+   clicks always land on the button itself. Direct-child only (`> *`)
+   isn't enough — SVG icons render <line>/<path> children whose default
+   `pointer-events: visiblePainted` will still grab clicks landing on the
+   stroke pixels and stop the click from registering on the button. */
+.mermaid-panel-toolbar button { position: relative; }
+.mermaid-panel-toolbar button * { pointer-events: none; }
 .mermaid-panel-zoom {
   width: 44px;
   text-align: center;

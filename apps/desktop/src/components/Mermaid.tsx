@@ -1,8 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
 import { Check, Copy, Maximize2, Minimize2, Minus, Plus, RotateCcw } from "lucide-react";
 import clsx from "clsx";
 import { getMermaid, invalidateMermaidTheme } from "../lib/mermaidTheme";
+
+const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
 const RENDER_DEBOUNCE_MS = 400;
 const MIN_ZOOM = 0.1;
@@ -72,24 +75,44 @@ export function Mermaid({ code }: { code: string }) {
 function MermaidPanel({ svg, source }: { svg: string; source: string }) {
   const [fullscreen, setFullscreen] = useState(false);
   const toggle = () => setFullscreen((v) => !v);
-
-  if (!fullscreen) {
-    return <PanelInner svg={svg} source={source} fullscreen={false} onToggleFullscreen={toggle} />;
-  }
-
   const root = document.querySelector("#app");
-  const panel = <PanelInner svg={svg} source={source} fullscreen onToggleFullscreen={toggle} />;
-  if (!root) return panel;
-  return createPortal(
-    <div
-      className="absolute inset-0 z-50 bg-[rgba(0,0,0,0.4)] backdrop-blur-md animate-fade-in p-6"
-      onClick={() => setFullscreen(false)}
-    >
-      <div className="w-full h-full" onClick={(e) => e.stopPropagation()}>
-        {panel}
-      </div>
-    </div>,
-    root,
+
+  // Inline panel is always mounted; the fullscreen overlay renders into a
+  // portal under AnimatePresence so closing fades + scales back down. The
+  // inline panel sits behind the opaque modal during the toggle, so the
+  // exit animation has something to land on without a flash.
+  return (
+    <>
+      <PanelInner svg={svg} source={source} fullscreen={false} onToggleFullscreen={toggle} />
+      {root &&
+        createPortal(
+          <AnimatePresence>
+            {fullscreen && (
+              <motion.div
+                key="mermaid-fullscreen"
+                className="absolute inset-0 z-50 bg-[rgba(0,0,0,0.4)] backdrop-blur-md p-6"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2, ease: MODAL_EASE }}
+                onClick={() => setFullscreen(false)}
+              >
+                <motion.div
+                  className="w-full h-full"
+                  initial={{ opacity: 0, scale: 0.96, y: 6 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 6 }}
+                  transition={{ duration: 0.22, ease: MODAL_EASE }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <PanelInner svg={svg} source={source} fullscreen onToggleFullscreen={toggle} />
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          root,
+        )}
+    </>
   );
 }
 
