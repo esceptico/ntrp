@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Chat } from "./Chat";
 import { SettingsModal } from "./SettingsModal";
+import { AutomationsModal } from "./AutomationsModal";
 import { MarkdownViewer } from "./MarkdownViewer";
 import { ToolViewer } from "./ToolViewer";
 import { Demo as TraceDemo } from "./trace/Demo";
@@ -39,6 +40,7 @@ export function App() {
       <Sidebar />
       <Chat />
       <SettingsModal />
+      <AutomationsModal />
       <MarkdownViewer />
       <ToolViewer />
     </>

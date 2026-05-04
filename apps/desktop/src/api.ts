@@ -371,3 +371,109 @@ export async function patchServerConfig(
     body: JSON.stringify(patch),
   });
 }
+
+// ─── Automations ───────────────────────────────────────────────────
+
+export type AutomationTriggerType = "time" | "event" | "idle" | "count";
+
+export interface AutomationTrigger {
+  type: AutomationTriggerType;
+  // Time
+  at?: string;
+  days?: string;
+  every?: string;
+  start?: string;
+  end?: string;
+  // Event
+  event_type?: string;
+  lead_minutes?: number;
+  // Idle
+  idle_minutes?: number;
+  // Count
+  threshold?: number;
+  scope?: string;
+}
+
+export interface Automation {
+  task_id: string;
+  name: string;
+  description: string;
+  model: string | null;
+  triggers: AutomationTrigger[];
+  enabled: boolean;
+  created_at: string;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  /** Textual output from the most recent run (markdown). Null until the
+   *  automation has actually run once. */
+  last_result: string | null;
+  writable: boolean;
+  running_since: string | null;
+  handler: string | null;
+  builtin: boolean;
+  cooldown_minutes: number | null;
+}
+
+export interface CreateAutomationPayload {
+  name: string;
+  description: string;
+  model?: string | null;
+  trigger_type?: AutomationTriggerType;
+  at?: string;
+  days?: string;
+  every?: string;
+  event_type?: string;
+  lead_minutes?: number | string;
+  writable?: boolean;
+  start?: string;
+  end?: string;
+  triggers?: AutomationTrigger[];
+  cooldown_minutes?: number | null;
+}
+
+export type UpdateAutomationPayload = Partial<
+  CreateAutomationPayload & { enabled?: boolean }
+>;
+
+export async function listAutomationsApi(config: AppConfig): Promise<Automation[]> {
+  const r = await apiWithConfig<{ automations: Automation[] }>(config, "/automations");
+  return r.automations;
+}
+
+export async function createAutomationApi(
+  config: AppConfig,
+  payload: CreateAutomationPayload,
+): Promise<Automation> {
+  return apiWithConfig<Automation>(config, "/automations", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAutomationApi(
+  config: AppConfig,
+  taskId: string,
+  patch: UpdateAutomationPayload,
+): Promise<Automation> {
+  return apiWithConfig<Automation>(config, `/automations/${encodeURIComponent(taskId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function toggleAutomationApi(
+  config: AppConfig,
+  taskId: string,
+): Promise<Automation> {
+  return apiWithConfig<Automation>(config, `/automations/${encodeURIComponent(taskId)}/toggle`, {
+    method: "POST",
+  });
+}
+
+export async function runAutomationApi(config: AppConfig, taskId: string): Promise<void> {
+  await apiWithConfig(config, `/automations/${encodeURIComponent(taskId)}/run`, { method: "POST" });
+}
+
+export async function deleteAutomationApi(config: AppConfig, taskId: string): Promise<void> {
+  await apiWithConfig(config, `/automations/${encodeURIComponent(taskId)}`, { method: "DELETE" });
+}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Archive, MoreHorizontal, Pencil, Settings as SettingsIcon } from "lucide-react";
+import { Archive, MoreHorizontal, Pencil, Settings as SettingsIcon, Zap } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
 import { archiveSession, createSession, renameSession, switchSession } from "../actions";
@@ -232,12 +232,22 @@ function SessionList() {
 
 export function Sidebar() {
   const openSettings = useStore((s) => s.openSettings);
+  const openAutomations = useStore((s) => s.openAutomations);
 
   return (
     <aside className="sidebar flex flex-col">
       <div className="drag-spacer shrink-0 h-[38px]" />
       <nav className="flex flex-col gap-px px-2.5 pt-2">
-        <NavRow icon={<Pencil size={13} strokeWidth={1.7} />} label="New session" onClick={() => void createSession()} />
+        <NavRow
+          icon={<Pencil size={13} strokeWidth={1.7} />}
+          label="New session"
+          onClick={() => void createSession()}
+        />
+        <NavRow
+          icon={<Zap size={13} strokeWidth={1.7} />}
+          label="Automations"
+          onClick={openAutomations}
+        />
       </nav>
       <SessionList />
       <nav className="flex flex-col gap-px px-2.5 pt-1.5 pb-3">

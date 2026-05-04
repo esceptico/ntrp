@@ -431,6 +431,37 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   opacity: 0.8;
 }
 
+/* ─── Automations modal polish ─────────────────────────────── */
+.auto-card { transition: border-color 0.18s ease, background-color 0.18s ease; }
+.auto-card-template { cursor: pointer; }
+.auto-card-template:focus-visible {
+  outline: none;
+  border-color: var(--color-line-strong);
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
+}
+.auto-editor textarea::-webkit-scrollbar { width: 8px; }
+.auto-editor textarea::-webkit-scrollbar-track { background: transparent; }
+.auto-editor textarea::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  border: 2px solid var(--color-surface);
+}
+.auto-editor textarea:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.16); }
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (prefers-color-scheme: dark) {
+  .auto-editor textarea::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--color-surface);
+  }
+  .auto-editor textarea:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); }
+}
+
 /* ─── Tool preview fade ────────────────────────────────────── */
 .tool-preview-fade {
   mask-image: linear-gradient(180deg, #000 60%, transparent 100%);

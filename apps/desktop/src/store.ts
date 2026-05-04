@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   type AppConfig,
+  type Automation,
   type ModelsResponse,
   type ServerConfig,
   type SessionListItem,
@@ -101,6 +102,8 @@ interface State {
   pendingImages: ImageBlock[];
   serverConfig: ServerConfig | null;
   serverModels: ModelsResponse | null;
+  automations: Automation[] | null;
+  automationsOpen: boolean;
 }
 
 export interface MarkdownViewState {
@@ -150,6 +153,9 @@ interface Actions {
   clearPendingImages: () => void;
   setServerConfig: (cfg: ServerConfig | null) => void;
   setServerModels: (models: ModelsResponse | null) => void;
+  setAutomations: (automations: Automation[] | null) => void;
+  openAutomations: () => void;
+  closeAutomations: () => void;
 }
 
 const initialUsage: SessionUsage = { lastPrompt: 0, totalTokens: 0, totalCost: 0 };
@@ -182,6 +188,8 @@ export const useStore = create<State & Actions>((set) => ({
   pendingImages: [],
   serverConfig: null,
   serverModels: null,
+  automations: null,
+  automationsOpen: false,
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
   setSessions: (sessions) => set({ sessions }),
@@ -343,6 +351,9 @@ export const useStore = create<State & Actions>((set) => ({
 
   setServerConfig: (serverConfig) => set({ serverConfig }),
   setServerModels: (serverModels) => set({ serverModels }),
+  setAutomations: (automations) => set({ automations }),
+  openAutomations: () => set({ automationsOpen: true }),
+  closeAutomations: () => set({ automationsOpen: false }),
 }));
 
 // Helpers for use outside React (e.g. inside event-stream handlers).
