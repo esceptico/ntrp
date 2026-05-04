@@ -66,6 +66,12 @@ async def get_session_history(svc: SessionService = Depends(require_session_serv
         if role == Role.TOOL and "tool_call_id" in msg:
             entry["tool_call_id"] = msg["tool_call_id"]
 
+        # Stable client-side id (the same one we streamed in SSE for assistant
+        # turns). Lets the desktop client key React components and reference
+        # the message in branch / edit calls without positional games.
+        if msg.get("client_id"):
+            entry["id"] = msg["client_id"]
+
         history.append(entry)
 
     return {"messages": history[-HISTORY_MESSAGE_LIMIT:]}
@@ -128,8 +134,14 @@ async def branch_session(
     svc: SessionService = Depends(require_session_service),
 ):
     name = req.name if req else None
+    up_to_id = req.up_to_message_id if req else None
     from_end = req.from_end_index if req else None
-    state = await svc.branch(session_id, name=name, from_end_index=from_end)
+    state = await svc.branch(
+        session_id,
+        name=name,
+        up_to_message_id=up_to_id,
+        from_end_index=from_end,
+    )
     if not state:
         raise HTTPException(status_code=404, detail="Session not found")
     return {

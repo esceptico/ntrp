@@ -69,6 +69,7 @@ class Agent:
         self.model_request_middlewares = tuple(model_request_middlewares)
         self._runner = ToolRunner(executor=executor, depth=current_depth, parent_id=parent_id)
         self._last_response: CompletionResponse | None = None
+        self._last_text_id: str | None = None
         self._usage = Usage()
 
     async def stream(self, messages: list[dict]) -> AsyncGenerator[AgentEvent]:
@@ -107,7 +108,12 @@ class Agent:
                     return
 
                 if text := (response_message.content or "").strip():
-                    yield TextBlock(depth=self.current_depth, parent_id=self.parent_id, content=text)
+                    yield TextBlock(
+                        depth=self.current_depth,
+                        parent_id=self.parent_id,
+                        message_id=self._last_text_id,
+                        content=text,
+                    )
 
                 calls = parse_tool_calls(response_message.tool_calls)
                 async for event in dispatch_tools(self._runner, messages, calls, response_message.tool_calls):
@@ -175,6 +181,11 @@ class Agent:
     ) -> AsyncGenerator[AgentEvent]:
         try:
             response = None
+            # Stable id assigned at the start of the assistant turn. Used both
+            # in the SSE `message_id` for streaming clients and persisted on
+            # the saved message so callers (e.g. branching) can reference it.
+            text_id = f"text-{uuid4().hex[:10]}"
+            text_started = False
             reasoning_id = f"reasoning-{uuid4().hex[:10]}"
             reasoning_started = False
             reasoning_parts: list[str] = []
@@ -185,7 +196,13 @@ class Agent:
                 kwargs["prompt_cache_key"] = self.prompt_cache_key
             async for item in self.client.stream(messages, model, tools, **kwargs):
                 if isinstance(item, str):
-                    yield TextDelta(depth=self.current_depth, parent_id=self.parent_id, content=item)
+                    text_started = True
+                    yield TextDelta(
+                        depth=self.current_depth,
+                        parent_id=self.parent_id,
+                        message_id=text_id,
+                        content=item,
+                    )
                 elif isinstance(item, ReasoningContentDelta):
                     content = item.content.lstrip() if not reasoning_parts else item.content
                     if not content:
@@ -220,6 +237,15 @@ class Agent:
             yield ReasoningEnded(depth=self.current_depth, parent_id=self.parent_id, message_id=reasoning_id)
         elif reasoning := response.choices[0].message.reasoning_content:
             yield ReasoningBlock(depth=self.current_depth, parent_id=self.parent_id, content=reasoning)
-        messages.append(normalize_assistant_message(response.choices[0].message))
+        assistant_msg = normalize_assistant_message(response.choices[0].message)
+        if text_started:
+            # Persist the same id we streamed, so the desktop client's
+            # locally-keyed message and the saved row share an id. Branching
+            # by message id then doesn't need a history refresh.
+            assistant_msg["client_id"] = text_id
+            self._last_text_id = text_id
+        else:
+            self._last_text_id = None
+        messages.append(assistant_msg)
         if self.hooks.on_response:
             await self.hooks.on_response(response)

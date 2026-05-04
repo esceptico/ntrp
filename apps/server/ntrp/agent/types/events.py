@@ -13,11 +13,13 @@ class AgentEventBase:
 @dataclass(frozen=True, kw_only=True)
 class TextDelta(AgentEventBase):
     content: str
+    message_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class TextBlock(AgentEventBase):
     content: str
+    message_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

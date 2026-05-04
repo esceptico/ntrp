@@ -226,10 +226,12 @@ class CreateSessionRequest(BaseModel):
 
 class BranchRequest(BaseModel):
     name: str | None = None
-    # 0-based index counted from the *end* of the message list. 0 means the
-    # last message, 1 the second-to-last, etc. Stays consistent between the
-    # UI's view (which may be sliced to the last N messages) and the server's
-    # full storage, since both share the same tail.
+    # Preferred: branch up to and including the message with this client_id.
+    # The desktop client persists the same id it used during streaming, so
+    # this works without any position math.
+    up_to_message_id: str | None = None
+    # Legacy: 0-based index counted from the end of the message list. Kept
+    # so older session data without persisted ids can still be branched.
     from_end_index: int | None = None
 
 

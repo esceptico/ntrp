@@ -96,24 +96,40 @@ class SessionService:
         self,
         session_id: str,
         name: str | None = None,
+        up_to_message_id: str | None = None,
         from_end_index: int | None = None,
     ) -> SessionState | None:
         """Clone a session's messages into a new session, preserving context.
 
-        When `from_end_index` is provided, the new session contains messages
-        up to and including the message at that offset from the end (0 = the
-        very last message, 1 = the second-to-last, …) plus any tool messages
-        that immediately follow it (so the cloned context stays valid).
+        Either pin-point arg picks the truncation point (and a trailing
+        tool-message run is kept so the cloned context is valid):
+
+        - `up_to_message_id`: the saved `client_id` of the assistant message
+          to include. Preferred — works without positional math.
+        - `from_end_index`: legacy positional fallback for sessions whose
+          messages were persisted before stable ids were introduced. 0 = the
+          last message, 1 = the second-to-last, …
         """
         data = await self.load(session_id)
         if not data:
             return None
 
         messages = list(data.messages)
-        if from_end_index is not None:
+        target_idx: int | None = None
+
+        if up_to_message_id is not None:
+            for i, msg in enumerate(messages):
+                if msg.get("client_id") == up_to_message_id:
+                    target_idx = i
+                    break
+            if target_idx is None:
+                return None
+        elif from_end_index is not None:
             if from_end_index < 0 or from_end_index >= len(messages):
                 return None
             target_idx = len(messages) - 1 - from_end_index
+
+        if target_idx is not None:
             end = target_idx + 1
             while end < len(messages) and messages[end].get("role") == "tool":
                 end += 1
