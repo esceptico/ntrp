@@ -1,14 +1,34 @@
 import { useEffect, useMemo, useRef } from "react";
-import { ArrowUp, ShieldOff, ShieldCheck, Sparkles, X } from "lucide-react";
+import { ArrowUp, ImagePlus, ShieldOff, ShieldCheck, Sparkles, X } from "lucide-react";
 import clsx from "clsx";
-import { useStore } from "../store";
-import { isBuiltin, runBuiltinCommand, sendMessage } from "../actions";
+import { useStore, type ImageBlock } from "../store";
+import { isBuiltin, runBuiltinCommand, sendMessage, viewSkill } from "../actions";
 import {
   CommandPicker,
   filterCommands,
   useCommandList,
   type CommandEntry,
 } from "./CommandPicker";
+
+/** Read a single File and return its bytes as base64 + media type. */
+function fileToImageBlock(file: File): Promise<ImageBlock> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("Read failed"));
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Unexpected reader result"));
+        return;
+      }
+      // result is "data:<media_type>;base64,<data>"
+      const [meta, data] = result.split(",", 2);
+      const m = meta.match(/^data:([^;]+);base64$/);
+      resolve({ media_type: m?.[1] ?? file.type ?? "application/octet-stream", data: data ?? "" });
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 /** Returns the slash-prefix at the start of `text` if it currently looks like
  *  a command being composed (no space between the slash and the cursor). */
@@ -71,7 +91,12 @@ export function Composer() {
   const skills = useStore((s) => s.skills);
   const selectedSkill = useStore((s) => s.selectedSkill);
   const setSelectedSkill = useStore((s) => s.setSelectedSkill);
+  const pendingImages = useStore((s) => s.pendingImages);
+  const addPendingImages = useStore((s) => s.addPendingImages);
+  const removePendingImage = useStore((s) => s.removePendingImage);
+  const clearPendingImages = useStore((s) => s.clearPendingImages);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const query = useMemo(() => pickerQuery(draft), [draft]);
   const allCommands = useCommandList();
@@ -103,9 +128,12 @@ export function Composer() {
   }, [query, filteredCommands.length, pickerOpen, setPickerOpen]);
 
   const hasDraft = draft.trim().length > 0;
-  // With a skill attached, the user can submit even with an empty draft
-  // (the skill body alone is the full request).
-  const disabled = running || !connected || (!hasDraft && !selectedSkill);
+  // With a skill attached or images pending, the user can submit even with an
+  // empty draft (the skill body / images alone are the full request).
+  const disabled =
+    running ||
+    !connected ||
+    (!hasDraft && !selectedSkill && pendingImages.length === 0);
 
   useEffect(() => {
     if (inputRef.current) resize(inputRef.current);
@@ -149,18 +177,20 @@ export function Composer() {
   function submit() {
     const text = draft;
     const skill = selectedSkill;
-    if (!text.trim() && !skill) return;
+    const images = pendingImages;
+    if (!text.trim() && !skill && images.length === 0) return;
 
     setDraft("");
     setSelectedSkill(null);
+    clearPendingImages();
     if (inputRef.current) {
       inputRef.current.value = "";
       resize(inputRef.current);
     }
     setPickerOpen(false);
 
-    // Pure builtin (no skill attached) — route to the dispatcher.
-    if (!skill && dispatchCommand(text)) return;
+    // Pure builtin (no skill, no images) — route to the dispatcher.
+    if (!skill && images.length === 0 && dispatchCommand(text)) return;
 
     const trimmed = text.trim();
     const fullText = skill
@@ -168,7 +198,7 @@ export function Composer() {
         ? `/${skill.name} ${trimmed}`
         : `/${skill.name}`
       : text;
-    void sendMessage(fullText);
+    void sendMessage(fullText, images);
   }
 
   function cancelEdit() {
@@ -178,6 +208,14 @@ export function Composer() {
       inputRef.current.value = "";
       resize(inputRef.current);
     }
+  }
+
+  async function attachFiles(fileList: FileList | File[] | null) {
+    if (!fileList) return;
+    const files = Array.from(fileList).filter((f) => f.type.startsWith("image/"));
+    if (files.length === 0) return;
+    const blocks = await Promise.all(files.map(fileToImageBlock));
+    addPendingImages(blocks);
   }
 
   return (
@@ -196,11 +234,7 @@ export function Composer() {
           <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">
             <button
               type="button"
-              onClick={() => {
-                if (selectedSkill.path) {
-                  void window.ntrpDesktop?.shell?.openPath(selectedSkill.path);
-                }
-              }}
+              onClick={() => void viewSkill(selectedSkill.name)}
               title={selectedSkill.path ?? selectedSkill.name}
               className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-sunken/80 border border-line-soft text-[11.5px] font-medium text-ink-soft hover:bg-surface-soft hover:border-line transition-colors"
             >
@@ -232,6 +266,38 @@ export function Composer() {
             </button>
           </div>
         )}
+        {pendingImages.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-3 pt-2">
+            {pendingImages.map((img, i) => (
+              <div key={i} className="relative">
+                <img
+                  src={`data:${img.media_type};base64,${img.data}`}
+                  alt=""
+                  className="h-14 w-14 rounded-md object-cover border border-line-soft"
+                />
+                <button
+                  type="button"
+                  onClick={() => removePendingImage(i)}
+                  aria-label="Remove image"
+                  className="absolute -top-1.5 -right-1.5 grid place-items-center w-4 h-4 rounded-full bg-ink text-on-ink shadow-sm hover:bg-black"
+                >
+                  <X size={9} strokeWidth={2.4} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            void attachFiles(e.target.files);
+            e.target.value = ""; // allow picking the same file again later
+          }}
+        />
         <textarea
           ref={inputRef}
           id="message-input"
@@ -284,11 +350,29 @@ export function Composer() {
               submit();
             }
           }}
+          onPaste={(e) => {
+            const files = Array.from(e.clipboardData?.files ?? []).filter((f) =>
+              f.type.startsWith("image/"),
+            );
+            if (files.length > 0) {
+              e.preventDefault();
+              void attachFiles(files);
+            }
+          }}
           rows={1}
           placeholder="Message ntrp…"
           className="w-full min-h-[44px] max-h-[220px] resize-none border-0 bg-transparent px-4 pt-[13px] pb-1 text-[14px] leading-[1.5] text-ink outline-none tracking-[-0.005em] placeholder:text-whisper"
         />
         <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-2">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach image"
+            aria-label="Attach image"
+            className="inline-flex items-center justify-center h-7 w-7 rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-colors"
+          >
+            <ImagePlus size={13} strokeWidth={1.8} />
+          </button>
           <button
             type="button"
             onClick={() => setSkipApprovals(!skipApprovals)}

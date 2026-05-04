@@ -7,6 +7,7 @@ import { renderMarkdown, escapeHtml } from "../markdown";
 import { ActivityHeader, ActivityTail, ActivityTrace } from "./trace/ActivityTrace";
 import { ApprovalCard } from "./ApprovalCard";
 import type { SkillDescriptor } from "../api";
+import { viewSkill } from "../actions";
 
 const EASE = [0.32, 0.72, 0, 1] as const;
 
@@ -93,38 +94,53 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
   );
 }
 
-/** Match a leading `/skill-name` token in user content; return the skill
- *  descriptor + the remaining text (the user's actual prompt) if the token
- *  matches a known skill. Returns null otherwise. */
+/** Detect a skill invocation in user content. Handles two formats:
+ *
+ *  1. Live (pre-server-expansion): `/skill-name <prompt>` — what the
+ *     composer actually sends.
+ *
+ *  2. Historic (server-expanded): `<skill name="...">…body…</skill>\n\n
+ *     User request: <prompt>` — what `expand_skill_command` writes into
+ *     `sessions.messages` before saving.
+ *
+ *  Returns the matched skill descriptor + the user's actual prompt
+ *  (everything after the skill block / slash command), or null. */
 function detectSkillPrefix(
   content: string,
   skills: SkillDescriptor[],
 ): { skill: SkillDescriptor; rest: string } | null {
-  if (!content.startsWith("/")) return null;
-  const match = content.match(/^\/([\w-]+)\s*([\s\S]*)$/);
-  if (!match) return null;
-  const [, name, rest = ""] = match;
-  const skill = skills.find((s) => s.name === name);
-  if (!skill) return null;
-  return { skill, rest: rest.trimStart() };
+  // Format 1: /skill-name args
+  if (content.startsWith("/")) {
+    const slash = content.match(/^\/([\w-]+)\s*([\s\S]*)$/);
+    if (slash) {
+      const [, name, rest = ""] = slash;
+      const skill = skills.find((s) => s.name === name);
+      if (skill) return { skill, rest: rest.trimStart() };
+    }
+  }
+
+  // Format 2: <skill name="..."> ... </skill>[\n\nUser request: ...]
+  if (content.startsWith("<skill")) {
+    const xml = content.match(
+      /^<skill\s+name="([^"]+)"[^>]*>[\s\S]*?<\/skill>\s*(?:User request:\s*([\s\S]*))?$/,
+    );
+    if (xml) {
+      const [, name, rest = ""] = xml;
+      const skill = skills.find((s) => s.name === name);
+      if (skill) return { skill, rest: rest.trim() };
+    }
+  }
+
+  return null;
 }
 
 function SkillChip({ skill }: { skill: SkillDescriptor }) {
-  const onClick = () => {
-    if (!skill.path) return;
-    void window.ntrpDesktop?.shell?.openPath(skill.path);
-  };
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={() => void viewSkill(skill.name)}
       title={skill.path ?? skill.name}
-      disabled={!skill.path}
-      className={clsx(
-        "inline-flex items-center gap-1.5 mt-1 px-2 py-1 rounded-md bg-surface-sunken/80 border border-line-soft",
-        "text-[11.5px] font-medium text-ink-soft transition-colors",
-        skill.path && "hover:bg-surface-soft hover:border-line cursor-pointer",
-      )}
+      className="inline-flex items-center gap-1.5 mt-1 px-2 py-1 rounded-md bg-surface-sunken/80 border border-line-soft text-[11.5px] font-medium text-ink-soft hover:bg-surface-soft hover:border-line transition-colors cursor-pointer"
     >
       <Sparkles size={11} strokeWidth={2} className="text-accent" />
       <span className="capitalize">{skill.name.replace(/[_-]/g, " ")}</span>
@@ -142,15 +158,24 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
     [message.content, skills],
   );
 
-  // When a skill prefix is detected, the bubble shows just the user's prompt
-  // (the part after `/skill-name`) and the chip below identifies the skill.
-  // If the user only typed `/skill-name` with no extra text, the chip stands
-  // alone — no empty bubble.
   const visibleText = skillMatch ? skillMatch.rest : message.content;
   const showBubble = visibleText.trim().length > 0;
+  const images = message.images ?? [];
 
   return (
     <article className="group flex flex-col items-end animate-fade-in" data-id={id}>
+      {images.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-1.5 max-w-[75%] mb-1.5">
+          {images.map((img, i) => (
+            <img
+              key={i}
+              src={`data:${img.media_type};base64,${img.data}`}
+              alt=""
+              className="rounded-lg max-h-[180px] max-w-[220px] object-cover border border-line-soft"
+            />
+          ))}
+        </div>
+      )}
       {showBubble && (
         <div className="max-w-[75%] px-3.5 py-2 rounded-[18px] bg-surface-sunken text-ink text-[13.5px] leading-[1.5] whitespace-pre-wrap break-words text-left">
           {visibleText}

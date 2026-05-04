@@ -22,6 +22,24 @@ async def list_skills(svc: SkillService = Depends(require_skill_service)):
     }
 
 
+@router.get("/skills/{name}/content")
+async def get_skill_content(name: str, svc: SkillService = Depends(require_skill_service)):
+    meta = svc.get(name)
+    if not meta:
+        raise HTTPException(status_code=404, detail=f"Skill not found: {name}")
+    skill_md = meta.path / "SKILL.md"
+    try:
+        content = skill_md.read_text()
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read skill: {e}")
+    return {
+        "name": name,
+        "description": meta.description,
+        "path": str(skill_md),
+        "content": content,
+    }
+
+
 @router.post("/skills/install")
 async def install_skill(request: InstallRequest, svc: SkillService = Depends(require_skill_service)):
     try:

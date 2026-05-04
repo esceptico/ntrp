@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
 import { EmptyState } from "./EmptyState";
 import { Message } from "./Message";
+import { ThinkingIndicator } from "./ThinkingIndicator";
 import { TurnGroup } from "./TurnGroup";
 
 function isAtBottom(el: Element, threshold = 64): boolean {
@@ -79,6 +80,7 @@ export function Messages() {
                 ? <TurnGroup key={seg.userId} userId={seg.userId} childIds={seg.childIds} />
                 : <div key="preamble" className="contents">{seg.childIds.map((id) => <Message key={id} id={id} />)}</div>
             )}
+        <ThinkingIndicator />
       </div>
     </div>
   );

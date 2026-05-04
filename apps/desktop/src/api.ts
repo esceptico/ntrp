@@ -17,12 +17,18 @@ export interface HistoryToolCall {
   arguments: string;
 }
 
+export interface HistoryImage {
+  media_type: string;
+  data: string;
+}
+
 export interface HistoryMessage {
   role: "user" | "assistant" | "tool";
   content: string;
   reasoning_content?: string;
   tool_calls?: HistoryToolCall[];
   tool_call_id?: string;
+  images?: HistoryImage[];
 }
 
 export interface HealthCheck {
@@ -248,4 +254,15 @@ export interface SkillDescriptor {
 export async function listSkills(config: AppConfig): Promise<SkillDescriptor[]> {
   const { skills } = await apiWithConfig<{ skills: SkillDescriptor[] }>(config, "/skills");
   return skills ?? [];
+}
+
+export interface SkillContent {
+  name: string;
+  description: string;
+  path: string;
+  content: string;
+}
+
+export async function fetchSkillContent(config: AppConfig, name: string): Promise<SkillContent> {
+  return apiWithConfig<SkillContent>(config, `/skills/${encodeURIComponent(name)}/content`);
 }

@@ -2,6 +2,7 @@ import {
   type AppConfig,
   apiWithConfig,
   checkHealth,
+  fetchSkillContent,
   listSkills,
   loadInitialConfig,
   saveConfig,
@@ -10,7 +11,7 @@ import {
   type HistoryMessage,
   type SessionListItem,
 } from "./api";
-import { getState, type UiMessage } from "./store";
+import { getState, type ImageBlock, type UiMessage } from "./store";
 
 function formatCall(name: string, argsJson: string): string {
   try {
@@ -56,6 +57,7 @@ export async function loadHistory(sessionId: string): Promise<void> {
         role: "user",
         content: msg.content,
         turn: { startedAt: 0, endedAt: 0, durationMs: null },
+        images: msg.images,
       });
       return;
     }
@@ -151,6 +153,34 @@ export async function fetchSkills(): Promise<void> {
   }
 }
 
+/** Fetch a skill's source markdown and pop the in-app viewer. Falls back to
+ *  opening the file in the OS default app if the fetch fails (e.g. server
+ *  is offline but the file exists locally). */
+export async function viewSkill(name: string): Promise<void> {
+  const s = getState();
+  const skill = s.skills.find((sk) => sk.name === name);
+  try {
+    const data = await fetchSkillContent(s.config, name);
+    s.setViewingMarkdown({
+      title: skill?.name ?? data.name,
+      subtitle: data.path,
+      content: data.content,
+      sourcePath: data.path,
+    });
+  } catch (error) {
+    // Couldn't load via server. As a last resort, open externally if we
+    // know the path locally.
+    if (skill?.path) void window.ntrpDesktop?.shell?.openPath(skill.path);
+    else {
+      s.appendMessage({
+        id: crypto.randomUUID(),
+        role: "error",
+        content: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+}
+
 export async function switchSession(sessionId: string): Promise<void> {
   const s = getState();
   s.setCurrentSession(sessionId);
@@ -167,9 +197,11 @@ export async function createSession(): Promise<void> {
   await switchSession(session.session_id);
 }
 
-export async function sendMessage(text: string): Promise<void> {
+export async function sendMessage(text: string, images: ImageBlock[] = []): Promise<void> {
   const s = getState();
-  if (!s.currentSessionId || !text.trim()) return;
+  if (!s.currentSessionId) return;
+  const trimmedText = text.trim();
+  if (!trimmedText && images.length === 0) return;
 
   if (s.editingId) {
     s.truncateFrom(s.editingId);
@@ -179,8 +211,9 @@ export async function sendMessage(text: string): Promise<void> {
   s.appendMessage({
     id: crypto.randomUUID(),
     role: "user",
-    content: text.trim(),
+    content: trimmedText,
     turn: { startedAt: Date.now(), endedAt: null, durationMs: null },
+    images: images.length > 0 ? images : undefined,
   });
   s.setRunning(true);
 
@@ -188,9 +221,10 @@ export async function sendMessage(text: string): Promise<void> {
     await apiWithConfig<{ run_id: string }>(s.config, "/chat/message", {
       method: "POST",
       body: JSON.stringify({
-        message: text.trim(),
+        message: trimmedText,
         session_id: s.currentSessionId,
         skip_approvals: s.skipApprovals,
+        images: images.length > 0 ? images : undefined,
       }),
     });
   } catch (error) {

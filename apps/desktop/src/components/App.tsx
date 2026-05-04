@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Chat } from "./Chat";
 import { SettingsModal } from "./SettingsModal";
+import { MarkdownViewer } from "./MarkdownViewer";
 import { Demo as TraceDemo } from "./trace/Demo";
 import { useStore } from "../store";
 import { useEvents } from "../hooks/useEvents";
@@ -38,6 +39,7 @@ export function App() {
       <Sidebar />
       <Chat />
       {settingsOpen && <SettingsModal />}
+      <MarkdownViewer />
     </>
   );
 }

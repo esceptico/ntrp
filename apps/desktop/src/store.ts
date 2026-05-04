@@ -37,6 +37,13 @@ export interface TurnMeta {
   durationMs: number | null;
 }
 
+export interface ImageBlock {
+  /** IANA media type, e.g. "image/png". */
+  media_type: string;
+  /** Base64-encoded image bytes (no data: URL prefix). */
+  data: string;
+}
+
 export interface UiMessage {
   id: string;
   role: Role;
@@ -46,6 +53,7 @@ export interface UiMessage {
   activity?: ActivityState;
   approval?: ApprovalState;
   turn?: TurnMeta;
+  images?: ImageBlock[];
 }
 
 export interface SessionUsage {
@@ -77,6 +85,16 @@ interface State {
   commandPickerOpen: boolean;
   commandPickerIndex: number;
   selectedSkill: SkillDescriptor | null;
+  viewingMarkdown: MarkdownViewState | null;
+  pendingImages: ImageBlock[];
+}
+
+export interface MarkdownViewState {
+  title: string;
+  subtitle?: string;
+  content: string;
+  /** Optional filesystem path — surfaces an "open in OS" affordance. */
+  sourcePath?: string;
 }
 
 interface Actions {
@@ -110,6 +128,10 @@ interface Actions {
   setCommandPickerOpen: (open: boolean) => void;
   setCommandPickerIndex: (index: number) => void;
   setSelectedSkill: (skill: SkillDescriptor | null) => void;
+  setViewingMarkdown: (view: MarkdownViewState | null) => void;
+  addPendingImages: (images: ImageBlock[]) => void;
+  removePendingImage: (index: number) => void;
+  clearPendingImages: () => void;
 }
 
 const initialUsage: SessionUsage = { lastPrompt: 0, totalTokens: 0, totalCost: 0 };
@@ -137,6 +159,8 @@ export const useStore = create<State & Actions>((set) => ({
   commandPickerOpen: false,
   commandPickerIndex: 0,
   selectedSkill: null,
+  viewingMarkdown: null,
+  pendingImages: [],
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
   setSessions: (sessions) => set({ sessions }),
@@ -268,6 +292,13 @@ export const useStore = create<State & Actions>((set) => ({
   setCommandPickerOpen: (commandPickerOpen) => set({ commandPickerOpen, commandPickerIndex: 0 }),
   setCommandPickerIndex: (commandPickerIndex) => set({ commandPickerIndex }),
   setSelectedSkill: (selectedSkill) => set({ selectedSkill }),
+  setViewingMarkdown: (viewingMarkdown) => set({ viewingMarkdown }),
+
+  addPendingImages: (images) =>
+    set((s) => ({ pendingImages: [...s.pendingImages, ...images] })),
+  removePendingImage: (index) =>
+    set((s) => ({ pendingImages: s.pendingImages.filter((_, i) => i !== index) })),
+  clearPendingImages: () => set({ pendingImages: [] }),
 }));
 
 // Helpers for use outside React (e.g. inside event-stream handlers).
