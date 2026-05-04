@@ -92,16 +92,38 @@ class SessionService:
     async def permanently_delete(self, session_id: str) -> bool:
         return await self.store.permanently_delete_session(session_id)
 
-    async def branch(self, session_id: str, name: str | None = None) -> SessionState | None:
-        """Clone a session's messages into a new session, preserving context."""
+    async def branch(
+        self,
+        session_id: str,
+        name: str | None = None,
+        from_end_index: int | None = None,
+    ) -> SessionState | None:
+        """Clone a session's messages into a new session, preserving context.
+
+        When `from_end_index` is provided, the new session contains messages
+        up to and including the message at that offset from the end (0 = the
+        very last message, 1 = the second-to-last, …) plus any tool messages
+        that immediately follow it (so the cloned context stays valid).
+        """
         data = await self.load(session_id)
         if not data:
             return None
+
+        messages = list(data.messages)
+        if from_end_index is not None:
+            if from_end_index < 0 or from_end_index >= len(messages):
+                return None
+            target_idx = len(messages) - 1 - from_end_index
+            end = target_idx + 1
+            while end < len(messages) and messages[end].get("role") == "tool":
+                end += 1
+            messages = messages[:end]
+
         new_state = self.create(name=name or (f"{data.state.name} (branch)" if data.state.name else None))
         new_state.auto_approve = set(data.state.auto_approve)
         new_state.skip_approvals = data.state.skip_approvals
         metadata = {"last_input_tokens": data.last_input_tokens} if data.last_input_tokens else None
-        await self.save(new_state, list(data.messages), metadata=metadata)
+        await self.save(new_state, messages, metadata=metadata)
         return new_state
 
 

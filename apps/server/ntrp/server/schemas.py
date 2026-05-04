@@ -224,6 +224,15 @@ class CreateSessionRequest(BaseModel):
     name: str | None = None
 
 
+class BranchRequest(BaseModel):
+    name: str | None = None
+    # 0-based index counted from the *end* of the message list. 0 means the
+    # last message, 1 the second-to-last, etc. Stays consistent between the
+    # UI's view (which may be sliced to the last N messages) and the server's
+    # full storage, since both share the same tail.
+    from_end_index: int | None = None
+
+
 class RenameSessionRequest(BaseModel):
     name: str
 

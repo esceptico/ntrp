@@ -6,6 +6,7 @@ from ntrp.core.content import blocks_to_text
 from ntrp.server.deps import require_session_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
+    BranchRequest,
     ClearSessionRequest,
     CreateSessionRequest,
     RenameSessionRequest,
@@ -123,11 +124,12 @@ async def revert_session(svc: SessionService = Depends(require_session_service),
 @router.post("/sessions/{session_id}/branch")
 async def branch_session(
     session_id: str,
-    req: CreateSessionRequest | None = None,
+    req: BranchRequest | None = None,
     svc: SessionService = Depends(require_session_service),
 ):
     name = req.name if req else None
-    state = await svc.branch(session_id, name=name)
+    from_end = req.from_end_index if req else None
+    state = await svc.branch(session_id, name=name, from_end_index=from_end)
     if not state:
         raise HTTPException(status_code=404, detail="Session not found")
     return {
