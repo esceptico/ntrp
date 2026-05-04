@@ -8,6 +8,7 @@ import { ActivityHeader, ActivityTail, ActivityTrace } from "./trace/ActivityTra
 import { ApprovalCard } from "./ApprovalCard";
 import type { SkillDescriptor } from "../api";
 import { viewSkill } from "../actions";
+import { MarkdownContent } from "./MarkdownContent";
 
 const EASE = [0.32, 0.72, 0, 1] as const;
 
@@ -193,9 +194,9 @@ const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: 
   if (!message) return null;
   return (
     <article className="group grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 animate-fade-in" data-id={id}>
-      <div
-        className="md py-0.5 text-[14px] leading-[1.62] text-ink tracking-[-0.005em] break-words"
-        dangerouslySetInnerHTML={{ __html: html || "&nbsp;" }}
+      <MarkdownContent
+        html={html}
+        className="py-0.5 text-[14px] leading-[1.62] text-ink tracking-[-0.005em] break-words"
       />
       {isFinal && <MessageActions id={id} role="assistant" />}
     </article>
@@ -238,9 +239,9 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
             transition={{ duration: 0.24, ease: EASE }}
             style={{ overflow: "hidden" }}
           >
-            <div
-              className="md mt-2 pl-3.5 border-l-2 border-line text-[13px] leading-[1.6] text-muted italic break-words"
-              dangerouslySetInnerHTML={{ __html: html || "&nbsp;" }}
+            <MarkdownContent
+              html={html}
+              className="mt-2 pl-3.5 border-l-2 border-line text-[13px] leading-[1.6] text-muted italic break-words"
             />
           </motion.div>
         )}

@@ -170,6 +170,56 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   font-size: 12.5px;
   line-height: 1.55;
 }
+
+/* Wrapped code block with language label + copy button. */
+.md .code-block {
+  margin: 0.6em 0;
+  border-radius: 10px;
+  background: var(--color-code-bg);
+  border: 1px solid var(--color-line-soft);
+  overflow: hidden;
+}
+.md .code-block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 12px;
+}
+.md .code-block-lang {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-muted);
+  text-transform: lowercase;
+  letter-spacing: 0.01em;
+}
+.md .code-block-copy {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  color: var(--color-faint);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: color 100ms ease, background 100ms ease;
+}
+.md .code-block-copy:hover {
+  color: var(--color-ink);
+  background: rgba(20, 18, 14, 0.06);
+}
+.md .code-block-copy.copied {
+  color: var(--color-ok);
+}
+/* The pre inside the wrapper takes the bottom rounded corners visually
+   via the wrapper's overflow: hidden, so we strip its own chrome. */
+.md .code-block pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
 .md pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; color: var(--color-ink); }
 .md strong { font-weight: 600; color: var(--color-ink); }
 .md em { font-style: italic; }
@@ -362,4 +412,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   .diff-preview .diff-del { background: rgba(209, 77, 65, 0.16); color: #e58075; }
   .diff-preview .diff-hunk { color: var(--color-info); }
   .modal-error span { color: #e58075 !important; }
+
+  .md .code-block-copy:hover { background: rgba(255, 255, 255, 0.06); }
 }

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { ExternalLink, X } from "lucide-react";
 import { useStore } from "../store";
 import { renderMarkdown } from "../markdown";
+import { MarkdownContent } from "./MarkdownContent";
 
 /** Generic markdown viewer modal. State lives in the store as `viewingMarkdown`
  *  so any code can pop the viewer with a `setViewingMarkdown({title, content, ...})`
@@ -75,10 +76,7 @@ export function MarkdownViewer() {
           </div>
         </header>
         <div className="overflow-y-auto scroll-thin px-5 py-4">
-          <div
-            className="md text-[14px] leading-[1.6] text-ink"
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
+          <MarkdownContent html={html} className="text-[14px] leading-[1.6] text-ink" />
         </div>
       </div>
     </div>,
