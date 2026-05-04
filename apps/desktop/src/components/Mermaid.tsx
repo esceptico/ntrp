@@ -2,106 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, Copy, Maximize2, Minimize2, Minus, Plus, RotateCcw } from "lucide-react";
 import clsx from "clsx";
-
-/** Pull the current value of a CSS custom property from :root. */
-function tok(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-let initPromise: Promise<typeof import("mermaid").default> | null = null;
-let initializedTheme: "light" | "dark" | null = null;
-
-function currentTheme(): "light" | "dark" {
-  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-async function getMermaid(): Promise<typeof import("mermaid").default> {
-  if (!initPromise) {
-    initPromise = import("mermaid").then((m) => m.default);
-  }
-  const mermaid = await initPromise;
-  const theme = currentTheme();
-  if (initializedTheme !== theme) {
-    const ink = tok("--color-ink");
-    const ink_soft = tok("--color-ink-soft");
-    const muted = tok("--color-muted");
-    const faint = tok("--color-faint");
-    const line = tok("--color-line-strong");
-    const surfaceSunken = tok("--color-surface-sunken");
-    const onInk = tok("--color-on-ink");
-
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: "strict",
-      theme: "neutral",
-      // useMaxWidth: false makes mermaid emit absolute pixel sizes on the
-      // <svg> instead of `style="width:100%"`. We need the natural size so
-      // fit-to-view math works.
-      flowchart: { useMaxWidth: false },
-      sequence: { useMaxWidth: false },
-      class: { useMaxWidth: false },
-      state: { useMaxWidth: false },
-      er: { useMaxWidth: false },
-      gantt: { useMaxWidth: false },
-      journey: { useMaxWidth: false },
-      timeline: { useMaxWidth: false },
-      mindmap: { useMaxWidth: false },
-      pie: { useMaxWidth: false },
-      quadrantChart: { useMaxWidth: false },
-      xyChart: { useMaxWidth: false },
-      requirement: { useMaxWidth: false },
-      gitGraph: { useMaxWidth: false },
-      themeVariables: {
-        fontSize: "13px",
-        background: "transparent",
-        textColor: ink,
-        lineColor: ink_soft,
-        actorBkg: "transparent",
-        actorBorder: line,
-        actorTextColor: ink,
-        actorLineColor: faint,
-        signalColor: ink_soft,
-        signalTextColor: ink,
-        labelBoxBkgColor: "transparent",
-        labelBoxBorderColor: line,
-        labelTextColor: ink,
-        loopTextColor: muted,
-        noteBkgColor: "transparent",
-        noteBorderColor: line,
-        noteTextColor: ink,
-        // Activation bar (the rect over a participant's lifeline while
-        // busy). Transparent fill made it almost invisible against the
-        // panel background; a tinted fill + muted border reads as a clear
-        // but unobtrusive bar.
-        activationBkgColor: surfaceSunken,
-        activationBorderColor: muted,
-        // mermaid fills the autonumber bubble with `actorTextColor` (dark);
-        // the number text needs the contrasting on-ink color to be visible.
-        sequenceNumberColor: onInk,
-        altBackground: "transparent",
-        cScale0: "transparent",
-        cScale1: "transparent",
-        cScale2: "transparent",
-        cScaleLabel0: ink,
-        cScaleLabel1: ink,
-        cScaleLabel2: ink,
-        primaryColor: "transparent",
-        primaryTextColor: ink,
-        primaryBorderColor: line,
-        secondaryColor: "transparent",
-        tertiaryColor: "transparent",
-        nodeBorder: line,
-        nodeTextColor: ink,
-        clusterBkg: "transparent",
-        clusterBorder: line,
-        edgeLabelBackground: "transparent",
-        mainBkg: "transparent",
-      },
-    });
-    initializedTheme = theme;
-  }
-  return mermaid;
-}
+import { getMermaid, invalidateMermaidTheme } from "../lib/mermaidTheme";
 
 const RENDER_DEBOUNCE_MS = 400;
 const MIN_ZOOM = 0.1;
@@ -149,7 +50,7 @@ export function Mermaid({ code }: { code: string }) {
   useEffect(() => {
     const mq = matchMedia("(prefers-color-scheme: dark)");
     const handler = () => {
-      initializedTheme = null;
+      invalidateMermaidTheme();
       setSvg((prev) => prev);
     };
     mq.addEventListener("change", handler);
