@@ -44,17 +44,6 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
     wasDone.current = isDone;
   }, [isDone]);
 
-  if (!isDone) {
-    return (
-      <>
-        <Message id={userId} />
-        {childIds.map((id) => (
-          <Message key={id} id={id} isFinal={false} />
-        ))}
-      </>
-    );
-  }
-
   const interimIds = finalAssistantId
     ? childIds.filter((id) => id !== finalAssistantId)
     : childIds;
@@ -65,49 +54,65 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
     ? `Worked for ${formatDuration(turn.durationMs)}`
     : "Worked";
 
+  // Single render tree across streaming and done — switching trees on
+  // isDone caused every Message to remount, replaying its mount-fade
+  // animation. Header fades in once the run ends; interim panel
+  // collapses via height animation rather than unmounting; the final
+  // assistant message stays at the same DOM position throughout.
+  const showInterim = !isDone || expanded;
+
   return (
     <>
       <Message id={userId} />
 
       {hasInterim && (
         <div className="flex flex-col">
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="self-start inline-flex items-center gap-1.5 text-[12px] text-faint hover:text-muted transition-colors select-none"
-          >
-            <span>{headerLabel}</span>
-            <ChevronDown
-              size={12}
-              strokeWidth={2}
-              className={clsx("transition-transform duration-200", expanded && "rotate-180")}
-            />
-          </button>
-
-          <div className="h-px bg-line-soft mt-2.5" />
-
           <AnimatePresence initial={false}>
-            {expanded && (
+            {isDone && (
               <motion.div
-                key="interim"
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.28, ease: EASE }}
+                key="header"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.22, ease: EASE }}
                 style={{ overflow: "hidden" }}
               >
-                <div className="flex flex-col gap-3.5 pt-3.5">
-                  {interimIds.map((id) => (
-                    <Message key={id} id={id} isFinal={false} />
-                  ))}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setExpanded((v) => !v)}
+                  className="self-start inline-flex items-center gap-1.5 text-[12px] text-faint hover:text-muted transition-colors select-none"
+                >
+                  <span>{headerLabel}</span>
+                  <ChevronDown
+                    size={12}
+                    strokeWidth={2}
+                    className={clsx("transition-transform duration-200", expanded && "rotate-180")}
+                  />
+                </button>
+                <div className="h-px bg-line-soft mt-2.5" />
               </motion.div>
             )}
           </AnimatePresence>
+
+          <motion.div
+            initial={false}
+            animate={{
+              height: showInterim ? "auto" : 0,
+              opacity: showInterim ? 1 : 0,
+            }}
+            transition={{ duration: 0.28, ease: EASE }}
+            style={{ overflow: "hidden" }}
+          >
+            <div className={clsx("flex flex-col gap-3.5", isDone && "pt-3.5")}>
+              {interimIds.map((id) => (
+                <Message key={id} id={id} isFinal={false} />
+              ))}
+            </div>
+          </motion.div>
         </div>
       )}
 
-      {finalAssistantId && <Message id={finalAssistantId} isFinal />}
+      {finalAssistantId && <Message id={finalAssistantId} isFinal={isDone} />}
     </>
   );
 }
