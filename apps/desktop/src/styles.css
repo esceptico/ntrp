@@ -472,6 +472,90 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   box-shadow: var(--shadow-md);
 }
 
+/* ─── Composer "thinking" indicators ────────────────────────
+   Active while the agent is running but has not yet streamed
+   its first token. The user picks the variant in Settings →
+   Appearance; we surface that choice via [data-thinking-style].
+   Default is "comet". All variants share the same `presence
+   not beacon` budget — soft accent only, slow movement. */
+@property --snake-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.composer-card[data-thinking="true"] {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Variant: comet — single trailing arc travels around the rim. */
+.composer-card[data-thinking="true"][data-thinking-style="comet"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--snake-angle),
+    transparent 0deg,
+    transparent 220deg,
+    color-mix(in oklab, var(--color-accent) 18%, transparent) 270deg,
+    color-mix(in oklab, var(--color-accent) 55%, transparent) 340deg,
+    color-mix(in oklab, var(--color-accent) 18%, transparent) 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: snakeRotate 3s linear infinite;
+  pointer-events: none;
+}
+@keyframes snakeRotate {
+  to { --snake-angle: 360deg; }
+}
+
+/* Variant: breath — wide diffuse halo, no rim. */
+.composer-card[data-thinking="true"][data-thinking-style="breath"] {
+  animation: composerBreath 3.6s ease-in-out infinite;
+}
+@keyframes composerBreath {
+  0%, 100% { box-shadow: var(--shadow-md); }
+  50% {
+    box-shadow:
+      var(--shadow-md),
+      0 0 32px 6px color-mix(in oklab, var(--color-accent) 14%, transparent);
+  }
+}
+
+/* Variant: hue-cycle — no motion, border color drifts toward accent. */
+.composer-card[data-thinking="true"][data-thinking-style="hue-cycle"] {
+  animation: composerHue 3.4s ease-in-out infinite;
+}
+@keyframes composerHue {
+  0%, 100% { border-color: var(--color-line); }
+  50% { border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-line)); }
+}
+
+/* Variant: send-orbit — only the send button gets a small spinner. */
+.composer-card[data-thinking="true"][data-thinking-style="send-orbit"] [data-send="true"] {
+  position: relative;
+}
+.composer-card[data-thinking="true"][data-thinking-style="send-orbit"] [data-send="true"]::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  border-top-color: var(--color-accent);
+  border-right-color: color-mix(in oklab, var(--color-accent) 35%, transparent);
+  animation: sendOrbit 1.1s linear infinite;
+  pointer-events: none;
+}
+@keyframes sendOrbit {
+  to { transform: rotate(360deg); }
+}
+
 /* ─── Tool shimmer (applies to running tool lines) ─────────── */
 .tool-line[data-state="running"] {
   background: linear-gradient(

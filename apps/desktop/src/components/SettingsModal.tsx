@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Boxes, Brain, Database, Plug, Sparkles, X, type LucideIcon } from "lucide-react";
+import { Boxes, Brain, Database, Palette, Plug, Sparkles, X, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
 import { saveAndReconnect, fetchServerConfig } from "../actions";
@@ -8,9 +8,10 @@ import { ModelsTab } from "./settings/ModelsTab";
 import { AgentTab } from "./settings/AgentTab";
 import { ContextTab } from "./settings/ContextTab";
 import { MCPTab } from "./settings/MCPTab";
+import { AppearanceTab } from "./settings/AppearanceTab";
 import { PageModal } from "./PageModal";
 
-type TabId = "connection" | "models" | "agent" | "context" | "mcp";
+type TabId = "connection" | "models" | "agent" | "context" | "mcp" | "appearance";
 
 interface Tab {
   id: TabId;
@@ -24,6 +25,7 @@ const TABS: Tab[] = [
   { id: "agent", label: "Agent", icon: Brain },
   { id: "context", label: "Context", icon: Database },
   { id: "mcp", label: "MCP servers", icon: Boxes },
+  { id: "appearance", label: "Appearance", icon: Palette },
 ];
 
 export function SettingsModal() {
@@ -132,6 +134,7 @@ export function SettingsModal() {
             {active === "agent" && <AgentTab serverConfig={serverConfig} />}
             {active === "context" && <ContextTab serverConfig={serverConfig} />}
             {active === "mcp" && <MCPTab />}
+            {active === "appearance" && <AppearanceTab />}
           </div>
         </div>
     </PageModal>

@@ -136,6 +136,18 @@ export function Composer() {
     !connected ||
     (!hasDraft && !selectedSkill && pendingImages.length === 0);
 
+  // Composer shows a "thinking" indicator while we're waiting for the
+  // agent's first token (running but no assistant turn streaming yet).
+  // Replaces the standalone Thinking row — status lives on the surface
+  // that produced the action. The visual variant is user-configurable
+  // via Settings → Appearance.
+  const order = useStore((s) => s.order);
+  const lastRole = useStore((s) =>
+    order.length > 0 ? s.messages.get(order[order.length - 1])?.role ?? null : null,
+  );
+  const awaitingFirstToken = running && lastRole !== "assistant";
+  const thinkingStyle = useStore((s) => s.prefs.thinkingAnimation);
+
   useEffect(() => {
     if (inputRef.current) resize(inputRef.current);
   }, [draft]);
@@ -226,6 +238,8 @@ export function Composer() {
           e.preventDefault();
           submit();
         }}
+        data-thinking={awaitingFirstToken ? "true" : undefined}
+        data-thinking-style={thinkingStyle}
         className="composer-card relative max-w-[760px] mx-auto flex flex-col border border-line rounded-[14px] bg-surface focus-within:border-line-strong transition-colors"
       >
         {pickerOpen && query !== null && (
@@ -420,6 +434,7 @@ export function Composer() {
             <button
               type="submit"
               disabled={disabled}
+              data-send="true"
               aria-label="Send"
               className="grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-[0_1px_2px_rgba(0,0,0,0.2)] hover:opacity-90 disabled:opacity-40 disabled:shadow-none transition-opacity"
             >

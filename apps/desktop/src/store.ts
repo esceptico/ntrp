@@ -12,6 +12,38 @@ import {
 
 export type Role = "user" | "assistant" | "reasoning" | "tool" | "status" | "error" | "activity" | "approval";
 
+export type ThinkingAnimation =
+  | "comet"
+  | "breath"
+  | "hue-cycle"
+  | "send-orbit";
+
+export interface Prefs {
+  thinkingAnimation: ThinkingAnimation;
+}
+
+const PREFS_KEY = "ntrp.desktop.prefs";
+const DEFAULT_PREFS: Prefs = { thinkingAnimation: "comet" };
+
+function loadPrefs(): Prefs {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return DEFAULT_PREFS;
+    const parsed = JSON.parse(raw) as Partial<Prefs>;
+    return { ...DEFAULT_PREFS, ...parsed };
+  } catch {
+    return DEFAULT_PREFS;
+  }
+}
+
+function persistPrefs(prefs: Prefs): void {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    /* localStorage unavailable — non-fatal */
+  }
+}
+
 export interface ActivityItem {
   id: string;
   /** Tool name (used for display + inspector lookup). Despite the name this
@@ -116,6 +148,8 @@ interface State {
   compacting: boolean;
   lastCompaction: { before: number; after: number; at: number } | null;
   memoryOpen: boolean;
+  paletteOpen: boolean;
+  prefs: Prefs;
 }
 
 export interface MarkdownViewState {
@@ -175,6 +209,10 @@ interface Actions {
   setLastCompaction: (info: State["lastCompaction"]) => void;
   openMemory: () => void;
   closeMemory: () => void;
+  openPalette: () => void;
+  closePalette: () => void;
+  togglePalette: () => void;
+  setPref: <K extends keyof Prefs>(key: K, value: Prefs[K]) => void;
 }
 
 const initialUsage: SessionUsage = { lastPrompt: 0, totalTokens: 0, totalCost: 0 };
@@ -214,6 +252,8 @@ export const useStore = create<State & Actions>((set) => ({
   compacting: false,
   lastCompaction: null,
   memoryOpen: false,
+  paletteOpen: false,
+  prefs: loadPrefs(),
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
   setSessions: (sessions) => set({ sessions }),
@@ -387,6 +427,15 @@ export const useStore = create<State & Actions>((set) => ({
   setLastCompaction: (lastCompaction) => set({ lastCompaction }),
   openMemory: () => set({ memoryOpen: true }),
   closeMemory: () => set({ memoryOpen: false }),
+  openPalette: () => set({ paletteOpen: true }),
+  closePalette: () => set({ paletteOpen: false }),
+  togglePalette: () => set((s) => ({ paletteOpen: !s.paletteOpen })),
+  setPref: (key, value) =>
+    set((s) => {
+      const next = { ...s.prefs, [key]: value };
+      persistPrefs(next);
+      return { prefs: next };
+    }),
 }));
 
 // Helpers for use outside React (e.g. inside event-stream handlers).

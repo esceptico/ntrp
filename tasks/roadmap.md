@@ -47,6 +47,47 @@ These are server endpoints that already work; just need a desktop surface.
 7. [ ] **Background tasks panel** — closes the async loop server-side wiring already enables.
 8. [ ] **Editable profile timeline** — a 6th memory tab; another angle on the data we already store.
 
+## UX patterns from top-tier agentic apps
+
+Cross-app themes that show up in 3+ polished agentic desktops (Claude / Codex / Cursor / Zed / Cody / Roo / Granola / Pieces / Warp / Linear / Raycast).
+
+### The bar (what serious agentic UI looks like)
+- **Per-tool approval policy with patterns** — not a global yolo toggle. `bash:rm *` always-confirm, `read_file *` always-allow.
+- **Edit-any-user-message → branch** as a click-on-card affordance, not a hidden menu.
+- **Context chips above the composer** showing every file/fact/skill/repo the next turn will load, removable inline. Token meter is the backup, chips are primary.
+- **Inline diffs with selective staging** — per-hunk accept/revert. Side-by-side beats inline for multi-line.
+- **Streaming status inside the producing surface** — the composer shimmers, the spawning card shows the step counter. Skeletons are out.
+- **Provenance links on every AI artifact** — click a fact, jump to the chat turn it was extracted from.
+- **Modes live on the composer**, not in settings — Chat / Agent / Plan / Ask pill above the input gates tool exposure.
+- **Sidebar = grouped + pinned + searchable** — recency-sorted flat lists are the floor, not the ceiling.
+- **Universal Cmd+K palette** that subsumes settings — search + nav + actions in one ranked list.
+- **Three-tier approval scope** — "Once / This session / Always (with pattern preview)" with the narrowest as the default keystroke.
+
+### Top 12 UX moves worth stealing for ntrp
+
+1. [ ] **Context chips above the composer** — fact/observation/skill/file the next turn will load, removable inline. Turns memory from backend feature into tangible surface.
+2. [ ] **Per-tool approval policy with patterns** (`bash:rm *` always-confirm, `read_file *` always-allow). Layered on the existing tool inspector.
+3. [ ] **Mode pill on the composer** (Chat / Agent / Plan / Ask) — gates tool exposure, sets expectations, cuts token cost in Ask mode.
+4. [ ] **Edit-any-message → branch** as click-on-card, not a hidden menu. We have the plumbing; this is purely surface.
+5. [ ] **Streaming status inside the producing card** (not a global spinner). For sub-agents, show step counter + current tool on the spawning card.
+6. [ ] **Per-hunk diff staging in tool inspector** for file-write tools. Side-by-side > inline.
+7. [ ] **Provenance links on every memory item** — click fact → jump to chat turn it was extracted from. Trust layer for the memory system.
+8. [~] **Universal Cmd+K** including session search, settings search, automation triggers, MCP toggle, "create memory from selection." One palette over five. _v1: sessions + actions (new/compact/archive/branch) + open targets (Memory/Automations/Archive/Settings). Skills/MCP/per-tab settings deep-links not yet wired._
+9. [ ] **Pinned + grouped sidebar** — pinned sessions, grouped by project/tag, archive at bottom.
+10. [ ] **Three-tier approval scope** on first tool prompt: Once / This session / Always (pattern preview).
+11. [ ] **Workstream-style activity rollup** (Pieces) — "what happened today" surface, separate from chat.
+12. [~] **Composer shimmer during stream** instead of a separate "thinking" row — quieter, signals attention on the input. _Shipped: composer pulses with a soft accent halo while waiting for the first token; standalone `ThinkingIndicator` deleted._
+
+### Specific patterns worth nicking from a single app
+- **Codex**: clicking a file-name strip collapses/expands the diff (header doubles as toggle); `/review` produces line-anchored inline comments; "approve once" vs "approve for this session" with narrowest default.
+- **Cursor**: Plan-mode plans render as live editable Markdown files mid-stream; "scroll to bottom" pill appears only when the agent stream overflows below the fold.
+- **Zed**: tool-call streams with `PermissionSelection` chip embedded in the same card (no modal); threads sidebar grouped by project with stop/archive/new as inline icon actions on hover.
+- **Granola**: AI-generated text in gray *underneath* user-typed black text — visual class system instead of chat bubbles; every AI bullet hyperlinks to the transcript timestamp.
+- **Cody**: first chat message pin-stays at top of panel after sending (anchor for context); auto-attached chips for current repo + selection.
+- **Warp**: Active AI raises its hand on detected scenarios (failing test, merge conflict) — assistant initiates, not just responds.
+- **Linear**: keyboard chords (`G then I` = Go to Issues), discoverable via the palette listing the chord next to each command.
+- **Raycast**: every list row has a right-side action menu (`Cmd+K` opens a sub-palette of actions for the focused item).
+
 ## Already shipped (reference)
 
 - Sessions: list, search, archive, restore, permanent delete, right-click menu, manual compact.

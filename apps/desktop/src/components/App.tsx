@@ -5,6 +5,7 @@ import { SettingsModal } from "./SettingsModal";
 import { AutomationsModal } from "./AutomationsModal";
 import { ArchiveModal } from "./ArchiveModal";
 import { MemoryModal } from "./MemoryModal";
+import { CommandPalette } from "./CommandPalette";
 import { MarkdownViewer } from "./MarkdownViewer";
 import { ToolViewer } from "./ToolViewer";
 import { Demo as TraceDemo } from "./trace/Demo";
@@ -45,6 +46,7 @@ export function App() {
       <AutomationsModal />
       <ArchiveModal />
       <MemoryModal />
+      <CommandPalette />
       <MarkdownViewer />
       <ToolViewer />
     </>

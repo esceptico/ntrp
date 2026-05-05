@@ -3,7 +3,6 @@ import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
 import { EmptyState } from "./EmptyState";
 import { Message } from "./Message";
-import { ThinkingIndicator } from "./ThinkingIndicator";
 import { CompactionIndicator } from "./CompactionIndicator";
 import { TurnGroup } from "./TurnGroup";
 
@@ -82,7 +81,6 @@ export function Messages() {
                 : <div key="preamble" className="contents">{seg.childIds.map((id) => <Message key={id} id={id} />)}</div>
             )}
         <CompactionIndicator />
-        <ThinkingIndicator />
       </div>
     </div>
   );
