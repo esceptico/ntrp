@@ -4,7 +4,7 @@ import { Bot, ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { RollingToken } from "./RollingToken";
 import { useStore, type ActivityItem } from "../../store";
-import { isAgent } from "../../lib/agent";
+import { extractTask, friendlyAgentLabel, isAgent } from "../../lib/agent";
 
 export type { ActivityItem };
 
@@ -249,22 +249,3 @@ function AgentButton({
   );
 }
 
-function extractTask(args: string | undefined): string | null {
-  if (!args) return null;
-  try {
-    const parsed = JSON.parse(args);
-    if (parsed && typeof parsed === "object" && typeof parsed.task === "string") {
-      return parsed.task;
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-function friendlyAgentLabel(toolName: string): string {
-  // "research" → "Research", "research_agent" → "Research"
-  const stripped = toolName.replace(/_agent$/i, "");
-  if (!stripped) return toolName;
-  return stripped[0].toUpperCase() + stripped.slice(1);
-}

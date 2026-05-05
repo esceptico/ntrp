@@ -17,6 +17,15 @@ from ntrp.llm.utils import blocks_to_text
 
 
 class Compactor(Protocol):
+    def should_compact(
+        self,
+        messages: list[dict],
+        model: str,
+        last_input_tokens: int | None,
+    ) -> bool:
+        """True iff a maybe_compact() call would produce a real compaction."""
+        ...
+
     async def maybe_compact(
         self,
         messages: list[dict],

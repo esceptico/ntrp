@@ -365,8 +365,11 @@ async def _drain_backgrounded(
 
 
 async def _emit_ingested_for_client_entries(batch: list[dict], bus: SessionBus, run: RunState) -> None:
+    # Read but do NOT pop — the saved message keeps its client_id so the
+    # desktop can later reference it via /session/revert (edit flow) or
+    # /sessions/{id}/branch.
     for entry in batch:
-        client_id = entry.pop("client_id", None)
+        client_id = entry.get("client_id")
         if client_id:
             await bus.emit(MessageIngestedEvent(client_id=client_id, run_id=run.run_id))
 

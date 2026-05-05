@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, Check, Copy, X } from "lucide-react";
+import { ArrowRight, Bot, Check, Copy, X } from "lucide-react";
 import clsx from "clsx";
 import { useShallow } from "zustand/react/shallow";
 import { useStore, type ActivityItem } from "../store";
 import { highlight } from "../highlight";
+import { extractTask, friendlyAgentLabel, isAgent } from "../lib/agent";
+import { Markdown } from "./Markdown";
 
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
@@ -41,22 +43,45 @@ export function ToolViewer() {
     return item;
   });
 
-  // Nested tool calls that declared this tool as their parent. Wrapped in
-  // useShallow so a fresh array with the same contents doesn't trigger a
-  // re-render — without that, this selector creates new array on every
-  // store update and we go into an infinite loop.
-  const children = useStore(
+  // All activity items reachable from this tool through `parentToolId`. We
+  // need the full descendant set so the agent inspector can render a tree
+  // of nested tool calls; the regular tool inspector only shows direct
+  // children. Wrapped in useShallow so reference equality stays stable
+  // across unrelated store updates.
+  const descendants = useStore(
     useShallow((s) => {
       if (!item) return [] as ActivityItem[];
-      const out: ActivityItem[] = [];
+      const childrenByParent = new Map<string, ActivityItem[]>();
       for (const msg of s.messages.values()) {
         if (!msg.activity) continue;
         for (const it of msg.activity.items) {
-          if (it.parentToolId === item.id) out.push(it);
+          if (!it.parentToolId) continue;
+          const arr = childrenByParent.get(it.parentToolId) ?? [];
+          arr.push(it);
+          childrenByParent.set(it.parentToolId, arr);
         }
       }
+      const out: ActivityItem[] = [];
+      const seen = new Set<string>();
+      const visit = (parentId: string) => {
+        const kids = childrenByParent.get(parentId);
+        if (!kids) return;
+        for (const k of kids) {
+          if (seen.has(k.id)) continue;
+          seen.add(k.id);
+          out.push(k);
+          visit(k.id);
+        }
+      };
+      visit(item.id);
       return out;
     }),
+  );
+
+  // Direct children only — what the regular tool inspector shows.
+  const directChildren = useMemo(
+    () => descendants.filter((it) => it.parentToolId === item?.id),
+    [descendants, item?.id],
   );
 
   const input = useMemo(() => formatMaybeJson(live?.args), [live?.args]);
@@ -104,15 +129,25 @@ export function ToolViewer() {
             onClick={(e) => e.stopPropagation()}
           >
             <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 border-b border-line-soft min-w-0">
-              <div className="min-w-0 flex-1">
-                <div className="text-[16px] font-semibold tracking-[-0.012em] text-ink truncate">
-                  {live?.kind}
-                </div>
-                {live?.target && live.target !== live.kind && (
-                  <div className="mt-0.5 text-[11.5px] text-faint font-mono truncate">
-                    {live.target}
-                  </div>
+              <div className="min-w-0 flex-1 flex items-center gap-2.5">
+                {live && isAgent(live) && (
+                  <span
+                    aria-hidden
+                    className="grid place-items-center w-[22px] h-[22px] rounded-md bg-accent-soft text-accent-strong shrink-0"
+                  >
+                    <Bot size={12} strokeWidth={2} />
+                  </span>
                 )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-[16px] font-semibold tracking-[-0.012em] text-ink truncate">
+                    {live && isAgent(live) ? friendlyAgentLabel(live.kind) : live?.kind}
+                  </div>
+                  {live && !isAgent(live) && live.target && live.target !== live.kind && (
+                    <div className="mt-0.5 text-[11.5px] text-faint font-mono truncate">
+                      {live.target}
+                    </div>
+                  )}
+                </div>
               </div>
               <button
                 type="button"
@@ -125,25 +160,260 @@ export function ToolViewer() {
             </header>
 
             <div className="overflow-y-auto scroll-thin px-5 py-4 grid grid-cols-[minmax(0,1fr)] gap-4 min-w-0">
-              <Section
-                title="Input"
-                body={input.body}
-                html={inputHtml}
-                placeholder="No input arguments."
-              />
-              <Section
-                title="Output"
-                body={output.body}
-                html={outputHtml}
-                placeholder={live?.result == null ? "Waiting for result…" : "Empty result."}
-              />
-              {children.length > 0 && <ChildRuns items={children} />}
+              {live && isAgent(live) ? (
+                <AgentBody item={live} descendants={descendants} />
+              ) : (
+                <>
+                  <Section
+                    title="Input"
+                    body={input.body}
+                    html={inputHtml}
+                    placeholder="No input arguments."
+                  />
+                  <Section
+                    title="Output"
+                    body={output.body}
+                    html={outputHtml}
+                    placeholder={live?.result == null ? "Waiting for result…" : "Empty result."}
+                  />
+                  {directChildren.length > 0 && <ChildRuns items={directChildren} />}
+                </>
+              )}
             </div>
           </motion.div>
         </motion.div>
       )}
     </AnimatePresence>,
     root,
+  );
+}
+
+function AgentBody({
+  item,
+  descendants,
+}: {
+  item: ActivityItem;
+  descendants: ActivityItem[];
+}) {
+  const task = useMemo(() => extractTask(item.args) ?? item.target, [item.args, item.target]);
+  const stats = useMemo(() => buildStats(descendants), [descendants]);
+
+  return (
+    <>
+      <section className="grid gap-1.5">
+        <h3 className="m-0 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint">
+          Task
+        </h3>
+        <p className="m-0 text-[13.5px] leading-relaxed text-ink whitespace-pre-wrap">
+          {task || "(no task provided)"}
+        </p>
+      </section>
+
+      <section className="grid gap-1.5">
+        <div className="flex items-center gap-2">
+          <h3 className="m-0 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint">
+            Result
+          </h3>
+          {item.result != null && item.result.length > 0 && (
+            <CopyButton getValue={() => item.result ?? ""} />
+          )}
+        </div>
+        {item.result == null ? (
+          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-[12.5px] text-faint italic">
+            Working…
+          </div>
+        ) : item.result.trim().length === 0 ? (
+          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-[12.5px] text-faint italic">
+            Empty result.
+          </div>
+        ) : (
+          <div className="rounded-[10px] border border-line-soft bg-bg-main px-3 py-2.5 max-h-[40vh] overflow-y-auto scroll-thin min-w-0">
+            <Markdown content={item.result} />
+          </div>
+        )}
+      </section>
+
+      {descendants.length > 0 && (
+        <section className="grid gap-1.5 min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="m-0 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint">
+              Activity
+            </h3>
+            <span className="text-[11px] text-faint tabular-nums">
+              {stats.total} {stats.total === 1 ? "call" : "calls"}
+              {stats.agents > 0 && ` · ${stats.agents} sub-agent${stats.agents === 1 ? "" : "s"}`}
+            </span>
+          </div>
+          <ActivityTree
+            descendants={descendants}
+            rootId={item.id}
+            rootDepth={item.depth ?? 0}
+          />
+        </section>
+      )}
+    </>
+  );
+}
+
+function ActivityTree({
+  descendants,
+  rootId,
+  rootDepth,
+}: {
+  descendants: ActivityItem[];
+  rootId: string;
+  rootDepth: number;
+}) {
+  const setViewing = useStore((s) => s.setViewingTool);
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, ActivityItem[]>();
+    for (const it of descendants) {
+      if (!it.parentToolId) continue;
+      const arr = map.get(it.parentToolId) ?? [];
+      arr.push(it);
+      map.set(it.parentToolId, arr);
+    }
+    return map;
+  }, [descendants]);
+
+  return (
+    <div className="rounded-[10px] border border-line-soft bg-surface overflow-hidden">
+      <ActivityTreeBranch
+        parentId={rootId}
+        baseDepth={rootDepth + 1}
+        childrenByParent={childrenByParent}
+        onPick={setViewing}
+      />
+    </div>
+  );
+}
+
+function ActivityTreeBranch({
+  parentId,
+  baseDepth,
+  childrenByParent,
+  onPick,
+}: {
+  parentId: string;
+  baseDepth: number;
+  childrenByParent: Map<string, ActivityItem[]>;
+  onPick: (item: ActivityItem) => void;
+}) {
+  const kids = childrenByParent.get(parentId);
+  if (!kids || kids.length === 0) return null;
+  return (
+    <ul className="m-0 p-0 list-none">
+      {kids.map((child) => (
+        <ActivityTreeNode
+          key={child.id}
+          item={child}
+          baseDepth={baseDepth}
+          childrenByParent={childrenByParent}
+          onPick={onPick}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function ActivityTreeNode({
+  item,
+  baseDepth,
+  childrenByParent,
+  onPick,
+}: {
+  item: ActivityItem;
+  baseDepth: number;
+  childrenByParent: Map<string, ActivityItem[]>;
+  onPick: (item: ActivityItem) => void;
+}) {
+  const indent = ((item.depth ?? baseDepth) - baseDepth) * 16 + 12;
+  const agent = isAgent(item);
+  const label = agent ? friendlyAgentLabel(item.kind) : item.kind;
+  const detail = agent ? extractTask(item.args) ?? item.target : item.target;
+  const running = item.result == null;
+  return (
+    <li className="m-0 p-0">
+      <button
+        type="button"
+        onClick={() => onPick(item)}
+        style={{ paddingLeft: indent }}
+        className="flex items-center gap-2 w-full pr-3 py-1.5 text-left bg-transparent border-0 hover:bg-surface-soft/60 transition-colors min-w-0"
+      >
+        {agent ? (
+          <span
+            aria-hidden
+            className="grid place-items-center w-[16px] h-[16px] rounded-[4px] bg-accent-soft text-accent-strong shrink-0"
+          >
+            <Bot size={9} strokeWidth={2} />
+          </span>
+        ) : (
+          <ArrowRight size={11} strokeWidth={1.8} className="text-whisper shrink-0" />
+        )}
+        <span
+          className={clsx(
+            "text-[12px] shrink-0",
+            agent ? "font-medium text-ink-soft" : "font-mono text-ink-soft",
+          )}
+        >
+          {label}
+        </span>
+        {detail && (
+          <span
+            className={clsx(
+              "truncate min-w-0 flex-1 text-[11.5px]",
+              agent ? "text-faint" : "text-faint font-mono",
+            )}
+          >
+            {detail}
+          </span>
+        )}
+        {running && (
+          <span className="text-[10px] uppercase tracking-[0.08em] text-faint shrink-0">
+            running
+          </span>
+        )}
+      </button>
+      <ActivityTreeBranch
+        parentId={item.id}
+        baseDepth={baseDepth}
+        childrenByParent={childrenByParent}
+        onPick={onPick}
+      />
+    </li>
+  );
+}
+
+function buildStats(descendants: ActivityItem[]) {
+  let agents = 0;
+  for (const d of descendants) if (isAgent(d)) agents++;
+  return { total: descendants.length, agents };
+}
+
+function CopyButton({ getValue }: { getValue: () => string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(getValue());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      /* ignore */
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void onCopy()}
+      aria-label={copied ? "Copied" : "Copy"}
+      className={clsx(
+        "ml-auto inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[11px] font-medium tracking-[-0.005em] transition-colors",
+        copied ? "text-accent-strong bg-accent-soft" : "text-muted hover:bg-surface-soft hover:text-ink",
+      )}
+    >
+      {copied ? <Check size={11} strokeWidth={2.4} /> : <Copy size={11} strokeWidth={1.8} />}
+      {copied ? "Copied" : "Copy"}
+    </button>
   );
 }
 

@@ -99,42 +99,41 @@ function handleServerEvent(event: ServerEvent) {
       return;
 
     // ─── Text messages ───────────────────────────────────────────────
+    // Sub-agent text (depth > 0) is the inner agent's output — the parent
+    // tool call's result captures it, so we drop it from the top-level
+    // chat to avoid bleed-through.
     case "TEXT_MESSAGE_START":
-      // The wrapper marks an explicit message boundary; we lazily create
-      // the assistant message on the first CONTENT chunk so empty text
-      // wrappers don't leave dangling articles.
+      if (event.depth) return;
       endActivity(s);
       return;
     case "TEXT_MESSAGE_CONTENT": {
+      if (event.depth) return;
       const lastId = s.order[s.order.length - 1];
       const last = lastId ? s.messages.get(lastId) : null;
       if (last && last.role === "assistant" && last.id === event.message_id) {
         s.mutateMessage(last.id, { content: last.content + event.delta });
       } else {
         endActivity(s);
-        // Use the server's stable message id (same one persisted on the
-        // saved message) so branching / edits can reference it directly.
         const id = event.message_id || crypto.randomUUID();
         s.appendMessage({ id, role: "assistant", content: event.delta });
       }
       return;
     }
     case "TEXT_MESSAGE_END":
-      // No-op for our renderer: deltas have already produced the message.
-      // If a `content` field is present we could reconcile, but it's
-      // redundant with the streamed deltas.
       return;
 
     // ─── Reasoning ───────────────────────────────────────────────────
+    // Same depth filter as text — sub-agent reasoning belongs to the
+    // sub-agent's run, not the parent chat.
     case "REASONING_START":
-      // Outer reasoning frame; the inner MESSAGE_START is what creates
-      // the renderable message, so this is mostly informational.
       return;
     case "REASONING_MESSAGE_START":
+      if (event.depth) return;
       endActivity(s);
       s.appendMessage({ id: event.message_id, role: "reasoning", title: "Reasoning", content: "" });
       return;
     case "REASONING_MESSAGE_CONTENT": {
+      if (event.depth) return;
       const m = s.messages.get(event.message_id);
       if (m) s.mutateMessage(event.message_id, { content: m.content + event.delta });
       else {

@@ -63,9 +63,9 @@ export type ServerEvent = WithTs & (
   | { type: "RUN_ERROR"; message: string }
 
   // ─── Text messages (Start / Content / End) ─────────────────────────
-  | { type: "TEXT_MESSAGE_START"; message_id: string; role?: string }
-  | { type: "TEXT_MESSAGE_CONTENT"; message_id: string; delta: string }
-  | { type: "TEXT_MESSAGE_END"; message_id: string; content?: string }
+  | { type: "TEXT_MESSAGE_START"; message_id: string; role?: string; depth?: number }
+  | { type: "TEXT_MESSAGE_CONTENT"; message_id: string; delta: string; depth?: number }
+  | { type: "TEXT_MESSAGE_END"; message_id: string; content?: string; depth?: number }
 
   // ─── Tool calls (Start / Args / End / Result) ──────────────────────
   | { type: "TOOL_CALL_START"; tool_call_id: string; tool_call_name: string; description?: string; display_name?: string; parent_message_id?: string | null; depth?: number; parent_id?: string | null; kind?: string }
@@ -74,11 +74,11 @@ export type ServerEvent = WithTs & (
   | { type: "TOOL_CALL_RESULT"; tool_call_id: string; name: string; content?: string; preview?: string; display_name?: string; depth?: number; parent_id?: string | null; kind?: string }
 
   // ─── Reasoning ─────────────────────────────────────────────────────
-  | { type: "REASONING_START"; message_id: string }
-  | { type: "REASONING_MESSAGE_START"; message_id: string; role?: string }
-  | { type: "REASONING_MESSAGE_CONTENT"; message_id: string; delta: string }
-  | { type: "REASONING_MESSAGE_END"; message_id: string }
-  | { type: "REASONING_END"; message_id: string }
+  | { type: "REASONING_START"; message_id: string; depth?: number }
+  | { type: "REASONING_MESSAGE_START"; message_id: string; role?: string; depth?: number }
+  | { type: "REASONING_MESSAGE_CONTENT"; message_id: string; delta: string; depth?: number }
+  | { type: "REASONING_MESSAGE_END"; message_id: string; depth?: number }
+  | { type: "REASONING_END"; message_id: string; depth?: number }
 
   // ─── ntrp-specific (non-AG-UI canonical) ───────────────────────────
   | { type: "approval_needed"; tool_id: string; name: string; path?: string | null; diff?: string | null; content_preview?: string | null }

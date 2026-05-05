@@ -67,7 +67,7 @@ class NtrpToolExecutor:
                     display_name=tool.display_name or name,
                     mutates=tool.mutates,
                     volatile=tool.volatile,
-                    kind=getattr(tool, "kind", "tool"),
+                    kind=tool.kind,
                 )
                 if tool
                 else None

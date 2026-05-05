@@ -28,11 +28,7 @@ class CompactionModelRequestMiddleware:
         last_input_tokens = prepared.previous_response.usage.input_tokens if prepared.previous_response else None
 
         # Pre-check so we only emit start/finish around an *actual* compaction.
-        # `should_compact` is optional on the Compactor protocol; fall back to
-        # the silent path when a compactor doesn't expose it.
-        should = bool(getattr(self.compactor, "should_compact", lambda *_: False)(
-            prepared.messages, prepared.model, last_input_tokens,
-        ))
+        should = self.compactor.should_compact(prepared.messages, prepared.model, last_input_tokens)
 
         emitted_started = False
         if should and self.emit:

@@ -20,6 +20,9 @@ from ntrp.llm.models import Provider, get_model
 from ntrp.llm.openai_responses import parse_responses_response, prepare_responses_request, stream_responses_completion
 from ntrp.llm.utils import blocks_to_text
 
+# Keys we attach for ntrp internals that must be stripped before an API call.
+_INTERNAL_MESSAGE_KEYS = frozenset({"client_id"})
+
 
 def _map_finish_reason(reason: str | None) -> FinishReason:
     if not reason:
@@ -305,19 +308,24 @@ class OpenAIClient(CompletionClient, EmbeddingClient):
         await self._client.close()
 
     def _preprocess_messages(self, messages: list[dict]) -> list[dict]:
+        # Drop ntrp-internal keys before sending to the OpenAI API. Most
+        # notably `client_id`, which we keep on stored messages so the
+        # desktop can match user rows for edit/branch flows but which the
+        # provider doesn't recognize.
         result = []
         for msg in messages:
-            content = msg["content"]
+            stripped = {k: v for k, v in msg.items() if k not in _INTERNAL_MESSAGE_KEYS}
+            content = stripped["content"]
             if not isinstance(content, list):
-                result.append(msg)
+                result.append(stripped)
                 continue
-            match msg["role"]:
+            match stripped["role"]:
                 case Role.SYSTEM:
-                    result.append({**msg, "content": blocks_to_text(content)})
+                    result.append({**stripped, "content": blocks_to_text(content)})
                 case Role.USER:
-                    result.append({**msg, "content": self._convert_user_content(content)})
+                    result.append({**stripped, "content": self._convert_user_content(content)})
                 case _:
-                    result.append(msg)
+                    result.append(stripped)
         return result
 
     def _convert_user_content(self, content: list) -> list[dict]:

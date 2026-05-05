@@ -122,11 +122,13 @@ async def test_drain_emits_ingested_for_entries_with_client_id():
 
     drained = await get_pending()
 
-    # client_id is stripped before delivery to the LLM
+    # client_id is preserved on the entry so the saved message keeps its id
+    # (the desktop relies on it to match user messages back to saved rows
+    # for edit/branch flows).
     assert drained == [
-        {"role": "user", "content": "first"},
+        {"role": "user", "content": "first", "client_id": "cid-1"},
         {"role": "user", "content": "second"},
-        {"role": "user", "content": "third"},
+        {"role": "user", "content": "third", "client_id": "cid-3"},
     ]
     # Two ingestion events emitted, in order
     events = [queue.get_nowait() for _ in range(2)]
@@ -247,9 +249,12 @@ async def test_full_chain_inject_during_run_emits_ingested_and_lands_in_messages
     assert ingested[0].client_id == "cid-XYZ"
     assert ingested[0].run_id == "cool-otter"
 
-    # The forwarded user message in `messages` MUST NOT carry client_id (stripped).
+    # client_id stays on the message so the saved row can later be
+    # referenced by /session/revert (edit flow) and /sessions/{id}/branch.
+    # Each LLM provider's preprocessor strips client_id before the actual
+    # API call so it never reaches the wire.
     injected_msg = next(m for m in messages if m.get("content") == "follow-up")
-    assert "client_id" not in injected_msg, f"client_id leaked to LLM: {injected_msg}"
+    assert injected_msg.get("client_id") == "cid-XYZ"
 
 
 @pytest.mark.asyncio
