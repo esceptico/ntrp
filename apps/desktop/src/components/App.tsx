@@ -13,7 +13,7 @@ import { Demo as TraceDemo } from "./trace/Demo";
 import { useStore } from "../store";
 import { useEvents } from "../hooks/useEvents";
 import { useThemeEffect } from "../lib/theme";
-import { bootstrap } from "../actions";
+import { bootstrap, createSession } from "../actions";
 
 function useHash(): string {
   const [hash, setHash] = useState(() => window.location.hash);
@@ -30,6 +30,7 @@ export function App() {
   const currentSessionId = useStore((s) => s.currentSessionId);
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
+  const openSettings = useStore((s) => s.openSettings);
 
   useThemeEffect();
 
@@ -38,17 +39,25 @@ export function App() {
     void bootstrap();
   }, [hash]);
 
-  // Cmd/Ctrl+B toggles the sidebar — matches Cursor / VSCode.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b" && !e.shiftKey && !e.altKey) {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === "b" && !e.shiftKey) {
         e.preventDefault();
         toggleSidebar();
+      } else if (k === "n" && !e.shiftKey) {
+        e.preventDefault();
+        void createSession();
+      } else if (e.key === ",") {
+        e.preventDefault();
+        openSettings();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleSidebar]);
+  }, [toggleSidebar, openSettings]);
 
   useEvents(hash === "#trace-demo" ? null : currentSessionId);
 
