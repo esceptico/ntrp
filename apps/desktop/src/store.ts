@@ -18,12 +18,15 @@ export type ThinkingAnimation =
   | "hue-cycle"
   | "send-orbit";
 
+export type ThemeChoice = "light" | "dark" | "system";
+
 export interface Prefs {
   thinkingAnimation: ThinkingAnimation;
+  theme: ThemeChoice;
 }
 
 const PREFS_KEY = "ntrp.desktop.prefs";
-const DEFAULT_PREFS: Prefs = { thinkingAnimation: "comet" };
+const DEFAULT_PREFS: Prefs = { thinkingAnimation: "comet", theme: "system" };
 
 function loadPrefs(): Prefs {
   try {

@@ -60,7 +60,7 @@ export function SettingsModal() {
     <PageModal
       open={open}
       onClose={close}
-      size="w-[min(820px,calc(100vw-80px))] h-[min(620px,calc(100vh-80px))]"
+      size="w-[min(960px,calc(100vw-80px))] h-[min(720px,calc(100vh-80px))]"
       grid="grid-cols-[180px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
       rounded="rounded-2xl"
       disableEscape={saving}

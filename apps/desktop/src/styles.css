@@ -71,10 +71,13 @@
 
 /* ─── Base ─────────────────────────────────────────────────── */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+:root.dark {
+  color-scheme: dark;
 }
 
 * {
@@ -454,13 +457,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   overflow: hidden;
 }
 
-@media (prefers-color-scheme: dark) {
-  .auto-editor textarea::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: var(--color-surface);
-  }
-  .auto-editor textarea:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); }
+:root.dark .auto-editor textarea::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--color-surface);
 }
+:root.dark .auto-editor textarea:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); }
 
 /* ─── Tool preview fade ────────────────────────────────────── */
 .tool-preview-fade {
@@ -616,9 +617,12 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   }
 }
 
-/* ─── Dark theme (system preference) ───────────────────────── */
-@media (prefers-color-scheme: dark) {
-  :root {
+/* ─── Dark theme ─────────────────────────────────────────────
+   Applied when the <html> element has class `dark`. The
+   `useThemeEffect` hook (lib/theme.ts) toggles this based on the
+   user's theme choice (Light / Dark / System) — for "System" it
+   mirrors `prefers-color-scheme` and listens for OS changes. */
+:root.dark {
     --color-bg: #100f0f;
     --color-bg-main: #1c1b1a;
     --color-surface: #1c1b1a;
@@ -665,20 +669,19 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     --hl-tag: #ea6962;
     --hl-meta: #7c6f64;
     --hl-symbol: #7daea3;
-  }
-
-  /* Scrollbar thumbs: lighter for visibility */
-  .scroll-thin:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); }
-  .scroll-messages:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); background-clip: padding-box; }
-
-  /* Selection */
-  ::selection { background: rgba(231, 138, 77, 0.28); }
-
-  /* Diff colors */
-  .diff-preview .diff-add { background: rgba(135, 154, 57, 0.16); color: #afc463; }
-  .diff-preview .diff-del { background: rgba(209, 77, 65, 0.16); color: #e58075; }
-  .diff-preview .diff-hunk { color: var(--color-info); }
-  .modal-error span { color: #e58075 !important; }
-
-  .md .code-block-copy:hover { background: rgba(255, 255, 255, 0.06); }
 }
+
+/* Scrollbar thumbs: lighter for visibility */
+:root.dark .scroll-thin:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); }
+:root.dark .scroll-messages:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); background-clip: padding-box; }
+
+/* Selection */
+:root.dark ::selection { background: rgba(231, 138, 77, 0.28); }
+
+/* Diff colors */
+:root.dark .diff-preview .diff-add { background: rgba(135, 154, 57, 0.16); color: #afc463; }
+:root.dark .diff-preview .diff-del { background: rgba(209, 77, 65, 0.16); color: #e58075; }
+:root.dark .diff-preview .diff-hunk { color: var(--color-info); }
+:root.dark .modal-error span { color: #e58075 !important; }
+
+:root.dark .md .code-block-copy:hover { background: rgba(255, 255, 255, 0.06); }

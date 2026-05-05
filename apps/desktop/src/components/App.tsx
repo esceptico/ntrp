@@ -11,6 +11,7 @@ import { ToolViewer } from "./ToolViewer";
 import { Demo as TraceDemo } from "./trace/Demo";
 import { useStore } from "../store";
 import { useEvents } from "../hooks/useEvents";
+import { useThemeEffect } from "../lib/theme";
 import { bootstrap } from "../actions";
 
 function useHash(): string {
@@ -26,6 +27,8 @@ function useHash(): string {
 export function App() {
   const hash = useHash();
   const currentSessionId = useStore((s) => s.currentSessionId);
+
+  useThemeEffect();
 
   useEffect(() => {
     if (hash === "#trace-demo") return;
