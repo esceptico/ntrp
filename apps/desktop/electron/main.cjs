@@ -7,6 +7,16 @@ const { fileURLToPath } = require("node:url");
 const isDev = Boolean(process.env.NTRP_DESKTOP_DEV_SERVER_URL);
 const configFileName = "config.json";
 
+// App icon. macOS dev: dock picks up the PNG via app.dock.setIcon below
+// (Electron's dock.setIcon is more reliable with a high-res PNG than an
+// .icns). Windows/Linux dev: BrowserWindow `icon` is enough. In a
+// packaged build the bundle's own icon (set by electron-builder) takes
+// over.
+const ICON_DIR = path.join(__dirname, "icons");
+const ICON_PATH = process.platform === "win32"
+  ? path.join(ICON_DIR, "icon.ico")
+  : path.join(ICON_DIR, "icon.png");
+
 const defaultConfig = {
   serverUrl: "http://localhost:6877",
   apiKey: "",
@@ -229,6 +239,7 @@ function createWindow() {
     minWidth: 980,
     minHeight: 660,
     title: "ntrp",
+    icon: ICON_PATH,
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#100f0f" : "#ece9e0",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 18 },
@@ -260,6 +271,12 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // macOS shows the bundle icon for packaged apps; in `electron .` dev
+  // mode the dock would otherwise show the generic Electron icon.
+  if (process.platform === "darwin" && app.dock) {
+    app.dock.setIcon(ICON_PATH);
+  }
+
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false);
   });
