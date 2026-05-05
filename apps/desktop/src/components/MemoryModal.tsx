@@ -5,8 +5,19 @@ import { useStore } from "../store";
 import { PageModal } from "./PageModal";
 import { FactsPane } from "./memory/FactsPane";
 import { ObservationsPane } from "./memory/ObservationsPane";
+import { DreamsPane } from "./memory/DreamsPane";
+import { ProfilePane } from "./memory/ProfilePane";
+import { MergesPane } from "./memory/MergesPane";
 
-type Tab = "facts" | "observations";
+type Tab = "facts" | "observations" | "profile" | "dreams" | "merges";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "facts", label: "Facts" },
+  { id: "observations", label: "Observations" },
+  { id: "profile", label: "Profile" },
+  { id: "dreams", label: "Dreams" },
+  { id: "merges", label: "Merges" },
+];
 
 export function MemoryModal() {
   const open = useStore((s) => s.memoryOpen);
@@ -28,16 +39,22 @@ export function MemoryModal() {
       </header>
 
       <nav className="flex items-end gap-5 mx-6 mt-3 border-b border-line-soft">
-        <TabButton label="Facts" active={tab === "facts"} onClick={() => setTab("facts")} />
-        <TabButton
-          label="Observations"
-          active={tab === "observations"}
-          onClick={() => setTab("observations")}
-        />
+        {TABS.map((t) => (
+          <TabButton
+            key={t.id}
+            label={t.label}
+            active={tab === t.id}
+            onClick={() => setTab(t.id)}
+          />
+        ))}
       </nav>
 
       <div className="overflow-hidden">
-        {tab === "facts" ? <FactsPane /> : <ObservationsPane />}
+        {tab === "facts" && <FactsPane />}
+        {tab === "observations" && <ObservationsPane />}
+        {tab === "profile" && <ProfilePane />}
+        {tab === "dreams" && <DreamsPane />}
+        {tab === "merges" && <MergesPane />}
       </div>
     </PageModal>
   );

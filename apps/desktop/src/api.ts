@@ -424,6 +424,110 @@ export async function getObservationApi(config: AppConfig, id: number): Promise<
   return apiWithConfig(config, `/observations/${id}`);
 }
 
+// ─── Dreams ───────────────────────────────────────────────────────────
+
+export interface Dream {
+  id: number;
+  bridge: string;
+  insight: string;
+  created_at: string;
+}
+
+export interface DreamDetail {
+  dream: Dream;
+  source_facts: { id: number; text: string }[];
+}
+
+export async function listDreamsApi(config: AppConfig): Promise<{ dreams: Dream[] }> {
+  return apiWithConfig(config, "/dreams?limit=200");
+}
+
+export async function getDreamApi(config: AppConfig, id: number): Promise<DreamDetail> {
+  return apiWithConfig(config, `/dreams/${id}`);
+}
+
+export async function deleteDreamApi(config: AppConfig, id: number): Promise<void> {
+  await apiWithConfig(config, `/dreams/${id}`, { method: "DELETE" });
+}
+
+// ─── Profile ──────────────────────────────────────────────────────────
+
+export interface ProfileEntry {
+  id: number;
+  kind: FactKind;
+  summary: string;
+  source_fact_ids: number[];
+  source_observation_ids: number[];
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+  created_by: string | null;
+  policy_version: number | null;
+  confidence: number;
+}
+
+export interface ProfileEntryDetail {
+  entry: ProfileEntry;
+  source_facts: Fact[];
+  source_observations: Observation[];
+}
+
+export async function listProfileApi(config: AppConfig): Promise<{ entries: ProfileEntry[] }> {
+  return apiWithConfig(config, "/memory/profile?limit=50");
+}
+
+export async function getProfileEntryApi(config: AppConfig, id: number): Promise<ProfileEntryDetail> {
+  return apiWithConfig(config, `/memory/profile/${id}`);
+}
+
+export interface UpdateProfileEntryPayload {
+  kind?: FactKind;
+  summary?: string;
+  confidence?: number;
+}
+
+export async function updateProfileEntryApi(
+  config: AppConfig,
+  id: number,
+  payload: UpdateProfileEntryPayload,
+): Promise<{ entry: ProfileEntry }> {
+  return apiWithConfig(config, `/memory/profile/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteProfileEntryApi(config: AppConfig, id: number): Promise<void> {
+  await apiWithConfig(config, `/memory/profile/${id}`, { method: "DELETE" });
+}
+
+// ─── Supersession (merge candidates) ──────────────────────────────────
+
+export interface SupersessionCandidate {
+  kind: string;
+  entity: string;
+  older_fact: Fact;
+  newer_fact: Fact;
+  reason: string;
+}
+
+export async function listSupersessionCandidatesApi(
+  config: AppConfig,
+): Promise<{ candidates: SupersessionCandidate[]; total: number }> {
+  return apiWithConfig(config, "/memory/supersession/candidates?limit=200");
+}
+
+export async function applySupersessionApi(
+  config: AppConfig,
+  olderFactId: number,
+  newerFactId: number,
+): Promise<void> {
+  await apiWithConfig(config, `/facts/${olderFactId}/metadata`, {
+    method: "PATCH",
+    body: JSON.stringify({ superseded_by_fact_id: newerFactId }),
+  });
+}
+
 export async function branchSessionApi(
   config: AppConfig,
   sessionId: string,
