@@ -528,6 +528,114 @@ export async function applySupersessionApi(
   });
 }
 
+// ─── MCP servers ──────────────────────────────────────────────────────
+
+export type MCPTransport = "stdio" | "http";
+
+export interface MCPTool {
+  name: string;
+  description: string;
+  enabled: boolean;
+}
+
+export interface MCPServer {
+  name: string;
+  transport: MCPTransport | "unknown";
+  connected: boolean;
+  tool_count: number;
+  error: string | null;
+  command: string | null;
+  args: string[] | null;
+  url: string | null;
+  tools: MCPTool[];
+  enabled: boolean;
+  auth: string | null;
+  has_client_credentials: boolean;
+}
+
+/** Raw payload shape persisted on the server. The desktop reads/writes this
+ *  dict directly via add/update; the server validates it through
+ *  parse_server_config. */
+export interface MCPServerConfigPayload {
+  transport: MCPTransport;
+  enabled?: boolean;
+  // stdio
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  // http
+  url?: string;
+  headers?: Record<string, string>;
+  auth?: string;
+  client_id?: string;
+  client_secret?: string;
+  redirect_port?: number;
+  scope?: string;
+  client_name?: string;
+  // common
+  tools?: string[] | null;
+}
+
+export async function listMCPServersApi(config: AppConfig): Promise<{ servers: MCPServer[] }> {
+  return apiWithConfig(config, "/mcp/servers");
+}
+
+export async function addMCPServerApi(
+  config: AppConfig,
+  name: string,
+  serverConfig: MCPServerConfigPayload,
+): Promise<void> {
+  await apiWithConfig(config, "/mcp/servers", {
+    method: "POST",
+    body: JSON.stringify({ name, config: serverConfig }),
+  });
+}
+
+export async function updateMCPServerApi(
+  config: AppConfig,
+  name: string,
+  serverConfig: MCPServerConfigPayload,
+): Promise<void> {
+  await apiWithConfig(config, `/mcp/servers/${encodeURIComponent(name)}`, {
+    method: "PUT",
+    body: JSON.stringify({ config: serverConfig }),
+  });
+}
+
+export async function updateMCPToolsApi(
+  config: AppConfig,
+  name: string,
+  tools: string[] | null,
+): Promise<void> {
+  await apiWithConfig(config, `/mcp/servers/${encodeURIComponent(name)}/tools`, {
+    method: "PUT",
+    body: JSON.stringify({ tools }),
+  });
+}
+
+export async function toggleMCPServerApi(
+  config: AppConfig,
+  name: string,
+  enabled: boolean,
+): Promise<void> {
+  await apiWithConfig(config, `/mcp/servers/${encodeURIComponent(name)}/enabled`, {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function startMCPOAuthApi(config: AppConfig, name: string): Promise<void> {
+  await apiWithConfig(config, `/mcp/servers/${encodeURIComponent(name)}/oauth`, {
+    method: "POST",
+  });
+}
+
+export async function removeMCPServerApi(config: AppConfig, name: string): Promise<void> {
+  await apiWithConfig(config, `/mcp/servers/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function branchSessionApi(
   config: AppConfig,
   sessionId: string,

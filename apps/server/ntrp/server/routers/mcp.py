@@ -92,6 +92,55 @@ async def add_mcp_server(
     }
 
 
+class UpdateMCPServerRequest(BaseModel):
+    config: dict
+
+
+@router.put("/servers/{name}")
+async def update_mcp_server_route(
+    name: str,
+    req: UpdateMCPServerRequest,
+    runtime: Runtime = Depends(get_runtime),
+    cfg_svc: ConfigService = Depends(require_config_service),
+):
+    existing = runtime.config.mcp_servers or {}
+    if name not in existing:
+        raise HTTPException(status_code=404, detail=f"MCP server {name!r} not found")
+
+    existing_transport = existing[name].get("transport")
+    new_transport = req.config.get("transport", existing_transport)
+    if new_transport != existing_transport:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot switch transport type; uninstall and re-add the server",
+        )
+
+    try:
+        parsed = parse_server_config(name, req.config)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    config = dict(req.config)
+    if isinstance(parsed.transport, HttpTransport):
+        config["url"] = parsed.transport.url
+
+    try:
+        await cfg_svc.update_mcp_server(name, config)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    manager = runtime.mcp_manager
+    session = manager.sessions.get(name) if manager else None
+    error = manager.errors.get(name) if manager else None
+    return {
+        "status": "updated",
+        "name": name,
+        "connected": session.connected if session else False,
+        "tool_count": len(session.tools) if session else 0,
+        "error": error,
+    }
+
+
 class UpdateToolsRequest(BaseModel):
     tools: list[str] | None
 
