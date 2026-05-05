@@ -32,6 +32,7 @@ import {
 } from "./api";
 import { getState, type ImageBlock, type UiMessage } from "./store";
 import { SEMANTIC_KIND_AGENT } from "./lib/agent";
+import { messagesScroll } from "./lib/messagesScroll";
 
 function formatCall(name: string, argsJson: string): string {
   try {
@@ -364,6 +365,7 @@ export async function sendMessage(text: string, images: ImageBlock[] = []): Prom
     turn: { startedAt: Date.now(), endedAt: null, durationMs: null },
     images: images.length > 0 ? images : undefined,
   });
+  messagesScroll.scrollToBottom?.("smooth");
   s.setRunning(true);
 
   try {
