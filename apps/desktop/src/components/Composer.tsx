@@ -147,6 +147,7 @@ export function Composer() {
   );
   const awaitingFirstToken = running && lastRole !== "assistant";
   const thinkingStyle = useStore((s) => s.prefs.thinkingAnimation);
+  const thinkingIntensity = useStore((s) => s.prefs.thinkingIntensity);
 
   useEffect(() => {
     if (inputRef.current) resize(inputRef.current);
@@ -240,6 +241,7 @@ export function Composer() {
         }}
         data-thinking={awaitingFirstToken ? "true" : undefined}
         data-thinking-style={thinkingStyle}
+        data-thinking-intensity={thinkingIntensity}
         className="composer-card relative max-w-[760px] mx-auto flex flex-col border border-line rounded-[14px] bg-surface focus-within:border-line-strong transition-colors"
       >
         {pickerOpen && query !== null && (

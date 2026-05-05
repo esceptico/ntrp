@@ -18,15 +18,33 @@ export type ThinkingAnimation =
   | "hue-cycle"
   | "send-orbit";
 
+export type ThinkingIntensity = "subtle" | "normal" | "strong";
+
 export type ThemeChoice = "light" | "dark" | "system";
+
+export type PaletteId =
+  | "warm"
+  | "vercel"
+  | "raycast"
+  | "github"
+  | "linear"
+  | "notion"
+  | "catppuccin";
 
 export interface Prefs {
   thinkingAnimation: ThinkingAnimation;
+  thinkingIntensity: ThinkingIntensity;
   theme: ThemeChoice;
+  palette: PaletteId;
 }
 
 const PREFS_KEY = "ntrp.desktop.prefs";
-const DEFAULT_PREFS: Prefs = { thinkingAnimation: "comet", theme: "system" };
+const DEFAULT_PREFS: Prefs = {
+  thinkingAnimation: "comet",
+  thinkingIntensity: "normal",
+  theme: "system",
+  palette: "warm",
+};
 
 function loadPrefs(): Prefs {
   try {
