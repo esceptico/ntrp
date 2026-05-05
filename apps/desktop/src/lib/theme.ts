@@ -20,9 +20,9 @@ function apply(choice: ThemeChoice, palette: PaletteId): void {
   root.classList.add(`palette-${palette}`);
 }
 
-/** Effect that keeps the <html> `dark` + `palette-<id>` classes in sync with
- *  the user's prefs. When theme is "system", also subscribes to OS-level
- *  changes so the app flips automatically without a reload. */
+/** Effect that keeps the <html> `dark` + `palette-<id>` classes in sync
+ *  with the user's prefs. When theme is "system", also subscribes to
+ *  OS-level changes so the app flips automatically without a reload. */
 export function useThemeEffect(): void {
   const theme = useStore((s) => s.prefs.theme);
   const palette = useStore((s) => s.prefs.palette);

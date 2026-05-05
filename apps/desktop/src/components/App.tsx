@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { motion } from "motion/react";
 import { Sidebar } from "./Sidebar";
 import { Chat } from "./Chat";
 import { SettingsModal } from "./SettingsModal";
@@ -27,6 +28,8 @@ function useHash(): string {
 export function App() {
   const hash = useHash();
   const currentSessionId = useStore((s) => s.currentSessionId);
+  const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
+  const toggleSidebar = useStore((s) => s.toggleSidebar);
 
   useThemeEffect();
 
@@ -34,6 +37,18 @@ export function App() {
     if (hash === "#trace-demo") return;
     void bootstrap();
   }, [hash]);
+
+  // Cmd/Ctrl+B toggles the sidebar — matches Cursor / VSCode.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b" && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        toggleSidebar();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleSidebar]);
 
   useEvents(hash === "#trace-demo" ? null : currentSessionId);
 
@@ -43,7 +58,14 @@ export function App() {
 
   return (
     <>
-      <Sidebar />
+      <motion.div
+        className="sidebar-wrap"
+        initial={false}
+        animate={{ x: sidebarHidden ? -244 : 0 }}
+        transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+      >
+        <Sidebar />
+      </motion.div>
       <Chat />
       <SettingsModal />
       <AutomationsModal />

@@ -6,6 +6,7 @@ import {
   Brain,
   GitBranch,
   MessageSquare,
+  PanelLeft,
   Pencil,
   Settings as SettingsIcon,
   Sparkles,
@@ -271,6 +272,8 @@ function useEntries(): CommandEntry[] {
   const openAutomations = useStore((s) => s.openAutomations);
   const openArchive = useStore((s) => s.openArchive);
   const openMemory = useStore((s) => s.openMemory);
+  const toggleSidebar = useStore((s) => s.toggleSidebar);
+  const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
   const order = useStore((s) => s.order);
 
   return useMemo(() => {
@@ -285,6 +288,15 @@ function useEntries(): CommandEntry[] {
       shortcut: "⌘N",
       run: () => createSession(),
       search: "new session create chat",
+    });
+    entries.push({
+      id: "suggested:toggle-sidebar",
+      section: "suggested",
+      label: sidebarHidden ? "Show sidebar" : "Hide sidebar",
+      icon: PanelLeft,
+      shortcut: "⌘B",
+      run: toggleSidebar,
+      search: "sidebar panel toggle hide show",
     });
     entries.push({
       id: "suggested:compact",
@@ -393,6 +405,8 @@ function useEntries(): CommandEntry[] {
     openAutomations,
     openArchive,
     openMemory,
+    toggleSidebar,
+    sidebarHidden,
     order,
   ]);
 }

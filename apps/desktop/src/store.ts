@@ -36,6 +36,7 @@ export interface Prefs {
   thinkingIntensity: ThinkingIntensity;
   theme: ThemeChoice;
   palette: PaletteId;
+  sidebarHidden: boolean;
 }
 
 const PREFS_KEY = "ntrp.desktop.prefs";
@@ -44,6 +45,7 @@ const DEFAULT_PREFS: Prefs = {
   thinkingIntensity: "normal",
   theme: "system",
   palette: "warm",
+  sidebarHidden: false,
 };
 
 function loadPrefs(): Prefs {
@@ -234,6 +236,7 @@ interface Actions {
   closePalette: () => void;
   togglePalette: () => void;
   setPref: <K extends keyof Prefs>(key: K, value: Prefs[K]) => void;
+  toggleSidebar: () => void;
 }
 
 const initialUsage: SessionUsage = { lastPrompt: 0, totalTokens: 0, totalCost: 0 };
@@ -454,6 +457,12 @@ export const useStore = create<State & Actions>((set) => ({
   setPref: (key, value) =>
     set((s) => {
       const next = { ...s.prefs, [key]: value };
+      persistPrefs(next);
+      return { prefs: next };
+    }),
+  toggleSidebar: () =>
+    set((s) => {
+      const next = { ...s.prefs, sidebarHidden: !s.prefs.sidebarHidden };
       persistPrefs(next);
       return { prefs: next };
     }),

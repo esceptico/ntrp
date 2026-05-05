@@ -445,7 +445,7 @@ export function Sidebar() {
   const openMemory = useStore((s) => s.openMemory);
 
   return (
-    <aside className="sidebar flex flex-col">
+    <aside className="sidebar flex flex-col h-full">
       <div className="drag-spacer shrink-0 h-[38px]" />
       <nav className="flex flex-col gap-px px-2.5 pt-2">
         <NavRow

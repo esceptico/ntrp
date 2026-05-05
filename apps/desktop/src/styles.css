@@ -101,11 +101,49 @@ body {
 
 #app {
   position: relative;
-  display: grid;
-  grid-template-columns: 244px minmax(0, 1fr);
   width: 100vw;
   height: 100vh;
+  overflow: hidden;
 }
+
+/* Sidebar overlays the chat shell and slides via GPU-composited
+   transform — keeps the chat from reflowing every frame. */
+.sidebar-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 244px;
+  height: 100%;
+  z-index: 30;
+  background: var(--color-bg);
+  will-change: transform;
+}
+
+/* Chat fills the window and animates its left padding in lockstep
+   with the sidebar's translateX so content always sits flush with the
+   sidebar's right edge. */
+.chat-shell {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 244px;
+  transition: left 320ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.chat-shell[data-sidebar-hidden="true"] { left: 0; }
+
+/* Fixed-position sidebar toggle, just right of the macOS traffic
+   lights. Lives inside the chat-header so it inherits its no-drag
+   region, but is fixed-positioned so it stays pinned regardless of
+   how the chat-header reflows. */
+.sidebar-toggle {
+  position: fixed;
+  top: 12px;
+  left: 88px;
+  z-index: 60;
+  -webkit-app-region: no-drag;
+}
+.sidebar-toggle * { -webkit-app-region: no-drag; }
 
 ::selection { background: rgba(184, 92, 31, 0.18); }
 
