@@ -1,3 +1,4 @@
+import asyncio
 import difflib
 import fnmatch
 import os
@@ -71,6 +72,12 @@ def _unified_diff(path: Path, before: str, after: str) -> str | None:
     return diff or None
 
 
+# Each tool's filesystem-touching body runs through `asyncio.to_thread` so a
+# slow read or a vault-wide search doesn't block the asyncio event loop —
+# without this, automations and research agents (which lean heavily on
+# read/search/find) would starve every other request on the server.
+
+
 class ReadFileInput(BaseModel):
     path: str = Field(description="Path to the file (relative or absolute)")
     offset: int = Field(
@@ -81,7 +88,7 @@ class ReadFileInput(BaseModel):
     )
 
 
-async def read_file(execution: ToolExecution, args: ReadFileInput) -> ToolResult:
+def _read_file_sync(args: ReadFileInput) -> ToolResult:
     full_path = _resolve_path(args.path)
     offset = args.offset
     limit = args.limit
@@ -119,13 +126,17 @@ async def read_file(execution: ToolExecution, args: ReadFileInput) -> ToolResult
         return ToolResult(content=f"Error reading file: {e}", preview="Read failed", is_error=True)
 
 
+async def read_file(execution: ToolExecution, args: ReadFileInput) -> ToolResult:
+    return await asyncio.to_thread(_read_file_sync, args)
+
+
 class ListFilesInput(BaseModel):
     path: str = Field(default=".", description="Directory path to list.")
     limit: int = Field(default=_DEFAULT_ENTRY_LIMIT, ge=1, le=1000, description="Maximum entries to return.")
     include_hidden: bool = Field(default=False, description="Include dotfiles and dot-directories.")
 
 
-async def list_files(execution: ToolExecution, args: ListFilesInput) -> ToolResult:
+def _list_files_sync(args: ListFilesInput) -> ToolResult:
     root = _resolve_path(args.path)
     if not root.exists():
         return ToolResult(content=f"Directory not found: {args.path}", preview="Not found", is_error=True)
@@ -163,6 +174,10 @@ async def list_files(execution: ToolExecution, args: ListFilesInput) -> ToolResu
         return ToolResult(content=f"Error listing directory: {e}", preview="List failed", is_error=True)
 
 
+async def list_files(execution: ToolExecution, args: ListFilesInput) -> ToolResult:
+    return await asyncio.to_thread(_list_files_sync, args)
+
+
 class FindFilesInput(BaseModel):
     path: str = Field(default=".", description="Directory path to search under.")
     pattern: str = Field(default="*", description="Glob pattern, for example '*.py' or '**/README.md'.")
@@ -170,7 +185,7 @@ class FindFilesInput(BaseModel):
     include_hidden: bool = Field(default=False, description="Include dotfiles and dot-directories.")
 
 
-async def find_files(execution: ToolExecution, args: FindFilesInput) -> ToolResult:
+def _find_files_sync(args: FindFilesInput) -> ToolResult:
     root = _resolve_path(args.path)
     if not root.exists():
         return ToolResult(content=f"Directory not found: {args.path}", preview="Not found", is_error=True)
@@ -210,6 +225,10 @@ async def find_files(execution: ToolExecution, args: FindFilesInput) -> ToolResu
         return ToolResult(content=f"Error finding files: {e}", preview="Find failed", is_error=True)
 
 
+async def find_files(execution: ToolExecution, args: FindFilesInput) -> ToolResult:
+    return await asyncio.to_thread(_find_files_sync, args)
+
+
 class SearchTextInput(BaseModel):
     query: str = Field(min_length=1, description="Literal text to search for.")
     path: str = Field(default=".", description="File or directory path to search.")
@@ -217,22 +236,22 @@ class SearchTextInput(BaseModel):
     limit: int = Field(default=_DEFAULT_MATCH_LIMIT, ge=1, le=1000, description="Maximum matches to return.")
 
 
-async def search_text(execution: ToolExecution, args: SearchTextInput) -> ToolResult:
+def _format_match(match: dict) -> str:
+    return f"{match['relative_path']}:{match['line']}:{match['column']}: {match['text']}"
+
+
+def _search_text_sync(args: SearchTextInput) -> ToolResult:
     root = _resolve_path(args.path)
     if not root.exists():
         return ToolResult(content=f"Path not found: {args.path}", preview="Not found", is_error=True)
 
     try:
-        return _search_text(root, args)
+        return _do_search(root, args)
     except OSError as e:
         return ToolResult(content=f"Error searching files: {e}", preview="Search failed", is_error=True)
 
 
-def _format_match(match: dict) -> str:
-    return f"{match['relative_path']}:{match['line']}:{match['column']}: {match['text']}"
-
-
-def _search_text(root: Path, args: SearchTextInput) -> ToolResult:
+def _do_search(root: Path, args: SearchTextInput) -> ToolResult:
     paths = (root,) if root.is_file() else root.rglob(args.file_glob or "*")
     matches = []
     for path in paths:
@@ -278,12 +297,16 @@ def _search_text(root: Path, args: SearchTextInput) -> ToolResult:
     )
 
 
+async def search_text(execution: ToolExecution, args: SearchTextInput) -> ToolResult:
+    return await asyncio.to_thread(_search_text_sync, args)
+
+
 class WriteFileInput(BaseModel):
     path: str = Field(description="Path to write.")
     content: str = Field(description="Full file content to write.")
 
 
-async def approve_write_file(execution: ToolExecution, args: WriteFileInput) -> ApprovalInfo | None:
+def _approve_write_file_sync(args: WriteFileInput) -> ApprovalInfo | None:
     path = _resolve_path(args.path)
     if path.exists() and path.is_dir():
         return None
@@ -295,7 +318,11 @@ async def approve_write_file(execution: ToolExecution, args: WriteFileInput) -> 
     return ApprovalInfo(description=f"{action} {path}", preview=args.content[:500], diff=diff)
 
 
-async def write_file(execution: ToolExecution, args: WriteFileInput) -> ToolResult:
+async def approve_write_file(execution: ToolExecution, args: WriteFileInput) -> ApprovalInfo | None:
+    return await asyncio.to_thread(_approve_write_file_sync, args)
+
+
+def _write_file_sync(args: WriteFileInput) -> ToolResult:
     path = _resolve_path(args.path)
     if path.exists() and path.is_dir():
         return ToolResult(content=f"Path is a directory: {args.path}", preview="Is directory", is_error=True)
@@ -317,13 +344,17 @@ async def write_file(execution: ToolExecution, args: WriteFileInput) -> ToolResu
     )
 
 
+async def write_file(execution: ToolExecution, args: WriteFileInput) -> ToolResult:
+    return await asyncio.to_thread(_write_file_sync, args)
+
+
 class EditFileInput(BaseModel):
     path: str = Field(description="Path to edit.")
     old_text: str = Field(min_length=1, description="Exact existing text block to replace. Must match once.")
     new_text: str = Field(description="Replacement text.")
 
 
-async def approve_edit_file(execution: ToolExecution, args: EditFileInput) -> ApprovalInfo | None:
+def _approve_edit_file_sync(args: EditFileInput) -> ApprovalInfo | None:
     path = _resolve_path(args.path)
     if not path.exists() or not path.is_file():
         return None
@@ -336,7 +367,11 @@ async def approve_edit_file(execution: ToolExecution, args: EditFileInput) -> Ap
     )
 
 
-async def edit_file(execution: ToolExecution, args: EditFileInput) -> ToolResult:
+async def approve_edit_file(execution: ToolExecution, args: EditFileInput) -> ApprovalInfo | None:
+    return await asyncio.to_thread(_approve_edit_file_sync, args)
+
+
+def _edit_file_sync(args: EditFileInput) -> ToolResult:
     path = _resolve_path(args.path)
     if not path.exists():
         return ToolResult(content=f"File not found: {args.path}", preview="Not found", is_error=True)
@@ -370,6 +405,10 @@ async def edit_file(execution: ToolExecution, args: EditFileInput) -> ToolResult
         return ToolResult(content=f"Error editing file: {e}", preview="Edit failed", is_error=True)
 
     return ToolResult(content=f"Edited {path}.", preview="Edited", data={"path": str(path)})
+
+
+async def edit_file(execution: ToolExecution, args: EditFileInput) -> ToolResult:
+    return await asyncio.to_thread(_edit_file_sync, args)
 
 
 read_file_tool = tool(
