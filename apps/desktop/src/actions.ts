@@ -354,8 +354,11 @@ export async function sendMessage(text: string, images: ImageBlock[] = []): Prom
     s.setEditingId(null);
   }
 
+  // Use the same id locally and on the server so /session/revert can match
+  // this user message back to its saved row when the user later edits it.
+  const userMessageId = crypto.randomUUID();
   s.appendMessage({
-    id: crypto.randomUUID(),
+    id: userMessageId,
     role: "user",
     content: trimmedText,
     turn: { startedAt: Date.now(), endedAt: null, durationMs: null },
@@ -371,6 +374,7 @@ export async function sendMessage(text: string, images: ImageBlock[] = []): Prom
         session_id: s.currentSessionId,
         skip_approvals: s.skipApprovals,
         images: images.length > 0 ? images : undefined,
+        client_id: userMessageId,
       }),
     });
   } catch (error) {

@@ -148,6 +148,7 @@ async def _prepare_messages(
     last_activity: datetime | None = None,
     images: list[dict] | None = None,
     context: list[dict] | None = None,
+    client_id: str | None = None,
 ) -> list[dict]:
     memory_context = None
     if deps.memory:
@@ -194,7 +195,15 @@ async def _prepare_messages(
         if time_gap:
             ctx_blocks.append(time_gap)
 
-    messages.append({"role": Role.USER, "content": build_user_content(user_message, images, ctx_blocks or None)})
+    user_msg: dict = {
+        "role": Role.USER,
+        "content": build_user_content(user_message, images, ctx_blocks or None),
+    }
+    if client_id:
+        # Stamp the desktop client's UI id so /session/revert can later
+        # match the saved row when the user edits this message.
+        user_msg["client_id"] = client_id
+    messages.append(user_msg)
 
     return messages
 
@@ -206,6 +215,7 @@ async def prepare_chat(
     session_id: str | None = None,
     images: list[dict] | None = None,
     context: list[dict] | None = None,
+    client_id: str | None = None,
 ) -> ChatContext:
     registry = deps.run_registry
 
@@ -239,6 +249,7 @@ async def prepare_chat(
         last_activity=session_state.last_activity,
         images=images,
         context=context,
+        client_id=client_id,
     )
 
     run = registry.create_run(session_state.session_id)
@@ -290,6 +301,7 @@ async def submit_chat_message(
         session_id=session_id,
         images=images,
         context=context,
+        client_id=client_id,
     )
     bus = buses.get_or_create(session_id)
     task = asyncio.create_task(run_chat(ctx, bus))
