@@ -25,13 +25,20 @@ function endTurn(s: ReturnType<typeof getState>, endedAt: number) {
 }
 
 /** Stagger activity-item insertions so a burst of tool calls in one stream
- *  chunk rolls in one-by-one rather than as a single chord. */
-const ITEM_STAGGER_MS = 110;
+ *  chunk rolls in one-by-one rather than as a single chord.
+ *
+ *  Sub-agents can fire tens of nested tools nearly simultaneously, so we
+ *  also cap how far the queue can fall behind real time — without the cap a
+ *  burst of 30 items would visibly drip out over 3+ seconds. */
+const ITEM_STAGGER_MS = 60;
+const MAX_STAGGER_LAG_MS = 240;
 let nextItemRenderAt = 0;
 
 function enqueueActivityItem(aid: string, item: ActivityItem) {
   const now = Date.now();
-  const renderAt = Math.max(now, nextItemRenderAt + ITEM_STAGGER_MS);
+  const queued = nextItemRenderAt + ITEM_STAGGER_MS;
+  const ceiling = now + MAX_STAGGER_LAG_MS;
+  const renderAt = Math.max(now, Math.min(queued, ceiling));
   nextItemRenderAt = renderAt;
   const delay = renderAt - now;
   const apply = () => {
@@ -48,7 +55,14 @@ function enqueueActivityItem(aid: string, item: ActivityItem) {
  *  activity once TOOL_CALL_END arrives. */
 const pendingToolCalls = new Map<
   string,
-  { name: string; description: string; argsBuffer: string; depth: number }
+  {
+    name: string;
+    description: string;
+    argsBuffer: string;
+    depth: number;
+    parentId: string | null;
+    semanticKind: string;
+  }
 >();
 
 function handleServerEvent(event: ServerEvent) {
@@ -143,6 +157,8 @@ function handleServerEvent(event: ServerEvent) {
         description: event.description ?? "",
         argsBuffer: "",
         depth: event.depth ?? 0,
+        parentId: event.parent_id ?? null,
+        semanticKind: event.kind ?? "tool",
       });
       return;
     case "TOOL_CALL_ARGS": {
@@ -159,9 +175,11 @@ function handleServerEvent(event: ServerEvent) {
       const item: ActivityItem = {
         id: event.tool_call_id,
         kind: pending.name,
+        semanticKind: pending.semanticKind === "agent" ? "agent" : undefined,
         target,
         args: pending.argsBuffer,
         depth: pending.depth || undefined,
+        parentToolId: pending.parentId ?? undefined,
       };
       const aid = s.activeActivityId;
       if (!aid) {

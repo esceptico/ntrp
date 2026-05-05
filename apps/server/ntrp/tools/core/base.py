@@ -40,6 +40,10 @@ class Tool(ABC):
     volatile: bool = False
     requires: frozenset[str] = frozenset()
     input_model: type[BaseModel] | None = None
+    # Semantic kind used by the UI to pick a rendering surface. "agent"
+    # marks tools that internally spawn a sub-agent (research, etc.) so
+    # the chat can render them as agent cards instead of plain rows.
+    kind: str = "tool"
 
     async def approval_info(self, execution: ToolExecution, **kwargs: Any) -> ApprovalInfo | None:
         return None

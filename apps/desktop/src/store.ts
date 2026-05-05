@@ -14,7 +14,13 @@ export type Role = "user" | "assistant" | "reasoning" | "tool" | "status" | "err
 
 export interface ActivityItem {
   id: string;
+  /** Tool name (used for display + inspector lookup). Despite the name this
+   *  is the tool's identifier — see `semanticKind` for "tool vs agent". */
   kind: string;
+  /** Semantic kind from the server: "tool" (default) or "agent" for tools
+   *  that internally spawn a sub-agent. The renderer picks a different row
+   *  surface for agents. */
+  semanticKind?: string;
   target: string;
   args?: string;
   result?: string;

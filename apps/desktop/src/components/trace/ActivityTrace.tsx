@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronDown } from "lucide-react";
+import { Bot, ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { RollingToken } from "./RollingToken";
 import { useStore } from "../../store";
@@ -11,6 +11,7 @@ const ROW_HEIGHT_EM = 1.55;
 export type ActivityItem = {
   id: string;
   kind: string;
+  semanticKind?: string;
   target: string;
   args?: string;
   result?: string;
@@ -89,31 +90,33 @@ export function ActivityTail({
   collapsed?: boolean;
 }) {
   // Two render modes:
-  //   - "rolling" (max set): used live during a run. Keeps AnimatePresence so
-  //     new items roll in and old ones fall off as the activity grows.
-  //   - "static"  (max unset): used post-run when the user has clicked to
-  //     expand the full list. No per-item entry animation — only the
-  //     container's height animation handles the open/close transition.
-  // Mixing the two caused items to "appear from the center" because the
-  // older items (suddenly newly visible when expanding) ran their initial
-  // y-translate animation while the container was also growing in height.
-  // Only show top-level tool calls in the tail. Calls a sub-agent makes
-  // (depth > 0) are still kept in the store, but they'd otherwise crowd
-  // the tail into a soup when several sub-agents run in parallel — the
-  // user reaches them by clicking the parent and using "Child runs" in
-  // the inspector.
-  const topLevel = items.filter((it) => (it.depth ?? 0) === 0);
+  //   - "rolling" (max set): used live during a run. Each level (top, plus
+  //     each *running* parent's children) keeps its last `max` rows; deeper
+  //     descendants of a finished parent are hidden so the tail stays short.
+  //     We render the result as a flat ordered list — parents come before
+  //     their children, depth handles indent — so motion has only one layout
+  //     surface to manage rather than nested motion.divs.
+  //   - "static"  (max unset): post-run, expanded list. Flat top-level only —
+  //     children are reachable via the inspector.
   const rolling = max != null;
-  const visible = rolling ? topLevel.slice(-max) : topLevel;
-  const targetHeight = rolling ? `${max * ROW_HEIGHT_EM}em` : "auto";
   const setViewingTool = useStore((s) => s.setViewingTool);
+
+  const visible = rolling
+    ? buildRollingList(items, max)
+    : items.filter((it) => (it.depth ?? 0) === 0);
+
+  // Compute explicit height instead of leaving it to a `layout` prop on the
+  // outer container. Mixing `layout` and an explicit `animate.height` causes
+  // the two systems to fight (motion docs warn against this), which produced
+  // the visible "jumping" / "wait then batch move" the user reported.
+  const targetHeight = `${visible.length * ROW_HEIGHT_EM}em`;
 
   return (
     <motion.div
       initial={false}
       animate={{
-        height: collapsed ? 0 : targetHeight,
         opacity: collapsed ? 0 : 1,
+        height: collapsed ? 0 : targetHeight,
       }}
       transition={{ duration: 0.24, ease: EASE }}
       style={{ overflow: "hidden" }}
@@ -151,6 +154,40 @@ export function ActivityTail({
   );
 }
 
+/** Walk the activity tree and return a flat ordered list to render in
+ *  rolling mode. Each level is capped at `max`; we recurse into a parent's
+ *  children only while the parent is still running, so finished agents
+ *  don't keep their detail on screen. Parents appear before their kids so
+ *  the natural document order doubles as visual hierarchy (depth-based
+ *  indent comes from `ItemButton`). */
+function buildRollingList(items: ActivityItem[], max: number): ActivityItem[] {
+  const childrenByParent = new Map<string, ActivityItem[]>();
+  for (const it of items) {
+    if (!it.parentToolId) continue;
+    const arr = childrenByParent.get(it.parentToolId) ?? [];
+    arr.push(it);
+    childrenByParent.set(it.parentToolId, arr);
+  }
+
+  const out: ActivityItem[] = [];
+  const visit = (parentId: string | null, depthFilter: 0 | null) => {
+    const pool =
+      depthFilter === 0
+        ? items.filter((it) => (it.depth ?? 0) === 0)
+        : (parentId !== null ? childrenByParent.get(parentId) ?? [] : []);
+    const slice = pool.slice(-max);
+    for (const item of slice) {
+      out.push(item);
+      const isRunning = item.result == null;
+      if (isRunning && childrenByParent.has(item.id)) {
+        visit(item.id, null);
+      }
+    }
+  };
+  visit(null, 0);
+  return out;
+}
+
 function ItemButton({
   item,
   onOpen,
@@ -159,6 +196,9 @@ function ItemButton({
   onOpen: (item: ActivityItem) => void;
 }) {
   const depth = Math.min(item.depth ?? 0, MAX_NEST_DEPTH);
+  if (item.semanticKind === "agent") {
+    return <AgentButton item={item} depth={depth} onOpen={onOpen} />;
+  }
   return (
     <button
       type="button"
@@ -173,4 +213,64 @@ function ItemButton({
       <span className="truncate">{item.target || item.kind}</span>
     </button>
   );
+}
+
+function AgentButton({
+  item,
+  depth,
+  onOpen,
+}: {
+  item: ActivityItem;
+  depth: number;
+  onOpen: (item: ActivityItem) => void;
+}) {
+  const task = useMemo(() => extractTask(item.args), [item.args]);
+  const label = friendlyAgentLabel(item.kind);
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(item)}
+      title={`${item.kind} — click to inspect`}
+      style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
+      className="flex items-baseline gap-2 min-w-0 text-left bg-transparent border-0 p-0 m-0 cursor-pointer group/agent"
+    >
+      {depth > 0 && (
+        <span className="text-whisper select-none self-center" aria-hidden="true">↳</span>
+      )}
+      <span
+        aria-hidden
+        className="grid place-items-center w-[18px] h-[18px] rounded-md bg-accent-soft text-accent-strong shrink-0 self-center"
+      >
+        <Bot size={11} strokeWidth={2} />
+      </span>
+      <span className="font-medium text-ink-soft shrink-0 group-hover/agent:text-ink transition-colors">
+        {label}
+      </span>
+      {task && (
+        <span className="text-faint truncate group-hover/agent:text-ink-soft transition-colors">
+          {task}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function extractTask(args: string | undefined): string | null {
+  if (!args) return null;
+  try {
+    const parsed = JSON.parse(args);
+    if (parsed && typeof parsed === "object" && typeof parsed.task === "string") {
+      return parsed.task;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function friendlyAgentLabel(toolName: string): string {
+  // "research" → "Research", "research_agent" → "Research"
+  const stripped = toolName.replace(/_agent$/i, "");
+  if (!stripped) return toolName;
+  return stripped[0].toUpperCase() + stripped.slice(1);
 }

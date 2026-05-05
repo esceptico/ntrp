@@ -155,6 +155,8 @@ class ToolCallStartEvent(SSEEvent):
     display_name: str = ""
     description: str = ""  # human-readable preview of the call
     depth: int = 0
+    parent_id: str | None = None
+    kind: str = "tool"
 
 
 @dataclass(frozen=True)
@@ -163,6 +165,7 @@ class ToolCallArgsEvent(SSEEvent):
     tool_call_id: str = ""
     delta: str = ""  # JSON-encoded args (ntrp emits atomically, so single delta)
     depth: int = 0
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -170,6 +173,7 @@ class ToolCallEndEvent(SSEEvent):
     type: EventType = field(default=EventType.TOOL_CALL_END, init=False)
     tool_call_id: str = ""
     depth: int = 0
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -185,6 +189,7 @@ class ToolCallResultEvent(SSEEvent):
     name: str = ""  # tool name, convenience
     depth: int = 0
     parent_id: str | None = None
+    kind: str = "tool"
 
 
 # ─── Reasoning (AG-UI Start / Content / End + outer Start/End) ───────
@@ -387,15 +392,19 @@ def agent_events_to_sse(event) -> tuple[SSEEvent, ...]:
                     display_name=event.display_name,
                     description=description,
                     depth=event.depth,
+                    parent_id=event.parent_id,
+                    kind=event.kind,
                 ),
                 ToolCallArgsEvent(
                     tool_call_id=event.tool_id,
                     delta=args_json,
                     depth=event.depth,
+                    parent_id=event.parent_id,
                 ),
                 ToolCallEndEvent(
                     tool_call_id=event.tool_id,
                     depth=event.depth,
+                    parent_id=event.parent_id,
                 ),
             )
         case ToolCompleted():
@@ -410,6 +419,7 @@ def agent_events_to_sse(event) -> tuple[SSEEvent, ...]:
                     display_name=event.display_name,
                     depth=event.depth,
                     parent_id=event.parent_id,
+                    kind=event.kind,
                 ),
             )
     return ()

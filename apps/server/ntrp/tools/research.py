@@ -129,4 +129,5 @@ research_tool = tool(
     description=RESEARCH_DESCRIPTION,
     input_model=ResearchInput,
     execute=research,
+    kind="agent",
 )

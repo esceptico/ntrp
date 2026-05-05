@@ -17,6 +17,7 @@ class _ResolvedCall:
     call: PendingToolCall
     display_name: str
     mutates: bool
+    kind: str = "tool"
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,7 @@ class ToolRunner:
             call=call,
             display_name=meta.display_name if meta else call.name,
             mutates=meta.mutates if meta else False,
+            kind=meta.kind if meta else "tool",
         )
 
     async def _run_one(self, rc: _ResolvedCall) -> tuple[ToolResult, int]:
@@ -67,6 +69,7 @@ class ToolRunner:
             depth=self._depth,
             parent_id=self._parent_id,
             display_name=rc.display_name,
+            kind=rc.kind,
         )
 
     def _completed(self, rc: _ResolvedCall, result: ToolResult, duration_ms: int) -> ToolCompleted:
@@ -81,6 +84,7 @@ class ToolRunner:
             is_error=result.is_error,
             data=result.data,
             display_name=rc.display_name,
+            kind=rc.kind,
         )
 
     async def _execute_sequential(self, resolved: list[_ResolvedCall]) -> AsyncGenerator[ToolStarted | ToolCompleted]:

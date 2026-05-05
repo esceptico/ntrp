@@ -33,6 +33,7 @@ class _FunctionTool(Tool):
         volatile: bool = False,
         requires: Iterable[str] = (),
         approval: ApprovalHandler | None = None,
+        kind: str = "tool",
     ):
         self.display_name = display_name
         self.description = description
@@ -42,6 +43,7 @@ class _FunctionTool(Tool):
         self.requires = frozenset(requires)
         self._execute = execute
         self._approval = approval
+        self.kind = kind
 
     async def approval_info(self, execution: ToolExecution, **kwargs: Any) -> ApprovalInfo | None:
         if self._approval is None:
@@ -67,6 +69,7 @@ def tool(
     volatile: bool = False,
     requires: Iterable[str] = (),
     approval: ApprovalHandler | None = None,
+    kind: str = "tool",
 ) -> Tool:
     return _FunctionTool(
         description=description,
@@ -77,4 +80,5 @@ def tool(
         volatile=volatile,
         requires=requires,
         approval=approval,
+        kind=kind,
     )

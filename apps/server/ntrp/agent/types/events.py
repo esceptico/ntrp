@@ -49,6 +49,7 @@ class ToolStarted(AgentEventBase):
     name: str
     args: dict
     display_name: str
+    kind: str = "tool"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -61,6 +62,7 @@ class ToolCompleted(AgentEventBase):
     is_error: bool
     data: dict | None
     display_name: str
+    kind: str = "tool"
 
 
 @dataclass(frozen=True)

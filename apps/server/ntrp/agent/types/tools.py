@@ -19,3 +19,4 @@ class ToolMeta:
     display_name: str
     mutates: bool
     volatile: bool
+    kind: str = "tool"
