@@ -1,3 +1,4 @@
+import asyncio
 import difflib
 import json
 
@@ -24,13 +25,13 @@ class SetDirectivesInput(BaseModel):
 
 
 async def approve_set_directives(execution: ToolExecution, args: SetDirectivesInput) -> ApprovalInfo:
-    current = load_directives() or ""
+    current = (await asyncio.to_thread(load_directives)) or ""
     diff = _diff(current, args.directives)
     return ApprovalInfo(description="Update directives", preview=None, diff=diff)
 
 
 async def set_directives(execution: ToolExecution, args: SetDirectivesInput) -> ToolResult:
-    save_directives(args.directives)
+    await asyncio.to_thread(save_directives, args.directives)
     if not args.directives.strip():
         return ToolResult(content="Directives cleared.", preview="Cleared")
     return ToolResult(
