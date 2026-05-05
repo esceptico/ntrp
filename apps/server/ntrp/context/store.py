@@ -6,7 +6,7 @@ from typing import Any
 import aiosqlite
 from pydantic import BaseModel
 
-from ntrp.context.models import ChatMessage, SessionData, SessionState
+from ntrp.context.models import SessionData, SessionState
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -21,19 +21,6 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
 CREATE INDEX IF NOT EXISTS idx_sessions_archived ON sessions(archived_at);
-
-CREATE TABLE IF NOT EXISTS chat_messages (
-    id INTEGER PRIMARY KEY,
-    session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
-    role TEXT NOT NULL,
-    content TEXT,
-    created_at TIMESTAMP NOT NULL,
-    message_index INTEGER NOT NULL,
-    UNIQUE(session_id, message_index)
-);
-
-CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, message_index);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at DESC);
 """
 
 SQL_SAVE_SESSION = """
@@ -70,27 +57,7 @@ ORDER BY archived_at DESC
 LIMIT ?
 """
 
-SQL_CHAT_MAX_INDEX = "SELECT MAX(message_index) FROM chat_messages WHERE session_id = ?"
-
-SQL_INSERT_CHAT_MESSAGE = """
-    INSERT OR IGNORE INTO chat_messages (session_id, role, content, created_at, message_index)
-    VALUES (?, ?, ?, ?, ?)
-"""
-
-SQL_GET_CHAT_SLICE = """
-    SELECT * FROM chat_messages
-    WHERE session_id = ? AND message_index >= ? AND message_index < ?
-    ORDER BY message_index
-"""
-
-SQL_BACKFILL_CANDIDATES = """
-    SELECT s.session_id, s.messages, s.last_activity FROM sessions s
-    WHERE s.messages IS NOT NULL AND s.messages != '[]'
-    AND NOT EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.session_id = s.session_id)
-"""
-
 SQL_LOAD_SESSION = "SELECT * FROM sessions WHERE session_id = ?"
-SQL_DELETE_STALE_MESSAGES = "DELETE FROM chat_messages WHERE session_id = ? AND message_index >= ?"
 SQL_UPDATE_NAME = "UPDATE sessions SET name = ? WHERE session_id = ?"
 SQL_ARCHIVE = "UPDATE sessions SET archived_at = ? WHERE session_id = ? AND archived_at IS NULL"
 SQL_RESTORE = "UPDATE sessions SET archived_at = NULL WHERE session_id = ? AND archived_at IS NOT NULL"
@@ -115,24 +82,26 @@ class SessionStore:
                 await self.conn.commit()
             except Exception:
                 pass
-        backfilled = await self.backfill_chat_messages()
-        if backfilled:
-            from ntrp.logging import get_logger
-
-            get_logger(__name__).info("Backfilled %d chat messages from existing sessions", backfilled)
 
     async def save_session(self, state: SessionState, messages: list[dict | Any], metadata: dict | None = None) -> None:
-        serializable_messages = []
+        serializable_messages: list[dict] = []
         for msg in messages:
             if isinstance(msg, BaseModel):
                 serializable_messages.append(msg.model_dump())
             elif isinstance(msg, dict):
                 serializable_messages.append(msg)
 
-        snapshot = list(serializable_messages)
+        # Stamp created_at on every message that hasn't been stamped yet.
+        # The list is shared with the agent's in-memory context so the
+        # stamp persists across saves without a side-table lookup.
+        now = datetime.now(UTC).isoformat()
+        for msg in serializable_messages:
+            if not msg.get("created_at"):
+                msg["created_at"] = now
+
         meta = metadata or {}
         messages_json, metadata_json = await asyncio.to_thread(
-            lambda: (json.dumps(snapshot, default=str), json.dumps(meta))
+            lambda: (json.dumps(serializable_messages, default=str), json.dumps(meta))
         )
         await self.conn.execute(
             SQL_SAVE_SESSION,
@@ -145,29 +114,7 @@ class SessionStore:
                 state.name,
             ),
         )
-        await self._sync_chat_messages(state.session_id, serializable_messages)
         await self.conn.commit()
-
-    async def _sync_chat_messages(self, session_id: str, messages: list[dict]) -> None:
-        rows = await self.conn.execute_fetchall(SQL_CHAT_MAX_INDEX, (session_id,))
-        max_existing = rows[0][0] if rows and rows[0][0] is not None else -1
-
-        # Handle revert: if messages list is shorter than what's stored, trim stale rows
-        if max_existing >= len(messages):
-            await self.conn.execute(SQL_DELETE_STALE_MESSAGES, (session_id, len(messages)))
-            max_existing = len(messages) - 1
-
-        now = datetime.now(UTC).isoformat()
-        params = []
-        for idx, msg in enumerate(messages):
-            if idx <= max_existing:
-                continue
-            role = msg.get("role", "")
-            raw_content = msg.get("content") if role in ("user", "assistant", "tool") else None
-            content = json.dumps(raw_content) if isinstance(raw_content, list) else raw_content
-            params.append((session_id, role, content, now, idx))
-        if params:
-            await self.conn.executemany(SQL_INSERT_CHAT_MESSAGE, params)
 
     async def load_session(self, session_id: str) -> SessionData | None:
         rows = await self.read_conn.execute_fetchall(SQL_LOAD_SESSION, (session_id,))
@@ -249,39 +196,3 @@ class SessionStore:
 
     async def permanently_delete_session(self, session_id: str) -> bool:
         return await self._update(SQL_DELETE_ARCHIVED, (session_id,))
-
-    async def get_chat_slice(self, session_id: str, start_index: int, end_index: int) -> list[ChatMessage]:
-        rows = await self.read_conn.execute_fetchall(SQL_GET_CHAT_SLICE, (session_id, start_index, end_index))
-        return [
-            ChatMessage(
-                id=r["id"],
-                session_id=r["session_id"],
-                role=r["role"],
-                content=r["content"],
-                created_at=datetime.fromisoformat(r["created_at"]),
-                message_index=r["message_index"],
-            )
-            for r in rows
-        ]
-
-    async def backfill_chat_messages(self) -> int:
-        """Populate chat_messages from existing session JSON blobs. Runs once."""
-        rows = await self.conn.execute_fetchall(SQL_BACKFILL_CANDIDATES)
-        if not rows:
-            return 0
-
-        count = 0
-        for row in rows:
-            session_time = row["last_activity"] or datetime.now(UTC).isoformat()
-            messages = json.loads(row["messages"])
-            for idx, msg in enumerate(messages):
-                role = msg.get("role", "")
-                raw_content = msg.get("content") if role in ("user", "assistant", "tool") else None
-                content = json.dumps(raw_content) if isinstance(raw_content, list) else raw_content
-                await self.conn.execute(
-                    SQL_INSERT_CHAT_MESSAGE,
-                    (row["session_id"], role, content, session_time, idx),
-                )
-                count += 1
-        await self.conn.commit()
-        return count

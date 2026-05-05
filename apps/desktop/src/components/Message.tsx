@@ -34,9 +34,27 @@ function useIsLast(id: string): boolean {
   return useStore((s) => s.order[s.order.length - 1] === id);
 }
 
+function formatMessageTime(ms: number): string {
+  const d = new Date(ms);
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const time = d.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  if (sameDay) return time;
+  const month = d.toLocaleString(undefined, { month: "short" });
+  return `${month} ${d.getDate()} · ${time}`;
+}
+
 function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }) {
   const [copied, setCopied] = useState(false);
   const [branching, setBranching] = useState(false);
+  const startedAt = useStore((s) => s.messages.get(id)?.turn?.startedAt);
 
   async function copy() {
     const message = useStore.getState().messages.get(id);
@@ -69,10 +87,12 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
     }
   }
 
+  const timeLabel = startedAt && startedAt > 0 ? formatMessageTime(startedAt) : null;
+
   return (
     <div
       className={clsx(
-        "flex gap-px h-6 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150",
+        "flex items-center gap-1.5 h-6 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150",
         role === "user" && "justify-end",
       )}
     >
@@ -107,6 +127,16 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
         >
           <Pencil size={13} strokeWidth={2} />
         </button>
+      )}
+      {timeLabel && (
+        <span
+          className={clsx(
+            "text-[11px] text-faint tracking-[-0.005em] select-none",
+            role === "user" ? "order-first mr-0.5" : "ml-0.5",
+          )}
+        >
+          {timeLabel}
+        </span>
       )}
     </div>
   );

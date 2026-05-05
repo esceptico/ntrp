@@ -36,6 +36,8 @@ export interface HistoryMessage {
    *  Available for messages saved after id-based persistence landed; older
    *  sessions may not have it. */
   id?: string;
+  /** ISO-8601 UTC timestamp stamped at first save. */
+  created_at?: string;
 }
 
 export interface HealthCheck {

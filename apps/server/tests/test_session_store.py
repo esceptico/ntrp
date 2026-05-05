@@ -114,7 +114,7 @@ async def test_archive_and_restore(store: SessionStore):
 
 
 @pytest.mark.asyncio
-async def test_chat_messages_synced(store: SessionStore):
+async def test_save_stamps_created_at(store: SessionStore):
     state = _make_state()
     messages = [
         {"role": "system", "content": "sys"},
@@ -123,14 +123,24 @@ async def test_chat_messages_synced(store: SessionStore):
     ]
     await store.save_session(state, messages)
 
-    # chat_messages table should have the user and assistant messages
-    rows = await store.conn.execute_fetchall(
-        "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY message_index",
-        ("test-session",),
-    )
-    roles = [r["role"] for r in rows]
-    assert "user" in roles
-    assert "assistant" in roles
+    loaded = await store.load_session("test-session")
+    assert loaded is not None
+    assert all(m.get("created_at") for m in loaded.messages)
+
+
+@pytest.mark.asyncio
+async def test_save_preserves_existing_created_at(store: SessionStore):
+    state = _make_state()
+    fixed = "2024-01-01T00:00:00+00:00"
+    messages = [
+        {"role": "user", "content": "hello", "created_at": fixed},
+        {"role": "assistant", "content": "hi"},
+    ]
+    await store.save_session(state, messages)
+    loaded = await store.load_session("test-session")
+    assert loaded is not None
+    assert loaded.messages[0]["created_at"] == fixed
+    assert loaded.messages[1]["created_at"] != fixed
 
 
 @pytest.mark.asyncio

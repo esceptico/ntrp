@@ -79,6 +79,7 @@ export async function loadHistory(sessionId: string): Promise<void> {
     // Prefer the stable server-issued id; fall back to a positional id for
     // older sessions whose messages were saved before id-based persistence.
     const stableId = msg.id ?? `history-${index}`;
+    const stampedAt = msg.created_at ? Date.parse(msg.created_at) : 0;
 
     if (msg.role === "user") {
       activeActivityId = null;
@@ -86,7 +87,7 @@ export async function loadHistory(sessionId: string): Promise<void> {
         id: stableId,
         role: "user",
         content: msg.content,
-        turn: { startedAt: 0, endedAt: 0, durationMs: null },
+        turn: { startedAt: stampedAt, endedAt: stampedAt, durationMs: null },
         images: msg.images,
       });
       return;
@@ -114,6 +115,9 @@ export async function loadHistory(sessionId: string): Promise<void> {
         id: stableId,
         role: "assistant",
         content: msg.content,
+        turn: stampedAt
+          ? { startedAt: stampedAt, endedAt: stampedAt, durationMs: null }
+          : undefined,
       });
     }
 

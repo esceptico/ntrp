@@ -115,7 +115,12 @@ function handleServerEvent(event: ServerEvent) {
       } else {
         endActivity(s);
         const id = event.message_id || crypto.randomUUID();
-        s.appendMessage({ id, role: "assistant", content: event.delta });
+        s.appendMessage({
+          id,
+          role: "assistant",
+          content: event.delta,
+          turn: { startedAt: Date.now(), endedAt: null, durationMs: null },
+        });
       }
       return;
     }

@@ -86,6 +86,9 @@ async def get_session_history(
         if msg.get("client_id"):
             entry["id"] = msg["client_id"]
 
+        if created_at := msg.get("created_at"):
+            entry["created_at"] = created_at
+
         history.append(entry)
 
     return {"messages": history[-HISTORY_MESSAGE_LIMIT:]}
