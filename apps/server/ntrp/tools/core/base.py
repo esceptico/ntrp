@@ -44,6 +44,12 @@ class Tool(ABC):
     # marks tools that internally spawn a sub-agent (research, etc.) so
     # the chat can render them as agent cards instead of plain rows.
     kind: str = "tool"
+    # Whether to offload large results to a temp file (return preview +
+    # path) when the content exceeds OFFLOAD_THRESHOLD. Default on; tools
+    # whose output is already paginated by the caller (or whose result
+    # is itself the answer the agent asked for and offloading would just
+    # force a re-read) can opt out by setting this to False.
+    offload: bool = True
 
     async def approval_info(self, execution: ToolExecution, **kwargs: Any) -> ApprovalInfo | None:
         return None

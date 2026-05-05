@@ -47,7 +47,8 @@ class NtrpToolExecutor:
 
         execution = ToolExecution(tool_id=tool_call_id, tool_name=name, ctx=self._ctx)
         result = await self._executor.registry.execute(name, execution, args)
-        result = self._maybe_offload(name, result)
+        if tool.offload:
+            result = self._maybe_offload(name, result)
 
         if already_read:
             result = ToolResult(

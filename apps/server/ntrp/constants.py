@@ -66,7 +66,7 @@ SESSION_HANDOFF_MARKER = "[Session State Handoff]"
 # Tool result offloading: large results stored externally, compact reference in context
 # Manus pattern: full representation → file, compact representation → context
 NTRP_TMP_BASE = "/tmp/ntrp"
-OFFLOAD_THRESHOLD = 30000  # chars — results above this are offloaded to temp files
+OFFLOAD_THRESHOLD = 50000  # chars — results above this are offloaded to temp files
 OFFLOAD_PREVIEW_LINES = 30  # lines kept in compact reference (structural summary, not raw chars)
 
 
