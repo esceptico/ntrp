@@ -71,4 +71,5 @@ class Tool(ABC):
             "display_name": self.display_name or name.replace("_", " ").title(),
             "description": self.description,
             "mutates": self.mutates,
+            "kind": self.kind,
         }

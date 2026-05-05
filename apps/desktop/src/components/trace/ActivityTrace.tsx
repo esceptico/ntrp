@@ -3,22 +3,13 @@ import { AnimatePresence, motion } from "motion/react";
 import { Bot, ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { RollingToken } from "./RollingToken";
-import { useStore } from "../../store";
+import { useStore, type ActivityItem } from "../../store";
+import { isAgent } from "../../lib/agent";
+
+export type { ActivityItem };
 
 const EASE = [0.32, 0.72, 0, 1] as const;
 const ROW_HEIGHT_EM = 1.55;
-
-export type ActivityItem = {
-  id: string;
-  kind: string;
-  semanticKind?: string;
-  target: string;
-  args?: string;
-  result?: string;
-  depth?: number;
-  parentToolId?: string;
-};
-
 const NEST_PX = 16;
 const MAX_NEST_DEPTH = 4; // visual cap; deeper nesting collapses to the same indent
 
@@ -159,7 +150,11 @@ export function ActivityTail({
  *  children only while the parent is still running, so finished agents
  *  don't keep their detail on screen. Parents appear before their kids so
  *  the natural document order doubles as visual hierarchy (depth-based
- *  indent comes from `ItemButton`). */
+ *  indent comes from `ItemButton`).
+ *
+ *  A `seen` set guards the recursion so a malformed tree (cycle, or a
+ *  depth-0 row that also points at a parent) can't blow the stack or emit
+ *  duplicate React keys. */
 function buildRollingList(items: ActivityItem[], max: number): ActivityItem[] {
   const childrenByParent = new Map<string, ActivityItem[]>();
   for (const it of items) {
@@ -170,21 +165,20 @@ function buildRollingList(items: ActivityItem[], max: number): ActivityItem[] {
   }
 
   const out: ActivityItem[] = [];
-  const visit = (parentId: string | null, depthFilter: 0 | null) => {
-    const pool =
-      depthFilter === 0
-        ? items.filter((it) => (it.depth ?? 0) === 0)
-        : (parentId !== null ? childrenByParent.get(parentId) ?? [] : []);
-    const slice = pool.slice(-max);
-    for (const item of slice) {
-      out.push(item);
-      const isRunning = item.result == null;
-      if (isRunning && childrenByParent.has(item.id)) {
-        visit(item.id, null);
-      }
+  const seen = new Set<string>();
+
+  const include = (item: ActivityItem) => {
+    if (seen.has(item.id)) return;
+    seen.add(item.id);
+    out.push(item);
+    if (item.result == null) {
+      const kids = childrenByParent.get(item.id);
+      if (kids) for (const k of kids.slice(-max)) include(k);
     }
   };
-  visit(null, 0);
+
+  const topLevel = items.filter((it) => (it.depth ?? 0) === 0);
+  for (const t of topLevel.slice(-max)) include(t);
   return out;
 }
 
@@ -196,7 +190,7 @@ function ItemButton({
   onOpen: (item: ActivityItem) => void;
 }) {
   const depth = Math.min(item.depth ?? 0, MAX_NEST_DEPTH);
-  if (item.semanticKind === "agent") {
+  if (isAgent(item)) {
     return <AgentButton item={item} depth={depth} onOpen={onOpen} />;
   }
   return (

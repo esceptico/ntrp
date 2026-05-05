@@ -34,12 +34,38 @@ class CompactionModelRequestMiddleware:
             prepared.messages, prepared.model, last_input_tokens,
         ))
 
+        emitted_started = False
         if should and self.emit:
             await self.emit(CompactionStartedEvent(run_id=self.run_id))
+            emitted_started = True
 
-        compacted = await self.compactor.maybe_compact(prepared.messages, prepared.model, last_input_tokens)
+        # If summarization fails (timeout, provider error) we MUST still emit
+        # Finished so the client clears its "compacting" spinner. Without
+        # this, the indicator would stay until the user switches sessions.
+        try:
+            compacted = await self.compactor.maybe_compact(prepared.messages, prepared.model, last_input_tokens)
+        except Exception:
+            if emitted_started and self.emit:
+                same = len(prepared.messages)
+                await self.emit(
+                    CompactionFinishedEvent(
+                        run_id=self.run_id,
+                        messages_before=same,
+                        messages_after=same,
+                    )
+                )
+            raise
 
         if compacted is None:
+            if emitted_started and self.emit:
+                same = len(prepared.messages)
+                await self.emit(
+                    CompactionFinishedEvent(
+                        run_id=self.run_id,
+                        messages_before=same,
+                        messages_after=same,
+                    )
+                )
             return prepared
 
         if self.emit:

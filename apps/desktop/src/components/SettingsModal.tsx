@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "motion/react";
 import { Brain, Database, Plug, Sparkles, X, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
@@ -9,10 +7,7 @@ import { ConnectionTab } from "./settings/ConnectionTab";
 import { ModelsTab } from "./settings/ModelsTab";
 import { AgentTab } from "./settings/AgentTab";
 import { ContextTab } from "./settings/ContextTab";
-
-const MODAL_BACKDROP_DURATION = 0.2;
-const MODAL_PANEL_DURATION = 0.22;
-const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
+import { PageModal } from "./PageModal";
 
 type TabId = "connection" | "models" | "agent" | "context";
 
@@ -57,32 +52,15 @@ export function SettingsModal() {
     void saveAndReconnect(draft);
   }
 
-  const root = document.querySelector("#app");
-  if (!root) return null;
-
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          key="settings"
-          className="absolute inset-0 z-50 grid place-items-center p-8 bg-[rgba(0,0,0,0.32)] backdrop-blur-md"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: MODAL_BACKDROP_DURATION, ease: MODAL_EASE }}
-          onClick={close}
-        >
-          <motion.div
-            className="w-[min(820px,calc(100vw-80px))] h-[min(620px,calc(100vh-80px))] grid grid-cols-[180px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] rounded-2xl bg-surface shadow-[var(--shadow-pop)] overflow-hidden"
-            initial={{ opacity: 0, scale: 0.96, y: 6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 6 }}
-            transition={{ duration: MODAL_PANEL_DURATION, ease: MODAL_EASE }}
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => {
-              if (e.key === "Escape" && !saving) close();
-            }}
-      >
+  return (
+    <PageModal
+      open={open}
+      onClose={close}
+      size="w-[min(820px,calc(100vw-80px))] h-[min(620px,calc(100vh-80px))]"
+      grid="grid-cols-[180px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
+      rounded="rounded-2xl"
+      disableEscape={saving}
+    >
         <aside className="border-r border-line-soft bg-surface-soft/40 flex flex-col">
           <div className="px-3 pt-4 pb-2 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint">
             Settings
@@ -153,10 +131,6 @@ export function SettingsModal() {
             {active === "context" && <ContextTab serverConfig={serverConfig} />}
           </div>
         </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>,
-    root,
+    </PageModal>
   );
 }

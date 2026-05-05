@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "motion/react";
 import { Circle, FileText, Play, Plus, Trash2, X, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
@@ -8,10 +6,7 @@ import { deleteAutomation, fetchAutomations, runAutomation, toggleAutomation } f
 import type { Automation, AutomationTrigger } from "../api";
 import { AutomationEditor, type EditorSeed } from "./automations/AutomationEditor";
 import { templatesByCategory, type AutomationTemplate } from "./automations/templates";
-
-const MODAL_BACKDROP_DURATION = 0.2;
-const MODAL_PANEL_DURATION = 0.22;
-const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
+import { PageModal } from "./PageModal";
 
 type Tab = "active" | "templates";
 
@@ -34,41 +29,16 @@ export function AutomationsModal() {
     if (automations !== null && automations.length === 0) setTab("templates");
   }, [open, automations]);
 
-  useEffect(() => {
-    if (!open || editor) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, editor, close]);
-
-  const root = document.querySelector("#app");
-  if (!root) return null;
   const activeCount = automations?.length ?? 0;
 
   return (
     <>
-      {createPortal(
-        <AnimatePresence>
-          {open && (
-            <motion.div
-              key="automations"
-              className="absolute inset-0 z-50 grid place-items-center p-8 bg-[rgba(0,0,0,0.32)] backdrop-blur-md"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: MODAL_BACKDROP_DURATION, ease: MODAL_EASE }}
-              onClick={close}
-            >
-              <motion.div
-                className="w-[min(960px,calc(100vw-80px))] h-[min(680px,calc(100vh-80px))] grid grid-rows-[auto_auto_minmax(0,1fr)] rounded-[14px] bg-surface shadow-[var(--shadow-pop)] overflow-hidden border border-line-soft"
-                initial={{ opacity: 0, scale: 0.96, y: 6 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, y: 6 }}
-                transition={{ duration: MODAL_PANEL_DURATION, ease: MODAL_EASE }}
-                onClick={(e) => e.stopPropagation()}
-              >
+      <PageModal
+        open={open}
+        onClose={close}
+        grid="grid-rows-[auto_auto_minmax(0,1fr)]"
+        disableEscape={!!editor}
+      >
                 <header className="flex items-center justify-between gap-3 px-6 pt-5 pb-4">
                   <h2 className="m-0 text-[18px] font-semibold tracking-[-0.014em] text-ink">
                     Automations
@@ -112,12 +82,7 @@ export function AutomationsModal() {
                     />
                   )}
                 </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        root,
-      )}
+      </PageModal>
       <AutomationEditor seed={editor} onClose={() => setEditor(null)} />
     </>
   );

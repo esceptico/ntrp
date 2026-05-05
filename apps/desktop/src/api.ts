@@ -15,6 +15,9 @@ export interface HistoryToolCall {
   id: string;
   name: string;
   arguments: string;
+  /** Semantic kind ("tool" | "agent") for the row renderer. Server fills
+   *  this from the tool registry at history-read time. */
+  kind?: string;
 }
 
 export interface HistoryImage {

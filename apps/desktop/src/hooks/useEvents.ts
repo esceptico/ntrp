@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { type AppConfig, type ServerEvent } from "../api";
 import { getState, setState, useStore, type ActivityItem } from "../store";
+import { previewArgs } from "../lib/format";
+import { SEMANTIC_KIND_AGENT } from "../lib/agent";
 
 /** End the active activity (if any) and clear the marker. */
 function endActivity(s: ReturnType<typeof getState>) {
@@ -175,7 +177,8 @@ function handleServerEvent(event: ServerEvent) {
       const item: ActivityItem = {
         id: event.tool_call_id,
         kind: pending.name,
-        semanticKind: pending.semanticKind === "agent" ? "agent" : undefined,
+        semanticKind:
+          pending.semanticKind === SEMANTIC_KIND_AGENT ? SEMANTIC_KIND_AGENT : undefined,
         target,
         args: pending.argsBuffer,
         depth: pending.depth || undefined,
@@ -244,24 +247,6 @@ function handleServerEvent(event: ServerEvent) {
   }
 }
 
-function previewArgs(argsJson: string): string {
-  try {
-    const parsed = JSON.parse(argsJson || "{}");
-    if (parsed && typeof parsed === "object") {
-      const entries = Object.entries(parsed as Record<string, unknown>);
-      if (entries.length === 0) return "";
-      const [k, v] = entries[0];
-      const valueStr = typeof v === "string" ? v : JSON.stringify(v);
-      const head = `${k}: ${valueStr}`;
-      return head.length > 120 ? `${head.slice(0, 117)}…` : head;
-    }
-    const flat = JSON.stringify(parsed);
-    return flat.length > 120 ? `${flat.slice(0, 117)}…` : flat;
-  } catch {
-    return argsJson.length > 120 ? `${argsJson.slice(0, 117)}…` : argsJson;
-  }
-}
-
 function headersFor(config: AppConfig): HeadersInit {
   return config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {};
 }
@@ -302,6 +287,7 @@ export function useEvents(sessionId: string | null) {
         disposed = true;
         dispose();
         if (connectionId) void desktopEvents.disconnect(connectionId);
+        resetStreamState();
       };
     }
 
@@ -345,6 +331,14 @@ export function useEvents(sessionId: string | null) {
     return () => {
       disposed = true;
       controller.abort();
+      resetStreamState();
     };
   }, [sessionId, config]);
+}
+
+/** Reset module-level buffers so a disconnect/reconnect doesn't leave
+ *  half-built tool calls or a stale stagger queue behind. */
+function resetStreamState(): void {
+  pendingToolCalls.clear();
+  nextItemRenderAt = 0;
 }

@@ -19,10 +19,23 @@ router = APIRouter(tags=["session"])
 
 
 @router.get("/session/history")
-async def get_session_history(svc: SessionService = Depends(require_session_service), session_id: str | None = None):
+async def get_session_history(
+    svc: SessionService = Depends(require_session_service),
+    runtime: Runtime = Depends(get_runtime),
+    session_id: str | None = None,
+):
     data = await svc.load(session_id)
     if not data:
         return {"messages": []}
+
+    # Tools carry a `kind` ("tool" | "agent") that the desktop renderer uses
+    # to pick a row surface. We thread it into the history payload so a
+    # reloaded session keeps the same UI as the live stream.
+    def _kind_for(name: str) -> str:
+        if not runtime.executor:
+            return "tool"
+        tool = runtime.executor.registry.get(name)
+        return getattr(tool, "kind", "tool") if tool else "tool"
 
     history = []
     for msg in data.messages:
@@ -57,6 +70,7 @@ async def get_session_history(svc: SessionService = Depends(require_session_serv
                     "id": tc["id"],
                     "name": tc["function"]["name"],
                     "arguments": tc["function"].get("arguments", "{}"),
+                    "kind": _kind_for(tc["function"]["name"]),
                 }
                 for tc in msg["tool_calls"]
             ]

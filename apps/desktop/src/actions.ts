@@ -31,6 +31,7 @@ import {
   type UpdateAutomationPayload,
 } from "./api";
 import { getState, type ImageBlock, type UiMessage } from "./store";
+import { SEMANTIC_KIND_AGENT } from "./lib/agent";
 
 function formatCall(name: string, argsJson: string): string {
   try {
@@ -132,6 +133,8 @@ export async function loadHistory(sessionId: string): Promise<void> {
           activity.items.push({
             id: tc.id,
             kind: tc.name,
+            semanticKind:
+              tc.kind === SEMANTIC_KIND_AGENT ? SEMANTIC_KIND_AGENT : undefined,
             target: formatCall(tc.name, args || "{}"),
             args,
             result: resultsById.get(tc.id),

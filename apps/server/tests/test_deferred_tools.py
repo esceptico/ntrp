@@ -89,6 +89,9 @@ async def _identity(req: ModelRequest) -> ModelRequest:
 
 
 class AlwaysCompacts:
+    def should_compact(self, messages: list[dict], model: str, last_input_tokens: int | None) -> bool:
+        return True
+
     async def maybe_compact(self, messages: list[dict], model: str, last_input_tokens: int | None) -> list[dict] | None:
         return [{"role": "system", "content": "compacted"}]
 
