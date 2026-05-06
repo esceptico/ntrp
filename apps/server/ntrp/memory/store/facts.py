@@ -111,46 +111,6 @@ _SQL_GET_FACTS_FOR_ENTITY = """
     ORDER BY f.access_count DESC, f.created_at DESC
     LIMIT ?
 """
-_SQL_LIST_SUPERSESSION_CANDIDATES = """
-    WITH refs AS (
-        SELECT
-            f.id AS fact_id,
-            f.kind,
-            f.text,
-            f.created_at,
-            er.name AS entity_name,
-            COALESCE('id:' || er.entity_id, 'name:' || lower(er.name)) AS entity_key
-        FROM facts f
-        JOIN entity_refs er ON er.fact_id = f.id
-        WHERE f.archived_at IS NULL
-          AND f.superseded_by_fact_id IS NULL
-          AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
-          AND f.kind IN ({placeholders})
-    ),
-    pairs AS (
-        SELECT
-            older.fact_id AS older_fact_id,
-            newer.fact_id AS newer_fact_id,
-            older.kind AS kind,
-            MIN(older.entity_name) AS entity_name,
-            older.created_at AS older_created_at,
-            newer.created_at AS newer_created_at
-        FROM refs older
-        JOIN refs newer
-          ON older.entity_key = newer.entity_key
-         AND older.kind = newer.kind
-         AND older.fact_id != newer.fact_id
-         AND (older.created_at < newer.created_at
-              OR (older.created_at = newer.created_at AND older.fact_id < newer.fact_id))
-        WHERE lower(older.text) != lower(newer.text)
-        GROUP BY older.fact_id, newer.fact_id
-    )
-    SELECT *
-    FROM pairs
-    ORDER BY newer_created_at DESC
-    LIMIT ?
-"""
-
 _SQL_GET_ENTITY = "SELECT * FROM entities WHERE id = ?"
 _SQL_GET_ENTITY_BY_NAME = "SELECT * FROM entities WHERE name = ? COLLATE NOCASE"
 _SQL_GET_ENTITIES_BY_IDS = "SELECT * FROM entities WHERE id IN ({placeholders})"
@@ -503,17 +463,6 @@ class FactRepository:
         count_rows = await self.read_conn.execute_fetchall(_SQL_COUNT_KIND_REVIEW)
         rows = await self.read_conn.execute_fetchall(_SQL_LIST_KIND_REVIEW, (limit, offset))
         return [Fact.model_validate(_row_dict(r)) for r in rows], count_rows[0][0]
-
-    async def list_supersession_candidates(self, kinds: Sequence[FactKind], limit: int) -> list[dict]:
-        if not kinds:
-            return []
-        placeholders = ",".join("?" * len(kinds))
-        params = tuple(kind.value for kind in kinds) + (limit,)
-        rows = await self.read_conn.execute_fetchall(
-            _SQL_LIST_SUPERSESSION_CANDIDATES.format(placeholders=placeholders),
-            params,
-        )
-        return [_row_dict(row) for row in rows]
 
     async def list_in_time_window(self, start: datetime, end: datetime) -> list[Fact]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_TIME_WINDOW, (start.isoformat(), end.isoformat()))

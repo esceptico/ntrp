@@ -45,13 +45,6 @@ from ntrp.memory.store.observations import ObservationRepository
 
 _logger = get_logger(__name__)
 
-CORE_FACT_KINDS = (
-    FactKind.IDENTITY,
-    FactKind.PREFERENCE,
-    FactKind.RELATIONSHIP,
-    FactKind.CONSTRAINT,
-)
-
 
 class RememberFactResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
