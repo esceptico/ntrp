@@ -4,6 +4,12 @@ import { Search } from "lucide-react";
 import { useStore } from "../../store";
 import { type Fact, type MemoryRecallInspectResult, type Observation, inspectMemoryRecallApi } from "../../api";
 import { formatRelativePast } from "../../lib/format";
+import {
+  factStatusLabel,
+  factStatusTone,
+  observationEvidenceLabel,
+  observationEvidenceTone,
+} from "../../lib/memoryTrust";
 import { ErrorPill, GhostBtn, Pill } from "./shared";
 
 export function RecallPane({
@@ -81,7 +87,15 @@ export function RecallPane({
               <SourceList
                 title="Patterns"
                 items={result.observations}
-                render={(obs) => <PatternSource key={obs.id} observation={obs} onOpen={() => onOpenPattern?.(obs)} />}
+                render={(obs) => (
+                  <PatternSource
+                    key={obs.id}
+                    observation={obs}
+                    sources={result.bundled_sources[String(obs.id)] ?? []}
+                    onOpen={() => onOpenPattern?.(obs)}
+                    onOpenFact={onOpenFact}
+                  />
+                )}
               />
               <div className="mt-5">
                 <SourceList
@@ -124,6 +138,7 @@ function FactSource({ fact, onOpen }: { fact: Fact; onOpen?: () => void }) {
     <li className="rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2">
       <div className="mb-1 flex items-center gap-1.5">
         <Pill>{fact.kind}</Pill>
+        <Pill tone={factStatusTone(fact.status)}>{factStatusLabel(fact.status)}</Pill>
         <span className="text-[11px] text-faint">{fact.access_count}× · {formatRelativePast(fact.last_accessed_at)}</span>
       </div>
       <button type="button" onClick={onOpen} className="text-left text-[12.5px] leading-snug text-ink-soft hover:text-ink">
@@ -133,15 +148,50 @@ function FactSource({ fact, onOpen }: { fact: Fact; onOpen?: () => void }) {
   );
 }
 
-function PatternSource({ observation, onOpen }: { observation: Observation; onOpen?: () => void }) {
+function PatternSource({
+  observation,
+  sources,
+  onOpen,
+  onOpenFact,
+}: {
+  observation: Observation;
+  sources: Fact[];
+  onOpen?: () => void;
+  onOpenFact?: (fact: Fact) => void;
+}) {
   return (
     <li className="rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2">
-      <div className="mb-1 text-[11px] text-faint">
-        {observation.evidence_count} sources · {observation.access_count}× · {formatRelativePast(observation.last_accessed_at)}
+      <div className="mb-1 flex flex-wrap items-center gap-1.5">
+        <Pill tone={observationEvidenceTone(observation.evidence_level)}>
+          {observationEvidenceLabel(observation.evidence_level)}
+        </Pill>
+        <span className="text-[11px] text-faint">
+          {observation.evidence_count} sources · {observation.access_count}× · {formatRelativePast(observation.last_accessed_at)}
+        </span>
       </div>
       <button type="button" onClick={onOpen} className="text-left text-[12.5px] leading-snug text-ink-soft hover:text-ink">
         {observation.summary}
       </button>
+      {sources.length > 0 && (
+        <ul className="mt-2 flex list-none flex-col gap-1 border-t border-line-soft pt-2">
+          {sources.slice(0, 3).map((fact) => (
+            <li key={fact.id} className="min-w-0">
+              <button
+                type="button"
+                onClick={() => onOpenFact?.(fact)}
+                className="block w-full text-left text-[11.5px] leading-snug text-faint hover:text-ink-soft"
+              >
+                <span className="uppercase tracking-[0.06em]">{fact.kind}</span>
+                <span aria-hidden> · </span>
+                <span>{fact.text}</span>
+              </button>
+            </li>
+          ))}
+          {sources.length > 3 && (
+            <li className="text-[11px] text-faint">{sources.length - 3} more sources in pattern detail</li>
+          )}
+        </ul>
+      )}
     </li>
   );
 }

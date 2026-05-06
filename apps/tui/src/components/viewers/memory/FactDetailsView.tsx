@@ -79,13 +79,7 @@ export function FactDetailsView({
   const lifetimeLabel = fact.expires_at
     ? `${fact.lifetime} until ${formatRelativeTime(fact.expires_at)}`
     : fact.lifetime;
-  const expired = fact.expires_at ? new Date(fact.expires_at).getTime() <= Date.now() : false;
-  const stateLabel =
-    fact.archived_at ? "archived" :
-    fact.superseded_by_fact_id ? "superseded" :
-    expired ? "expired" :
-    fact.pinned_at ? "pinned" :
-    "active";
+  const stateLabel = fact.status;
 
   if (confirmDelete) {
     return <DeleteConfirmation width={width} height={height} message={`Delete this fact? This will remove ${details.entities.length} entities, ${details.linked_facts.length} links.`} />;

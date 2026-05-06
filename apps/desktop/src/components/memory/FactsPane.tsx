@@ -11,6 +11,7 @@ import {
 } from "../../api";
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { formatAbs, formatRelativePast } from "../../lib/format";
+import { factStatusLabel, factStatusTone } from "../../lib/memoryTrust";
 import {
   DangerBtn,
   DetailMeta,
@@ -21,6 +22,7 @@ import {
   ListColumn,
   MetaGrid,
   PaneShell,
+  Pill,
   PrimaryBtn,
   SearchInput,
   Sep,
@@ -148,6 +150,8 @@ function FactRow({
           <div className="mt-1 flex items-center gap-2 text-[11px] text-faint">
             <span className="uppercase tracking-[0.06em]">{fact.kind}</span>
             <span aria-hidden>·</span>
+            <span>{factStatusLabel(fact.status)}</span>
+            <span aria-hidden>·</span>
             <span className="tabular-nums">{formatRelativePast(fact.last_accessed_at)}</span>
             {fact.access_count > 0 && (
               <>
@@ -205,6 +209,7 @@ function FactDetail({
     <DetailShell
       header={
         <DetailMeta>
+          <Pill tone={factStatusTone(fact.status)}>{factStatusLabel(fact.status)}</Pill>
           <span className="uppercase tracking-[0.06em]">{fact.kind}</span>
           <Sep />
           <span>salience {fact.salience.toFixed(2)}</span>
@@ -252,11 +257,15 @@ function FactDetail({
           <MetaGrid
             rows={[
               { label: "Created", value: formatAbs(fact.created_at) },
+              fact.happened_at ? { label: "Happened", value: formatAbs(fact.happened_at) } : null,
               { label: "Last accessed", value: formatAbs(fact.last_accessed_at) },
               { label: "Access count", value: String(fact.access_count) },
               { label: "Source", value: fact.source_type },
               fact.source_ref ? { label: "Source ref", value: fact.source_ref, mono: true } : null,
               fact.expires_at ? { label: "Expires", value: formatAbs(fact.expires_at) } : null,
+              fact.superseded_by_fact_id
+                ? { label: "Superseded by", value: `fact #${fact.superseded_by_fact_id}` }
+                : null,
             ]}
           />
         </>

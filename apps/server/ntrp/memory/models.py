@@ -42,6 +42,22 @@ class FactLifetime(StrEnum):
     TEMPORARY = "temporary"
 
 
+class FactStatus(StrEnum):
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+    SUPERSEDED = "superseded"
+    EXPIRED = "expired"
+    TEMPORARY = "temporary"
+    PINNED = "pinned"
+
+
+class ObservationEvidenceLevel(StrEnum):
+    UNSUPPORTED = "unsupported"
+    SINGLE_FACT_SEED = "single_fact_seed"
+    MULTI_FACT = "multi_fact"
+    TEMPORAL_PATTERN = "temporal_pattern"
+
+
 def _parse_datetime(value: Any) -> datetime | None:
     if value is None:
         return None
@@ -127,6 +143,16 @@ class Observation(_MemoryModel):
     def evidence_count(self) -> int:
         return len(self.source_fact_ids)
 
+    @property
+    def evidence_level(self) -> ObservationEvidenceLevel:
+        if self.evidence_count == 0:
+            return ObservationEvidenceLevel.UNSUPPORTED
+        if self.created_by == "temporal":
+            return ObservationEvidenceLevel.TEMPORAL_PATTERN
+        if self.evidence_count == 1:
+            return ObservationEvidenceLevel.SINGLE_FACT_SEED
+        return ObservationEvidenceLevel.MULTI_FACT
+
     @field_validator("created_at", "updated_at", "last_accessed_at", "archived_at", mode="before")
     @classmethod
     def _parse_dt(cls, v: Any) -> datetime | None:
@@ -153,6 +179,20 @@ class Fact(_MemoryModel):
     pinned_at: datetime | None = None
     superseded_by_fact_id: int | None = None
     entity_refs: list["EntityRef"] = []
+
+    @property
+    def status(self) -> FactStatus:
+        if self.archived_at is not None:
+            return FactStatus.ARCHIVED
+        if self.superseded_by_fact_id is not None:
+            return FactStatus.SUPERSEDED
+        if self.expires_at is not None and self.expires_at <= datetime.now(UTC):
+            return FactStatus.EXPIRED
+        if self.lifetime == FactLifetime.TEMPORARY:
+            return FactStatus.TEMPORARY
+        if self.pinned_at is not None:
+            return FactStatus.PINNED
+        return FactStatus.ACTIVE
 
     @model_validator(mode="before")
     @classmethod

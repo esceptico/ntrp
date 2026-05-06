@@ -319,6 +319,7 @@ export type FactKind =
 
 export type FactLifetime = "durable" | "temporary";
 export type FactStatus = "active" | "archived" | "superseded" | "expired" | "temporary" | "pinned" | "all";
+export type FactTrustStatus = Exclude<FactStatus, "all">;
 
 export interface Fact {
   id: number;
@@ -338,7 +339,10 @@ export interface Fact {
   expires_at: string | null;
   pinned_at: string | null;
   superseded_by_fact_id: number | null;
+  status: FactTrustStatus;
 }
+
+export type ObservationEvidenceLevel = "unsupported" | "single_fact_seed" | "multi_fact" | "temporal_pattern";
 
 export interface Observation {
   id: number;
@@ -351,6 +355,7 @@ export interface Observation {
   archived_at: string | null;
   created_by: string | null;
   policy_version: string | null;
+  evidence_level: ObservationEvidenceLevel;
 }
 
 export interface FactListFilters {

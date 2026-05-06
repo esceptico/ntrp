@@ -19,6 +19,7 @@ export interface Fact {
   expires_at: string | null;
   pinned_at: string | null;
   superseded_by_fact_id: number | null;
+  status: FactTrustStatus;
 }
 
 export type FactKind =
@@ -36,6 +37,7 @@ export type FactKind =
 export type FactLifetime = "durable" | "temporary";
 export type SourceType = "chat" | "explicit";
 export type FactStatus = "active" | "archived" | "superseded" | "expired" | "temporary" | "pinned" | "all";
+export type FactTrustStatus = Exclude<FactStatus, "all">;
 export type FactAccessed = "never" | "used";
 
 export interface FactFilters {
@@ -84,7 +86,10 @@ export interface Observation {
   archived_at: string | null;
   created_by: string;
   policy_version: string;
+  evidence_level: ObservationEvidenceLevel;
 }
+
+export type ObservationEvidenceLevel = "unsupported" | "single_fact_seed" | "multi_fact" | "temporal_pattern";
 
 export type ObservationStatus = "active" | "archived" | "all";
 export type ObservationAccessed = "never" | "used";

@@ -72,6 +72,7 @@ export function ObservationDetailsView({
   const textWidth = width - 2;
   const createdBy = observation.created_by || "legacy";
   const policyVersion = observation.policy_version || "legacy";
+  const evidenceLevel = observation.evidence_level.replace(/_/g, " ");
 
   if (confirmDelete) {
     return <DeleteConfirmation width={width} height={height} message={`Delete this pattern? This will remove the pattern and ${details.supporting_facts.length} supporting fact references.`} />;
@@ -126,6 +127,8 @@ export function ObservationDetailsView({
         <text>
           <span fg={accentValue}>pattern</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
+          <span fg={labelColor}>{evidenceLevel}</span>
+          <span fg={colors.text.disabled}> {"\u2502"} </span>
           <span fg={labelColor}>support {observation.evidence_count} facts</span>
           <span fg={colors.text.disabled}> {"\u2502"} </span>
           <span fg={labelColor}>used {observation.access_count}</span>
@@ -179,14 +182,7 @@ export function ObservationDetailsView({
             selectedIndex={factsIndex}
             visibleLines={Math.min(supporting_facts.length, 8)}
             renderItem={(fact, _idx, selected) => {
-              const status = fact.archived_at
-                ? "archived"
-                : fact.superseded_by_fact_id
-                  ? "superseded"
-                  : fact.expires_at && new Date(fact.expires_at) <= new Date()
-                    ? "expired"
-                    : "active";
-              const meta = `${fact.kind} · ${fact.lifetime} · ${fact.source_type} · ${status}`;
+              const meta = `${fact.kind} · ${fact.lifetime} · ${fact.source_type} · ${fact.status}`;
               const bodyWidth = Math.max(10, textWidth - meta.length - 7);
               return (
                 <text>

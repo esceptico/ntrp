@@ -11,7 +11,7 @@ from httpx import ASGITransport, AsyncClient
 
 from ntrp.config import Config
 from ntrp.context.models import SessionState
-from ntrp.memory.models import FactContext, FactKind, SourceType
+from ntrp.memory.models import FactContext, FactKind, FactLifetime, SourceType
 from ntrp.server.app import app
 from ntrp.server.runtime import Runtime
 from ntrp.settings import hash_api_key
@@ -269,6 +269,49 @@ class TestFactCRUD:
         assert archived.status_code == 200
         assert hidden.id in {fact["id"] for fact in archived.json()["facts"]}
 
+    @pytest.mark.asyncio
+    async def test_fact_payload_includes_computed_trust_status(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        repo = test_runtime.memory.facts
+        now = datetime.now(UTC)
+        active = await repo.create("Active fact", SourceType.EXPLICIT)
+        pinned = await repo.create("Pinned fact", SourceType.EXPLICIT, pinned_at=now)
+        temporary = await repo.create(
+            "Temporary fact",
+            SourceType.EXPLICIT,
+            lifetime=FactLifetime.TEMPORARY,
+            expires_at=now + timedelta(days=1),
+        )
+        expired = await repo.create(
+            "Expired fact",
+            SourceType.EXPLICIT,
+            lifetime=FactLifetime.TEMPORARY,
+            expires_at=now - timedelta(days=1),
+        )
+        current = await repo.create("Current replacement fact", SourceType.EXPLICIT)
+        superseded = await repo.create(
+            "Superseded fact",
+            SourceType.EXPLICIT,
+            superseded_by_fact_id=current.id,
+        )
+        archived = await repo.create("Archived fact", SourceType.EXPLICIT)
+        await repo.archive_batch([archived.id])
+        await test_runtime.memory.db.conn.commit()
+
+        response = await test_client.get("/facts", params={"status": "all", "limit": 20})
+
+        assert response.status_code == 200
+        statuses = {fact["id"]: fact["status"] for fact in response.json()["facts"]}
+        assert statuses[active.id] == "active"
+        assert statuses[pinned.id] == "pinned"
+        assert statuses[temporary.id] == "temporary"
+        assert statuses[expired.id] == "expired"
+        assert statuses[superseded.id] == "superseded"
+        assert statuses[archived.id] == "archived"
+
 
 class TestFactMetadataAPI:
     @pytest.mark.asyncio
@@ -408,6 +451,47 @@ class TestObservationCRUD:
         assert data["missing_source_fact_ids"] == []
         support = data["supporting_facts"][0]
         assert {"id", "text", "kind", "source_type", "archived_at", "superseded_by_fact_id"} <= set(support)
+
+    @pytest.mark.asyncio
+    async def test_observation_payload_includes_evidence_level(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        memory = test_runtime.memory
+        source_a = await memory.facts.create("First source fact", SourceType.EXPLICIT)
+        source_b = await memory.facts.create("Second source fact", SourceType.EXPLICIT)
+        unsupported = await memory.observations.create(
+            summary="Unsupported pattern",
+            embedding=mock_embedding("unsupported"),
+        )
+        single = await memory.observations.create(
+            summary="Single source pattern",
+            embedding=mock_embedding("single"),
+            source_fact_id=source_a.id,
+        )
+        multi = await memory.observations.create(
+            summary="Multi source pattern",
+            embedding=mock_embedding("multi"),
+            source_fact_id=source_a.id,
+        )
+        await memory.observations.add_source_facts(multi.id, [source_b.id])
+        temporal = await memory.observations.create(
+            summary="Temporal pattern",
+            embedding=mock_embedding("temporal"),
+            source_fact_id=source_a.id,
+            created_by="temporal",
+        )
+        await memory.db.conn.commit()
+
+        response = await test_client.get("/observations", params={"status": "all", "limit": 20})
+
+        assert response.status_code == 200
+        levels = {obs["id"]: obs["evidence_level"] for obs in response.json()["observations"]}
+        assert levels[unsupported.id] == "unsupported"
+        assert levels[single.id] == "single_fact_seed"
+        assert levels[multi.id] == "multi_fact"
+        assert levels[temporal.id] == "temporal_pattern"
 
     @pytest.mark.asyncio
     async def test_get_observation_details_reports_missing_provenance(

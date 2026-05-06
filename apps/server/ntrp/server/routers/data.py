@@ -47,6 +47,7 @@ def _fact_payload(fact: Fact) -> dict:
         "expires_at": fact.expires_at.isoformat() if fact.expires_at else None,
         "pinned_at": fact.pinned_at.isoformat() if fact.pinned_at else None,
         "superseded_by_fact_id": fact.superseded_by_fact_id,
+        "status": fact.status,
     }
 
 
@@ -62,6 +63,7 @@ def _observation_payload(observation: Observation) -> dict:
         "archived_at": observation.archived_at.isoformat() if observation.archived_at else None,
         "created_by": observation.created_by,
         "policy_version": observation.policy_version,
+        "evidence_level": observation.evidence_level,
     }
 
 

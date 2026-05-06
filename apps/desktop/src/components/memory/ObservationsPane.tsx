@@ -14,6 +14,12 @@ import {
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { formatAbs, formatRelativePast } from "../../lib/format";
 import {
+  factStatusLabel,
+  factStatusTone,
+  observationEvidenceLabel,
+  observationEvidenceTone,
+} from "../../lib/memoryTrust";
+import {
   DangerBtn,
   DetailMeta,
   DetailPlaceholder,
@@ -22,6 +28,7 @@ import {
   GhostBtn,
   ListColumn,
   PaneShell,
+  Pill,
   PrimaryBtn,
   SearchInput,
   Sep,
@@ -146,6 +153,9 @@ function ObservationRow({
     >
       <div className="text-[12.5px] leading-snug line-clamp-2">{obs.summary}</div>
       <div className="mt-1 flex items-center gap-2 text-[11px] text-faint">
+        <Pill tone={observationEvidenceTone(obs.evidence_level)}>
+          {observationEvidenceLabel(obs.evidence_level)}
+        </Pill>
         <span className="tabular-nums">
           {obs.evidence_count} {obs.evidence_count === 1 ? "source" : "sources"}
         </span>
@@ -201,6 +211,9 @@ function ObservationView({
     <DetailShell
       header={
         <DetailMeta>
+          <Pill tone={observationEvidenceTone(detail.observation.evidence_level)}>
+            {observationEvidenceLabel(detail.observation.evidence_level)}
+          </Pill>
           <span>
             {detail.observation.evidence_count}{" "}
             {detail.observation.evidence_count === 1 ? "source" : "sources"}
@@ -286,13 +299,18 @@ function SupportingFacts({ facts, missing, onOpenFact }: { facts: Fact[]; missin
             <span className="mt-[2px] text-[10px] uppercase tracking-[0.06em] text-faint shrink-0 w-[80px]">
               {f.kind}
             </span>
-            <button
-              type="button"
-              onClick={() => onOpenFact?.(f)}
-              className="min-w-0 text-left text-[12.5px] leading-snug text-ink-soft hover:text-ink"
-            >
-              {f.text}
-            </button>
+            <div className="min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => onOpenFact?.(f)}
+                className="min-w-0 text-left text-[12.5px] leading-snug text-ink-soft hover:text-ink"
+              >
+                {f.text}
+              </button>
+              <div className="mt-1">
+                <Pill tone={factStatusTone(f.status)}>{factStatusLabel(f.status)}</Pill>
+              </div>
+            </div>
           </li>
         ))}
         {missing.map((id) => (
