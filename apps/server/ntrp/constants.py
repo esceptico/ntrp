@@ -1,9 +1,6 @@
 # --- Content Truncation Limits ---
 
-CONTENT_PREVIEW_LIMIT = 500
-CONTENT_READ_LIMIT = 10000
-EMBEDDING_TEXT_LIMIT = 8000
-BASH_OUTPUT_LIMIT = 5000
+EMBEDDING_TEXT_LIMIT = 8000  # for embedder input only — see embedder.py
 DIFF_PREVIEW_LINES = 20
 
 
@@ -18,7 +15,7 @@ DEFAULT_LIST_LIMIT = 50
 AGENT_MAX_DEPTH = 8
 AGENT_MAX_ITERATIONS = None
 
-BASH_TIMEOUT = None
+BASH_TIMEOUT = 120  # seconds — safety brake against runaway commands
 
 RESEARCH_TIMEOUT = None
 SUBAGENT_DEFAULT_TIMEOUT = None
@@ -63,8 +60,14 @@ MAX_MESSAGES = 120  # message count ceiling — compress regardless of tokens
 COMPRESSION_KEEP_RATIO = 0.2  # the most recent % of messages to keep uncompressed
 SESSION_HANDOFF_MARKER = "[Session State Handoff]"
 
-# Tool result offloading: large results stored externally, compact reference in context
-# Manus pattern: full representation → file, compact representation → context
+# Tool result offloading: large results stored externally, compact reference in context.
+# Manus pattern: full representation → file, compact representation → context.
+#
+# This is the ONE knob that gates tool-result truncation. Tools must not
+# trim their own output without leaving a continuation path — any such
+# in-tool truncation is a bug. NtrpToolExecutor._maybe_offload moves the
+# full content to NTRP_TMP_BASE/<session>/results/<tool>_<n>.txt and
+# returns a head preview + file path so the agent can grep/read it.
 NTRP_TMP_BASE = "/tmp/ntrp"
 OFFLOAD_THRESHOLD = 50000  # chars — results above this are offloaded to temp files
 OFFLOAD_PREVIEW_LINES = 30  # lines kept in compact reference (structural summary, not raw chars)

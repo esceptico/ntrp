@@ -13,7 +13,6 @@ from typing import Any
 import markdown
 from googleapiclient.discovery import build
 
-from ntrp.constants import CONTENT_READ_LIMIT
 from ntrp.core.prompts import env
 from ntrp.integrations.google_auth.auth import (
     SCOPES_ALL,
@@ -404,7 +403,7 @@ class GmailSource:
         content = plain_text.strip() if plain_text.strip() else html_to_plain(html_text)
         if not content:
             content = raw.get("snippet", "")
-        return self._build_raw_item(raw, content[:CONTENT_READ_LIMIT])
+        return self._build_raw_item(raw, content)
 
     def read(self, source_id: str) -> str | None:
         msg = self._fetch_message_full(source_id)

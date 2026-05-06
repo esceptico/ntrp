@@ -4,7 +4,7 @@ import subprocess
 
 from pydantic import BaseModel, Field
 
-from ntrp.constants import BASH_OUTPUT_LIMIT, BASH_TIMEOUT
+from ntrp.constants import BASH_TIMEOUT
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
 from ntrp.tools.core.types import ApprovalInfo
@@ -138,9 +138,6 @@ def execute_bash(command: str, working_dir: str | None = None, timeout: int = BA
 
         if result.returncode != 0:
             output += f"\n[exit code: {result.returncode}]"
-
-        if len(output) > BASH_OUTPUT_LIMIT:
-            output = output[:BASH_OUTPUT_LIMIT] + "\n... [truncated]"
 
         return output if output else "(no output)"
 

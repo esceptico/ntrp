@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ntrp.constants import EMBEDDING_TEXT_LIMIT, WEB_SEARCH_MAX_RESULTS
+from ntrp.constants import WEB_SEARCH_MAX_RESULTS
 from ntrp.integrations.web.types import WebClient
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
@@ -99,8 +99,6 @@ async def web_fetch(execution: ToolExecution, args: WebFetchInput) -> ToolResult
                 output.append(f"Author: {r.author}")
             output.append("")
             if text:
-                if len(text) > EMBEDDING_TEXT_LIMIT:
-                    text = text[:EMBEDDING_TEXT_LIMIT] + "\n\n... [truncated]"
                 output.append(text)
             return ToolResult(content="\n".join(output), preview=f"Fetched {lines} lines")
         return ToolResult(content="No content fetched. Page may be empty or require JavaScript.", preview="Empty")

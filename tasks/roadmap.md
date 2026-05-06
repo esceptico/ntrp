@@ -8,6 +8,15 @@ Out of scope for now (per user, 2026-05-05): notifications panel, tools/skills b
 
 ---
 
+## Reliability bugs (fix now, in order)
+
+These are the four issues landed 2026-05-06 — fix one at a time with full review.
+
+1. [x] **Tool result truncation must always offer a continuation path.** Audited; three offending sites removed (`bash.py`, `read_url`, gmail `read_email`). `OFFLOAD_THRESHOLD = 50000` is the single knob; tools no longer trim their own output. `BASH_TIMEOUT` set to 120s as a runaway-command brake. Open follow-up: bash captures full stdout in memory before offload writes it; streaming subprocess → temp file would handle multi-GB output without an RSS spike, but no current evidence we need it.
+2. [ ] **Sub-agent failure must salvage prior work.** Research / spawn currently throws away ~all gathered tool results when the inner loop hits a fatal error (LLM API error, timeout). Add: catch in `tools/research.py` → run a cheap synthesis pass over `child_messages` so far → return the summary with a `[partial — errored: …]` marker. Plus: in the agent loop, on LLM-API errors caused by a single oversized tool result, clamp the offending message and retry once before bailing.
+3. [ ] **Tool calls invisible after research returns.** Repro and debug: likely candidates are `TurnGroup` auto-collapse with missing `durationMs` (no header → can't expand) or research-emitted events landing in a different activity bucket that gets hidden. Need DOM/store inspection to confirm before fixing.
+4. [ ] **Cross-session streaming durability.** Step-boundary checkpointing leaves visible gaps when a step is long (research). Sidebar dot is 2s-laggy. Consider: per-text-message-end mini-checkpoints, push-based active-run channel instead of polling, optional Redis pub/sub when the user opts into multi-instance / network deploys. Goal: feel bulletproof — no visible "lost progress" on session switch or app reload.
+
 ## Server gaps with no UI
 
 These are server endpoints that already work; just need a desktop surface.
