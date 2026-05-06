@@ -29,6 +29,87 @@ _logger = get_logger(__name__)
 
 _REASONING_EVENTS = (ReasoningBlock, ReasoningStarted, ReasoningDelta, ReasoningEnded)
 
+# Salvage tunables — used when the inner agent's LLM call fails and we
+# try to summarize whatever tool results were gathered before the error.
+_SALVAGE_TOOL_CHAR_LIMIT = 4000
+_SALVAGE_MAX_TOKENS = 2000
+_SALVAGE_TAIL_RESULTS = 20
+
+
+def _clamp_for_salvage(msg: dict) -> dict:
+    """Defensive clamp on tool/assistant content before re-sending to the
+    model for the salvage summary — the original failure may have been
+    triggered by an oversized tool result, and we don't want to fail the
+    salvage pass for the same reason. Handles both plain-string content
+    and the list-of-blocks shape that providers use for tool results
+    with images or structured payloads."""
+    if msg.get("role") not in ("tool", "assistant"):
+        return msg
+    content = msg.get("content")
+    if isinstance(content, str):
+        if len(content) <= _SALVAGE_TOOL_CHAR_LIMIT:
+            return msg
+        head = content[: _SALVAGE_TOOL_CHAR_LIMIT - 60]
+        return {**msg, "content": head + "\n\n[clamped for salvage summary]"}
+    if isinstance(content, list):
+        # Flatten to a string so we never re-emit huge multi-part blocks
+        # to the salvage LLM. Crude but safe.
+        flat = "\n".join(
+            block.get("text", "") if isinstance(block, dict) else str(block) for block in content
+        )
+        if len(flat) <= _SALVAGE_TOOL_CHAR_LIMIT:
+            return {**msg, "content": flat}
+        head = flat[: _SALVAGE_TOOL_CHAR_LIMIT - 60]
+        return {**msg, "content": head + "\n\n[clamped for salvage summary]"}
+    return msg
+
+
+async def _salvage_summary(model: str, child_messages: list[dict], error: str, task: str) -> str:
+    """Ask the model to summarize what it found before erroring. Returns
+    "" if even this attempt fails (caller falls back to deterministic)."""
+    salvage_messages = [_clamp_for_salvage(m) for m in child_messages]
+    salvage_messages.append(
+        {
+            "role": Role.USER,
+            "content": (
+                f"Your previous step errored: {error}\n\n"
+                f"Original task: {task}\n\n"
+                "Without making any more tool calls, summarize the partial findings "
+                "from the tool results above. Be honest about gaps. The parent agent "
+                "will use this as a partial answer, so make every fact recoverable."
+            ),
+        }
+    )
+    try:
+        response = await llm_client.complete(
+            model=model,
+            messages=salvage_messages,
+            temperature=0.2,
+            max_tokens=_SALVAGE_MAX_TOKENS,
+        )
+        return (response.choices[0].message.content or "").strip()
+    except Exception as e:
+        _logger.warning("Salvage summary call failed: %s", e)
+        return ""
+
+
+def _deterministic_salvage(child_messages: list[dict], error: str) -> str:
+    """Last-resort fallback when the LLM-based salvage also fails: emit a
+    flat list of the tail tool results so the parent at least sees raw
+    evidence of what was gathered."""
+    tool_results: list[str] = []
+    for msg in child_messages:
+        if msg.get("role") != "tool":
+            continue
+        content = (msg.get("content") or "")[:300]
+        tool_results.append(f"- {content}")
+    body = "\n".join(tool_results[-_SALVAGE_TAIL_RESULTS:])
+    return (
+        f"[partial — sub-agent errored: {error}]\n"
+        f"Last {min(len(tool_results), _SALVAGE_TAIL_RESULTS)} tool results before "
+        f"the error:\n{body or '(none)'}"
+    )
+
 
 def _create_session_state(calling_ctx: ToolContext, isolation: IsolationLevel) -> SessionState:
     if isolation == IsolationLevel.SHARED:
@@ -143,19 +224,43 @@ def create_spawn_fn(
 
         async def _stream_to(to_events) -> str:
             text = ""
-            async for event in sub_agent.stream(child_messages):
-                if isinstance(event, Result):
-                    text = event.text
-                elif parent_emit:
-                    for out in to_events(event):
-                        await parent_emit(out)
-            return text
+            try:
+                async for event in sub_agent.stream(child_messages):
+                    if isinstance(event, Result):
+                        text = event.text
+                    elif parent_emit:
+                        for out in to_events(event):
+                            await parent_emit(out)
+                return text
+            except asyncio.CancelledError:
+                # User-initiated cancel — don't try to salvage, just propagate.
+                raise
+            except Exception as exc:
+                # Fatal LLM/transport error mid-run. Whatever the sub-agent
+                # already gathered in `child_messages` is real work we paid
+                # for; synthesize a summary instead of returning bare error.
+                _logger.warning(
+                    "Sub-agent failed mid-run after %d messages, salvaging: %s",
+                    len(child_messages),
+                    exc,
+                )
+                summary = await _salvage_summary(child_model, child_messages, str(exc), task)
+                if summary:
+                    return f"[partial — sub-agent errored: {exc}]\n\n{summary}"
+                return _deterministic_salvage(child_messages, str(exc))
 
         if not background:
             try:
                 return await asyncio.wait_for(_stream_to(_foreground_child_events), timeout=timeout)
             except TimeoutError:
-                return f"Error: Sub-agent timed out after {timeout}s"
+                # Same idea on timeout — try to salvage what we collected.
+                _logger.warning("Sub-agent timed out after %ss, salvaging", timeout)
+                summary = await _salvage_summary(
+                    child_model, child_messages, f"timed out after {timeout}s", task
+                )
+                if summary:
+                    return f"[partial — sub-agent timed out after {timeout}s]\n\n{summary}"
+                return _deterministic_salvage(child_messages, f"timed out after {timeout}s")
 
         registry = calling_ctx.background_tasks
         task_id = registry.generate_id()
@@ -177,9 +282,26 @@ def create_spawn_fn(
             except asyncio.CancelledError:
                 return
             except TimeoutError:
-                result = f"Error: Background agent timed out after {timeout}s"
+                _logger.warning("Background task %s timed out, salvaging", task_id)
+                # Belt-and-suspenders: if the salvage call itself raises
+                # (e.g. cancelled mid-await), still emit the deterministic
+                # fallback so deliver_result always runs.
+                try:
+                    summary = await _salvage_summary(
+                        child_model, child_messages, f"timed out after {timeout}s", task
+                    )
+                except Exception as salvage_exc:
+                    _logger.warning("Background salvage failed: %s", salvage_exc)
+                    summary = ""
+                result = (
+                    f"[partial — background agent timed out after {timeout}s]\n\n{summary}"
+                    if summary
+                    else _deterministic_salvage(child_messages, f"timed out after {timeout}s")
+                )
                 status = "failed"
             except Exception as e:
+                # _stream_to handles its own salvage internally, so we only
+                # land here for exceptions outside the stream loop itself.
                 result = f"Error: {e}"
                 status = "failed"
                 _logger.warning("Background task %s failed: %s", task_id, e)
