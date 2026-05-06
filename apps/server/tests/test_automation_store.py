@@ -143,10 +143,13 @@ async def test_seed_builtins_keeps_memory_maintenance_non_destructive(automation
         BUILTIN_MEMORY_HEALTH_ID,
     } <= set(automations)
     assert automations[BUILTIN_CONSOLIDATION_ID].handler == "consolidation"
+    assert automations[BUILTIN_CONSOLIDATION_ID].enabled is True
     assert automations[BUILTIN_MEMORY_MAINTENANCE_ID].handler == "memory_maintenance"
+    assert automations[BUILTIN_MEMORY_MAINTENANCE_ID].enabled is False
     assert automations[BUILTIN_MEMORY_MAINTENANCE_ID].writable is False
     assert "without applying changes" in automations[BUILTIN_MEMORY_MAINTENANCE_ID].description
     assert automations[BUILTIN_MEMORY_HEALTH_ID].handler == "memory_health"
+    assert automations[BUILTIN_MEMORY_HEALTH_ID].enabled is False
     assert automations[BUILTIN_MEMORY_HEALTH_ID].writable is False
     assert all(automation.handler != "learning_review" for automation in automations.values())
 
@@ -166,6 +169,7 @@ async def test_seed_builtins_updates_legacy_memory_maintenance_to_review_pass(au
     automation = await automation_store.get(BUILTIN_MEMORY_MAINTENANCE_ID)
     assert automation is not None
     assert automation.handler == "memory_maintenance"
+    assert automation.enabled is True
     assert automation.writable is False
     assert "without applying changes" in automation.description
 

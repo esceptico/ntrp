@@ -29,6 +29,7 @@ class BuiltinSpec:
     description: str
     triggers: list[Trigger]
     handler: str
+    enabled: bool = True
     writable: bool = False
     cooldown_minutes: int | None = None
 
@@ -67,6 +68,7 @@ BUILTINS = [
             IdleTrigger(idle_minutes=DEFAULT_CONSOLIDATION_IDLE_MINUTES),
         ],
         handler="memory_maintenance",
+        enabled=False,
         cooldown_minutes=DEFAULT_MEMORY_MAINTENANCE_COOLDOWN_MINUTES,
         writable=False,
     ),
@@ -78,6 +80,7 @@ BUILTINS = [
             TimeTrigger(at="04:00", days="daily"),
         ],
         handler="memory_health",
+        enabled=False,
         cooldown_minutes=DEFAULT_MEMORY_HEALTH_COOLDOWN_MINUTES,
         writable=False,
     ),
@@ -117,7 +120,7 @@ async def seed_builtins(store: AutomationStore) -> None:
             description=spec.description,
             model=None,
             triggers=spec.triggers,
-            enabled=True,
+            enabled=spec.enabled,
             created_at=datetime.now(UTC),
             next_run_at=None,
             last_run_at=None,
