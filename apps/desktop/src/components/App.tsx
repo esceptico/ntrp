@@ -12,6 +12,7 @@ import { ToolViewer } from "./ToolViewer";
 import { Demo as TraceDemo } from "./trace/Demo";
 import { useStore } from "../store";
 import { useEvents } from "../hooks/useEvents";
+import { useActiveRuns } from "../hooks/useActiveRuns";
 import { useThemeEffect } from "../lib/theme";
 import { bootstrap, createSession } from "../actions";
 
@@ -60,6 +61,7 @@ export function App() {
   }, [toggleSidebar, openSettings]);
 
   useEvents(hash === "#trace-demo" ? null : currentSessionId);
+  useActiveRuns();
 
   if (hash === "#trace-demo") {
     return <TraceDemo />;

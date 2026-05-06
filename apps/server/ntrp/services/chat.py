@@ -434,6 +434,15 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         )
         agent.hooks.on_response = tracker.track
 
+        async def _checkpoint(_step: int, _response, messages: list[dict]) -> None:
+            # Persist after each agent step so a client navigating back to
+            # this session sees the in-flight conversation, not the pre-run
+            # snapshot. Lightweight UPDATE, leaves metadata alone — the
+            # final save in `finally` re-stamps last_input_tokens.
+            await ctx.session_service.save_progress(session_state, messages)
+
+        agent.hooks.on_step_finish = _checkpoint
+
         run.status = RunStatus.RUNNING
         run_finished = False
 

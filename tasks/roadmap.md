@@ -98,3 +98,9 @@ Cross-app themes that show up in 3+ polished agentic desktops (Claude / Codex / 
 - Tool inspector: agent variant with task / markdown result / recursive Activity tree.
 - Edit + branch flows: stable `client_id` end-to-end (server stamps user messages on submit; provider preprocessor strips before API call).
 - PageModal shell + lib/{hooks,format,agent} de-duped from across modals; MemoryModal split into `memory/{Facts,Observations,Profile,Dreams,Merges}Pane.tsx`.
+- Cross-session streaming awareness (Letta-shaped):
+  - Server checkpoints `run.messages` to SQLite via `SessionStore.update_progress` after every agent step (hook: `agent.hooks.on_step_finish` in `services/chat.py`). The DB is the source of truth for in-flight conversation state — no event-replay buffer.
+  - Client gates SSE subscription on `historyLoadedFor === currentSessionId` so `setHistory()` can't race the first live deltas after a session switch.
+  - `useActiveRuns` polls `/chat/runs/status` every 2s; sidebar rows render a breathing inset border while their session has an active run.
+  - When a run finishes while the user is on another session, the row gets an "unread done" glow dot in place of the timestamp. Cleared the moment the user opens the session.
+  - Right for single local / single cloud-VPS deploy. Multi-instance autoscaling would need Redis pub/sub for the bus; surviving server restarts mid-run would need a re-entrant agent checkpointer (LangGraph-style). Both deferred.

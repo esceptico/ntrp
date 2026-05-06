@@ -49,6 +49,8 @@ function SessionRow({
   name,
   lastActivity,
   active,
+  streaming,
+  unread,
   renaming,
   onStartRename,
   onCancelRename,
@@ -58,6 +60,8 @@ function SessionRow({
   name: string | null;
   lastActivity: string;
   active: boolean;
+  streaming: boolean;
+  unread: boolean;
   renaming: boolean;
   onStartRename: () => void;
   onCancelRename: () => void;
@@ -116,6 +120,7 @@ function SessionRow({
         e.preventDefault();
         onStartRename();
       }}
+      data-streaming={streaming ? "true" : undefined}
       className={clsx(
         "session-row relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full pl-3 pr-2.5 py-1.5 rounded-lg text-left transition-colors",
         active
@@ -131,20 +136,24 @@ function SessionRow({
       )}
       <span
         className={clsx(
-          "text-[13px] tracking-[-0.005em] truncate",
+          "min-w-0 flex items-center gap-1.5 text-[13px] tracking-[-0.005em]",
           active ? "font-semibold" : "font-medium",
         )}
       >
-        {name || "untitled"}
+        <span className="truncate">{name || "untitled"}</span>
       </span>
-      <span
-        className={clsx(
-          "text-[11px] tabular-nums shrink-0",
-          active ? "text-muted" : "text-faint",
-        )}
-      >
-        {formatAge(lastActivity)}
-      </span>
+      {unread && !streaming ? (
+        <span aria-hidden className="session-unread-dot shrink-0" title="New activity" />
+      ) : (
+        <span
+          className={clsx(
+            "text-[11px] tabular-nums shrink-0",
+            active ? "text-muted" : "text-faint",
+          )}
+        >
+          {formatAge(lastActivity)}
+        </span>
+      )}
     </button>
   );
 }
@@ -152,6 +161,8 @@ function SessionRow({
 function SessionList() {
   const sessions = useStore((s) => s.sessions);
   const currentSessionId = useStore((s) => s.currentSessionId);
+  const activeRunSessionIds = useStore((s) => s.activeRunSessionIds);
+  const unreadDoneSessionIds = useStore((s) => s.unreadDoneSessionIds);
   const connected = useStore((s) => s.connected);
   const openArchive = useStore((s) => s.openArchive);
   const [query, setQuery] = useState("");
@@ -219,6 +230,8 @@ function SessionList() {
               name={session.name ?? null}
               lastActivity={session.last_activity}
               active={session.session_id === currentSessionId}
+              streaming={activeRunSessionIds.has(session.session_id)}
+              unread={unreadDoneSessionIds.has(session.session_id)}
               renaming={renamingId === session.session_id}
               onStartRename={() => setRenamingId(session.session_id)}
               onCancelRename={() => setRenamingId(null)}

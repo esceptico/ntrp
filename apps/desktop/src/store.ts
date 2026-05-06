@@ -142,6 +142,20 @@ interface State {
   currentSessionId: string | null;
   messages: Map<string, UiMessage>;
   order: string[];
+  /** Set to the session id whose saved history is now loaded into
+   *  `messages`/`order`. We delay opening the SSE stream until this
+   *  matches `currentSessionId` — otherwise `setHistory()` racing the
+   *  first live deltas would wipe them. */
+  historyLoadedFor: string | null;
+  /** Session ids with an active run on the server. Refreshed by a
+   *  poller hook so the sidebar can render a streaming indicator on
+   *  sessions that are still working — including the ones the user
+   *  isn't currently viewing. */
+  activeRunSessionIds: Set<string>;
+  /** Sessions whose runs finished while the user wasn't looking at
+   *  them. Cleared when the user opens the session. Renders as an
+   *  "unread" dot in the sidebar. */
+  unreadDoneSessionIds: Set<string>;
   connected: boolean;
   running: boolean;
   error: string | null;
@@ -187,6 +201,7 @@ interface Actions {
   setConfig: (config: AppConfig) => void;
   setSessions: (sessions: SessionListItem[]) => void;
   prependSession: (session: SessionListItem) => void;
+  setActiveRunSessions: (ids: string[]) => void;
   setCurrentSession: (sessionId: string | null) => void;
   setHistory: (messages: UiMessage[]) => void;
   appendMessage: (message: UiMessage) => void;
@@ -247,6 +262,9 @@ export const useStore = create<State & Actions>((set) => ({
   currentSessionId: null,
   messages: new Map(),
   order: [],
+  historyLoadedFor: null,
+  activeRunSessionIds: new Set(),
+  unreadDoneSessionIds: new Set(),
   connected: false,
   running: false,
   error: null,
@@ -282,28 +300,73 @@ export const useStore = create<State & Actions>((set) => ({
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
   setSessions: (sessions) => set({ sessions }),
   prependSession: (session) => set((s) => ({ sessions: [session, ...s.sessions] })),
+  setActiveRunSessions: (ids) =>
+    set((s) => {
+      const next = new Set(ids);
+      // Sessions that just transitioned active → idle are "unread done"
+      // unless the user is currently viewing them.
+      const newlyDone: string[] = [];
+      for (const prev of s.activeRunSessionIds) {
+        if (!next.has(prev) && prev !== s.currentSessionId) {
+          newlyDone.push(prev);
+        }
+      }
+
+      let unread = s.unreadDoneSessionIds;
+      if (newlyDone.length > 0) {
+        unread = new Set(unread);
+        for (const id of newlyDone) unread.add(id);
+      }
+
+      // Skip the activeRunSessionIds update if nothing changed by membership.
+      let activeChanged = next.size !== s.activeRunSessionIds.size || newlyDone.length > 0;
+      if (!activeChanged) {
+        for (const id of next) {
+          if (!s.activeRunSessionIds.has(id)) {
+            activeChanged = true;
+            break;
+          }
+        }
+      }
+
+      if (!activeChanged && unread === s.unreadDoneSessionIds) return {};
+      return {
+        ...(activeChanged ? { activeRunSessionIds: next } : {}),
+        ...(unread !== s.unreadDoneSessionIds ? { unreadDoneSessionIds: unread } : {}),
+      };
+    }),
   setCurrentSession: (currentSessionId) =>
-    set({
-      currentSessionId,
-      messages: new Map(),
-      order: [],
-      usage: initialUsage,
-      editingId: null,
-      activeActivityId: null,
-      currentRunId: null,
-      compacting: false,
-      lastCompaction: null,
+    set((s) => {
+      let unread = s.unreadDoneSessionIds;
+      if (currentSessionId && unread.has(currentSessionId)) {
+        unread = new Set(unread);
+        unread.delete(currentSessionId);
+      }
+      return {
+        currentSessionId,
+        messages: new Map(),
+        order: [],
+        usage: initialUsage,
+        editingId: null,
+        activeActivityId: null,
+        currentRunId: null,
+        compacting: false,
+        lastCompaction: null,
+        historyLoadedFor: null,
+        ...(unread !== s.unreadDoneSessionIds ? { unreadDoneSessionIds: unread } : {}),
+      };
     }),
 
-  setHistory: (messages) => {
-    const map = new Map<string, UiMessage>();
-    const order: string[] = [];
-    for (const m of messages) {
-      map.set(m.id, m);
-      order.push(m.id);
-    }
-    set({ messages: map, order });
-  },
+  setHistory: (messages) =>
+    set((s) => {
+      const map = new Map<string, UiMessage>();
+      const order: string[] = [];
+      for (const m of messages) {
+        map.set(m.id, m);
+        order.push(m.id);
+      }
+      return { messages: map, order, historyLoadedFor: s.currentSessionId };
+    }),
 
   appendMessage: (message) =>
     set((s) => {

@@ -42,6 +42,14 @@ class SessionService:
         except Exception as e:
             _logger.warning("Failed to save session: %s", e)
 
+    async def save_progress(self, session_state: SessionState, messages: list[dict]) -> None:
+        """Mid-run checkpoint — overwrites messages only, keeps metadata."""
+        try:
+            session_state.last_activity = datetime.now(UTC)
+            await self.store.update_progress(session_state.session_id, messages)
+        except Exception as e:
+            _logger.warning("Failed to save mid-run progress: %s", e)
+
     async def list_sessions(self, limit: int = 20) -> list[dict]:
         return await self.store.list_sessions(limit=limit)
 

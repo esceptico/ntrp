@@ -257,9 +257,14 @@ function headersFor(config: AppConfig): HeadersInit {
 
 export function useEvents(sessionId: string | null) {
   const config = useStore((s) => s.config);
+  const historyLoadedFor = useStore((s) => s.historyLoadedFor);
+  // Wait until loadHistory has populated the store for this session.
+  // Otherwise setHistory() landing after the first live deltas would
+  // wipe what we just rebuilt from streaming.
+  const ready = sessionId !== null && historyLoadedFor === sessionId;
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !ready) return;
     let disposed = false;
 
     const desktopEvents = window.ntrpDesktop?.events;
@@ -337,7 +342,7 @@ export function useEvents(sessionId: string | null) {
       controller.abort();
       resetStreamState();
     };
-  }, [sessionId, config]);
+  }, [sessionId, config, ready]);
 }
 
 /** Reset module-level buffers so a disconnect/reconnect doesn't leave

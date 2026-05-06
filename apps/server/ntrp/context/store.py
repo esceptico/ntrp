@@ -58,6 +58,11 @@ LIMIT ?
 """
 
 SQL_LOAD_SESSION = "SELECT * FROM sessions WHERE session_id = ?"
+SQL_UPDATE_PROGRESS = """
+UPDATE sessions
+SET messages = ?, last_activity = ?
+WHERE session_id = ?
+"""
 SQL_UPDATE_NAME = "UPDATE sessions SET name = ? WHERE session_id = ?"
 SQL_ARCHIVE = "UPDATE sessions SET archived_at = ? WHERE session_id = ? AND archived_at IS NULL"
 SQL_RESTORE = "UPDATE sessions SET archived_at = NULL WHERE session_id = ? AND archived_at IS NOT NULL"
@@ -82,6 +87,26 @@ class SessionStore:
                 await self.conn.commit()
             except Exception:
                 pass
+
+    async def update_progress(self, session_id: str, messages: list[dict | Any]) -> None:
+        """Lightweight mid-run save: rewrite messages + bump last_activity,
+        leave name/metadata alone. Lets `loadHistory` return the in-flight
+        state when a client navigates back to a streaming session."""
+        serializable: list[dict] = []
+        for msg in messages:
+            if isinstance(msg, BaseModel):
+                serializable.append(msg.model_dump())
+            elif isinstance(msg, dict):
+                serializable.append(msg)
+
+        now = datetime.now(UTC).isoformat()
+        for msg in serializable:
+            if not msg.get("created_at"):
+                msg["created_at"] = now
+
+        messages_json = await asyncio.to_thread(lambda: json.dumps(serializable, default=str))
+        await self.conn.execute(SQL_UPDATE_PROGRESS, (messages_json, now, session_id))
+        await self.conn.commit()
 
     async def save_session(self, state: SessionState, messages: list[dict | Any], metadata: dict | None = None) -> None:
         serializable_messages: list[dict] = []
