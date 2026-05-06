@@ -199,9 +199,6 @@ class FactMemory:
     async def run_consolidation(self) -> str:
         return await self._consolidation.run_consolidation()
 
-    async def run_memory_maintenance(self) -> str:
-        return await self._consolidation.run_maintenance()
-
     async def run_memory_health_audit(self) -> str:
         audit = await memory_audit(self.facts.read_conn)
         facts = audit["facts"]

@@ -8,9 +8,6 @@ from ntrp.constants import CONSOLIDATION_PASS_TIMEOUT
 from ntrp.embedder import Embedder
 from ntrp.logging import get_logger
 from ntrp.memory.consolidation import PATTERN_POLICY_VERSION, apply_consolidation, get_consolidation_decisions
-from ntrp.memory.decay import should_archive_fact, should_archive_observation
-from ntrp.memory.fact_merge import fact_merge_pass
-from ntrp.memory.observation_merge import observation_merge_pass
 from ntrp.memory.store.events import MemoryEventRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
@@ -20,7 +17,7 @@ _logger = get_logger(__name__)
 
 
 class ConsolidationRunner:
-    """Consolidates, merges, and archives memory. Invoked by the automation scheduler."""
+    """Builds supported memory patterns from facts. Invoked by the automation scheduler."""
 
     def __init__(
         self,
@@ -45,9 +42,6 @@ class ConsolidationRunner:
         self._running: bool = False
 
         self._last_temporal_pass: datetime | None = None
-        self._last_merge_pass: datetime | None = None
-        self._last_fact_merge_pass: datetime | None = None
-        self._last_archival_pass: datetime | None = None
 
     @property
     def model(self) -> str:
@@ -66,23 +60,6 @@ class ConsolidationRunner:
                 results.append(f"consolidated {count} facts")
             await self._maybe_run_temporal_pass()
             return "; ".join(results) if results else "no pending consolidation"
-        finally:
-            self._running = False
-
-    async def run_maintenance(self) -> str:
-        self._running = True
-        try:
-            results = []
-            merged_observations = await self._maybe_run_observation_merge()
-            if merged_observations is not None:
-                results.append(f"merged {merged_observations} patterns")
-            merged_facts = await self._maybe_run_fact_merge()
-            if merged_facts is not None:
-                results.append(f"merged {merged_facts} facts")
-            archived_facts, archived_observations = await self._maybe_run_archival_pass()
-            if archived_facts or archived_observations:
-                results.append(f"archived {archived_facts} facts / {archived_observations} patterns")
-            return "; ".join(results) if results else "no maintenance work"
         finally:
             self._running = False
 
@@ -185,105 +162,3 @@ class ConsolidationRunner:
             _logger.warning("Temporal consolidation pass timed out after %ds", CONSOLIDATION_PASS_TIMEOUT)
         except Exception as e:
             _logger.warning("Temporal consolidation pass failed: %s", e)
-
-    async def _maybe_run_observation_merge(self) -> int | None:
-        now = datetime.now(UTC)
-        if self._last_merge_pass and (now - self._last_merge_pass) < timedelta(days=1):
-            return None
-        try:
-            merged = await asyncio.wait_for(
-                observation_merge_pass(
-                    self.observations,
-                    self.model,
-                    self.embedder.embed_one,
-                    atomic=self._atomic,
-                ),
-                timeout=CONSOLIDATION_PASS_TIMEOUT,
-            )
-            if merged > 0:
-                _logger.info("Observation merge pass: %d merges", merged)
-            self._last_merge_pass = now
-            return merged
-        except TimeoutError:
-            _logger.warning("Observation merge pass timed out after %ds", CONSOLIDATION_PASS_TIMEOUT)
-        except Exception as e:
-            _logger.warning("Observation merge pass failed: %s", e)
-        return None
-
-    async def _maybe_run_fact_merge(self) -> int | None:
-        now = datetime.now(UTC)
-        if self._last_fact_merge_pass and (now - self._last_fact_merge_pass) < timedelta(days=1):
-            return None
-        try:
-            merged = await asyncio.wait_for(
-                fact_merge_pass(
-                    self.facts,
-                    self.observations,
-                    self.model,
-                    self.embedder.embed_one,
-                    atomic=self._atomic,
-                ),
-                timeout=CONSOLIDATION_PASS_TIMEOUT,
-            )
-            if merged > 0:
-                _logger.info("Fact merge pass: %d merges", merged)
-            self._last_fact_merge_pass = now
-            return merged
-        except TimeoutError:
-            _logger.warning("Fact merge pass timed out after %ds", CONSOLIDATION_PASS_TIMEOUT)
-        except Exception as e:
-            _logger.warning("Fact merge pass failed: %s", e)
-        return None
-
-    async def _maybe_run_archival_pass(self) -> tuple[int, int]:
-        now = datetime.now(UTC)
-        if self._last_archival_pass and (now - self._last_archival_pass) < timedelta(days=1):
-            return (0, 0)
-        try:
-            archived_facts = 0
-            candidates = await self.facts.list_archival_candidates(limit=100)
-            archive_ids = [
-                f.id
-                for f in candidates
-                if should_archive_fact(f.consolidated_at, f.created_at, f.last_accessed_at, f.access_count, now)
-            ]
-            if archive_ids:
-                async with self._transaction():
-                    archived_facts = await self.facts.archive_batch(archive_ids)
-                    if self.events and archived_facts:
-                        await self.events.create(
-                            actor="automation",
-                            action="facts.archived",
-                            target_type="fact_batch",
-                            reason="decay archival pass",
-                            policy_version="memory.decay.v1",
-                            details={"ids": archive_ids, "count": archived_facts},
-                        )
-
-            archived_obs = 0
-            obs_candidates = await self.observations.list_archival_candidates(limit=100)
-            obs_archive_ids = [
-                o.id
-                for o in obs_candidates
-                if should_archive_observation(o.created_at, o.updated_at, o.last_accessed_at, o.access_count, now)
-            ]
-            if obs_archive_ids:
-                async with self._transaction():
-                    archived_obs = await self.observations.archive_batch(obs_archive_ids)
-                    if self.events and archived_obs:
-                        await self.events.create(
-                            actor="automation",
-                            action="observations.archived",
-                            target_type="observation_batch",
-                            reason="decay archival pass",
-                            policy_version="memory.decay.v1",
-                            details={"ids": obs_archive_ids, "count": archived_obs},
-                        )
-
-            if archived_facts or archived_obs:
-                _logger.info("Archival pass: %d facts, %d observations archived", archived_facts, archived_obs)
-            self._last_archival_pass = now
-            return (archived_facts, archived_obs)
-        except Exception as e:
-            _logger.warning("Archival pass failed: %s", e)
-        return (0, 0)

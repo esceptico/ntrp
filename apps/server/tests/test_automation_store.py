@@ -131,7 +131,7 @@ async def test_status_summarizes_scheduler_owned_state(automation_store: Automat
 
 
 @pytest.mark.asyncio
-async def test_seed_builtins_splits_memory_jobs(automation_store: AutomationStore):
+async def test_seed_builtins_keeps_memory_jobs_explicit(automation_store: AutomationStore):
     await seed_builtins(automation_store)
 
     automations = {automation.task_id: automation for automation in await automation_store.list_all()}
@@ -139,15 +139,28 @@ async def test_seed_builtins_splits_memory_jobs(automation_store: AutomationStor
     assert {
         BUILTIN_CHAT_EXTRACTION_ID,
         BUILTIN_CONSOLIDATION_ID,
-        BUILTIN_MEMORY_MAINTENANCE_ID,
         BUILTIN_MEMORY_HEALTH_ID,
     } <= set(automations)
     assert automations[BUILTIN_CONSOLIDATION_ID].handler == "consolidation"
-    assert automations[BUILTIN_MEMORY_MAINTENANCE_ID].handler == "memory_maintenance"
-    assert automations[BUILTIN_MEMORY_MAINTENANCE_ID].writable is True
     assert automations[BUILTIN_MEMORY_HEALTH_ID].handler == "memory_health"
     assert automations[BUILTIN_MEMORY_HEALTH_ID].writable is False
+    assert all(automation.handler != "memory_maintenance" for automation in automations.values())
     assert all(automation.handler != "learning_review" for automation in automations.values())
+
+
+@pytest.mark.asyncio
+async def test_seed_builtins_removes_legacy_memory_maintenance(automation_store: AutomationStore):
+    await automation_store.save(
+        _automation(
+            BUILTIN_MEMORY_MAINTENANCE_ID,
+            handler="memory_maintenance",
+            next_run_at=datetime.now(UTC),
+        )
+    )
+
+    await seed_builtins(automation_store)
+
+    assert await automation_store.get(BUILTIN_MEMORY_MAINTENANCE_ID) is None
 
 
 def test_scheduler_constructor_has_no_learning_recorder(automation_store: AutomationStore):
