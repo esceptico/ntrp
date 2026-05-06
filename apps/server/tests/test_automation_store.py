@@ -131,7 +131,7 @@ async def test_status_summarizes_scheduler_owned_state(automation_store: Automat
 
 
 @pytest.mark.asyncio
-async def test_seed_builtins_keeps_memory_jobs_explicit(automation_store: AutomationStore):
+async def test_seed_builtins_keeps_memory_maintenance_non_destructive(automation_store: AutomationStore):
     await seed_builtins(automation_store)
 
     automations = {automation.task_id: automation for automation in await automation_store.list_all()}
@@ -139,17 +139,20 @@ async def test_seed_builtins_keeps_memory_jobs_explicit(automation_store: Automa
     assert {
         BUILTIN_CHAT_EXTRACTION_ID,
         BUILTIN_CONSOLIDATION_ID,
+        BUILTIN_MEMORY_MAINTENANCE_ID,
         BUILTIN_MEMORY_HEALTH_ID,
     } <= set(automations)
     assert automations[BUILTIN_CONSOLIDATION_ID].handler == "consolidation"
+    assert automations[BUILTIN_MEMORY_MAINTENANCE_ID].handler == "memory_maintenance"
+    assert automations[BUILTIN_MEMORY_MAINTENANCE_ID].writable is False
+    assert "without applying changes" in automations[BUILTIN_MEMORY_MAINTENANCE_ID].description
     assert automations[BUILTIN_MEMORY_HEALTH_ID].handler == "memory_health"
     assert automations[BUILTIN_MEMORY_HEALTH_ID].writable is False
-    assert all(automation.handler != "memory_maintenance" for automation in automations.values())
     assert all(automation.handler != "learning_review" for automation in automations.values())
 
 
 @pytest.mark.asyncio
-async def test_seed_builtins_removes_legacy_memory_maintenance(automation_store: AutomationStore):
+async def test_seed_builtins_updates_legacy_memory_maintenance_to_review_pass(automation_store: AutomationStore):
     await automation_store.save(
         _automation(
             BUILTIN_MEMORY_MAINTENANCE_ID,
@@ -160,7 +163,11 @@ async def test_seed_builtins_removes_legacy_memory_maintenance(automation_store:
 
     await seed_builtins(automation_store)
 
-    assert await automation_store.get(BUILTIN_MEMORY_MAINTENANCE_ID) is None
+    automation = await automation_store.get(BUILTIN_MEMORY_MAINTENANCE_ID)
+    assert automation is not None
+    assert automation.handler == "memory_maintenance"
+    assert automation.writable is False
+    assert "without applying changes" in automation.description
 
 
 def test_scheduler_constructor_has_no_learning_recorder(automation_store: AutomationStore):

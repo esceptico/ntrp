@@ -22,7 +22,7 @@ from ntrp.constants import (
 )
 from ntrp.embedder import Embedder, EmbeddingConfig
 from ntrp.logging import get_logger
-from ntrp.memory.audit import memory_audit
+from ntrp.memory.audit import memory_audit, observation_prune_dry_run
 from ntrp.memory.consolidation_runner import ConsolidationRunner
 from ntrp.memory.decay import decay_score
 from ntrp.memory.extraction import Extractor
@@ -198,6 +198,42 @@ class FactMemory:
 
     async def run_consolidation(self) -> str:
         return await self._consolidation.run_consolidation()
+
+    async def run_memory_maintenance(self) -> str:
+        audit, prune = await asyncio.gather(
+            memory_audit(self.facts.read_conn),
+            observation_prune_dry_run(self.observations.read_conn, limit=50),
+        )
+        storage_issues = _storage_issue_count(audit["storage"])
+        provenance_issues = _provenance_issue_count(audit["provenance"])
+        relation_issues = sum(int(value) for value in audit["relations"].values())
+        cleanup_summary = prune.get("summary", {})
+        cleanup_candidate_count = int(cleanup_summary.get("total") or 0)
+        cleanup_candidate_ids = [int(row["id"]) for row in prune.get("candidates", [])]
+
+        if cleanup_candidate_count or storage_issues or provenance_issues or relation_issues:
+            async with self.transaction():
+                await self.events.create(
+                    actor="automation",
+                    action="memory.maintenance.reviewed",
+                    target_type="memory",
+                    reason="non-destructive memory maintenance review",
+                    policy_version="memory.maintenance.review.v1",
+                    details={
+                        "cleanup_candidate_count": cleanup_candidate_count,
+                        "cleanup_candidate_ids": cleanup_candidate_ids,
+                        "storage_issues": storage_issues,
+                        "provenance_issues": provenance_issues,
+                        "relation_issues": relation_issues,
+                        "criteria": prune.get("criteria", {}),
+                    },
+                )
+
+        return (
+            f"maintenance review: cleanup candidates={cleanup_candidate_count} "
+            f"storage_issues={storage_issues} provenance_issues={provenance_issues} "
+            f"relation_issues={relation_issues}"
+        )
 
     async def run_memory_health_audit(self) -> str:
         audit = await memory_audit(self.facts.read_conn)

@@ -1082,6 +1082,36 @@ class TestMemoryAuditAPI:
         assert obs is not None
 
     @pytest.mark.asyncio
+    async def test_memory_maintenance_records_review_candidates_without_archiving(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+        sample_observation: int,
+    ):
+        now = datetime.now(UTC)
+        old = (now - timedelta(days=31)).isoformat()
+        await test_runtime.memory.db.conn.execute(
+            "UPDATE observations SET created_at = ?, updated_at = ? WHERE id = ?",
+            (old, old, sample_observation),
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        result = await test_runtime.memory.run_memory_maintenance()
+
+        assert "cleanup candidates=1" in result
+        obs = await test_runtime.memory.observations.get(sample_observation)
+        assert obs is not None
+        assert obs.archived_at is None
+
+        events = await test_client.get("/memory/events", params={"action": "memory.maintenance.reviewed"})
+        assert events.status_code == 200
+        event = events.json()["events"][0]
+        assert event["actor"] == "automation"
+        assert event["policy_version"] == "memory.maintenance.review.v1"
+        assert event["details"]["cleanup_candidate_count"] == 1
+        assert event["details"]["cleanup_candidate_ids"] == [sample_observation]
+
+    @pytest.mark.asyncio
     async def test_prune_apply_archives_only_matching_candidates(
         self,
         test_client: AsyncClient,

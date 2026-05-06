@@ -14,6 +14,7 @@ from ntrp.constants import (
     DEFAULT_CONSOLIDATION_IDLE_MINUTES,
     DEFAULT_EXTRACTION_IDLE_MINUTES,
     DEFAULT_MEMORY_HEALTH_COOLDOWN_MINUTES,
+    DEFAULT_MEMORY_MAINTENANCE_COOLDOWN_MINUTES,
     EXTRACTION_EVERY_N_TURNS,
 )
 from ntrp.logging import get_logger
@@ -58,6 +59,18 @@ BUILTINS = [
         writable=True,
     ),
     BuiltinSpec(
+        task_id=BUILTIN_MEMORY_MAINTENANCE_ID,
+        name="Memory Maintenance",
+        description="Find memory review candidates without applying changes",
+        triggers=[
+            TimeTrigger(at="03:30", days="daily"),
+            IdleTrigger(idle_minutes=DEFAULT_CONSOLIDATION_IDLE_MINUTES),
+        ],
+        handler="memory_maintenance",
+        cooldown_minutes=DEFAULT_MEMORY_MAINTENANCE_COOLDOWN_MINUTES,
+        writable=False,
+    ),
+    BuiltinSpec(
         task_id=BUILTIN_MEMORY_HEALTH_ID,
         name="Memory Health Audit",
         description="Read-only memory health and provenance snapshot",
@@ -72,9 +85,6 @@ BUILTINS = [
 
 
 async def seed_builtins(store: AutomationStore) -> None:
-    if await store.delete(BUILTIN_MEMORY_MAINTENANCE_ID):
-        _logger.info("Removed legacy builtin automation: Memory Maintenance")
-
     for spec in BUILTINS:
         existing = await store.get(spec.task_id)
         if existing:
