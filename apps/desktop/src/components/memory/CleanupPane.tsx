@@ -7,8 +7,14 @@ import {
   type MemoryPruneDryRun,
   applyMemoryPruneApi,
   getMemoryPruneDryRunApi,
+  listMemoryEventsApi,
 } from "../../api";
 import { formatAbs, formatRelativePast } from "../../lib/format";
+import {
+  MEMORY_MAINTENANCE_REVIEW_ACTION,
+  type MemoryMaintenanceReview,
+  latestMemoryMaintenanceReview,
+} from "../../lib/memoryMaintenance";
 import { DetailPlaceholder, ErrorPill, GhostBtn, ListColumn, PaneShell, Pill, PrimaryBtn, SearchInput } from "./shared";
 
 export function CleanupPane({ onOpenPattern }: { onOpenPattern?: (patternId: number) => void }) {
@@ -16,13 +22,18 @@ export function CleanupPane({ onOpenPattern }: { onOpenPattern?: (patternId: num
   const [dryRun, setDryRun] = useState<MemoryPruneDryRun | null>(null);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [maintenanceReview, setMaintenanceReview] = useState<MemoryMaintenanceReview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
     setError(null);
-    const result = await getMemoryPruneDryRunApi(config);
+    const [result, eventResult] = await Promise.all([
+      getMemoryPruneDryRunApi(config),
+      listMemoryEventsApi(config, 1, { action: MEMORY_MAINTENANCE_REVIEW_ACTION }),
+    ]);
     setDryRun(result);
+    setMaintenanceReview(latestMemoryMaintenanceReview(eventResult.events));
     setSelectedId((current) => current ?? result.candidates[0]?.id ?? null);
   }
 
@@ -78,7 +89,12 @@ export function CleanupPane({ onOpenPattern }: { onOpenPattern?: (patternId: num
     <PaneShell
       list={
         <ListColumn
-          toolbar={<SearchInput value={query} onChange={setQuery} placeholder="Filter cleanup candidates" />}
+          toolbar={
+            <div className="grid w-full gap-2">
+              <SearchInput value={query} onChange={setQuery} placeholder="Filter cleanup candidates" />
+              <MaintenanceReviewNote review={maintenanceReview} />
+            </div>
+          }
           loading={dryRun === null && !error}
           empty="No cleanup candidates."
           totalLabel={dryRun ? `${filtered?.length ?? 0} of ${dryRun.summary.total}` : null}
@@ -104,6 +120,7 @@ export function CleanupPane({ onOpenPattern }: { onOpenPattern?: (patternId: num
             onOpenPattern={() => onOpenPattern?.(selected.id)}
             onArchiveSelected={() => void archiveSelected()}
             onArchiveAll={() => void archiveAll()}
+            maintenanceReview={maintenanceReview}
           />
         ) : error ? (
           <DetailPlaceholder>{error}</DetailPlaceholder>
@@ -112,6 +129,23 @@ export function CleanupPane({ onOpenPattern }: { onOpenPattern?: (patternId: num
         )
       }
     />
+  );
+}
+
+function MaintenanceReviewNote({ review }: { review: MemoryMaintenanceReview | null }) {
+  if (!review) return null;
+  const issueCount = review.storageIssues + review.provenanceIssues + review.relationIssues;
+  return (
+    <div className="rounded-md border border-line-soft bg-surface px-2.5 py-2">
+      <div className="flex items-center justify-between gap-2 text-[11px] text-faint">
+        <span>Maintenance</span>
+        <span>{formatRelativePast(review.event.created_at)}</span>
+      </div>
+      <div className="mt-1 text-[12px] text-ink-soft">
+        {review.cleanupCandidateCount} cleanup candidates
+        {issueCount > 0 ? ` · ${issueCount} integrity issues` : ""}
+      </div>
+    </div>
   );
 }
 
@@ -154,6 +188,7 @@ function CleanupDetail({
   onOpenPattern,
   onArchiveSelected,
   onArchiveAll,
+  maintenanceReview,
 }: {
   dryRun: MemoryPruneDryRun;
   candidate: MemoryPruneCandidate;
@@ -163,6 +198,7 @@ function CleanupDetail({
   onOpenPattern: () => void;
   onArchiveSelected: () => void;
   onArchiveAll: () => void;
+  maintenanceReview: MemoryMaintenanceReview | null;
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -177,6 +213,12 @@ function CleanupDetail({
           <span>max {dryRun.criteria.max_sources} sources</span>
           <span aria-hidden>·</span>
           <span>{dryRun.summary.total} candidates in dry-run</span>
+          {maintenanceReview && (
+            <>
+              <span aria-hidden>·</span>
+              <span>maintenance saw {maintenanceReview.cleanupCandidateCount}</span>
+            </>
+          )}
         </div>
       </div>
 

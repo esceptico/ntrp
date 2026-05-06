@@ -613,8 +613,11 @@ export async function getMemoryAuditApi(config: AppConfig): Promise<MemoryAudit>
 export async function listMemoryEventsApi(
   config: AppConfig,
   limit = 100,
+  filters: { action?: string } = {},
 ): Promise<{ events: MemoryEvent[] }> {
-  return apiWithConfig(config, `/memory/events?limit=${limit}`);
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (filters.action) params.set("action", filters.action);
+  return apiWithConfig(config, `/memory/events?${params.toString()}`);
 }
 
 export async function listMemoryAccessEventsApi(

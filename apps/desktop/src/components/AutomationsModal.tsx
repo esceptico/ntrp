@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { useStore } from "../store";
 import { deleteAutomation, fetchAutomations, runAutomation, toggleAutomation } from "../actions";
 import type { Automation, AutomationTrigger } from "../api";
+import { automationTrustLabel, automationTrustTone } from "../lib/automationTrust";
 import { AutomationEditor, type EditorSeed } from "./automations/AutomationEditor";
 import { templatesByCategory, type AutomationTemplate } from "./automations/templates";
 import { PageModal } from "./PageModal";
@@ -238,6 +239,7 @@ function AutomationCard({
   const trigger = automation.triggers.map(formatTrigger).join(" · ") || "—";
   const hasResult = !!automation.last_result?.trim();
   const setMarkdownView = useStore((s) => s.setViewingMarkdown);
+  const trustLabel = automationTrustLabel(automation);
   const editable = !automation.builtin;
   const open = () => {
     if (editable) onEdit();
@@ -270,7 +272,7 @@ function AutomationCard({
         <button
           type="button"
           onClick={stop(wrap("toggle", () => toggleAutomation(automation.task_id)))}
-          disabled={busy === "toggle" || automation.builtin}
+          disabled={busy === "toggle"}
           title={automation.enabled ? "Pause" : "Enable"}
           aria-label={automation.enabled ? "Pause automation" : "Enable automation"}
           className={clsx(
@@ -293,6 +295,7 @@ function AutomationCard({
               </Tag>
             )}
             {automation.builtin && <Tag tone="neutral">builtin</Tag>}
+            {trustLabel && <Tag tone={automationTrustTone(automation)}>{trustLabel}</Tag>}
           </div>
           <p className="m-0 text-[12px] text-muted leading-[1.5] line-clamp-2">
             {automation.description || "No description."}
@@ -319,6 +322,7 @@ function AutomationCard({
             label="Run now"
             onClick={stop(wrap("run", () => runAutomation(automation.task_id)))}
             busy={busy === "run"}
+            disabled={!automation.enabled}
           />
           <CardAction
             icon={Trash2}
