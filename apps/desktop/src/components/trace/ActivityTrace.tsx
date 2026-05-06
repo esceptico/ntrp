@@ -92,9 +92,10 @@ export function ActivityTail({
   const rolling = max != null;
   const setViewingTool = useStore((s) => s.setViewingTool);
 
-  const visible = rolling
-    ? buildRollingList(items, max)
-    : items.filter((it) => (it.depth ?? 0) === 0);
+  const visible = useMemo(
+    () => (rolling ? buildRollingList(items, max as number) : buildStaticTree(items)),
+    [items, max, rolling],
+  );
 
   // Compute explicit height instead of leaving it to a `layout` prop on the
   // outer container. Mixing `layout` and an explicit `animate.height` causes
@@ -143,6 +144,44 @@ export function ActivityTail({
       )}
     </motion.div>
   );
+}
+
+/** Static-mode tree: post-run, expanded panel. Emit every item in DFS
+ *  order (parent before children). The user wants to see what tools the
+ *  sub-agent ran without clicking into the agent card — depth-based
+ *  indent in `ItemButton` handles the visual hierarchy. */
+function buildStaticTree(items: ActivityItem[]): ActivityItem[] {
+  const childrenByParent = new Map<string, ActivityItem[]>();
+  for (const it of items) {
+    if (!it.parentToolId) continue;
+    const arr = childrenByParent.get(it.parentToolId) ?? [];
+    arr.push(it);
+    childrenByParent.set(it.parentToolId, arr);
+  }
+
+  const out: ActivityItem[] = [];
+  const seen = new Set<string>();
+
+  const visit = (item: ActivityItem) => {
+    if (seen.has(item.id)) return;
+    seen.add(item.id);
+    out.push(item);
+    const kids = childrenByParent.get(item.id);
+    if (kids) for (const k of kids) visit(k);
+  };
+
+  for (const t of items.filter((it) => (it.depth ?? 0) === 0)) visit(t);
+  // Belt-and-suspenders: surface any item whose parentToolId points
+  // outside this activity's items (e.g. when sub-agent calls span
+  // multiple activity messages). Better to show unanchored than to
+  // silently drop and have the user wonder where the tool went.
+  for (const it of items) {
+    if (!seen.has(it.id)) {
+      seen.add(it.id);
+      out.push(it);
+    }
+  }
+  return out;
 }
 
 /** Walk the activity tree and return a flat ordered list to render in
