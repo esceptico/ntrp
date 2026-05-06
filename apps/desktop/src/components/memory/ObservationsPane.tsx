@@ -13,6 +13,7 @@ import {
 } from "../../api";
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { formatAbs, formatRelativePast } from "../../lib/format";
+import { factSourceSummary } from "../../lib/memoryProvenance";
 import {
   factStatusLabel,
   factStatusTone,
@@ -307,8 +308,9 @@ function SupportingFacts({ facts, missing, onOpenFact }: { facts: Fact[]; missin
               >
                 {f.text}
               </button>
-              <div className="mt-1">
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <Pill tone={factStatusTone(f.status)}>{factStatusLabel(f.status)}</Pill>
+                <span className="text-[11px] text-faint">{factSourceSummary(f)}</span>
               </div>
             </div>
           </li>

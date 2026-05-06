@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { useStore } from "../../store";
 import { type Fact, type MemoryRecallInspectResult, type Observation, inspectMemoryRecallApi } from "../../api";
 import { formatRelativePast } from "../../lib/format";
+import { factSourceSummary } from "../../lib/memoryProvenance";
 import {
   factStatusLabel,
   factStatusTone,
@@ -139,7 +140,9 @@ function FactSource({ fact, onOpen }: { fact: Fact; onOpen?: () => void }) {
       <div className="mb-1 flex items-center gap-1.5">
         <Pill>{fact.kind}</Pill>
         <Pill tone={factStatusTone(fact.status)}>{factStatusLabel(fact.status)}</Pill>
-        <span className="text-[11px] text-faint">{fact.access_count}× · {formatRelativePast(fact.last_accessed_at)}</span>
+        <span className="text-[11px] text-faint">
+          {factSourceSummary(fact)} · {fact.access_count}× · {formatRelativePast(fact.last_accessed_at)}
+        </span>
       </div>
       <button type="button" onClick={onOpen} className="text-left text-[12.5px] leading-snug text-ink-soft hover:text-ink">
         {fact.text}
@@ -182,6 +185,8 @@ function PatternSource({
                 className="block w-full text-left text-[11.5px] leading-snug text-faint hover:text-ink-soft"
               >
                 <span className="uppercase tracking-[0.06em]">{fact.kind}</span>
+                <span aria-hidden> · </span>
+                <span>{factSourceSummary(fact)}</span>
                 <span aria-hidden> · </span>
                 <span>{fact.text}</span>
               </button>

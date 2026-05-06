@@ -16,6 +16,7 @@ import {
 } from "../../api";
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { formatAbs, formatRelativePast } from "../../lib/format";
+import { factSourceDetail, factSourceLabel } from "../../lib/memoryProvenance";
 import { factStatusFilterLabel, factStatusLabel, factStatusTone } from "../../lib/memoryTrust";
 import {
   DetailMeta,
@@ -210,6 +211,8 @@ function FactRow({
             <span aria-hidden>·</span>
             <span>{factStatusLabel(fact.status)}</span>
             <span aria-hidden>·</span>
+            <span>{factSourceLabel(fact)}</span>
+            <span aria-hidden>·</span>
             <span className="tabular-nums">{formatRelativePast(fact.last_accessed_at)}</span>
             {fact.access_count > 0 && (
               <>
@@ -251,6 +254,7 @@ function FactDetail({
   }, [fact.id, fact.text]);
 
   const dirty = mode !== null && draft.trim() !== fact.text.trim();
+  const sourceRef = factSourceDetail(fact);
 
   async function save() {
     if (!dirty || !draft.trim()) return;
@@ -332,8 +336,8 @@ function FactDetail({
               fact.happened_at ? { label: "Happened", value: formatAbs(fact.happened_at) } : null,
               { label: "Last accessed", value: formatAbs(fact.last_accessed_at) },
               { label: "Access count", value: String(fact.access_count) },
-              { label: "Source", value: fact.source_type },
-              fact.source_ref ? { label: "Source ref", value: fact.source_ref, mono: true } : null,
+              { label: "Source", value: factSourceLabel(fact) },
+              sourceRef ? { label: "Reference", value: sourceRef, mono: true } : null,
               fact.expires_at ? { label: "Expires", value: formatAbs(fact.expires_at) } : null,
             ]}
           />
