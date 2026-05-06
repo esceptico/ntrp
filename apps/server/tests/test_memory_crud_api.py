@@ -397,6 +397,61 @@ class TestFactMetadataAPI:
         assert "superseding fact not found" in response.json()["detail"]
 
     @pytest.mark.asyncio
+    async def test_supersede_fact_creates_replacement_and_marks_old(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        result = await test_runtime.memory.remember(
+            text="User prefers concise memory reports",
+            source_type=SourceType.CHAT,
+            source_ref="chat-123",
+            kind=FactKind.PREFERENCE,
+            lifetime=FactLifetime.DURABLE,
+            salience=2,
+            confidence=0.9,
+            entity_names=["User"],
+        )
+        assert result is not None
+
+        response = await test_client.post(
+            f"/facts/{result.fact.id}/supersede",
+            json={"text": "User prefers detailed memory reports with source links"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        old_fact = data["old_fact"]
+        new_fact = data["new_fact"]
+
+        assert old_fact["id"] == result.fact.id
+        assert old_fact["status"] == "superseded"
+        assert old_fact["superseded_by_fact_id"] == new_fact["id"]
+        assert new_fact["text"] == "User prefers detailed memory reports with source links"
+        assert new_fact["status"] == "active"
+        assert new_fact["source_type"] == "chat"
+        assert new_fact["source_ref"] == "chat-123"
+        assert new_fact["kind"] == "preference"
+        assert new_fact["lifetime"] == "durable"
+        assert new_fact["salience"] == 2
+        assert new_fact["confidence"] == 0.9
+        assert any(ref["name"].lower() == "user" for ref in data["entity_refs"])
+
+        active = await test_client.get("/facts", params={"status": "active"})
+        active_ids = {fact["id"] for fact in active.json()["facts"]}
+        assert result.fact.id not in active_ids
+        assert new_fact["id"] in active_ids
+
+        events = await test_client.get(
+            "/memory/events",
+            params={"target_type": "fact", "target_id": result.fact.id, "action": "fact.superseded"},
+        )
+        assert events.status_code == 200
+        event = events.json()["events"][0]
+        assert event["actor"] == "user"
+        assert event["details"]["new_fact_id"] == new_fact["id"]
+
+    @pytest.mark.asyncio
     async def test_kind_review_lists_untyped_facts(self, test_client: AsyncClient, test_runtime: Runtime):
         review_fact = await test_runtime.memory.facts.create(
             "User has not reviewed this fact yet",

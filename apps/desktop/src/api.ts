@@ -342,6 +342,11 @@ export interface Fact {
   status: FactTrustStatus;
 }
 
+export interface FactEntityRef {
+  name: string;
+  entity_id: number | null;
+}
+
 export type ObservationEvidenceLevel = "unsupported" | "single_fact_seed" | "multi_fact" | "temporal_pattern";
 
 export interface Observation {
@@ -384,6 +389,17 @@ export async function listFactsApi(
 export async function updateFactTextApi(config: AppConfig, id: number, text: string): Promise<{ fact: Fact }> {
   return apiWithConfig(config, `/facts/${id}`, {
     method: "PATCH",
+    body: JSON.stringify({ text }),
+  });
+}
+
+export async function supersedeFactApi(
+  config: AppConfig,
+  id: number,
+  text: string,
+): Promise<{ old_fact: Fact; new_fact: Fact; entity_refs: FactEntityRef[] }> {
+  return apiWithConfig(config, `/facts/${id}/supersede`, {
+    method: "POST",
     body: JSON.stringify({ text }),
   });
 }

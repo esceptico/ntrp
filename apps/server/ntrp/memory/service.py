@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
@@ -132,6 +133,72 @@ class FactService:
 
         entity_refs = await repo.get_entity_refs(fact_id)
         return fact, [{"name": e.name, "entity_id": e.entity_id} for e in entity_refs]
+
+    async def supersede(self, fact_id: int, replacement_text: str) -> tuple[Fact, Fact, list[dict]]:
+        async with self._memory.transaction():
+            repo = self._memory.facts
+
+            old = await repo.get(fact_id)
+            if not old:
+                raise KeyError(f"Fact {fact_id} not found")
+
+            embedding, extraction = await asyncio.gather(
+                self._memory.embedder.embed_one(replacement_text),
+                self._memory.extractor.extract(replacement_text),
+            )
+            new_fact = await repo.create(
+                text=replacement_text,
+                source_type=old.source_type,
+                source_ref=old.source_ref,
+                embedding=embedding,
+                happened_at=old.happened_at,
+                kind=old.kind,
+                lifetime=old.lifetime,
+                salience=old.salience,
+                confidence=old.confidence,
+                expires_at=old.expires_at,
+                pinned_at=old.pinned_at,
+            )
+            entities_extracted = await self._memory._process_extraction(new_fact.id, extraction)
+            await self._memory.events.create(
+                actor="user",
+                action="fact.created",
+                target_type="fact",
+                target_id=new_fact.id,
+                source_type=old.source_type.value,
+                source_ref=old.source_ref,
+                reason="manual fact correction",
+                policy_version="memory.api.v1",
+                details={
+                    "supersedes_fact_id": old.id,
+                    "kind": new_fact.kind.value,
+                    "lifetime": new_fact.lifetime.value,
+                    "salience": new_fact.salience,
+                    "confidence": new_fact.confidence,
+                    "entity_count": len(entities_extracted),
+                },
+            )
+
+            superseded = await repo.update_metadata(fact_id, {"superseded_by_fact_id": new_fact.id})
+            if not superseded:
+                raise RuntimeError(f"Fact {fact_id} disappeared during supersede")
+            await self._memory.events.create(
+                actor="user",
+                action="fact.superseded",
+                target_type="fact",
+                target_id=fact_id,
+                source_type=old.source_type.value,
+                source_ref=old.source_ref,
+                reason="manual fact correction",
+                policy_version="memory.api.v1",
+                details={"new_fact_id": new_fact.id, "old_chars": len(old.text), "new_chars": len(replacement_text)},
+            )
+
+        if self._enqueue_fact_index_upsert:
+            await self._enqueue_fact_index_upsert(new_fact.id, replacement_text)
+
+        entity_refs = await repo.get_entity_refs(new_fact.id)
+        return superseded, new_fact, [{"name": e.name, "entity_id": e.entity_id} for e in entity_refs]
 
     async def update_metadata(self, fact_id: int, updates: dict[str, object]) -> Fact:
         async with self._memory.transaction():

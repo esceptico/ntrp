@@ -40,6 +40,11 @@ export type FactStatus = "active" | "archived" | "superseded" | "expired" | "tem
 export type FactTrustStatus = Exclude<FactStatus, "all">;
 export type FactAccessed = "never" | "used";
 
+export interface FactEntityRef {
+  name: string;
+  entity_id: number | null;
+}
+
 export interface FactFilters {
   kind?: FactKind;
   lifetime?: FactLifetime;
@@ -51,7 +56,7 @@ export interface FactFilters {
 
 export interface FactDetails {
   fact: Fact;
-  entities: Array<{ name: string; entity_id: number }>;
+  entities: FactEntityRef[];
   linked_facts: Array<{
     id: number;
     text: string;
@@ -253,8 +258,16 @@ export async function updateFact(
   config: Config,
   factId: number,
   text: string
-): Promise<{ fact: Fact; entity_refs: Array<{ name: string; entity_id: number }> }> {
+): Promise<{ fact: Fact; entity_refs: FactEntityRef[] }> {
   return api.patch(`${config.serverUrl}/facts/${factId}`, { text });
+}
+
+export async function supersedeFact(
+  config: Config,
+  factId: number,
+  text: string
+): Promise<{ old_fact: Fact; new_fact: Fact; entity_refs: FactEntityRef[] }> {
+  return api.post(`${config.serverUrl}/facts/${factId}/supersede`, { text });
 }
 
 export async function updateFactMetadata(

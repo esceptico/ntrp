@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Archive, ArchiveRestore, ChevronDown, Pencil, Pin } from "lucide-react";
+import { Archive, ArchiveRestore, ChevronDown, GitCompareArrows, Pencil, Pin } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../../store";
 import {
@@ -7,6 +7,7 @@ import {
   type FactKind,
   type FactStatus,
   listFactsApi,
+  supersedeFactApi,
   updateFactMetadataApi,
   updateFactTextApi,
 } from "../../api";
@@ -115,6 +116,18 @@ export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
             key={selected.id}
             fact={selected}
             onSaved={refresh}
+            onSuperseded={async (oldFact, newFact) => {
+              setStatus("active");
+              setQuery("");
+              setFacts((prev) => {
+                const existing = prev ?? [];
+                return [
+                  newFact,
+                  ...existing.filter((fact) => fact.id !== oldFact.id && fact.id !== newFact.id),
+                ];
+              });
+              setSelectedId(newFact.id);
+            }}
             onArchived={async (archived) => {
               const nextStatus = archived ? "archived" : "active";
               setStatus(nextStatus);
@@ -175,31 +188,42 @@ function FactRow({
 function FactDetail({
   fact,
   onSaved,
+  onSuperseded,
   onArchived,
 }: {
   fact: Fact;
   onSaved: () => Promise<void>;
+  onSuperseded: (oldFact: Fact, newFact: Fact) => Promise<void>;
   onArchived: (archived: boolean) => Promise<void>;
 }) {
   const config = useStore((s) => s.config);
-  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState<"edit" | "correct" | null>(null);
   const [draft, setDraft] = useState(fact.text);
   const mounted = useMountedRef();
   const { busy, error, run } = useMutationState(mounted);
 
   useEffect(() => {
-    setEditing(false);
+    setMode(null);
     setDraft(fact.text);
   }, [fact.id, fact.text]);
 
-  const dirty = editing && draft.trim() !== fact.text.trim();
+  const dirty = mode !== null && draft.trim() !== fact.text.trim();
 
   async function save() {
     if (!dirty || !draft.trim()) return;
     await run(async () => {
       await updateFactTextApi(config, fact.id, draft.trim());
       await onSaved();
-      if (mounted.current) setEditing(false);
+      if (mounted.current) setMode(null);
+    });
+  }
+
+  async function supersede() {
+    if (!dirty || !draft.trim()) return;
+    await run(async () => {
+      const result = await supersedeFactApi(config, fact.id, draft.trim());
+      await onSuperseded(result.old_fact, result.new_fact);
+      if (mounted.current) setMode(null);
     });
   }
 
@@ -237,14 +261,14 @@ function FactDetail({
         </DetailMeta>
       }
       body={
-        editing ? (
+        mode !== null ? (
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
                 e.preventDefault();
-                void save();
+                void (mode === "correct" ? supersede() : save());
               }
             }}
             spellCheck={false}
@@ -278,19 +302,22 @@ function FactDetail({
       actions={
         <>
           {error && <ErrorPill message={error} />}
-          {editing ? (
+          {mode !== null ? (
             <>
               <GhostBtn
                 onClick={() => {
-                  setEditing(false);
+                  setMode(null);
                   setDraft(fact.text);
                 }}
                 disabled={busy}
               >
                 Cancel
               </GhostBtn>
-              <PrimaryBtn onClick={() => void save()} disabled={!dirty || busy || !draft.trim()}>
-                {busy ? "Saving…" : "Save changes"}
+              <PrimaryBtn
+                onClick={() => void (mode === "correct" ? supersede() : save())}
+                disabled={!dirty || busy || !draft.trim()}
+              >
+                {busy ? "Saving…" : mode === "correct" ? "Create replacement" : "Save changes"}
               </PrimaryBtn>
             </>
           ) : (
@@ -304,7 +331,10 @@ function FactDetail({
                   <Archive size={12} strokeWidth={1.8} /> Archive
                 </GhostBtn>
               )}
-              <GhostBtn onClick={() => setEditing(true)} disabled={busy}>
+              <GhostBtn onClick={() => setMode("correct")} disabled={busy || fact.status === "superseded"}>
+                <GitCompareArrows size={12} strokeWidth={1.8} /> Correct
+              </GhostBtn>
+              <GhostBtn onClick={() => setMode("edit")} disabled={busy}>
                 <Pencil size={12} strokeWidth={1.8} /> Edit
               </GhostBtn>
             </>

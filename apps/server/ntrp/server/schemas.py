@@ -290,6 +290,10 @@ class UpdateFactRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=10000)
 
 
+class SupersedeFactRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=10000)
+
+
 class UpdateFactMetadataRequest(BaseModel):
     kind: FactKind | None = None
     lifetime: FactLifetime | None = None

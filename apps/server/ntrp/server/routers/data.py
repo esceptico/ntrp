@@ -20,6 +20,7 @@ from ntrp.server.schemas import (
     MemoryPruneDryRunRequest,
     MemoryRecallInspectRequest,
     MemoryRepairEmbeddingsRequest,
+    SupersedeFactRequest,
     UpdateFactMetadataRequest,
     UpdateFactRequest,
     UpdateObservationRequest,
@@ -187,6 +188,24 @@ async def update_fact(fact_id: int, request: UpdateFactRequest, svc: MemoryServi
 
     return {
         "fact": _fact_payload(fact),
+        "entity_refs": entity_refs,
+    }
+
+
+@router.post("/facts/{fact_id}/supersede")
+async def supersede_fact(
+    fact_id: int,
+    request: SupersedeFactRequest,
+    svc: MemoryService = Depends(require_memory),
+):
+    try:
+        old_fact, new_fact, entity_refs = await svc.facts.supersede(fact_id, request.text)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Fact not found")
+
+    return {
+        "old_fact": _fact_payload(old_fact),
+        "new_fact": _fact_payload(new_fact),
         "entity_refs": entity_refs,
     }
 
