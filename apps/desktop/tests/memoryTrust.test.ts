@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  factStatusFilterLabel,
   factStatusLabel,
   factStatusTone,
   observationEvidenceLabel,
@@ -14,6 +15,12 @@ test("labels fact statuses for trust inspection", () => {
   expect(factStatusTone("archived")).toBe("bad");
 });
 
+test("labels fact status filters for correction views", () => {
+  expect(factStatusFilterLabel("active")).toBe("Active");
+  expect(factStatusFilterLabel("all")).toBe("All statuses");
+  expect(factStatusFilterLabel("archived")).toBe("Archived");
+});
+
 test("labels pattern evidence levels by trust strength", () => {
   expect(observationEvidenceLabel("unsupported")).toBe("unsupported");
   expect(observationEvidenceLabel("single_fact_seed")).toBe("single source");
@@ -23,4 +30,3 @@ test("labels pattern evidence levels by trust strength", () => {
   expect(observationEvidenceTone("single_fact_seed")).toBe("warn");
   expect(observationEvidenceTone("multi_fact")).toBe("ok");
 });
-

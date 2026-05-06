@@ -5,13 +5,14 @@ import { useStore } from "../../store";
 import {
   type Fact,
   type FactKind,
+  type FactStatus,
   listFactsApi,
   updateFactMetadataApi,
   updateFactTextApi,
 } from "../../api";
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { formatAbs, formatRelativePast } from "../../lib/format";
-import { factStatusLabel, factStatusTone } from "../../lib/memoryTrust";
+import { factStatusFilterLabel, factStatusLabel, factStatusTone } from "../../lib/memoryTrust";
 import {
   DetailMeta,
   DetailPlaceholder,
@@ -40,16 +41,19 @@ const FACT_KINDS: FactKind[] = [
   "note",
 ];
 
+const FACT_STATUSES: FactStatus[] = ["active", "all", "archived", "superseded", "expired", "temporary", "pinned"];
+
 export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
   const config = useStore((s) => s.config);
   const [facts, setFacts] = useState<Fact[] | null>(null);
   const [total, setTotal] = useState(0);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<FactKind | null>(null);
+  const [status, setStatus] = useState<FactStatus>("active");
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
-  async function refresh() {
-    const r = await listFactsApi(config, { limit: 200, kind: kind ?? undefined, status: "active" });
+  async function refresh(nextStatus = status) {
+    const r = await listFactsApi(config, { limit: 200, kind: kind ?? undefined, status: nextStatus });
     setFacts(r.facts);
     setTotal(r.total);
   }
@@ -57,7 +61,7 @@ export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
   useEffect(() => {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind]);
+  }, [kind, status]);
 
   useEffect(() => {
     if (!targetFact) return;
@@ -68,6 +72,7 @@ export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
     setSelectedId(targetFact.id);
     setQuery("");
     setKind(null);
+    setStatus(targetFact.status === "archived" ? "archived" : "active");
   }, [targetFact]);
 
   const filtered = useMemo(() => {
@@ -86,6 +91,7 @@ export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
           toolbar={
             <>
               <SearchInput value={query} onChange={setQuery} placeholder="Filter facts" />
+              <StatusFilter value={status} onChange={setStatus} />
               <KindFilter value={kind} onChange={setKind} />
             </>
           }
@@ -110,8 +116,9 @@ export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
             fact={selected}
             onSaved={refresh}
             onArchived={async (archived) => {
-              await refresh();
-              if (archived) setSelectedId(null);
+              const nextStatus = archived ? "archived" : "active";
+              setStatus(nextStatus);
+              await refresh(nextStatus);
             }}
           />
         ) : (
@@ -367,6 +374,66 @@ function KindFilter({
               active={value === k}
               onClick={() => {
                 onChange(k);
+                setOpen(false);
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatusFilter({
+  value,
+  onChange,
+}: {
+  value: FactStatus;
+  onChange: (v: FactStatus) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={clsx(
+          "inline-flex items-center gap-1 h-7 pl-2.5 pr-1.5 rounded-md text-[11.5px] font-medium tracking-[-0.005em] transition-colors",
+          value !== "active"
+            ? "bg-ink text-on-ink"
+            : "text-ink-soft bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)]",
+        )}
+      >
+        <span>{factStatusFilterLabel(value)}</span>
+        <ChevronDown size={11} strokeWidth={1.8} className="opacity-70" />
+      </button>
+      {open && (
+        <div className="absolute top-full mt-1 right-0 z-10 w-[150px] py-1 rounded-[10px] border border-line-soft bg-surface shadow-[var(--shadow-pop)]">
+          {FACT_STATUSES.map((s) => (
+            <KindOption
+              key={s}
+              label={factStatusFilterLabel(s)}
+              active={value === s}
+              onClick={() => {
+                onChange(s);
                 setOpen(false);
               }}
             />

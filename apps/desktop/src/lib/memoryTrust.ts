@@ -1,9 +1,14 @@
-import type { FactTrustStatus, ObservationEvidenceLevel } from "../api";
+import type { FactStatus, FactTrustStatus, ObservationEvidenceLevel } from "../api";
 
 type PillTone = "neutral" | "accent" | "ok" | "warn" | "bad";
 
 export function factStatusLabel(status: FactTrustStatus): string {
   return status;
+}
+
+export function factStatusFilterLabel(status: FactStatus): string {
+  if (status === "all") return "All statuses";
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 export function factStatusTone(status: FactTrustStatus): PillTone {
