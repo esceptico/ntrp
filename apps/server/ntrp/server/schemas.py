@@ -298,6 +298,7 @@ class UpdateFactMetadataRequest(BaseModel):
     expires_at: datetime | None = None
     pinned: bool | None = None
     superseded_by_fact_id: int | None = Field(default=None, ge=1)
+    archived: bool | None = None
 
 
 class MemoryRecallInspectRequest(BaseModel):

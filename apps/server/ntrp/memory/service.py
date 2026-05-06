@@ -140,6 +140,7 @@ class FactService:
             if not old:
                 raise KeyError(f"Fact {fact_id} not found")
 
+            archive_state = updates.pop("archived", None)
             superseded_by = updates.get("superseded_by_fact_id")
             if superseded_by is not None:
                 if superseded_by == fact_id:
@@ -150,7 +151,17 @@ class FactService:
             fact = await repo.update_metadata(fact_id, updates)
             if not fact:
                 raise RuntimeError(f"Fact {fact_id} disappeared during metadata update")
-            if updates:
+            changed_fields = set(updates)
+            if archive_state is not None:
+                changed_fields.add("archived_at")
+                if archive_state:
+                    await repo.archive_batch([fact_id])
+                else:
+                    await repo.unarchive(fact_id)
+                fact = await repo.get(fact_id)
+                if not fact:
+                    raise RuntimeError(f"Fact {fact_id} disappeared during archive update")
+            if changed_fields:
                 await self._memory.events.create(
                     actor="user",
                     action="fact.metadata_updated",
@@ -160,7 +171,7 @@ class FactService:
                     source_ref=old.source_ref,
                     reason="manual fact metadata edit",
                     policy_version="memory.api.v1",
-                    details={"updates": updates, "fields": sorted(updates)},
+                    details={"updates": updates | ({"archived": archive_state} if archive_state is not None else {}), "fields": sorted(changed_fields)},
                 )
 
         return fact

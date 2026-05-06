@@ -1,19 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Pencil, Pin, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, ChevronDown, Pencil, Pin } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../../store";
 import {
   type Fact,
   type FactKind,
-  deleteFactApi,
   listFactsApi,
+  updateFactMetadataApi,
   updateFactTextApi,
 } from "../../api";
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { formatAbs, formatRelativePast } from "../../lib/format";
 import { factStatusLabel, factStatusTone } from "../../lib/memoryTrust";
 import {
-  DangerBtn,
   DetailMeta,
   DetailPlaceholder,
   DetailShell,
@@ -110,9 +109,9 @@ export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
             key={selected.id}
             fact={selected}
             onSaved={refresh}
-            onDeleted={async () => {
-              setSelectedId(null);
+            onArchived={async (archived) => {
               await refresh();
+              if (archived) setSelectedId(null);
             }}
           />
         ) : (
@@ -169,11 +168,11 @@ function FactRow({
 function FactDetail({
   fact,
   onSaved,
-  onDeleted,
+  onArchived,
 }: {
   fact: Fact;
   onSaved: () => Promise<void>;
-  onDeleted: () => Promise<void>;
+  onArchived: (archived: boolean) => Promise<void>;
 }) {
   const config = useStore((s) => s.config);
   const [editing, setEditing] = useState(false);
@@ -197,11 +196,10 @@ function FactDetail({
     });
   }
 
-  async function remove() {
-    if (!confirm("Delete this fact? This cannot be undone.")) return;
+  async function setArchived(archived: boolean) {
     await run(async () => {
-      await deleteFactApi(config, fact.id);
-      await onDeleted();
+      await updateFactMetadataApi(config, fact.id, { archived });
+      await onArchived(archived);
     });
   }
 
@@ -290,9 +288,15 @@ function FactDetail({
             </>
           ) : (
             <>
-              <DangerBtn onClick={() => void remove()} disabled={busy}>
-                <Trash2 size={12} strokeWidth={1.8} /> Delete
-              </DangerBtn>
+              {fact.status === "archived" ? (
+                <GhostBtn onClick={() => void setArchived(false)} disabled={busy}>
+                  <ArchiveRestore size={12} strokeWidth={1.8} /> Restore
+                </GhostBtn>
+              ) : (
+                <GhostBtn onClick={() => void setArchived(true)} disabled={busy}>
+                  <Archive size={12} strokeWidth={1.8} /> Archive
+                </GhostBtn>
+              )}
               <GhostBtn onClick={() => setEditing(true)} disabled={busy}>
                 <Pencil size={12} strokeWidth={1.8} /> Edit
               </GhostBtn>

@@ -348,6 +348,41 @@ class TestFactMetadataAPI:
         assert event["details"]["fields"] == ["confidence", "expires_at", "kind", "lifetime", "pinned_at", "salience"]
 
     @pytest.mark.asyncio
+    async def test_patch_fact_metadata_archives_and_unarchives_fact(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        fact = await test_runtime.memory.facts.create(
+            "Fact should be archived instead of deleted",
+            SourceType.EXPLICIT,
+            embedding=mock_embedding("archive me"),
+        )
+        await test_runtime.memory.db.conn.commit()
+
+        archived = await test_client.patch(f"/facts/{fact.id}/metadata", json={"archived": True})
+
+        assert archived.status_code == 200
+        archived_fact = archived.json()["fact"]
+        assert archived_fact["status"] == "archived"
+        assert archived_fact["archived_at"] is not None
+        active = await test_client.get("/facts", params={"status": "active"})
+        assert fact.id not in {row["id"] for row in active.json()["facts"]}
+
+        restored = await test_client.patch(f"/facts/{fact.id}/metadata", json={"archived": False})
+
+        assert restored.status_code == 200
+        restored_fact = restored.json()["fact"]
+        assert restored_fact["status"] == "active"
+        assert restored_fact["archived_at"] is None
+        events = await test_client.get(
+            "/memory/events",
+            params={"target_type": "fact", "target_id": fact.id, "action": "fact.metadata_updated"},
+        )
+        assert events.status_code == 200
+        assert events.json()["events"][0]["details"]["fields"] == ["archived_at"]
+
+    @pytest.mark.asyncio
     async def test_patch_fact_metadata_rejects_missing_superseding_fact(
         self,
         test_client: AsyncClient,

@@ -396,6 +396,7 @@ export interface FactMetadataUpdate {
   expires_at?: string | null;
   pinned?: boolean;
   superseded_by_fact_id?: number | null;
+  archived?: boolean;
 }
 
 export async function updateFactMetadataApi(

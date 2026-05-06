@@ -213,6 +213,8 @@ async def update_fact_metadata(
         updates["pinned_at"] = datetime.now(UTC) if request.pinned else None
     if "superseded_by_fact_id" in fields:
         updates["superseded_by_fact_id"] = request.superseded_by_fact_id
+    if "archived" in fields:
+        updates["archived"] = request.archived
 
     try:
         fact = await svc.facts.update_metadata(fact_id, updates)
