@@ -6,7 +6,6 @@ import pytest_asyncio
 from ntrp.memory.audit import memory_audit, observation_prune_dry_run
 from ntrp.memory.models import FactKind, SourceType
 from ntrp.memory.store.base import GraphDatabase
-from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
 from tests.conftest import mock_embedding
@@ -20,11 +19,6 @@ async def fact_repo(db: GraphDatabase) -> FactRepository:
 @pytest_asyncio.fixture
 async def obs_repo(db: GraphDatabase) -> ObservationRepository:
     return ObservationRepository(db.conn)
-
-
-@pytest_asyncio.fixture
-async def dream_repo(db: GraphDatabase) -> DreamRepository:
-    return DreamRepository(db.conn)
 
 
 class TestMemoryAudit:
@@ -83,7 +77,6 @@ class TestMemoryAudit:
         db: GraphDatabase,
         fact_repo: FactRepository,
         obs_repo: ObservationRepository,
-        dream_repo: DreamRepository,
     ):
         active_fact = await fact_repo.create("A supported fact", SourceType.EXPLICIT)
         archived_fact = await fact_repo.create("An old supporting fact", SourceType.CHAT)
@@ -93,9 +86,6 @@ class TestMemoryAudit:
         await obs_repo.create("Observation without support")
         await obs_repo.create("Observation with archived support", source_fact_id=archived_fact.id)
         await obs_repo.create("Observation with missing support", source_fact_id=999_999)
-
-        await dream_repo.create("Bridge", "Insight", [active_fact.id, archived_fact.id, 999_999])
-        await dream_repo.create("No source bridge", "No source insight", [])
 
         audit = await memory_audit(db.conn)
 
@@ -108,14 +98,6 @@ class TestMemoryAudit:
         assert observation_provenance["archived_source_refs"] == 1
         assert observation_provenance["records_with_archived_sources"] == 1
         assert observation_provenance["relation_refs"] == 2
-
-        dream_provenance = audit["provenance"]["dreams"]
-        assert dream_provenance["records"] == 2
-        assert dream_provenance["records_without_sources"] == 1
-        assert dream_provenance["source_refs"] == 3
-        assert dream_provenance["missing_source_refs"] == 1
-        assert dream_provenance["archived_source_refs"] == 1
-        assert dream_provenance["relation_refs"] == 2
 
     @pytest.mark.asyncio
     async def test_reports_search_storage_integrity(

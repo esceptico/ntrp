@@ -353,7 +353,7 @@ function useEntries(): CommandEntry[] {
       label: "Memory",
       icon: Brain,
       run: openMemory,
-      search: "memory facts observations dreams profile",
+      search: "memory facts observations patterns",
     });
     entries.push({
       id: "open:automations",
@@ -452,4 +452,3 @@ function groupBySection(entries: CommandEntry[]): {
   }
   return out;
 }
-

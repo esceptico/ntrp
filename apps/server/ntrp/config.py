@@ -46,7 +46,6 @@ PERSIST_KEYS = frozenset(
         "memory_model",
         "embedding_model",
         "memory",
-        "dreams",
         "consolidation_interval",
         "google",
         "gmail_days",
@@ -97,7 +96,6 @@ class Config(BaseSettings):
 
     # Memory
     memory: bool = True
-    dreams: bool = False
     consolidation_interval: int = 30
 
     # Google (Gmail + Calendar)

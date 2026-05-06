@@ -1,30 +1,24 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { Config } from "../../../types.js";
 import type { FactFilters, ObservationFilters } from "../../../api/client.js";
 import { useFactsTab } from "../../../hooks/useFactsTab.js";
-import { useProfileTab } from "../../../hooks/useProfileTab.js";
 import { useObservationsTab } from "../../../hooks/useObservationsTab.js";
 import { usePruneTab } from "../../../hooks/usePruneTab.js";
 import { useMemoryEventsTab } from "../../../hooks/useMemoryEventsTab.js";
 import { useMemoryAccessTab } from "../../../hooks/useMemoryAccessTab.js";
-import { useLearningTab } from "../../../hooks/useLearningTab.js";
 import { useMemoryData } from "../../../hooks/useMemoryData.js";
 import { useMemoryKeypress } from "../../../hooks/useMemoryKeypress.js";
 import { useRecallInspectTab } from "../../../hooks/useRecallInspectTab.js";
 import { Dialog, Tabs, colors, truncateText } from "../../ui/index.js";
 import { useContentWidth } from "../../../contexts/index.js";
 import { memoryAccessSourceLabel } from "../../../lib/memoryAccess.js";
-import { summarizeLearningCandidates } from "../../../lib/memoryLearning.js";
 import { MEMORY_TABS, MEMORY_TAB_COPY, memoryTabLabels, type MemoryTabType } from "../../../lib/memoryTabs.js";
 import { FactsSection } from "./FactsSection.js";
-import { LearningSection } from "./LearningSection.js";
 import { MemoryAccessSection } from "./MemoryAccessSection.js";
 import { ObservationsSection } from "./ObservationsSection.js";
-import { ProfileSection } from "./ProfileSection.js";
 import { PruneSection } from "./PruneSection.js";
 import { MemoryEventsSection } from "./MemoryEventsSection.js";
 import { MemoryFooter } from "./MemoryFooter.js";
-import { OverviewSection } from "./OverviewSection.js";
 import { RecallInspectSection } from "./RecallInspectSection.js";
 
 type SortableTab = { sortOrder: string };
@@ -36,67 +30,50 @@ interface MemoryViewerProps {
 
 export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
   const contentWidth = useContentWidth();
-  const [activeTab, setActiveTab] = useState<MemoryTabType>("overview");
+  const [activeTab, setActiveTab] = useState<MemoryTabType>("recall");
   const [factFilters, setFactFilters] = useState<FactFilters>({ status: "active" });
   const [observationFilters, setObservationFilters] = useState<ObservationFilters>({ status: "active" });
 
   const {
     facts,
     factTotal,
-    profileEntries,
     observations,
     observationTotal,
     pruneDryRun,
     memoryEvents,
-    learningEvents,
-    learningCandidates,
     memoryAccessEvents,
     memoryAccessFacts,
     memoryAccessObservations,
-    memoryInjectionPolicy,
     memoryAudit,
     loading,
     backgroundLoading,
     error,
     setFacts,
-    setProfileEntries,
     setObservations,
-    setLearningCandidates,
     setError,
     reload,
   } = useMemoryData(config, factFilters, observationFilters);
 
-  const profileTab = useProfileTab(config, profileEntries, contentWidth);
   const factsTab = useFactsTab(config, facts, contentWidth, factFilters, setFactFilters, factTotal);
   const obsTab = useObservationsTab(config, observations, contentWidth, observationFilters, setObservationFilters, observationTotal);
   const pruneTab = usePruneTab(pruneDryRun?.candidates ?? [], contentWidth);
-  const learningTab = useLearningTab(learningCandidates, learningEvents, contentWidth);
   const eventsTab = useMemoryEventsTab(memoryEvents, contentWidth);
   const accessTab = useMemoryAccessTab(memoryAccessEvents, contentWidth);
   const recallTab = useRecallInspectTab(config);
-  const learningSummary = useMemo(
-    () => summarizeLearningCandidates(learningCandidates),
-    [learningCandidates],
-  );
 
   const { saving } = useMemoryKeypress({
     activeTab,
     setActiveTab,
     recallTab,
-    profileTab,
     factsTab,
     obsTab,
     pruneTab,
-    learningTab,
     pruneDryRun,
     accessTab,
     eventsTab,
-    profileEntries,
     config,
     setFacts,
-    setProfileEntries,
     setObservations,
-    setLearningCandidates,
     setError,
     reload,
     onClose,
@@ -111,11 +88,9 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
         <MemoryFooter
           activeTab={activeTab}
           recallTab={recallTab}
-          profileTab={profileTab}
           factsTab={factsTab}
           obsTab={obsTab}
           pruneTab={pruneTab}
-          learningTab={learningTab}
           accessTab={accessTab}
           eventsTab={eventsTab}
         />
@@ -125,37 +100,25 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
         const errorLineHeight = error ? 1 : 0;
         const sectionHeight = Math.max(1, height - 4 - errorLineHeight);
         const tab: SortableTab | null =
-          activeTab === "overview" || activeTab === "recall"
+          activeTab === "recall"
             ? null
             : activeTab === "context"
               ? accessTab
-              : activeTab === "profile"
-                ? profileTab
-                : activeTab === "facts"
+              : activeTab === "facts"
                   ? factsTab
                   : activeTab === "observations"
-                    ? obsTab
-                    : activeTab === "prune"
-                      ? pruneTab
-                      : activeTab === "learning"
-                        ? learningTab
-                        : eventsTab;
-        const filterDisplay = activeTab === "overview"
-          ? `${factTotal} facts · ${observationTotal} patterns · ${learningSummary.needsAction} learning`
-          : activeTab === "recall"
+                  ? obsTab
+                  : activeTab === "prune"
+                    ? pruneTab
+                    : eventsTab;
+        const filterDisplay = activeTab === "recall"
           ? recallTab.result
             ? `${recallTab.result.observations.length} patterns · ${recallTab.result.facts.length} facts`
             : "no query yet"
           : activeTab === "context"
           ? [
               `source: ${accessTab.sourceFilter === "all" ? "all" : memoryAccessSourceLabel(accessTab.sourceFilter)}`,
-              `policy flags: ${memoryInjectionPolicy?.summary.candidates ?? 0}`,
               `loaded: ${memoryAccessEvents.length}`,
-            ].join(" · ")
-          : activeTab === "profile"
-          ? [
-              `core entries: ${profileEntries.length}`,
-              "curated",
             ].join(" · ")
           : activeTab === "facts"
           ? [
@@ -177,16 +140,6 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
                   `older: ${pruneDryRun.criteria.older_than_days}d`,
                   `max support: ${pruneDryRun.criteria.max_sources}`,
                   `candidates: ${pruneDryRun.summary.total}`,
-                ].join(" · ")
-            : activeTab === "learning"
-              ? [
-                  `lane: ${learningTab.laneFilter}`,
-                  `status: ${learningTab.statusFilter}`,
-                  `type: ${learningTab.changeTypeFilter ?? "all"}`,
-                  `review: ${learningSummary.proposed}`,
-                  `apply: ${learningSummary.readyToApply}`,
-                  `active: ${learningSummary.active}`,
-                  `events: ${learningEvents.length}`,
                 ].join(" · ")
             : activeTab === "events"
               ? [
@@ -234,22 +187,6 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
               </box>
             )}
 
-            {activeTab === "overview" && (
-              <OverviewSection
-                factTotal={factTotal}
-                observationTotal={observationTotal}
-                pruneDryRun={pruneDryRun}
-                memoryEvents={memoryEvents}
-                learningCandidates={learningCandidates}
-                memoryAccessEvents={memoryAccessEvents}
-                profileCount={profileEntries.length}
-                memoryInjectionPolicy={memoryInjectionPolicy}
-                memoryAudit={memoryAudit}
-                height={sectionHeight}
-                width={width}
-              />
-            )}
-
             {activeTab === "recall" && (
               <RecallInspectSection tab={recallTab} height={sectionHeight} width={width} />
             )}
@@ -258,20 +195,10 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
               <MemoryAccessSection
                 tab={accessTab}
                 totalCount={memoryAccessEvents.length}
-                policyPreview={memoryInjectionPolicy}
                 facts={[...facts, ...memoryAccessFacts]}
                 observations={[...observations, ...memoryAccessObservations]}
                 height={sectionHeight}
                 width={width}
-              />
-            )}
-
-            {activeTab === "profile" && (
-              <ProfileSection
-                tab={profileTab}
-                height={sectionHeight}
-                width={width}
-                saving={saving}
               />
             )}
 
@@ -285,15 +212,6 @@ export function MemoryViewer({ config, onClose }: MemoryViewerProps) {
 
             {activeTab === "prune" && (
               <PruneSection tab={pruneTab} dryRun={pruneDryRun} height={sectionHeight} width={width} />
-            )}
-
-            {activeTab === "learning" && (
-              <LearningSection
-                tab={learningTab}
-                totalCount={learningCandidates.length}
-                height={sectionHeight}
-                width={width}
-              />
             )}
 
             {activeTab === "events" && (

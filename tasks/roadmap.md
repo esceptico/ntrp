@@ -24,9 +24,7 @@ These are server endpoints that already work; just need a desktop surface.
 - [~] **MCP server manager** — `/mcp/servers` list, add, enable/disable, tool whitelist, OAuth flow. _Implemented in `Settings → MCP servers` tab; not yet manually tested end-to-end._
 - [ ] **Background tasks panel** — `/chat/background-tasks`, cancel, view results.
 - [ ] **Pending messages queue** — `DELETE /chat/inject/{client_id}` exists; `MessageIngestedEvent` already streams. Show queued user messages while a run is in flight, with cancel-before-ingest. Currently the user can submit while a run is running but has no visibility into whether/when the message lands.
-- [ ] **Memory observability tab** — `/stats`, `/memory/audit`, `/memory/events`, `/memory/access/events`, `/memory/recall/inspect`.
-- [ ] **Learning/candidate review** — `/memory/learning/*`, `/memory/facts/kind-review`. Surface LLM-proposed memory edits before they apply.
-- [ ] **Memory injection-policy preview** — `/memory/injection-policy/preview`. Show exactly what gets stuffed into the prompt for a given query.
+- [~] **Memory observability tab** — `/stats`, `/memory/audit`, `/memory/events`, `/memory/access/events`, `/memory/recall/inspect`. _Implemented as Search plus Advanced → Sent/Cleanup/Audit; learning, dreams, merge review, and injection-policy preview surfaces were stripped._
 - [ ] **Run history view** — `/chat/runs/status`. Per-run metadata, timing, replay.
 - [ ] **Provider discovery** — `/providers`, `/tool-providers`. Connect new models/integrations.
 - [ ] **Directives editor** — `/directives` PUT. Edit the system-level directives file from the app.
@@ -41,7 +39,7 @@ These are server endpoints that already work; just need a desktop surface.
 - [ ] **Background agents that produce reviewable diffs** — long-running entropy-reduction tasks (inbox triage, vault cleanup) run async and present a changeset to review. (Cursor Background Agents.)
 - [ ] **Global OS hotkey + screenshot-to-chat / "work with apps"** — Electron `globalShortcut`, capture from anywhere on the OS, promote captures to memory. (ChatGPT, Witsy, Pieces.)
 - [ ] **Voice capture → structured note** — voice in, fact-extraction-ready transcript out. (Granola, Cleft, Bee.)
-- [ ] **Editable profile timeline view** — chronological "what changed about me" across facts/observations/dreams with inline edit. (Bee.)
+- [ ] **Editable memory timeline view** — chronological fact/pattern changes with inline edit and source links. (Bee.)
 - [ ] **Persistent project containers** — `Project = (instructions + files + memory scope)` shared across sessions. (Claude Projects, LibreChat Presets.)
 - [ ] **Live/interactive artifacts** — chat-embedded UIs that re-render with fresh data. (Claude Live Artifacts, MCP Apps.)
 
@@ -50,11 +48,11 @@ These are server endpoints that already work; just need a desktop surface.
 1. ~~**`@`-mention context picker**~~ — built and reverted; parked.
 2. [ ] **Live token meter + auto-fork banner** — cheapest win; landed in ~an hour using existing compaction signal.
 3. [~] **MCP server manager** — without it, MCP is power-user-only. _Shipped, untested._
-4. [ ] **Memory observability tab** (audit + events + injection preview) — trust-builder for the memory work.
+4. [~] **Memory observability tab** (audit + events + recall inspect) — trust-builder for the memory work. _Shipped in desktop Memory modal; needs manual testing._
 5. [ ] **Global hotkey + screenshot-to-chat** — biggest "real personal app" lift; needs Electron `globalShortcut` + native capture.
 6. [ ] **Automation `{{var}}` placeholders + ad-hoc fire** — small change, big leverage on existing automations.
 7. [ ] **Background tasks panel** — closes the async loop server-side wiring already enables.
-8. [ ] **Editable profile timeline** — a 6th memory tab; another angle on the data we already store.
+8. [ ] **Editable memory timeline** — a future memory view, not a separate profile layer.
 
 ## UX patterns from top-tier agentic apps
 
@@ -102,11 +100,11 @@ Cross-app themes that show up in 3+ polished agentic desktops (Claude / Codex / 
 - Sessions: list, search, archive, restore, permanent delete, right-click menu, manual compact.
 - Compaction indicator (server emits start/finish; client shows spinner + "compacted N → M" toast).
 - Automations: list (Active/Templates tabs), prompt-first editor, run, view-last-run, scheduling chip.
-- Memory: Facts, Observations, Profile, Dreams, Merges (supersession candidates).
+- Memory: Search, Facts, Patterns, with Sent/Cleanup/Audit tucked under Advanced.
 - Activity trace: per-parent rolling sub-tail; agent-kind tools render as agent cards instead of raw args.
 - Tool inspector: agent variant with task / markdown result / recursive Activity tree.
 - Edit + branch flows: stable `client_id` end-to-end (server stamps user messages on submit; provider preprocessor strips before API call).
-- PageModal shell + lib/{hooks,format,agent} de-duped from across modals; MemoryModal split into `memory/{Facts,Observations,Profile,Dreams,Merges}Pane.tsx`.
+- PageModal shell + lib/{hooks,format,agent} de-duped from across modals; MemoryModal split into focused `memory/*Pane.tsx` files.
 - Cross-session streaming awareness (Letta-shaped):
   - Server checkpoints `run.messages` to SQLite via `SessionStore.update_progress` after every agent step (hook: `agent.hooks.on_step_finish` in `services/chat.py`). The DB is the source of truth for in-flight conversation state — no event-replay buffer.
   - Client gates SSE subscription on `historyLoadedFor === currentSessionId` so `setHistory()` can't race the first live deltas after a session switch.

@@ -11,7 +11,6 @@ from ntrp.core.prompts import build_system_prompt
 from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import AutomationProgressEvent, ToolCallEvent, ToolResultEvent, agent_event_to_sse
 from ntrp.memory.facts import FactMemory
-from ntrp.memory.learning_context import get_applied_automation_policy_context, get_approved_learning_context
 from ntrp.memory.prefetch import build_memory_prompt_context
 from ntrp.server.bus import SessionBus
 from ntrp.tools.deferred import build_deferred_tools_prompt_for_schemas
@@ -52,7 +51,6 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
     run_id = generate_slug(2)
 
     memory_context = None
-    learning_context = None
     if deps.memory:
         memory_context = await build_memory_prompt_context(
             deps.memory,
@@ -60,22 +58,6 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
             source="operator_prompt",
             details={"source_id": request.source_id},
         )
-        learning_context = await get_approved_learning_context(deps.memory)
-        if request.automation_id and (
-            automation_policy := await get_applied_automation_policy_context(
-                deps.memory,
-                automation_id=request.automation_id,
-            )
-        ):
-            learning_context = "\n".join(
-                part
-                for part in (
-                    learning_context,
-                    "Applied automation policy notes:",
-                    automation_policy,
-                )
-                if part
-            )
 
     executor = deps.executor
     tools = executor.get_tools() if request.writable else executor.get_tools(mutates=False)
@@ -93,7 +75,6 @@ async def _prepare(deps: OperatorDeps, request: RunRequest) -> tuple[Agent, list
     system_prompt = build_system_prompt(
         source_details=deps.source_details,
         memory_context=memory_context,
-        learning_context=learning_context,
         directives=load_directives(),
         notifiers=deps.notifiers or None,
         deferred_tools_context=deferred_tools_context,

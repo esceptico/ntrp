@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 15
+CURRENT_VERSION = 17
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -170,17 +170,6 @@ async def _migrate_v6(conn: aiosqlite.Connection) -> None:
     """)
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_observation_facts_fact ON observation_facts(fact_id)")
 
-    await conn.execute("""
-        CREATE TABLE IF NOT EXISTS dream_facts (
-            dream_id INTEGER NOT NULL REFERENCES dreams(id) ON DELETE CASCADE,
-            fact_id INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
-            role TEXT NOT NULL DEFAULT 'support',
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (dream_id, fact_id)
-        )
-    """)
-    await conn.execute("CREATE INDEX IF NOT EXISTS idx_dream_facts_fact ON dream_facts(fact_id)")
-
     if await _table_exists(conn, "observations"):
         await conn.execute("""
             INSERT OR IGNORE INTO observation_facts (observation_id, fact_id, role, created_at)
@@ -188,15 +177,6 @@ async def _migrate_v6(conn: aiosqlite.Connection) -> None:
             FROM observations o, json_each(o.source_fact_ids) source
             JOIN facts f ON f.id = CAST(source.value AS INTEGER)
             WHERE json_valid(o.source_fact_ids)
-        """)
-
-    if await _table_exists(conn, "dreams"):
-        await conn.execute("""
-            INSERT OR IGNORE INTO dream_facts (dream_id, fact_id, role, created_at)
-            SELECT d.id, f.id, 'support', COALESCE(d.created_at, CURRENT_TIMESTAMP)
-            FROM dreams d, json_each(d.source_fact_ids) source
-            JOIN facts f ON f.id = CAST(source.value AS INTEGER)
-            WHERE json_valid(d.source_fact_ids)
         """)
 
 
@@ -271,113 +251,6 @@ async def _migrate_v9(conn: aiosqlite.Connection) -> None:
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_access_events_source ON memory_access_events(source)")
 
 
-async def _migrate_v10(conn: aiosqlite.Connection) -> None:
-    """Add continuous-learning event and candidate logs."""
-    _logger.info("Migration v10: adding continuous-learning tables")
-
-    await conn.execute("""
-        CREATE TABLE IF NOT EXISTS learning_events (
-            id INTEGER PRIMARY KEY,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            source_type TEXT NOT NULL,
-            source_id TEXT,
-            scope TEXT NOT NULL,
-            signal TEXT NOT NULL,
-            evidence_ids TEXT NOT NULL DEFAULT '[]',
-            outcome TEXT NOT NULL DEFAULT 'unknown',
-            details TEXT NOT NULL DEFAULT '{}'
-        )
-    """)
-    await conn.execute("CREATE INDEX IF NOT EXISTS idx_learning_events_created ON learning_events(created_at DESC)")
-    await conn.execute("CREATE INDEX IF NOT EXISTS idx_learning_events_scope ON learning_events(scope)")
-    await conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_learning_events_source ON learning_events(source_type, source_id)"
-    )
-
-    await conn.execute("""
-        CREATE TABLE IF NOT EXISTS learning_candidates (
-            id INTEGER PRIMARY KEY,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            status TEXT NOT NULL DEFAULT 'proposed',
-            change_type TEXT NOT NULL,
-            target_key TEXT NOT NULL,
-            proposal TEXT NOT NULL,
-            rationale TEXT NOT NULL,
-            evidence_event_ids TEXT NOT NULL DEFAULT '[]',
-            expected_metric TEXT,
-            policy_version TEXT NOT NULL,
-            applied_at TIMESTAMP,
-            reverted_at TIMESTAMP,
-            details TEXT NOT NULL DEFAULT '{}'
-        )
-    """)
-    await conn.execute("CREATE INDEX IF NOT EXISTS idx_learning_candidates_status ON learning_candidates(status)")
-    await conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_learning_candidates_change_type ON learning_candidates(change_type)"
-    )
-    await conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_learning_candidates_created ON learning_candidates(created_at DESC)"
-    )
-
-
-async def _migrate_v11(conn: aiosqlite.Connection) -> None:
-    """Add durable learning event processing state."""
-    _logger.info("Migration v11: adding learning event processing table")
-
-    await conn.execute("""
-        CREATE TABLE IF NOT EXISTS learning_event_processing (
-            scanner TEXT NOT NULL,
-            event_id INTEGER NOT NULL REFERENCES learning_events(id) ON DELETE CASCADE,
-            candidate_id INTEGER REFERENCES learning_candidates(id) ON DELETE SET NULL,
-            decision TEXT NOT NULL,
-            processed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (scanner, event_id)
-        )
-    """)
-    await conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_learning_event_processing_event ON learning_event_processing(event_id)"
-    )
-
-    await conn.execute("""
-        INSERT OR IGNORE INTO learning_event_processing (scanner, event_id, candidate_id, decision, processed_at)
-        SELECT
-            CASE learning_candidates.change_type
-                WHEN 'skill_note' THEN 'skill_note'
-                WHEN 'memory_feedback' THEN 'memory_feedback'
-            END,
-            CAST(event_id.value AS INTEGER),
-            learning_candidates.id,
-            'backfilled',
-            COALESCE(learning_candidates.updated_at, CURRENT_TIMESTAMP)
-        FROM learning_candidates, json_each(learning_candidates.evidence_event_ids) AS event_id
-        WHERE json_valid(learning_candidates.evidence_event_ids)
-          AND learning_candidates.change_type IN ('skill_note', 'memory_feedback')
-    """)
-
-
-async def _migrate_v12(conn: aiosqlite.Connection) -> None:
-    """Add relational provenance edges for learning candidates."""
-    _logger.info("Migration v12: adding learning candidate event links")
-
-    await conn.execute("""
-        CREATE TABLE IF NOT EXISTS learning_candidate_events (
-            candidate_id INTEGER NOT NULL REFERENCES learning_candidates(id) ON DELETE CASCADE,
-            event_id INTEGER NOT NULL REFERENCES learning_events(id) ON DELETE CASCADE,
-            PRIMARY KEY (candidate_id, event_id)
-        )
-    """)
-    await conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_learning_candidate_events_event ON learning_candidate_events(event_id)"
-    )
-    await conn.execute("""
-        INSERT OR IGNORE INTO learning_candidate_events (candidate_id, event_id)
-        SELECT learning_candidates.id, CAST(event_id.value AS INTEGER)
-        FROM learning_candidates, json_each(learning_candidates.evidence_event_ids) AS event_id
-        WHERE json_valid(learning_candidates.evidence_event_ids)
-    """)
-
-
 async def _migrate_v13(conn: aiosqlite.Connection) -> None:
     """Add explicit fact lifetime metadata."""
     _logger.info("Migration v13: adding fact lifetime")
@@ -405,49 +278,26 @@ async def _migrate_v13(conn: aiosqlite.Connection) -> None:
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_lifetime ON facts(lifetime)")
 
 
-async def _migrate_v14(conn: aiosqlite.Connection) -> None:
-    """Close deprecated profile-learning candidates."""
-    _logger.info("Migration v14: closing deprecated profile learning candidates")
+async def _migrate_v16(conn: aiosqlite.Connection) -> None:
+    """Drop removed dream and continual-learning storage."""
+    _logger.info("Migration v16: dropping dream and continual-learning tables")
 
-    if not await _table_exists(conn, "learning_candidates"):
-        return
-
-    await conn.execute("""
-        UPDATE learning_candidates
-        SET status = 'rejected',
-            updated_at = CURRENT_TIMESTAMP
-        WHERE status IN ('proposed', 'approved')
-          AND (
-            change_type IN ('profile_rule', 'supersession_review')
-            OR target_key LIKE 'memory.profile.%'
-            OR target_key = 'memory.facts.supersession.profile'
-          )
-    """)
+    for table in (
+        "learning_event_processing",
+        "learning_candidate_events",
+        "learning_candidates",
+        "learning_events",
+        "dream_facts",
+        "dreams",
+    ):
+        await conn.execute(f"DROP TABLE IF EXISTS {table}")
 
 
-async def _migrate_v15(conn: aiosqlite.Connection) -> None:
-    """Add explicit curated profile entries."""
-    _logger.info("Migration v15: adding curated profile entries")
+async def _migrate_v17(conn: aiosqlite.Connection) -> None:
+    """Drop removed profile storage."""
+    _logger.info("Migration v17: dropping profile table")
 
-    await conn.execute("""
-        CREATE TABLE IF NOT EXISTS profile_entries (
-            id INTEGER PRIMARY KEY,
-            kind TEXT NOT NULL,
-            summary TEXT NOT NULL,
-            source_fact_ids TEXT NOT NULL DEFAULT '[]',
-            source_observation_ids TEXT NOT NULL DEFAULT '[]',
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            archived_at TIMESTAMP,
-            created_by TEXT NOT NULL DEFAULT 'manual',
-            policy_version TEXT NOT NULL DEFAULT 'manual',
-            confidence REAL NOT NULL DEFAULT 1.0
-        )
-    """)
-    await conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_profile_entries_active ON profile_entries(archived_at, updated_at DESC)"
-    )
-    await conn.execute("CREATE INDEX IF NOT EXISTS idx_profile_entries_kind ON profile_entries(kind)")
+    await conn.execute("DROP TABLE IF EXISTS profile_entries")
 
 
 _MIGRATIONS: list[tuple[int, callable]] = [
@@ -460,12 +310,9 @@ _MIGRATIONS: list[tuple[int, callable]] = [
     (7, _migrate_v7),
     (8, _migrate_v8),
     (9, _migrate_v9),
-    (10, _migrate_v10),
-    (11, _migrate_v11),
-    (12, _migrate_v12),
     (13, _migrate_v13),
-    (14, _migrate_v14),
-    (15, _migrate_v15),
+    (16, _migrate_v16),
+    (17, _migrate_v17),
 ]
 
 

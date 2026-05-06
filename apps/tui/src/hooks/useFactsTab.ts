@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Config } from "../types.js";
 import type { Key } from "./useKeypress.js";
@@ -10,7 +10,6 @@ import {
   type FactFilters,
   type FactKind,
   type FactLifetime,
-  type FactMetadataSuggestion,
   type FactStatus,
   type SourceType,
 } from "../api/client.js";
@@ -58,9 +57,6 @@ export interface FactsTabState {
   confirmDelete: boolean;
   filters: FactFilters;
   factTotal: number;
-  metadataSuggestion: FactMetadataSuggestion | null;
-  suggestionLoading: boolean;
-  suggestionError: string | null;
   sortOrder: SortOrder;
   handleKeys: (key: Key) => void;
   setSearchQuery: (q: string) => void;
@@ -72,9 +68,6 @@ export interface FactsTabState {
   setEditText: Dispatch<SetStateAction<string>>;
   setCursorPos: Dispatch<SetStateAction<number>>;
   setConfirmDelete: Dispatch<SetStateAction<boolean>>;
-  setMetadataSuggestion: Dispatch<SetStateAction<FactMetadataSuggestion | null>>;
-  setSuggestionLoading: Dispatch<SetStateAction<boolean>>;
-  setSuggestionError: Dispatch<SetStateAction<string | null>>;
 }
 
 export function useFactsTab(
@@ -86,9 +79,6 @@ export function useFactsTab(
   factTotal: number,
   enableFilters = true,
 ): FactsTabState {
-  const [metadataSuggestion, setMetadataSuggestion] = useState<FactMetadataSuggestion | null>(null);
-  const [suggestionLoading, setSuggestionLoading] = useState(false);
-  const [suggestionError, setSuggestionError] = useState<string | null>(null);
   const detailsRef = useRef<FactDetails | null>(null);
 
   const cycle = useCallback(<T,>(values: T[], current: T): T => {
@@ -147,12 +137,6 @@ export function useFactsTab(
 
   const currentId = ld.filtered[ld.selectedIndex]?.id;
 
-  useEffect(() => {
-    setMetadataSuggestion(null);
-    setSuggestionError(null);
-    setSuggestionLoading(false);
-  }, [currentId]);
-
   const { data: factDetails = null, isLoading: detailsLoading } = useQuery({
     queryKey: ["factDetails", currentId],
     queryFn: ({ signal }) => getFactDetails(config, currentId!, signal),
@@ -180,9 +164,6 @@ export function useFactsTab(
     confirmDelete: ld.confirmDelete,
     filters,
     factTotal,
-    metadataSuggestion,
-    suggestionLoading,
-    suggestionError,
     sortOrder: ld.sortOrder,
     handleKeys: ld.handleKeys,
     setSearchQuery: ld.setSearchQuery,
@@ -194,8 +175,5 @@ export function useFactsTab(
     setEditText: ld.setEditText,
     setCursorPos: ld.setCursorPos,
     setConfirmDelete: ld.setConfirmDelete,
-    setMetadataSuggestion,
-    setSuggestionLoading,
-    setSuggestionError,
   };
 }

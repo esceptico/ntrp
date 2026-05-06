@@ -39,7 +39,7 @@ const FACT_KINDS: FactKind[] = [
   "note",
 ];
 
-export function FactsPane() {
+export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
   const config = useStore((s) => s.config);
   const [facts, setFacts] = useState<Fact[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -57,6 +57,17 @@ export function FactsPane() {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind]);
+
+  useEffect(() => {
+    if (!targetFact) return;
+    setFacts((prev) => {
+      const existing = prev ?? [];
+      return [targetFact, ...existing.filter((fact) => fact.id !== targetFact.id)];
+    });
+    setSelectedId(targetFact.id);
+    setQuery("");
+    setKind(null);
+  }, [targetFact]);
 
   const filtered = useMemo(() => {
     if (!facts) return null;
@@ -237,16 +248,18 @@ function FactDetail({
         )
       }
       meta={
-        <MetaGrid
-          rows={[
-            { label: "Created", value: formatAbs(fact.created_at) },
-            { label: "Last accessed", value: formatAbs(fact.last_accessed_at) },
-            { label: "Access count", value: String(fact.access_count) },
-            { label: "Source", value: fact.source_type },
-            fact.source_ref ? { label: "Source ref", value: fact.source_ref, mono: true } : null,
-            fact.expires_at ? { label: "Expires", value: formatAbs(fact.expires_at) } : null,
-          ]}
-        />
+        <>
+          <MetaGrid
+            rows={[
+              { label: "Created", value: formatAbs(fact.created_at) },
+              { label: "Last accessed", value: formatAbs(fact.last_accessed_at) },
+              { label: "Access count", value: String(fact.access_count) },
+              { label: "Source", value: fact.source_type },
+              fact.source_ref ? { label: "Source ref", value: fact.source_ref, mono: true } : null,
+              fact.expires_at ? { label: "Expires", value: formatAbs(fact.expires_at) } : null,
+            ]}
+          />
+        </>
       }
       actions={
         <>

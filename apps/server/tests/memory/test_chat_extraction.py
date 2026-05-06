@@ -1,3 +1,4 @@
+from inspect import signature
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -92,6 +93,18 @@ class TestExtractFromChat:
         assert "Patterns not directly stated" in prompt
         assert "Assign exactly one kind" in prompt
         assert "Assign exactly one lifetime" in prompt
+
+    def test_extraction_prompt_has_no_policy_note_slot(self):
+        prompt = CHAT_EXTRACTION_PROMPT.render(
+            conversation="user: I prefer raw SQL",
+            policy_context="- memory.extraction.feedback: Add more rules",
+        )
+
+        assert "APPROVED MEMORY POLICY NOTES" not in prompt
+        assert "memory.extraction.feedback" not in prompt
+
+    def test_extract_from_chat_accepts_only_messages_and_model(self):
+        assert "policy_context" not in signature(extract_from_chat).parameters
 
     @pytest.mark.asyncio
     async def test_returns_extracted_facts(self):

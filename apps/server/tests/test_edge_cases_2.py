@@ -13,7 +13,7 @@ from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
 from ntrp.memory.facts import SessionMemory
 from ntrp.memory.formatting import model_memory_context
-from ntrp.memory.models import Fact, FactContext, FactKind, Observation, ProfileEntry, SourceType
+from ntrp.memory.models import Fact, FactContext, FactKind, Observation, SourceType
 from ntrp.memory.prefetch import (
     build_memory_prompt_context,
     filter_prefetch_context,
@@ -110,19 +110,6 @@ def _observation(obs_id: int, summary: str, source_fact_ids: list[int]) -> Obser
     )
 
 
-def _profile_entry(entry_id: int, summary: str, source_fact_ids: list[int]) -> ProfileEntry:
-    now = datetime.now(UTC)
-    return ProfileEntry(
-        id=entry_id,
-        kind=FactKind.PREFERENCE,
-        summary=summary,
-        source_fact_ids=source_fact_ids,
-        source_observation_ids=[],
-        created_at=now,
-        updated_at=now,
-    )
-
-
 def test_memory_prefetch_query_is_conservative():
     assert memory_prefetch_query("") is None
     assert memory_prefetch_query("/memory") is None
@@ -131,17 +118,15 @@ def test_memory_prefetch_query_is_conservative():
 
 
 def test_filter_prefetch_context_removes_session_memory_duplicates():
-    profile_fact = _fact(1, "User prefers concise replies")
-    profile_entry = _profile_entry(20, "User prefers concise replies", [profile_fact.id])
+    session_fact = _fact(1, "User prefers concise replies")
     user_fact = _fact(2, "User works on ntrp")
     session_observation = _observation(10, "User often reviews backend architecture", [3])
     session_memory = SessionMemory(
         observations=[session_observation],
-        profile_entries=[profile_entry],
-        user_facts=[user_fact],
+        user_facts=[session_fact, user_fact],
     )
     context = FactContext(
-        facts=[profile_fact, user_fact, _fact(4, "Alice owns the launch doc")],
+        facts=[session_fact, user_fact, _fact(4, "Alice owns the launch doc")],
         observations=[session_observation, _observation(11, "Alice appears in project work", [4])],
         bundled_sources={
             10: [_fact(3, "Session source")],
@@ -211,7 +196,7 @@ async def test_prompt_memory_does_not_auto_recall_from_weak_user_turn():
         inspected = False
 
         async def get_session_memory(self, **kwargs):
-            return SessionMemory(observations=[], profile_entries=[], user_facts=[])
+            return SessionMemory(observations=[], user_facts=[])
 
         async def inspect_recall(self, **kwargs):
             self.inspected = True

@@ -13,7 +13,6 @@ import { IntegrationsSection } from "./IntegrationsSection.js";
 import { AutomationsSection } from "./AutomationsSection.js";
 import { SessionsList } from "./SessionsList.js";
 import { MemorySection } from "./MemorySection.js";
-import { summarizeLearningCandidates } from "../../lib/memoryLearning.js";
 
 interface SidebarProps {
   config: Config;
@@ -32,8 +31,7 @@ interface SidebarProps {
 export const Sidebar = React.memo(function Sidebar({ config, serverConfig, serverVersion, data, usage, width, height, currentSessionId, sessionStates, sections, onSessionClick }: SidebarProps) {
   const { accentValue } = useAccentColor();
   const contentWidth = width - 2;
-  const learningSummary = summarizeLearningCandidates(data.learningCandidates);
-  const showMemory = sections.memory_stats && (Boolean(data.memoryStats) || learningSummary.total > 0);
+  const showMemory = sections.memory_stats && Boolean(data.memoryStats);
 
   return (
     <scrollbox
@@ -58,7 +56,6 @@ export const Sidebar = React.memo(function Sidebar({ config, serverConfig, serve
         {showMemory && (
           <MemorySection
             stats={sections.memory_stats ? data.memoryStats : null}
-            learningCandidates={data.learningCandidates}
             width={contentWidth}
           />
         )}

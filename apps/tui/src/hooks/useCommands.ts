@@ -182,7 +182,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   },
 
   init: ({ addMessage, sendMessage }) => {
-    addMessage({ role: "status", content: "Scanning sources and learning about you..." });
+    addMessage({ role: "status", content: "Scanning sources and updating memory..." });
     sendMessage("/init");
     return true;
   },

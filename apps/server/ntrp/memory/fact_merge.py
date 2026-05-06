@@ -20,7 +20,6 @@ from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding, Fact
 from ntrp.memory.prompts import FACT_MERGE_PROMPT
 from ntrp.memory.retrieval import SimilarityPairQueue
-from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.facts import FactRepository
 from ntrp.memory.store.observations import ObservationRepository
 
@@ -76,9 +75,7 @@ def _pick_keeper(a: Fact, b: Fact) -> tuple[Fact, Fact]:
     return (a, b) if a.created_at >= b.created_at else (b, a)
 
 
-async def _replace_source_fact_id(
-    conn, table: Literal["observations", "dreams"], removed_id: int, keeper_id: int
-) -> None:
+async def _replace_source_fact_id(conn, table: Literal["observations"], removed_id: int, keeper_id: int) -> None:
     """Replace removed_id with keeper_id in source_fact_ids column, deduplicating."""
     rows = await conn.execute_fetchall(
         f"SELECT id, source_fact_ids FROM {table} WHERE source_fact_ids LIKE ?",
@@ -104,7 +101,6 @@ async def _merge_facts(
     embedding: Embedding,
     fact_repo: FactRepository,
     obs_repo: ObservationRepository,
-    dream_repo: DreamRepository | None = None,
 ) -> None:
     # Update keeper text + embedding
     await fact_repo.update_text(keeper.id, merged_text, embedding)
@@ -129,10 +125,8 @@ async def _merge_facts(
             (removed.access_count, keeper.id),
         )
 
-    # Update source_fact_ids in observations and dreams: replace removed.id with keeper.id
+    # Update source_fact_ids in observations: replace removed.id with keeper.id
     await _replace_source_fact_id(obs_repo.conn, "observations", removed.id, keeper.id)
-    if dream_repo:
-        await _replace_source_fact_id(dream_repo.conn, "dreams", removed.id, keeper.id)
 
     # Delete the removed fact
     await fact_repo.delete(removed.id)
@@ -145,7 +139,6 @@ async def fact_merge_pass(
     embed_fn: EmbedFn,
     atomic: AtomicFn | None = None,
     threshold: float = FACT_MERGE_SIMILARITY_THRESHOLD,
-    dream_repo: DreamRepository | None = None,
 ) -> int:
     facts = await fact_repo.list_all_with_embeddings()
     if len(facts) < 2:
@@ -183,7 +176,7 @@ async def fact_merge_pass(
 
         # DB writes inside atomic
         async with atomic() if atomic else nullcontext():
-            await _merge_facts(keeper, removed, merged_text, embedding, fact_repo, obs_repo, dream_repo)
+            await _merge_facts(keeper, removed, merged_text, embedding, fact_repo, obs_repo)
 
         _logger.info(
             "Merged fact %d + %d → %d (sim=%.3f): %s",

@@ -115,7 +115,7 @@ async def test_migrate_v13_adds_lifetime_and_backfills_legacy_temporary(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_migrate_v6_backfills_generated_memory_provenance(tmp_path: Path):
+async def test_migrate_v6_backfills_observation_provenance(tmp_path: Path):
     conn = await aiosqlite.connect(tmp_path / "memory.db")
     conn.row_factory = aiosqlite.Row
     await conn.executescript("""
@@ -136,18 +136,9 @@ async def test_migrate_v6_backfills_generated_memory_provenance(tmp_path: Path):
             source_fact_ids TEXT DEFAULT '[]',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-        CREATE TABLE dreams (
-            id INTEGER PRIMARY KEY,
-            bridge TEXT NOT NULL,
-            insight TEXT NOT NULL,
-            source_fact_ids TEXT DEFAULT '[]',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
         INSERT INTO facts (id, text, source_type) VALUES (1, 'Fact 1', 'explicit');
         INSERT INTO facts (id, text, source_type) VALUES (2, 'Fact 2', 'explicit');
         INSERT INTO observations (id, summary, source_fact_ids) VALUES (10, 'Observation', '[1,999,2]');
-        INSERT INTO dreams (id, bridge, insight, source_fact_ids) VALUES (20, 'Bridge', 'Insight', '[2,999]');
     """)
 
     await run_migrations(conn)
@@ -156,9 +147,6 @@ async def test_migrate_v6_backfills_generated_memory_provenance(tmp_path: Path):
         "SELECT observation_id, fact_id FROM observation_facts ORDER BY fact_id"
     )
     assert [(row["observation_id"], row["fact_id"]) for row in observation_rows] == [(10, 1), (10, 2)]
-
-    dream_rows = await conn.execute_fetchall("SELECT dream_id, fact_id FROM dream_facts ORDER BY fact_id")
-    assert [(row["dream_id"], row["fact_id"]) for row in dream_rows] == [(20, 2)]
 
     await conn.close()
 
@@ -265,7 +253,7 @@ async def test_migrate_v9_adds_memory_access_events(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_migrate_v10_adds_learning_tables(tmp_path: Path):
+async def test_migrate_does_not_recreate_removed_memory_tables(tmp_path: Path):
     conn = await aiosqlite.connect(tmp_path / "memory.db")
     conn.row_factory = aiosqlite.Row
     await conn.executescript("""
@@ -275,42 +263,12 @@ async def test_migrate_v10_adds_learning_tables(tmp_path: Path):
 
     await run_migrations(conn)
 
-    event_columns = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(learning_events)")}
-    assert {
-        "source_type",
-        "source_id",
-        "scope",
-        "signal",
-        "evidence_ids",
-        "outcome",
-        "details",
-    }.issubset(event_columns)
-
-    candidate_columns = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(learning_candidates)")}
-    assert {
-        "status",
-        "change_type",
-        "target_key",
-        "proposal",
-        "rationale",
-        "evidence_event_ids",
-        "expected_metric",
-        "policy_version",
-        "applied_at",
-        "reverted_at",
-        "details",
-    }.issubset(candidate_columns)
-
-    indexes = {row["name"] for row in await conn.execute_fetchall("PRAGMA index_list(learning_candidates)")}
-    assert {"idx_learning_candidates_status", "idx_learning_candidates_change_type"}.issubset(indexes)
-
-    processing_columns = {
-        row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(learning_event_processing)")
-    }
-    assert {"scanner", "event_id", "candidate_id", "decision", "processed_at"}.issubset(processing_columns)
-
-    link_columns = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(learning_candidate_events)")}
-    assert {"candidate_id", "event_id"}.issubset(link_columns)
+    tables = {row["name"] for row in await conn.execute_fetchall("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "learning_events" not in tables
+    assert "learning_candidates" not in tables
+    assert "learning_candidate_events" not in tables
+    assert "learning_event_processing" not in tables
+    assert "profile_entries" not in tables
 
     version = await conn.execute_fetchall("SELECT value FROM meta WHERE key = 'schema_version'")
     assert version[0][0] == str(CURRENT_VERSION)
@@ -319,44 +277,79 @@ async def test_migrate_v10_adds_learning_tables(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_migrate_v14_rejects_deprecated_profile_learning_candidates(tmp_path: Path):
+async def test_migrate_v16_drops_existing_dream_and_learning_tables(tmp_path: Path):
     conn = await aiosqlite.connect(tmp_path / "memory.db")
     conn.row_factory = aiosqlite.Row
     await conn.executescript("""
         CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
-        INSERT INTO meta (key, value) VALUES ('schema_version', '13');
+        INSERT INTO meta (key, value) VALUES ('schema_version', '15');
+        CREATE TABLE dreams (
+            id INTEGER PRIMARY KEY,
+            bridge TEXT NOT NULL,
+            insight TEXT NOT NULL,
+            source_fact_ids TEXT DEFAULT '[]'
+        );
+        CREATE TABLE dream_facts (
+            dream_id INTEGER NOT NULL,
+            fact_id INTEGER NOT NULL,
+            PRIMARY KEY (dream_id, fact_id)
+        );
+        CREATE TABLE learning_events (
+            id INTEGER PRIMARY KEY,
+            source_type TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            signal TEXT NOT NULL
+        );
         CREATE TABLE learning_candidates (
             id INTEGER PRIMARY KEY,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            status TEXT NOT NULL DEFAULT 'proposed',
-            change_type TEXT NOT NULL,
-            target_key TEXT NOT NULL,
-            proposal TEXT NOT NULL,
-            rationale TEXT NOT NULL,
-            evidence_event_ids TEXT NOT NULL DEFAULT '[]',
-            expected_metric TEXT,
-            policy_version TEXT NOT NULL,
-            applied_at TIMESTAMP,
-            reverted_at TIMESTAMP,
-            details TEXT NOT NULL DEFAULT '{}'
+            status TEXT NOT NULL DEFAULT 'proposed'
         );
-        INSERT INTO learning_candidates (
-            status, change_type, target_key, proposal, rationale, policy_version
-        ) VALUES
-            ('proposed', 'profile_rule', 'memory.profile.promotions', 'old profile', 'old', 'test'),
-            ('approved', 'supersession_review', 'memory.facts.supersession.profile', 'old conflict', 'old', 'test'),
-            ('proposed', 'injection_rule', 'memory.injection.budget', 'keep', 'keep', 'test');
+        CREATE TABLE learning_candidate_events (
+            candidate_id INTEGER NOT NULL,
+            event_id INTEGER NOT NULL,
+            PRIMARY KEY (candidate_id, event_id)
+        );
+        CREATE TABLE learning_event_processing (
+            scanner TEXT NOT NULL,
+            event_id INTEGER NOT NULL,
+            PRIMARY KEY (scanner, event_id)
+        );
     """)
 
     await run_migrations(conn)
 
-    rows = await conn.execute_fetchall("SELECT change_type, status FROM learning_candidates ORDER BY id")
-    assert [(row["change_type"], row["status"]) for row in rows] == [
-        ("profile_rule", "rejected"),
-        ("supersession_review", "rejected"),
-        ("injection_rule", "proposed"),
-    ]
+    tables = {row["name"] for row in await conn.execute_fetchall("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "dreams" not in tables
+    assert "dream_facts" not in tables
+    assert "learning_events" not in tables
+    assert "learning_candidates" not in tables
+    assert "learning_candidate_events" not in tables
+    assert "learning_event_processing" not in tables
+
+    version = await conn.execute_fetchall("SELECT value FROM meta WHERE key = 'schema_version'")
+    assert version[0][0] == str(CURRENT_VERSION)
+
+    await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_migrate_v17_drops_existing_profile_table(tmp_path: Path):
+    conn = await aiosqlite.connect(tmp_path / "memory.db")
+    conn.row_factory = aiosqlite.Row
+    await conn.executescript("""
+        CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+        INSERT INTO meta (key, value) VALUES ('schema_version', '16');
+        CREATE TABLE profile_entries (
+            id INTEGER PRIMARY KEY,
+            kind TEXT NOT NULL,
+            summary TEXT NOT NULL
+        );
+    """)
+
+    await run_migrations(conn)
+
+    tables = {row["name"] for row in await conn.execute_fetchall("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "profile_entries" not in tables
 
     version = await conn.execute_fetchall("SELECT value FROM meta WHERE key = 'schema_version'")
     assert version[0][0] == str(CURRENT_VERSION)

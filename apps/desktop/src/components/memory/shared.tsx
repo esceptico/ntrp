@@ -150,6 +150,36 @@ export function ErrorPill({ message }: { message: string }) {
   );
 }
 
+export function Pill({
+  children,
+  tone = "neutral",
+}: {
+  children: ReactNode;
+  tone?: "neutral" | "accent" | "ok" | "warn" | "bad";
+}) {
+  const classes = {
+    neutral: "bg-surface-soft text-muted border-line-soft",
+    accent: "bg-accent-soft text-accent-strong border-[rgba(184,92,31,0.16)]",
+    ok: "bg-ok-soft text-ok border-[rgba(79,138,58,0.18)]",
+    warn: "bg-warn-soft text-warn border-[rgba(196,106,20,0.18)]",
+    bad: "bg-bad-soft text-bad border-[rgba(184,68,43,0.18)]",
+  }[tone];
+
+  return (
+    <span className={clsx("inline-flex items-center rounded-md border px-2 py-[3px] text-[11px]", classes)}>
+      {children}
+    </span>
+  );
+}
+
+export function JsonBlock({ value }: { value: unknown }) {
+  return (
+    <pre className="m-0 max-h-[260px] overflow-auto scroll-thin rounded-[8px] border border-line-soft bg-code-bg px-3 py-2 text-[11.5px] leading-relaxed text-ink-soft whitespace-pre-wrap">
+      {JSON.stringify(value, null, 2)}
+    </pre>
+  );
+}
+
 // ─── Buttons ──────────────────────────────────────────────────────────
 
 export function PrimaryBtn({

@@ -101,15 +101,6 @@ CREATE TABLE IF NOT EXISTS temporal_checkpoints (
     PRIMARY KEY (entity_id, window_end)
 );
 
-CREATE TABLE IF NOT EXISTS dreams (
-    id INTEGER PRIMARY KEY,
-    bridge TEXT NOT NULL,
-    insight TEXT NOT NULL,
-    embedding BLOB,
-    source_fact_ids TEXT DEFAULT '[]',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE IF NOT EXISTS observation_facts (
     observation_id INTEGER NOT NULL REFERENCES observations(id) ON DELETE CASCADE,
     fact_id INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
@@ -119,33 +110,6 @@ CREATE TABLE IF NOT EXISTS observation_facts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_observation_facts_fact ON observation_facts(fact_id);
-
-CREATE TABLE IF NOT EXISTS profile_entries (
-    id INTEGER PRIMARY KEY,
-    kind TEXT NOT NULL,
-    summary TEXT NOT NULL,
-    source_fact_ids TEXT NOT NULL DEFAULT '[]',
-    source_observation_ids TEXT NOT NULL DEFAULT '[]',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    archived_at TIMESTAMP,
-    created_by TEXT NOT NULL DEFAULT 'manual',
-    policy_version TEXT NOT NULL DEFAULT 'manual',
-    confidence REAL NOT NULL DEFAULT 1.0
-);
-
-CREATE INDEX IF NOT EXISTS idx_profile_entries_active ON profile_entries(archived_at, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_profile_entries_kind ON profile_entries(kind);
-
-CREATE TABLE IF NOT EXISTS dream_facts (
-    dream_id INTEGER NOT NULL REFERENCES dreams(id) ON DELETE CASCADE,
-    fact_id INTEGER NOT NULL REFERENCES facts(id) ON DELETE CASCADE,
-    role TEXT NOT NULL DEFAULT 'support',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (dream_id, fact_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_dream_facts_fact ON dream_facts(fact_id);
 
 CREATE TABLE IF NOT EXISTS memory_events (
     id INTEGER PRIMARY KEY,
@@ -184,62 +148,6 @@ CREATE TABLE IF NOT EXISTS memory_access_events (
 
 CREATE INDEX IF NOT EXISTS idx_memory_access_events_created ON memory_access_events(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_memory_access_events_source ON memory_access_events(source);
-
-CREATE TABLE IF NOT EXISTS learning_events (
-    id INTEGER PRIMARY KEY,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    source_type TEXT NOT NULL,
-    source_id TEXT,
-    scope TEXT NOT NULL,
-    signal TEXT NOT NULL,
-    evidence_ids TEXT NOT NULL DEFAULT '[]',
-    outcome TEXT NOT NULL DEFAULT 'unknown',
-    details TEXT NOT NULL DEFAULT '{}'
-);
-
-CREATE INDEX IF NOT EXISTS idx_learning_events_created ON learning_events(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_learning_events_scope ON learning_events(scope);
-CREATE INDEX IF NOT EXISTS idx_learning_events_source ON learning_events(source_type, source_id);
-
-CREATE TABLE IF NOT EXISTS learning_candidates (
-    id INTEGER PRIMARY KEY,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    status TEXT NOT NULL DEFAULT 'proposed',
-    change_type TEXT NOT NULL,
-    target_key TEXT NOT NULL,
-    proposal TEXT NOT NULL,
-    rationale TEXT NOT NULL,
-    evidence_event_ids TEXT NOT NULL DEFAULT '[]',
-    expected_metric TEXT,
-    policy_version TEXT NOT NULL,
-    applied_at TIMESTAMP,
-    reverted_at TIMESTAMP,
-    details TEXT NOT NULL DEFAULT '{}'
-);
-
-CREATE INDEX IF NOT EXISTS idx_learning_candidates_status ON learning_candidates(status);
-CREATE INDEX IF NOT EXISTS idx_learning_candidates_change_type ON learning_candidates(change_type);
-CREATE INDEX IF NOT EXISTS idx_learning_candidates_created ON learning_candidates(created_at DESC);
-
-CREATE TABLE IF NOT EXISTS learning_candidate_events (
-    candidate_id INTEGER NOT NULL REFERENCES learning_candidates(id) ON DELETE CASCADE,
-    event_id INTEGER NOT NULL REFERENCES learning_events(id) ON DELETE CASCADE,
-    PRIMARY KEY (candidate_id, event_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_learning_candidate_events_event ON learning_candidate_events(event_id);
-
-CREATE TABLE IF NOT EXISTS learning_event_processing (
-    scanner TEXT NOT NULL,
-    event_id INTEGER NOT NULL REFERENCES learning_events(id) ON DELETE CASCADE,
-    candidate_id INTEGER REFERENCES learning_candidates(id) ON DELETE SET NULL,
-    decision TEXT NOT NULL,
-    processed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (scanner, event_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_learning_event_processing_event ON learning_event_processing(event_id);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
     text,
@@ -292,13 +200,6 @@ class GraphDatabase:
         await self.conn.commit()
 
     async def clear_all(self) -> None:
-        await self.conn.execute("DELETE FROM learning_event_processing")
-        await self.conn.execute("DELETE FROM learning_candidate_events")
-        await self.conn.execute("DELETE FROM learning_candidates")
-        await self.conn.execute("DELETE FROM learning_events")
-        await self.conn.execute("DELETE FROM profile_entries")
-        await self.conn.execute("DELETE FROM dream_facts")
-        await self.conn.execute("DELETE FROM dreams")
         await self.conn.execute("DELETE FROM memory_access_events")
         await self.conn.execute("DELETE FROM memory_events")
         await self.conn.execute("DELETE FROM temporal_checkpoints")

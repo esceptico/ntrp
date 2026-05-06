@@ -121,7 +121,6 @@ RECALL_SEARCH_LIMIT = 5  # seed nodes from search
 RECALL_OBSERVATION_LIMIT = 5  # max observations in context
 RECALL_STANDALONE_FACT_LIMIT = 10  # max standalone facts (not bundled with observations)
 CONSOLIDATED_FACT_RECALL_WEIGHT = 0.85  # processed facts remain recallable, just slightly lower priority
-SYSTEM_PROMPT_PROFILE_LIMIT = 6  # legacy profile API limit; prompt memory is contextual recall
 SYSTEM_PROMPT_OBSERVATION_LIMIT = 5  # max observations in system prompt memory context
 OBSERVATION_HISTORY_LIMIT = 10  # max history entries kept per observation
 
@@ -152,15 +151,6 @@ SUMMARY_MAX_TOKENS = 1500
 CONSOLIDATION_MAX_BACKOFF_MULTIPLIER = 16
 USER_ENTITY_NAME = "User"
 
-# --- Dream Mode ---
-
-DREAM_MIN_FACTS = 20
-DREAM_CLUSTER_FACTOR = 3
-DREAM_MAX_PAIRS = 6  # max cluster pairs to cross-pollinate (caps LLM calls)
-DREAM_DEDUP_THRESHOLD = 0.85  # cosine similarity — skip dreams too similar to recent ones
-DREAM_TEMPERATURE = 0.7
-DREAM_EVAL_TEMPERATURE = 0.3
-
 # --- Observation Merge ---
 
 OBSERVATION_MERGE_SIMILARITY_THRESHOLD = 0.90
@@ -187,13 +177,11 @@ BUILTIN_CHAT_EXTRACTION_ID = "builtin:chat-extraction"
 BUILTIN_CONSOLIDATION_ID = "builtin:consolidation"
 BUILTIN_MEMORY_MAINTENANCE_ID = "builtin:memory-maintenance"
 BUILTIN_MEMORY_HEALTH_ID = "builtin:memory-health"
-BUILTIN_LEARNING_REVIEW_ID = "builtin:learning-review"
 DEFAULT_EXTRACTION_IDLE_MINUTES = 5
 DEFAULT_CONSOLIDATION_IDLE_MINUTES = 5
 DEFAULT_CONSOLIDATION_COOLDOWN_MINUTES = 30
 DEFAULT_MEMORY_MAINTENANCE_COOLDOWN_MINUTES = 24 * 60
 DEFAULT_MEMORY_HEALTH_COOLDOWN_MINUTES = 24 * 60
-DEFAULT_LEARNING_REVIEW_COOLDOWN_MINUTES = 24 * 60
 
 # --- Monitor ---
 

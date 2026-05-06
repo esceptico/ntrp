@@ -7,7 +7,6 @@ from ntrp.automation.service import AutomationService
 from ntrp.integrations.calendar.client import MultiCalendarSource
 from ntrp.memory.extraction_handler import create_chat_extraction_handler
 from ntrp.memory.facts import FactMemory
-from ntrp.memory.service import MemoryService
 from ntrp.monitor.calendar import CalendarMonitor
 from ntrp.monitor.service import Monitor
 from ntrp.operator.runner import OperatorDeps
@@ -32,7 +31,6 @@ class AutomationRuntime:
         self.scheduler = Scheduler(
             store=stores.automations,
             build_deps=build_operator_deps,
-            record_learning_event=self._record_learning_event,
         )
         self.automation_service = AutomationService(
             store=stores.automations,
@@ -71,21 +69,10 @@ class AutomationRuntime:
                 "memory_health",
                 self._build_memory_health_handler(),
             )
-            self.scheduler.register_handler(
-                "learning_review",
-                self._build_learning_review_handler(),
-            )
 
         await seed_builtins(self.stores.automations)
         self.scheduler.start()
         self.outbox_runtime.start()
-
-    async def _record_learning_event(self, **event: object) -> None:
-        memory = self.get_memory()
-        if not memory:
-            return
-        await memory.learning.create_event(**event)
-        await memory.db.conn.commit()
 
     def _build_consolidation_handler(self):
         async def handler(context: dict | None) -> str | None:
@@ -111,21 +98,6 @@ class AutomationRuntime:
             if not memory:
                 return None
             return await memory.run_memory_health_audit()
-
-        return handler
-
-    def _build_learning_review_handler(self):
-        async def handler(context: dict | None) -> str | None:
-            memory = self.get_memory()
-            if not memory:
-                return None
-            result = await MemoryService(memory).learning.propose_review_candidates()
-            return (
-                "Learning review scan: "
-                f"{len(result.created_candidates)} new, "
-                f"{len(result.skipped_candidates)} existing, "
-                f"{result.proposals_considered} considered"
-            )
 
         return handler
 

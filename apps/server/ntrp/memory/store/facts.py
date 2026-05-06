@@ -106,43 +106,6 @@ _SQL_GET_FACTS_FOR_ENTITY = """
     ORDER BY f.access_count DESC, f.created_at DESC
     LIMIT ?
 """
-_SQL_LIST_PROFILE_FACTS = """
-    SELECT * FROM facts
-    WHERE archived_at IS NULL
-      AND superseded_by_fact_id IS NULL
-      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
-      AND lifetime = 'durable'
-      AND kind IN ({placeholders})
-    ORDER BY pinned_at IS NULL, salience DESC, access_count DESC, created_at DESC
-    LIMIT ?
-"""
-_SQL_LIST_PROFILE_FACTS_FOR_ENTITY = """
-    SELECT DISTINCT f.*
-    FROM facts f
-    JOIN entity_refs er ON f.id = er.fact_id
-    WHERE f.archived_at IS NULL
-      AND f.superseded_by_fact_id IS NULL
-      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
-      AND f.lifetime = 'durable'
-      AND f.kind IN ({placeholders})
-      AND (
-          er.entity_id = (SELECT id FROM entities WHERE name = ? COLLATE NOCASE)
-          OR (er.entity_id IS NULL AND er.name = ? COLLATE NOCASE)
-      )
-    ORDER BY f.pinned_at IS NULL, f.salience DESC, f.access_count DESC, f.created_at DESC
-    LIMIT ?
-"""
-_SQL_LIST_PROFILE_REVIEW_CANDIDATES = """
-    SELECT * FROM facts
-    WHERE archived_at IS NULL
-      AND superseded_by_fact_id IS NULL
-      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
-      AND lifetime = 'durable'
-      AND kind NOT IN ({placeholders})
-      AND (pinned_at IS NOT NULL OR salience >= ? OR (salience >= 1 AND access_count >= ?))
-    ORDER BY pinned_at IS NULL, salience DESC, access_count DESC, created_at DESC
-    LIMIT ?
-"""
 _SQL_LIST_SUPERSESSION_CANDIDATES = """
     WITH refs AS (
         SELECT
@@ -531,51 +494,6 @@ class FactRepository:
         count_rows = await self.read_conn.execute_fetchall(_SQL_COUNT_KIND_REVIEW)
         rows = await self.read_conn.execute_fetchall(_SQL_LIST_KIND_REVIEW, (limit, offset))
         return [Fact.model_validate(_row_dict(r)) for r in rows], count_rows[0][0]
-
-    async def list_profile_facts(self, kinds: Sequence[FactKind], limit: int) -> list[Fact]:
-        if not kinds:
-            return []
-        placeholders = ",".join("?" * len(kinds))
-        params = tuple(kind.value for kind in kinds) + (limit,)
-        rows = await self.read_conn.execute_fetchall(
-            _SQL_LIST_PROFILE_FACTS.format(placeholders=placeholders),
-            params,
-        )
-        return [Fact.model_validate(_row_dict(r)) for r in rows]
-
-    async def list_profile_facts_for_entity(
-        self,
-        name: str,
-        kinds: Sequence[FactKind],
-        limit: int,
-    ) -> list[Fact]:
-        if not kinds:
-            return []
-        placeholders = ",".join("?" * len(kinds))
-        params = tuple(kind.value for kind in kinds) + (name, name, limit)
-        rows = await self.read_conn.execute_fetchall(
-            _SQL_LIST_PROFILE_FACTS_FOR_ENTITY.format(placeholders=placeholders),
-            params,
-        )
-        return [Fact.model_validate(_row_dict(r)) for r in rows]
-
-    async def list_profile_review_candidates(
-        self,
-        profile_kinds: Sequence[FactKind],
-        *,
-        min_salience: int,
-        min_access_count: int,
-        limit: int,
-    ) -> list[Fact]:
-        if not profile_kinds:
-            return []
-        placeholders = ",".join("?" * len(profile_kinds))
-        params = tuple(kind.value for kind in profile_kinds) + (min_salience, min_access_count, limit)
-        rows = await self.read_conn.execute_fetchall(
-            _SQL_LIST_PROFILE_REVIEW_CANDIDATES.format(placeholders=placeholders),
-            params,
-        )
-        return [Fact.model_validate(_row_dict(r)) for r in rows]
 
     async def list_supersession_candidates(self, kinds: Sequence[FactKind], limit: int) -> list[dict]:
         if not kinds:

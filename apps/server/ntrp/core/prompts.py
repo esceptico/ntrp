@@ -153,13 +153,6 @@ Skills provide specialized capabilities and domain knowledge. When the user asks
 If a skill has already been loaded in this conversation (you see a `<skill>` tag in a prior message), follow its instructions directly instead of calling use_skill again.
 
 {{ skills_xml }}
-{% endif %}
-{% if learning_context %}
-
-## APPROVED LEARNING NOTES
-These are user-approved procedural or prompt notes. Apply them when relevant. They are not source facts.
-
-{{ learning_context }}
 {% endif %}""")
 
 DYNAMIC_BLOCK = env.from_string("""## CONTEXT
@@ -240,7 +233,6 @@ def build_system_blocks(
     source_details: dict[str, dict],
     memory_context: str | None = None,
     skills_context: str | None = None,
-    learning_context: str | None = None,
     directives: str | None = None,
     notifiers: list[str] | None = None,
     deferred_tools_context: str | None = None,
@@ -260,7 +252,6 @@ def build_system_blocks(
         directives=directives,
         sources=source_details,
         skills_xml=skills_context,
-        learning_context=learning_context,
         notifiers=notifiers,
         deferred_tools_context=deferred_tools_context,
     )
@@ -293,7 +284,6 @@ def build_system_prompt(
     source_details: dict[str, dict],
     memory_context: str | None = None,
     skills_context: str | None = None,
-    learning_context: str | None = None,
     directives: str | None = None,
     notifiers: list[str] | None = None,
     deferred_tools_context: str | None = None,
@@ -303,7 +293,6 @@ def build_system_prompt(
         source_details,
         memory_context=memory_context,
         skills_context=skills_context,
-        learning_context=learning_context,
         directives=directives,
         notifiers=notifiers,
         deferred_tools_context=deferred_tools_context,

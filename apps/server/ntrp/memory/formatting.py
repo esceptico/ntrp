@@ -1,15 +1,8 @@
 from dataclasses import dataclass, field
 
-from ntrp.memory.models import Fact, FactContext, FactKind, Observation, ProfileEntry, SourceType
+from ntrp.memory.models import Fact, FactContext, Observation, SourceType
 
 MEMORY_CONTEXT_CHAR_BUDGET = 3000
-
-PROFILE_SECTIONS = (
-    (FactKind.IDENTITY, "**Identity**"),
-    (FactKind.PREFERENCE, "**Preferences**"),
-    (FactKind.RELATIONSHIP, "**Relationships**"),
-    (FactKind.CONSTRAINT, "**Standing constraints**"),
-)
 
 CONTEXTUAL_MEMORY_HEADER = "**Contextual memory**"
 DIRECT_FACTS_HEADER = "**Direct facts**"
@@ -70,15 +63,6 @@ def _tracked_bundled_observation(obs: Observation, source_facts: list[Fact]) -> 
 
 def _format_observation(obs: Observation) -> str:
     return f"- {obs.summary}"
-
-
-def _profile_sections(profile_entries: list[ProfileEntry]) -> list[tuple[str, list[str]]]:
-    sections: list[tuple[str, list[str]]] = []
-    for kind, header in PROFILE_SECTIONS:
-        items = [f"- {entry.summary}" for entry in profile_entries if entry.kind == kind]
-        if items:
-            sections.append((header, items))
-    return sections
 
 
 def _dedupe(ids: list[int]) -> list[int]:
@@ -170,29 +154,25 @@ def _format_sections(
 
 
 def format_session_memory(
-    profile_entries: list[ProfileEntry] | None = None,
     observations: list[Observation] | None = None,
     user_facts: list[Fact] | None = None,
 ) -> str | None:
     """Format stable user memory for the system prompt (cacheable)."""
-    if not profile_entries and not observations and not user_facts:
+    if not observations and not user_facts:
         return None
     sections: list[tuple[str, list[str]]] = []
     if observations:
         sections.append((CONTEXTUAL_MEMORY_HEADER, [_format_observation_with_support(obs) for obs in observations]))
-    if profile_entries:
-        sections.extend(_profile_sections(profile_entries))
     if user_facts:
         sections.append((DIRECT_FACTS_HEADER, [f"- {f.text}" for f in user_facts]))
     return _format_sections(sections)
 
 
 def format_session_memory_render(
-    profile_entries: list[ProfileEntry] | None = None,
     observations: list[Observation] | None = None,
     user_facts: list[Fact] | None = None,
 ) -> MemoryContextRender | None:
-    if not profile_entries and not observations and not user_facts:
+    if not observations and not user_facts:
         return None
     sections: list[tuple[str, list[_TrackedItem]]] = []
     if observations:
@@ -210,19 +190,6 @@ def format_session_memory_render(
                 ],
             )
         )
-    if profile_entries:
-        for kind, header in PROFILE_SECTIONS:
-            items = [
-                _TrackedItem(
-                    text=f"- {entry.summary}",
-                    fact_ids=tuple(entry.source_fact_ids),
-                    observation_ids=tuple(entry.source_observation_ids),
-                )
-                for entry in profile_entries
-                if entry.kind == kind
-            ]
-            if items:
-                sections.append((header, items))
     if user_facts:
         sections.append(
             (

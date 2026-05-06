@@ -84,7 +84,6 @@ class KnowledgeRuntime:
             enqueue_fact_index_upsert=stores.outbox.enqueue_fact_index_upsert,
             enqueue_fact_index_delete=stores.outbox.enqueue_fact_index_delete,
         )
-        self.memory.dreams_enabled = self.config.dreams
         self.memory_service = MemoryService(
             self.memory,
             enqueue_fact_index_upsert=stores.outbox.enqueue_fact_index_upsert,
@@ -113,7 +112,6 @@ class KnowledgeRuntime:
                 return
             if self.memory.model != self.config.memory_model:
                 self.memory.update_model(self.config.memory_model)
-            self.memory.dreams_enabled = self.config.dreams
         elif not self.config.memory and self.memory:
             await self._close_memory()
 

@@ -8,7 +8,6 @@ export interface IntegrationInfo {
   accounts?: string[];
   mode?: "auto" | "exa" | "ddgs" | "none";
   provider?: "exa" | "ddgs" | "none" | "unknown";
-  dreams?: boolean;
 }
 
 export interface ServerConfig {

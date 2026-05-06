@@ -14,7 +14,6 @@ interface MemorySectionProps {
 export function MemorySection({ memory, serverConfig, agentSettings, accent }: MemorySectionProps) {
   const sources = serverConfig?.integrations;
   const memoryEnabled = sources?.memory?.enabled ?? false;
-  const dreamsEnabled = sources?.memory?.dreams ?? false;
 
   return (
     <box flexDirection="column">
@@ -30,21 +29,12 @@ export function MemorySection({ memory, serverConfig, agentSettings, accent }: M
 
       {memoryEnabled && (
         <>
-          <ToggleRow
-            id="item-1"
-            header="Dreams"
-            label="Enabled"
-            enabled={dreamsEnabled}
-            selected={memory.memoryIndex === 1}
-            accent={accent}
-          />
-
           <NumberRow
-            id="item-2"
+            id="item-1"
             header="Consolidation"
             item={MEMORY_NUMBER_ITEMS[0]}
             value={agentSettings[MEMORY_NUMBER_ITEMS[0].key as keyof AgentSettings] as number}
-            selected={memory.memoryIndex === 2}
+            selected={memory.memoryIndex === 1}
             accent={accent}
             showDescription
           />

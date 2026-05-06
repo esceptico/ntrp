@@ -350,7 +350,7 @@ export interface Observation {
   last_accessed_at: string;
   archived_at: string | null;
   created_by: string | null;
-  policy_version: number | null;
+  policy_version: string | null;
 }
 
 export interface FactListFilters {
@@ -358,6 +358,8 @@ export interface FactListFilters {
   offset?: number;
   kind?: FactKind;
   status?: FactStatus;
+  accessed?: "never" | "used";
+  entity?: string;
 }
 
 export async function listFactsApi(
@@ -369,6 +371,8 @@ export async function listFactsApi(
   if (filters.offset) qs.set("offset", String(filters.offset));
   if (filters.kind) qs.set("kind", filters.kind);
   if (filters.status) qs.set("status", filters.status);
+  if (filters.accessed) qs.set("accessed", filters.accessed);
+  if (filters.entity?.trim()) qs.set("entity", filters.entity.trim());
   return apiWithConfig(config, `/facts?${qs.toString()}`);
 }
 
@@ -376,6 +380,27 @@ export async function updateFactTextApi(config: AppConfig, id: number, text: str
   return apiWithConfig(config, `/facts/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ text }),
+  });
+}
+
+export interface FactMetadataUpdate {
+  kind?: FactKind;
+  lifetime?: FactLifetime;
+  salience?: number;
+  confidence?: number;
+  expires_at?: string | null;
+  pinned?: boolean;
+  superseded_by_fact_id?: number | null;
+}
+
+export async function updateFactMetadataApi(
+  config: AppConfig,
+  id: number,
+  payload: FactMetadataUpdate,
+): Promise<{ fact: Fact }> {
+  return apiWithConfig(config, `/facts/${id}/metadata`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
   });
 }
 
@@ -387,6 +412,9 @@ export interface ObservationListFilters {
   limit?: number;
   offset?: number;
   status?: "active" | "archived" | "all";
+  accessed?: "never" | "used";
+  minSources?: number;
+  maxSources?: number;
 }
 
 export async function listObservationsApi(
@@ -397,6 +425,9 @@ export async function listObservationsApi(
   qs.set("limit", String(filters.limit ?? 100));
   if (filters.offset) qs.set("offset", String(filters.offset));
   if (filters.status) qs.set("status", filters.status);
+  if (filters.accessed) qs.set("accessed", filters.accessed);
+  if (filters.minSources !== undefined) qs.set("min_sources", String(filters.minSources));
+  if (filters.maxSources !== undefined) qs.set("max_sources", String(filters.maxSources));
   return apiWithConfig(config, `/observations?${qs.toString()}`);
 }
 
@@ -426,107 +457,162 @@ export async function getObservationApi(config: AppConfig, id: number): Promise<
   return apiWithConfig(config, `/observations/${id}`);
 }
 
-// ─── Dreams ───────────────────────────────────────────────────────────
+// ─── Memory observability / review ───────────────────────────────────
 
-export interface Dream {
+export interface MemoryStats {
+  fact_count: number;
+  observation_count: number;
+}
+
+export interface MemoryStorageHealth {
+  vec_rows: number;
+  missing_vec_rows: number;
+  stale_vec_rows: number;
+  fts_rows: number;
+  missing_fts_rows: number;
+  stale_fts_rows: number;
+}
+
+export interface MemoryAudit {
+  facts: { no_embedding: number };
+  observations: { no_embedding: number };
+  storage: {
+    facts: MemoryStorageHealth;
+    observations: MemoryStorageHealth;
+  };
+  relations: Record<string, number>;
+}
+
+export interface MemoryEvent {
   id: number;
-  bridge: string;
-  insight: string;
   created_at: string;
+  actor: string;
+  action: string;
+  target_type: string;
+  target_id: number | null;
+  source_type: string | null;
+  source_ref: string | null;
+  reason: string | null;
+  policy_version: string;
+  details: Record<string, unknown>;
 }
 
-export interface DreamDetail {
-  dream: Dream;
-  source_facts: { id: number; text: string }[];
-}
-
-export async function listDreamsApi(config: AppConfig): Promise<{ dreams: Dream[] }> {
-  return apiWithConfig(config, "/dreams?limit=200");
-}
-
-export async function getDreamApi(config: AppConfig, id: number): Promise<DreamDetail> {
-  return apiWithConfig(config, `/dreams/${id}`);
-}
-
-export async function deleteDreamApi(config: AppConfig, id: number): Promise<void> {
-  await apiWithConfig(config, `/dreams/${id}`, { method: "DELETE" });
-}
-
-// ─── Profile ──────────────────────────────────────────────────────────
-
-export interface ProfileEntry {
+export interface MemoryAccessEvent {
   id: number;
-  kind: FactKind;
+  created_at: string;
+  source: string;
+  query: string | null;
+  retrieved_fact_ids: number[];
+  retrieved_observation_ids: number[];
+  injected_fact_ids: number[];
+  injected_observation_ids: number[];
+  omitted_fact_ids: number[];
+  omitted_observation_ids: number[];
+  bundled_fact_ids: number[];
+  formatted_chars: number;
+  policy_version: string;
+  details: Record<string, unknown>;
+}
+
+export interface MemoryPruneCriteria {
+  older_than_days: number;
+  max_sources: number;
+  limit: number;
+  cutoff: string;
+}
+
+export interface MemoryPruneSummary {
+  total: number;
+  over_1000_chars: number;
+  empty_sources: number;
+}
+
+export interface MemoryPruneCandidate {
+  id: number;
   summary: string;
-  source_fact_ids: number[];
-  source_observation_ids: number[];
   created_at: string;
   updated_at: string;
-  archived_at: string | null;
-  created_by: string | null;
-  policy_version: number | null;
-  confidence: number;
-}
-
-export interface ProfileEntryDetail {
-  entry: ProfileEntry;
-  source_facts: Fact[];
-  source_observations: Observation[];
-}
-
-export async function listProfileApi(config: AppConfig): Promise<{ entries: ProfileEntry[] }> {
-  return apiWithConfig(config, "/memory/profile?limit=50");
-}
-
-export async function getProfileEntryApi(config: AppConfig, id: number): Promise<ProfileEntryDetail> {
-  return apiWithConfig(config, `/memory/profile/${id}`);
-}
-
-export interface UpdateProfileEntryPayload {
-  kind?: FactKind;
-  summary?: string;
-  confidence?: number;
-}
-
-export async function updateProfileEntryApi(
-  config: AppConfig,
-  id: number,
-  payload: UpdateProfileEntryPayload,
-): Promise<{ entry: ProfileEntry }> {
-  return apiWithConfig(config, `/memory/profile/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function deleteProfileEntryApi(config: AppConfig, id: number): Promise<void> {
-  await apiWithConfig(config, `/memory/profile/${id}`, { method: "DELETE" });
-}
-
-// ─── Supersession (merge candidates) ──────────────────────────────────
-
-export interface SupersessionCandidate {
-  kind: string;
-  entity: string;
-  older_fact: Fact;
-  newer_fact: Fact;
+  access_count: number;
+  evidence_count: number;
+  chars: number;
   reason: string;
 }
 
-export async function listSupersessionCandidatesApi(
-  config: AppConfig,
-): Promise<{ candidates: SupersessionCandidate[]; total: number }> {
-  return apiWithConfig(config, "/memory/supersession/candidates?limit=200");
+export interface MemoryPruneDryRun {
+  criteria: MemoryPruneCriteria;
+  summary: MemoryPruneSummary;
+  candidates: MemoryPruneCandidate[];
 }
 
-export async function applySupersessionApi(
+export interface MemoryPruneApplyResult {
+  status: "archived" | "unchanged";
+  archived: number;
+  archived_ids: number[];
+  skipped_ids: number[];
+  candidates: MemoryPruneCandidate[];
+}
+
+export interface MemoryRecallInspectResult {
+  query: string;
+  limit: number;
+  formatted_recall: string | null;
+  facts: Fact[];
+  observations: Observation[];
+  bundled_sources: Record<string, Fact[]>;
+}
+
+export async function getMemoryStatsApi(config: AppConfig): Promise<MemoryStats> {
+  return apiWithConfig(config, "/stats");
+}
+
+export async function getMemoryAuditApi(config: AppConfig): Promise<MemoryAudit> {
+  return apiWithConfig(config, "/memory/audit");
+}
+
+export async function listMemoryEventsApi(
   config: AppConfig,
-  olderFactId: number,
-  newerFactId: number,
-): Promise<void> {
-  await apiWithConfig(config, `/facts/${olderFactId}/metadata`, {
-    method: "PATCH",
-    body: JSON.stringify({ superseded_by_fact_id: newerFactId }),
+  limit = 100,
+): Promise<{ events: MemoryEvent[] }> {
+  return apiWithConfig(config, `/memory/events?limit=${limit}`);
+}
+
+export async function listMemoryAccessEventsApi(
+  config: AppConfig,
+  limit = 100,
+): Promise<{ events: MemoryAccessEvent[]; facts?: Fact[]; observations?: Observation[] }> {
+  return apiWithConfig(config, `/memory/access/events?limit=${limit}&include_records=true`);
+}
+
+export async function inspectMemoryRecallApi(
+  config: AppConfig,
+  query: string,
+  limit = 5,
+): Promise<MemoryRecallInspectResult> {
+  return apiWithConfig(config, "/memory/recall/inspect", {
+    method: "POST",
+    body: JSON.stringify({ query, limit }),
+  });
+}
+
+export async function getMemoryPruneDryRunApi(config: AppConfig): Promise<MemoryPruneDryRun> {
+  return apiWithConfig(config, "/memory/prune/dry-run", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function applyMemoryPruneApi(
+  config: AppConfig,
+  payload: {
+    observation_ids?: number[];
+    all_matching?: boolean;
+    older_than_days: number;
+    max_sources: number;
+  },
+): Promise<MemoryPruneApplyResult> {
+  return apiWithConfig(config, "/memory/prune/apply", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 
@@ -727,7 +813,7 @@ export type ServerConfigPatch = Partial<{
   summary_max_tokens: number;
   consolidation_interval: number;
   web_search: "auto" | "exa" | "ddgs" | "none";
-  integrations: { google?: boolean | null; memory?: boolean | null; dreams?: boolean | null };
+  integrations: { google?: boolean | null; memory?: boolean | null };
 }>;
 
 export async function patchServerConfig(

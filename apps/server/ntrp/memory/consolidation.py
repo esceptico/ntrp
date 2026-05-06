@@ -44,7 +44,6 @@ async def get_consolidation_decisions(
     obs_repo: ObservationRepository,
     fact_repo: FactRepository,
     model: str,
-    policy_context: str | None = None,
 ) -> list[ConsolidationAction]:
     if fact.lifetime == FactLifetime.TEMPORARY:
         return []
@@ -52,7 +51,7 @@ async def get_consolidation_decisions(
         return []
 
     candidates = await obs_repo.search_vector(fact.embedding, limit=CONSOLIDATION_SEARCH_LIMIT)
-    return await _llm_consolidation_decisions(fact, candidates, fact_repo, model, policy_context=policy_context)
+    return await _llm_consolidation_decisions(fact, candidates, fact_repo, model)
 
 
 async def apply_consolidation(
@@ -90,14 +89,12 @@ async def _llm_consolidation_decisions(
     candidates: list[tuple[Observation, float]],
     fact_repo: FactRepository,
     model: str,
-    policy_context: str | None = None,
 ) -> list[ConsolidationAction]:
     observations_json = await _format_observations(candidates, fact_repo)
 
     prompt = CONSOLIDATION_PROMPT.render(
         fact_json=json.dumps(_format_fact(fact), indent=2),
         observations_json=observations_json,
-        policy_context=policy_context,
     )
 
     try:

@@ -1,4 +1,4 @@
-import type { FactDetails, FactMetadataSuggestion } from "../../../api/client.js";
+import type { FactDetails } from "../../../api/client.js";
 import { colors, truncateText, ExpandableText, ScrollableList, TextEditArea } from "../../ui/index.js";
 import { useAccentColor } from "../../../hooks/index.js";
 import { formatRelativeTime, formatTimeAgo } from "../../../lib/format.js";
@@ -31,9 +31,6 @@ interface FactDetailsViewProps {
   setCursorPos: (pos: number | ((prev: number) => number)) => void;
   confirmDelete: boolean;
   saving: boolean;
-  metadataSuggestion: FactMetadataSuggestion | null;
-  suggestionLoading: boolean;
-  suggestionError: string | null;
 }
 
 const TEXT_VISIBLE_LINES = 10;
@@ -56,9 +53,6 @@ export function FactDetailsView({
   setCursorPos,
   confirmDelete,
   saving,
-  metadataSuggestion,
-  suggestionLoading,
-  suggestionError,
 }: FactDetailsViewProps) {
   const { accentValue } = useAccentColor();
 
@@ -164,36 +158,6 @@ export function FactDetailsView({
           <span fg={labelColor}>{stateLabel}</span>
         </text>
       </box>
-
-      {(suggestionLoading || suggestionError || metadataSuggestion) && (
-        <box flexDirection="column" marginTop={1}>
-          <text><span fg={labelColor}>REVIEW SUGGESTION</span></text>
-          {suggestionLoading && <text><span fg={colors.tool.running}>Classifying...</span></text>}
-          {suggestionError && <text><span fg={colors.status.error}>{suggestionError}</span></text>}
-          {metadataSuggestion && (
-            <>
-              <text>
-                <span fg={accentValue}>{metadataSuggestion.kind}</span>
-                <span fg={colors.text.disabled}> · </span>
-                <span fg={colors.text.secondary}>{metadataSuggestion.lifetime}</span>
-                {metadataSuggestion.expires_at && (
-                  <>
-                    <span fg={colors.text.disabled}> · </span>
-                    <span fg={colors.text.secondary}>until {formatRelativeTime(metadataSuggestion.expires_at)}</span>
-                  </>
-                )}
-                <span fg={colors.text.disabled}> · </span>
-                <span fg={colors.text.secondary}>importance {metadataSuggestion.salience}/2</span>
-                <span fg={colors.text.disabled}> · </span>
-                <span fg={colors.text.secondary}>{Math.round(metadataSuggestion.confidence * 100)}%</span>
-              </text>
-              {metadataSuggestion.reason && (
-                <text><span fg={colors.text.muted}>{truncateText(metadataSuggestion.reason, textWidth)}</span></text>
-              )}
-            </>
-          )}
-        </box>
-      )}
 
       {/* Entities — only if non-empty */}
       {entities.length > 0 && (

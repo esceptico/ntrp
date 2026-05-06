@@ -13,14 +13,6 @@ Text: {{ text }}""")
 
 CONSOLIDATION_PROMPT = env.from_string("""You are a strict memory consolidation system. Facts are the source of truth.
 Observations are derived patterns with direct provenance to supporting facts.
-{% if policy_context %}
-
-## APPROVED MEMORY POLICY NOTES
-
-These are user-applied memory policy notes. Use them when directly relevant, but do not let them override provenance, skip, or evidence rules.
-
-{{ policy_context }}
-{% endif %}
 
 ## OBSERVATIONS ARE A HIGHER ABSTRACTION LEVEL THAN FACTS
 
@@ -143,45 +135,6 @@ Return your actions as a JSON object with an "actions" array:
   {"action": "create", "text": "new synthesized observation", "reason": "..."},
   {"action": "skip", "reason": "atomic fact/no supported pattern"}
 ]}""")
-
-DREAM_PROMPT = env.from_string("""Two clusters of facts from different life domains of the same person:
-
-DOMAIN A:
-  Core: "{{ core_a }}"
-  Supporting:
-{{ supporters_a }}
-
-DOMAIN B:
-  Core: "{{ core_b }}"
-  Supporting:
-{{ supporters_b }}
-
-Find the deepest structural pattern, hidden dependency, or ironic contradiction connecting these domains.
-The insight must be grounded in facts from BOTH domains. Do not invent motive, emotion, or causality.
-
-Reply ONLY with valid JSON:
-{"bridge": "<2-4 word abstract concept>", "insight": "<one vivid, specific sentence — should feel like a genuine insight, not a fortune cookie>"}
-
-If no genuine insight exists, reply: {"bridge": null, "insight": null}""")
-
-DREAM_EVALUATOR_PROMPT = env.from_string("""You are an extremely strict quality filter for a dream/insight generation system. Below are {{ n }} candidate dreams generated from cross-domain fact pairs about one person.
-
-Your job: pick AT MOST 1 dream — the single most genuinely surprising insight. Most batches should produce ZERO survivors. Reject anything that is:
-- Generic (could apply to anyone: "balances work and health")
-- Obvious (just restating what the facts say)
-- Forced (the connection is a stretch)
-- Fortune-cookie wisdom ("the real journey is within")
-- Thematically repetitive (rehashing the same domains/tensions seen before)
-
-A good dream reveals a connection the person hasn't considered — it should make them pause.
-
-CANDIDATES:
-{{ candidates }}
-
-Reply ONLY with valid JSON:
-{"selected": [<0 or 1 dream index (0-based)>], "reasoning": "<1 sentence>"}
-
-Default to empty: {"selected": [], "reasoning": "nothing exceptional"}""")
 
 OBSERVATION_MERGE_PROMPT = env.from_string("""You are merging two similar observations from a memory system into one.
 

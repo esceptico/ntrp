@@ -68,24 +68,9 @@ export interface FactMetadataUpdate {
   superseded_by_fact_id?: number | null;
 }
 
-export interface FactMetadataSuggestion {
-  kind: FactKind;
-  lifetime: FactLifetime;
-  salience: number;
-  confidence: number;
-  expires_at: string | null;
-  reason: string;
-}
-
-export interface FactKindReviewSuggestion {
-  fact: Fact;
-  suggestion: FactMetadataSuggestion;
-}
-
 export interface Stats {
   fact_count: number;
   observation_count: number;
-  dream_count: number;
 }
 
 export interface Observation {
@@ -116,54 +101,6 @@ export interface ObservationDetails {
   supporting_facts: Fact[];
   source_fact_ids: number[];
   missing_source_fact_ids: number[];
-}
-
-export interface ProfileEntry {
-  id: number;
-  kind: FactKind;
-  summary: string;
-  source_fact_ids: number[];
-  source_observation_ids: number[];
-  created_at: string;
-  updated_at: string;
-  archived_at: string | null;
-  created_by: string;
-  policy_version: string;
-  confidence: number;
-}
-
-export interface ProfileEntryDetails {
-  entry: ProfileEntry;
-  source_facts: Fact[];
-  source_observations: Observation[];
-}
-
-export interface ProfileEntryUpdate {
-  kind?: FactKind;
-  summary?: string;
-  source_fact_ids?: number[];
-  source_observation_ids?: number[];
-  confidence?: number;
-}
-
-export interface ProfileEntryCreate {
-  kind: FactKind;
-  summary: string;
-  source_fact_ids: number[];
-  source_observation_ids?: number[];
-  confidence?: number;
-}
-
-export interface Dream {
-  id: number;
-  bridge: string;
-  insight: string;
-  created_at: string;
-}
-
-export interface DreamDetails {
-  dream: Dream;
-  source_facts: Array<{ id: number; text: string }>;
 }
 
 export interface MemoryPruneCriteria {
@@ -218,42 +155,6 @@ export interface MemoryEvent {
   details: Record<string, unknown>;
 }
 
-export interface LearningEvent {
-  id: number;
-  created_at: string;
-  source_type: string;
-  source_id: string | null;
-  scope: string;
-  signal: string;
-  evidence_ids: string[];
-  outcome: string;
-  details: Record<string, unknown>;
-}
-
-export interface LearningCandidate {
-  id: number;
-  created_at: string;
-  updated_at: string;
-  status: string;
-  change_type: string;
-  target_key: string;
-  proposal: string;
-  rationale: string;
-  evidence_event_ids: number[];
-  expected_metric: string | null;
-  policy_version: string;
-  applied_at: string | null;
-  reverted_at: string | null;
-  details: Record<string, unknown>;
-}
-
-export interface LearningProposalResult {
-  proposals_considered: number;
-  created_events: LearningEvent[];
-  created_candidates: LearningCandidate[];
-  skipped_candidates: LearningCandidate[];
-}
-
 export interface MemoryAccessEvent {
   id: number;
   created_at: string;
@@ -269,38 +170,6 @@ export interface MemoryAccessEvent {
   formatted_chars: number;
   policy_version: string;
   details: Record<string, unknown>;
-}
-
-export type MemoryInjectionPolicyReason = "empty_recall" | "over_budget" | "pattern_heavy";
-
-export interface MemoryInjectionPolicyCandidate {
-  access_event_id: number;
-  created_at: string;
-  source: string;
-  query: string | null;
-  formatted_chars: number;
-  fact_count: number;
-  pattern_count: number;
-  reasons: MemoryInjectionPolicyReason[];
-  recommendation: string;
-}
-
-export interface MemoryInjectionPolicyPreview {
-  policy: {
-    char_budget: number;
-    version: string;
-  };
-  summary: {
-    events: number;
-    sources: Record<string, number>;
-    average_chars: number;
-    max_chars: number;
-    empty_recalls: number;
-    over_budget: number;
-    pattern_heavy: number;
-    candidates: number;
-  };
-  candidates: MemoryInjectionPolicyCandidate[];
 }
 
 export interface MemoryStorageHealth {
@@ -390,16 +259,6 @@ export async function updateFactMetadata(
   return api.patch<{ fact: Fact }>(`${config.serverUrl}/facts/${factId}/metadata`, update);
 }
 
-export async function suggestFactMetadata(
-  config: Config,
-  factId: number
-): Promise<{ suggestions: FactKindReviewSuggestion[]; total_reviewable: number }> {
-  return api.post<{ suggestions: FactKindReviewSuggestion[]; total_reviewable: number }>(
-    `${config.serverUrl}/memory/facts/kind-review/suggestions`,
-    { fact_ids: [factId] }
-  );
-}
-
 export async function deleteFact(
   config: Config,
   factId: number
@@ -413,40 +272,6 @@ export async function deleteFact(
 
 export async function getStats(config: Config): Promise<Stats> {
   return api.get<Stats>(`${config.serverUrl}/stats`);
-}
-
-export async function getMemoryProfile(config: Config, limit = 20): Promise<{ entries: ProfileEntry[] }> {
-  return api.get<{ entries: ProfileEntry[] }>(`${config.serverUrl}/memory/profile?limit=${limit}`);
-}
-
-export async function getProfileEntryDetails(
-  config: Config,
-  entryId: number,
-  signal?: AbortSignal
-): Promise<ProfileEntryDetails> {
-  return api.get<ProfileEntryDetails>(`${config.serverUrl}/memory/profile/${entryId}`, { signal });
-}
-
-export async function createProfileEntry(
-  config: Config,
-  entry: ProfileEntryCreate
-): Promise<{ entry: ProfileEntry }> {
-  return api.post<{ entry: ProfileEntry }>(`${config.serverUrl}/memory/profile`, entry);
-}
-
-export async function updateProfileEntry(
-  config: Config,
-  entryId: number,
-  update: ProfileEntryUpdate
-): Promise<{ entry: ProfileEntry }> {
-  return api.patch<{ entry: ProfileEntry }>(`${config.serverUrl}/memory/profile/${entryId}`, update);
-}
-
-export async function deleteProfileEntry(
-  config: Config,
-  entryId: number
-): Promise<{ status: string; entry_id: number }> {
-  return api.delete(`${config.serverUrl}/memory/profile/${entryId}`);
 }
 
 export async function inspectMemoryRecall(
@@ -487,20 +312,6 @@ export async function deleteObservation(
   return api.delete(`${config.serverUrl}/observations/${observationId}`);
 }
 
-export async function getDreams(config: Config, limit = 50): Promise<{
-  dreams: Dream[];
-}> {
-  return api.get<{ dreams: Dream[] }>(`${config.serverUrl}/dreams?limit=${limit}`);
-}
-
-export async function getDreamDetails(config: Config, dreamId: number, signal?: AbortSignal): Promise<DreamDetails> {
-  return api.get<DreamDetails>(`${config.serverUrl}/dreams/${dreamId}`, { signal });
-}
-
-export async function deleteDream(config: Config, dreamId: number): Promise<{ status: string }> {
-  return api.delete<{ status: string }>(`${config.serverUrl}/dreams/${dreamId}`);
-}
-
 export async function getMemoryPruneDryRun(config: Config): Promise<MemoryPruneDryRun> {
   return api.post<MemoryPruneDryRun>(`${config.serverUrl}/memory/prune/dry-run`, {});
 }
@@ -523,32 +334,6 @@ export async function getMemoryEvents(config: Config, limit = 100): Promise<{ ev
   return api.get<{ events: MemoryEvent[] }>(`${config.serverUrl}/memory/events?limit=${limit}`);
 }
 
-export async function getLearningEvents(config: Config, limit = 100): Promise<{ events: LearningEvent[] }> {
-  return api.get<{ events: LearningEvent[] }>(`${config.serverUrl}/memory/learning/events?limit=${limit}`);
-}
-
-export async function getLearningCandidates(
-  config: Config,
-  limit = 100
-): Promise<{ candidates: LearningCandidate[] }> {
-  return api.get<{ candidates: LearningCandidate[] }>(`${config.serverUrl}/memory/learning/candidates?limit=${limit}`);
-}
-
-export async function updateLearningCandidateStatus(
-  config: Config,
-  candidateId: number,
-  status: string
-): Promise<{ candidate: LearningCandidate }> {
-  return api.patch<{ candidate: LearningCandidate }>(
-    `${config.serverUrl}/memory/learning/candidates/${candidateId}/status`,
-    { status }
-  );
-}
-
-export async function proposeLearningCandidates(config: Config): Promise<LearningProposalResult> {
-  return api.post<LearningProposalResult>(`${config.serverUrl}/memory/learning/propose`, {});
-}
-
 export async function getMemoryAccessEvents(config: Config, limit = 100): Promise<{
   events: MemoryAccessEvent[];
   facts?: Fact[];
@@ -557,13 +342,6 @@ export async function getMemoryAccessEvents(config: Config, limit = 100): Promis
   return api.get<{ events: MemoryAccessEvent[]; facts?: Fact[]; observations?: Observation[] }>(
     `${config.serverUrl}/memory/access/events?limit=${limit}&include_records=true`
   );
-}
-
-export async function getMemoryInjectionPolicyPreview(
-  config: Config,
-  limit = 100
-): Promise<MemoryInjectionPolicyPreview> {
-  return api.get<MemoryInjectionPolicyPreview>(`${config.serverUrl}/memory/injection-policy/preview?limit=${limit}`);
 }
 
 export async function getMemoryAudit(config: Config): Promise<MemoryAudit> {

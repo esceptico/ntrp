@@ -18,7 +18,6 @@ from ntrp.constants import (
     FORGET_SIMILARITY_THRESHOLD,
     RECALL_SEARCH_LIMIT,
     SYSTEM_PROMPT_OBSERVATION_LIMIT,
-    SYSTEM_PROMPT_PROFILE_LIMIT,
     USER_ENTITY_NAME,
 )
 from ntrp.embedder import Embedder, EmbeddingConfig
@@ -35,22 +34,18 @@ from ntrp.memory.models import (
     FactKind,
     FactLifetime,
     Observation,
-    ProfileEntry,
     SourceType,
 )
 from ntrp.memory.retrieval import retrieve_with_observations
 from ntrp.memory.store.access_events import MemoryAccessEventRepository
 from ntrp.memory.store.base import GraphDatabase
-from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.events import MemoryEventRepository
 from ntrp.memory.store.facts import FactRepository
-from ntrp.memory.store.learning import LearningRepository
 from ntrp.memory.store.observations import ObservationRepository
-from ntrp.memory.store.profile import ProfileRepository
 
 _logger = get_logger(__name__)
 
-PROFILE_FACT_KINDS = (
+CORE_FACT_KINDS = (
     FactKind.IDENTITY,
     FactKind.PREFERENCE,
     FactKind.RELATIONSHIP,
@@ -68,7 +63,6 @@ class RememberFactResult(BaseModel):
 @dataclass(frozen=True)
 class SessionMemory:
     observations: list[Observation]
-    profile_entries: list[ProfileEntry]
     user_facts: list[Fact]
 
 
@@ -87,15 +81,11 @@ def _context_observation_ids(context: FactContext) -> list[int]:
 
 
 def _session_fact_ids(memory: SessionMemory) -> list[int]:
-    ids = [fact_id for entry in memory.profile_entries for fact_id in entry.source_fact_ids]
-    ids.extend(fact.id for fact in memory.user_facts)
-    return _dedupe_ids(ids)
+    return _dedupe_ids([fact.id for fact in memory.user_facts])
 
 
 def _session_observation_ids(memory: SessionMemory) -> list[int]:
-    ids = [observation.id for observation in memory.observations]
-    ids.extend(obs_id for entry in memory.profile_entries for obs_id in entry.source_observation_ids)
-    return _dedupe_ids(ids)
+    return _dedupe_ids([observation.id for observation in memory.observations])
 
 
 def _is_active_fact(fact: Fact, now: datetime | None = None) -> bool:
@@ -151,11 +141,8 @@ class FactMemory:
         self.db = GraphDatabase(conn, embedding.dim)
         self.facts = FactRepository(conn, read_conn)
         self.observations = ObservationRepository(conn, read_conn)
-        self.profile = ProfileRepository(conn, read_conn)
-        self.dreams = DreamRepository(conn, read_conn)
         self.events = MemoryEventRepository(conn, read_conn)
         self.access_events = MemoryAccessEventRepository(conn, read_conn)
-        self.learning = LearningRepository(conn, read_conn)
         self.embedder = embedder or Embedder(embedding)
         self.extractor = extractor or Extractor(model)
         self._enqueue_fact_index_upsert = enqueue_fact_index_upsert
@@ -167,13 +154,11 @@ class FactMemory:
         self._consolidation = ConsolidationRunner(
             facts=self.facts,
             observations=self.observations,
-            dreams=self.dreams,
             embedder=self.embedder,
             model_fn=lambda: self.model,
             transaction=self.transaction,
             db_lock=self._db_lock,
             db_conn=conn,
-            learning=self.learning,
             events=self.events,
         )
 
@@ -217,14 +202,6 @@ class FactMemory:
         return instance
 
     # --- Consolidation delegation ---
-
-    @property
-    def dreams_enabled(self) -> bool:
-        return self._consolidation.dreams_enabled
-
-    @dreams_enabled.setter
-    def dreams_enabled(self, value: bool) -> None:
-        self._consolidation.dreams_enabled = value
 
     async def run_consolidation(self) -> str:
         return await self._consolidation.run_consolidation()
@@ -600,7 +577,6 @@ class FactMemory:
                     count += 1
             if count > 0:
                 await self.observations.remove_source_facts(deleted_ids)
-                await self.dreams.remove_source_facts(deleted_ids)
                 await self.facts.cleanup_orphaned_entities()
         if self._enqueue_fact_index_delete:
             for fact_id in deleted_ids:
@@ -634,23 +610,9 @@ class FactMemory:
     async def count(self) -> int:
         return await self.facts.count()
 
-    async def get_profile(self, limit: int = SYSTEM_PROMPT_PROFILE_LIMIT) -> list[ProfileEntry]:
-        return await self.get_profile_entries(limit=limit)
-
-    async def get_raw_profile_facts(self, limit: int = SYSTEM_PROMPT_PROFILE_LIMIT) -> list[Fact]:
-        return await self.facts.list_profile_facts_for_entity(
-            USER_ENTITY_NAME,
-            PROFILE_FACT_KINDS,
-            limit=limit,
-        )
-
-    async def get_profile_entries(self, limit: int = SYSTEM_PROMPT_PROFILE_LIMIT) -> list[ProfileEntry]:
-        return await self.profile.list_active(limit=limit)
-
     async def get_session_memory(
         self,
         user_limit: int = 0,
-        profile_limit: int = SYSTEM_PROMPT_PROFILE_LIMIT,
         include_observations: bool = True,
     ) -> SessionMemory:
         if include_observations and (user_entity := await self.facts.get_entity_by_name(USER_ENTITY_NAME)):
@@ -672,13 +634,9 @@ class FactMemory:
         else:
             observations = []
 
-        profile_entries = await self.get_profile_entries(limit=profile_limit)
-
         exclude_ids: set[int] = set()
         for obs in observations:
             exclude_ids.update(obs.source_fact_ids)
-        for entry in profile_entries:
-            exclude_ids.update(entry.source_fact_ids)
 
         if user_limit > 0:
             all_user_facts = await self.facts.get_facts_for_entity(
@@ -688,7 +646,7 @@ class FactMemory:
         else:
             user_facts = []
 
-        return SessionMemory(observations=observations, profile_entries=profile_entries, user_facts=user_facts)
+        return SessionMemory(observations=observations, user_facts=user_facts)
 
     async def get_context(self, user_limit: int = 10) -> tuple[list[Observation], list[Fact]]:
         session_memory = await self.get_session_memory(user_limit=user_limit)

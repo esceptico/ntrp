@@ -71,7 +71,6 @@ class ChatRunsStatusResponse(BaseModel):
 OutboxEventId = Annotated[int, Field(gt=0)]
 FactId = Annotated[int, Field(gt=0)]
 ObservationId = Annotated[int, Field(gt=0)]
-ProfileEntryId = Annotated[int, Field(gt=0)]
 
 
 class ReplayOutboxRequest(BaseModel):
@@ -259,7 +258,6 @@ class RevertRequest(BaseModel):
 class IntegrationToggles(BaseModel):
     google: bool | None = None
     memory: bool | None = None
-    dreams: bool | None = None
 
 
 class UpdateConfigRequest(BaseModel):
@@ -302,31 +300,9 @@ class UpdateFactMetadataRequest(BaseModel):
     superseded_by_fact_id: int | None = Field(default=None, ge=1)
 
 
-class FactKindReviewSuggestionRequest(BaseModel):
-    fact_ids: list[FactId] | None = Field(default=None, min_length=1, max_length=50)
-    limit: int = Field(default=20, ge=1, le=50)
-    offset: int = Field(default=0, ge=0)
-
-
 class MemoryRecallInspectRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
     limit: int = Field(default=5, ge=1, le=20)
-
-
-class CreateProfileEntryRequest(BaseModel):
-    kind: FactKind
-    summary: str = Field(..., min_length=1, max_length=2000)
-    source_fact_ids: list[FactId] = Field(default_factory=list, max_length=100)
-    source_observation_ids: list[ObservationId] = Field(default_factory=list, max_length=100)
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-
-
-class UpdateProfileEntryRequest(BaseModel):
-    kind: FactKind | None = None
-    summary: str | None = Field(default=None, min_length=1, max_length=2000)
-    source_fact_ids: list[FactId] | None = Field(default=None, max_length=100)
-    source_observation_ids: list[ObservationId] | None = Field(default=None, max_length=100)
-    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class MemoryRepairEmbeddingsRequest(BaseModel):
@@ -349,48 +325,6 @@ class MemoryPruneApplyRequest(BaseModel):
     all_matching: bool = False
     older_than_days: int = Field(default=30, ge=1, le=3650)
     max_sources: int = Field(default=5, ge=0, le=1000)
-
-
-class CreateLearningEventRequest(BaseModel):
-    source_type: str = Field(..., min_length=1, max_length=100)
-    source_id: str | None = Field(default=None, max_length=200)
-    scope: str = Field(..., min_length=1, max_length=100)
-    signal: str = Field(..., min_length=1, max_length=5000)
-    evidence_ids: list[str] = Field(default_factory=list, max_length=100)
-    outcome: str = Field(default="unknown", min_length=1, max_length=100)
-    details: dict = Field(default_factory=dict)
-
-
-class CreateLearningCandidateRequest(BaseModel):
-    change_type: str = Field(..., min_length=1, max_length=100)
-    target_key: str = Field(..., min_length=1, max_length=200)
-    proposal: str = Field(..., min_length=1, max_length=10000)
-    rationale: str = Field(..., min_length=1, max_length=10000)
-    evidence_event_ids: list[int] = Field(default_factory=list, max_length=100)
-    expected_metric: str | None = Field(default=None, max_length=1000)
-    policy_version: str = Field(..., min_length=1, max_length=100)
-    status: str = Field(default="proposed", min_length=1, max_length=100)
-    details: dict = Field(default_factory=dict)
-
-
-class UpdateLearningCandidateStatusRequest(BaseModel):
-    status: str = Field(..., min_length=1, max_length=100)
-
-
-class ProposeLearningCandidatesRequest(BaseModel):
-    access_limit: int = Field(default=100, ge=1, le=500)
-    injection_char_budget: int = Field(default=3000, ge=1, le=100_000)
-    profile_limit: int = Field(default=100, ge=1, le=500)
-    prune_older_than_days: int = Field(default=30, ge=1, le=3650)
-    prune_max_sources: int = Field(default=5, ge=0, le=1000)
-    prune_limit: int = Field(default=100, ge=1, le=1000)
-    feedback_event_limit: int = Field(default=100, ge=1, le=500)
-    skill_event_limit: int = Field(default=100, ge=1, le=500)
-    prompt_event_limit: int = Field(default=100, ge=1, le=500)
-    automation_event_limit: int = Field(default=100, ge=1, le=500)
-    include_skill_notes: bool = True
-    include_prompt_notes: bool = True
-    include_automation_rules: bool = True
 
 
 # --- Automations / notifiers ---

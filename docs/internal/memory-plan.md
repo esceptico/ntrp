@@ -4,6 +4,22 @@ Date: 2026-05-01
 
 This plan follows from the live DB review of `~/.ntrp/memory.db` and the current `apps/server/ntrp/memory` implementation.
 
+## 2026-05-06 Cleanup Status
+
+The continual-learning, injection-policy preview, and dreams experiments were stripped after review. The supported memory surface is now deliberately smaller:
+
+```text
+facts          source-of-truth evidence
+observations   patterns with fact provenance
+search         live recall inspection
+sent           recent injected fact/pattern bundles
+cleanup/audit  pruning and diagnostics
+```
+
+Chat extraction remains default-enabled. Future work should improve these kept surfaces before reintroducing candidate-review or self-improvement loops.
+
+2026-05-06 follow-up: the visible UI is smaller again. Search is the default view; Facts and Patterns are primary tabs; Sent, Cleanup, and Audit are advanced diagnostics. The old Home dashboard was removed because it hid several slow reads behind the first tab. Profile was removed because it duplicated facts without adding a clear workflow. The merge/supersession tab was removed from the UI pending a better design.
+
 ## Baseline
 
 Current live shape:
@@ -82,13 +98,7 @@ context bundles above the configured character budget
 pattern-heavy bundles where derived observations dominate source facts
 ```
 
-The legacy profile policy preview is also read-only. It scans source facts that might deserve explicit profile review and flags:
-
-```text
-pinned, important, or useful-and-repeatedly-used facts that are not profile kinds yet
-profile facts that are too long for always-on memory
-profile facts with low confidence
-```
+The legacy profile policy preview was removed. Profile review created another candidate surface without a clear user action model.
 
 Continuous learning now has append-only storage primitives:
 
@@ -101,11 +111,10 @@ No candidate is auto-applied. The first contract is provenance and reviewability
 
 ## Target Model
 
-The memory system should have four clear layers:
+The memory system should have three clear layers:
 
 ```text
 typed facts        source-of-truth evidence
-profile entries    curated, small, always-on core memory
 observations       derived patterns, aggressively prunable
 prefetch context   per-turn query-specific context
 ```
@@ -113,7 +122,6 @@ prefetch context   per-turn query-specific context
 Rules:
 
 - Facts are the durable source of truth.
-- Profile entries are explicit core memory records with direct fact/pattern provenance. They are not inferred by "mentions User".
 - Observations are derived summaries/patterns. They can be deleted or regenerated from facts.
 - Prefetch is a delivery mechanism, not a storage layer.
 
@@ -123,7 +131,7 @@ Grounding:
 - Generative Agents separates raw experience records from higher-level reflections and dynamic retrieval.
 - A-MEM argues for evolving structured memory notes with links/provenance, not a flat pile of facts.
 
-The implementation consequence is simple: `/memory/profile` must return curated `profile_entries`, not raw facts filtered by `entity_refs(User)`.
+The implementation consequence is simple: there is no profile projection. If always-on memory returns, it should be an explicit view over source facts/patterns, not copied profile rows.
 
 ## Provenance Invariant
 
@@ -302,40 +310,10 @@ Extraction policy:
 Status:
 
 ```text
-profile_entries table added
-GET /memory/profile returns curated profile entries
-POST/PATCH/DELETE /memory/profile manages explicit profile entries
-session memory formatter uses profile entries, not raw facts
+removed
 ```
 
-Profile should answer: "What should the assistant always know about the user?"
-
-Do not infer profile by filtering facts that mention `User`. That produced a random list of raw facts, not a profile.
-
-Profile entries are curated records:
-
-```text
-profile_entries
-  id
-  kind
-  summary
-  source_fact_ids
-  source_observation_ids
-  created_by
-  policy_version
-  confidence
-```
-
-Then format into sections:
-
-```text
-Identity
-Preferences
-Relationships
-Standing constraints
-```
-
-Source facts remain the truth. Profile entries are prompt-facing core memory backed by direct provenance.
+Profile was removed after review. It either required heuristic promotion or manual copying from facts; both made the system harder to trust. Source facts remain the truth, and patterns remain the derived memory layer.
 
 ## Phase 4: Generated Memory Provenance
 
@@ -935,27 +913,28 @@ The first code slices in this direction are intentionally boring:
 Status:
 
 ```text
-Profile tab added as a read-only projection over source facts
+Profile tab added as a projection over source facts
 Pattern rows/details expose creator and policy metadata
-top-level tabs are now Overview, Profile, Facts, Patterns, Cleanup, Log
+top-level desktop tabs are now Search, Facts, Patterns, Profile, with Sent/Cleanup/Audit under Advanced
 Cleanup can archive the selected candidate or all currently matching candidates
-Dreams are hidden from the main memory nav for now
-Recall Inspector is still pending
+Search runs the recall inspector and previews the formatted context
+Sent shows recent injected memory bundles and links back to source facts/patterns
+Continual-learning, injection-policy preview, fact metadata suggestions, dreams, Home, and merge review were removed
 ```
 
 Replace the current 3-tab shape with:
 
 ```text
-Overview | Profile | Facts | Patterns | Cleanup | Log
+Search | Facts | Patterns | Profile
 ```
 
 Optional/secondary:
 
 ```text
-Dreams
+Advanced: Sent | Cleanup | Audit
 ```
 
-Dreams are interesting but should not occupy equal navigation weight with source-of-truth memory if the goal is robustness.
+Keep the main path boring until facts, patterns, and recall are trustworthy under daily use.
 
 ### Overview
 

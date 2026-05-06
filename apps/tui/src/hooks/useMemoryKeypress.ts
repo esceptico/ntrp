@@ -4,63 +4,39 @@ import { useKeypress, type Key } from "./useKeypress.js";
 import { useTextInput } from "./useTextInput.js";
 import type { Config } from "../types.js";
 import type { FactsTabState } from "./useFactsTab.js";
-import type { ProfileTabState } from "./useProfileTab.js";
 import type { ObservationsTabState } from "./useObservationsTab.js";
 import { OBS_SECTIONS } from "../components/viewers/memory/ObservationDetailsView.js";
-import { PROFILE_SECTIONS } from "../components/viewers/memory/ProfileDetailsView.js";
 import type { PruneTabState } from "./usePruneTab.js";
 import type { MemoryEventsTabState } from "./useMemoryEventsTab.js";
 import type { MemoryAccessTabState } from "./useMemoryAccessTab.js";
-import type { LearningTabState } from "./useLearningTab.js";
 import type { RecallInspectTabState } from "./useRecallInspectTab.js";
 import {
   updateFact,
-  updateFactMetadata,
-  suggestFactMetadata,
   deleteFact,
-  createProfileEntry,
-  updateProfileEntry,
-  deleteProfileEntry,
   updateObservation,
   deleteObservation,
   applyMemoryPrune,
-  proposeLearningCandidates,
-  updateLearningCandidateStatus,
   type Fact,
   type FactDetails,
-  type LearningCandidate,
   type Observation,
   type ObservationDetails,
-  type ProfileEntry,
-  type ProfileEntryDetails,
   type MemoryPruneDryRun,
 } from "../api/client.js";
 import { MEMORY_TABS, type MemoryTabType } from "../lib/memoryTabs.js";
-import {
-  canApplyLearningCandidate,
-  canApproveLearningCandidate,
-  canRejectLearningCandidate,
-  canRevertLearningCandidate,
-} from "../lib/memoryLearning.js";
 
 interface UseMemoryKeypressOptions {
   activeTab: MemoryTabType;
   setActiveTab: React.Dispatch<React.SetStateAction<MemoryTabType>>;
   recallTab: RecallInspectTabState;
-  profileTab: ProfileTabState;
   factsTab: FactsTabState;
   obsTab: ObservationsTabState;
   pruneTab: PruneTabState;
-  learningTab: LearningTabState;
   pruneDryRun: MemoryPruneDryRun | null;
   accessTab: MemoryAccessTabState;
   eventsTab: MemoryEventsTabState;
-  profileEntries: ProfileEntry[];
   config: Config;
   setFacts: React.Dispatch<React.SetStateAction<Fact[]>>;
-  setProfileEntries: React.Dispatch<React.SetStateAction<ProfileEntry[]>>;
   setObservations: React.Dispatch<React.SetStateAction<Observation[]>>;
-  setLearningCandidates: React.Dispatch<React.SetStateAction<LearningCandidate[]>>;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
   reload: () => void;
   onClose: () => void;
@@ -74,28 +50,21 @@ function isUpperA(key: Key): boolean {
   return key.sequence === "A" || (key.name === "a" && key.shift);
 }
 
-const PROFILE_ENTRY_KINDS = new Set(["identity", "preference", "relationship", "constraint"]);
-
 type SearchModeTab = { searchMode: boolean; handleKeys: (key: Key) => void };
 
 export function useMemoryKeypress({
   activeTab,
   setActiveTab,
   recallTab,
-  profileTab,
   factsTab,
   obsTab,
   pruneTab,
-  learningTab,
   pruneDryRun,
   accessTab,
   eventsTab,
-  profileEntries,
   config,
   setFacts,
-  setProfileEntries,
   setObservations,
-  setLearningCandidates,
   setError,
   reload,
   onClose,
@@ -108,13 +77,6 @@ export function useMemoryKeypress({
     cursorPos: factsTab.cursorPos,
     setText: factsTab.setEditText,
     setCursorPos: factsTab.setCursorPos,
-  });
-
-  const profileTextInput = useTextInput({
-    text: profileTab.editText,
-    cursorPos: profileTab.cursorPos,
-    setText: profileTab.setEditText,
-    setCursorPos: profileTab.setCursorPos,
   });
 
   const obsTextInput = useTextInput({
@@ -137,63 +99,11 @@ export function useMemoryKeypress({
         factsTab.setFocusPane("details");
         setActiveTab("facts");
       };
-      const promoteFactToProfile = (fact: Fact) => {
-        if (!PROFILE_ENTRY_KINDS.has(fact.kind)) {
-          setError("Profile entries need identity, preference, relationship, or constraint facts. Reclassify the fact first.");
-          return;
-        }
-        if (fact.lifetime !== "durable") {
-          setError("Profile entries need durable facts. Reclassify the fact lifetime first.");
-          return;
-        }
-        if (fact.archived_at || fact.superseded_by_fact_id) {
-          setError("Only active facts can be promoted to profile.");
-          return;
-        }
-
-        const existingIndex = profileEntries.findIndex((entry) => entry.source_fact_ids.includes(fact.id));
-        if (existingIndex >= 0) {
-          profileTab.setSearchQuery("");
-          profileTab.setSelectedIndex(existingIndex);
-          profileTab.setFocusPane("details");
-          profileTab.resetDetailState();
-          setActiveTab("profile");
-          return;
-        }
-
-        setSaving(true);
-        createProfileEntry(config, {
-          kind: fact.kind,
-          summary: fact.text,
-          source_fact_ids: [fact.id],
-          confidence: fact.confidence,
-        })
-          .then((result) => {
-            setProfileEntries((prev: ProfileEntry[]) => [
-              result.entry,
-              ...prev.filter((entry) => entry.id !== result.entry.id),
-            ]);
-            queryClient.setQueryData<ProfileEntryDetails>(
-              ["profileEntryDetails", result.entry.id],
-              { entry: result.entry, source_facts: [fact], source_observations: [] },
-            );
-            profileTab.setSearchQuery("");
-            profileTab.setSelectedIndex(0);
-            profileTab.setFocusPane("details");
-            profileTab.resetDetailState();
-            setActiveTab("profile");
-            reload();
-          })
-          .catch((e: unknown) => setError(`Profile promotion failed: ${e}`))
-          .finally(() => setSaving(false));
-      };
       const activeSearchTab: SearchModeTab | null =
         activeTab === "context" ? accessTab :
-        activeTab === "profile" ? profileTab :
         activeTab === "facts" ? factsTab :
         activeTab === "observations" ? obsTab :
         activeTab === "prune" ? pruneTab :
-        activeTab === "learning" ? learningTab :
         activeTab === "events" ? eventsTab :
         null;
 
@@ -205,99 +115,6 @@ export function useMemoryKeypress({
       if (activeSearchTab?.searchMode) {
         activeSearchTab.handleKeys(key);
         return;
-      }
-
-      if (activeTab === "profile" && profileTab.focusPane === "details" && profileTab.entryDetails) {
-        if (key.name === "return" && profileTab.detailSection === PROFILE_SECTIONS.FACTS) {
-          const fact = profileTab.entryDetails.source_facts[profileTab.factsIndex];
-          if (fact) {
-            openFact(fact);
-            return;
-          }
-        }
-
-        if (profileTab.confirmDelete) {
-          if (key.name === "y") {
-            setSaving(true);
-            deleteProfileEntry(config, profileTab.entryDetails.entry.id)
-              .then(() => {
-                setProfileEntries((prev: ProfileEntry[]) =>
-                  prev.filter((entry) => entry.id !== profileTab.entryDetails?.entry.id)
-                );
-                profileTab.setConfirmDelete(false);
-                profileTab.setFocusPane("list");
-                profileTab.resetDetailState();
-                reload();
-              })
-              .catch((e: unknown) => setError(`Archive failed: ${e}`))
-              .finally(() => setSaving(false));
-          } else {
-            profileTab.setConfirmDelete(false);
-          }
-          return;
-        }
-
-        if (profileTab.editMode) {
-          if (key.ctrl && key.name === "s") {
-            setSaving(true);
-            updateProfileEntry(config, profileTab.entryDetails.entry.id, { summary: profileTab.editText })
-              .then((result) => {
-                setProfileEntries((prev: ProfileEntry[]) =>
-                  prev.map((entry) => (entry.id === result.entry.id ? result.entry : entry))
-                );
-                queryClient.setQueryData<ProfileEntryDetails>(
-                  ["profileEntryDetails", result.entry.id],
-                  (prev) => prev ? { ...prev, entry: result.entry } : prev,
-                );
-                profileTab.setEditMode(false);
-                profileTab.setEditText("");
-                profileTab.setCursorPos(0);
-                reload();
-              })
-              .catch((e: unknown) => setError(`Save failed: ${e}`))
-              .finally(() => setSaving(false));
-            return;
-          }
-          if (key.name === "escape") {
-            profileTab.setEditMode(false);
-            profileTab.setEditText("");
-            profileTab.setCursorPos(0);
-            return;
-          }
-          if (profileTextInput.handleKey(key)) {
-            return;
-          }
-          return;
-        }
-
-        if (key.name === "e") {
-          profileTab.setEditMode(true);
-          profileTab.setEditText(profileTab.entryDetails.entry.summary);
-          profileTab.setCursorPos(profileTab.entryDetails.entry.summary.length);
-          return;
-        }
-        if (key.name === "d" || key.name === "delete") {
-          profileTab.setConfirmDelete(true);
-          return;
-        }
-      }
-
-      if (activeTab === "profile" && profileTab.focusPane === "list" && profileTab.filteredEntries.length > 0) {
-        const selectedEntry = profileTab.filteredEntries[profileTab.selectedIndex];
-        if (selectedEntry) {
-          if (key.name === "e") {
-            profileTab.setFocusPane("details");
-            profileTab.setEditMode(true);
-            profileTab.setEditText(selectedEntry.summary);
-            profileTab.setCursorPos(selectedEntry.summary.length);
-            return;
-          }
-          if ((key.name === "d" || key.name === "delete") && profileTab.entryDetails) {
-            profileTab.setFocusPane("details");
-            profileTab.setConfirmDelete(true);
-            return;
-          }
-        }
       }
 
       if (activeFactTab?.focusPane === "details" && activeFactTab.factDetails) {
@@ -358,45 +175,6 @@ export function useMemoryKeypress({
           activeFactTab.setCursorPos(activeFactTab.factDetails.fact.text.length);
           return;
         }
-        if (key.name === "p") {
-          promoteFactToProfile(activeFactTab.factDetails.fact);
-          return;
-        }
-        if (key.name === "g") {
-          activeFactTab.setSuggestionLoading(true);
-          activeFactTab.setSuggestionError(null);
-          activeFactTab.setMetadataSuggestion(null);
-          suggestFactMetadata(config, activeFactTab.factDetails.fact.id)
-            .then((result) => {
-              const suggestion = result.suggestions[0]?.suggestion ?? null;
-              activeFactTab.setMetadataSuggestion(suggestion);
-              if (!suggestion) activeFactTab.setSuggestionError("No suggestion for this fact");
-            })
-            .catch((e: unknown) => activeFactTab.setSuggestionError(`Suggest failed: ${e}`))
-            .finally(() => activeFactTab.setSuggestionLoading(false));
-          return;
-        }
-        if (key.name === "a" && activeFactTab.metadataSuggestion) {
-          setSaving(true);
-          updateFactMetadata(config, activeFactTab.factDetails.fact.id, {
-            kind: activeFactTab.metadataSuggestion.kind,
-            lifetime: activeFactTab.metadataSuggestion.lifetime,
-            salience: activeFactTab.metadataSuggestion.salience,
-            confidence: activeFactTab.metadataSuggestion.confidence,
-            expires_at: activeFactTab.metadataSuggestion.expires_at,
-          })
-            .then((result) => {
-              setActiveFacts((prev: Fact[]) => prev.map((f) => (f.id === result.fact.id ? result.fact : f)));
-              queryClient.setQueryData<FactDetails>(["factDetails", result.fact.id], (prev) =>
-                prev ? { ...prev, fact: result.fact } : prev
-              );
-              activeFactTab.setMetadataSuggestion(null);
-              reload();
-            })
-            .catch((e: unknown) => setError(`Apply failed: ${e}`))
-            .finally(() => setSaving(false));
-          return;
-        }
         if (key.name === "d" || key.name === "delete") {
           activeFactTab.setConfirmDelete(true);
           return;
@@ -416,10 +194,6 @@ export function useMemoryKeypress({
           if ((key.name === "d" || key.name === "delete") && activeFactTab.factDetails) {
             activeFactTab.setFocusPane("details");
             activeFactTab.setConfirmDelete(true);
-            return;
-          }
-          if (key.name === "p") {
-            promoteFactToProfile(selectedFact);
             return;
           }
         }
@@ -559,76 +333,6 @@ export function useMemoryKeypress({
         }
       }
 
-      if (activeTab === "learning" && !learningTab.searchMode && learningTab.confirmProposalScan) {
-        if (key.name === "y") {
-          setSaving(true);
-          proposeLearningCandidates(config)
-            .then(() => {
-              learningTab.setConfirmProposalScan(false);
-              reload();
-            })
-            .catch((e: unknown) => setError(`Proposal scan failed: ${e}`))
-            .finally(() => setSaving(false));
-        } else if (key.name === "n" || key.name === "escape") {
-          learningTab.setConfirmProposalScan(false);
-        }
-        return;
-      }
-
-      if (
-        activeTab === "learning" &&
-        !learningTab.searchMode &&
-        learningTab.selectedCandidate
-      ) {
-        if (learningTab.confirmStatus) {
-          if (key.name === "y") {
-            setSaving(true);
-            updateLearningCandidateStatus(config, learningTab.selectedCandidate.id, learningTab.confirmStatus)
-              .then((result) => {
-                setLearningCandidates((prev: LearningCandidate[]) =>
-                  prev.map((candidate) => (candidate.id === result.candidate.id ? result.candidate : candidate))
-                );
-                learningTab.setConfirmStatus(null);
-                reload();
-              })
-              .catch((e: unknown) => setError(`Update failed: ${e}`))
-              .finally(() => setSaving(false));
-          } else if (key.name === "n" || key.name === "escape") {
-            learningTab.setConfirmStatus(null);
-          }
-          return;
-        }
-        if (
-          key.name === "a" &&
-          (
-            canApproveLearningCandidate(learningTab.selectedCandidate.status) ||
-            canApplyLearningCandidate(learningTab.selectedCandidate.status)
-          )
-        ) {
-          learningTab.setConfirmStatus(
-            canApproveLearningCandidate(learningTab.selectedCandidate.status) ? "approved" : "applied"
-          );
-          return;
-        }
-        if (key.name === "d" && canRejectLearningCandidate(learningTab.selectedCandidate.status)) {
-          learningTab.setConfirmStatus("rejected");
-          return;
-        }
-        if (key.name === "z" && canRevertLearningCandidate(learningTab.selectedCandidate.status)) {
-          learningTab.setConfirmStatus("reverted");
-          return;
-        }
-      }
-
-      if (activeTab === "learning" && !learningTab.searchMode && key.name === "tab") {
-        return;
-      }
-
-      if (activeTab === "learning" && !learningTab.searchMode && key.name === "p") {
-        learningTab.setConfirmProposalScan(true);
-        return;
-      }
-
       const numericTab = Number(key.name);
       if (Number.isInteger(numericTab) && numericTab >= 1 && numericTab <= MEMORY_TABS.length) {
         setActiveTab(MEMORY_TABS[numericTab - 1]);
@@ -647,22 +351,9 @@ export function useMemoryKeypress({
       if (key.name === "r") { reload(); return; }
 
       if (key.name === "escape" || key.name === "q") {
-        if (activeTab === "overview") {
-          onClose();
-          return;
-        }
-        const tab = activeTab === "context" ? accessTab : activeTab === "profile" ? profileTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : activeTab === "learning" ? learningTab : eventsTab;
+        const tab = activeTab === "context" ? accessTab : activeTab === "facts" ? factsTab : activeTab === "observations" ? obsTab : activeTab === "prune" ? pruneTab : eventsTab;
         if (tab.searchMode) {
           tab.handleKeys(key);
-          return;
-        }
-        if (activeTab === "learning") {
-          if (tab.searchQuery) {
-            tab.setSearchQuery("");
-            tab.setSelectedIndex(0);
-            return;
-          }
-          onClose();
           return;
         }
         if (tab.focusPane === "details") {
@@ -679,16 +370,13 @@ export function useMemoryKeypress({
         return;
       }
 
-      if (activeTab === "overview") { return; }
       if (activeTab === "context") { accessTab.handleKeys(key); return; }
-      if (activeTab === "profile") { profileTab.handleKeys(key); return; }
-      if (activeTab === "learning") { learningTab.handleKeys(key); return; }
       if (activeTab === "events") { eventsTab.handleKeys(key); return; }
       if (activeTab === "prune") { pruneTab.handleKeys(key); return; }
       if (activeTab === "observations") { obsTab.handleKeys(key); return; }
       factsTab.handleKeys(key);
     },
-    [activeTab, setActiveTab, recallTab, profileTab, factsTab, obsTab, pruneTab, learningTab, pruneDryRun, accessTab, eventsTab, profileEntries, onClose, reload, config, profileTextInput, factsTextInput, obsTextInput, setSaving, setProfileEntries, setFacts, setObservations, setLearningCandidates, setError, queryClient]
+    [activeTab, setActiveTab, recallTab, factsTab, obsTab, pruneTab, pruneDryRun, accessTab, eventsTab, onClose, reload, config, factsTextInput, obsTextInput, setSaving, setFacts, setObservations, setError, queryClient]
   );
 
   useKeypress(handleKeypress, { isActive: true });

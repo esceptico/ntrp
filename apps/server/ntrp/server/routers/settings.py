@@ -72,7 +72,6 @@ def _config_response(rt: Runtime) -> dict:
     integrations["memory"] = {
         "enabled": config.memory,
         "connected": memory_connected,
-        "dreams": config.dreams,
         **(
             {"error": "Embedding model required — configure an OpenAI or Google embedding model"}
             if config.memory and not memory_connected

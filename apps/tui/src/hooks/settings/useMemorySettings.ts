@@ -25,13 +25,11 @@ export function useMemorySettings(
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
   const memoryEnabled = serverConfig?.integrations?.memory?.enabled ?? false;
-  const itemCount = memoryEnabled ? 3 : 1; // memory toggle, dreams toggle, consolidation
+  const itemCount = memoryEnabled ? 2 : 1; // memory toggle, consolidation
 
   const handleToggle = useCallback(async (source: string) => {
     if (actionInProgress || !serverConfig?.integrations) return;
-    const current = source === "dreams"
-      ? serverConfig.integrations.memory?.dreams ?? false
-      : serverConfig.integrations[source]?.enabled ?? false;
+    const current = serverConfig.integrations[source]?.enabled ?? false;
     setActionInProgress("Updating...");
     try {
       await updateConfig(config, { integrations: { [source]: !current } });
@@ -50,16 +48,15 @@ export function useMemorySettings(
       if (memoryIndex < itemCount - 1) setMemoryIndex(i => i + 1);
     } else if (key.name === "return" || key.name === "space") {
       if (memoryIndex === 0) handleToggle("memory");
-      else if (memoryIndex === 1) handleToggle("dreams");
     } else if (key.name === "left" || key.name === "h") {
-      if (memoryIndex === 2) {
+      if (memoryIndex === 1) {
         const item = MEMORY_NUMBER_ITEMS[0];
         const val = settings.agent[item.key as keyof typeof settings.agent] as number;
         const step = item.step ?? 1;
         if (val > item.min) onUpdate("agent", item.key, Math.max(item.min, val - step));
       }
     } else if (key.name === "right" || key.name === "l") {
-      if (memoryIndex === 2) {
+      if (memoryIndex === 1) {
         const item = MEMORY_NUMBER_ITEMS[0];
         const val = settings.agent[item.key as keyof typeof settings.agent] as number;
         const step = item.step ?? 1;

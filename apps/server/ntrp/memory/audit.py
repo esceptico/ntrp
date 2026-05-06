@@ -195,18 +195,6 @@ async def _relation_integrity(conn: aiosqlite.Connection) -> dict[str, Any]:
             ) AS observation_facts_missing_fact,
             (
                 SELECT COUNT(*)
-                FROM dream_facts rel
-                LEFT JOIN dreams d ON d.id = rel.dream_id
-                WHERE d.id IS NULL
-            ) AS dream_facts_missing_dream,
-            (
-                SELECT COUNT(*)
-                FROM dream_facts rel
-                LEFT JOIN facts f ON f.id = rel.fact_id
-                WHERE f.id IS NULL
-            ) AS dream_facts_missing_fact,
-            (
-                SELECT COUNT(*)
                 FROM temporal_checkpoints tc
                 LEFT JOIN entities e ON e.id = tc.entity_id
                 WHERE e.id IS NULL
@@ -254,16 +242,6 @@ async def memory_audit(conn: aiosqlite.Connection) -> dict[str, Any]:
         FROM observations
         """,
     )
-    dreams = await _one(
-        conn,
-        """
-        SELECT
-            COUNT(*) AS total,
-            COALESCE(SUM(embedding IS NULL), 0) AS no_embedding
-        FROM dreams
-        """,
-    )
-
     by_source = await _all(
         conn,
         """
@@ -336,12 +314,6 @@ async def memory_audit(conn: aiosqlite.Connection) -> dict[str, Any]:
             relation_table="observation_facts",
             relation_id_column="observation_id",
         ),
-        "dreams": await _source_provenance(
-            conn,
-            "dreams",
-            relation_table="dream_facts",
-            relation_id_column="dream_id",
-        ),
     }
     storage = {
         "facts": await _search_storage_health(
@@ -365,7 +337,6 @@ async def memory_audit(conn: aiosqlite.Connection) -> dict[str, Any]:
     return {
         "facts": facts,
         "observations": observations,
-        "dreams": dreams,
         "facts_by_source": by_source,
         "facts_by_kind": by_kind,
         "observation_source_distribution": observation_sources,

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { Config } from "../types.js";
 import { getContextUsage, getAutomations, listSessions, type Automation, type SessionListItem } from "../api/client.js";
-import { getLearningCandidates, getStats, type LearningCandidate, type Stats } from "../api/memory.js";
+import { getStats, type Stats } from "../api/memory.js";
 import type { SidebarSettings } from "./useSettings.js";
 
 const POLL_INTERVAL = 60_000;
@@ -20,7 +20,6 @@ export interface SidebarData {
   nextAutomations: Automation[];
   sessions: SessionListItem[];
   memoryStats: Stats | null;
-  learningCandidates: LearningCandidate[];
 }
 
 const EMPTY: SidebarData = {
@@ -28,7 +27,6 @@ const EMPTY: SidebarData = {
   nextAutomations: [],
   sessions: [],
   memoryStats: null,
-  learningCandidates: [],
 };
 
 function nextAutomations(automations: Automation[]): Automation[] {
@@ -44,19 +42,14 @@ function nextAutomations(automations: Automation[]): Automation[] {
 
 async function loadMemorySidebar(config: Config, enabled: boolean): Promise<{
   memoryStats: Stats | null;
-  learningCandidates: LearningCandidate[];
 }> {
   if (!enabled) {
-    return { memoryStats: null, learningCandidates: [] };
+    return { memoryStats: null };
   }
 
-  const [memoryStats, learningResult] = await Promise.all([
-    getStats(config).catch(() => null),
-    getLearningCandidates(config, 40).catch(() => ({ candidates: [] as LearningCandidate[] })),
-  ]);
+  const memoryStats = await getStats(config).catch(() => null);
   return {
     memoryStats,
-    learningCandidates: learningResult.candidates ?? [],
   };
 }
 
@@ -102,7 +95,6 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
         nextAutomations: nextAutomations(automationsResult.automations),
         sessions: sessionsResult.sessions,
         memoryStats: memory.memoryStats,
-        learningCandidates: memory.learningCandidates,
       });
     } catch {
       // ignore
@@ -123,7 +115,6 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
         sessions: sessionsResult.sessions,
         nextAutomations: nextAutomations(automationsResult.automations),
         memoryStats: memory.memoryStats,
-        learningCandidates: memory.learningCandidates,
       }));
     });
   }, [config]);
@@ -145,7 +136,6 @@ export function useSidebar(config: Config, active: boolean, messageCount: number
       .then(memory => setData(prev => ({
         ...prev,
         memoryStats: memory.memoryStats,
-        learningCandidates: memory.learningCandidates,
       })))
       .catch(() => {});
   }, [wantMemory, active, config]);

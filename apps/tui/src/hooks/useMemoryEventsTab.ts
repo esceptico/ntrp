@@ -6,7 +6,7 @@ import { useListDetail, type ListKeyHelpers, type SortOrder } from "./useListDet
 export type { SortOrder };
 
 type EventActorFilter = "all" | "user" | "backend" | "automation";
-type EventTargetFilter = "all" | "fact" | "observation" | "dream" | "fact_batch" | "observation_batch";
+type EventTargetFilter = "all" | "fact" | "observation" | "fact_batch" | "observation_batch";
 
 const filterEvent = (event: MemoryEvent, q: string) => {
   const fields = [
@@ -44,7 +44,7 @@ export interface MemoryEventsTabState {
 }
 
 const ACTOR_FILTERS: EventActorFilter[] = ["all", "user", "backend", "automation"];
-const TARGET_FILTERS: EventTargetFilter[] = ["all", "fact", "observation", "dream", "fact_batch", "observation_batch"];
+const TARGET_FILTERS: EventTargetFilter[] = ["all", "fact", "observation", "fact_batch", "observation_batch"];
 
 export function useMemoryEventsTab(events: MemoryEvent[], contentWidth: number): MemoryEventsTabState {
   const [actorFilter, setActorFilter] = useState<EventActorFilter>("all");

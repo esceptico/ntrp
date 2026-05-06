@@ -22,7 +22,6 @@ from ntrp.events.sse import (
 from ntrp.llm.models import Provider, get_model
 from ntrp.logging import get_logger
 from ntrp.memory.facts import FactMemory
-from ntrp.memory.learning_context import get_approved_learning_context
 from ntrp.memory.prefetch import build_memory_prompt_context
 from ntrp.notifiers.service import NotifierService
 from ntrp.server.bus import BusRegistry, SessionBus
@@ -159,7 +158,6 @@ async def _prepare_messages(
         )
 
     skills_context = deps.skill_registry.to_prompt_xml() if deps.skill_registry else None
-    learning_context = await get_approved_learning_context(deps.memory) if deps.memory else None
     directives = load_directives()
 
     notifiers = deps.notifier_service.list_summary() if deps.notifier_service else None
@@ -173,7 +171,6 @@ async def _prepare_messages(
         source_details={},
         memory_context=memory_context,
         skills_context=skills_context,
-        learning_context=learning_context,
         directives=directives,
         notifiers=notifiers,
         deferred_tools_context=deferred_tools_context,

@@ -27,7 +27,13 @@ import {
   Sep,
 } from "./shared";
 
-export function ObservationsPane() {
+export function ObservationsPane({
+  targetPatternId,
+  onOpenFact,
+}: {
+  targetPatternId?: number | null;
+  onOpenFact?: (fact: Fact) => void;
+}) {
   const config = useStore((s) => s.config);
   const [items, setItems] = useState<Observation[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -45,6 +51,12 @@ export function ObservationsPane() {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!targetPatternId) return;
+    setSelectedId(targetPatternId);
+    setQuery("");
+  }, [targetPatternId]);
 
   // Whenever a row is selected, fetch full detail with supporting facts.
   useEffect(() => {
@@ -73,7 +85,7 @@ export function ObservationsPane() {
     <PaneShell
       list={
         <ListColumn
-          toolbar={<SearchInput value={query} onChange={setQuery} placeholder="Filter observations" />}
+          toolbar={<SearchInput value={query} onChange={setQuery} placeholder="Filter patterns" />}
           empty={items && items.length === 0 ? "Nothing here yet." : undefined}
           loading={items === null}
           totalLabel={items ? `${filtered?.length ?? 0} of ${total}` : null}
@@ -90,11 +102,12 @@ export function ObservationsPane() {
       }
       detail={
         selectedId === null ? (
-          <DetailPlaceholder>Select an observation to view details</DetailPlaceholder>
+          <DetailPlaceholder>Select a pattern to view details</DetailPlaceholder>
         ) : detail ? (
           <ObservationView
             key={detail.observation.id}
             detail={detail}
+            onOpenFact={onOpenFact}
             onSaved={async () => {
               await refresh();
               const fresh = await getObservationApi(config, detail.observation.id);
@@ -145,10 +158,12 @@ function ObservationRow({
 
 function ObservationView({
   detail,
+  onOpenFact,
   onSaved,
   onDeleted,
 }: {
   detail: ObservationDetail;
+  onOpenFact?: (fact: Fact) => void;
   onSaved: () => Promise<void>;
   onDeleted: () => Promise<void>;
 }) {
@@ -175,7 +190,7 @@ function ObservationView({
   }
 
   async function remove() {
-    if (!confirm("Delete this observation? This cannot be undone.")) return;
+    if (!confirm("Delete this pattern? This cannot be undone.")) return;
     await run(async () => {
       await deleteObservationApi(config, detail.observation.id);
       await onDeleted();
@@ -223,7 +238,7 @@ function ObservationView({
           </p>
         )
       }
-      meta={<SupportingFacts facts={detail.supporting_facts} missing={detail.missing_source_fact_ids} />}
+      meta={<SupportingFacts facts={detail.supporting_facts} missing={detail.missing_source_fact_ids} onOpenFact={onOpenFact} />}
       actions={
         <>
           {error && <ErrorPill message={error} />}
@@ -258,7 +273,7 @@ function ObservationView({
   );
 }
 
-function SupportingFacts({ facts, missing }: { facts: Fact[]; missing: number[] }) {
+function SupportingFacts({ facts, missing, onOpenFact }: { facts: Fact[]; missing: number[]; onOpenFact?: (fact: Fact) => void }) {
   if (facts.length === 0 && missing.length === 0) return null;
   return (
     <section>
@@ -271,7 +286,13 @@ function SupportingFacts({ facts, missing }: { facts: Fact[]; missing: number[] 
             <span className="mt-[2px] text-[10px] uppercase tracking-[0.06em] text-faint shrink-0 w-[80px]">
               {f.kind}
             </span>
-            <span className="text-[12.5px] leading-snug text-ink-soft">{f.text}</span>
+            <button
+              type="button"
+              onClick={() => onOpenFact?.(f)}
+              className="min-w-0 text-left text-[12.5px] leading-snug text-ink-soft hover:text-ink"
+            >
+              {f.text}
+            </button>
           </li>
         ))}
         {missing.map((id) => (

@@ -1,12 +1,9 @@
 export const MEMORY_TABS = [
-  "overview",
   "recall",
   "context",
-  "profile",
   "facts",
   "observations",
   "prune",
-  "learning",
   "events",
 ] as const;
 
@@ -21,12 +18,6 @@ export const MEMORY_TAB_COPY: Record<
     description: string;
   }
 > = {
-  overview: {
-    wide: "Home",
-    narrow: "Home",
-    title: "Home",
-    description: "health, counts, and where to go next",
-  },
   recall: {
     wide: "Search",
     narrow: "Find",
@@ -38,12 +29,6 @@ export const MEMORY_TAB_COPY: Record<
     narrow: "Sent",
     title: "Sent",
     description: "memory bundles that reached prompts or tools",
-  },
-  profile: {
-    wide: "Profile",
-    narrow: "Prof",
-    title: "Profile",
-    description: "curated core memory that is always visible",
   },
   facts: {
     wide: "Facts",
@@ -62,12 +47,6 @@ export const MEMORY_TAB_COPY: Record<
     narrow: "Clean",
     title: "Cleanup",
     description: "bulk archive low-value derived patterns",
-  },
-  learning: {
-    wide: "Improve",
-    narrow: "Learn",
-    title: "Improve",
-    description: "review durable policy, prompt, and skill proposals",
   },
   events: {
     wide: "Audit",

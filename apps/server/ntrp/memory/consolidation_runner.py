@@ -9,14 +9,10 @@ from ntrp.embedder import Embedder
 from ntrp.logging import get_logger
 from ntrp.memory.consolidation import PATTERN_POLICY_VERSION, apply_consolidation, get_consolidation_decisions
 from ntrp.memory.decay import should_archive_fact, should_archive_observation
-from ntrp.memory.dreams import run_dream_pass
 from ntrp.memory.fact_merge import fact_merge_pass
-from ntrp.memory.learning_context import get_applied_memory_policy_context
 from ntrp.memory.observation_merge import observation_merge_pass
-from ntrp.memory.store.dreams import DreamRepository
 from ntrp.memory.store.events import MemoryEventRepository
 from ntrp.memory.store.facts import FactRepository
-from ntrp.memory.store.learning import LearningRepository
 from ntrp.memory.store.observations import ObservationRepository
 from ntrp.memory.temporal import temporal_consolidation_pass
 
@@ -24,25 +20,21 @@ _logger = get_logger(__name__)
 
 
 class ConsolidationRunner:
-    """Consolidates, merges, dreams, and archives memory. Invoked by the automation scheduler."""
+    """Consolidates, merges, and archives memory. Invoked by the automation scheduler."""
 
     def __init__(
         self,
         facts: FactRepository,
         observations: ObservationRepository,
-        dreams: DreamRepository,
         embedder: Embedder,
         model_fn: Callable[[], str],
         transaction: Callable[..., Any],
         db_lock: asyncio.Lock,
         db_conn: Any,
-        learning: LearningRepository,
         events: MemoryEventRepository | None = None,
     ):
         self.facts = facts
         self.observations = observations
-        self.dreams = dreams
-        self.learning = learning
         self.embedder = embedder
         self._model_fn = model_fn
         self._transaction = transaction
@@ -50,11 +42,9 @@ class ConsolidationRunner:
         self._db_conn = db_conn
         self.events = events
 
-        self.dreams_enabled: bool = False
         self._running: bool = False
 
         self._last_temporal_pass: datetime | None = None
-        self._last_dream_pass: datetime | None = None
         self._last_merge_pass: datetime | None = None
         self._last_fact_merge_pass: datetime | None = None
         self._last_archival_pass: datetime | None = None
@@ -75,7 +65,6 @@ class ConsolidationRunner:
             if count:
                 results.append(f"consolidated {count} facts")
             await self._maybe_run_temporal_pass()
-            await self._maybe_run_dream_pass()
             return "; ".join(results) if results else "no pending consolidation"
         finally:
             self._running = False
@@ -116,10 +105,6 @@ class ConsolidationRunner:
                 fact.model_copy(update={"entity_refs": await self.facts.get_entity_refs(fact.id)}) for fact in facts
             ]
 
-        policy_context = await get_applied_memory_policy_context(
-            self,
-            target_prefixes=("memory.observations.", "memory.facts.supersession."),
-        )
         decisions = []
         for fact in facts:
             actions = await get_consolidation_decisions(
@@ -127,7 +112,6 @@ class ConsolidationRunner:
                 self.observations,
                 self.facts,
                 self.model,
-                policy_context=policy_context,
             )
             precomputed = []
             for action in actions:
@@ -238,7 +222,6 @@ class ConsolidationRunner:
                     self.model,
                     self.embedder.embed_one,
                     atomic=self._atomic,
-                    dream_repo=self.dreams,
                 ),
                 timeout=CONSOLIDATION_PASS_TIMEOUT,
             )
@@ -251,31 +234,6 @@ class ConsolidationRunner:
         except Exception as e:
             _logger.warning("Fact merge pass failed: %s", e)
         return None
-
-    async def _maybe_run_dream_pass(self) -> None:
-        if not self.dreams_enabled:
-            return
-        now = datetime.now(UTC)
-        if self._last_dream_pass and (now - self._last_dream_pass) < timedelta(weeks=1):
-            return
-        try:
-            created = await asyncio.wait_for(
-                run_dream_pass(
-                    self.facts,
-                    self.dreams,
-                    self.model,
-                    self.embedder.embed_one,
-                    atomic=self._atomic,
-                ),
-                timeout=CONSOLIDATION_PASS_TIMEOUT,
-            )
-            if created > 0:
-                _logger.info("Dream pass created %d dreams", created)
-            self._last_dream_pass = now
-        except TimeoutError:
-            _logger.warning("Dream pass timed out after %ds", CONSOLIDATION_PASS_TIMEOUT)
-        except Exception as e:
-            _logger.warning("Dream pass failed: %s", e)
 
     async def _maybe_run_archival_pass(self) -> tuple[int, int]:
         now = datetime.now(UTC)
