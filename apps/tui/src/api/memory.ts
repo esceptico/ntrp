@@ -39,6 +39,7 @@ export type SourceType = "chat" | "explicit";
 export type FactStatus = "active" | "archived" | "superseded" | "expired" | "temporary" | "pinned" | "all";
 export type FactTrustStatus = Exclude<FactStatus, "all">;
 export type FactAccessed = "never" | "used";
+export type FactLinkType = "semantic" | "entity" | "superseded_by" | "supersedes";
 
 export interface FactEntityRef {
   name: string;
@@ -60,7 +61,7 @@ export interface FactDetails {
   linked_facts: Array<{
     id: number;
     text: string;
-    link_type: string;
+    link_type: FactLinkType;
     weight: number;
   }>;
 }

@@ -168,14 +168,14 @@ async def get_supersession_candidates(
 @router.get("/facts/{fact_id}")
 async def get_fact_details(fact_id: int, svc: MemoryService = Depends(require_memory)):
     try:
-        fact, entity_refs = await svc.facts.get(fact_id)
+        fact, entity_refs, linked_facts = await svc.facts.get_with_links(fact_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Fact not found")
 
     return {
         "fact": _fact_payload(fact),
         "entities": [{"name": e.name, "entity_id": e.entity_id} for e in entity_refs],
-        "linked_facts": [],
+        "linked_facts": linked_facts,
     }
 
 

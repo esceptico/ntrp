@@ -98,6 +98,32 @@ class FactService:
         entity_refs = await self._memory.facts.get_entity_refs(fact_id)
         return fact, entity_refs
 
+    async def get_with_links(self, fact_id: int) -> tuple[Fact, list[EntityRef], list[dict]]:
+        fact, entity_refs = await self.get(fact_id)
+        linked_facts: list[dict] = []
+        if fact.superseded_by_fact_id is not None:
+            superseding = await self._memory.facts.get(fact.superseded_by_fact_id)
+            if superseding:
+                linked_facts.append(
+                    {
+                        "id": superseding.id,
+                        "text": superseding.text,
+                        "link_type": "superseded_by",
+                        "weight": 1,
+                    }
+                )
+
+        for old_fact in await self._memory.facts.list_superseded_by(fact_id):
+            linked_facts.append(
+                {
+                    "id": old_fact.id,
+                    "text": old_fact.text,
+                    "link_type": "supersedes",
+                    "weight": 1,
+                }
+            )
+        return fact, entity_refs, linked_facts
+
     async def update(self, fact_id: int, new_text: str) -> tuple[Fact, list[dict]]:
         async with self._memory.transaction():
             repo = self._memory.facts

@@ -347,6 +347,21 @@ export interface FactEntityRef {
   entity_id: number | null;
 }
 
+export type FactLinkType = "superseded_by" | "supersedes";
+
+export interface LinkedFact {
+  id: number;
+  text: string;
+  link_type: FactLinkType;
+  weight: number;
+}
+
+export interface FactDetail {
+  fact: Fact;
+  entities: FactEntityRef[];
+  linked_facts: LinkedFact[];
+}
+
 export type ObservationEvidenceLevel = "unsupported" | "single_fact_seed" | "multi_fact" | "temporal_pattern";
 
 export interface Observation {
@@ -391,6 +406,10 @@ export async function updateFactTextApi(config: AppConfig, id: number, text: str
     method: "PATCH",
     body: JSON.stringify({ text }),
   });
+}
+
+export async function getFactApi(config: AppConfig, id: number): Promise<FactDetail> {
+  return apiWithConfig(config, `/facts/${id}`);
 }
 
 export async function supersedeFactApi(

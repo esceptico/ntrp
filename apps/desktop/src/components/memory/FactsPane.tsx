@@ -4,8 +4,11 @@ import clsx from "clsx";
 import { useStore } from "../../store";
 import {
   type Fact,
+  type FactDetail as ApiFactDetail,
   type FactKind,
   type FactStatus,
+  type LinkedFact,
+  getFactApi,
   listFactsApi,
   supersedeFactApi,
   updateFactMetadataApi,
@@ -44,6 +47,11 @@ const FACT_KINDS: FactKind[] = [
 
 const FACT_STATUSES: FactStatus[] = ["active", "all", "archived", "superseded", "expired", "temporary", "pinned"];
 
+function statusFilterForFact(fact: Fact): FactStatus {
+  if (fact.status === "archived" || fact.status === "superseded" || fact.status === "expired") return fact.status;
+  return "active";
+}
+
 export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
   const config = useStore((s) => s.config);
   const [facts, setFacts] = useState<Fact[] | null>(null);
@@ -52,11 +60,25 @@ export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
   const [kind, setKind] = useState<FactKind | null>(null);
   const [status, setStatus] = useState<FactStatus>("active");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<ApiFactDetail | null>(null);
 
   async function refresh(nextStatus = status) {
     const r = await listFactsApi(config, { limit: 200, kind: kind ?? undefined, status: nextStatus });
     setFacts(r.facts);
     setTotal(r.total);
+  }
+
+  async function openFactById(factId: number) {
+    const next = await getFactApi(config, factId);
+    setFacts((prev) => {
+      const existing = prev ?? [];
+      return [next.fact, ...existing.filter((fact) => fact.id !== next.fact.id)];
+    });
+    setDetail(next);
+    setSelectedId(next.fact.id);
+    setQuery("");
+    setKind(null);
+    setStatus(statusFilterForFact(next.fact));
   }
 
   useEffect(() => {
@@ -73,8 +95,23 @@ export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
     setSelectedId(targetFact.id);
     setQuery("");
     setKind(null);
-    setStatus(targetFact.status === "archived" ? "archived" : "active");
+    setStatus(statusFilterForFact(targetFact));
   }, [targetFact]);
+
+  useEffect(() => {
+    if (selectedId === null) {
+      setDetail(null);
+      return;
+    }
+    let cancelled = false;
+    setDetail(null);
+    void getFactApi(config, selectedId).then((next) => {
+      if (!cancelled) setDetail(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [config, selectedId]);
 
   const filtered = useMemo(() => {
     if (!facts) return null;
@@ -114,8 +151,10 @@ export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
         selected ? (
           <FactDetail
             key={selected.id}
-            fact={selected}
+            fact={detail?.fact.id === selected.id ? detail.fact : selected}
+            linkedFacts={detail?.fact.id === selected.id ? detail.linked_facts : []}
             onSaved={refresh}
+            onOpenFact={(factId) => void openFactById(factId)}
             onSuperseded={async (oldFact, newFact) => {
               setStatus("active");
               setQuery("");
@@ -187,12 +226,16 @@ function FactRow({
 
 function FactDetail({
   fact,
+  linkedFacts,
   onSaved,
+  onOpenFact,
   onSuperseded,
   onArchived,
 }: {
   fact: Fact;
+  linkedFacts: LinkedFact[];
   onSaved: () => Promise<void>;
+  onOpenFact: (factId: number) => void;
   onSuperseded: (oldFact: Fact, newFact: Fact) => Promise<void>;
   onArchived: (archived: boolean) => Promise<void>;
 }) {
@@ -282,7 +325,7 @@ function FactDetail({
         )
       }
       meta={
-        <>
+        <div className="flex flex-col gap-6">
           <MetaGrid
             rows={[
               { label: "Created", value: formatAbs(fact.created_at) },
@@ -292,12 +335,10 @@ function FactDetail({
               { label: "Source", value: fact.source_type },
               fact.source_ref ? { label: "Source ref", value: fact.source_ref, mono: true } : null,
               fact.expires_at ? { label: "Expires", value: formatAbs(fact.expires_at) } : null,
-              fact.superseded_by_fact_id
-                ? { label: "Superseded by", value: `fact #${fact.superseded_by_fact_id}` }
-                : null,
             ]}
           />
-        </>
+          <FactLinks links={linkedFacts} onOpenFact={onOpenFact} />
+        </div>
       }
       actions={
         <>
@@ -342,6 +383,33 @@ function FactDetail({
         </>
       }
     />
+  );
+}
+
+function FactLinks({ links, onOpenFact }: { links: LinkedFact[]; onOpenFact: (factId: number) => void }) {
+  if (links.length === 0) return null;
+  return (
+    <section>
+      <h3 className="m-0 mb-3 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-faint">
+        Fact links
+      </h3>
+      <ul className="flex flex-col gap-2">
+        {links.map((link) => (
+          <li key={`${link.link_type}-${link.id}`} className="flex items-start gap-3">
+            <span className="mt-[2px] text-[10px] uppercase tracking-[0.06em] text-faint shrink-0 w-[96px]">
+              {link.link_type === "superseded_by" ? "replaced by" : "replaces"}
+            </span>
+            <button
+              type="button"
+              onClick={() => onOpenFact(link.id)}
+              className="min-w-0 text-left text-[12.5px] leading-snug text-ink-soft hover:text-ink"
+            >
+              {link.text}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

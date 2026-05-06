@@ -452,6 +452,47 @@ class TestFactMetadataAPI:
         assert event["details"]["new_fact_id"] == new_fact["id"]
 
     @pytest.mark.asyncio
+    async def test_fact_details_include_supersession_links(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        old = await test_runtime.memory.facts.create(
+            "User prefers short reports",
+            SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+        )
+        new = await test_runtime.memory.facts.create(
+            "User prefers detailed reports",
+            SourceType.EXPLICIT,
+            kind=FactKind.PREFERENCE,
+        )
+        await test_runtime.memory.facts.update_metadata(old.id, {"superseded_by_fact_id": new.id})
+        await test_runtime.memory.db.conn.commit()
+
+        old_response = await test_client.get(f"/facts/{old.id}")
+        new_response = await test_client.get(f"/facts/{new.id}")
+
+        assert old_response.status_code == 200
+        assert new_response.status_code == 200
+        assert old_response.json()["linked_facts"] == [
+            {
+                "id": new.id,
+                "text": "User prefers detailed reports",
+                "link_type": "superseded_by",
+                "weight": 1,
+            }
+        ]
+        assert new_response.json()["linked_facts"] == [
+            {
+                "id": old.id,
+                "text": "User prefers short reports",
+                "link_type": "supersedes",
+                "weight": 1,
+            }
+        ]
+
+    @pytest.mark.asyncio
     async def test_kind_review_lists_untyped_facts(self, test_client: AsyncClient, test_runtime: Runtime):
         review_fact = await test_runtime.memory.facts.create(
             "User has not reviewed this fact yet",

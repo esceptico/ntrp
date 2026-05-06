@@ -8,6 +8,11 @@ from ntrp.memory.fts import build_fts_query
 from ntrp.memory.models import Embedding, Entity, EntityRef, Fact, FactKind, FactLifetime, SourceType
 
 _SQL_GET_FACT = "SELECT * FROM facts WHERE id = ?"
+_SQL_GET_FACTS_SUPERSEDED_BY = """
+    SELECT * FROM facts
+    WHERE superseded_by_fact_id = ?
+    ORDER BY created_at DESC
+"""
 _SQL_COUNT_FACTS = "SELECT COUNT(*) FROM facts"
 _SQL_COUNT_ACTIVE_FACTS = "SELECT COUNT(*) FROM facts WHERE archived_at IS NULL"
 _SQL_COUNT_UNCONSOLIDATED = "SELECT COUNT(*) FROM facts WHERE consolidated_at IS NULL"
@@ -384,6 +389,10 @@ class FactRepository:
             if fid in facts:
                 facts[fid] = facts[fid].model_copy(update={"entity_refs": entity_refs})
         return facts
+
+    async def list_superseded_by(self, fact_id: int) -> list[Fact]:
+        rows = await self.conn.execute_fetchall(_SQL_GET_FACTS_SUPERSEDED_BY, (fact_id,))
+        return [Fact.model_validate(_row_dict(row)) for row in rows]
 
     async def create(
         self,
