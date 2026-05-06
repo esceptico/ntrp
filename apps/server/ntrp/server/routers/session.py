@@ -26,7 +26,13 @@ async def get_session_history(
 ):
     data = await svc.load(session_id)
     if not data:
-        return {"messages": []}
+        return {"messages": [], "active_run_id": None}
+
+    # Active-run id: when present, the desktop client knows the latest
+    # user turn is still in-flight and shouldn't render as "Worked for X".
+    sid = data.state.session_id
+    active_run = runtime.run_registry.get_active_run(sid) if runtime.run_registry else None
+    active_run_id = active_run.run_id if active_run else None
 
     # Tools carry a `kind` ("tool" | "agent") that the desktop renderer uses
     # to pick a row surface. We thread it into the history payload so a
@@ -91,7 +97,7 @@ async def get_session_history(
 
         history.append(entry)
 
-    return {"messages": history[-HISTORY_MESSAGE_LIMIT:]}
+    return {"messages": history[-HISTORY_MESSAGE_LIMIT:], "active_run_id": active_run_id}
 
 
 @router.get("/session")

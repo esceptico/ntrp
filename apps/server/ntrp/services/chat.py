@@ -303,6 +303,13 @@ async def submit_chat_message(
         context=context,
         client_id=client_id,
     )
+    # Persist the user message before the agent starts streaming. Without
+    # this the message exists only in `run.messages` (in memory) until the
+    # first `on_step_finish` save fires — and a client that switches away
+    # and back in that window would lose the message: loadHistory returns
+    # the pre-submit history and the SSE replay carries agent events, not
+    # the user message itself.
+    await deps.session_service.save_progress(ctx.session_state, ctx.run.messages)
     bus = buses.get_or_create(session_id)
     task = asyncio.create_task(run_chat(ctx, bus))
     ctx.run.task = task
@@ -439,7 +446,13 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             # this session sees the in-flight conversation, not the pre-run
             # snapshot. Lightweight UPDATE, leaves metadata alone — the
             # final save in `finally` re-stamps last_input_tokens.
+            #
+            # The bus replay buffer is wiped right after the save so disk
+            # and buffer never overlap: disk has everything up to here,
+            # the buffer holds only events emitted between this checkpoint
+            # and the next. Reconnecting clients get the union, no dups.
             await ctx.session_service.save_progress(session_state, messages)
+            bus.clear_buffer()
 
         agent.hooks.on_step_finish = _checkpoint
 
@@ -505,6 +518,10 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 input_tokens = None
             metadata = {"last_input_tokens": input_tokens} if input_tokens is not None else None
             await ctx.session_service.save(session_state, run.messages, metadata=metadata)
+            # Disk now holds the canonical end-of-run state; drop the
+            # replay buffer so reconnects don't re-apply already-saved
+            # events on top of fresh history.
+            bus.clear_buffer()
             event = RunCompleted(
                 run_id=run.run_id,
                 session_id=session_state.session_id,

@@ -350,6 +350,11 @@ export const useStore = create<State & Actions>((set) => ({
         editingId: null,
         activeActivityId: null,
         currentRunId: null,
+        // The previous session's RUN_FINISHED arrives on a bus we no
+        // longer subscribe to — reset here so we don't carry a stale
+        // "thinking" indicator into the new session. loadHistory turns
+        // it back on if the destination session is itself in-flight.
+        running: false,
         compacting: false,
         lastCompaction: null,
         historyLoadedFor: null,

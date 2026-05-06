@@ -1,9 +1,17 @@
 import asyncio
+from collections import deque
 from dataclasses import dataclass, field
 
 from ntrp.events.sse import SSEEvent
 
 SSE_QUEUE_MAXSIZE = 256
+# Sized for a single research turn that fans out to ~150 nested tool
+# calls (each emits START + ARGS + END + RESULT = 4 events, plus text
+# deltas). Below this, an overflowing run loses early TOOL_CALL_START
+# events; the client then sees orphaned ARGS/END/RESULT and the tool
+# silently disappears from the activity panel. ~10k events × ~200B =
+# ~2MB per active session, which is fine for a single-user app.
+RECENT_BUFFER_MAX = 10000
 
 
 @dataclass
@@ -11,18 +19,43 @@ class SessionBus:
     session_id: str
     subscriber_queue_size: int = SSE_QUEUE_MAXSIZE
     _subscribers: list[asyncio.Queue[SSEEvent | None]] = field(default_factory=list)
+    # Replay buffer for events emitted since the last `clear_buffer()`.
+    # Paired with checkpoint saves: every `on_step_finish` (and the final
+    # save in chat.py) commits messages to disk and then wipes this. So
+    # disk holds everything up to the last checkpoint and the buffer
+    # holds everything since — together they reconstruct current state
+    # without overlap, no cursor needed.
+    _recent: deque[SSEEvent] = field(default_factory=lambda: deque(maxlen=RECENT_BUFFER_MAX))
 
     async def emit(self, event: SSEEvent) -> None:
+        self._recent.append(event)
         for queue in tuple(self._subscribers):
             try:
                 queue.put_nowait(event)
             except asyncio.QueueFull:
                 self._close_slow_subscriber(queue)
 
+    def subscribe_with_replay(self) -> tuple[list[SSEEvent], asyncio.Queue[SSEEvent | None]]:
+        """Atomically snapshot the replay buffer AND register a live queue.
+        emit() never awaits, so no event can interleave between snapshot and
+        queue registration."""
+        snapshot = list(self._recent)
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue(maxsize=self.subscriber_queue_size)
+        self._subscribers.append(queue)
+        return snapshot, queue
+
     def subscribe(self) -> asyncio.Queue[SSEEvent | None]:
+        """Live-only subscription — for feeds that don't replay (e.g. the
+        global automation stream)."""
         queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue(maxsize=self.subscriber_queue_size)
         self._subscribers.append(queue)
         return queue
+
+    def clear_buffer(self) -> None:
+        """Drop every buffered event. Called by the chat service right
+        after each checkpoint save so the buffer never holds events that
+        are also on disk (which would re-apply on reconnect)."""
+        self._recent.clear()
 
     def unsubscribe(self, queue: asyncio.Queue[SSEEvent | None]) -> None:
         try:

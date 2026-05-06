@@ -58,10 +58,15 @@ LIMIT ?
 """
 
 SQL_LOAD_SESSION = "SELECT * FROM sessions WHERE session_id = ?"
-SQL_UPDATE_PROGRESS = """
-UPDATE sessions
-SET messages = ?, last_activity = ?
-WHERE session_id = ?
+# Upsert: a fresh session won't have a row yet on its very first save,
+# and an UPDATE-only would silently no-op (lost user message until the
+# final end-of-run save).
+SQL_UPSERT_PROGRESS = """
+INSERT INTO sessions (session_id, started_at, last_activity, messages, metadata, name)
+VALUES (?, ?, ?, ?, '{}', ?)
+ON CONFLICT(session_id) DO UPDATE SET
+    messages = excluded.messages,
+    last_activity = excluded.last_activity
 """
 SQL_UPDATE_NAME = "UPDATE sessions SET name = ? WHERE session_id = ?"
 SQL_ARCHIVE = "UPDATE sessions SET archived_at = ? WHERE session_id = ? AND archived_at IS NULL"
@@ -88,10 +93,11 @@ class SessionStore:
             except Exception:
                 pass
 
-    async def update_progress(self, session_id: str, messages: list[dict | Any]) -> None:
+    async def update_progress(self, state: SessionState, messages: list[dict | Any]) -> None:
         """Lightweight mid-run save: rewrite messages + bump last_activity,
-        leave name/metadata alone. Lets `loadHistory` return the in-flight
-        state when a client navigates back to a streaming session."""
+        upserting the row so a fresh session's first save lands instead of
+        silently no-op'ing. Leaves metadata alone — the final save in the
+        chat service re-stamps last_input_tokens."""
         serializable: list[dict] = []
         for msg in messages:
             if isinstance(msg, BaseModel):
@@ -105,7 +111,16 @@ class SessionStore:
                 msg["created_at"] = now
 
         messages_json = await asyncio.to_thread(lambda: json.dumps(serializable, default=str))
-        await self.conn.execute(SQL_UPDATE_PROGRESS, (messages_json, now, session_id))
+        await self.conn.execute(
+            SQL_UPSERT_PROGRESS,
+            (
+                state.session_id,
+                state.started_at.isoformat(),
+                now,
+                messages_json,
+                state.name,
+            ),
+        )
         await self.conn.commit()
 
     async def save_session(self, state: SessionState, messages: list[dict | Any], metadata: dict | None = None) -> None:

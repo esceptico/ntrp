@@ -55,10 +55,10 @@ function formatCall(name: string, argsJson: string): string {
 
 export async function loadHistory(sessionId: string): Promise<void> {
   const s = getState();
-  const { messages } = await apiWithConfig<{ messages: HistoryMessage[] }>(
-    s.config,
-    `/session/history?session_id=${encodeURIComponent(sessionId)}`,
-  );
+  const { messages, active_run_id } = await apiWithConfig<{
+    messages: HistoryMessage[];
+    active_run_id: string | null;
+  }>(s.config, `/session/history?session_id=${encodeURIComponent(sessionId)}`);
 
   // Pre-index tool results so we can attach them to their calls regardless
   // of ordering between the assistant message and its `tool` follow-ups.
@@ -149,7 +149,24 @@ export async function loadHistory(sessionId: string): Promise<void> {
     }
   });
 
+  // If the server has an active run for this session, the latest user
+  // turn is still in flight. Clear its `endedAt` so TurnGroup doesn't
+  // collapse it under "Worked for Xs" — the SSE replay + live events
+  // build the in-flight UI on top of the history.
+  if (active_run_id) {
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      if (it.role === "user" && it.turn) {
+        it.turn = { ...it.turn, endedAt: null, durationMs: null };
+        break;
+      }
+    }
+  }
+
   s.setHistory(items);
+  if (active_run_id) {
+    s.setRunning(true);
+  }
 }
 
 export async function refresh(): Promise<void> {

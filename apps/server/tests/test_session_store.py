@@ -129,6 +129,48 @@ async def test_save_stamps_created_at(store: SessionStore):
 
 
 @pytest.mark.asyncio
+async def test_update_progress_upserts_for_brand_new_session(store: SessionStore):
+    """Regression: a fresh session's first save_progress (called by
+    submit_chat_message before the agent starts) used to silently no-op
+    because the SQL was UPDATE-only and the row didn't exist yet. The
+    user-typed message would then be invisible if the user switched
+    sessions and came back before the run's first step finished."""
+    state = _make_state("brand-new")
+    messages = [
+        {"role": "user", "content": "hi", "client_id": "cid-1"},
+    ]
+    await store.update_progress(state, messages)
+
+    loaded = await store.load_session("brand-new")
+    assert loaded is not None
+    assert loaded.messages[0]["content"] == "hi"
+    assert loaded.messages[0]["client_id"] == "cid-1"
+
+
+@pytest.mark.asyncio
+async def test_update_progress_keeps_metadata_on_existing_session(store: SessionStore):
+    """Mid-run checkpoints must not clobber metadata that the final save
+    sets (e.g. last_input_tokens used for compaction)."""
+    state = _make_state("with-meta")
+    await store.save_session(
+        state,
+        [{"role": "user", "content": "hi"}],
+        metadata={"last_input_tokens": 1234},
+    )
+    await store.update_progress(
+        state,
+        [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "yo"},
+        ],
+    )
+    loaded = await store.load_session("with-meta")
+    assert loaded is not None
+    assert loaded.last_input_tokens == 1234
+    assert len(loaded.messages) == 2
+
+
+@pytest.mark.asyncio
 async def test_save_preserves_existing_created_at(store: SessionStore):
     state = _make_state()
     fixed = "2024-01-01T00:00:00+00:00"

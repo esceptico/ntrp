@@ -43,10 +43,10 @@ class SessionService:
             _logger.warning("Failed to save session: %s", e)
 
     async def save_progress(self, session_state: SessionState, messages: list[dict]) -> None:
-        """Mid-run checkpoint — overwrites messages only, keeps metadata."""
+        """Mid-run checkpoint — upserts messages, leaves metadata alone."""
         try:
             session_state.last_activity = datetime.now(UTC)
-            await self.store.update_progress(session_state.session_id, messages)
+            await self.store.update_progress(session_state, messages)
         except Exception as e:
             _logger.warning("Failed to save mid-run progress: %s", e)
 

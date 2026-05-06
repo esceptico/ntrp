@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ntrp.events.sse import (
     BackgroundTaskEvent,
+    MessageIngestedEvent,
     ReasoningEndEvent,
     ReasoningMessageContentEvent,
     ReasoningMessageEndEvent,
@@ -15,6 +16,7 @@ from ntrp.events.sse import (
     TextEvent,
     TextMessageEndEvent,
     TextMessageStartEvent,
+    ThinkingEvent,
 )
 from ntrp.server.bus import BusRegistry
 from ntrp.server.deps import get_bus_registry, require_run_registry
@@ -40,15 +42,63 @@ async def _event_stream(
     session_id: str, bus_registry: BusRegistry, run_registry: RunRegistry, stream: bool = False
 ) -> AsyncGenerator[str]:
     bus = bus_registry.get_or_create(session_id)
-    queue = bus.subscribe()
+    snapshot, queue = bus.subscribe_with_replay()
     last_event_at = time.monotonic()
 
     # Transform state: wrap TextDelta/Text sequences in Start/End boundaries.
-    # Inspired by AG-UI's transformChunks pattern.
+    # Inspired by AG-UI's transformChunks pattern. The same transform runs
+    # over the replayed snapshot first, then over live queue events — so
+    # boundary markers (TextMessageStart/End) end up correctly synthesized
+    # whether the events came from the buffer or the live stream.
     in_text_message = False
     msg_counter = 0
 
+    def _process(event) -> list[str]:
+        nonlocal in_text_message, msg_counter, last_event_at
+        is_text = isinstance(event, TextDeltaEvent | TextEvent)
+        # Passthrough events fly past the text-message-boundary state machine
+        # without closing an open text block. Anything not in this list will
+        # synthesize a TEXT_MESSAGE_END if a text run is open — which is fine
+        # for tool calls / approvals / run-lifecycle, but wrong for ambient
+        # signals like ThinkingEvent (cosmetic) and MessageIngestedEvent
+        # (out-of-band notice, can fire mid-stream when the user injects).
+        is_passthrough = isinstance(
+            event,
+            BackgroundTaskEvent
+            | ReasoningStartEvent
+            | ReasoningMessageStartEvent
+            | ReasoningMessageContentEvent
+            | ReasoningMessageEndEvent
+            | ReasoningEndEvent
+            | ThinkingEvent
+            | MessageIngestedEvent,
+        )
+
+        chunks: list[str] = []
+        if is_text and not in_text_message:
+            msg_counter += 1
+            in_text_message = True
+            chunks.append(TextMessageStartEvent(message_id=f"msg-{msg_counter}").to_sse_string())
+        elif not is_text and not is_passthrough and in_text_message:
+            in_text_message = False
+            chunks.append(TextMessageEndEvent(message_id=f"msg-{msg_counter}").to_sse_string())
+
+        if not stream and isinstance(event, TextDeltaEvent):
+            return chunks
+
+        last_event_at = time.monotonic()
+        chunks.append(event.to_sse_string())
+        return chunks
+
     try:
+        # Replay buffered events first so a reconnecting client can rebuild
+        # in-flight state (current step's deltas, in-progress activity)
+        # before live events take over.
+        for event in snapshot:
+            for chunk in _process(event):
+                yield chunk
+                await asyncio.sleep(0)
+
         while True:
             try:
                 event = await asyncio.wait_for(queue.get(), timeout=0.5)
@@ -63,37 +113,11 @@ async def _event_stream(
                     yield TextMessageEndEvent(message_id=f"msg-{msg_counter}").to_sse_string()
                 break
 
-            is_text = isinstance(event, TextDeltaEvent | TextEvent)
-            is_passthrough = isinstance(
-                event,
-                BackgroundTaskEvent
-                | ReasoningStartEvent
-                | ReasoningMessageStartEvent
-                | ReasoningMessageContentEvent
-                | ReasoningMessageEndEvent
-                | ReasoningEndEvent,
-            )
-
-            if is_text and not in_text_message:
-                msg_counter += 1
-                in_text_message = True
-                last_event_at = time.monotonic()
-                yield TextMessageStartEvent(message_id=f"msg-{msg_counter}").to_sse_string()
+            for chunk in _process(event):
+                yield chunk
+                # Yield to event loop so the transport flushes each event
+                # individually instead of batching them in the TCP buffer.
                 await asyncio.sleep(0)
-            elif not is_text and not is_passthrough and in_text_message:
-                in_text_message = False
-                last_event_at = time.monotonic()
-                yield TextMessageEndEvent(message_id=f"msg-{msg_counter}").to_sse_string()
-                await asyncio.sleep(0)
-
-            if not stream and isinstance(event, TextDeltaEvent):
-                continue
-
-            last_event_at = time.monotonic()
-            yield event.to_sse_string()
-            # Yield to event loop so the transport flushes each event
-            # individually instead of batching them in the TCP buffer.
-            await asyncio.sleep(0)
     except asyncio.CancelledError:
         pass
     finally:
