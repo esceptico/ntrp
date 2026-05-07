@@ -90,7 +90,7 @@ function MermaidPanel({ svg, source }: { svg: string; source: string }) {
             {fullscreen && (
               <motion.div
                 key="mermaid-fullscreen"
-                className="absolute inset-0 z-50 bg-[rgba(0,0,0,0.4)] backdrop-blur-md p-6"
+                className="absolute inset-0 z-50 bg-[rgba(0,0,0,0.4)] backdrop-blur-xl p-6"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}

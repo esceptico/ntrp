@@ -288,7 +288,7 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
 
   return (
     <article
-      className={clsx("grid grid-cols-[minmax(0,1fr)] min-w-0 my-1 animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx("grid grid-cols-[minmax(0,1fr)] min-w-0 animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
@@ -411,7 +411,7 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
 
   return (
     <article
-      className={clsx("grid grid-cols-[minmax(0,1fr)] my-1 animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx("grid grid-cols-[minmax(0,1fr)] animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}

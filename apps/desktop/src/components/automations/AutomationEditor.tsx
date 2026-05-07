@@ -237,7 +237,7 @@ export function AutomationEditor({
       {open && seed && (
         <motion.div
           key="automation-editor"
-          className="absolute inset-0 z-[60] grid place-items-center p-8 bg-[rgba(0,0,0,0.36)] backdrop-blur-md"
+          className="absolute inset-0 z-[60] grid place-items-center p-8 bg-[rgba(0,0,0,0.36)] backdrop-blur-xl"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
