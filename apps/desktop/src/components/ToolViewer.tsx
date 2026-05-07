@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Bot, Check, Copy, X } from "lucide-react";
 import clsx from "clsx";
 import { useShallow } from "zustand/react/shallow";
@@ -8,8 +6,6 @@ import { useStore, type ActivityItem } from "../store";
 import { highlight } from "../highlight";
 import { extractTask, friendlyAgentLabel, isAgent } from "../lib/agent";
 import { Markdown } from "./Markdown";
-
-const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
 /** Pretty-print JSON; fall back to the raw string when parse fails. The
  *  `lang` field is set to "json" when we successfully reformatted, so the
@@ -104,87 +100,70 @@ export function ToolViewer() {
     return () => window.removeEventListener("keydown", onKey);
   }, [item, close]);
 
-  const root = document.querySelector("#app");
-  if (!root) return null;
-  const open = !!(item && live);
+  if (!item || !live) {
+    return (
+      <div className="grid place-items-center h-full text-[12px] text-faint italic">
+        Select a tool call to inspect
+      </div>
+    );
+  }
 
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          key="tool-viewer"
-          className="absolute inset-0 z-50 grid place-items-center p-8 bg-[rgba(0,0,0,0.32)] backdrop-blur-md"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2, ease: MODAL_EASE }}
-          onClick={() => close(null)}
-        >
-          <motion.div
-            className="w-[min(720px,calc(100vw-80px))] max-w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] rounded-2xl bg-surface shadow-[var(--shadow-pop)] overflow-hidden"
-            initial={{ opacity: 0, scale: 0.96, y: 6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 6 }}
-            transition={{ duration: 0.22, ease: MODAL_EASE }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 border-b border-line-soft min-w-0">
-              <div className="min-w-0 flex-1 flex items-center gap-2.5">
-                {live && isAgent(live) && (
-                  <span
-                    aria-hidden
-                    className="grid place-items-center w-[22px] h-[22px] rounded-md bg-accent-soft text-accent-strong shrink-0"
-                  >
-                    <Bot size={12} strokeWidth={2} />
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="text-[16px] font-semibold tracking-[-0.012em] text-ink truncate">
-                    {live && isAgent(live) ? friendlyAgentLabel(live.kind) : live?.kind}
-                  </div>
-                  {live && !isAgent(live) && live.target && live.target !== live.kind && (
-                    <div className="mt-0.5 text-[11.5px] text-faint font-mono truncate">
-                      {live.target}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => close(null)}
-                aria-label="Close"
-                className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors shrink-0"
-              >
-                <X size={13} strokeWidth={1.8} />
-              </button>
-            </header>
-
-            <div className="overflow-y-auto scroll-thin px-5 py-4 grid grid-cols-[minmax(0,1fr)] gap-4 min-w-0">
-              {live && isAgent(live) ? (
-                <AgentBody item={live} descendants={descendants} />
-              ) : (
-                <>
-                  <Section
-                    title="Input"
-                    body={input.body}
-                    html={inputHtml}
-                    placeholder="No input arguments."
-                  />
-                  <Section
-                    title="Output"
-                    body={output.body}
-                    html={outputHtml}
-                    placeholder={live?.result == null ? "Waiting for result…" : "Empty result."}
-                  />
-                  {directChildren.length > 0 && <ChildRuns items={directChildren} />}
-                </>
-              )}
+  return (
+    <div className="grid grid-rows-[auto_minmax(0,1fr)] h-full bg-bg-main">
+      <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 min-w-0">
+        <div className="min-w-0 flex-1 flex items-center gap-2.5">
+          {isAgent(live) && (
+            <span
+              aria-hidden
+              className="grid place-items-center w-[22px] h-[22px] rounded-md bg-accent-soft text-accent-strong shrink-0"
+            >
+              <Bot size={12} strokeWidth={2} />
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="text-[14px] font-semibold tracking-[-0.012em] text-ink truncate">
+              {isAgent(live) ? friendlyAgentLabel(live.kind) : live.kind}
             </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>,
-    root,
+            {!isAgent(live) && live.target && live.target !== live.kind && (
+              <div className="mt-0.5 text-[11.5px] text-faint font-mono truncate">
+                {live.target}
+              </div>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => close(null)}
+          aria-label="Close inspector"
+          title="Close (Esc)"
+          className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors shrink-0"
+        >
+          <X size={13} strokeWidth={1.8} />
+        </button>
+      </header>
+
+      <div className="overflow-y-auto scroll-thin px-5 py-4 grid grid-cols-[minmax(0,1fr)] gap-4 min-w-0 content-start">
+        {isAgent(live) ? (
+          <AgentBody item={live} descendants={descendants} />
+        ) : (
+          <>
+            <Section
+              title="Input"
+              body={input.body}
+              html={inputHtml}
+              placeholder="No input arguments."
+            />
+            <Section
+              title="Output"
+              body={output.body}
+              html={outputHtml}
+              placeholder={live.result == null ? "Waiting for result…" : "Empty result."}
+            />
+            {directChildren.length > 0 && <ChildRuns items={directChildren} />}
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
