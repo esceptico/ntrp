@@ -32,9 +32,13 @@ export function Messages() {
     firstMessageIdInSourceFocus(s.order, s.messages, s.sourceFocus, s.currentSessionId),
   );
 
+  // Streaming smooth-scroll. Spring tuned for "river of text" feel — low
+  // stiffness + high damping so scroll trails the latest content gently
+  // instead of snapping or overshooting. Spec: docs/internal/apple-design-
+  // intel.md and https://github.com/StonkDog/use-stick-to-bottom.
   const { scrollRef, contentRef, scrollToBottom, isNearBottom } = useStickToBottom({
     initial: "instant",
-    resize: "smooth",
+    resize: { damping: 0.92, stiffness: 0.025, mass: 1.5 },
   });
   const topAnchorRef = useRef<{ height: number; top: number } | null>(null);
 
