@@ -177,16 +177,21 @@ class Fact(_MemoryModel):
     confidence: float = 1.0
     expires_at: datetime | None = None
     pinned_at: datetime | None = None
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
     superseded_by_fact_id: int | None = None
     entity_refs: list["EntityRef"] = []
 
     @property
     def status(self) -> FactStatus:
+        now = datetime.now(UTC)
         if self.archived_at is not None:
             return FactStatus.ARCHIVED
         if self.superseded_by_fact_id is not None:
             return FactStatus.SUPERSEDED
-        if self.expires_at is not None and self.expires_at <= datetime.now(UTC):
+        if self.expires_at is not None and self.expires_at <= now:
+            return FactStatus.EXPIRED
+        if self.valid_until is not None and self.valid_until <= now:
             return FactStatus.EXPIRED
         if self.lifetime == FactLifetime.TEMPORARY:
             return FactStatus.TEMPORARY
@@ -214,6 +219,8 @@ class Fact(_MemoryModel):
         "archived_at",
         "expires_at",
         "pinned_at",
+        "valid_from",
+        "valid_until",
         mode="before",
     )
     @classmethod

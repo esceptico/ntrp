@@ -338,6 +338,8 @@ export interface Fact {
   confidence: number;
   expires_at: string | null;
   pinned_at: string | null;
+  valid_from: string | null;
+  valid_until: string | null;
   superseded_by_fact_id: number | null;
   status: FactTrustStatus;
 }

@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS facts (
     confidence REAL NOT NULL DEFAULT 1.0,
     expires_at TIMESTAMP,
     pinned_at TIMESTAMP,
+    valid_from TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    valid_until TIMESTAMP,
     superseded_by_fact_id INTEGER REFERENCES facts(id) ON DELETE SET NULL
 );
 

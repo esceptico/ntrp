@@ -47,6 +47,8 @@ def _fact_payload(fact: Fact) -> dict:
         "confidence": fact.confidence,
         "expires_at": fact.expires_at.isoformat() if fact.expires_at else None,
         "pinned_at": fact.pinned_at.isoformat() if fact.pinned_at else None,
+        "valid_from": fact.valid_from.isoformat() if fact.valid_from else None,
+        "valid_until": fact.valid_until.isoformat() if fact.valid_until else None,
         "superseded_by_fact_id": fact.superseded_by_fact_id,
         "status": fact.status,
     }

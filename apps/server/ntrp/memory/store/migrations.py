@@ -4,7 +4,7 @@ from ntrp.logging import get_logger
 
 _logger = get_logger(__name__)
 
-CURRENT_VERSION = 17
+CURRENT_VERSION = 18
 
 
 async def _get_version(conn: aiosqlite.Connection) -> int:
@@ -300,6 +300,31 @@ async def _migrate_v17(conn: aiosqlite.Connection) -> None:
     await conn.execute("DROP TABLE IF EXISTS profile_entries")
 
 
+async def _migrate_v18(conn: aiosqlite.Connection) -> None:
+    """Add explicit validity windows to facts."""
+    _logger.info("Migration v18: adding fact validity windows")
+
+    if not await _table_exists(conn, "facts"):
+        return
+
+    existing = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(facts)")}
+    if "valid_from" not in existing:
+        await conn.execute("ALTER TABLE facts ADD COLUMN valid_from TIMESTAMP")
+    if "valid_until" not in existing:
+        await conn.execute("ALTER TABLE facts ADD COLUMN valid_until TIMESTAMP")
+
+    existing = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(facts)")}
+    if {"valid_from", "created_at"}.issubset(existing):
+        happened_expr = "happened_at" if "happened_at" in existing else "NULL"
+        await conn.execute(f"""
+            UPDATE facts
+            SET valid_from = COALESCE(valid_from, {happened_expr}, created_at, CURRENT_TIMESTAMP)
+        """)
+
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_valid_from ON facts(valid_from)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_valid_until ON facts(valid_until)")
+
+
 _MIGRATIONS: list[tuple[int, callable]] = [
     (1, _migrate_v1),
     (2, _migrate_v2),
@@ -313,6 +338,7 @@ _MIGRATIONS: list[tuple[int, callable]] = [
     (13, _migrate_v13),
     (16, _migrate_v16),
     (17, _migrate_v17),
+    (18, _migrate_v18),
 ]
 
 

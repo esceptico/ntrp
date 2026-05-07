@@ -13,12 +13,19 @@ _SQL_GET_FACTS_SUPERSEDED_BY = """
     WHERE superseded_by_fact_id = ?
     ORDER BY created_at DESC
 """
-_SQL_CURRENT_FACT = """
-    archived_at IS NULL
-      AND superseded_by_fact_id IS NULL
-      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+
+
+def _sql_current_fact(alias: str = "") -> str:
+    prefix = f"{alias}." if alias else ""
+    return f"""
+    {prefix}archived_at IS NULL
+      AND {prefix}superseded_by_fact_id IS NULL
+      AND ({prefix}valid_until IS NULL OR julianday({prefix}valid_until) > julianday('now'))
+      AND ({prefix}expires_at IS NULL OR julianday({prefix}expires_at) > julianday('now'))
 """
 
+
+_SQL_CURRENT_FACT = _sql_current_fact()
 _SQL_COUNT_FACTS = "SELECT COUNT(*) FROM facts"
 _SQL_COUNT_ACTIVE_FACTS = f"SELECT COUNT(*) FROM facts WHERE {_SQL_CURRENT_FACT}"
 _SQL_COUNT_UNCONSOLIDATED = f"""
@@ -35,17 +42,19 @@ _SQL_LIST_RECENT = f"""
 """
 _SQL_COUNT_KIND_REVIEW = """
     SELECT COUNT(*) FROM facts
-    WHERE archived_at IS NULL
-      AND kind = 'note'
+    WHERE kind = 'note'
+      AND archived_at IS NULL
       AND superseded_by_fact_id IS NULL
-      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+      AND (valid_until IS NULL OR julianday(valid_until) > julianday('now'))
+      AND (expires_at IS NULL OR julianday(expires_at) > julianday('now'))
 """
 _SQL_LIST_KIND_REVIEW = """
     SELECT * FROM facts
-    WHERE archived_at IS NULL
-      AND kind = 'note'
+    WHERE kind = 'note'
+      AND archived_at IS NULL
       AND superseded_by_fact_id IS NULL
-      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+      AND (valid_until IS NULL OR julianday(valid_until) > julianday('now'))
+      AND (expires_at IS NULL OR julianday(expires_at) > julianday('now'))
     ORDER BY access_count DESC, created_at DESC
     LIMIT ? OFFSET ?
 """
@@ -55,26 +64,23 @@ _SQL_INSERT_FACT = """
     INSERT INTO facts (
         text, embedding, source_type, source_ref,
         created_at, happened_at, last_accessed_at, access_count,
-        kind, lifetime, salience, confidence, expires_at, pinned_at, superseded_by_fact_id
+        kind, lifetime, salience, confidence, expires_at, pinned_at,
+        valid_from, valid_until, superseded_by_fact_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
-_SQL_LIST_TIME_WINDOW = """
+_SQL_LIST_TIME_WINDOW = f"""
     SELECT * FROM facts
     WHERE created_at BETWEEN ? AND ?
-      AND archived_at IS NULL
-      AND superseded_by_fact_id IS NULL
-      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+      AND {_SQL_CURRENT_FACT}
     ORDER BY created_at DESC
 """
 
-_SQL_SEARCH_FACTS_TEMPORAL = """
+_SQL_SEARCH_FACTS_TEMPORAL = f"""
     SELECT * FROM facts
     WHERE happened_at IS NOT NULL
-      AND archived_at IS NULL
-      AND superseded_by_fact_id IS NULL
-      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+      AND {_SQL_CURRENT_FACT}
     ORDER BY ABS(julianday(happened_at) - julianday(?))
     LIMIT ?
 """
@@ -115,7 +121,8 @@ _SQL_SEARCH_FACTS_FTS = """
     WHERE facts_fts MATCH ?
       AND f.archived_at IS NULL
       AND f.superseded_by_fact_id IS NULL
-      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
+      AND (f.valid_until IS NULL OR julianday(f.valid_until) > julianday('now'))
+      AND (f.expires_at IS NULL OR julianday(f.expires_at) > julianday('now'))
     ORDER BY bm25(facts_fts)
     LIMIT ?
 """
@@ -131,7 +138,8 @@ _SQL_GET_FACTS_FOR_ENTITY = """
     JOIN entity_refs er ON f.id = er.fact_id
     WHERE f.archived_at IS NULL
       AND f.superseded_by_fact_id IS NULL
-      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
+      AND (f.valid_until IS NULL OR julianday(f.valid_until) > julianday('now'))
+      AND (f.expires_at IS NULL OR julianday(f.expires_at) > julianday('now'))
       AND (er.entity_id = (SELECT id FROM entities WHERE name = ? COLLATE NOCASE)
            OR (er.entity_id IS NULL AND er.name = ? COLLATE NOCASE))
     ORDER BY f.access_count DESC, f.created_at DESC
@@ -152,10 +160,11 @@ _SQL_COUNT_ENTITY_FACTS = """
     FROM entity_refs er
     JOIN facts f ON er.fact_id = f.id
     WHERE (er.entity_id = (SELECT id FROM entities WHERE name = ? COLLATE NOCASE)
-       OR (er.entity_id IS NULL AND er.name = ? COLLATE NOCASE))
+      OR (er.entity_id IS NULL AND er.name = ? COLLATE NOCASE))
       AND f.archived_at IS NULL
       AND f.superseded_by_fact_id IS NULL
-      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
+      AND (f.valid_until IS NULL OR julianday(f.valid_until) > julianday('now'))
+      AND (f.expires_at IS NULL OR julianday(f.expires_at) > julianday('now'))
 """
 
 _SQL_LIST_ALL_ENTITIES = "SELECT * FROM entities ORDER BY updated_at DESC LIMIT ?"
@@ -167,7 +176,8 @@ _SQL_GET_FACTS_FOR_ENTITY_BY_ID = """
     WHERE er.entity_id = ?
       AND f.archived_at IS NULL
       AND f.superseded_by_fact_id IS NULL
-      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
+      AND (f.valid_until IS NULL OR julianday(f.valid_until) > julianday('now'))
+      AND (f.expires_at IS NULL OR julianday(f.expires_at) > julianday('now'))
     ORDER BY f.created_at DESC
     LIMIT ?
 """
@@ -179,7 +189,8 @@ _SQL_COUNT_ENTITY_FACTS_BY_ID = """
     WHERE er.entity_id = ?
       AND f.archived_at IS NULL
       AND f.superseded_by_fact_id IS NULL
-      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
+      AND (f.valid_until IS NULL OR julianday(f.valid_until) > julianday('now'))
+      AND (f.expires_at IS NULL OR julianday(f.expires_at) > julianday('now'))
 """
 
 _SQL_COUNT_ENTITY_FACTS_BATCH = """
@@ -189,7 +200,8 @@ _SQL_COUNT_ENTITY_FACTS_BATCH = """
     WHERE er.entity_id IN ({placeholders})
       AND f.archived_at IS NULL
       AND f.superseded_by_fact_id IS NULL
-      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
+      AND (f.valid_until IS NULL OR julianday(f.valid_until) > julianday('now'))
+      AND (f.expires_at IS NULL OR julianday(f.expires_at) > julianday('now'))
     GROUP BY er.entity_id
 """
 
@@ -207,7 +219,8 @@ _SQL_GET_FACTS_FOR_ENTITY_TEMPORAL = """
     WHERE er.entity_id = ?
       AND f.archived_at IS NULL
       AND f.superseded_by_fact_id IS NULL
-      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
+      AND (f.valid_until IS NULL OR julianday(f.valid_until) > julianday('now'))
+      AND (f.expires_at IS NULL OR julianday(f.expires_at) > julianday('now'))
       AND f.lifetime = 'durable'
       AND COALESCE(f.happened_at, f.created_at) >= datetime('now', '-' || ? || ' days')
       AND COALESCE(f.happened_at, f.created_at) <= datetime('now')
@@ -235,7 +248,8 @@ _SQL_GET_ENTITIES_WITH_FACT_COUNT = """
       AND er.entity_id IS NOT NULL
       AND f.archived_at IS NULL
       AND f.superseded_by_fact_id IS NULL
-      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
+      AND (f.valid_until IS NULL OR julianday(f.valid_until) > julianday('now'))
+      AND (f.expires_at IS NULL OR julianday(f.expires_at) > julianday('now'))
       AND f.lifetime = 'durable'
     GROUP BY er.entity_id
     HAVING COUNT(*) >= ?
@@ -250,7 +264,8 @@ _SQL_LIST_ARCHIVAL_CANDIDATES = """
     WHERE consolidated_at IS NOT NULL
       AND archived_at IS NULL
       AND superseded_by_fact_id IS NULL
-      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+      AND (valid_until IS NULL OR julianday(valid_until) > julianday('now'))
+      AND (expires_at IS NULL OR julianday(expires_at) > julianday('now'))
     ORDER BY last_accessed_at ASC
     LIMIT ?
 """
@@ -270,7 +285,8 @@ _SQL_LIST_MISSING_EMBEDDINGS = """
     WHERE embedding IS NULL
       AND archived_at IS NULL
       AND superseded_by_fact_id IS NULL
-      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+      AND (valid_until IS NULL OR julianday(valid_until) > julianday('now'))
+      AND (expires_at IS NULL OR julianday(expires_at) > julianday('now'))
     ORDER BY created_at DESC
     LIMIT ?
 """
@@ -278,11 +294,14 @@ _SQL_UPDATE_EMBEDDING = "UPDATE facts SET embedding = ? WHERE id = ?"
 
 
 def _is_current_fact(fact: Fact, now: datetime | None = None) -> bool:
+    now = now or datetime.now(UTC)
     if fact.archived_at is not None or fact.superseded_by_fact_id is not None:
         return False
-    if fact.expires_at is None:
-        return True
-    return fact.expires_at > (now or datetime.now(UTC))
+    if fact.valid_until is not None and fact.valid_until <= now:
+        return False
+    if fact.expires_at is not None and fact.expires_at <= now:
+        return False
+    return True
 
 
 def _row_dict(row: aiosqlite.Row) -> dict:
@@ -328,7 +347,8 @@ def _filtered_fact_clauses(
                 [
                     "f.archived_at IS NULL",
                     "f.superseded_by_fact_id IS NULL",
-                    "(f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)",
+                    "(f.valid_until IS NULL OR julianday(f.valid_until) > julianday('now'))",
+                    "(f.expires_at IS NULL OR julianday(f.expires_at) > julianday('now'))",
                 ]
             )
         case "archived":
@@ -336,14 +356,18 @@ def _filtered_fact_clauses(
         case "superseded":
             where.append("f.superseded_by_fact_id IS NOT NULL")
         case "expired":
-            where.append("f.expires_at IS NOT NULL AND f.expires_at <= CURRENT_TIMESTAMP")
+            where.append(
+                "((f.expires_at IS NOT NULL AND julianday(f.expires_at) <= julianday('now')) "
+                "OR (f.valid_until IS NOT NULL AND julianday(f.valid_until) <= julianday('now')))"
+            )
         case "temporary":
             where.extend(
                 [
                     "f.lifetime = 'temporary'",
-                    "f.expires_at > CURRENT_TIMESTAMP",
                     "f.archived_at IS NULL",
                     "f.superseded_by_fact_id IS NULL",
+                    "(f.valid_until IS NULL OR julianday(f.valid_until) > julianday('now'))",
+                    "julianday(f.expires_at) > julianday('now')",
                 ]
             )
         case "pinned":
@@ -352,7 +376,8 @@ def _filtered_fact_clauses(
                     "f.pinned_at IS NOT NULL",
                     "f.archived_at IS NULL",
                     "f.superseded_by_fact_id IS NULL",
-                    "(f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)",
+                    "(f.valid_until IS NULL OR julianday(f.valid_until) > julianday('now'))",
+                    "(f.expires_at IS NULL OR julianday(f.expires_at) > julianday('now'))",
                 ]
             )
         case "all":
@@ -435,10 +460,13 @@ class FactRepository:
         confidence: float = 1.0,
         expires_at: datetime | None = None,
         pinned_at: datetime | None = None,
+        valid_from: datetime | None = None,
+        valid_until: datetime | None = None,
         superseded_by_fact_id: int | None = None,
     ) -> Fact:
         now = datetime.now(UTC)
         kind, lifetime, expires_at = _normalize_metadata(kind=kind, lifetime=lifetime, expires_at=expires_at)
+        valid_from = valid_from or happened_at or now
         embedding_bytes = serialize_embedding(embedding)
         cursor = await self.conn.execute(
             _SQL_INSERT_FACT,
@@ -457,6 +485,8 @@ class FactRepository:
                 confidence,
                 expires_at.isoformat() if expires_at else None,
                 pinned_at.isoformat() if pinned_at else None,
+                valid_from.isoformat(),
+                valid_until.isoformat() if valid_until else None,
                 superseded_by_fact_id,
             ),
         )
@@ -480,6 +510,8 @@ class FactRepository:
             confidence=confidence,
             expires_at=expires_at,
             pinned_at=pinned_at,
+            valid_from=valid_from,
+            valid_until=valid_until,
             superseded_by_fact_id=superseded_by_fact_id,
         )
 
@@ -568,6 +600,8 @@ class FactRepository:
             "confidence",
             "expires_at",
             "pinned_at",
+            "valid_from",
+            "valid_until",
             "superseded_by_fact_id",
         }
         invalid = set(updates) - allowed
@@ -585,8 +619,11 @@ class FactRepository:
             kind = FactKind(kind)
         if lifetime is not None and not isinstance(lifetime, FactLifetime):
             lifetime = FactLifetime(lifetime)
-        if expires_at is not None and not isinstance(expires_at, datetime):
-            expires_at = datetime.fromisoformat(str(expires_at))
+        for field in ("expires_at", "pinned_at", "valid_from", "valid_until"):
+            value = normalized_updates.get(field)
+            if value is not None and not isinstance(value, datetime):
+                normalized_updates[field] = datetime.fromisoformat(str(value))
+        expires_at = normalized_updates.get("expires_at", expires_at)
         kind, lifetime, expires_at = _normalize_metadata(kind=kind, lifetime=lifetime, expires_at=expires_at)
         if "kind" in updates or kind != current.kind:
             normalized_updates["kind"] = kind

@@ -467,8 +467,12 @@ class TestFactMetadataAPI:
         assert old_fact["id"] == result.fact.id
         assert old_fact["status"] == "superseded"
         assert old_fact["superseded_by_fact_id"] == new_fact["id"]
+        assert old_fact["valid_from"] is not None
+        assert old_fact["valid_until"] is not None
         assert new_fact["text"] == "User prefers detailed memory reports with source links"
         assert new_fact["status"] == "active"
+        assert new_fact["valid_from"] == old_fact["valid_until"]
+        assert new_fact["valid_until"] is None
         assert new_fact["source_type"] == "chat"
         assert new_fact["source_ref"] == "chat-123"
         assert new_fact["kind"] == "preference"

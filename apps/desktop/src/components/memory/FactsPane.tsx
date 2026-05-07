@@ -345,6 +345,8 @@ function FactDetail({
             rows={[
               { label: "Created", value: formatAbs(fact.created_at) },
               fact.happened_at ? { label: "Happened", value: formatAbs(fact.happened_at) } : null,
+              fact.valid_from ? { label: "Valid from", value: formatAbs(fact.valid_from) } : null,
+              fact.valid_until ? { label: "Valid until", value: formatAbs(fact.valid_until) } : null,
               { label: "Last accessed", value: formatAbs(fact.last_accessed_at) },
               { label: "Access count", value: String(fact.access_count) },
               { label: "Source", value: factSourceLabel(fact) },

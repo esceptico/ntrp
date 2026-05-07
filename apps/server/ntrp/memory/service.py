@@ -28,9 +28,11 @@ _logger = get_logger(__name__)
 def _is_indexable_fact(fact: Fact, now: datetime) -> bool:
     if fact.archived_at is not None or fact.superseded_by_fact_id is not None:
         return False
-    if fact.expires_at is None:
-        return True
-    return fact.expires_at > now
+    if fact.valid_until is not None and fact.valid_until <= now:
+        return False
+    if fact.expires_at is not None and fact.expires_at <= now:
+        return False
+    return True
 
 
 class FactService:
@@ -155,6 +157,7 @@ class FactService:
                 self._memory.embedder.embed_one(replacement_text),
                 self._memory.extractor.extract(replacement_text),
             )
+            replacement_time = datetime.now(UTC)
             new_fact = await repo.create(
                 text=replacement_text,
                 source_type=old.source_type,
@@ -167,6 +170,8 @@ class FactService:
                 confidence=old.confidence,
                 expires_at=old.expires_at,
                 pinned_at=old.pinned_at,
+                valid_from=replacement_time,
+                valid_until=None,
             )
             entities_extracted = await self._memory._process_extraction(new_fact.id, extraction)
             await self._memory.events.create(
@@ -188,7 +193,13 @@ class FactService:
                 },
             )
 
-            superseded = await repo.update_metadata(fact_id, {"superseded_by_fact_id": new_fact.id})
+            superseded = await repo.update_metadata(
+                fact_id,
+                {
+                    "superseded_by_fact_id": new_fact.id,
+                    "valid_until": replacement_time,
+                },
+            )
             if not superseded:
                 raise RuntimeError(f"Fact {fact_id} disappeared during supersede")
             await self._memory.events.create(

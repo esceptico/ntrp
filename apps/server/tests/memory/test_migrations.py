@@ -355,3 +355,43 @@ async def test_migrate_v17_drops_existing_profile_table(tmp_path: Path):
     assert version[0][0] == str(CURRENT_VERSION)
 
     await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_migrate_v18_adds_fact_validity_window(tmp_path: Path):
+    conn = await aiosqlite.connect(tmp_path / "memory.db")
+    conn.row_factory = aiosqlite.Row
+    await conn.executescript("""
+        CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+        INSERT INTO meta (key, value) VALUES ('schema_version', '17');
+        CREATE TABLE facts (
+            id INTEGER PRIMARY KEY,
+            text TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            happened_at TIMESTAMP
+        );
+        INSERT INTO facts (id, text, source_type, created_at, happened_at)
+        VALUES (1, 'Created-only fact', 'explicit', '2026-05-01T10:00:00+00:00', NULL);
+        INSERT INTO facts (id, text, source_type, created_at, happened_at)
+        VALUES (2, 'Event fact', 'explicit', '2026-05-02T10:00:00+00:00', '2026-04-20T09:00:00+00:00');
+    """)
+
+    await run_migrations(conn)
+
+    columns = {row["name"] for row in await conn.execute_fetchall("PRAGMA table_info(facts)")}
+    assert {"valid_from", "valid_until"}.issubset(columns)
+
+    rows = await conn.execute_fetchall("SELECT id, valid_from, valid_until FROM facts ORDER BY id")
+    assert [(row["id"], row["valid_from"], row["valid_until"]) for row in rows] == [
+        (1, "2026-05-01T10:00:00+00:00", None),
+        (2, "2026-04-20T09:00:00+00:00", None),
+    ]
+
+    indexes = {row["name"] for row in await conn.execute_fetchall("PRAGMA index_list(facts)")}
+    assert {"idx_facts_valid_from", "idx_facts_valid_until"}.issubset(indexes)
+
+    version = await conn.execute_fetchall("SELECT value FROM meta WHERE key = 'schema_version'")
+    assert version[0][0] == str(CURRENT_VERSION)
+
+    await conn.close()
