@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { factSourceDetail, factSourceLabel, factSourceSummary } from "../src/lib/memoryProvenance.js";
+import {
+  factChatSourceSessionId,
+  factSourceDetail,
+  factSourceLabel,
+  factSourceSummary,
+} from "../src/lib/memoryProvenance.js";
 
 test("formats fact source labels without inferring from refs", () => {
   expect(factSourceLabel({ source_type: "chat", source_ref: "session-123" })).toBe("Chat");
@@ -21,6 +26,12 @@ test("formats parsed chat segment refs as readable provenance", () => {
 
   expect(factSourceDetail(fact)).toBe("session-123 · messages 4-9");
   expect(factSourceSummary(fact)).toBe("Chat · session-123 · messages 4-9");
+  expect(factChatSourceSessionId(fact)).toBe("session-123");
+});
+
+test("does not expose a chat source action for unparsed refs", () => {
+  expect(factChatSourceSessionId({ source_type: "chat", source_ref: "session-123" })).toBeNull();
+  expect(factChatSourceSessionId({ source_type: "explicit", source_ref: null })).toBeNull();
 });
 
 test("omits empty source refs from summaries", () => {

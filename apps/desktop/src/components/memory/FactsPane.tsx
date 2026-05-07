@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Archive, ArchiveRestore, ChevronDown, GitCompareArrows, Pencil, Pin } from "lucide-react";
+import { Archive, ArchiveRestore, ChevronDown, ExternalLink, GitCompareArrows, Pencil, Pin } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../../store";
 import {
@@ -16,7 +16,7 @@ import {
 } from "../../api";
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { formatAbs, formatRelativePast } from "../../lib/format";
-import { factSourceDetail, factSourceLabel } from "../../lib/memoryProvenance";
+import { factChatSourceSessionId, factSourceDetail, factSourceLabel } from "../../lib/memoryProvenance";
 import { type MemoryTarget, upsertById } from "../../lib/memoryTargets";
 import { factStatusFilterLabel, factStatusLabel, factStatusTone } from "../../lib/memoryTrust";
 import {
@@ -54,7 +54,13 @@ function statusFilterForFact(fact: Fact): FactStatus {
   return "active";
 }
 
-export function FactsPane({ targetFact }: { targetFact?: MemoryTarget<Fact | number> | null }) {
+export function FactsPane({
+  targetFact,
+  onOpenSource,
+}: {
+  targetFact?: MemoryTarget<Fact | number> | null;
+  onOpenSource?: (sessionId: string) => void;
+}) {
   const config = useStore((s) => s.config);
   const [facts, setFacts] = useState<Fact[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -164,6 +170,7 @@ export function FactsPane({ targetFact }: { targetFact?: MemoryTarget<Fact | num
             linkedFacts={detail?.fact.id === selected.id ? detail.linked_facts : []}
             onSaved={refresh}
             onOpenFact={(factId) => void openFactById(factId)}
+            onOpenSource={onOpenSource}
             onSuperseded={async (oldFact, newFact) => {
               setStatus("active");
               setQuery("");
@@ -243,6 +250,7 @@ function FactDetail({
   linkedFacts,
   onSaved,
   onOpenFact,
+  onOpenSource,
   onSuperseded,
   onArchived,
 }: {
@@ -250,6 +258,7 @@ function FactDetail({
   linkedFacts: LinkedFact[];
   onSaved: () => Promise<void>;
   onOpenFact: (factId: number) => void;
+  onOpenSource?: (sessionId: string) => void;
   onSuperseded: (oldFact: Fact, newFact: Fact) => Promise<void>;
   onArchived: (archived: boolean) => Promise<void>;
 }) {
@@ -266,6 +275,7 @@ function FactDetail({
 
   const dirty = mode !== null && draft.trim() !== fact.text.trim();
   const sourceRef = factSourceDetail(fact);
+  const sourceSessionId = factChatSourceSessionId(fact);
 
   async function save() {
     if (!dirty || !draft.trim()) return;
@@ -380,6 +390,11 @@ function FactDetail({
             </>
           ) : (
             <>
+              {sourceSessionId && (
+                <GhostBtn onClick={() => onOpenSource?.(sourceSessionId)} disabled={busy}>
+                  <ExternalLink size={12} strokeWidth={1.8} /> Open source
+                </GhostBtn>
+              )}
               {fact.status === "archived" ? (
                 <GhostBtn onClick={() => void setArchived(false)} disabled={busy}>
                   <ArchiveRestore size={12} strokeWidth={1.8} /> Restore

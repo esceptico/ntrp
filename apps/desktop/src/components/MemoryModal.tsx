@@ -3,6 +3,7 @@ import { ChevronRight, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
 import type { Fact, Observation } from "../api";
+import { switchSession } from "../actions";
 import { advancedMemoryTabsVisible, isAdvancedMemoryTab, type MemoryTab } from "../lib/memoryTabs";
 import { nextMemoryTarget, type MemoryTarget } from "../lib/memoryTargets";
 import { PageModal } from "./PageModal";
@@ -42,6 +43,11 @@ export function MemoryModal() {
     setTab("patterns");
   };
 
+  const openSourceSession = async (sessionId: string) => {
+    await switchSession(sessionId);
+    close();
+  };
+
   return (
     <PageModal
       open={open}
@@ -78,7 +84,12 @@ export function MemoryModal() {
           <RecallPane onOpenFact={openFact} onOpenPattern={openPattern} />
         </section>
         {tab === "sent" && <SentPane onOpenFact={openFact} onOpenPattern={openPattern} />}
-        {tab === "facts" && <FactsPane targetFact={targetFact} />}
+        {tab === "facts" && (
+          <FactsPane
+            targetFact={targetFact}
+            onOpenSource={(sessionId) => void openSourceSession(sessionId)}
+          />
+        )}
         {tab === "patterns" && <ObservationsPane targetPattern={targetPattern} onOpenFact={openFact} />}
         {tab === "cleanup" && <CleanupPane onOpenFact={openFact} onOpenPattern={openPattern} />}
         {tab === "audit" && <AuditPane />}

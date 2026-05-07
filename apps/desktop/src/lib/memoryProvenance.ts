@@ -16,6 +16,14 @@ export interface FactSourceLike {
   source_ref_parts?: FactSourceRefParts | null;
 }
 
+function chatSegmentParts(parts: FactSourceRefParts | null | undefined): Extract<FactSourceRefParts, { kind: "chat_segment" }> | null {
+  if (parts?.kind !== "chat_segment") return null;
+  if (typeof parts.session_id !== "string") return null;
+  if (typeof parts.message_start !== "number") return null;
+  if (typeof parts.message_end !== "number") return null;
+  return parts as Extract<FactSourceRefParts, { kind: "chat_segment" }>;
+}
+
 export function factSourceLabel(fact: FactSourceLike): string {
   return fact.source_type
     .split("_")
@@ -25,8 +33,9 @@ export function factSourceLabel(fact: FactSourceLike): string {
 }
 
 export function factSourceDetail(fact: FactSourceLike): string | null {
-  if (fact.source_ref_parts?.kind === "chat_segment") {
-    return `${fact.source_ref_parts.session_id} · messages ${fact.source_ref_parts.message_start}-${fact.source_ref_parts.message_end}`;
+  const chatSegment = chatSegmentParts(fact.source_ref_parts);
+  if (chatSegment) {
+    return `${chatSegment.session_id} · messages ${chatSegment.message_start}-${chatSegment.message_end}`;
   }
   const ref = fact.source_ref?.trim();
   return ref ? ref : null;
@@ -35,4 +44,9 @@ export function factSourceDetail(fact: FactSourceLike): string | null {
 export function factSourceSummary(fact: FactSourceLike): string {
   const detail = factSourceDetail(fact);
   return detail ? `${factSourceLabel(fact)} · ${detail}` : factSourceLabel(fact);
+}
+
+export function factChatSourceSessionId(fact: FactSourceLike): string | null {
+  if (fact.source_type !== "chat") return null;
+  return chatSegmentParts(fact.source_ref_parts)?.session_id ?? null;
 }
