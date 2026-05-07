@@ -91,6 +91,9 @@ test("does not mutate a finalized activity group after a tool burst", async () =
     timestamp: 6,
   });
 
+  // Drain the stagger queue — burst items roll in over ITEM_STAGGER_MS each.
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
   const state = getState();
   const activityId = state.order.find((id) => state.messages.get(id)?.role === "activity");
   expect(activityId).toBeTruthy();
@@ -108,7 +111,7 @@ test("does not mutate a finalized activity group after a tool burst", async () =
   ]);
 });
 
-test("keeps one activity group across top-level reasoning events", () => {
+test("keeps one activity group across top-level reasoning events", async () => {
   handleServerEvent({
     type: "RUN_STARTED",
     run_id: "run-1",
@@ -148,6 +151,8 @@ test("keeps one activity group across top-level reasoning events", () => {
     tool_call_id: "tool-2",
     timestamp: 7,
   });
+
+  await new Promise((resolve) => setTimeout(resolve, 80));
 
   const state = getState();
   const activityIds = state.order.filter((id) => state.messages.get(id)?.role === "activity");

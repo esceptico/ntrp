@@ -26,11 +26,31 @@ function endTurn(s: ReturnType<typeof getState>, endedAt: number) {
   }
 }
 
+/** Stagger activity-item insertions so a burst of tool calls in one stream
+ *  chunk rolls in one-by-one rather than as a single chord.
+ *
+ *  Sub-agents can fire tens of nested tools nearly simultaneously, so we
+ *  also cap how far the queue can fall behind real time — without the cap a
+ *  burst of 30 items would visibly drip out over 3+ seconds. */
+const ITEM_STAGGER_MS = 40;
+const MAX_STAGGER_LAG_MS = 120;
+let nextItemRenderAt = 0;
+
 function enqueueActivityItem(aid: string, item: ActivityItem) {
-  const state = getState();
-  if (state.messages.get(aid)?.activity) {
-    state.appendActivityItem(aid, item);
-  }
+  const now = Date.now();
+  const queued = nextItemRenderAt + ITEM_STAGGER_MS;
+  const ceiling = now + MAX_STAGGER_LAG_MS;
+  const renderAt = Math.max(now, Math.min(queued, ceiling));
+  nextItemRenderAt = renderAt;
+  const delay = renderAt - now;
+  const apply = () => {
+    const state = getState();
+    if (state.messages.get(aid)?.activity) {
+      state.appendActivityItem(aid, item);
+    }
+  };
+  if (delay === 0) apply();
+  else setTimeout(apply, delay);
 }
 
 /** Buffer in-flight tool calls so we can hand a complete item to the
@@ -213,6 +233,7 @@ export function handleServerEvent(event: ServerEvent) {
           activity: { items: [item], label: "Calling", done: false },
         }, activityInsertAnchor());
         s.setActiveActivityId(newId);
+        nextItemRenderAt = Date.now();
       } else {
         enqueueActivityItem(aid, item);
       }
@@ -361,10 +382,11 @@ export function useEvents(sessionId: string | null) {
 }
 
 /** Reset module-level buffers so a disconnect/reconnect doesn't leave
- *  half-built tool calls or a stale assistant anchor behind. */
+ *  half-built tool calls or a stale stagger queue behind. */
 function resetStreamState(): void {
   pendingToolCalls.clear();
   activeAssistantMessageId = null;
+  nextItemRenderAt = 0;
 }
 
 export const resetStreamStateForTest = resetStreamState;
