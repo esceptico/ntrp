@@ -8,6 +8,7 @@ import {
   MessageSquare,
   PanelLeft,
   Pencil,
+  Search,
   Settings as SettingsIcon,
   Sparkles,
   Zap,
@@ -75,7 +76,7 @@ export function CommandPalette() {
       {open && (
         <motion.div
           key="palette"
-          className="absolute inset-0 z-[60] grid place-items-start justify-center pt-[14vh] p-8 bg-[rgba(0,0,0,0.32)] backdrop-blur-md"
+          className="absolute inset-0 z-[60] grid place-items-start justify-center pt-[14vh] p-8 bg-[rgba(0,0,0,0.28)] backdrop-blur-xl"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -83,7 +84,7 @@ export function CommandPalette() {
           onClick={close}
         >
           <motion.div
-            className="w-[min(640px,calc(100vw-80px))] max-h-[60vh] grid grid-rows-[auto_minmax(0,1fr)] rounded-[14px] bg-surface shadow-[var(--shadow-pop)] overflow-hidden border border-line-soft"
+            className="w-[min(660px,calc(100vw-80px))] max-h-[62vh] grid grid-rows-[auto_minmax(0,1fr)] rounded-[16px] bg-surface/95 shadow-[var(--shadow-pop)] overflow-hidden border border-line-soft backdrop-blur-xl"
             initial={{ opacity: 0, scale: 0.96, y: -6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: -6 }}
@@ -149,7 +150,12 @@ function PaletteBody({
 
   return (
     <>
-      <div className="px-4 pt-3 pb-2.5">
+      <div className="relative px-4 pt-3 pb-2.5">
+        <Search
+          size={15}
+          strokeWidth={1.8}
+          className="absolute left-4 top-[22px] text-faint pointer-events-none"
+        />
         <input
           ref={inputRef}
           type="text"
@@ -172,9 +178,9 @@ function PaletteBody({
               execute(filtered[safe]);
             }
           }}
-          placeholder="Type command"
+          placeholder="Search commands, sessions, memory..."
           spellCheck={false}
-          className="w-full h-7 bg-transparent text-[14px] text-ink placeholder:text-faint outline-none"
+          className="w-full h-8 pl-6 bg-transparent text-[14px] text-ink placeholder:text-faint outline-none"
         />
       </div>
 
@@ -186,7 +192,7 @@ function PaletteBody({
         ) : (
           grouped.map(({ section, items }) => (
             <div key={section}>
-              <div className="px-4 pt-3 pb-1 text-[11.5px] text-faint">
+              <div className="px-4 pt-3 pb-1 text-[10.5px] font-medium uppercase tracking-[0.10em] text-faint">
                 {SECTION_LABEL[section]}
               </div>
               <ul className="m-0 px-1.5 list-none">
@@ -235,11 +241,16 @@ function Row({
         onMouseDown={(e) => e.preventDefault()}
         onClick={onClick}
         className={clsx(
-          "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[6px] text-left transition-colors",
-          active ? "bg-surface-soft" : "hover:bg-surface-soft/60",
+          "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[8px] text-left transition-colors",
+          active ? "bg-surface-soft text-ink" : "hover:bg-surface-soft/60",
         )}
       >
-        <span className="grid place-items-center w-5 h-5 text-muted shrink-0">
+        <span
+          className={clsx(
+            "grid place-items-center w-5 h-5 rounded-md shrink-0 transition-colors",
+            active ? "bg-accent-soft text-accent-strong" : "text-muted",
+          )}
+        >
           <Icon size={14} strokeWidth={1.7} />
         </span>
         <span className="text-[13px] text-ink truncate flex-1">{entry.label}</span>
