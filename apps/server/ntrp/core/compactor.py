@@ -78,12 +78,16 @@ def compactable_range(
     return (1, tail_start)
 
 
+def is_handoff_message(msg: dict) -> bool:
+    return blocks_to_text(msg.get("content", "")).startswith(SESSION_HANDOFF_MARKER)
+
+
 def _extract_prior_summary(messages: list, start: int, end: int) -> str | None:
     """If the compactable range starts with a prior handoff, extract and return it."""
     if start >= end:
         return None
     content = blocks_to_text(messages[start].get("content", ""))
-    if content.startswith(SESSION_HANDOFF_MARKER):
+    if is_handoff_message(messages[start]):
         return content.removeprefix(SESSION_HANDOFF_MARKER).strip()
     return None
 
@@ -167,10 +171,29 @@ async def compact_summarize(
     return content.strip()
 
 
-def _build_compacted_messages(messages: list[dict], end: int, summary: str) -> list[dict]:
+def _message_ref_id(msg: dict) -> str | None:
+    value = msg.get("message_id") or msg.get("client_id")
+    return value if isinstance(value, str) and value else None
+
+
+def _build_compacted_messages(messages: list[dict], start: int, end: int, summary: str) -> list[dict]:
+    compaction: dict = {
+        "kind": "session_handoff",
+        "message_start": start,
+        "message_end": end,
+    }
+    if start_id := _message_ref_id(messages[start]):
+        compaction["message_start_id"] = start_id
+    if end > start and (end_id := _message_ref_id(messages[end - 1])):
+        compaction["message_end_id"] = end_id
+
     return [
         messages[0],
-        {"role": Role.ASSISTANT, "content": f"{SESSION_HANDOFF_MARKER}\n{summary}"},
+        {
+            "role": Role.ASSISTANT,
+            "content": f"{SESSION_HANDOFF_MARKER}\n{summary}",
+            "compaction": compaction,
+        },
         *messages[end:],
     ]
 
@@ -188,7 +211,7 @@ async def compact_messages(
         return None
     start, end = r
     summary = await compact_summarize(messages, start, end, model, summary_max_tokens)
-    return _build_compacted_messages(messages, end, summary)
+    return _build_compacted_messages(messages, start, end, summary)
 
 
 class SummaryCompactor:

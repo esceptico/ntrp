@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.agent import Role
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
+from ntrp.core.compactor import is_handoff_message
 from ntrp.core.content import blocks_to_text
 from ntrp.server.deps import require_session_service
 from ntrp.server.runtime import Runtime, get_runtime
@@ -62,6 +63,8 @@ async def get_session_history(
         msg = row["message"]
         role = msg["role"]
         if role == Role.SYSTEM:
+            continue
+        if is_handoff_message(msg):
             continue
 
         raw_content = msg.get("content", "") or ""
