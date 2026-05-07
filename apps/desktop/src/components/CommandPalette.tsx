@@ -19,6 +19,7 @@ import { useStore } from "../store";
 import { archiveSession, branchAtMessage, createSession, switchSession } from "../actions";
 import { apiWithConfig } from "../api";
 import { formatRelativePast } from "../lib/format";
+import { trackHoverDish } from "../lib/hoverDish";
 
 const BACKDROP_DURATION = 0.16;
 const PANEL_DURATION = 0.18;
@@ -238,10 +239,11 @@ function Row({
         ref={activeRef}
         type="button"
         onMouseEnter={onHover}
+        onMouseMove={trackHoverDish}
         onMouseDown={(e) => e.preventDefault()}
         onClick={onClick}
         className={clsx(
-          "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[8px] text-left transition-colors",
+          "hover-dish w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[8px] text-left transition-colors",
           active ? "bg-surface-soft text-ink" : "hover:bg-surface-soft/60",
         )}
       >

@@ -5,6 +5,7 @@ import clsx from "clsx";
 import { useStore } from "../store";
 import { apiWithConfig } from "../api";
 import { archiveSession, createSession, renameSession, switchSession } from "../actions";
+import { trackHoverDish } from "../lib/hoverDish";
 
 function formatAge(value: string): string {
   const delta = Date.now() - new Date(value).getTime();
@@ -13,6 +14,41 @@ function formatAge(value: string): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 48) return `${hours}h`;
   return `${Math.floor(hours / 24)}d`;
+}
+
+const DAY_MS = 86_400_000;
+
+function bucketByTime<T extends { last_activity: string }>(
+  items: T[],
+): { label: string; items: T[] }[] {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const todayStart = startOfToday.getTime();
+  const yesterdayStart = todayStart - DAY_MS;
+  const sevenDaysAgo = todayStart - 6 * DAY_MS;
+  const thirtyDaysAgo = todayStart - 29 * DAY_MS;
+
+  const today: T[] = [];
+  const yesterday: T[] = [];
+  const week: T[] = [];
+  const month: T[] = [];
+  const older: T[] = [];
+  for (const item of items) {
+    const t = new Date(item.last_activity).getTime();
+    if (t >= todayStart) today.push(item);
+    else if (t >= yesterdayStart) yesterday.push(item);
+    else if (t >= sevenDaysAgo) week.push(item);
+    else if (t >= thirtyDaysAgo) month.push(item);
+    else older.push(item);
+  }
+
+  const buckets: { label: string; items: T[] }[] = [];
+  if (today.length) buckets.push({ label: "Today", items: today });
+  if (yesterday.length) buckets.push({ label: "Yesterday", items: yesterday });
+  if (week.length) buckets.push({ label: "Previous 7 days", items: week });
+  if (month.length) buckets.push({ label: "Previous 30 days", items: month });
+  if (older.length) buckets.push({ label: "Older", items: older });
+  return buckets;
 }
 
 function NavRow({
@@ -28,7 +64,8 @@ function NavRow({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-[9px] w-full px-2 py-1.5 rounded-lg text-[13px] font-medium text-ink-soft text-left tracking-[-0.005em] hover:bg-[rgba(0,0,0,0.045)] transition-colors"
+      onMouseMove={trackHoverDish}
+      className="hover-dish flex items-center gap-[9px] w-full px-2 py-1.5 rounded-lg text-[13px] font-medium text-ink-soft text-left tracking-[-0.005em] hover:bg-[rgba(0,0,0,0.045)] transition-colors"
     >
       <span className="nav-icon grid place-items-center w-[22px] h-[22px] rounded-md text-ink-soft shrink-0">
         {icon}
@@ -120,9 +157,10 @@ function SessionRow({
         e.preventDefault();
         onStartRename();
       }}
+      onMouseMove={trackHoverDish}
       data-streaming={streaming ? "true" : undefined}
       className={clsx(
-        "session-row relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full pl-3 pr-2.5 py-1.5 rounded-lg text-left transition-colors",
+        "session-row hover-dish relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full pl-3 pr-2.5 py-1.5 rounded-lg text-left transition-colors",
         active
           ? "bg-[rgba(0,0,0,0.075)] text-ink"
           : "text-ink-soft hover:bg-[rgba(0,0,0,0.045)]",
@@ -215,7 +253,7 @@ function SessionList() {
         )}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin px-2.5 pb-3 flex flex-col gap-px">
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin pb-3">
         {sessions.length === 0 ? (
           <div className="px-3 py-3 text-[12px] italic text-faint">
             {connected ? "No sessions yet." : "Connect to load sessions."}
@@ -223,23 +261,32 @@ function SessionList() {
         ) : filtered.length === 0 ? (
           <div className="px-3 py-3 text-[12px] italic text-faint">No matches.</div>
         ) : (
-          filtered.map((session) => (
-            <SessionRow
-              key={session.session_id}
-              sessionId={session.session_id}
-              name={session.name ?? null}
-              lastActivity={session.last_activity}
-              active={session.session_id === currentSessionId}
-              streaming={activeRunSessionIds.has(session.session_id)}
-              unread={unreadDoneSessionIds.has(session.session_id)}
-              renaming={renamingId === session.session_id}
-              onStartRename={() => setRenamingId(session.session_id)}
-              onCancelRename={() => setRenamingId(null)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setMenu({ sessionId: session.session_id, x: e.clientX, y: e.clientY });
-              }}
-            />
+          bucketByTime(filtered).map((bucket) => (
+            <div key={bucket.label}>
+              <div className="sticky top-0 z-10 px-3 pt-3 pb-1.5 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint bg-bg">
+                {bucket.label}
+              </div>
+              <div className="px-2.5 flex flex-col gap-px">
+                {bucket.items.map((session) => (
+                  <SessionRow
+                    key={session.session_id}
+                    sessionId={session.session_id}
+                    name={session.name ?? null}
+                    lastActivity={session.last_activity}
+                    active={session.session_id === currentSessionId}
+                    streaming={activeRunSessionIds.has(session.session_id)}
+                    unread={unreadDoneSessionIds.has(session.session_id)}
+                    renaming={renamingId === session.session_id}
+                    onStartRename={() => setRenamingId(session.session_id)}
+                    onCancelRename={() => setRenamingId(null)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setMenu({ sessionId: session.session_id, x: e.clientX, y: e.clientY });
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
           ))
         )}
       </div>
