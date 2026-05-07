@@ -245,6 +245,9 @@ export function handleServerEvent(event: ServerEvent) {
       if (event.parent_id) patch.parentToolId = event.parent_id;
       if (event.depth != null) patch.depth = event.depth || undefined;
       if (event.is_error) patch.error = true;
+      if (typeof event.duration_ms === "number" && event.duration_ms > 0) {
+        patch.durationMs = event.duration_ms;
+      }
       s.mergeActivityItem(event.tool_call_id, patch);
       return;
     }

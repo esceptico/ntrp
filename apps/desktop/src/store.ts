@@ -104,6 +104,9 @@ export interface ActivityItem {
   /** Server-reported error flag (set on TOOL_CALL_RESULT). Lets the
    *  trace render error rows distinctly without parsing the result text. */
   error?: boolean;
+  /** Wall-clock duration of the tool call in milliseconds. Set on
+   *  TOOL_CALL_RESULT — undefined while running. */
+  durationMs?: number;
 }
 
 export interface ActivityState {
