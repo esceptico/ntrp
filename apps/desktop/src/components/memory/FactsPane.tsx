@@ -254,12 +254,10 @@ function FactRow({
             <span aria-hidden>·</span>
             <span>{factStatusLabel(fact.status)}</span>
             <span aria-hidden>·</span>
-            <span>{factSourceLabel(fact)}</span>
-            {sourceStatus.tone === "warn" && (
-              <>
-                <span aria-hidden>·</span>
-                <Pill tone="warn">source</Pill>
-              </>
+            {sourceStatus.tone === "warn" ? (
+              <Pill tone="warn">{sourceStatus.label.toLowerCase()}</Pill>
+            ) : (
+              <span>{factSourceLabel(fact)}</span>
             )}
             <span aria-hidden>·</span>
             <span className="tabular-nums">{formatRelativePast(fact.last_accessed_at)}</span>
