@@ -25,6 +25,11 @@ import {
   defaultCustomModelDraft,
   type CustomModelDraft,
 } from "../../lib/customModelDraft";
+import {
+  settingsErrorMessage,
+  settingsErrorTitle,
+  shouldShowLoadedSettingsContent,
+} from "../../lib/settingsLoadState";
 
 const PRIMARY_PROVIDERS = ["openai-codex", "openai", "anthropic", "google", "openrouter"];
 
@@ -66,6 +71,7 @@ export function ProvidersTab() {
   const [providers, setProviders] = useState<ModelProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadedOnce, setLoadedOnce] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -86,6 +92,7 @@ export function ProvidersTab() {
     try {
       const next = await listModelProvidersApi(config);
       setProviders(next);
+      setLoadedOnce(true);
       const codex = next.find((provider) => provider.id === "openai-codex");
       if (codex?.connected) {
         setCodexStatus({ connected: true, status: "connected" });
@@ -222,6 +229,9 @@ export function ProvidersTab() {
     setCustomDraft((prev) => ({ ...prev, ...patch }));
   }
 
+  const hasLoadedData = loadedOnce || providers.length > 0;
+  const showContent = shouldShowLoadedSettingsContent({ loading, error, hasData: hasLoadedData });
+
   return (
     <div className="grid gap-4">
       <div className="flex items-start justify-between gap-3">
@@ -241,14 +251,20 @@ export function ProvidersTab() {
 
       {error && (
         <div className="grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.16)]">
-          <strong className="text-bad text-[12px] font-semibold">Provider action failed</strong>
-          <span className="text-[12px] text-[#8a3220] leading-[1.4]">{error}</span>
+          <strong className="text-bad text-[12px] font-semibold">
+            {settingsErrorTitle("providers", hasLoadedData)}
+          </strong>
+          <span className="text-[12px] text-[#8a3220] leading-[1.4]">
+            {settingsErrorMessage(error)}
+          </span>
         </div>
       )}
 
       <div className="grid gap-2">
         {loading && providers.length === 0 ? (
           <div className="text-[12.5px] text-faint">Loading providers…</div>
+        ) : !showContent ? (
+          <ConnectionHint />
         ) : (
           sortedProviders.map((provider) => (
             <ProviderRow
@@ -291,6 +307,17 @@ export function ProvidersTab() {
             </ProviderRow>
           ))
         )}
+      </div>
+    </div>
+  );
+}
+
+function ConnectionHint() {
+  return (
+    <div className="rounded-[12px] border border-line-soft bg-surface px-3.5 py-3">
+      <div className="text-[13px] font-medium text-ink">Connect the desktop to ntrp first</div>
+      <div className="mt-1 text-[12px] text-muted leading-[1.45]">
+        Check the server URL and API key in the Connection tab, then refresh this view.
       </div>
     </div>
   );
@@ -533,7 +560,7 @@ function CustomModelsPanel({
       </div>
 
       <div className="grid gap-2">
-        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2">
           <input
             value={draft.model_id}
             onChange={(event) => onDraftChange({ model_id: event.target.value })}
@@ -547,7 +574,7 @@ function CustomModelsPanel({
             className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
           />
         </div>
-        <div className="grid grid-cols-[120px_120px_minmax(0,1fr)_auto] gap-2">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
           <input
             type="number"
             min={1}
@@ -575,7 +602,7 @@ function CustomModelsPanel({
             type="button"
             onClick={onCreate}
             disabled={!canSaveCustomModelDraft(draft) || creating}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-[12px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-[12px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
           >
             {creating ? <Loader2 size={13} strokeWidth={1.8} className="animate-spin" /> : <Plus size={13} strokeWidth={2} />}
             Add

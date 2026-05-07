@@ -27,6 +27,11 @@ import {
   serviceActionLabel,
   serviceConnectionLabel,
 } from "../../lib/integrationConnection";
+import {
+  settingsErrorMessage,
+  settingsErrorTitle,
+  shouldShowLoadedSettingsContent,
+} from "../../lib/settingsLoadState";
 
 export function IntegrationsTab() {
   const config = useStore((s) => s.config);
@@ -35,6 +40,7 @@ export function IntegrationsTab() {
   const [gmailAccounts, setGmailAccounts] = useState<GmailAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadedOnce, setLoadedOnce] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [serviceKey, setServiceKey] = useState("");
@@ -55,6 +61,7 @@ export function IntegrationsTab() {
       ]);
       setServices(nextServices);
       setGmailAccounts(nextGmail);
+      setLoadedOnce(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -139,6 +146,9 @@ export function IntegrationsTab() {
     }
   }
 
+  const hasLoadedData = loadedOnce || services.length > 0 || gmailAccounts.length > 0;
+  const showContent = shouldShowLoadedSettingsContent({ loading, error, hasData: hasLoadedData });
+
   return (
     <div className="grid gap-5">
       <div className="flex items-start justify-between gap-3">
@@ -159,37 +169,60 @@ export function IntegrationsTab() {
 
       {error && (
         <div className="grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.16)]">
-          <strong className="text-bad text-[12px] font-semibold">Integration action failed</strong>
-          <span className="text-[12px] text-[#8a3220] leading-[1.4]">{error}</span>
+          <strong className="text-bad text-[12px] font-semibold">
+            {settingsErrorTitle("integrations", hasLoadedData)}
+          </strong>
+          <span className="text-[12px] text-[#8a3220] leading-[1.4]">
+            {settingsErrorMessage(error)}
+          </span>
         </div>
       )}
 
-      <GoogleCard
-        enabled={googleEnabled}
-        accounts={gmailAccounts}
-        pendingId={pendingId}
-        onToggle={toggleGoogle}
-        onAdd={addGoogleAccount}
-        onRemove={removeGoogleAccount}
-      />
+      {loading && !hasLoadedData ? (
+        <div className="text-[12.5px] text-faint">Loading integrations…</div>
+      ) : !showContent ? (
+        <ConnectionHint />
+      ) : (
+        <>
+          <GoogleCard
+            enabled={googleEnabled}
+            accounts={gmailAccounts}
+            pendingId={pendingId}
+            onToggle={toggleGoogle}
+            onAdd={addGoogleAccount}
+            onRemove={removeGoogleAccount}
+          />
 
-      <ServiceCard
-        services={slackServices}
-        editingId={editingId}
-        serviceKey={serviceKey}
-        pendingId={pendingId}
-        onEdit={(service) => {
-          setEditingId(service.id);
-          setServiceKey("");
-        }}
-        onCancel={() => {
-          setEditingId(null);
-          setServiceKey("");
-        }}
-        onKeyChange={setServiceKey}
-        onConnect={connectService}
-        onDisconnect={disconnectService}
-      />
+          <ServiceCard
+            services={slackServices}
+            editingId={editingId}
+            serviceKey={serviceKey}
+            pendingId={pendingId}
+            onEdit={(service) => {
+              setEditingId(service.id);
+              setServiceKey("");
+            }}
+            onCancel={() => {
+              setEditingId(null);
+              setServiceKey("");
+            }}
+            onKeyChange={setServiceKey}
+            onConnect={connectService}
+            onDisconnect={disconnectService}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+function ConnectionHint() {
+  return (
+    <div className="rounded-[12px] border border-line-soft bg-surface px-3.5 py-3">
+      <div className="text-[13px] font-medium text-ink">Connect the desktop to ntrp first</div>
+      <div className="mt-1 text-[12px] text-muted leading-[1.45]">
+        Check the server URL and API key in the Connection tab, then refresh this view.
+      </div>
     </div>
   );
 }
