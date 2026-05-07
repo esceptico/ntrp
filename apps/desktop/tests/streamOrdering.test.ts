@@ -1,0 +1,109 @@
+import { beforeEach, expect, test } from "bun:test";
+import { handleServerEvent, resetStreamStateForTest } from "../src/hooks/useEvents.js";
+import { getState, setState } from "../src/store.js";
+
+beforeEach(() => {
+  resetStreamStateForTest();
+  setState({
+    messages: new Map(),
+    order: [],
+    activeActivityId: null,
+    running: false,
+    currentRunId: null,
+    error: null,
+  });
+});
+
+test("anchors a new activity group before already-streaming assistant text", () => {
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-1",
+    session_id: "session-1",
+    timestamp: 1,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_START",
+    message_id: "assistant-1",
+    timestamp: 2,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-1",
+    delta: "I am streaming",
+    timestamp: 3,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-1",
+    tool_call_name: "ReadFile",
+    timestamp: 4,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_ARGS",
+    tool_call_id: "tool-1",
+    delta: '{"path":"apps/desktop/src/hooks/useEvents.ts"}',
+    timestamp: 5,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-1",
+    timestamp: 6,
+  });
+
+  const state = getState();
+  expect(state.order).toHaveLength(2);
+  expect(state.messages.get(state.order[0])?.role).toBe("activity");
+  expect(state.messages.get(state.order[1])?.role).toBe("assistant");
+});
+
+test("does not mutate a finalized activity group after a tool burst", async () => {
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-1",
+    session_id: "session-1",
+    timestamp: 1,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-1",
+    tool_call_name: "ReadFile",
+    timestamp: 2,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-1",
+    timestamp: 3,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-2",
+    tool_call_name: "ListFiles",
+    timestamp: 4,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-2",
+    timestamp: 5,
+  });
+  handleServerEvent({
+    type: "RUN_FINISHED",
+    run_id: "run-1",
+    timestamp: 6,
+  });
+
+  const state = getState();
+  const activityId = state.order.find((id) => state.messages.get(id)?.role === "activity");
+  expect(activityId).toBeTruthy();
+  expect(state.messages.get(activityId!)?.activity?.items.map((item) => item.id)).toEqual([
+    "tool-1",
+    "tool-2",
+  ]);
+  expect(state.messages.get(activityId!)?.activity?.done).toBe(true);
+
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  expect(getState().messages.get(activityId!)?.activity?.items.map((item) => item.id)).toEqual([
+    "tool-1",
+    "tool-2",
+  ]);
+});
