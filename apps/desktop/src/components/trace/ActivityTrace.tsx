@@ -5,10 +5,11 @@ import clsx from "clsx";
 import { RollingToken } from "./RollingToken";
 import { useStore, type ActivityItem } from "../../store";
 import { extractTask, friendlyAgentLabel, isAgent } from "../../lib/agent";
+import { MOTION, EASE_EMPHASIZED } from "../../lib/motion";
 
 export type { ActivityItem };
 
-const EASE = [0.32, 0.72, 0, 1] as const;
+const EASE = EASE_EMPHASIZED;
 const ROW_HEIGHT_EM = 1.55;
 const NEST_PX = 16;
 const MAX_NEST_DEPTH = 4; // visual cap; deeper nesting collapses to the same indent
@@ -17,7 +18,7 @@ export function ActivityTrace({ children }: { children: ReactNode }) {
   return (
     <motion.div
       layout
-      transition={{ layout: { duration: 0.22, ease: EASE } }}
+      transition={{ layout: { duration: MOTION.panel, ease: EASE } }}
       className="font-sans text-[13px] leading-[1.55] text-muted"
     >
       {children}
@@ -110,7 +111,7 @@ export function ActivityTail({
         opacity: collapsed ? 0 : 1,
         height: collapsed ? 0 : targetHeight,
       }}
-      transition={{ duration: 0.24, ease: EASE }}
+      transition={{ duration: MOTION.trace, ease: EASE }}
       style={{ overflow: "hidden" }}
       className="pl-4 mt-0.5"
     >
@@ -123,7 +124,7 @@ export function ActivityTail({
               initial={{ y: 8, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: -8, opacity: 0 }}
-              transition={{ duration: 0.22, ease: EASE }}
+              transition={{ duration: MOTION.row, ease: EASE }}
               style={{ height: `${ROW_HEIGHT_EM}em` }}
               className="flex items-baseline min-w-0"
             >

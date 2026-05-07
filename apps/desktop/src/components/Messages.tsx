@@ -8,6 +8,7 @@ import { messagesScroll } from "../lib/messagesScroll";
 import { visibleMessageIds } from "../lib/messageVisibility";
 import { firstMessageIdInSourceFocus } from "../lib/messageSourceFocus";
 import { loadNewerHistory, loadOlderHistory } from "../actions";
+import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
 import { EmptyState } from "./EmptyState";
 import { Message } from "./Message";
 import { CompactionIndicator } from "./CompactionIndicator";
@@ -150,7 +151,7 @@ export function Messages() {
             initial={{ opacity: 0, y: 6, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.95 }}
-            transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
+            transition={{ duration: MOTION.row, ease: EASE_EMPHASIZED }}
             aria-label="Scroll to bottom"
             className="scroll-to-bottom absolute left-1/2 -translate-x-1/2 bottom-3 grid place-items-center w-8 h-8 rounded-full text-muted hover:text-ink"
           >

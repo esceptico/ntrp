@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
+import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
 import { Sidebar } from "./Sidebar";
 import { Chat } from "./Chat";
 import { SettingsModal } from "./SettingsModal";
@@ -73,7 +74,7 @@ export function App() {
         className="sidebar-wrap"
         initial={false}
         animate={{ x: sidebarHidden ? -244 : 0 }}
-        transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+        transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
       >
         <Sidebar />
       </motion.div>
@@ -96,7 +97,7 @@ function InspectorPane() {
       className="inspector-wrap"
       initial={false}
       animate={{ x: open ? 0 : 380 }}
-      transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+      transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
       style={{ pointerEvents: open ? "auto" : "none" }}
       aria-hidden={!open}
     >

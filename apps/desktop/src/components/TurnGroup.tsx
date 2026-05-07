@@ -6,8 +6,9 @@ import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
 import { Message } from "./Message";
 import { turnLayout } from "../lib/turnLayout";
+import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
 
-const EASE = [0.32, 0.72, 0, 1] as const;
+const EASE = EASE_EMPHASIZED;
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return "less than a second";
@@ -76,7 +77,7 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.22, ease: EASE }}
+            transition={{ duration: MOTION.panel, ease: EASE }}
             style={{ overflow: "hidden" }}
           >
             <button
@@ -103,7 +104,7 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
             height: showInterim ? "auto" : 0,
             opacity: showInterim ? 1 : 0,
           }}
-          transition={{ duration: 0.28, ease: EASE }}
+          transition={{ duration: MOTION.route, ease: EASE }}
           style={{ overflow: "hidden" }}
         >
           {interimList}

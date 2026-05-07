@@ -9,8 +9,9 @@ import { ApprovalCard } from "./ApprovalCard";
 import type { SkillDescriptor } from "../api";
 import { branchAtMessage, viewSkill } from "../actions";
 import { Markdown } from "./Markdown";
+import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
 
-const EASE = [0.32, 0.72, 0, 1] as const;
+const EASE = EASE_EMPHASIZED;
 const SOURCE_FOCUS_CLASS = "scroll-mt-20 rounded-[10px] bg-accent-soft/35 shadow-[0_0_0_1px_var(--color-accent-strong)]";
 
 export function Message({ id, isFinal = true }: { id: string; isFinal?: boolean }) {
@@ -309,7 +310,7 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.24, ease: EASE }}
+            transition={{ duration: MOTION.panel, ease: EASE }}
             style={{ overflow: "hidden" }}
           >
             <Markdown

@@ -1,7 +1,8 @@
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
+import { MOTION, EASE_EMPHASIZED } from "../../lib/motion";
 
-const EASE = [0.32, 0.72, 0, 1] as const;
+const EASE = EASE_EMPHASIZED;
 
 /**
  * Odometer-style slot. When `value` changes, the old token slides up and out
@@ -13,7 +14,7 @@ export function RollingToken({ value, mono = false }: { value: string; mono?: bo
   return (
     <motion.span
       layout="size"
-      transition={{ layout: { duration: 0.2, ease: EASE } }}
+      transition={{ layout: { duration: MOTION.trace, ease: EASE } }}
       className={clsx(
         "relative inline-block overflow-hidden align-baseline",
         mono && "tabular-nums",
@@ -25,7 +26,7 @@ export function RollingToken({ value, mono = false }: { value: string; mono?: bo
           initial={{ y: "100%" }}
           animate={{ y: 0 }}
           exit={{ y: "-100%" }}
-          transition={{ duration: 0.18, ease: EASE }}
+          transition={{ duration: MOTION.palette, ease: EASE }}
           className="inline-block"
         >
           {value}

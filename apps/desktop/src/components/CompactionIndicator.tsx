@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Loader2, Sparkles } from "lucide-react";
 import { useStore } from "../store";
+import { MOTION, EASE_OUT } from "../lib/motion";
 
 const TOAST_VISIBLE_MS = 4500;
 
@@ -25,7 +26,7 @@ export function CompactionIndicator() {
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -2 }}
-          transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+          transition={{ duration: MOTION.palette, ease: EASE_OUT }}
           className="flex items-center gap-2 my-1"
         >
           <Loader2
@@ -43,7 +44,7 @@ export function CompactionIndicator() {
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+          transition={{ duration: MOTION.palette, ease: EASE_OUT }}
           className="flex items-center gap-2 my-1"
         >
           <Sparkles size={12} strokeWidth={1.8} className="text-faint" />
