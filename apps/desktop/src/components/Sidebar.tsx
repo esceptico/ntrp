@@ -139,22 +139,24 @@ function SessionRow({
 
   if (renaming) {
     return (
-      <input
-        ref={inputRef}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => void commitRename()}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            void commitRename();
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            onCancelRename();
-          }
-        }}
-        className="block w-full h-[31px] px-2 rounded-lg border border-line bg-surface text-ink text-[13px] outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
-      />
+      <div className="w-full px-2 py-0.5">
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => void commitRename()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void commitRename();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onCancelRename();
+            }
+          }}
+          className="block w-full h-[28px] px-2 rounded-lg border border-line bg-surface text-ink text-[13px] outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+        />
+      </div>
     );
   }
 
