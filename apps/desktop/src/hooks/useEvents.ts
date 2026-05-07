@@ -223,6 +223,7 @@ export function handleServerEvent(event: ServerEvent) {
       const patch: Partial<ActivityItem> = { result };
       if (event.parent_id) patch.parentToolId = event.parent_id;
       if (event.depth != null) patch.depth = event.depth || undefined;
+      if (event.is_error) patch.error = true;
       s.mergeActivityItem(event.tool_call_id, patch);
       return;
     }

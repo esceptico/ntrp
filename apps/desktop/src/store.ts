@@ -91,6 +91,9 @@ export interface ActivityItem {
   /** Tool-call id of the parent tool whose run produced this call.
    *  Available for nested calls; lets the inspector group children. */
   parentToolId?: string;
+  /** Server-reported error flag (set on TOOL_CALL_RESULT). Lets the
+   *  trace render error rows distinctly without parsing the result text. */
+  error?: boolean;
 }
 
 export interface ActivityState {

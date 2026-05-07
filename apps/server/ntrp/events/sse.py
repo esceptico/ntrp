@@ -190,6 +190,7 @@ class ToolCallResultEvent(SSEEvent):
     depth: int = 0
     parent_id: str | None = None
     kind: str = "tool"
+    is_error: bool = False
 
 
 # ─── Reasoning (AG-UI Start / Content / End + outer Start/End) ───────
@@ -420,6 +421,7 @@ def agent_events_to_sse(event) -> tuple[SSEEvent, ...]:
                     depth=event.depth,
                     parent_id=event.parent_id,
                     kind=event.kind,
+                    is_error=event.is_error,
                 ),
             )
     return ()
