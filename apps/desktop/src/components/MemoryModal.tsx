@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { useState } from "react";
+import { ChevronRight, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
 import type { Fact, Observation } from "../api";
+import { advancedMemoryTabsVisible, isAdvancedMemoryTab, type MemoryTab } from "../lib/memoryTabs";
 import { PageModal } from "./PageModal";
 import { FactsPane } from "./memory/FactsPane";
 import { ObservationsPane } from "./memory/ObservationsPane";
@@ -11,15 +12,13 @@ import { SentPane } from "./memory/SentPane";
 import { CleanupPane } from "./memory/CleanupPane";
 import { AuditPane } from "./memory/AuditPane";
 
-type Tab = "search" | "facts" | "patterns" | "sent" | "cleanup" | "audit";
-
-const PRIMARY_TABS: { id: Tab; label: string }[] = [
+const PRIMARY_TABS: { id: MemoryTab; label: string }[] = [
   { id: "search", label: "Search" },
   { id: "facts", label: "Facts" },
   { id: "patterns", label: "Patterns" },
 ];
 
-const ADVANCED_TABS: { id: Tab; label: string }[] = [
+const ADVANCED_TABS: { id: MemoryTab; label: string }[] = [
   { id: "sent", label: "Sent" },
   { id: "cleanup", label: "Cleanup" },
   { id: "audit", label: "Audit" },
@@ -28,7 +27,7 @@ const ADVANCED_TABS: { id: Tab; label: string }[] = [
 export function MemoryModal() {
   const open = useStore((s) => s.memoryOpen);
   const close = useStore((s) => s.closeMemory);
-  const [tab, setTab] = useState<Tab>("search");
+  const [tab, setTab] = useState<MemoryTab>("search");
   const [targetFact, setTargetFact] = useState<Fact | null>(null);
   const [targetPatternId, setTargetPatternId] = useState<number | null>(null);
 
@@ -70,7 +69,7 @@ export function MemoryModal() {
             onClick={() => setTab(t.id)}
           />
         ))}
-        <AdvancedMenu activeTab={tab} onSelect={setTab} />
+        <AdvancedRow activeTab={tab} onSelect={setTab} />
       </nav>
 
       <div className="overflow-hidden">
@@ -85,63 +84,78 @@ export function MemoryModal() {
   );
 }
 
-function AdvancedMenu({ activeTab, onSelect }: { activeTab: Tab; onSelect: (tab: Tab) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const active = ADVANCED_TABS.some((tab) => tab.id === activeTab);
-  const activeLabel = ADVANCED_TABS.find((tab) => tab.id === activeTab)?.label;
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+function AdvancedRow({ activeTab, onSelect }: { activeTab: MemoryTab; onSelect: (tab: MemoryTab) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = advancedMemoryTabsVisible(activeTab, expanded);
+  const active = isAdvancedMemoryTab(activeTab);
 
   return (
-    <div ref={ref} className="relative pb-2 -mb-px">
+    <div
+      className={clsx(
+        "mb-1 flex h-7 items-center overflow-hidden rounded-full border px-1 transition-colors duration-200",
+        active ? "border-line-strong bg-surface-soft" : "border-line-soft bg-surface-soft/60",
+      )}
+    >
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={visible}
         className={clsx(
-          "inline-flex items-center gap-1 text-[13px] font-medium tracking-[-0.005em] transition-colors",
-          active ? "text-ink" : "text-muted hover:text-ink",
+          "inline-flex h-5.5 items-center gap-1 rounded-full px-2 text-[12.5px] font-medium tracking-[-0.005em] transition-colors duration-150",
+          active ? "bg-surface text-ink" : "text-muted hover:bg-surface hover:text-ink",
         )}
       >
-        {activeLabel ? `Advanced: ${activeLabel}` : "Advanced"}
-        <ChevronDown size={12} strokeWidth={1.8} className={clsx("transition-transform", open && "rotate-180")} />
+        Advanced
+        <ChevronRight
+          size={12}
+          strokeWidth={1.8}
+          className={clsx("transition-transform duration-200 ease-out", visible && "rotate-90")}
+        />
       </button>
-      {active && <span className="absolute left-0 right-0 bottom-0 h-[2px] rounded-full bg-ink" />}
-      {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 w-[150px] rounded-[8px] border border-line-soft bg-surface py-1 shadow-[var(--shadow-pop)]">
-          {ADVANCED_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => {
-                onSelect(tab.id);
-                setOpen(false);
-              }}
-              className={clsx(
-                "block w-full px-3 py-1.5 text-left text-[12px] transition-colors",
-                activeTab === tab.id ? "font-medium text-ink" : "text-ink-soft hover:bg-surface-soft hover:text-ink",
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      )}
+      <div
+        className={clsx(
+          "flex items-center gap-1 overflow-hidden transition-[max-width,opacity,margin-left] duration-200 ease-out",
+          visible ? "ml-1 max-w-[260px] opacity-100" : "ml-0 max-w-0 opacity-0 pointer-events-none",
+        )}
+        aria-hidden={!visible}
+      >
+        {ADVANCED_TABS.map((tab) => (
+          <PillTabButton
+            key={tab.id}
+            label={tab.label}
+            active={activeTab === tab.id}
+            onClick={() => onSelect(tab.id)}
+            focusable={visible}
+          />
+        ))}
+      </div>
     </div>
+  );
+}
+
+function PillTabButton({
+  label,
+  active,
+  onClick,
+  focusable,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  focusable: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      tabIndex={focusable ? undefined : -1}
+      className={clsx(
+        "h-5.5 whitespace-nowrap rounded-full px-2 text-[12px] font-medium tracking-[-0.005em] transition-colors duration-150",
+        active ? "bg-surface text-ink shadow-[0_0_0_1px_var(--color-line-soft)]" : "text-muted hover:bg-surface hover:text-ink",
+      )}
+    >
+      {label}
+    </button>
   );
 }
 

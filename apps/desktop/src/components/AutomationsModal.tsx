@@ -4,12 +4,13 @@ import clsx from "clsx";
 import { useStore } from "../store";
 import { deleteAutomation, fetchAutomations, runAutomation, toggleAutomation } from "../actions";
 import type { Automation, AutomationTrigger } from "../api";
+import { splitAutomationsForTabs } from "../lib/automationFilters";
 import { automationTrustLabel, automationTrustTone } from "../lib/automationTrust";
 import { AutomationEditor, type EditorSeed } from "./automations/AutomationEditor";
 import { templatesByCategory, type AutomationTemplate } from "./automations/templates";
 import { PageModal } from "./PageModal";
 
-type Tab = "active" | "templates";
+type Tab = "active" | "internal" | "templates";
 
 export function AutomationsModal() {
   const open = useStore((s) => s.automationsOpen);
@@ -30,7 +31,9 @@ export function AutomationsModal() {
     if (automations !== null && automations.length === 0) setTab("templates");
   }, [open, automations]);
 
-  const activeCount = automations?.length ?? 0;
+  const automationGroups = useMemo(() => (automations ? splitAutomationsForTabs(automations) : null), [automations]);
+  const activeCount = automationGroups?.user.length ?? 0;
+  const internalCount = automationGroups?.internal.length ?? 0;
 
   return (
     <>
@@ -40,49 +43,57 @@ export function AutomationsModal() {
         grid="grid-rows-[auto_auto_minmax(0,1fr)]"
         disableEscape={!!editor}
       >
-                <header className="flex items-center justify-between gap-3 px-6 pt-5 pb-4">
-                  <h2 className="m-0 text-[18px] font-semibold tracking-[-0.014em] text-ink">
-                    Automations
-                  </h2>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setEditor({ kind: "create" })}
-                      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-[12px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
-                    >
-                      <Plus size={11} strokeWidth={2.2} />
-                      New
-                    </button>
-                    <button
-                      type="button"
-                      onClick={close}
-                      aria-label="Close"
-                      className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
-                    >
-                      <X size={13} strokeWidth={1.7} />
-                    </button>
-                  </div>
-                </header>
+        <header className="flex items-center justify-between gap-3 px-6 pt-5 pb-4">
+          <h2 className="m-0 text-[18px] font-semibold tracking-[-0.014em] text-ink">
+            Automations
+          </h2>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setEditor({ kind: "create" })}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-[12px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
+            >
+              <Plus size={11} strokeWidth={2.2} />
+              New
+            </button>
+            <button
+              type="button"
+              onClick={close}
+              aria-label="Close"
+              className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
+            >
+              <X size={13} strokeWidth={1.7} />
+            </button>
+          </div>
+        </header>
 
-                <nav className="flex items-center gap-5 px-6 border-b border-line-soft">
-                  <TabButton label="Active" count={activeCount} active={tab === "active"} onClick={() => setTab("active")} />
-                  <TabButton label="Templates" active={tab === "templates"} onClick={() => setTab("templates")} />
-                </nav>
+        <nav className="flex items-center gap-5 px-6 border-b border-line-soft">
+          <TabButton label="Active" count={activeCount} active={tab === "active"} onClick={() => setTab("active")} />
+          <TabButton
+            label="Internal"
+            count={internalCount}
+            active={tab === "internal"}
+            onClick={() => setTab("internal")}
+          />
+          <TabButton label="Templates" active={tab === "templates"} onClick={() => setTab("templates")} />
+        </nav>
 
-                <div className="overflow-y-auto scroll-thin px-6 py-5">
-                  {tab === "active" ? (
-                    <ActiveList
-                      automations={automations}
-                      onEdit={(automation) => setEditor({ kind: "edit", automation })}
-                      onPickTemplate={() => setTab("templates")}
-                      onCreate={() => setEditor({ kind: "create" })}
-                    />
-                  ) : (
-                    <TemplatesList
-                      onPick={(template) => setEditor({ kind: "create", preset: template.payload })}
-                    />
-                  )}
-                </div>
+        <div className="overflow-y-auto scroll-thin px-6 py-5">
+          {tab === "active" ? (
+            <ActiveList
+              automations={automationGroups?.user ?? null}
+              onEdit={(automation) => setEditor({ kind: "edit", automation })}
+              onPickTemplate={() => setTab("templates")}
+              onCreate={() => setEditor({ kind: "create" })}
+            />
+          ) : tab === "internal" ? (
+            <InternalList automations={automationGroups?.internal ?? null} />
+          ) : (
+            <TemplatesList
+              onPick={(template) => setEditor({ kind: "create", preset: template.payload })}
+            />
+          )}
+        </div>
       </PageModal>
       <AutomationEditor seed={editor} onClose={() => setEditor(null)} />
     </>
@@ -176,6 +187,33 @@ function ActiveList({
           key={automation.task_id}
           automation={automation}
           onEdit={() => onEdit(automation)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function InternalList({ automations }: { automations: Automation[] | null }) {
+  if (automations === null) {
+    return <div className="text-[12.5px] text-faint">Loading…</div>;
+  }
+  if (automations.length === 0) {
+    return (
+      <div className="grid gap-2 max-w-[420px] py-10">
+        <div className="text-[14px] font-medium text-ink">No internal automations.</div>
+        <div className="text-[12.5px] text-muted leading-[1.5]">
+          Internal memory maintenance tasks will appear here when available.
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-2 gap-2.5">
+      {automations.map((automation) => (
+        <AutomationCard
+          key={automation.task_id}
+          automation={automation}
+          onEdit={() => undefined}
         />
       ))}
     </div>
