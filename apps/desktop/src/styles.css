@@ -202,6 +202,47 @@ body {
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: 0.45; }
 
+/* Tap feedback — buttons scale to 0.96 on press, easing back on release.
+   Spec: docs/internal/apple-design-intel.md "Tap / Active States".
+   `!important` wins over Tailwind's `transition-colors`; we re-state the
+   hover transitions in the same shorthand so they keep working. */
+button:not(:disabled) {
+  transition:
+    transform var(--motion-check) cubic-bezier(0.25, 0.1, 0.25, 1),
+    background-color var(--motion-palette) ease,
+    color var(--motion-palette) ease,
+    border-color var(--motion-palette) ease,
+    box-shadow var(--motion-palette) ease,
+    opacity var(--motion-palette) ease !important;
+}
+button:not(:disabled):active {
+  transform: scale(0.96);
+}
+
+/* Hover dish — radial gradient that follows the cursor on hover. Apply
+   `hover-dish` to any container; set the CSS vars `--mx` and `--my`
+   from a mousemove handler (see lib/hoverDish.ts). The gradient is
+   muted enough to layer on top of the row's own hover-bg without
+   fighting it. */
+.hover-dish { position: relative; isolation: isolate; }
+.hover-dish::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    140px circle at var(--mx, 50%) var(--my, 50%),
+    color-mix(in oklab, var(--color-ink) 7%, transparent),
+    transparent 55%
+  );
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+  pointer-events: none;
+  z-index: 0;
+}
+.hover-dish:hover::before { opacity: 1; }
+.hover-dish > * { position: relative; z-index: 1; }
+
 /* ─── Drag regions ─────────────────────────────────────────── */
 .sidebar { -webkit-app-region: drag; }
 .sidebar > *:not(.drag-spacer) { -webkit-app-region: no-drag; }
