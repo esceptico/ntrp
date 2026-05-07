@@ -125,27 +125,31 @@ function Section({
   }, [groups, query]);
 
   return (
-    <div className="grid gap-1.5">
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="grid gap-0.5">
-          <div className="text-[13px] font-medium text-ink">{title}</div>
-          <div className="text-[11.5px] text-faint leading-[1.4]">{description}</div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          disabled={saving}
-          className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-surface border border-line text-ink-soft text-[12px] font-medium font-mono hover:border-line-strong transition-colors"
-        >
-          {saving ? "Saving…" : current || "—"}
-        </button>
+    <div className="grid gap-2 rounded-[10px] border border-line-soft bg-surface px-3.5 py-3">
+      <div className="grid gap-0.5">
+        <div className="text-[13px] font-medium text-ink">{title}</div>
+        <div className="text-[11.5px] text-faint leading-[1.4]">{description}</div>
       </div>
 
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={saving}
+        className="min-w-0 inline-flex w-full items-center justify-between gap-2 min-h-8 px-2.5 py-1.5 rounded-md bg-surface-soft border border-line text-ink-soft text-[12px] font-medium font-mono text-left hover:border-line-strong transition-colors disabled:opacity-60"
+      >
+        <span className="min-w-0 break-all leading-[1.35]">
+          {saving ? "Saving..." : current || "-"}
+        </span>
+        <span className="shrink-0 text-[11px] font-sans text-faint">
+          Change
+        </span>
+      </button>
+
       {open && (
-        <div className="mt-1 rounded-[10px] border border-line-soft bg-surface-soft/40 overflow-hidden">
+        <div className="rounded-[10px] border border-line-soft bg-surface-soft/40 overflow-hidden">
           <input
             type="text"
-            placeholder="Search models…"
+            placeholder="Search models..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="w-full h-8 px-3 border-0 border-b border-line-soft bg-transparent text-[12.5px] text-ink outline-none placeholder:text-whisper"
@@ -181,7 +185,7 @@ function Section({
                       <span className="grid place-items-center w-3 h-3 shrink-0">
                         {isCurrent && <Check size={11} strokeWidth={2.4} className="text-accent" />}
                       </span>
-                      <span className="truncate">{m}</span>
+                      <span className="min-w-0 break-all leading-[1.35]">{m}</span>
                     </button>
                   );
                 })}

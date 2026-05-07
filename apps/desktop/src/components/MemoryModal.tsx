@@ -66,7 +66,7 @@ export function MemoryModal() {
     <PageModal
       open={open}
       onClose={close}
-      size="w-[min(1180px,calc(100vw-64px))] h-[min(760px,calc(100vh-64px))]"
+      size="w-[min(1180px,calc(100vw-32px))] h-[min(760px,calc(100vh-32px))] sm:w-[min(1180px,calc(100vw-64px))] sm:h-[min(760px,calc(100vh-64px))]"
       grid="grid-rows-[auto_auto_minmax(0,1fr)]"
     >
       <header className="flex items-center justify-between gap-3 pl-6 pr-3 pt-5">

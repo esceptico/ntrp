@@ -27,7 +27,7 @@ export interface PageModalProps {
 }
 
 const DEFAULT_SIZE =
-  "w-[min(960px,calc(100vw-80px))] h-[min(680px,calc(100vh-80px))]";
+  "w-[min(960px,calc(100vw-32px))] h-[min(680px,calc(100vh-32px))] sm:w-[min(960px,calc(100vw-80px))] sm:h-[min(680px,calc(100vh-80px))]";
 const DEFAULT_GRID = "grid-rows-[auto_minmax(0,1fr)]";
 const DEFAULT_ROUNDED = "rounded-[14px]";
 
@@ -61,7 +61,7 @@ export function PageModal({
       {open && (
         <motion.div
           key="page-modal"
-          className="absolute inset-0 z-50 grid place-items-center p-8 bg-[rgba(0,0,0,0.32)] backdrop-blur-md"
+          className="absolute inset-0 z-50 grid place-items-center p-4 sm:p-8 bg-[rgba(0,0,0,0.32)] backdrop-blur-md"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

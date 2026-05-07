@@ -181,7 +181,7 @@ function ActiveList({
     );
   }
   return (
-    <div className="grid grid-cols-2 gap-2.5">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
       {automations.map((automation) => (
         <AutomationCard
           key={automation.task_id}
@@ -208,7 +208,7 @@ function InternalList({ automations }: { automations: Automation[] | null }) {
     );
   }
   return (
-    <div className="grid grid-cols-2 gap-2.5">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
       {automations.map((automation) => (
         <AutomationCard
           key={automation.task_id}
@@ -231,7 +231,7 @@ function TemplatesList({ onPick }: { onPick: (template: AutomationTemplate) => v
           <h3 className="m-0 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
             {category}
           </h3>
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
             {items.map((template) => (
               <TemplateCard key={template.id} template={template} onPick={() => onPick(template)} />
             ))}
@@ -306,7 +306,7 @@ function AutomationCard({
         editable && "cursor-pointer",
       )}
     >
-      <div className="flex items-start gap-2.5 min-w-0">
+      <div className="grid grid-cols-[10px_minmax(0,1fr)] items-start gap-2.5 min-w-0">
         <button
           type="button"
           onClick={stop(wrap("toggle", () => toggleAutomation(automation.task_id)))}
@@ -314,26 +314,30 @@ function AutomationCard({
           title={automation.enabled ? "Pause" : "Enable"}
           aria-label={automation.enabled ? "Pause automation" : "Enable automation"}
           className={clsx(
-            "shrink-0 mt-[5px] grid place-items-center w-[10px] h-[10px] rounded-full transition-colors",
+            "mt-[5px] grid place-items-center w-[10px] h-[10px] rounded-full transition-colors",
             automation.enabled
               ? "bg-ok"
               : "bg-transparent border border-line-strong hover:border-muted",
             busy === "toggle" && "opacity-50",
           )}
         />
-        <div className="min-w-0 grid gap-1 flex-1">
-          <div className="flex items-center gap-1.5 min-w-0">
+        <div className="min-w-0 grid gap-1.5 pr-16">
+          <div className="grid gap-1.5 min-w-0">
             <h4 className="m-0 text-[13.5px] font-medium tracking-[-0.005em] text-ink truncate">
               {automation.name || "Untitled"}
             </h4>
-            {running && (
-              <Tag tone="accent">
-                <Circle size={5} strokeWidth={3} fill="currentColor" />
-                running
-              </Tag>
+            {(running || automation.builtin || trustLabel) && (
+              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                {running && (
+                  <Tag tone="accent">
+                    <Circle size={5} strokeWidth={3} fill="currentColor" />
+                    running
+                  </Tag>
+                )}
+                {automation.builtin && <Tag tone="neutral">builtin</Tag>}
+                {trustLabel && <Tag tone={automationTrustTone(automation)}>{trustLabel}</Tag>}
+              </div>
             )}
-            {automation.builtin && <Tag tone="neutral">builtin</Tag>}
-            {trustLabel && <Tag tone={automationTrustTone(automation)}>{trustLabel}</Tag>}
           </div>
           <p className="m-0 text-[12px] text-muted leading-[1.5] line-clamp-2">
             {automation.description || "No description."}
@@ -373,20 +377,16 @@ function AutomationCard({
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 pl-[19px] text-[11px] font-mono tabular-nums text-faint">
-        <span className="truncate">{trigger}</span>
+      <div className="grid gap-1 pl-[19px] text-[11px] font-mono tabular-nums text-faint">
+        <span className="min-w-0 truncate" title={trigger}>{trigger}</span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         {(() => {
           const nextLabel = formatNext(automation);
           return nextLabel ? (
-            <>
-              <span aria-hidden>·</span>
-              <span title={automation.next_run_at ?? undefined}>{nextLabel}</span>
-            </>
+            <span title={automation.next_run_at ?? undefined}>{nextLabel}</span>
           ) : null;
         })()}
         {hasResult && automation.last_run_at && (
-          <>
-            <span aria-hidden>·</span>
             <button
               type="button"
               onClick={stop(() =>
@@ -401,8 +401,8 @@ function AutomationCard({
             >
               ran {formatRelative(automation.last_run_at)}
             </button>
-          </>
         )}
+        </div>
       </div>
     </article>
   );
@@ -418,7 +418,7 @@ function Tag({
   return (
     <span
       className={clsx(
-        "inline-flex items-center gap-1 px-1.5 h-[18px] rounded-full text-[10px] font-medium tracking-[0.005em]",
+        "inline-flex max-w-full shrink-0 items-center gap-1 px-1.5 h-[18px] rounded-full text-[10px] font-medium tracking-[0.005em] whitespace-nowrap",
         tone === "accent" && "bg-accent-soft text-accent-strong",
         tone === "neutral" && "bg-surface-sunken text-muted",
         tone === "bad" && "bg-bad-soft text-bad",
