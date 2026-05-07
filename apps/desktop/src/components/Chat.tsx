@@ -40,10 +40,10 @@ function ChatHeader() {
     >
       <SidebarToggle />
       <div className="flex-1 min-w-0 flex items-baseline gap-2.5">
-        <h1 className="m-0 text-[14px] font-semibold tracking-[-0.01em] text-ink truncate max-w-[50%]">
+        <h1 className="m-0 min-w-0 text-[14px] font-semibold tracking-[-0.01em] text-ink truncate">
           {title}
         </h1>
-        <span className="text-[11.5px] text-faint font-mono tracking-[-0.01em] truncate">
+        <span className="shrink-0 text-[11.5px] text-faint font-mono tracking-[-0.01em]">
           {meta}
         </span>
       </div>

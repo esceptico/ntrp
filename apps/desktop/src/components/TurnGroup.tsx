@@ -55,6 +55,13 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
     : "Worked";
 
   const showInterim = !isDone || expanded;
+  const interimList = (
+    <div className={clsx("flex flex-col gap-3.5", isDone && "pt-3.5")}>
+      {interimIds.map((id) => (
+        <Message key={id} id={id} isFinal={false} />
+      ))}
+    </div>
+  );
   const workBlock = hasInterim ? (
     <div className="flex flex-col">
       <AnimatePresence initial={false}>
@@ -84,21 +91,21 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
         )}
       </AnimatePresence>
 
-      <motion.div
-        initial={false}
-        animate={{
-          height: showInterim ? "auto" : 0,
-          opacity: showInterim ? 1 : 0,
-        }}
-        transition={{ duration: 0.28, ease: EASE }}
-        style={{ overflow: "hidden" }}
-      >
-        <div className={clsx("flex flex-col gap-3.5", isDone && "pt-3.5")}>
-          {interimIds.map((id) => (
-            <Message key={id} id={id} isFinal={false} />
-          ))}
-        </div>
-      </motion.div>
+      {isDone ? (
+        <motion.div
+          initial={false}
+          animate={{
+            height: showInterim ? "auto" : 0,
+            opacity: showInterim ? 1 : 0,
+          }}
+          transition={{ duration: 0.28, ease: EASE }}
+          style={{ overflow: "hidden" }}
+        >
+          {interimList}
+        </motion.div>
+      ) : (
+        interimList
+      )}
     </div>
   ) : null;
 
