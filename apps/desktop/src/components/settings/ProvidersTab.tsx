@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import clsx from "clsx";
-import { CheckCircle2, ExternalLink, KeyRound, Loader2, RefreshCw } from "lucide-react";
+import { CheckCircle2, ExternalLink, KeyRound, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import {
+  createCustomModelApi,
   connectModelProviderApi,
+  deleteCustomModelApi,
   disconnectModelProviderApi,
   getOpenAICodexOAuthStatusApi,
   listModelProvidersApi,
+  type CustomModelSummary,
   startOpenAICodexOAuthApi,
   type ModelProvider,
   type OpenAICodexOAuthStatus,
@@ -17,11 +20,20 @@ import {
   providerConnectionLabel,
   providerModelCountLabel,
 } from "../../lib/providerConnection";
+import {
+  canSaveCustomModelDraft,
+  defaultCustomModelDraft,
+  type CustomModelDraft,
+} from "../../lib/customModelDraft";
 
 const PRIMARY_PROVIDERS = ["openai-codex", "openai", "anthropic", "google", "openrouter"];
 
 function modelIds(provider: ModelProvider): string[] {
   return provider.models.map((model) => (typeof model === "string" ? model : model.id));
+}
+
+function customModels(provider: ModelProvider): CustomModelSummary[] {
+  return provider.models.filter((model): model is CustomModelSummary => typeof model !== "string");
 }
 
 function providerDescription(id: string): string {
@@ -58,6 +70,8 @@ export function ProvidersTab() {
   const [apiKey, setApiKey] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [codexStatus, setCodexStatus] = useState<OpenAICodexOAuthStatus | null>(null);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customDraft, setCustomDraft] = useState<CustomModelDraft>(() => defaultCustomModelDraft());
 
   const sortedProviders = useMemo(() => {
     const rank = new Map(PRIMARY_PROVIDERS.map((id, index) => [id, index]));
@@ -151,16 +165,61 @@ export function ProvidersTab() {
   async function useForAgent(provider: ModelProvider) {
     const [first] = modelIds(provider);
     if (!first || serverConfig?.chat_model === first) return;
-    setPendingId(`${provider.id}:agent`);
+    await useModelForAgent(first, provider.id);
+  }
+
+  async function useModelForAgent(modelId: string, pendingKey: string) {
+    if (!modelId || serverConfig?.chat_model === modelId) return;
+    setPendingId(`${pendingKey}:agent`);
     setError(null);
     try {
-      await updateServerConfig({ chat_model: first });
+      await updateServerConfig({ chat_model: modelId });
       await fetchServerConfig();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setPendingId(null);
     }
+  }
+
+  async function createCustomModel() {
+    if (!canSaveCustomModelDraft(customDraft)) return;
+    setPendingId("custom:create");
+    setError(null);
+    try {
+      await createCustomModelApi(config, {
+        model_id: customDraft.model_id.trim(),
+        base_url: customDraft.base_url.trim(),
+        context_window: customDraft.context_window,
+        max_output_tokens: customDraft.max_output_tokens,
+        api_key: customDraft.api_key.trim() || null,
+      });
+      setCustomDraft(defaultCustomModelDraft());
+      await refresh();
+      await fetchServerConfig();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPendingId(null);
+    }
+  }
+
+  async function deleteCustomModel(modelId: string) {
+    setPendingId(`custom:delete:${modelId}`);
+    setError(null);
+    try {
+      await deleteCustomModelApi(config, modelId);
+      await refresh();
+      await fetchServerConfig();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPendingId(null);
+    }
+  }
+
+  function updateCustomDraft(patch: Partial<CustomModelDraft>) {
+    setCustomDraft((prev) => ({ ...prev, ...patch }));
   }
 
   return (
@@ -201,6 +260,8 @@ export function ProvidersTab() {
               agentPending={pendingId === `${provider.id}:agent`}
               currentAgentModel={serverConfig?.chat_model ?? null}
               codexStatus={provider.id === "openai-codex" ? codexStatus : null}
+              customOpen={provider.id === "custom" ? customOpen : false}
+              onToggleCustom={() => setCustomOpen((value) => !value)}
               onEdit={() => {
                 setEditingId(provider.id);
                 setApiKey("");
@@ -214,7 +275,20 @@ export function ProvidersTab() {
               onDisconnect={() => void disconnect(provider)}
               onCodexSignIn={() => void startCodexSignIn()}
               onUseForAgent={() => void useForAgent(provider)}
-            />
+            >
+              {provider.id === "custom" && customOpen && (
+                <CustomModelsPanel
+                  provider={provider}
+                  draft={customDraft}
+                  pendingId={pendingId}
+                  currentAgentModel={serverConfig?.chat_model ?? null}
+                  onDraftChange={updateCustomDraft}
+                  onCreate={() => void createCustomModel()}
+                  onDelete={(modelId) => void deleteCustomModel(modelId)}
+                  onUseForAgent={(modelId) => void useModelForAgent(modelId, `custom:${modelId}`)}
+                />
+              )}
+            </ProviderRow>
           ))
         )}
       </div>
@@ -230,6 +304,7 @@ function ProviderRow({
   agentPending,
   currentAgentModel,
   codexStatus,
+  customOpen,
   onEdit,
   onCancel,
   onKeyChange,
@@ -237,6 +312,8 @@ function ProviderRow({
   onDisconnect,
   onCodexSignIn,
   onUseForAgent,
+  onToggleCustom,
+  children,
 }: {
   provider: ModelProvider;
   editing: boolean;
@@ -245,6 +322,7 @@ function ProviderRow({
   agentPending: boolean;
   currentAgentModel: string | null;
   codexStatus: OpenAICodexOAuthStatus | null;
+  customOpen: boolean;
   onEdit: () => void;
   onCancel: () => void;
   onKeyChange: (value: string) => void;
@@ -252,16 +330,21 @@ function ProviderRow({
   onDisconnect: () => void;
   onCodexSignIn: () => void;
   onUseForAgent: () => void;
+  onToggleCustom: () => void;
+  children?: ReactNode;
 }) {
   const ids = modelIds(provider);
-  const canUseForAgent = provider.connected && ids.length > 0 && !ids.includes(currentAgentModel ?? "");
   const isCustom = provider.id === "custom";
+  const canUseForAgent = !isCustom && provider.connected && ids.length > 0 && !ids.includes(currentAgentModel ?? "");
   const isOauth = provider.auth_type === "oauth";
-  const actionLabel = pending ? "Working…" : providerActionLabel(provider);
-  const readOnlyPrimary = (provider.connected && provider.from_env) || isCustom;
+  const actionLabel = isCustom ? (customOpen ? "Done" : "Manage") : pending ? "Working…" : providerActionLabel(provider);
+  const readOnlyPrimary = provider.connected && provider.from_env;
 
   function primaryAction() {
-    if (isCustom) return;
+    if (isCustom) {
+      onToggleCustom();
+      return;
+    }
     if (isOauth) {
       if (provider.connected) onDisconnect();
       else onCodexSignIn();
@@ -321,7 +404,7 @@ function ProviderRow({
         </div>
       </div>
 
-      {editing && !provider.connected && !isOauth && (
+      {editing && !provider.connected && !isOauth && !isCustom && (
         <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3.5 py-3 border-t border-line-soft bg-surface-soft/35">
           <input
             type="password"
@@ -371,6 +454,134 @@ function ProviderRow({
           {codexStatus.error}
         </div>
       )}
+
+      {children}
+    </div>
+  );
+}
+
+function CustomModelsPanel({
+  provider,
+  draft,
+  pendingId,
+  currentAgentModel,
+  onDraftChange,
+  onCreate,
+  onDelete,
+  onUseForAgent,
+}: {
+  provider: ModelProvider;
+  draft: CustomModelDraft;
+  pendingId: string | null;
+  currentAgentModel: string | null;
+  onDraftChange: (patch: Partial<CustomModelDraft>) => void;
+  onCreate: () => void;
+  onDelete: (modelId: string) => void;
+  onUseForAgent: (modelId: string) => void;
+}) {
+  const models = customModels(provider);
+  const creating = pendingId === "custom:create";
+
+  return (
+    <div className="grid gap-3 px-3.5 py-3 border-t border-line-soft bg-surface-soft/35">
+      <div className="grid gap-1.5">
+        {models.length === 0 ? (
+          <div className="text-[12px] text-faint">No custom models configured.</div>
+        ) : (
+          models.map((model) => {
+            const deleting = pendingId === `custom:delete:${model.id}`;
+            const agentPending = pendingId === `custom:${model.id}:agent`;
+            const active = currentAgentModel === model.id;
+            return (
+              <div
+                key={model.id}
+                className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-center rounded-[9px] border border-line-soft bg-surface px-2.5 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="text-[12.5px] font-medium text-ink-soft truncate">{model.id}</div>
+                  <div className="text-[11px] text-faint truncate">
+                    {model.base_url || "default base URL"} · {model.context_window.toLocaleString()} ctx
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onUseForAgent(model.id)}
+                    disabled={active || agentPending}
+                    className="h-7 px-2 rounded-md border border-line bg-surface text-[11.5px] text-ink-soft hover:border-line-strong transition-colors disabled:opacity-45"
+                  >
+                    {active ? "Active" : agentPending ? "Saving…" : "Use"}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${model.id}`}
+                    onClick={() => onDelete(model.id)}
+                    disabled={deleting}
+                    className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-bad transition-colors disabled:opacity-50"
+                  >
+                    {deleting ? (
+                      <Loader2 size={13} strokeWidth={1.8} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={13} strokeWidth={1.8} />
+                    )}
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="grid gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
+          <input
+            value={draft.model_id}
+            onChange={(event) => onDraftChange({ model_id: event.target.value })}
+            placeholder="model id"
+            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+          />
+          <input
+            value={draft.base_url}
+            onChange={(event) => onDraftChange({ base_url: event.target.value })}
+            placeholder="base URL"
+            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+          />
+        </div>
+        <div className="grid grid-cols-[120px_120px_minmax(0,1fr)_auto] gap-2">
+          <input
+            type="number"
+            min={1}
+            value={draft.context_window}
+            onChange={(event) => onDraftChange({ context_window: Number(event.target.value) })}
+            aria-label="Context window"
+            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+          />
+          <input
+            type="number"
+            min={1}
+            value={draft.max_output_tokens}
+            onChange={(event) => onDraftChange({ max_output_tokens: Number(event.target.value) })}
+            aria-label="Max output tokens"
+            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+          />
+          <input
+            type="password"
+            value={draft.api_key}
+            onChange={(event) => onDraftChange({ api_key: event.target.value })}
+            placeholder="API key (optional)"
+            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+          />
+          <button
+            type="button"
+            onClick={onCreate}
+            disabled={!canSaveCustomModelDraft(draft) || creating}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-[12px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+          >
+            {creating ? <Loader2 size={13} strokeWidth={1.8} className="animate-spin" /> : <Plus size={13} strokeWidth={2} />}
+            Add
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

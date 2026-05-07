@@ -915,6 +915,14 @@ export interface GmailAccount {
   error?: string;
 }
 
+export interface CreateCustomModelPayload {
+  model_id: string;
+  base_url: string;
+  context_window: number;
+  max_output_tokens: number;
+  api_key?: string | null;
+}
+
 export async function listServicesApi(config: AppConfig): Promise<ServiceConnection[]> {
   const r = await apiWithConfig<{ services: ServiceConnection[] }>(config, "/services");
   return r.services;
@@ -947,6 +955,27 @@ export async function removeGmailAccountApi(
   return apiWithConfig<{ email: string | null; status: string }>(
     config,
     `/gmail/${encodeURIComponent(tokenFile)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function createCustomModelApi(
+  config: AppConfig,
+  payload: CreateCustomModelPayload,
+): Promise<{ status: string; model_id: string }> {
+  return apiWithConfig<{ status: string; model_id: string }>(config, "/models/custom", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCustomModelApi(
+  config: AppConfig,
+  modelId: string,
+): Promise<{ status: string; model_id: string }> {
+  return apiWithConfig<{ status: string; model_id: string }>(
+    config,
+    `/models/custom/${encodeURIComponent(modelId)}`,
     { method: "DELETE" },
   );
 }
