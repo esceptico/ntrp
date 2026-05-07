@@ -57,7 +57,7 @@ export function Chat() {
   return (
     <main
       data-sidebar-hidden={sidebarHidden ? "true" : "false"}
-      className="chat-shell grid grid-rows-[minmax(0,1fr)_auto] bg-bg-main rounded-tl-xl overflow-hidden"
+      className="chat-shell grid grid-rows-[auto_minmax(0,1fr)_auto] bg-bg-main rounded-tl-xl overflow-hidden"
     >
       <ChatHeader />
       <Messages key={sessionId ?? "none"} />
