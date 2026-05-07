@@ -16,6 +16,16 @@ function formatAge(value: string): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
+/** Re-render the caller every `intervalMs` so `Date.now()`-based labels
+ *  (formatAge, "1m / 12h / 2d") tick forward without user interaction. */
+function useTimeTicker(intervalMs = 30_000): void {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+}
+
 const DAY_MS = 86_400_000;
 
 function bucketByTime<T extends { last_activity: string }>(
@@ -239,6 +249,7 @@ function RowAction({
 }
 
 function SessionList() {
+  useTimeTicker();
   const sessions = useStore((s) => s.sessions);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const activeRunSessionIds = useStore((s) => s.activeRunSessionIds);
