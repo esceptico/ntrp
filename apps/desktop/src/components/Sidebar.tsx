@@ -178,9 +178,9 @@ function SessionRow({
       <span className="min-w-0 flex items-center gap-1.5 text-[13px] font-medium tracking-[-0.005em]">
         <span className="truncate">{name || "untitled"}</span>
       </span>
-      <span className="relative shrink-0 grid place-items-center min-w-[36px] h-[18px]">
-        {/* default state: timestamp or unread dot */}
-        <span className="col-start-1 row-start-1 transition-opacity duration-150 group-hover/row:opacity-0 pointer-events-none">
+      <span className="relative shrink-0 flex items-center justify-end h-[22px] w-[48px]">
+        {/* default state: timestamp or unread dot, right-aligned */}
+        <span className="transition-opacity duration-150 group-hover/row:opacity-0 pointer-events-none">
           {unread && !streaming ? (
             <span aria-hidden className="session-unread-dot block" title="New activity" />
           ) : (
@@ -194,7 +194,7 @@ function SessionRow({
             </span>
           )}
         </span>
-        {/* hover state: inline actions */}
+        {/* hover state: actions, also right-aligned within the same wrapper */}
         <span className="absolute inset-0 flex items-center justify-end gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity duration-150">
           <RowAction
             icon={<Pencil size={11} strokeWidth={1.8} />}
