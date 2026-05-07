@@ -388,10 +388,10 @@ function FactDetail({
                 </GhostBtn>
               )}
               <GhostBtn onClick={() => setMode("correct")} disabled={busy || fact.status === "superseded"}>
-                <GitCompareArrows size={12} strokeWidth={1.8} /> Correct
+                <GitCompareArrows size={12} strokeWidth={1.8} /> Replace claim
               </GhostBtn>
               <GhostBtn onClick={() => setMode("edit")} disabled={busy}>
-                <Pencil size={12} strokeWidth={1.8} /> Edit
+                <Pencil size={12} strokeWidth={1.8} /> Fix typo
               </GhostBtn>
             </>
           )}

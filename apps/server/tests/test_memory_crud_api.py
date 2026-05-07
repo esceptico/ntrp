@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from ntrp.config import Config
 from ntrp.context.models import SessionState
 from ntrp.memory.models import FactContext, FactKind, FactLifetime, SourceType
+from ntrp.outbox import OUTBOX_FACT_INDEX_DELETE, OUTBOX_FACT_INDEX_UPSERT
 from ntrp.server.app import app
 from ntrp.server.runtime import Runtime
 from ntrp.settings import hash_api_key
@@ -383,6 +384,45 @@ class TestFactMetadataAPI:
         assert events.json()["events"][0]["details"]["fields"] == ["archived_at"]
 
     @pytest.mark.asyncio
+    async def test_patch_fact_metadata_archive_updates_memory_search_index(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        result = await test_runtime.memory.remember(
+            text="User prefers indexed memory facts",
+            source_type=SourceType.EXPLICIT,
+            entity_names=["User"],
+        )
+        assert result is not None
+
+        archived = await test_client.patch(f"/facts/{result.fact.id}/metadata", json={"archived": True})
+
+        assert archived.status_code == 200
+        assert test_runtime.stores is not None
+        archive_events = await test_runtime.stores.outbox.claim_batch(worker_id="test-worker", limit=10)
+        archive_index_events = [
+            (event.event_type, event.payload)
+            for event in archive_events
+            if event.aggregate_type == "memory_fact"
+        ]
+        assert (OUTBOX_FACT_INDEX_DELETE, {"fact_id": result.fact.id}) in archive_index_events
+
+        restored = await test_client.patch(f"/facts/{result.fact.id}/metadata", json={"archived": False})
+
+        assert restored.status_code == 200
+        restore_events = await test_runtime.stores.outbox.claim_batch(worker_id="test-worker-2", limit=10)
+        restore_index_events = [
+            (event.event_type, event.payload)
+            for event in restore_events
+            if event.aggregate_type == "memory_fact"
+        ]
+        assert (
+            OUTBOX_FACT_INDEX_UPSERT,
+            {"fact_id": result.fact.id, "text": "User prefers indexed memory facts"},
+        ) in restore_index_events
+
+    @pytest.mark.asyncio
     async def test_patch_fact_metadata_rejects_missing_superseding_fact(
         self,
         test_client: AsyncClient,
@@ -450,6 +490,44 @@ class TestFactMetadataAPI:
         event = events.json()["events"][0]
         assert event["actor"] == "user"
         assert event["details"]["new_fact_id"] == new_fact["id"]
+
+    @pytest.mark.asyncio
+    async def test_supersede_fact_updates_memory_search_index(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        result = await test_runtime.memory.remember(
+            text="User prefers short memory reports",
+            source_type=SourceType.CHAT,
+            source_ref="chat-456",
+            kind=FactKind.PREFERENCE,
+            entity_names=["User"],
+        )
+        assert result is not None
+
+        replacement_text = "User prefers detailed memory reports with source links"
+        response = await test_client.post(
+            f"/facts/{result.fact.id}/supersede",
+            json={"text": replacement_text},
+        )
+
+        assert response.status_code == 200
+        new_fact = response.json()["new_fact"]
+
+        assert test_runtime.stores is not None
+        events = await test_runtime.stores.outbox.claim_batch(worker_id="test-worker", limit=10)
+        memory_index_events = [
+            (event.event_type, event.payload)
+            for event in events
+            if event.aggregate_type == "memory_fact"
+        ]
+
+        assert (OUTBOX_FACT_INDEX_DELETE, {"fact_id": result.fact.id}) in memory_index_events
+        assert (
+            OUTBOX_FACT_INDEX_UPSERT,
+            {"fact_id": new_fact["id"], "text": replacement_text},
+        ) in memory_index_events
 
     @pytest.mark.asyncio
     async def test_fact_details_include_supersession_links(

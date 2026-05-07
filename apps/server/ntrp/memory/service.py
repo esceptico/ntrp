@@ -4,9 +4,6 @@ from datetime import UTC, datetime
 
 from ntrp.logging import get_logger
 from ntrp.memory.audit import (
-    DEFAULT_PRUNE_LIMIT,
-    DEFAULT_PRUNE_MAX_SOURCES,
-    DEFAULT_PRUNE_OLDER_THAN_DAYS,
     memory_audit,
     observation_prune_candidates_by_ids,
     observation_prune_candidates_matching,
@@ -26,6 +23,14 @@ from ntrp.memory.models import (
 )
 
 _logger = get_logger(__name__)
+
+
+def _is_indexable_fact(fact: Fact, now: datetime) -> bool:
+    if fact.archived_at is not None or fact.superseded_by_fact_id is not None:
+        return False
+    if fact.expires_at is None:
+        return True
+    return fact.expires_at > now
 
 
 class FactService:
@@ -198,6 +203,8 @@ class FactService:
                 details={"new_fact_id": new_fact.id, "old_chars": len(old.text), "new_chars": len(replacement_text)},
             )
 
+        if self._enqueue_fact_index_delete:
+            await self._enqueue_fact_index_delete(old.id)
         if self._enqueue_fact_index_upsert:
             await self._enqueue_fact_index_upsert(new_fact.id, replacement_text)
 
@@ -244,6 +251,14 @@ class FactService:
                     policy_version="memory.api.v1",
                     details={"updates": updates | ({"archived": archive_state} if archive_state is not None else {}), "fields": sorted(changed_fields)},
                 )
+
+        now = datetime.now(UTC)
+        old_indexable = _is_indexable_fact(old, now)
+        fact_indexable = _is_indexable_fact(fact, now)
+        if old_indexable and not fact_indexable and self._enqueue_fact_index_delete:
+            await self._enqueue_fact_index_delete(fact_id)
+        elif fact_indexable and not old_indexable and self._enqueue_fact_index_upsert:
+            await self._enqueue_fact_index_upsert(fact.id, fact.text)
 
         return fact
 
