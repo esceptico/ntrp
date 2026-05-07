@@ -900,6 +900,57 @@ export async function getOpenAICodexOAuthStatusApi(config: AppConfig): Promise<O
   return apiWithConfig<OpenAICodexOAuthStatus>(config, "/providers/openai-codex/oauth/status");
 }
 
+export interface ServiceConnection {
+  id: string;
+  name: string;
+  connected: boolean;
+  key_hint: string | null;
+  from_env: boolean;
+}
+
+export interface GmailAccount {
+  email: string | null;
+  token_file: string;
+  has_send_scope?: boolean;
+  error?: string;
+}
+
+export async function listServicesApi(config: AppConfig): Promise<ServiceConnection[]> {
+  const r = await apiWithConfig<{ services: ServiceConnection[] }>(config, "/services");
+  return r.services;
+}
+
+export async function connectServiceApi(config: AppConfig, serviceId: string, apiKey: string): Promise<void> {
+  await apiWithConfig(config, `/services/${encodeURIComponent(serviceId)}/connect`, {
+    method: "POST",
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+}
+
+export async function disconnectServiceApi(config: AppConfig, serviceId: string): Promise<void> {
+  await apiWithConfig(config, `/services/${encodeURIComponent(serviceId)}`, { method: "DELETE" });
+}
+
+export async function listGmailAccountsApi(config: AppConfig): Promise<GmailAccount[]> {
+  const r = await apiWithConfig<{ accounts: GmailAccount[] }>(config, "/gmail/accounts");
+  return r.accounts;
+}
+
+export async function addGmailAccountApi(config: AppConfig): Promise<{ email: string; status: string }> {
+  return apiWithConfig<{ email: string; status: string }>(config, "/gmail/add", { method: "POST" });
+}
+
+export async function removeGmailAccountApi(
+  config: AppConfig,
+  tokenFile: string,
+): Promise<{ email: string | null; status: string }> {
+  return apiWithConfig<{ email: string | null; status: string }>(
+    config,
+    `/gmail/${encodeURIComponent(tokenFile)}`,
+    { method: "DELETE" },
+  );
+}
+
 export interface ServerConfig {
   chat_model: string;
   research_model: string;
