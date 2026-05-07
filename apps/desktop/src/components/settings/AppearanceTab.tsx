@@ -89,7 +89,7 @@ export function AppearanceTab() {
           }
         />
         <div className="border-t border-line-soft" />
-        <div className="px-4 py-4 grid grid-cols-2 gap-2">
+        <div className="px-4 py-4 grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-2">
           {VARIANTS.map((v) => (
             <button
               key={v.id}
@@ -127,12 +127,12 @@ function SettingRow({
   control: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+    <div className="flex flex-col items-start gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="min-w-0">
         <div className="text-[13px] font-medium text-ink tracking-[-0.005em]">{title}</div>
         <div className="text-[12px] text-muted mt-0.5 leading-snug">{hint}</div>
       </div>
-      <div className="shrink-0">{control}</div>
+      <div className="shrink-0 max-w-full">{control}</div>
     </div>
   );
 }

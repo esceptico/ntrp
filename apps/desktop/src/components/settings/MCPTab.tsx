@@ -15,17 +15,26 @@ import {
   updateMCPToolsApi,
 } from "../../api";
 import { useMountedRef, useMutationState } from "../../lib/hooks";
+import { settingsErrorMessage } from "../../lib/settingsLoadState";
+import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 
 type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; name: string };
 
 export function MCPTab() {
   const config = useStore((s) => s.config);
   const [servers, setServers] = useState<MCPServer[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [view, setView] = useState<View>({ kind: "list" });
 
   async function refresh() {
-    const r = await listMCPServersApi(config);
-    setServers(r.servers);
+    setLoadError(null);
+    try {
+      const r = await listMCPServersApi(config);
+      setServers(r.servers);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err));
+      setServers([]);
+    }
   }
 
   useEffect(() => {
@@ -70,6 +79,7 @@ export function MCPTab() {
   return (
     <ServerList
       servers={servers}
+      loadError={loadError}
       onAdd={() => setView({ kind: "add" })}
       onEdit={(name) => setView({ kind: "edit", name })}
       onChanged={refresh}
@@ -81,11 +91,13 @@ export function MCPTab() {
 
 function ServerList({
   servers,
+  loadError,
   onAdd,
   onEdit,
   onChanged,
 }: {
   servers: MCPServer[] | null;
+  loadError: string | null;
   onAdd: () => void;
   onEdit: (name: string) => void;
   onChanged: () => Promise<void>;
@@ -99,21 +111,31 @@ function ServerList({
       </div>
 
       <div className="grid gap-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <h3 className="m-0 text-[12px] font-medium uppercase tracking-[0.06em] text-faint">
             Servers
           </h3>
-          <button
-            type="button"
-            onClick={onAdd}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-[12px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
-          >
-            <Plus size={11} strokeWidth={2.2} /> Add server
-          </button>
+          {!loadError && (
+            <button
+              type="button"
+              onClick={onAdd}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-[12px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
+            >
+              <Plus size={11} strokeWidth={2.2} /> Add server
+            </button>
+          )}
         </div>
 
         {servers === null ? (
           <Empty>Loading…</Empty>
+        ) : loadError ? (
+          <div className="grid gap-3">
+            <SettingsInlineError
+              title="Couldn't load MCP servers"
+              message={settingsErrorMessage(loadError)}
+            />
+            <SettingsConnectionHint />
+          </div>
         ) : servers.length === 0 ? (
           <Empty>No MCP servers yet.</Empty>
         ) : (
@@ -376,11 +398,7 @@ function ServerForm({
         <ToolsSection server={server} onChanged={onSaved} />
       )}
 
-      {error && (
-        <div className="px-3 py-2 rounded-md bg-bad-soft border border-[rgba(184,68,43,0.18)] text-[12px] text-bad">
-          {error}
-        </div>
-      )}
+      {error && <SettingsInlineError title="Couldn't save MCP server" message={error} />}
 
       <div className="flex justify-end pt-1">
         <button
@@ -460,7 +478,7 @@ function ToolsSection({
           );
         })}
       </ul>
-      {error && <div className="text-[11.5px] text-bad">{error}</div>}
+      {error && <SettingsInlineError title="Couldn't update tools" message={error} />}
     </div>
   );
 }

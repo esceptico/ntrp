@@ -64,16 +64,16 @@ export function SettingsModal() {
     <PageModal
       open={open}
       onClose={close}
-      size="w-[min(960px,calc(100vw-80px))] h-[min(720px,calc(100vh-80px))]"
+      size="w-[min(1000px,calc(100vw-64px))] h-[min(740px,calc(100vh-64px))]"
       grid="grid-cols-[180px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
       rounded="rounded-2xl"
       disableEscape={saving}
     >
-        <aside className="border-r border-line-soft bg-surface-soft/40 flex flex-col">
+        <aside className="border-r border-line-soft bg-surface-soft/40 flex flex-col min-h-0">
           <div className="px-3 pt-4 pb-2 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint">
             Settings
           </div>
-          <nav className="flex flex-col gap-px px-2 pb-3">
+          <nav className="flex flex-col gap-px px-2 pb-3 overflow-y-auto scroll-thin">
             {TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = active === tab.id;
@@ -95,7 +95,7 @@ export function SettingsModal() {
               );
             })}
           </nav>
-          <div className="mt-auto px-3 pb-3 text-[10.5px] text-faint">
+          <div className="mt-auto px-3 pb-3 text-[10.5px] text-faint shrink-0">
             <button
               type="button"
               onClick={close}

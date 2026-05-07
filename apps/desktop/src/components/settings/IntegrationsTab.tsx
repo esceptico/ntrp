@@ -32,6 +32,7 @@ import {
   settingsErrorTitle,
   shouldShowLoadedSettingsContent,
 } from "../../lib/settingsLoadState";
+import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 
 export function IntegrationsTab() {
   const config = useStore((s) => s.config);
@@ -168,20 +169,16 @@ export function IntegrationsTab() {
       </div>
 
       {error && (
-        <div className="grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.16)]">
-          <strong className="text-bad text-[12px] font-semibold">
-            {settingsErrorTitle("integrations", hasLoadedData)}
-          </strong>
-          <span className="text-[12px] text-[#8a3220] leading-[1.4]">
-            {settingsErrorMessage(error)}
-          </span>
-        </div>
+        <SettingsInlineError
+          title={settingsErrorTitle("integrations", hasLoadedData)}
+          message={settingsErrorMessage(error)}
+        />
       )}
 
       {loading && !hasLoadedData ? (
         <div className="text-[12.5px] text-faint">Loading integrations…</div>
       ) : !showContent ? (
-        <ConnectionHint />
+        <SettingsConnectionHint />
       ) : (
         <>
           <GoogleCard
@@ -212,17 +209,6 @@ export function IntegrationsTab() {
           />
         </>
       )}
-    </div>
-  );
-}
-
-function ConnectionHint() {
-  return (
-    <div className="rounded-[12px] border border-line-soft bg-surface px-3.5 py-3">
-      <div className="text-[13px] font-medium text-ink">Connect the desktop to ntrp first</div>
-      <div className="mt-1 text-[12px] text-muted leading-[1.45]">
-        Check the server URL and API key in the Connection tab, then refresh this view.
-      </div>
     </div>
   );
 }

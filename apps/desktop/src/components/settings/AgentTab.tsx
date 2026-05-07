@@ -3,12 +3,16 @@ import clsx from "clsx";
 import { NumberField } from "./Field";
 import { updateServerConfig, fetchServerConfig } from "../../actions";
 import type { ServerConfig } from "../../api";
+import { useStore } from "../../store";
+import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 
 export function AgentTab({ serverConfig }: { serverConfig: ServerConfig | null }) {
+  const connected = useStore((s) => s.connected);
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
 
   if (!serverConfig) {
+    if (!connected) return <SettingsConnectionHint />;
     return <div className="text-[12.5px] text-faint">Loading agent settings…</div>;
   }
 
@@ -73,10 +77,7 @@ export function AgentTab({ serverConfig }: { serverConfig: ServerConfig | null }
       />
 
       {error && (
-        <div className="grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.16)]">
-          <strong className="text-bad text-[12px] font-semibold">Couldn't save</strong>
-          <span className="text-[12px] text-[#8a3220] leading-[1.4]">{error}</span>
-        </div>
+        <SettingsInlineError title="Couldn't save" message={error} />
       )}
     </div>
   );

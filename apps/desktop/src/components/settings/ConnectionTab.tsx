@@ -1,5 +1,6 @@
 import { Field } from "./Field";
 import type { AppConfig } from "../../api";
+import { SettingsInlineError } from "./SettingsNotice";
 
 export function ConnectionTab({
   formRef,
@@ -39,12 +40,7 @@ export function ConnectionTab({
         help="From your server config. Used as a Bearer token."
       />
 
-      {error && (
-        <div className="grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.16)]">
-          <strong className="text-bad text-[12px] font-semibold">Could not connect</strong>
-          <span className="text-[12px] text-[#8a3220] leading-[1.4]">{error}</span>
-        </div>
-      )}
+      {error && <SettingsInlineError title="Could not connect" message={error} />}
 
       <div className="flex justify-end pt-1">
         <button

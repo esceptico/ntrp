@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { NumberField, PercentField } from "./Field";
 import { updateServerConfig, fetchServerConfig } from "../../actions";
 import type { ServerConfig, ServerConfigPatch } from "../../api";
+import { useStore } from "../../store";
+import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 
 type Draft = Pick<
   ServerConfig,
@@ -21,6 +23,7 @@ const KEYS: Array<keyof Draft> = [
 ];
 
 export function ContextTab({ serverConfig }: { serverConfig: ServerConfig | null }) {
+  const connected = useStore((s) => s.connected);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +40,7 @@ export function ContextTab({ serverConfig }: { serverConfig: ServerConfig | null
   }, [serverConfig]);
 
   if (!serverConfig || !draft) {
+    if (!connected) return <SettingsConnectionHint />;
     return <div className="text-[12.5px] text-faint">Loading context settings…</div>;
   }
 
@@ -120,10 +124,7 @@ export function ContextTab({ serverConfig }: { serverConfig: ServerConfig | null
       />
 
       {error && (
-        <div className="grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.16)]">
-          <strong className="text-bad text-[12px] font-semibold">Couldn't save</strong>
-          <span className="text-[12px] text-[#8a3220] leading-[1.4]">{error}</span>
-        </div>
+        <SettingsInlineError title="Couldn't save" message={error} />
       )}
 
       <div className="flex justify-end pt-1">

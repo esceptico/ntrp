@@ -30,6 +30,7 @@ import {
   settingsErrorTitle,
   shouldShowLoadedSettingsContent,
 } from "../../lib/settingsLoadState";
+import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 
 const PRIMARY_PROVIDERS = ["openai-codex", "openai", "anthropic", "google", "openrouter"];
 
@@ -250,21 +251,17 @@ export function ProvidersTab() {
       </div>
 
       {error && (
-        <div className="grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.16)]">
-          <strong className="text-bad text-[12px] font-semibold">
-            {settingsErrorTitle("providers", hasLoadedData)}
-          </strong>
-          <span className="text-[12px] text-[#8a3220] leading-[1.4]">
-            {settingsErrorMessage(error)}
-          </span>
-        </div>
+        <SettingsInlineError
+          title={settingsErrorTitle("providers", hasLoadedData)}
+          message={settingsErrorMessage(error)}
+        />
       )}
 
       <div className="grid gap-2">
         {loading && providers.length === 0 ? (
           <div className="text-[12.5px] text-faint">Loading providers…</div>
         ) : !showContent ? (
-          <ConnectionHint />
+          <SettingsConnectionHint />
         ) : (
           sortedProviders.map((provider) => (
             <ProviderRow
@@ -307,17 +304,6 @@ export function ProvidersTab() {
             </ProviderRow>
           ))
         )}
-      </div>
-    </div>
-  );
-}
-
-function ConnectionHint() {
-  return (
-    <div className="rounded-[12px] border border-line-soft bg-surface px-3.5 py-3">
-      <div className="text-[13px] font-medium text-ink">Connect the desktop to ntrp first</div>
-      <div className="mt-1 text-[12px] text-muted leading-[1.45]">
-        Check the server URL and API key in the Connection tab, then refresh this view.
       </div>
     </div>
   );

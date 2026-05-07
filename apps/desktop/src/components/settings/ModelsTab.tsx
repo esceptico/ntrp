@@ -4,6 +4,7 @@ import { Check } from "lucide-react";
 import { useStore } from "../../store";
 import { updateServerConfig, fetchServerConfig } from "../../actions";
 import type { ModelGroup } from "../../api";
+import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 
 type ModelKind = "chat_model" | "research_model" | "memory_model";
 
@@ -32,13 +33,30 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 export function ModelsTab() {
+  const connected = useStore((s) => s.connected);
   const cfg = useStore((s) => s.serverConfig);
   const models = useStore((s) => s.serverModels);
   const [savingKind, setSavingKind] = useState<ModelKind | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (!cfg || !models) {
+  if (!cfg) {
+    if (!connected) return <SettingsConnectionHint />;
     return <div className="text-[12.5px] text-faint">Loading models…</div>;
+  }
+
+  if (!models) {
+    return (
+      <div className="grid gap-3">
+        <SettingsInlineError
+          title="Couldn't load models"
+          message="The server is reachable, but the model list did not load."
+        />
+        <SettingsConnectionHint
+          title="Check provider setup"
+          detail="Connect at least one model provider in Providers, then refresh this view."
+        />
+      </div>
+    );
   }
 
   const groups: ModelGroup[] = models.groups.length > 0
@@ -75,10 +93,7 @@ export function ModelsTab() {
         );
       })}
       {error && (
-        <div className="grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.16)]">
-          <strong className="text-bad text-[12px] font-semibold">Couldn't update model</strong>
-          <span className="text-[12px] text-[#8a3220] leading-[1.4]">{error}</span>
-        </div>
+        <SettingsInlineError title="Couldn't update model" message={error} />
       )}
     </div>
   );
