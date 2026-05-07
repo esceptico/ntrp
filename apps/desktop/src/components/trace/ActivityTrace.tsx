@@ -16,9 +16,13 @@ const MAX_NEST_DEPTH = 4; // visual cap; deeper nesting collapses to the same in
 
 export function ActivityTrace({ children }: { children: ReactNode }) {
   return (
-    <div className="font-sans text-[13px] leading-[1.55] text-muted">
+    <motion.div
+      layout
+      transition={{ layout: { duration: MOTION.panel, ease: EASE } }}
+      className="font-sans text-[13px] leading-[1.55] text-muted"
+    >
       {children}
-    </div>
+    </motion.div>
   );
 }
 
