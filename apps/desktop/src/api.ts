@@ -424,7 +424,7 @@ export async function listFactsApi(
   if (filters.status) qs.set("status", filters.status);
   if (filters.accessed) qs.set("accessed", filters.accessed);
   if (filters.entity?.trim()) qs.set("entity", filters.entity.trim());
-  return apiWithConfig(config, `/facts?${qs.toString()}`);
+  return apiWithConfig(config, `/facts?${qs.toString()}`, { timeout: 5000 } as RequestInit & { timeout: number });
 }
 
 export async function updateFactTextApi(config: AppConfig, id: number, text: string): Promise<{ fact: Fact }> {
@@ -495,7 +495,7 @@ export async function listObservationsApi(
   if (filters.accessed) qs.set("accessed", filters.accessed);
   if (filters.minSources !== undefined) qs.set("min_sources", String(filters.minSources));
   if (filters.maxSources !== undefined) qs.set("max_sources", String(filters.maxSources));
-  return apiWithConfig(config, `/observations?${qs.toString()}`);
+  return apiWithConfig(config, `/observations?${qs.toString()}`, { timeout: 5000 } as RequestInit & { timeout: number });
 }
 
 export async function updateObservationSummaryApi(

@@ -24,6 +24,7 @@ export function ListColumn<T>({
   items,
   renderItem,
   loading,
+  error,
   empty,
   totalLabel,
 }: {
@@ -31,6 +32,7 @@ export function ListColumn<T>({
   items: T[];
   renderItem: (item: T) => ReactNode;
   loading: boolean;
+  error?: ReactNode;
   empty?: string;
   totalLabel: string | null;
 }) {
@@ -40,6 +42,8 @@ export function ListColumn<T>({
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin px-2 pb-3">
         {loading ? (
           <Empty>Loading…</Empty>
+        ) : error ? (
+          <div className="px-1 py-3">{error}</div>
         ) : items.length === 0 ? (
           <Empty>{empty ?? "No matches."}</Empty>
         ) : (
@@ -50,6 +54,15 @@ export function ListColumn<T>({
         <div className="px-4 py-2 text-[11px] text-faint tabular-nums">{totalLabel}</div>
       )}
     </>
+  );
+}
+
+export function ListError({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="rounded-[10px] border border-[rgba(184,68,43,0.16)] bg-bad-soft px-3 py-2.5">
+      <div className="text-[12px] font-semibold text-bad">{title}</div>
+      <div className="mt-0.5 text-[12px] leading-[1.4] text-[#8a3220]">{message}</div>
+    </div>
   );
 }
 

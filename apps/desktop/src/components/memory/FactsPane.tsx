@@ -16,6 +16,7 @@ import {
 } from "../../api";
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { formatAbs, formatRelativePast } from "../../lib/format";
+import { settingsErrorMessage } from "../../lib/settingsLoadState";
 import {
   factChatSourceFocus,
   factSourceDetail,
@@ -32,6 +33,7 @@ import {
   ErrorPill,
   GhostBtn,
   ListColumn,
+  ListError,
   MetaGrid,
   PaneShell,
   Pill,
@@ -76,11 +78,19 @@ export function FactsPane({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [targetHighlightId, setTargetHighlightId] = useState<number | null>(null);
   const [detail, setDetail] = useState<ApiFactDetail | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function refresh(nextStatus = status) {
-    const r = await listFactsApi(config, { limit: 200, kind: kind ?? undefined, status: nextStatus });
-    setFacts(r.facts);
-    setTotal(r.total);
+    setLoadError(null);
+    try {
+      const r = await listFactsApi(config, { limit: 200, kind: kind ?? undefined, status: nextStatus });
+      setFacts(r.facts);
+      setTotal(r.total);
+    } catch (err) {
+      setFacts([]);
+      setTotal(0);
+      setLoadError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   async function openFactById(factId: number) {
@@ -152,7 +162,12 @@ export function FactsPane({
           }
           empty={facts && facts.length === 0 ? "Nothing here yet." : undefined}
           loading={facts === null}
-          totalLabel={facts ? `${filtered?.length ?? 0} of ${total}` : null}
+          error={
+            loadError ? (
+              <ListError title="Couldn't load facts" message={settingsErrorMessage(loadError)} />
+            ) : null
+          }
+          totalLabel={!loadError && facts ? `${filtered?.length ?? 0} of ${total}` : null}
           items={filtered ?? []}
           renderItem={(f) => (
             <FactRow
@@ -196,7 +211,9 @@ export function FactsPane({
             }}
           />
         ) : (
-          <DetailPlaceholder>Select a fact to view details</DetailPlaceholder>
+          <DetailPlaceholder>
+            {loadError ? "Connect to ntrp to inspect facts" : "Select a fact to view details"}
+          </DetailPlaceholder>
         )
       }
     />

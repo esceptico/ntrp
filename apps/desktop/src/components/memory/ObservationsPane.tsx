@@ -13,6 +13,7 @@ import {
 } from "../../api";
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { formatAbs, formatRelativePast } from "../../lib/format";
+import { settingsErrorMessage } from "../../lib/settingsLoadState";
 import {
   factChatSourceFocus,
   factSourceSummary,
@@ -33,6 +34,7 @@ import {
   ErrorPill,
   GhostBtn,
   ListColumn,
+  ListError,
   PaneShell,
   Pill,
   PrimaryBtn,
@@ -56,11 +58,19 @@ export function ObservationsPane({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [targetHighlightId, setTargetHighlightId] = useState<number | null>(null);
   const [detail, setDetail] = useState<ObservationDetail | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function refresh() {
-    const r = await listObservationsApi(config, { limit: 200, status: "active" });
-    setItems(r.observations);
-    setTotal(r.total);
+    setLoadError(null);
+    try {
+      const r = await listObservationsApi(config, { limit: 200, status: "active" });
+      setItems(r.observations);
+      setTotal(r.total);
+    } catch (err) {
+      setItems([]);
+      setTotal(0);
+      setLoadError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   useEffect(() => {
@@ -116,7 +126,12 @@ export function ObservationsPane({
           toolbar={<SearchInput value={query} onChange={setQuery} placeholder="Filter patterns" />}
           empty={items && items.length === 0 ? "Nothing here yet." : undefined}
           loading={items === null}
-          totalLabel={items ? `${filtered?.length ?? 0} of ${total}` : null}
+          error={
+            loadError ? (
+              <ListError title="Couldn't load patterns" message={settingsErrorMessage(loadError)} />
+            ) : null
+          }
+          totalLabel={!loadError && items ? `${filtered?.length ?? 0} of ${total}` : null}
           items={filtered ?? []}
           renderItem={(o) => (
             <ObservationRow
@@ -134,7 +149,9 @@ export function ObservationsPane({
       }
       detail={
         selectedId === null ? (
-          <DetailPlaceholder>Select a pattern to view details</DetailPlaceholder>
+          <DetailPlaceholder>
+            {loadError ? "Connect to ntrp to inspect patterns" : "Select a pattern to view details"}
+          </DetailPlaceholder>
         ) : detail ? (
           <ObservationView
             key={detail.observation.id}
