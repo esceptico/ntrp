@@ -121,17 +121,17 @@ body {
   overflow: hidden;
 }
 
-/* Sidebar overlays the chat shell and slides via GPU-composited
-   transform — keeps the chat from reflowing every frame. */
+/* Sidebar wrap. Width is animated via framer-motion (App.tsx) so the
+   collapse animation can drive the chat-shell's `left` in lockstep. */
 .sidebar-wrap {
   position: absolute;
   top: 0;
   left: 0;
-  width: 244px;
   height: 100%;
   z-index: 30;
   background: var(--color-bg);
-  will-change: transform;
+  will-change: width;
+  overflow: hidden;
 }
 
 /* Chat fills the window and animates its left padding in lockstep
@@ -145,7 +145,7 @@ body {
   left: 244px;
   transition: left var(--motion-route) var(--motion-ease-emphasized);
 }
-.chat-shell[data-sidebar-hidden="true"] { left: 0; }
+.chat-shell[data-sidebar-collapsed="true"] { left: 56px; }
 
 /* Fixed-position sidebar toggle, just right of the macOS traffic
    lights. Lives inside the chat-header so it inherits its no-drag

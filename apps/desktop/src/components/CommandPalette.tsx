@@ -286,7 +286,7 @@ function useEntries(): CommandEntry[] {
   const openArchive = useStore((s) => s.openArchive);
   const openMemory = useStore((s) => s.openMemory);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
-  const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
+  const sidebarCollapsed = useStore((s) => s.prefs.sidebarCollapsed);
   const order = useStore((s) => s.order);
 
   return useMemo(() => {
@@ -305,7 +305,7 @@ function useEntries(): CommandEntry[] {
     entries.push({
       id: "suggested:toggle-sidebar",
       section: "suggested",
-      label: sidebarHidden ? "Show sidebar" : "Hide sidebar",
+      label: sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar",
       icon: PanelLeft,
       shortcut: "⌘B",
       run: toggleSidebar,
@@ -419,7 +419,7 @@ function useEntries(): CommandEntry[] {
     openArchive,
     openMemory,
     toggleSidebar,
-    sidebarHidden,
+    sidebarCollapsed,
     order,
   ]);
 }

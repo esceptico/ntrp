@@ -5,15 +5,15 @@ import { Messages } from "./Messages";
 import { Composer } from "./Composer";
 
 function SidebarToggle() {
-  const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
+  const sidebarCollapsed = useStore((s) => s.prefs.sidebarCollapsed);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
-  const Icon = sidebarHidden ? PanelLeftOpen : PanelLeftClose;
+  const Icon = sidebarCollapsed ? PanelLeftOpen : PanelLeftClose;
   return (
     <button
       type="button"
       onClick={toggleSidebar}
-      title={sidebarHidden ? "Show sidebar (⌘B)" : "Hide sidebar (⌘B)"}
-      aria-label={sidebarHidden ? "Show sidebar" : "Hide sidebar"}
+      title={sidebarCollapsed ? "Expand sidebar (⌘B)" : "Collapse sidebar (⌘B)"}
+      aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
       className="sidebar-toggle grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
     >
       <Icon size={14} strokeWidth={1.7} />
@@ -24,7 +24,7 @@ function SidebarToggle() {
 function ChatHeader() {
   const sessionId = useStore((s) => s.currentSessionId);
   const sessions = useStore((s) => s.sessions);
-  const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
+  const sidebarCollapsed = useStore((s) => s.prefs.sidebarCollapsed);
   const session = sessions.find((s) => s.session_id === sessionId);
 
   const title = session?.name || (sessionId ? "untitled" : "no session");
@@ -34,7 +34,7 @@ function ChatHeader() {
     <div
       className={clsx(
         "chat-header flex items-center gap-3 h-[52px] pr-[18px]",
-        sidebarHidden ? "pl-[128px]" : "pl-[18px]",
+        sidebarCollapsed ? "pl-[88px]" : "pl-[18px]",
       )}
       style={{ transition: "padding-left 320ms cubic-bezier(0.32, 0.72, 0, 1)" }}
     >
@@ -52,11 +52,11 @@ function ChatHeader() {
 }
 
 export function Chat() {
-  const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
+  const sidebarCollapsed = useStore((s) => s.prefs.sidebarCollapsed);
   const sessionId = useStore((s) => s.currentSessionId);
   return (
     <main
-      data-sidebar-hidden={sidebarHidden ? "true" : "false"}
+      data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
       className="chat-shell grid grid-rows-[auto_minmax(0,1fr)_auto] bg-bg-main rounded-tl-xl overflow-hidden"
     >
       <ChatHeader />

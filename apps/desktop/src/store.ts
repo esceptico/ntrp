@@ -39,7 +39,7 @@ export interface Prefs {
   thinkingIntensity: ThinkingIntensity;
   theme: ThemeChoice;
   palette: PaletteId;
-  sidebarHidden: boolean;
+  sidebarCollapsed: boolean;
   showReasoningInChat: boolean;
 }
 
@@ -50,7 +50,7 @@ const DEFAULT_PREFS: Prefs = {
   thinkingIntensity: "normal",
   theme: "system",
   palette: "graphite",
-  sidebarHidden: false,
+  sidebarCollapsed: false,
   showReasoningInChat: true,
 };
 
@@ -638,7 +638,7 @@ export const useStore = create<State & Actions>((set) => ({
     }),
   toggleSidebar: () =>
     set((s) => {
-      const next = { ...s.prefs, sidebarHidden: !s.prefs.sidebarHidden };
+      const next = { ...s.prefs, sidebarCollapsed: !s.prefs.sidebarCollapsed };
       persistPrefs(next);
       return { prefs: next };
     }),
