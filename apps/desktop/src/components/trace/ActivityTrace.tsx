@@ -232,19 +232,38 @@ function ItemButton({
   if (isAgent(item)) {
     return <AgentButton item={item} depth={depth} onOpen={onOpen} />;
   }
+  const running = item.result == null;
   return (
     <button
       type="button"
       onClick={() => onOpen(item)}
       title={`${item.kind} — click to inspect`}
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
-      className="flex items-baseline gap-1.5 font-mono text-faint truncate text-left bg-transparent border-0 p-0 m-0 hover:text-ink-soft transition-colors cursor-pointer"
+      className={clsx(
+        "flex items-baseline gap-1.5 font-mono truncate text-left bg-transparent border-0 p-0 m-0 transition-colors cursor-pointer",
+        running ? "text-ink-soft" : "text-faint hover:text-ink-soft",
+      )}
     >
       {depth > 0 && (
         <span className="text-whisper select-none" aria-hidden="true">↳</span>
       )}
+      <StateDot running={running} />
       <span className="truncate">{item.target || item.kind}</span>
     </button>
+  );
+}
+
+function StateDot({ running }: { running: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={clsx(
+        "inline-block w-[5px] h-[5px] rounded-full self-center shrink-0",
+        running
+          ? "bg-accent animate-[pulseSoft_1.2s_ease-in-out_infinite]"
+          : "bg-whisper",
+      )}
+    />
   );
 }
 
