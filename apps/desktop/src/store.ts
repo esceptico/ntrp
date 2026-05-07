@@ -40,8 +40,17 @@ export interface Prefs {
   theme: ThemeChoice;
   palette: PaletteId;
   sidebarHidden: boolean;
+  /** Sidebar width in pixels. User-resizable via the right-edge drag
+   *  handle. Clamped to [SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH] in the
+   *  resize handler. Default matches the historic fixed width. */
+  sidebarWidth: number;
   showReasoningInChat: boolean;
 }
+
+export const SIDEBAR_MIN_WIDTH = 200;
+export const SIDEBAR_MAX_WIDTH = 380;
+export const SIDEBAR_SNAP_POINTS = [220, 244, 280, 320] as const;
+export const SIDEBAR_SNAP_THRESHOLD_PX = 12;
 
 const PREFS_KEY = "ntrp.desktop.prefs";
 const PREFS_VERSION = 2;
@@ -51,6 +60,7 @@ const DEFAULT_PREFS: Prefs = {
   theme: "system",
   palette: "graphite",
   sidebarHidden: false,
+  sidebarWidth: 244,
   showReasoningInChat: true,
 };
 
