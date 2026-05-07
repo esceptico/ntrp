@@ -68,8 +68,8 @@ export function providerReadinessSummary(
   if (currentProvider && currentModel) {
     return {
       ready: true,
-      label: "Agent ready",
-      detail: `${currentProvider.name} powers ${currentModel}`,
+      label: "Chat model ready",
+      detail: `${currentProvider.name} provides ${currentModel}`,
       currentModel,
       currentProviderName: currentProvider.name,
       connectedProviderCount: connected.length,
@@ -80,7 +80,7 @@ export function providerReadinessSummary(
   if (connected.length > 0) {
     return {
       ready: false,
-      label: "Choose an agent model",
+      label: "Choose a chat model",
       detail: `${connected.length} ${connected.length === 1 ? "provider is" : "providers are"} connected`,
       currentModel,
       currentProviderName: null,
@@ -92,7 +92,7 @@ export function providerReadinessSummary(
   return {
     ready: false,
     label: "Connect a model provider",
-    detail: "The agent needs at least one chat model provider",
+    detail: "Connect at least one provider with chat models",
     currentModel,
     currentProviderName: null,
     connectedProviderCount: 0,

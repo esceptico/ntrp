@@ -30,7 +30,7 @@ class AgentConfig:
             model=model or config.chat_model,
             research_model=config.research_model,
             max_depth=config.max_depth,
-            reasoning_effort=config.reasoning_effort,
+            reasoning_effort=config.reasoning_effort_for(model or config.chat_model),
             deferred_tools=config.deferred_tools,
             compactor=SummaryCompactor(
                 threshold=config.compression_threshold,

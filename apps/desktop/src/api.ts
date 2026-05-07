@@ -992,6 +992,7 @@ export interface ServerConfig {
   max_depth: number;
   reasoning_effort: string | null;
   reasoning_efforts: string[];
+  model_reasoning_efforts: Record<string, string>;
   compression_threshold: number;
   max_messages: number;
   compression_keep_ratio: number;

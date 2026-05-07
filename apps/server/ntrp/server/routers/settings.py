@@ -30,7 +30,13 @@ def _config_response(rt: Runtime) -> dict:
     web_client = rt.integrations.get_client("web")
     web_provider = getattr(web_client, "provider", "unknown") if web_client else "none"
     reasoning_efforts = list(get_model(config.chat_model).reasoning_efforts) if config.chat_model else []
-    reasoning_effort = config.reasoning_effort if config.reasoning_effort in reasoning_efforts else None
+    reasoning_effort = config.reasoning_effort_for(config.chat_model)
+    known_models = get_models_fn()
+    model_reasoning_efforts = {
+        model_id: effort
+        for model_id, effort in config.model_reasoning_efforts.items()
+        if model_id in known_models and effort in known_models[model_id].reasoning_efforts
+    }
 
     integrations: dict[str, dict] = {}
     for integration in rt.integrations.integrations.values():
@@ -91,6 +97,7 @@ def _config_response(rt: Runtime) -> dict:
         "max_depth": config.max_depth,
         "reasoning_effort": reasoning_effort,
         "reasoning_efforts": reasoning_efforts,
+        "model_reasoning_efforts": model_reasoning_efforts,
         "compression_threshold": config.compression_threshold,
         "max_messages": config.max_messages,
         "compression_keep_ratio": config.compression_keep_ratio,
@@ -113,17 +120,22 @@ def _validate_reasoning_patch(fields: dict, config) -> None:
     efforts = _reasoning_efforts(target_model)
 
     if "reasoning_effort" in fields:
-        effort = fields["reasoning_effort"]
+        effort = fields.pop("reasoning_effort")
         if effort is not None and effort not in efforts:
             available = ", ".join(efforts) or "none"
             raise HTTPException(
                 status_code=400,
                 detail=f"reasoning_effort {effort!r} is not supported by {target_model!r}; available: {available}",
             )
+        per_model = dict(config.model_reasoning_efforts)
+        if target_model:
+            if effort is None:
+                per_model.pop(target_model, None)
+            else:
+                per_model[target_model] = effort
+        fields["model_reasoning_efforts"] = per_model
+        fields["reasoning_effort"] = None  # clear legacy global storage
         return
-
-    if "chat_model" in fields and config.reasoning_effort not in efforts:
-        fields["reasoning_effort"] = None
 
 
 @router.get("/config")

@@ -51,6 +51,7 @@ PERSIST_KEYS = frozenset(
         "gmail_days",
         "max_depth",
         "reasoning_effort",
+        "model_reasoning_efforts",
         "compression_threshold",
         "max_messages",
         "compression_keep_ratio",
@@ -118,7 +119,10 @@ class Config(BaseSettings):
 
     # Agent
     max_depth: int = 8
+    # Legacy global setting. New writes use model_reasoning_efforts so each
+    # chat model keeps its own thinking level.
     reasoning_effort: str | None = None
+    model_reasoning_efforts: dict[str, str] = Field(default_factory=dict)
     deferred_tools: bool = True
 
     # Context compaction
@@ -141,6 +145,7 @@ class Config(BaseSettings):
         self._migrate_deprecated_env()
         self._resolve_chat_model()
         self._fill_model_fallbacks()
+        self._migrate_legacy_reasoning_effort()
         self._resolve_embedding_model()
         return self
 
@@ -168,6 +173,14 @@ class Config(BaseSettings):
             self.memory_model = self.chat_model
         if not self.research_model and self.chat_model:
             self.research_model = self.chat_model
+
+    def _migrate_legacy_reasoning_effort(self) -> None:
+        if not self.reasoning_effort or not self.chat_model or self.model_reasoning_efforts:
+            return
+        effort = self.reasoning_effort
+        if effort in get_models()[self.chat_model].reasoning_efforts:
+            object.__setattr__(self, "model_reasoning_efforts", {self.chat_model: effort})
+        object.__setattr__(self, "reasoning_effort", None)
 
     def _resolve_embedding_model(self) -> None:
         if self.embedding_model:
@@ -231,6 +244,14 @@ class Config(BaseSettings):
             return None
         model = get_embedding_model(self.embedding_model)
         return EmbeddingConfig(model=model.id, dim=model.dim)
+
+    def reasoning_effort_for(self, model_id: str | None) -> str | None:
+        if not model_id:
+            return None
+        effort = self.model_reasoning_efforts.get(model_id)
+        if not effort:
+            return None
+        return effort if effort in get_models()[model_id].reasoning_efforts else None
 
     @property
     def db_dir(self) -> Path:

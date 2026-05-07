@@ -63,6 +63,7 @@ export function ModelReasoningChip() {
   const currentModel = cfg.chat_model;
   const efforts = cfg.reasoning_efforts;
   const currentEffort = cfg.reasoning_effort;
+  const modelReasoningEfforts = cfg.model_reasoning_efforts;
 
   const apply = async (patch: Record<string, unknown>) => {
     if (busy) return;
@@ -105,7 +106,7 @@ export function ModelReasoningChip() {
           {efforts.length > 0 && (
             <div className="grid gap-1 px-3 pt-2.5 pb-2 border-b border-line-soft">
               <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
-                Thinking
+                Thinking for this model
               </div>
               <div className="flex flex-wrap gap-1">
                 <EffortPill
@@ -146,13 +147,13 @@ export function ModelReasoningChip() {
                   )}
                   {g.models.map((m) => {
                     const isCurrent = m === currentModel;
+                    const savedEffort = modelReasoningEfforts[m];
                     return (
                       <button
                         key={m}
                         type="button"
                         onClick={() => {
                           if (m !== currentModel) void apply({ chat_model: m });
-                          setOpen(false);
                           setQuery("");
                         }}
                         className={clsx(
@@ -163,7 +164,12 @@ export function ModelReasoningChip() {
                         <span className="grid place-items-center w-3 h-3 shrink-0">
                           {isCurrent && <Check size={11} strokeWidth={2.4} className="text-accent" />}
                         </span>
-                        <span className="truncate">{m}</span>
+                        <span className="min-w-0 flex-1 truncate">{m}</span>
+                        {savedEffort && (
+                          <span className="shrink-0 text-[11px] font-sans text-faint">
+                            {savedEffort}
+                          </span>
+                        )}
                       </button>
                     );
                   })}

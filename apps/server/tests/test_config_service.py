@@ -112,6 +112,7 @@ async def test_config_service_deletes_custom_model_and_clears_active_fields(monk
         "chat_model": "local/test",
         "research_model": "local/test",
         "memory_model": "other",
+        "model_reasoning_efforts": {"local/test": "high", "other": "low"},
     }
     removed: list[str] = []
     reload_seen: list[dict] = []
@@ -146,5 +147,6 @@ async def test_config_service_deletes_custom_model_and_clears_active_fields(monk
     assert persisted == {
         "custom_model_keys": {"other": "keep"},
         "memory_model": "other",
+        "model_reasoning_efforts": {"other": "low"},
     }
     assert reload_seen == [persisted]

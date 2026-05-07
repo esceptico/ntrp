@@ -59,7 +59,7 @@ test("summarizes chat and embedding models without pretending custom is an api k
   expect(providerModelCountLabel(provider)).toBe("2 models");
 });
 
-test("summarizes agent readiness from the active model provider", () => {
+test("summarizes chat model readiness from the active model provider", () => {
   const summary = providerReadinessSummary(
     [
       {
@@ -85,6 +85,8 @@ test("summarizes agent readiness from the active model provider", () => {
   );
 
   expect(summary.ready).toBe(true);
+  expect(summary.label).toBe("Chat model ready");
+  expect(summary.detail).toBe("OpenAI provides gpt-5.5");
   expect(summary.currentProviderName).toBe("OpenAI");
   expect(summary.connectedProviderCount).toBe(1);
   expect(summary.availableModelCount).toBe(2);

@@ -69,6 +69,7 @@ class ConfigService:
             for key in ("chat_model", "research_model", "memory_model"):
                 if (val := settings.get(key)) and val in provider_models:
                     settings.pop(key)
+            _remove_model_reasoning_settings(settings, set(provider_models))
 
         await self._with_rollback(mutate)
 
@@ -79,6 +80,7 @@ class ConfigService:
             for key in ("chat_model", "research_model", "memory_model"):
                 if (val := settings.get(key)) and val in provider_models:
                     settings.pop(key)
+            _remove_model_reasoning_settings(settings, set(provider_models))
 
         await self._with_rollback(mutate)
 
@@ -217,6 +219,7 @@ class ConfigService:
             for key in ("chat_model", "research_model", "memory_model"):
                 if active_models.get(key) == model_id:
                     settings.pop(key, None)
+            _remove_model_reasoning_settings(settings, {model_id})
 
         await self._with_rollback(mutate)
 
@@ -233,3 +236,15 @@ class ConfigService:
             await self._on_config_change()
         except Exception:
             _logger.exception("Failed to reload runtime after restoring custom model deletion")
+
+
+def _remove_model_reasoning_settings(settings: dict, model_ids: set[str]) -> None:
+    per_model = settings.get("model_reasoning_efforts")
+    if not isinstance(per_model, dict):
+        return
+    for model_id in model_ids:
+        per_model.pop(model_id, None)
+    if per_model:
+        settings["model_reasoning_efforts"] = per_model
+    else:
+        settings.pop("model_reasoning_efforts", None)
