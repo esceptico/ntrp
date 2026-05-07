@@ -53,13 +53,11 @@ function ChatHeader() {
 
 export function Chat() {
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
-  const inspectorOpen = useStore((s) => s.viewingTool != null);
   const sessionId = useStore((s) => s.currentSessionId);
   return (
     <main
       data-sidebar-hidden={sidebarHidden ? "true" : "false"}
-      data-inspector-open={inspectorOpen ? "true" : "false"}
-      className="chat-shell grid grid-rows-[auto_minmax(0,1fr)_auto] bg-bg-main rounded-tl-xl overflow-hidden"
+      className="chat-shell grid grid-rows-[minmax(0,1fr)_auto] bg-bg-main rounded-tl-xl overflow-hidden"
     >
       <ChatHeader />
       <Messages key={sessionId ?? "none"} />
