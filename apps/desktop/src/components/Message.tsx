@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Brain, Check, ChevronDown, Copy, GitBranch, Pencil, Sparkles, Terminal } from "lucide-react";
 import clsx from "clsx";
@@ -38,50 +38,6 @@ function useIsLast(id: string): boolean {
 
 function useSourceFocused(id: string): boolean {
   return useStore((s) => messageInSourceFocus(s.messages.get(id), s.sourceFocus, s.currentSessionId));
-}
-
-function nextStreamingSlice(current: string, target: string): string {
-  if (!target.startsWith(current)) return target;
-  const remaining = target.length - current.length;
-  if (remaining <= 0) return target;
-  const chunk = remaining > 600 ? 260 : remaining > 160 ? 90 : 28;
-  return target.slice(0, current.length + Math.min(remaining, chunk));
-}
-
-function useSmoothStreamingContent(content: string, active: boolean): string {
-  const [visible, setVisible] = useState(content);
-  const visibleRef = useRef(content);
-  const targetRef = useRef(content);
-  const frameRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    targetRef.current = content;
-    if (!active) {
-      if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
-      visibleRef.current = content;
-      setVisible(content);
-      return;
-    }
-
-    const tick = () => {
-      const next = nextStreamingSlice(visibleRef.current, targetRef.current);
-      visibleRef.current = next;
-      setVisible(next);
-      frameRef.current = next === targetRef.current ? null : requestAnimationFrame(tick);
-    };
-
-    if (frameRef.current == null) frameRef.current = requestAnimationFrame(tick);
-  }, [active, content]);
-
-  useEffect(
-    () => () => {
-      if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
-    },
-    [],
-  );
-
-  return active ? visible : content;
 }
 
 function formatMessageTime(ms: number): string {
@@ -296,7 +252,6 @@ const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: 
   const sourceFocused = useSourceFocused(id);
   const running = useStore((s) => s.running);
   const isStreaming = Boolean(message && running && message.turn?.endedAt === null);
-  const visibleContent = useSmoothStreamingContent(message?.content ?? "", isStreaming);
   if (!message) return null;
   return (
     <article
@@ -307,7 +262,7 @@ const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: 
       data-source-index={message.sourceIndex}
     >
       <Markdown
-        content={visibleContent}
+        content={message.content}
         streaming={isStreaming}
         className="py-0.5 text-[14px] leading-[1.62] text-ink tracking-[-0.005em] break-words"
       />
