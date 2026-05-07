@@ -8,14 +8,15 @@ import {
   listMemoryAccessEventsApi,
 } from "../../api";
 import { formatAbs, formatRelativePast } from "../../lib/format";
+import { memoryTargetItem } from "../../lib/memoryTargets";
 import { DetailPlaceholder, JsonBlock, ListColumn, PaneShell, Pill, SearchInput } from "./shared";
 
 export function SentPane({
   onOpenFact,
   onOpenPattern,
 }: {
-  onOpenFact?: (fact: Fact) => void;
-  onOpenPattern?: (pattern: Observation) => void;
+  onOpenFact?: (fact: Fact | number) => void;
+  onOpenPattern?: (pattern: Observation | number) => void;
 }) {
   const config = useStore((s) => s.config);
   const [events, setEvents] = useState<MemoryAccessEvent[] | null>(null);
@@ -134,8 +135,8 @@ function SentDetail({
   event: MemoryAccessEvent;
   factById: Map<number, Fact>;
   observationById: Map<number, Observation>;
-  onOpenFact?: (fact: Fact) => void;
-  onOpenPattern?: (pattern: Observation) => void;
+  onOpenFact?: (fact: Fact | number) => void;
+  onOpenPattern?: (pattern: Observation | number) => void;
 }) {
   return (
     <div className="px-7 py-6">
@@ -162,28 +163,19 @@ function SentDetail({
         title="Injected patterns"
         ids={event.injected_observation_ids}
         render={(id) => observationById.get(id)?.summary ?? `Pattern #${id}`}
-        onOpen={(id) => {
-          const pattern = observationById.get(id);
-          if (pattern) onOpenPattern?.(pattern);
-        }}
+        onOpen={(id) => onOpenPattern?.(memoryTargetItem(observationById, id))}
       />
       <MemoryIdSection
         title="Injected facts"
         ids={event.injected_fact_ids}
         render={(id) => factById.get(id)?.text ?? `Fact #${id}`}
-        onOpen={(id) => {
-          const fact = factById.get(id);
-          if (fact) onOpenFact?.(fact);
-        }}
+        onOpen={(id) => onOpenFact?.(memoryTargetItem(factById, id))}
       />
       <MemoryIdSection
         title="Omitted facts"
         ids={event.omitted_fact_ids}
         render={(id) => factById.get(id)?.text ?? `Fact #${id}`}
-        onOpen={(id) => {
-          const fact = factById.get(id);
-          if (fact) onOpenFact?.(fact);
-        }}
+        onOpen={(id) => onOpenFact?.(memoryTargetItem(factById, id))}
       />
 
       <section className="mt-5">

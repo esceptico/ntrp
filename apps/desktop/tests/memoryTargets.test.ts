@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { memoryTargetId, nextMemoryTarget, upsertById } from "../src/lib/memoryTargets.js";
+import { memoryTargetId, memoryTargetItem, nextMemoryTarget, upsertById } from "../src/lib/memoryTargets.js";
 
 test("increments target nonce even for the same item", () => {
   const first = nextMemoryTarget(null, { id: 7, text: "one" });
@@ -15,7 +15,13 @@ test("extracts target ids from object and numeric targets", () => {
   expect(memoryTargetId(null)).toBeNull();
 });
 
+test("uses a loaded record when available and falls back to the numeric id", () => {
+  const records = new Map([[12, { id: 12, text: "loaded" }]]);
+
+  expect(memoryTargetItem(records, 12)).toEqual({ id: 12, text: "loaded" });
+  expect(memoryTargetItem(records, 34)).toBe(34);
+});
+
 test("upserts target item at the top without duplicates", () => {
   expect(upsertById([{ id: 1 }, { id: 2 }], { id: 2 })).toEqual([{ id: 2 }, { id: 1 }]);
 });
-

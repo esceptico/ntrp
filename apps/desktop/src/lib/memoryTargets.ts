@@ -17,6 +17,10 @@ export function memoryTargetId<T extends { id: number }>(
   return typeof target.item === "number" ? target.item : target.item.id;
 }
 
+export function memoryTargetItem<T>(itemsById: Map<number, T>, id: number): T | number {
+  return itemsById.get(id) ?? id;
+}
+
 export function upsertById<T extends { id: number }>(items: T[] | null | undefined, item: T): T[] {
   const existing = items ?? [];
   return [item, ...existing.filter((candidate) => candidate.id !== item.id)];
