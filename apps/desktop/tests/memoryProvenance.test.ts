@@ -37,6 +37,27 @@ test("formats parsed chat segment refs as readable provenance", () => {
   expect(factSourceStatus(fact)).toEqual({ label: "Openable source", tone: "ok" });
 });
 
+test("formats stable chat message ranges as readable provenance", () => {
+  const fact = {
+    source_type: "chat",
+    source_ref: "chatmsg:session-123:msg-a..msg-c",
+    source_ref_parts: {
+      kind: "chat_message_range",
+      session_id: "session-123",
+      message_start_id: "msg-a",
+      message_end_id: "msg-c",
+    },
+  };
+
+  expect(factSourceDetail(fact)).toBe("session-123 · messages msg-a-msg-c");
+  expect(factSourceSummary(fact)).toBe("Chat · session-123 · messages msg-a-msg-c");
+  expect(factChatSourceFocus(fact)).toEqual({
+    sessionId: "session-123",
+    messageStartId: "msg-a",
+    messageEndId: "msg-c",
+  });
+});
+
 test("does not expose a chat source action for unparsed refs", () => {
   const fact = { source_type: "chat", source_ref: "session-123" };
 

@@ -59,7 +59,10 @@ export function factSourceLabel(fact: FactSourceLike): string {
 export function factSourceDetail(fact: FactSourceLike): string | null {
   const chatRange = chatMessageRangeParts(fact.source_ref_parts);
   if (chatRange) {
-    return `${chatRange.session_id} · message ${chatRange.message_start_id}`;
+    if (chatRange.message_start_id === chatRange.message_end_id) {
+      return `${chatRange.session_id} · message ${chatRange.message_start_id}`;
+    }
+    return `${chatRange.session_id} · messages ${chatRange.message_start_id}-${chatRange.message_end_id}`;
   }
   const chatSegment = chatSegmentParts(fact.source_ref_parts);
   if (chatSegment) {
