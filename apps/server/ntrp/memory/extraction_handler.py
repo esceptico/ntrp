@@ -7,7 +7,7 @@ from ntrp.logging import get_logger
 from ntrp.memory.chat_extraction import extract_from_chat
 from ntrp.memory.facts import FactMemory
 from ntrp.memory.models import SourceType
-from ntrp.memory.source_refs import chat_segment_ref
+from ntrp.memory.source_refs import chat_message_range_ref, chat_segment_ref
 
 _logger = get_logger(__name__)
 
@@ -45,7 +45,7 @@ def create_chat_extraction_handler(memory: FactMemory, store: AutomationStore) -
             return None
 
         _logger.info("Extracted %d facts from chat (session %s)", len(facts), sid[:8])
-        source_ref = chat_segment_ref(sid, context_start, len(messages))
+        source_ref = _source_ref_for_window(sid, context_start, len(messages), window)
         for fact in facts:
             await memory.remember(
                 text=fact.text,
@@ -62,3 +62,16 @@ def create_chat_extraction_handler(memory: FactMemory, store: AutomationStore) -
         return len(facts)
 
     return handler
+
+
+def _message_ref_id(msg: dict) -> str | None:
+    value = msg.get("message_id") or msg.get("client_id")
+    return value if isinstance(value, str) and value else None
+
+
+def _source_ref_for_window(sid: str, context_start: int, message_end: int, window: tuple[dict, ...]) -> str:
+    ids = [_message_ref_id(msg) for msg in window]
+    ids = [value for value in ids if value]
+    if ids:
+        return chat_message_range_ref(sid, ids[0], ids[-1])
+    return chat_segment_ref(sid, context_start, message_end)

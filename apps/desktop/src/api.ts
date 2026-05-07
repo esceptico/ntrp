@@ -36,8 +36,19 @@ export interface HistoryMessage {
    *  Available for messages saved after id-based persistence landed; older
    *  sessions may not have it. */
   id?: string;
+  /** Stable durable transcript id. */
+  message_id?: string;
+  /** Durable transcript order within the session. */
+  seq?: number;
   /** ISO-8601 UTC timestamp stamped at first save. */
   created_at?: string;
+}
+
+export interface HistoryPage {
+  has_more_before: boolean;
+  has_more_after: boolean;
+  before?: string | null;
+  after?: string | null;
 }
 
 export interface HealthCheck {

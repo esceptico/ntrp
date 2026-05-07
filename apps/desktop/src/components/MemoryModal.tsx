@@ -46,7 +46,10 @@ export function MemoryModal() {
   };
 
   const openSourceSession = async (focus: FactChatSourceFocus) => {
-    await switchSession(focus.sessionId);
+    await switchSession(focus.sessionId, {
+      around: focus.messageStartId,
+      aroundSeq: focus.messageStart,
+    });
     setSourceFocus({ ...focus, nonce: Date.now() });
     close();
   };

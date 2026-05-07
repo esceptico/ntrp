@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown } from "lucide-react";
 import { useStickToBottom } from "use-stick-to-bottom";
@@ -6,6 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
 import { messagesScroll } from "../lib/messagesScroll";
 import { firstMessageIdInSourceFocus } from "../lib/messageSourceFocus";
+import { loadNewerHistory, loadOlderHistory } from "../actions";
 import { EmptyState } from "./EmptyState";
 import { Message } from "./Message";
 import { CompactionIndicator } from "./CompactionIndicator";
@@ -17,6 +18,14 @@ export function Messages() {
   const order = useStore((s) => s.order);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const sourceFocus = useStore((s) => s.sourceFocus);
+  const historyPaging = useStore(
+    useShallow((s) => ({
+      hasMoreBefore: s.historyHasMoreBefore,
+      hasMoreAfter: s.historyHasMoreAfter,
+      loadingBefore: s.historyLoadingBefore,
+      loadingAfter: s.historyLoadingAfter,
+    })),
+  );
   const firstSourceFocusId = useStore((s) =>
     firstMessageIdInSourceFocus(s.order, s.messages, s.sourceFocus, s.currentSessionId),
   );
@@ -25,6 +34,21 @@ export function Messages() {
     initial: "instant",
     resize: "smooth",
   });
+  const topAnchorRef = useRef<{ height: number; top: number } | null>(null);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (el.scrollTop < 120 && historyPaging.hasMoreBefore && !historyPaging.loadingBefore) {
+      topAnchorRef.current = { height: el.scrollHeight, top: el.scrollTop };
+      void loadOlderHistory();
+    }
+
+    const bottomGap = el.scrollHeight - el.clientHeight - el.scrollTop;
+    if (bottomGap < 120 && historyPaging.hasMoreAfter && !historyPaging.loadingAfter) {
+      void loadNewerHistory();
+    }
+  }, [historyPaging.hasMoreAfter, historyPaging.hasMoreBefore, historyPaging.loadingAfter, historyPaging.loadingBefore, scrollRef]);
 
   // First time content lands after mount (loadHistory fills `order`),
   // snap instantly. Without this, the library treats the empty→full
@@ -38,6 +62,14 @@ export function Messages() {
     if (el) el.scrollTop = el.scrollHeight;
     scrollToBottom({ animation: "instant" });
   }, [order.length, scrollRef, scrollToBottom]);
+
+  useLayoutEffect(() => {
+    const anchor = topAnchorRef.current;
+    const el = scrollRef.current;
+    if (!anchor || !el) return;
+    el.scrollTop = el.scrollHeight - anchor.height + anchor.top;
+    topAnchorRef.current = null;
+  }, [order.length, scrollRef]);
 
   // Expose for actions.sendMessage to force-scroll on user send.
   useEffect(() => {
@@ -82,7 +114,11 @@ export function Messages() {
 
   return (
     <div className="relative min-h-0">
-      <div ref={scrollRef} className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-messages px-0 pt-7 pb-9">
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-messages px-0 pt-7 pb-9"
+      >
         <div ref={contentRef} className="messages-inner mx-auto max-w-[760px] min-w-0 px-7 flex flex-col gap-3.5">
           {order.length === 0
             ? <EmptyState />

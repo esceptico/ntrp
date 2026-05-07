@@ -193,3 +193,71 @@ async def test_metadata_round_trip(store: SessionStore):
 
     loaded = await store.load_session("test-session")
     assert loaded.last_input_tokens == 1234
+
+
+@pytest.mark.asyncio
+async def test_session_messages_are_stable_across_compaction(store: SessionStore):
+    state = _make_state()
+    original = [
+        {"role": "user", "content": "first", "client_id": "u-1"},
+        {"role": "assistant", "content": "reply", "client_id": "a-1"},
+        {"role": "user", "content": "second", "client_id": "u-2"},
+    ]
+    await store.save_session(state, original)
+
+    compacted = [
+        {"role": "assistant", "content": "Summary of earlier chat.", "client_id": "summary-1"},
+        original[-1],
+    ]
+    await store.save_session(state, compacted)
+
+    page = await store.list_session_messages("test-session", limit=10)
+
+    assert [row["message"]["content"] for row in page["messages"]] == [
+        "first",
+        "reply",
+        "second",
+        "Summary of earlier chat.",
+    ]
+    assert page["has_more_before"] is False
+    assert page["has_more_after"] is False
+
+
+@pytest.mark.asyncio
+async def test_session_message_pagination_before_and_around(store: SessionStore):
+    state = _make_state()
+    messages = [
+        {"role": "user", "content": f"msg {i}", "client_id": f"m-{i}"}
+        for i in range(5)
+    ]
+    await store.save_session(state, messages)
+
+    latest = await store.list_session_messages("test-session", limit=2)
+    assert [row["message_id"] for row in latest["messages"]] == ["m-3", "m-4"]
+    assert latest["has_more_before"] is True
+    assert latest["has_more_after"] is False
+
+    older = await store.list_session_messages("test-session", limit=2, before="m-3")
+    assert [row["message_id"] for row in older["messages"]] == ["m-1", "m-2"]
+    assert older["has_more_before"] is True
+    assert older["has_more_after"] is True
+
+    around = await store.list_session_messages("test-session", limit=3, around="m-2")
+    assert [row["message_id"] for row in around["messages"]] == ["m-1", "m-2", "m-3"]
+    assert around["has_more_before"] is True
+    assert around["has_more_after"] is True
+
+
+@pytest.mark.asyncio
+async def test_delete_session_messages_from_trims_reverted_future(store: SessionStore):
+    state = _make_state()
+    messages = [
+        {"role": "user", "content": f"msg {i}", "client_id": f"m-{i}"}
+        for i in range(4)
+    ]
+    await store.save_session(state, messages)
+
+    assert await store.delete_session_messages_from("test-session", message_id="m-2")
+
+    page = await store.list_session_messages("test-session", limit=10)
+    assert [row["message_id"] for row in page["messages"]] == ["m-0", "m-1"]

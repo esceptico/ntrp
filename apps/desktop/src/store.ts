@@ -3,6 +3,7 @@ import {
   type AppConfig,
   type ArchivedSession,
   type Automation,
+  type HistoryPage,
   type ModelsResponse,
   type ServerConfig,
   type SessionListItem,
@@ -123,6 +124,7 @@ export interface UiMessage {
   id: string;
   role: Role;
   sourceIndex?: number;
+  sourceMessageId?: string;
   title?: string;
   subtitle?: string;
   content: string;
@@ -149,6 +151,10 @@ interface State {
    *  matches `currentSessionId` — otherwise `setHistory()` racing the
    *  first live deltas would wipe them. */
   historyLoadedFor: string | null;
+  historyHasMoreBefore: boolean;
+  historyHasMoreAfter: boolean;
+  historyLoadingBefore: boolean;
+  historyLoadingAfter: boolean;
   /** Session ids with an active run on the server. Refreshed by a
    *  poller hook so the sidebar can render a streaming indicator on
    *  sessions that are still working — including the ones the user
@@ -206,7 +212,10 @@ interface Actions {
   prependSession: (session: SessionListItem) => void;
   setActiveRunSessions: (ids: string[]) => void;
   setCurrentSession: (sessionId: string | null) => void;
-  setHistory: (messages: UiMessage[]) => void;
+  setHistory: (messages: UiMessage[], page?: HistoryPage) => void;
+  prependHistory: (messages: UiMessage[], page?: HistoryPage) => void;
+  appendHistoryPage: (messages: UiMessage[], page?: HistoryPage) => void;
+  setHistoryLoading: (direction: "before" | "after", loading: boolean) => void;
   appendMessage: (message: UiMessage) => void;
   mutateMessage: (id: string, patch: Partial<UiMessage>) => void;
   truncateFrom: (id: string) => void;
@@ -267,6 +276,10 @@ export const useStore = create<State & Actions>((set) => ({
   messages: new Map(),
   order: [],
   historyLoadedFor: null,
+  historyHasMoreBefore: false,
+  historyHasMoreAfter: false,
+  historyLoadingBefore: false,
+  historyLoadingAfter: false,
   activeRunSessionIds: new Set(),
   unreadDoneSessionIds: new Set(),
   connected: false,
@@ -364,11 +377,15 @@ export const useStore = create<State & Actions>((set) => ({
         lastCompaction: null,
         sourceFocus: null,
         historyLoadedFor: null,
+        historyHasMoreBefore: false,
+        historyHasMoreAfter: false,
+        historyLoadingBefore: false,
+        historyLoadingAfter: false,
         ...(unread !== s.unreadDoneSessionIds ? { unreadDoneSessionIds: unread } : {}),
       };
     }),
 
-  setHistory: (messages) =>
+  setHistory: (messages, page) =>
     set((s) => {
       const map = new Map<string, UiMessage>();
       const order: string[] = [];
@@ -376,8 +393,57 @@ export const useStore = create<State & Actions>((set) => ({
         map.set(m.id, m);
         order.push(m.id);
       }
-      return { messages: map, order, historyLoadedFor: s.currentSessionId };
+      return {
+        messages: map,
+        order,
+        historyLoadedFor: s.currentSessionId,
+        historyHasMoreBefore: page?.has_more_before ?? false,
+        historyHasMoreAfter: page?.has_more_after ?? false,
+      };
     }),
+
+  prependHistory: (messages, page) =>
+    set((s) => {
+      const map = new Map(s.messages);
+      const ids: string[] = [];
+      for (const m of messages) {
+        const exists = map.has(m.id);
+        map.set(m.id, m);
+        if (!exists) ids.push(m.id);
+      }
+      return {
+        messages: map,
+        order: [...ids, ...s.order],
+        historyLoadedFor: s.currentSessionId,
+        historyHasMoreBefore: page?.has_more_before ?? false,
+        historyHasMoreAfter: s.historyHasMoreAfter || Boolean(page?.has_more_after),
+      };
+    }),
+
+  appendHistoryPage: (messages, page) =>
+    set((s) => {
+      const map = new Map(s.messages);
+      const ids: string[] = [];
+      for (const m of messages) {
+        const exists = map.has(m.id);
+        map.set(m.id, m);
+        if (!exists) ids.push(m.id);
+      }
+      return {
+        messages: map,
+        order: [...s.order, ...ids],
+        historyLoadedFor: s.currentSessionId,
+        historyHasMoreBefore: s.historyHasMoreBefore || Boolean(page?.has_more_before),
+        historyHasMoreAfter: page?.has_more_after ?? false,
+      };
+    }),
+
+  setHistoryLoading: (direction, loading) =>
+    set(
+      direction === "before"
+        ? { historyLoadingBefore: loading }
+        : { historyLoadingAfter: loading },
+    ),
 
   appendMessage: (message) =>
     set((s) => {

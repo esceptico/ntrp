@@ -25,6 +25,7 @@ import {
   updateAutomationApi,
   validateConnection,
   type CreateAutomationPayload,
+  type HistoryPage,
   type HistoryMessage,
   type ServerConfigPatch,
   type SessionListItem,
@@ -53,13 +54,37 @@ function formatCall(name: string, argsJson: string): string {
   return name;
 }
 
-export async function loadHistory(sessionId: string): Promise<void> {
-  const s = getState();
-  const { messages, active_run_id } = await apiWithConfig<{
-    messages: HistoryMessage[];
-    active_run_id: string | null;
-  }>(s.config, `/session/history?session_id=${encodeURIComponent(sessionId)}`);
+type HistoryLoadMode = "replace" | "prepend" | "append";
 
+interface LoadHistoryOptions {
+  mode?: HistoryLoadMode;
+  before?: string;
+  after?: string;
+  around?: string;
+  aroundSeq?: number;
+  limit?: number;
+}
+
+function historyPath(sessionId: string, options: LoadHistoryOptions): string {
+  const params = new URLSearchParams({ session_id: sessionId });
+  if (options.limit) params.set("limit", String(options.limit));
+  if (options.before) params.set("before", options.before);
+  if (options.after) params.set("after", options.after);
+  if (options.around) params.set("around", options.around);
+  if (options.aroundSeq !== undefined) params.set("around_seq", String(options.aroundSeq));
+  return `/session/history?${params.toString()}`;
+}
+
+function historyBoundaryId(s: ReturnType<typeof getState>, edge: "first" | "last"): string | null {
+  const order = edge === "first" ? s.order : [...s.order].reverse();
+  for (const id of order) {
+    const msg = s.messages.get(id);
+    if (msg?.sourceMessageId) return msg.sourceMessageId;
+  }
+  return null;
+}
+
+function historyMessagesToUi(messages: HistoryMessage[], activeRunId: string | null): UiMessage[] {
   // Pre-index tool results so we can attach them to their calls regardless
   // of ordering between the assistant message and its `tool` follow-ups.
   const resultsById = new Map<string, string>();
@@ -78,7 +103,9 @@ export async function loadHistory(sessionId: string): Promise<void> {
   messages.forEach((msg, index) => {
     // Prefer the stable server-issued id; fall back to a positional id for
     // older sessions whose messages were saved before id-based persistence.
-    const stableId = msg.id ?? `history-${index}`;
+    const sourceIndex = msg.seq ?? index;
+    const sourceMessageId = msg.message_id ?? msg.id;
+    const stableId = msg.id ?? msg.message_id ?? `history-${sourceIndex}`;
     const stampedAt = msg.created_at ? Date.parse(msg.created_at) : 0;
 
     if (msg.role === "user") {
@@ -86,7 +113,8 @@ export async function loadHistory(sessionId: string): Promise<void> {
       items.push({
         id: stableId,
         role: "user",
-        sourceIndex: index,
+        sourceIndex,
+        sourceMessageId,
         content: msg.content,
         turn: { startedAt: stampedAt, endedAt: stampedAt, durationMs: null },
         images: msg.images,
@@ -105,7 +133,8 @@ export async function loadHistory(sessionId: string): Promise<void> {
       items.push({
         id: `${stableId}-reasoning`,
         role: "reasoning",
-        sourceIndex: index,
+        sourceIndex,
+        sourceMessageId,
         title: "Reasoning",
         content: msg.reasoning_content,
       });
@@ -116,7 +145,8 @@ export async function loadHistory(sessionId: string): Promise<void> {
       items.push({
         id: stableId,
         role: "assistant",
-        sourceIndex: index,
+        sourceIndex,
+        sourceMessageId,
         content: msg.content,
         turn: stampedAt
           ? { startedAt: stampedAt, endedAt: stampedAt, durationMs: null }
@@ -130,7 +160,8 @@ export async function loadHistory(sessionId: string): Promise<void> {
         items.push({
           id: activeActivityId,
           role: "activity",
-          sourceIndex: index,
+          sourceIndex,
+          sourceMessageId,
           content: "",
           activity: { items: [], label: "Called", done: true },
         });
@@ -157,7 +188,7 @@ export async function loadHistory(sessionId: string): Promise<void> {
   // turn is still in flight. Clear its `endedAt` so TurnGroup doesn't
   // collapse it under "Worked for Xs" — the SSE replay + live events
   // build the in-flight UI on top of the history.
-  if (active_run_id) {
+  if (activeRunId) {
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
       if (it.role === "user" && it.turn) {
@@ -167,9 +198,52 @@ export async function loadHistory(sessionId: string): Promise<void> {
     }
   }
 
-  s.setHistory(items);
-  if (active_run_id) {
-    s.setRunning(true);
+  return items;
+}
+
+export async function loadHistory(sessionId: string, options: LoadHistoryOptions = {}): Promise<void> {
+  const s = getState();
+  const { messages, active_run_id, page } = await apiWithConfig<{
+    messages: HistoryMessage[];
+    active_run_id: string | null;
+    page?: HistoryPage;
+  }>(s.config, historyPath(sessionId, options));
+
+  if (getState().currentSessionId !== sessionId) return;
+  const items = historyMessagesToUi(messages, active_run_id);
+  if (options.mode === "prepend") {
+    s.prependHistory(items, page);
+  } else if (options.mode === "append") {
+    s.appendHistoryPage(items, page);
+  } else {
+    s.setHistory(items, page);
+  }
+  if (active_run_id) s.setRunning(true);
+}
+
+export async function loadOlderHistory(): Promise<void> {
+  const s = getState();
+  if (!s.currentSessionId || !s.historyHasMoreBefore || s.historyLoadingBefore) return;
+  const before = historyBoundaryId(s, "first");
+  if (!before) return;
+  s.setHistoryLoading("before", true);
+  try {
+    await loadHistory(s.currentSessionId, { mode: "prepend", before });
+  } finally {
+    getState().setHistoryLoading("before", false);
+  }
+}
+
+export async function loadNewerHistory(): Promise<void> {
+  const s = getState();
+  if (!s.currentSessionId || !s.historyHasMoreAfter || s.historyLoadingAfter) return;
+  const after = historyBoundaryId(s, "last");
+  if (!after) return;
+  s.setHistoryLoading("after", true);
+  try {
+    await loadHistory(s.currentSessionId, { mode: "append", after });
+  } finally {
+    getState().setHistoryLoading("after", false);
   }
 }
 
@@ -267,10 +341,10 @@ export async function viewSkill(name: string): Promise<void> {
   }
 }
 
-export async function switchSession(sessionId: string): Promise<void> {
+export async function switchSession(sessionId: string, historyOptions: LoadHistoryOptions = {}): Promise<void> {
   const s = getState();
   s.setCurrentSession(sessionId);
-  await loadHistory(sessionId);
+  await loadHistory(sessionId, historyOptions);
 }
 
 export async function createSession(): Promise<void> {

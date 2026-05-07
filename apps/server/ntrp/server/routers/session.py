@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.agent import Role
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
@@ -23,10 +23,15 @@ async def get_session_history(
     svc: SessionService = Depends(require_session_service),
     runtime: Runtime = Depends(get_runtime),
     session_id: str | None = None,
+    limit: int = Query(default=HISTORY_MESSAGE_LIMIT, ge=1, le=250),
+    before: str | None = None,
+    after: str | None = None,
+    around: str | None = None,
+    around_seq: int | None = Query(default=None, ge=0),
 ):
     data = await svc.load(session_id)
     if not data:
-        return {"messages": [], "active_run_id": None}
+        return {"messages": [], "active_run_id": None, "page": {"has_more_before": False, "has_more_after": False}}
 
     # Active-run id: when present, the desktop client knows the latest
     # user turn is still in-flight and shouldn't render as "Worked for X".
@@ -43,8 +48,18 @@ async def get_session_history(
         tool = runtime.executor.registry.get(name)
         return getattr(tool, "kind", "tool") if tool else "tool"
 
+    page = await svc.list_messages(
+        sid,
+        limit=limit,
+        before=before,
+        after=after,
+        around=around,
+        around_seq=around_seq,
+    )
+
     history = []
-    for msg in data.messages:
+    for row in page["messages"]:
+        msg = row["message"]
         role = msg["role"]
         if role == Role.SYSTEM:
             continue
@@ -91,13 +106,27 @@ async def get_session_history(
         # the message in branch / edit calls without positional games.
         if msg.get("client_id"):
             entry["id"] = msg["client_id"]
+        elif row.get("message_id"):
+            entry["id"] = row["message_id"]
+
+        entry["message_id"] = row["message_id"]
+        entry["seq"] = row["seq"]
 
         if created_at := msg.get("created_at"):
             entry["created_at"] = created_at
 
         history.append(entry)
 
-    return {"messages": history[-HISTORY_MESSAGE_LIMIT:], "active_run_id": active_run_id}
+    return {
+        "messages": history,
+        "active_run_id": active_run_id,
+        "page": {
+            "has_more_before": page["has_more_before"],
+            "has_more_after": page["has_more_after"],
+            "before": page["before"],
+            "after": page["after"],
+        },
+    }
 
 
 @router.get("/session")

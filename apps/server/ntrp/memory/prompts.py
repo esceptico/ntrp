@@ -55,7 +55,8 @@ Source facts include `happened_at` timestamps showing when events actually occur
 ## TASK / SESSION BOUNDARIES
 
 Source facts include `source_type` and `source_ref`.
-For chat facts, `source_ref` is a chat segment: `chat:<session_id>:<message_start>-<message_end>`.
+For chat facts, `source_ref` is either a stable chat message range (`chatmsg:<session_id>:<start_id>..<end_id>`)
+or a legacy chat segment (`chat:<session_id>:<message_start>-<message_end>`).
 
 - Same segment means the facts came from the same local conversation window.
 - Different segments are allowed to support the same durable pattern only when they share the same concrete entity/topic.

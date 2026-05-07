@@ -245,6 +245,31 @@ class TestExtractionRemember:
         refs = await memory.facts.get_entity_refs(by_text["User works at Acme"].id)
         assert {ref.name for ref in refs} == {"User", "Acme"}
 
+    @pytest.mark.asyncio
+    async def test_stores_stable_message_source_ref_when_available(
+        self,
+        memory: FactMemory,
+        automation_store: AutomationStore,
+    ):
+        handler = create_chat_extraction_handler(memory, automation_store)
+        messages = tuple(
+            {**msg, "message_id": f"msg-{index}"}
+            for index, msg in enumerate(_make_messages(4))
+        )
+
+        mock_extract = AsyncMock(return_value=[_fact("User prefers terse reports")])
+        with patch("ntrp.memory.extraction_handler.extract_from_chat", mock_extract):
+            await handler(
+                {
+                    "trigger_type": "count",
+                    "session_id": "sess-1",
+                    "messages": list(messages),
+                }
+            )
+
+        facts = await memory.facts.list_recent(limit=10)
+        assert facts[0].source_ref == "chatmsg:sess-1:msg-0..msg-3"
+
 
 class TestExtractionSkips:
     """Handler returns None for unknown trigger types or missing context."""

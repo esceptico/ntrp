@@ -53,6 +53,24 @@ class SessionService:
     async def list_sessions(self, limit: int = 20) -> list[dict]:
         return await self.store.list_sessions(limit=limit)
 
+    async def list_messages(
+        self,
+        session_id: str,
+        limit: int = 100,
+        before: str | None = None,
+        after: str | None = None,
+        around: str | None = None,
+        around_seq: int | None = None,
+    ) -> dict:
+        return await self.store.list_session_messages(
+            session_id,
+            limit=limit,
+            before=before,
+            after=after,
+            around=around,
+            around_seq=around_seq,
+        )
+
     async def rename(self, session_id: str, name: str) -> bool:
         return await self.store.update_session_name(session_id, name)
 
@@ -77,7 +95,7 @@ class SessionService:
         target_idx: int | None = None
         if message_id is not None:
             for i, msg in enumerate(data.messages):
-                if msg.get("client_id") == message_id:
+                if msg.get("client_id") == message_id or msg.get("message_id") == message_id:
                     target_idx = i
                     break
         else:
@@ -92,7 +110,9 @@ class SessionService:
         if target_idx is None:
             return None
 
-        raw = data.messages[target_idx]["content"]
+        target_message = data.messages[target_idx]
+        target_ref = target_message.get("message_id") or target_message.get("client_id")
+        raw = target_message["content"]
         user_message = (
             raw
             if isinstance(raw, str)
@@ -106,6 +126,11 @@ class SessionService:
         data.messages = data.messages[:target_idx]
         metadata = {"last_input_tokens": data.last_input_tokens} if data.last_input_tokens else None
         await self.save(data.state, data.messages, metadata=metadata)
+        await self.store.delete_session_messages_from(
+            data.state.session_id,
+            message_id=target_ref if isinstance(target_ref, str) else None,
+            seq=target_idx if not isinstance(target_ref, str) else None,
+        )
         return {"user_message": user_message, "reverted_count": reverted_count}
 
     async def permanently_delete(self, session_id: str) -> bool:
@@ -138,7 +163,7 @@ class SessionService:
 
         if up_to_message_id is not None:
             for i, msg in enumerate(messages):
-                if msg.get("client_id") == up_to_message_id:
+                if msg.get("client_id") == up_to_message_id or msg.get("message_id") == up_to_message_id:
                     target_idx = i
                     break
             if target_idx is None:

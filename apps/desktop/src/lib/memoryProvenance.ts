@@ -8,6 +8,12 @@ export type FactSourceRefParts =
       message_end: number;
     }
   | {
+      kind: "chat_message_range";
+      session_id: string;
+      message_start_id: string;
+      message_end_id: string;
+    }
+  | {
       kind: string;
       [key: string]: unknown;
     };
@@ -34,6 +40,14 @@ function chatSegmentParts(parts: FactSourceRefParts | null | undefined): Extract
   return parts as Extract<FactSourceRefParts, { kind: "chat_segment" }>;
 }
 
+function chatMessageRangeParts(parts: FactSourceRefParts | null | undefined): Extract<FactSourceRefParts, { kind: "chat_message_range" }> | null {
+  if (parts?.kind !== "chat_message_range") return null;
+  if (typeof parts.session_id !== "string") return null;
+  if (typeof parts.message_start_id !== "string") return null;
+  if (typeof parts.message_end_id !== "string") return null;
+  return parts as Extract<FactSourceRefParts, { kind: "chat_message_range" }>;
+}
+
 export function factSourceLabel(fact: FactSourceLike): string {
   return fact.source_type
     .split("_")
@@ -43,6 +57,10 @@ export function factSourceLabel(fact: FactSourceLike): string {
 }
 
 export function factSourceDetail(fact: FactSourceLike): string | null {
+  const chatRange = chatMessageRangeParts(fact.source_ref_parts);
+  if (chatRange) {
+    return `${chatRange.session_id} · message ${chatRange.message_start_id}`;
+  }
   const chatSegment = chatSegmentParts(fact.source_ref_parts);
   if (chatSegment) {
     return `${chatSegment.session_id} · messages ${chatSegment.message_start}-${chatSegment.message_end}`;
@@ -77,6 +95,14 @@ export function factChatSourceSessionId(fact: FactSourceLike): string | null {
 
 export function factChatSourceFocus(fact: FactSourceLike): FactChatSourceFocus | null {
   if (fact.source_type !== "chat") return null;
+  const chatRange = chatMessageRangeParts(fact.source_ref_parts);
+  if (chatRange) {
+    return {
+      sessionId: chatRange.session_id,
+      messageStartId: chatRange.message_start_id,
+      messageEndId: chatRange.message_end_id,
+    };
+  }
   const chatSegment = chatSegmentParts(fact.source_ref_parts);
   if (!chatSegment) return null;
   return {
