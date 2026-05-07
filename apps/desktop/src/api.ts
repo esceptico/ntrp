@@ -1010,17 +1010,18 @@ export interface ModelGroup {
 export interface ModelsResponse {
   models: string[];
   groups: ModelGroup[];
+  reasoning_efforts: Record<string, string[]>;
   chat_model: string;
   research_model: string;
   memory_model: string;
 }
 
 export async function getServerConfig(config: AppConfig): Promise<ServerConfig> {
-  return apiWithConfig<ServerConfig>(config, "/config");
+  return parseServerConfig(await apiWithConfig<unknown>(config, "/config"));
 }
 
 export async function getServerModels(config: AppConfig): Promise<ModelsResponse> {
-  return apiWithConfig<ModelsResponse>(config, "/models");
+  return parseModelsResponse(await apiWithConfig<unknown>(config, "/models"));
 }
 
 export type ServerConfigPatch = Partial<{
@@ -1028,6 +1029,7 @@ export type ServerConfigPatch = Partial<{
   research_model: string;
   memory_model: string;
   max_depth: number;
+  reasoning_model: string;
   reasoning_effort: string | null;
   compression_threshold: number;
   max_messages: number;
@@ -1038,14 +1040,59 @@ export type ServerConfigPatch = Partial<{
   integrations: { google?: boolean | null; memory?: boolean | null };
 }>;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every((item) => typeof item === "string");
+}
+
+function isStringArrayRecord(value: unknown): value is Record<string, string[]> {
+  return isRecord(value) && Object.values(value).every(isStringArray);
+}
+
+function assertServerContract(condition: unknown, message: string): asserts condition {
+  if (!condition) throw new Error(message);
+}
+
+export function parseServerConfig(data: unknown): ServerConfig {
+  assertServerContract(isRecord(data), "Invalid /config response: expected an object");
+  assertServerContract(typeof data.chat_model === "string", "Invalid /config response: missing chat_model");
+  assertServerContract(typeof data.research_model === "string", "Invalid /config response: missing research_model");
+  assertServerContract(typeof data.memory_model === "string", "Invalid /config response: missing memory_model");
+  assertServerContract(isStringArray(data.reasoning_efforts), "Invalid /config response: missing reasoning_efforts");
+  assertServerContract(
+    isStringRecord(data.model_reasoning_efforts),
+    "Invalid /config response: missing model_reasoning_efforts",
+  );
+  return data as unknown as ServerConfig;
+}
+
+export function parseModelsResponse(data: unknown): ModelsResponse {
+  assertServerContract(isRecord(data), "Invalid /models response: expected an object");
+  assertServerContract(isStringArray(data.models), "Invalid /models response: missing models");
+  assertServerContract(Array.isArray(data.groups), "Invalid /models response: missing groups");
+  assertServerContract(
+    isStringArrayRecord(data.reasoning_efforts),
+    "Invalid /models response: missing reasoning_efforts",
+  );
+  return data as unknown as ModelsResponse;
+}
+
 export async function patchServerConfig(
   config: AppConfig,
   patch: ServerConfigPatch,
 ): Promise<ServerConfig> {
-  return apiWithConfig<ServerConfig>(config, "/config", {
+  const data = await apiWithConfig<unknown>(config, "/config", {
     method: "PATCH",
     body: JSON.stringify(patch),
   });
+  return parseServerConfig(data);
 }
 
 // ─── Automations ───────────────────────────────────────────────────
