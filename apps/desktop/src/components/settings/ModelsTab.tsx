@@ -6,13 +6,9 @@ import { updateServerConfig, fetchServerConfig } from "../../actions";
 import type { ModelGroup } from "../../api";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 
-type ModelKind = "chat_model" | "research_model" | "memory_model";
+type ModelKind = "research_model" | "memory_model";
 
 const KIND_LABELS: Record<ModelKind, { title: string; description: string }> = {
-  chat_model: {
-    title: "Agent",
-    description: "Main conversation model used for chat.",
-  },
   research_model: {
     title: "Research",
     description: "Used by research-style sub-agents and deeper investigations.",
@@ -22,6 +18,8 @@ const KIND_LABELS: Record<ModelKind, { title: string; description: string }> = {
     description: "Fact extraction and pattern consolidation.",
   },
 };
+
+const SETTINGS_MODEL_KINDS: ModelKind[] = ["research_model", "memory_model"];
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
@@ -65,33 +63,39 @@ export function ModelsTab() {
 
   return (
     <div className="grid gap-5">
-      {(Object.keys(KIND_LABELS) as ModelKind[]).map((kind) => {
-        const current = cfg[kind];
-        const meta = KIND_LABELS[kind];
-        return (
-          <Section
-            key={kind}
-            title={meta.title}
-            description={meta.description}
-            current={current}
-            saving={savingKind === kind}
-            groups={groups}
-            onSelect={async (model) => {
-              if (model === current || savingKind) return;
-              setSavingKind(kind);
-              setError(null);
-              try {
-                await updateServerConfig({ [kind]: model });
-              } catch (err) {
-                setError(err instanceof Error ? err.message : String(err));
-                await fetchServerConfig();
-              } finally {
-                setSavingKind(null);
-              }
-            }}
-          />
-        );
-      })}
+      <div className="rounded-[10px] border border-line-soft bg-surface-soft/45 px-3.5 py-3 text-[12px] leading-[1.45] text-muted">
+        The chat model and reasoning level live in the composer. These defaults are for background work.
+      </div>
+
+      <div className="grid divide-y divide-line-soft">
+        {SETTINGS_MODEL_KINDS.map((kind) => {
+          const current = cfg[kind];
+          const meta = KIND_LABELS[kind];
+          return (
+            <Section
+              key={kind}
+              title={meta.title}
+              description={meta.description}
+              current={current}
+              saving={savingKind === kind}
+              groups={groups}
+              onSelect={async (model) => {
+                if (model === current || savingKind) return;
+                setSavingKind(kind);
+                setError(null);
+                try {
+                  await updateServerConfig({ [kind]: model });
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : String(err));
+                  await fetchServerConfig();
+                } finally {
+                  setSavingKind(null);
+                }
+              }}
+            />
+          );
+        })}
+      </div>
       {error && (
         <SettingsInlineError title="Couldn't update model" message={error} />
       )}
@@ -125,7 +129,7 @@ function Section({
   }, [groups, query]);
 
   return (
-    <div className="grid gap-2 rounded-[10px] border border-line-soft bg-surface px-3.5 py-3">
+    <div className="grid gap-2.5 py-3">
       <div className="grid gap-0.5">
         <div className="text-[13px] font-medium text-ink">{title}</div>
         <div className="text-[11.5px] text-faint leading-[1.4]">{description}</div>
@@ -135,9 +139,9 @@ function Section({
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={saving}
-        className="min-w-0 inline-flex w-full items-center justify-between gap-2 min-h-8 px-2.5 py-1.5 rounded-md bg-surface-soft border border-line text-ink-soft text-[12px] font-medium font-mono text-left hover:border-line-strong transition-colors disabled:opacity-60"
+        className="min-w-0 inline-flex w-full items-center justify-between gap-2 min-h-8 px-2.5 py-1.5 rounded-md border border-line bg-surface text-ink-soft text-[12px] font-medium font-mono text-left hover:border-line-strong transition-colors disabled:opacity-60"
       >
-        <span className="min-w-0 break-all leading-[1.35]">
+        <span className="min-w-0 truncate">
           {saving ? "Saving..." : current || "-"}
         </span>
         <span className="shrink-0 text-[11px] font-sans text-faint">
@@ -185,7 +189,7 @@ function Section({
                       <span className="grid place-items-center w-3 h-3 shrink-0">
                         {isCurrent && <Check size={11} strokeWidth={2.4} className="text-accent" />}
                       </span>
-                      <span className="min-w-0 break-all leading-[1.35]">{m}</span>
+                      <span className="min-w-0 truncate">{m}</span>
                     </button>
                   );
                 })}
