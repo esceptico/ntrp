@@ -20,6 +20,7 @@ import {
   factChatSourceFocus,
   factSourceDetail,
   factSourceLabel,
+  factSourceStatus,
   type FactChatSourceFocus,
 } from "../../lib/memoryProvenance";
 import { type MemoryTarget, upsertById } from "../../lib/memoryTargets";
@@ -213,6 +214,8 @@ function FactRow({
   highlighted: boolean;
   onSelect: () => void;
 }) {
+  const sourceStatus = factSourceStatus(fact);
+
   return (
     <button
       type="button"
@@ -235,6 +238,12 @@ function FactRow({
             <span>{factStatusLabel(fact.status)}</span>
             <span aria-hidden>·</span>
             <span>{factSourceLabel(fact)}</span>
+            {sourceStatus.tone === "warn" && (
+              <>
+                <span aria-hidden>·</span>
+                <Pill tone="warn">source</Pill>
+              </>
+            )}
             <span aria-hidden>·</span>
             <span className="tabular-nums">{formatRelativePast(fact.last_accessed_at)}</span>
             {fact.access_count > 0 && (
@@ -281,6 +290,7 @@ function FactDetail({
   const dirty = mode !== null && draft.trim() !== fact.text.trim();
   const sourceRef = factSourceDetail(fact);
   const sourceFocus = factChatSourceFocus(fact);
+  const sourceStatus = factSourceStatus(fact);
 
   async function save() {
     if (!dirty || !draft.trim()) return;
@@ -312,6 +322,7 @@ function FactDetail({
       header={
         <DetailMeta>
           <Pill tone={factStatusTone(fact.status)}>{factStatusLabel(fact.status)}</Pill>
+          <Pill tone={sourceStatus.tone}>{sourceStatus.label}</Pill>
           <span className="uppercase tracking-[0.06em]">{fact.kind}</span>
           <Sep />
           <span>salience {fact.salience.toFixed(2)}</span>

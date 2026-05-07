@@ -4,6 +4,7 @@ import {
   factChatSourceSessionId,
   factSourceDetail,
   factSourceLabel,
+  factSourceStatus,
   factSourceSummary,
 } from "../src/lib/memoryProvenance.js";
 
@@ -33,20 +34,30 @@ test("formats parsed chat segment refs as readable provenance", () => {
     messageStart: 4,
     messageEnd: 9,
   });
+  expect(factSourceStatus(fact)).toEqual({ label: "Openable source", tone: "ok" });
 });
 
 test("does not expose a chat source action for unparsed refs", () => {
-  expect(factChatSourceSessionId({ source_type: "chat", source_ref: "session-123" })).toBeNull();
-  expect(factChatSourceFocus({ source_type: "chat", source_ref: "session-123" })).toBeNull();
+  const fact = { source_type: "chat", source_ref: "session-123" };
+
+  expect(factChatSourceSessionId(fact)).toBeNull();
+  expect(factChatSourceFocus(fact)).toBeNull();
+  expect(factSourceStatus(fact)).toEqual({ label: "Source link unavailable", tone: "warn" });
   expect(factChatSourceSessionId({ source_type: "explicit", source_ref: null })).toBeNull();
 });
 
 test("omits empty source refs from summaries", () => {
-  expect(factSourceLabel({ source_type: "explicit", source_ref: null })).toBe("Explicit");
-  expect(factSourceDetail({ source_type: "explicit", source_ref: null })).toBeNull();
-  expect(factSourceSummary({ source_type: "explicit", source_ref: null })).toBe("Explicit");
+  const fact = { source_type: "explicit", source_ref: null };
+
+  expect(factSourceLabel(fact)).toBe("Explicit");
+  expect(factSourceDetail(fact)).toBeNull();
+  expect(factSourceSummary(fact)).toBe("Explicit");
+  expect(factSourceStatus(fact)).toEqual({ label: "Manual entry", tone: "neutral" });
 });
 
 test("keeps unknown source types readable", () => {
-  expect(factSourceLabel({ source_type: "daily_sweep", source_ref: "note.md" })).toBe("Daily sweep");
+  const fact = { source_type: "daily_sweep", source_ref: "note.md" };
+
+  expect(factSourceLabel(fact)).toBe("Daily sweep");
+  expect(factSourceStatus(fact)).toEqual({ label: "Source reference", tone: "neutral" });
 });

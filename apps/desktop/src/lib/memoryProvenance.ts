@@ -19,6 +19,12 @@ export interface FactSourceLike {
 }
 
 export type FactChatSourceFocus = Omit<MessageSourceFocus, "nonce">;
+export type FactSourceStatusTone = "neutral" | "ok" | "warn";
+
+export interface FactSourceStatus {
+  label: string;
+  tone: FactSourceStatusTone;
+}
 
 function chatSegmentParts(parts: FactSourceRefParts | null | undefined): Extract<FactSourceRefParts, { kind: "chat_segment" }> | null {
   if (parts?.kind !== "chat_segment") return null;
@@ -48,6 +54,21 @@ export function factSourceDetail(fact: FactSourceLike): string | null {
 export function factSourceSummary(fact: FactSourceLike): string {
   const detail = factSourceDetail(fact);
   return detail ? `${factSourceLabel(fact)} · ${detail}` : factSourceLabel(fact);
+}
+
+export function factSourceStatus(fact: FactSourceLike): FactSourceStatus {
+  if (fact.source_type === "chat") {
+    return factChatSourceFocus(fact)
+      ? { label: "Openable source", tone: "ok" }
+      : { label: "Source link unavailable", tone: "warn" };
+  }
+  if (fact.source_type === "explicit" && !fact.source_ref?.trim()) {
+    return { label: "Manual entry", tone: "neutral" };
+  }
+  if (fact.source_ref?.trim()) {
+    return { label: "Source reference", tone: "neutral" };
+  }
+  return { label: "No source reference", tone: "warn" };
 }
 
 export function factChatSourceSessionId(fact: FactSourceLike): string | null {
