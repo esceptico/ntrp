@@ -150,6 +150,30 @@ class TestFactCRUD:
         assert latest["details"]["old_chars"] > 0
 
     @pytest.mark.asyncio
+    async def test_get_fact_details_exposes_parsed_chat_source_ref(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        result = await test_runtime.memory.remember(
+            text="User prefers auditable memory",
+            source_type=SourceType.CHAT,
+            source_ref="chat:session-123:4-9",
+            kind=FactKind.PREFERENCE,
+        )
+        assert result is not None
+
+        response = await test_client.get(f"/facts/{result.fact.id}")
+
+        assert response.status_code == 200
+        assert response.json()["fact"]["source_ref_parts"] == {
+            "kind": "chat_segment",
+            "session_id": "session-123",
+            "message_start": 4,
+            "message_end": 9,
+        }
+
+    @pytest.mark.asyncio
     async def test_patch_fact_marks_for_reconsolidation(
         self, test_client: AsyncClient, sample_fact: int, test_runtime: Runtime
     ):

@@ -326,6 +326,7 @@ export interface Fact {
   text: string;
   source_type: string;
   source_ref: string | null;
+  source_ref_parts: FactSourceRefParts | null;
   created_at: string;
   happened_at: string | null;
   last_accessed_at: string;
@@ -343,6 +344,18 @@ export interface Fact {
   superseded_by_fact_id: number | null;
   status: FactTrustStatus;
 }
+
+export type FactSourceRefParts =
+  | {
+      kind: "chat_segment";
+      session_id: string;
+      message_start: number;
+      message_end: number;
+    }
+  | {
+      kind: string;
+      [key: string]: unknown;
+    };
 
 export interface FactEntityRef {
   name: string;

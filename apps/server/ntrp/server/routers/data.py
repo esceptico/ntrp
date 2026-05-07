@@ -14,6 +14,7 @@ from ntrp.memory.models import (
     SourceType,
 )
 from ntrp.memory.service import MemoryService
+from ntrp.memory.source_refs import parse_source_ref
 from ntrp.server.deps import require_memory
 from ntrp.server.schemas import (
     MemoryPruneApplyRequest,
@@ -35,6 +36,7 @@ def _fact_payload(fact: Fact) -> dict:
         "text": fact.text,
         "source_type": fact.source_type,
         "source_ref": fact.source_ref,
+        "source_ref_parts": parse_source_ref(fact.source_ref),
         "created_at": fact.created_at.isoformat(),
         "happened_at": fact.happened_at.isoformat() if fact.happened_at else None,
         "last_accessed_at": fact.last_accessed_at.isoformat(),
