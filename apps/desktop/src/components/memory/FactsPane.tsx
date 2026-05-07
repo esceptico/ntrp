@@ -17,6 +17,7 @@ import {
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { formatAbs, formatRelativePast } from "../../lib/format";
 import { factSourceDetail, factSourceLabel } from "../../lib/memoryProvenance";
+import { type MemoryTarget, upsertById } from "../../lib/memoryTargets";
 import { factStatusFilterLabel, factStatusLabel, factStatusTone } from "../../lib/memoryTrust";
 import {
   DetailMeta,
@@ -53,7 +54,7 @@ function statusFilterForFact(fact: Fact): FactStatus {
   return "active";
 }
 
-export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
+export function FactsPane({ targetFact }: { targetFact?: MemoryTarget<Fact> | null }) {
   const config = useStore((s) => s.config);
   const [facts, setFacts] = useState<Fact[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -61,6 +62,7 @@ export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
   const [kind, setKind] = useState<FactKind | null>(null);
   const [status, setStatus] = useState<FactStatus>("active");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [targetHighlightId, setTargetHighlightId] = useState<number | null>(null);
   const [detail, setDetail] = useState<ApiFactDetail | null>(null);
 
   async function refresh(nextStatus = status) {
@@ -71,12 +73,10 @@ export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
 
   async function openFactById(factId: number) {
     const next = await getFactApi(config, factId);
-    setFacts((prev) => {
-      const existing = prev ?? [];
-      return [next.fact, ...existing.filter((fact) => fact.id !== next.fact.id)];
-    });
+    setFacts((prev) => upsertById(prev, next.fact));
     setDetail(next);
     setSelectedId(next.fact.id);
+    setTargetHighlightId(next.fact.id);
     setQuery("");
     setKind(null);
     setStatus(statusFilterForFact(next.fact));
@@ -89,15 +89,14 @@ export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
 
   useEffect(() => {
     if (!targetFact) return;
-    setFacts((prev) => {
-      const existing = prev ?? [];
-      return [targetFact, ...existing.filter((fact) => fact.id !== targetFact.id)];
-    });
-    setSelectedId(targetFact.id);
+    const fact = targetFact.item;
+    setFacts((prev) => upsertById(prev, fact));
+    setSelectedId(fact.id);
+    setTargetHighlightId(fact.id);
     setQuery("");
     setKind(null);
-    setStatus(statusFilterForFact(targetFact));
-  }, [targetFact]);
+    setStatus(statusFilterForFact(fact));
+  }, [targetFact?.nonce]);
 
   useEffect(() => {
     if (selectedId === null) {
@@ -143,7 +142,11 @@ export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
               key={f.id}
               fact={f}
               selected={f.id === selectedId}
-              onSelect={() => setSelectedId(f.id)}
+              highlighted={f.id === targetHighlightId}
+              onSelect={() => {
+                setSelectedId(f.id);
+                setTargetHighlightId(null);
+              }}
             />
           )}
         />
@@ -185,10 +188,12 @@ export function FactsPane({ targetFact }: { targetFact?: Fact | null }) {
 function FactRow({
   fact,
   selected,
+  highlighted,
   onSelect,
 }: {
   fact: Fact;
   selected: boolean;
+  highlighted: boolean;
   onSelect: () => void;
 }) {
   return (
@@ -196,8 +201,9 @@ function FactRow({
       type="button"
       onClick={onSelect}
       className={clsx(
-        "w-full text-left px-4 py-2.5 transition-colors rounded-md",
+        "w-full text-left px-4 py-2.5 transition-[background-color,color,box-shadow] rounded-md",
         selected ? "bg-surface-soft text-ink" : "hover:bg-surface-soft/50 text-ink-soft",
+        highlighted && "bg-accent-soft/50 shadow-[inset_0_0_0_1px_var(--color-accent-strong)]",
       )}
     >
       <div className="flex items-start gap-2">

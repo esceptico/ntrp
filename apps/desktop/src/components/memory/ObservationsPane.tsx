@@ -14,6 +14,7 @@ import {
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { formatAbs, formatRelativePast } from "../../lib/format";
 import { factSourceSummary } from "../../lib/memoryProvenance";
+import { memoryTargetId, type MemoryTarget, upsertById } from "../../lib/memoryTargets";
 import {
   factStatusLabel,
   factStatusTone,
@@ -36,10 +37,10 @@ import {
 } from "./shared";
 
 export function ObservationsPane({
-  targetPatternId,
+  targetPattern,
   onOpenFact,
 }: {
-  targetPatternId?: number | null;
+  targetPattern?: MemoryTarget<Observation | number> | null;
   onOpenFact?: (fact: Fact) => void;
 }) {
   const config = useStore((s) => s.config);
@@ -47,6 +48,7 @@ export function ObservationsPane({
   const [total, setTotal] = useState(0);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [targetHighlightId, setTargetHighlightId] = useState<number | null>(null);
   const [detail, setDetail] = useState<ObservationDetail | null>(null);
 
   async function refresh() {
@@ -61,10 +63,16 @@ export function ObservationsPane({
   }, []);
 
   useEffect(() => {
-    if (!targetPatternId) return;
-    setSelectedId(targetPatternId);
+    const id = memoryTargetId(targetPattern);
+    if (!id) return;
+    const targetItem = targetPattern?.item;
+    if (targetItem && typeof targetItem !== "number") {
+      setItems((prev) => upsertById(prev, targetItem));
+    }
+    setSelectedId(id);
+    setTargetHighlightId(id);
     setQuery("");
-  }, [targetPatternId]);
+  }, [targetPattern?.nonce]);
 
   // Whenever a row is selected, fetch full detail with supporting facts.
   useEffect(() => {
@@ -75,7 +83,13 @@ export function ObservationsPane({
     let cancelled = false;
     setDetail(null);
     void getObservationApi(config, selectedId).then((d) => {
-      if (!cancelled) setDetail(d);
+      if (!cancelled) {
+        setDetail(d);
+        setItems((prev) => {
+          if (prev?.some((item) => item.id === d.observation.id)) return prev;
+          return upsertById(prev, d.observation);
+        });
+      }
     });
     return () => {
       cancelled = true;
@@ -103,7 +117,11 @@ export function ObservationsPane({
               key={o.id}
               obs={o}
               selected={o.id === selectedId}
-              onSelect={() => setSelectedId(o.id)}
+              highlighted={o.id === targetHighlightId}
+              onSelect={() => {
+                setSelectedId(o.id);
+                setTargetHighlightId(null);
+              }}
             />
           )}
         />
@@ -137,10 +155,12 @@ export function ObservationsPane({
 function ObservationRow({
   obs,
   selected,
+  highlighted,
   onSelect,
 }: {
   obs: Observation;
   selected: boolean;
+  highlighted: boolean;
   onSelect: () => void;
 }) {
   return (
@@ -148,8 +168,9 @@ function ObservationRow({
       type="button"
       onClick={onSelect}
       className={clsx(
-        "w-full text-left px-4 py-2.5 transition-colors rounded-md",
+        "w-full text-left px-4 py-2.5 transition-[background-color,color,box-shadow] rounded-md",
         selected ? "bg-surface-soft text-ink" : "hover:bg-surface-soft/50 text-ink-soft",
+        highlighted && "bg-accent-soft/50 shadow-[inset_0_0_0_1px_var(--color-accent-strong)]",
       )}
     >
       <div className="text-[12.5px] leading-snug line-clamp-2">{obs.summary}</div>

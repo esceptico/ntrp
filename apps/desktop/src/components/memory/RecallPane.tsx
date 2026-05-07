@@ -136,16 +136,20 @@ function SourceList<T>({
 
 function FactSource({ fact, onOpen }: { fact: Fact; onOpen?: () => void }) {
   return (
-    <li className="rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2">
-      <div className="mb-1 flex items-center gap-1.5">
-        <Pill>{fact.kind}</Pill>
-        <Pill tone={factStatusTone(fact.status)}>{factStatusLabel(fact.status)}</Pill>
-        <span className="text-[11px] text-faint">
-          {factSourceSummary(fact)} · {fact.access_count}× · {formatRelativePast(fact.last_accessed_at)}
+    <li>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="block w-full rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2 text-left transition-colors hover:border-line-strong hover:bg-surface-soft/40"
+      >
+        <span className="mb-1 flex items-center gap-1.5">
+          <Pill>{fact.kind}</Pill>
+          <Pill tone={factStatusTone(fact.status)}>{factStatusLabel(fact.status)}</Pill>
+          <span className="text-[11px] text-faint">
+            {factSourceSummary(fact)} · {fact.access_count}× · {formatRelativePast(fact.last_accessed_at)}
+          </span>
         </span>
-      </div>
-      <button type="button" onClick={onOpen} className="text-left text-[12.5px] leading-snug text-ink-soft hover:text-ink">
-        {fact.text}
+        <span className="block text-[12.5px] leading-snug text-ink-soft">{fact.text}</span>
       </button>
     </li>
   );
@@ -164,16 +168,20 @@ function PatternSource({
 }) {
   return (
     <li className="rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2">
-      <div className="mb-1 flex flex-wrap items-center gap-1.5">
-        <Pill tone={observationEvidenceTone(observation.evidence_level)}>
-          {observationEvidenceLabel(observation.evidence_level)}
-        </Pill>
-        <span className="text-[11px] text-faint">
-          {observation.evidence_count} sources · {observation.access_count}× · {formatRelativePast(observation.last_accessed_at)}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="-mx-1 -mt-1 block w-[calc(100%+0.5rem)] rounded-[6px] px-1 py-1 text-left transition-colors hover:bg-surface-soft/40"
+      >
+        <span className="mb-1 flex flex-wrap items-center gap-1.5">
+          <Pill tone={observationEvidenceTone(observation.evidence_level)}>
+            {observationEvidenceLabel(observation.evidence_level)}
+          </Pill>
+          <span className="text-[11px] text-faint">
+            {observation.evidence_count} sources · {observation.access_count}× · {formatRelativePast(observation.last_accessed_at)}
+          </span>
         </span>
-      </div>
-      <button type="button" onClick={onOpen} className="text-left text-[12.5px] leading-snug text-ink-soft hover:text-ink">
-        {observation.summary}
+        <span className="block text-[12.5px] leading-snug text-ink-soft">{observation.summary}</span>
       </button>
       {sources.length > 0 && (
         <ul className="mt-2 flex list-none flex-col gap-1 border-t border-line-soft pt-2">

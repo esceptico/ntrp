@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { useStore } from "../store";
 import type { Fact, Observation } from "../api";
 import { advancedMemoryTabsVisible, isAdvancedMemoryTab, type MemoryTab } from "../lib/memoryTabs";
+import { nextMemoryTarget, type MemoryTarget } from "../lib/memoryTargets";
 import { PageModal } from "./PageModal";
 import { FactsPane } from "./memory/FactsPane";
 import { ObservationsPane } from "./memory/ObservationsPane";
@@ -28,16 +29,16 @@ export function MemoryModal() {
   const open = useStore((s) => s.memoryOpen);
   const close = useStore((s) => s.closeMemory);
   const [tab, setTab] = useState<MemoryTab>("search");
-  const [targetFact, setTargetFact] = useState<Fact | null>(null);
-  const [targetPatternId, setTargetPatternId] = useState<number | null>(null);
+  const [targetFact, setTargetFact] = useState<MemoryTarget<Fact> | null>(null);
+  const [targetPattern, setTargetPattern] = useState<MemoryTarget<Observation | number> | null>(null);
 
   const openFact = (fact: Fact) => {
-    setTargetFact(fact);
+    setTargetFact((current) => nextMemoryTarget(current, fact));
     setTab("facts");
   };
 
   const openPattern = (pattern: Observation | number) => {
-    setTargetPatternId(typeof pattern === "number" ? pattern : pattern.id);
+    setTargetPattern((current) => nextMemoryTarget(current, pattern));
     setTab("patterns");
   };
 
@@ -72,11 +73,13 @@ export function MemoryModal() {
         <AdvancedRow activeTab={tab} onSelect={setTab} />
       </nav>
 
-      <div className="overflow-hidden">
-        {tab === "search" && <RecallPane onOpenFact={openFact} onOpenPattern={openPattern} />}
+      <div className="h-full overflow-hidden">
+        <section className={clsx("h-full", tab === "search" ? "block" : "hidden")}>
+          <RecallPane onOpenFact={openFact} onOpenPattern={openPattern} />
+        </section>
         {tab === "sent" && <SentPane onOpenFact={openFact} onOpenPattern={openPattern} />}
         {tab === "facts" && <FactsPane targetFact={targetFact} />}
-        {tab === "patterns" && <ObservationsPane targetPatternId={targetPatternId} onOpenFact={openFact} />}
+        {tab === "patterns" && <ObservationsPane targetPattern={targetPattern} onOpenFact={openFact} />}
         {tab === "cleanup" && <CleanupPane onOpenPattern={openPattern} />}
         {tab === "audit" && <AuditPane />}
       </div>
