@@ -37,6 +37,13 @@
   --color-bad-soft: rgba(184, 68, 43, 0.08);
   --color-info: #3d6e9c;
 
+  /* Live agent state — mint/teal regardless of which palette the user
+     picked. Semantic, not theme-bound: when something is *currently
+     running*, this is the color. Picked to read as "live system" rather
+     than "brand" so it works across warm / graphite / vercel / etc. */
+  --color-live: #0f8d76;
+  --color-live-soft: rgba(15, 141, 118, 0.14);
+
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.03);
   --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.05), 0 12px 50px rgba(0, 0, 0, 0.03), 0 0 0 1px rgba(0, 0, 0, 0.04);
   --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -179,20 +186,14 @@ body {
 
 /* Streaming session: subtle inset border that breathes. Quiet enough
    to live in peripheral vision without pulling attention away from
-   whatever the user is reading. */
+   whatever the user is reading. Uses --color-live so the "this session
+   is currently running" signal stays mint across every palette. */
 .session-row[data-streaming="true"] {
   animation: session-row-pulse 2.2s ease-in-out infinite;
 }
 @keyframes session-row-pulse {
-  0%, 100% { box-shadow: inset 0 0 0 1px rgba(217, 118, 72, 0.18); }
-  50%      { box-shadow: inset 0 0 0 1px rgba(217, 118, 72, 0.55); }
-}
-:root.dark .session-row[data-streaming="true"] {
-  animation-name: session-row-pulse-dark;
-}
-@keyframes session-row-pulse-dark {
-  0%, 100% { box-shadow: inset 0 0 0 1px rgba(229, 138, 90, 0.22); }
-  50%      { box-shadow: inset 0 0 0 1px rgba(229, 138, 90, 0.7); }
+  0%, 100% { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-live) 24%, transparent); }
+  50%      { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-live) 70%, transparent); }
 }
 
 /* Unread "done" indicator — a steady soft-glow dot, like an unread
@@ -202,11 +203,8 @@ body {
   width: 7px;
   height: 7px;
   border-radius: 9999px;
-  background: var(--color-accent-strong, #d97648);
-  box-shadow: 0 0 8px 1px rgba(217, 118, 72, 0.45);
-}
-:root.dark .session-unread-dot {
-  box-shadow: 0 0 10px 1px rgba(229, 138, 90, 0.55);
+  background: var(--color-live);
+  box-shadow: 0 0 8px 1px color-mix(in oklab, var(--color-live) 50%, transparent);
 }
 
 .scroll-to-bottom {
@@ -650,9 +648,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     from var(--snake-angle),
     transparent 0deg,
     transparent 220deg,
-    color-mix(in oklab, var(--color-accent) var(--thinking-shoulder), transparent) 270deg,
-    color-mix(in oklab, var(--color-accent) var(--thinking-peak), transparent) 340deg,
-    color-mix(in oklab, var(--color-accent) var(--thinking-shoulder), transparent) 360deg
+    color-mix(in oklab, var(--color-live) var(--thinking-shoulder), transparent) 270deg,
+    color-mix(in oklab, var(--color-live) var(--thinking-peak), transparent) 340deg,
+    color-mix(in oklab, var(--color-live) var(--thinking-shoulder), transparent) 360deg
   );
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
@@ -678,7 +676,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   50% {
     box-shadow:
       var(--shadow-md),
-      0 0 24px 2px color-mix(in oklab, var(--color-accent) var(--breath-peak), transparent);
+      0 0 24px 2px color-mix(in oklab, var(--color-live) var(--breath-peak), transparent);
   }
 }
 
@@ -688,7 +686,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 @keyframes composerHue {
   0%, 100% { border-color: var(--color-line); }
-  50% { border-color: color-mix(in oklab, var(--color-accent) var(--thinking-peak), var(--color-line)); }
+  50% { border-color: color-mix(in oklab, var(--color-live) var(--thinking-peak), var(--color-line)); }
 }
 
 /* Variant: send-orbit — only the send button gets a small spinner. */
@@ -701,8 +699,8 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   inset: -3px;
   border-radius: 50%;
   border: 1.5px solid transparent;
-  border-top-color: color-mix(in oklab, var(--color-accent) var(--thinking-peak), transparent);
-  border-right-color: color-mix(in oklab, var(--color-accent) var(--thinking-shoulder), transparent);
+  border-top-color: color-mix(in oklab, var(--color-live) var(--thinking-peak), transparent);
+  border-right-color: color-mix(in oklab, var(--color-live) var(--thinking-shoulder), transparent);
   animation: sendOrbit calc(var(--thinking-duration) * 0.45) linear infinite;
   pointer-events: none;
 }
@@ -776,6 +774,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    user's theme choice (Light / Dark / System) — for "System" it
    mirrors `prefers-color-scheme` and listens for OS changes. */
 :root.dark {
+    /* Live state on dark — brighter mint so it pops on graphite surfaces. */
+    --color-live: #55d6be;
+    --color-live-soft: rgba(85, 214, 190, 0.18);
+
     --color-bg: #100f0f;
     --color-bg-main: #1c1b1a;
     --color-surface: #1c1b1a;

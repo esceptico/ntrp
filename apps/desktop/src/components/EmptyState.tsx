@@ -1,17 +1,26 @@
+import { Sparkles } from "lucide-react";
 import { useStore } from "../store";
 
 export function EmptyState() {
   const connected = useStore((s) => s.connected);
   return (
-    <div className="mt-[10vh] grid gap-2.5 text-center text-muted">
-      <h2 className="m-0 text-[22px] font-semibold tracking-[-0.02em] text-ink">
-        {connected ? "What's on your mind?" : "Connect to get started"}
-      </h2>
-      <p className="m-0 text-[13.5px] text-muted">
-        {connected
-          ? "Send a message to begin a new exchange."
-          : "Open settings to point ntrp at your server."}
-      </p>
+    <div className="mt-[14vh] grid gap-5 justify-items-center text-center">
+      <span
+        aria-hidden
+        className="grid place-items-center w-12 h-12 rounded-2xl bg-[var(--color-live-soft)] text-[var(--color-live)]"
+      >
+        <Sparkles size={20} strokeWidth={1.6} />
+      </span>
+      <div className="grid gap-1.5 max-w-[420px]">
+        <h2 className="m-0 text-[20px] font-semibold tracking-[-0.018em] text-ink">
+          {connected ? "What's on your mind?" : "Connect to get started"}
+        </h2>
+        <p className="m-0 text-[13px] text-muted leading-snug">
+          {connected
+            ? "Send a message, or press ⌘K to search memory, agents, and tools."
+            : "Open settings to point ntrp at your server."}
+        </p>
+      </div>
     </div>
   );
 }

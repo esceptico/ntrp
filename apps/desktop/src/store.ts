@@ -44,11 +44,12 @@ export interface Prefs {
 }
 
 const PREFS_KEY = "ntrp.desktop.prefs";
+const PREFS_VERSION = 2;
 const DEFAULT_PREFS: Prefs = {
   thinkingAnimation: "comet",
   thinkingIntensity: "normal",
   theme: "system",
-  palette: "warm",
+  palette: "graphite",
   sidebarHidden: false,
   showReasoningInChat: true,
 };
@@ -57,7 +58,13 @@ function loadPrefs(): Prefs {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
     if (!raw) return DEFAULT_PREFS;
-    const parsed = JSON.parse(raw) as Partial<Prefs>;
+    const parsed = JSON.parse(raw) as Partial<Prefs> & { prefsVersion?: number };
+    // One-time migration: bump anyone still on the legacy "warm" default
+    // to graphite when introducing the new default. Users who explicitly
+    // want warm can flip back from Settings → Appearance.
+    if ((parsed.prefsVersion ?? 1) < PREFS_VERSION && parsed.palette === "warm") {
+      parsed.palette = "graphite";
+    }
     return { ...DEFAULT_PREFS, ...parsed };
   } catch {
     return DEFAULT_PREFS;
@@ -66,7 +73,10 @@ function loadPrefs(): Prefs {
 
 function persistPrefs(prefs: Prefs): void {
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    localStorage.setItem(
+      PREFS_KEY,
+      JSON.stringify({ ...prefs, prefsVersion: PREFS_VERSION }),
+    );
   } catch {
     /* localStorage unavailable — non-fatal */
   }
