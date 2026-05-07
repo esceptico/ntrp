@@ -185,6 +185,57 @@ class TestTemporalPass:
         mock_client.completion.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_superseded_facts_do_not_trigger_temporal_patterns(
+        self,
+        fact_repo: FactRepository,
+        obs_repo: ObservationRepository,
+    ):
+        """Temporal patterning should only consider current durable facts."""
+        embed_fn = AsyncMock(return_value=mock_embedding("test"))
+
+        entity = await fact_repo.create_entity("User")
+        now = datetime.now(UTC)
+
+        for index in range(2):
+            fact = await fact_repo.create(
+                text=f"User current durable fact {index}",
+                source_type=SourceType.EXPLICIT,
+                embedding=mock_embedding(f"current {index}"),
+                happened_at=now - timedelta(days=index + 1),
+            )
+            await fact_repo.add_entity_ref(fact.id, "User", entity.id)
+
+        replacement = await fact_repo.create(
+            text="Replacement fact without User entity link",
+            source_type=SourceType.EXPLICIT,
+            embedding=mock_embedding("replacement"),
+            happened_at=now,
+        )
+        old = await fact_repo.create(
+            text="User old superseded fact",
+            source_type=SourceType.EXPLICIT,
+            embedding=mock_embedding("old"),
+            happened_at=now - timedelta(days=3),
+            superseded_by_fact_id=replacement.id,
+        )
+        await fact_repo.add_entity_ref(old.id, "User", entity.id)
+        await fact_repo.conn.commit()
+
+        mock_client = AsyncMock()
+        with patch("ntrp.memory.temporal.get_completion_client", return_value=mock_client):
+            created = await temporal_consolidation_pass(
+                fact_repo,
+                obs_repo,
+                "test-model",
+                embed_fn,
+                days=30,
+                min_facts=3,
+            )
+
+        assert created == 0
+        mock_client.completion.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_no_pattern_returns_skip(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
         """LLM returns skip when no patterns found — no observations created."""
         embed_fn = AsyncMock(return_value=mock_embedding("test"))

@@ -13,10 +13,26 @@ _SQL_GET_FACTS_SUPERSEDED_BY = """
     WHERE superseded_by_fact_id = ?
     ORDER BY created_at DESC
 """
+_SQL_CURRENT_FACT = """
+    archived_at IS NULL
+      AND superseded_by_fact_id IS NULL
+      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+"""
+
 _SQL_COUNT_FACTS = "SELECT COUNT(*) FROM facts"
-_SQL_COUNT_ACTIVE_FACTS = "SELECT COUNT(*) FROM facts WHERE archived_at IS NULL"
-_SQL_COUNT_UNCONSOLIDATED = "SELECT COUNT(*) FROM facts WHERE consolidated_at IS NULL"
-_SQL_LIST_RECENT = "SELECT * FROM facts WHERE archived_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?"
+_SQL_COUNT_ACTIVE_FACTS = f"SELECT COUNT(*) FROM facts WHERE {_SQL_CURRENT_FACT}"
+_SQL_COUNT_UNCONSOLIDATED = f"""
+    SELECT COUNT(*) FROM facts
+    WHERE consolidated_at IS NULL
+      AND lifetime = 'durable'
+      AND {_SQL_CURRENT_FACT}
+"""
+_SQL_LIST_RECENT = f"""
+    SELECT * FROM facts
+    WHERE {_SQL_CURRENT_FACT}
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+"""
 _SQL_COUNT_KIND_REVIEW = """
     SELECT COUNT(*) FROM facts
     WHERE archived_at IS NULL
@@ -48,19 +64,26 @@ _SQL_LIST_TIME_WINDOW = """
     SELECT * FROM facts
     WHERE created_at BETWEEN ? AND ?
       AND archived_at IS NULL
+      AND superseded_by_fact_id IS NULL
+      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
     ORDER BY created_at DESC
 """
 
 _SQL_SEARCH_FACTS_TEMPORAL = """
     SELECT * FROM facts
-    WHERE happened_at IS NOT NULL AND archived_at IS NULL
+    WHERE happened_at IS NOT NULL
+      AND archived_at IS NULL
+      AND superseded_by_fact_id IS NULL
+      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
     ORDER BY ABS(julianday(happened_at) - julianday(?))
     LIMIT ?
 """
 
-_SQL_LIST_UNCONSOLIDATED = """
+_SQL_LIST_UNCONSOLIDATED = f"""
     SELECT * FROM facts
-    WHERE consolidated_at IS NULL AND archived_at IS NULL
+    WHERE consolidated_at IS NULL
+      AND lifetime = 'durable'
+      AND {_SQL_CURRENT_FACT}
     ORDER BY created_at ASC
     LIMIT ?
 """
@@ -89,7 +112,10 @@ _SQL_SEARCH_FACTS_FTS = """
     SELECT f.*
     FROM facts f
     JOIN facts_fts fts ON f.id = fts.rowid
-    WHERE facts_fts MATCH ? AND f.archived_at IS NULL
+    WHERE facts_fts MATCH ?
+      AND f.archived_at IS NULL
+      AND f.superseded_by_fact_id IS NULL
+      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
     ORDER BY bm25(facts_fts)
     LIMIT ?
 """
@@ -122,9 +148,14 @@ _SQL_INSERT_ENTITY = """
 """
 
 _SQL_COUNT_ENTITY_FACTS = """
-    SELECT COUNT(*) FROM entity_refs
-    WHERE entity_id = (SELECT id FROM entities WHERE name = ? COLLATE NOCASE)
-       OR (entity_id IS NULL AND name = ? COLLATE NOCASE)
+    SELECT COUNT(DISTINCT er.fact_id)
+    FROM entity_refs er
+    JOIN facts f ON er.fact_id = f.id
+    WHERE (er.entity_id = (SELECT id FROM entities WHERE name = ? COLLATE NOCASE)
+       OR (er.entity_id IS NULL AND er.name = ? COLLATE NOCASE))
+      AND f.archived_at IS NULL
+      AND f.superseded_by_fact_id IS NULL
+      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
 """
 
 _SQL_LIST_ALL_ENTITIES = "SELECT * FROM entities ORDER BY updated_at DESC LIMIT ?"
@@ -133,17 +164,33 @@ _SQL_GET_FACTS_FOR_ENTITY_BY_ID = """
     SELECT f.*
     FROM facts f
     JOIN entity_refs er ON f.id = er.fact_id
-    WHERE er.entity_id = ? AND f.archived_at IS NULL
+    WHERE er.entity_id = ?
+      AND f.archived_at IS NULL
+      AND f.superseded_by_fact_id IS NULL
+      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
     ORDER BY f.created_at DESC
     LIMIT ?
 """
 
-_SQL_COUNT_ENTITY_FACTS_BY_ID = "SELECT COUNT(*) FROM entity_refs WHERE entity_id = ?"
+_SQL_COUNT_ENTITY_FACTS_BY_ID = """
+    SELECT COUNT(DISTINCT er.fact_id)
+    FROM entity_refs er
+    JOIN facts f ON er.fact_id = f.id
+    WHERE er.entity_id = ?
+      AND f.archived_at IS NULL
+      AND f.superseded_by_fact_id IS NULL
+      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
+"""
 
 _SQL_COUNT_ENTITY_FACTS_BATCH = """
-    SELECT entity_id, COUNT(*) as cnt FROM entity_refs
-    WHERE entity_id IN ({placeholders})
-    GROUP BY entity_id
+    SELECT er.entity_id, COUNT(*) as cnt
+    FROM entity_refs er
+    JOIN facts f ON er.fact_id = f.id
+    WHERE er.entity_id IN ({placeholders})
+      AND f.archived_at IS NULL
+      AND f.superseded_by_fact_id IS NULL
+      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
+    GROUP BY er.entity_id
 """
 
 _SQL_GET_ENTITY_IDS_FOR_FACTS = """
@@ -159,6 +206,8 @@ _SQL_GET_FACTS_FOR_ENTITY_TEMPORAL = """
     JOIN entity_refs er ON f.id = er.fact_id
     WHERE er.entity_id = ?
       AND f.archived_at IS NULL
+      AND f.superseded_by_fact_id IS NULL
+      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
       AND f.lifetime = 'durable'
       AND COALESCE(f.happened_at, f.created_at) >= datetime('now', '-' || ? || ' days')
       AND COALESCE(f.happened_at, f.created_at) <= datetime('now')
@@ -185,6 +234,8 @@ _SQL_GET_ENTITIES_WITH_FACT_COUNT = """
       AND COALESCE(f.happened_at, f.created_at) <= datetime('now')
       AND er.entity_id IS NOT NULL
       AND f.archived_at IS NULL
+      AND f.superseded_by_fact_id IS NULL
+      AND (f.expires_at IS NULL OR f.expires_at > CURRENT_TIMESTAMP)
       AND f.lifetime = 'durable'
     GROUP BY er.entity_id
     HAVING COUNT(*) >= ?
@@ -196,7 +247,10 @@ _SQL_UNARCHIVE = "UPDATE facts SET archived_at = NULL WHERE id = ?"
 
 _SQL_LIST_ARCHIVAL_CANDIDATES = """
     SELECT * FROM facts
-    WHERE consolidated_at IS NOT NULL AND archived_at IS NULL
+    WHERE consolidated_at IS NOT NULL
+      AND archived_at IS NULL
+      AND superseded_by_fact_id IS NULL
+      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
     ORDER BY last_accessed_at ASC
     LIMIT ?
 """
@@ -205,16 +259,30 @@ _SQL_COUNT_ARCHIVED = "SELECT COUNT(*) FROM facts WHERE archived_at IS NOT NULL"
 _SQL_UPDATE_TEXT = "UPDATE facts SET text = ?, embedding = ?, consolidated_at = NULL WHERE id = ?"
 _SQL_COUNT_ENTITY_REFS_FOR_FACT = "SELECT COUNT(*) FROM entity_refs WHERE fact_id = ?"
 _SQL_RESET_CONSOLIDATED = "UPDATE facts SET consolidated_at = NULL WHERE consolidated_at IS NOT NULL"
-_SQL_LIST_ALL_WITH_EMBEDDINGS = (
-    "SELECT * FROM facts WHERE embedding IS NOT NULL AND archived_at IS NULL ORDER BY created_at DESC"
-)
+_SQL_LIST_ALL_WITH_EMBEDDINGS = f"""
+    SELECT * FROM facts
+    WHERE embedding IS NOT NULL
+      AND {_SQL_CURRENT_FACT}
+    ORDER BY created_at DESC
+"""
 _SQL_LIST_MISSING_EMBEDDINGS = """
     SELECT * FROM facts
-    WHERE embedding IS NULL AND archived_at IS NULL
+    WHERE embedding IS NULL
+      AND archived_at IS NULL
+      AND superseded_by_fact_id IS NULL
+      AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
     ORDER BY created_at DESC
     LIMIT ?
 """
 _SQL_UPDATE_EMBEDDING = "UPDATE facts SET embedding = ? WHERE id = ?"
+
+
+def _is_current_fact(fact: Fact, now: datetime | None = None) -> bool:
+    if fact.archived_at is not None or fact.superseded_by_fact_id is not None:
+        return False
+    if fact.expires_at is None:
+        return True
+    return fact.expires_at > (now or datetime.now(UTC))
 
 
 def _row_dict(row: aiosqlite.Row) -> dict:
@@ -617,11 +685,12 @@ class FactRepository:
             _SQL_GET_FACTS_BY_IDS.format(placeholders=placeholders), fact_ids
         )
         facts_by_id = {r["id"]: Fact.model_validate(_row_dict(r)) for r in fact_rows}
+        now = datetime.now(UTC)
 
         return [
             (facts_by_id[fid], 1 - distances[fid])
             for fid in fact_ids
-            if fid in facts_by_id and facts_by_id[fid].archived_at is None
+            if fid in facts_by_id and _is_current_fact(facts_by_id[fid], now)
         ]
 
     async def search_facts_fts(self, query: str, limit: int = 10) -> list[Fact]:

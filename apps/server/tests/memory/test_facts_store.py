@@ -241,6 +241,38 @@ class TestConsolidation:
         assert f1.id not in fact_ids
         assert f2.id in fact_ids
 
+    @pytest.mark.asyncio
+    async def test_unconsolidated_work_excludes_non_current_facts(self, repo: FactRepository):
+        now = datetime.now(UTC)
+        active = await repo.create(text="Current durable fact", source_type=SourceType.EXPLICIT)
+        archived = await repo.create(text="Archived fact", source_type=SourceType.EXPLICIT)
+        replacement = await repo.create(text="Replacement fact", source_type=SourceType.EXPLICIT)
+        await repo.create(
+            text="Superseded fact",
+            source_type=SourceType.EXPLICIT,
+            superseded_by_fact_id=replacement.id,
+        )
+        await repo.create(
+            text="Expired temporary fact",
+            source_type=SourceType.EXPLICIT,
+            lifetime=FactLifetime.TEMPORARY,
+            expires_at=now - timedelta(days=1),
+        )
+        await repo.create(
+            text="Current temporary fact",
+            source_type=SourceType.EXPLICIT,
+            lifetime=FactLifetime.TEMPORARY,
+            expires_at=now + timedelta(days=1),
+        )
+
+        await repo.archive_batch([archived.id])
+        await repo.mark_consolidated(replacement.id)
+
+        unconsolidated = await repo.list_unconsolidated(limit=10)
+
+        assert [fact.id for fact in unconsolidated] == [active.id]
+        assert await repo.count_unconsolidated() == 1
+
 
 class TestVectorSearch:
     @pytest.mark.asyncio

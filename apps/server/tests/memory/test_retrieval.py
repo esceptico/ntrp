@@ -284,6 +284,26 @@ class TestEntityExpand:
         expansion = await entity_expand(repo, [seed.id], max_facts=5)
         assert len(expansion) <= 5
 
+    @pytest.mark.asyncio
+    async def test_expansion_ignores_superseded_facts(self, repo: FactRepository):
+        entity = await repo.create_entity(name="Alice")
+        seed = await repo.create(text="Alice seed fact", source_type=SourceType.EXPLICIT)
+        active = await repo.create(text="Alice current fact", source_type=SourceType.EXPLICIT)
+        replacement = await repo.create(text="Alice replacement fact", source_type=SourceType.EXPLICIT)
+        superseded = await repo.create(
+            text="Alice old fact",
+            source_type=SourceType.EXPLICIT,
+            superseded_by_fact_id=replacement.id,
+        )
+
+        for fact in (seed, active, superseded):
+            await repo.add_entity_ref(fact.id, "Alice", entity.id)
+
+        expansion = await entity_expand(repo, [seed.id])
+
+        assert active.id in expansion
+        assert superseded.id not in expansion
+
 
 class TestRetrieveFacts:
     @pytest.mark.asyncio
