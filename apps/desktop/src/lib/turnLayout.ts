@@ -2,6 +2,7 @@ export interface TurnLayoutInput {
   childIds: string[];
   finalAssistantId: string | null;
   isDone: boolean;
+  showWorkTrace?: boolean;
 }
 
 export interface TurnLayoutResult {
@@ -14,8 +15,9 @@ export function turnLayout({
   childIds,
   finalAssistantId,
   isDone,
+  showWorkTrace = true,
 }: TurnLayoutInput): TurnLayoutResult {
-  if (!isDone) {
+  if (!isDone || !showWorkTrace) {
     return { directIds: childIds, workIds: [], finalAssistantId };
   }
 

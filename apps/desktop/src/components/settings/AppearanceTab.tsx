@@ -35,6 +35,7 @@ export function AppearanceTab() {
   const intensity = useStore((s) => s.prefs.thinkingIntensity);
   const theme = useStore((s) => s.prefs.theme);
   const palette = useStore((s) => s.prefs.palette);
+  const showReasoning = useStore((s) => s.prefs.showReasoningInChat);
   const setPref = useStore((s) => s.setPref);
 
   return (
@@ -73,6 +74,17 @@ export function AppearanceTab() {
           title="Palette"
           hint="Color scheme used across the app."
           control={<PalettePicker value={palette} onChange={(id) => setPref("palette", id)} />}
+        />
+        <div className="border-t border-line-soft" />
+        <SettingRow
+          title="Reasoning in chat"
+          hint="Show or hide reasoning rows. Tool calls stay visible."
+          control={
+            <Toggle
+              checked={showReasoning}
+              onChange={() => setPref("showReasoningInChat", !showReasoning)}
+            />
+          }
         />
       </section>
 
@@ -134,6 +146,35 @@ function SettingRow({
       </div>
       <div className="shrink-0 max-w-full">{control}</div>
     </div>
+  );
+}
+
+function Toggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      className={clsx(
+        "relative inline-flex items-center h-[18px] w-[30px] rounded-full transition-colors shrink-0",
+        checked ? "bg-accent-strong" : "bg-line",
+      )}
+    >
+      <span
+        aria-hidden
+        className={clsx(
+          "absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform",
+          checked ? "translate-x-[14px]" : "translate-x-[2px]",
+        )}
+      />
+    </button>
   );
 }
 

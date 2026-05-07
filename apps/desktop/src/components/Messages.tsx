@@ -5,6 +5,7 @@ import { useStickToBottom } from "use-stick-to-bottom";
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
 import { messagesScroll } from "../lib/messagesScroll";
+import { visibleMessageIds } from "../lib/messageVisibility";
 import { firstMessageIdInSourceFocus } from "../lib/messageSourceFocus";
 import { loadNewerHistory, loadOlderHistory } from "../actions";
 import { EmptyState } from "./EmptyState";
@@ -92,14 +93,25 @@ export function Messages() {
   const roles = useStore(
     useShallow((s) => order.map((id) => s.messages.get(id)?.role ?? null)),
   );
+  const showReasoning = useStore((s) => s.prefs.showReasoningInChat);
+
+  const visibleOrder = useMemo(
+    () => visibleMessageIds({ ids: order, roles, showReasoning }),
+    [order, roles, showReasoning],
+  );
+
+  const roleById = useMemo(() => {
+    const out = new Map<string, typeof roles[number]>();
+    for (let i = 0; i < order.length; i++) out.set(order[i], roles[i]);
+    return out;
+  }, [order, roles]);
 
   const segments = useMemo(() => {
     type Segment = { userId: string | null; childIds: string[] };
     const out: Segment[] = [];
     let current: Segment | null = null;
-    for (let i = 0; i < order.length; i++) {
-      const id = order[i];
-      const role = roles[i];
+    for (const id of visibleOrder) {
+      const role = roleById.get(id);
       if (role === "user") {
         if (current) out.push(current);
         current = { userId: id, childIds: [] };
@@ -110,7 +122,7 @@ export function Messages() {
     }
     if (current) out.push(current);
     return out;
-  }, [order, roles]);
+  }, [roleById, visibleOrder]);
 
   return (
     <div className="relative min-h-0">
@@ -120,7 +132,7 @@ export function Messages() {
         className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-messages px-0 pt-7 pb-9"
       >
         <div ref={contentRef} className="messages-inner mx-auto max-w-[760px] min-w-0 px-7 flex flex-col gap-3.5">
-          {order.length === 0
+          {visibleOrder.length === 0
             ? <EmptyState />
             : segments.map((seg) =>
                 seg.userId

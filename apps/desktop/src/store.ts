@@ -39,6 +39,7 @@ export interface Prefs {
   theme: ThemeChoice;
   palette: PaletteId;
   sidebarHidden: boolean;
+  showReasoningInChat: boolean;
 }
 
 const PREFS_KEY = "ntrp.desktop.prefs";
@@ -48,6 +49,7 @@ const DEFAULT_PREFS: Prefs = {
   theme: "system",
   palette: "warm",
   sidebarHidden: false,
+  showReasoningInChat: true,
 };
 
 function loadPrefs(): Prefs {

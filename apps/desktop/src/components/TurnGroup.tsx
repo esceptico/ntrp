@@ -23,6 +23,7 @@ function formatDuration(ms: number): string {
 
 export function TurnGroup({ userId, childIds }: { userId: string; childIds: string[] }) {
   const turn = useStore((s) => s.messages.get(userId)?.turn);
+  const showReasoning = useStore((s) => s.prefs.showReasoningInChat);
 
   const finalAssistantId = useStore(
     useShallow((s) => {
@@ -45,7 +46,12 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
     wasDone.current = isDone;
   }, [isDone]);
 
-  const layout = turnLayout({ childIds, finalAssistantId, isDone });
+  const layout = turnLayout({
+    childIds,
+    finalAssistantId,
+    isDone,
+    showWorkTrace: showReasoning,
+  });
   const hasWork = layout.workIds.length > 0;
   // Live runs have a real durationMs; historic ones don't (we don't persist
   // turn timing). Show the time when we have it, plain "Worked" otherwise.
