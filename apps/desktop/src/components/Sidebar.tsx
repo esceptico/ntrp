@@ -55,29 +55,22 @@ function NavRow({
   icon,
   label,
   onClick,
-  collapsed,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
-  collapsed?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       onMouseMove={trackHoverDish}
-      title={collapsed ? label : undefined}
-      aria-label={collapsed ? label : undefined}
-      className={clsx(
-        "hover-dish flex items-center w-full py-1.5 rounded-lg text-[13px] font-medium text-ink-soft text-left tracking-[-0.005em] hover:bg-[rgba(0,0,0,0.045)] transition-colors",
-        collapsed ? "justify-center px-0" : "gap-[9px] px-2",
-      )}
+      className="hover-dish flex items-center gap-[9px] w-full px-2 py-1.5 rounded-lg text-[13px] font-medium text-ink-soft text-left tracking-[-0.005em] hover:bg-[rgba(0,0,0,0.045)] transition-colors"
     >
       <span className="nav-icon grid place-items-center w-[22px] h-[22px] rounded-md text-ink-soft shrink-0">
         {icon}
       </span>
-      {!collapsed && <span className="truncate">{label}</span>}
+      <span>{label}</span>
     </button>
   );
 }
@@ -556,39 +549,30 @@ export function Sidebar() {
   const openSettings = useStore((s) => s.openSettings);
   const openAutomations = useStore((s) => s.openAutomations);
   const openMemory = useStore((s) => s.openMemory);
-  const collapsed = useStore((s) => s.prefs.sidebarCollapsed);
 
   return (
-    <aside className="sidebar flex flex-col h-full w-full">
+    <aside className="sidebar flex flex-col h-full">
       <div className="drag-spacer shrink-0 h-[38px]" />
-      <nav className={clsx("flex flex-col gap-px pt-2", collapsed ? "px-1.5" : "px-2.5")}>
+      <nav className="flex flex-col gap-px px-2.5 pt-2">
         <NavRow
           icon={<Pencil size={13} strokeWidth={1.7} />}
           label="New session"
           onClick={() => void createSession()}
-          collapsed={collapsed}
         />
         <NavRow
           icon={<Zap size={13} strokeWidth={1.7} />}
           label="Automations"
           onClick={openAutomations}
-          collapsed={collapsed}
         />
         <NavRow
           icon={<Brain size={13} strokeWidth={1.7} />}
           label="Memory"
           onClick={openMemory}
-          collapsed={collapsed}
         />
       </nav>
-      {collapsed ? <div className="flex-1" /> : <SessionList />}
-      <nav className={clsx("flex flex-col gap-px pt-1.5 pb-3", collapsed ? "px-1.5" : "px-2.5")}>
-        <NavRow
-          icon={<SettingsIcon size={13} strokeWidth={1.7} />}
-          label="Settings"
-          onClick={openSettings}
-          collapsed={collapsed}
-        />
+      <SessionList />
+      <nav className="flex flex-col gap-px px-2.5 pt-1.5 pb-3">
+        <NavRow icon={<SettingsIcon size={13} strokeWidth={1.7} />} label="Settings" onClick={openSettings} />
       </nav>
     </aside>
   );

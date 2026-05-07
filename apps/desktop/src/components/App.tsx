@@ -30,7 +30,7 @@ function useHash(): string {
 export function App() {
   const hash = useHash();
   const currentSessionId = useStore((s) => s.currentSessionId);
-  const sidebarCollapsed = useStore((s) => s.prefs.sidebarCollapsed);
+  const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
   const openSettings = useStore((s) => s.openSettings);
 
@@ -73,7 +73,7 @@ export function App() {
       <motion.div
         className="sidebar-wrap"
         initial={false}
-        animate={{ width: sidebarCollapsed ? 56 : 244 }}
+        animate={{ x: sidebarHidden ? -244 : 0 }}
         transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
       >
         <Sidebar />
