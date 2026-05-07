@@ -60,7 +60,7 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
 
   const showInterim = !isDone || expanded;
   const interimList = (
-    <div className={clsx("flex flex-col gap-3.5", isDone && "pt-3.5")}>
+    <div className={clsx("flex flex-col gap-3.5", isDone && "pt-2.5")}>
       {layout.workIds.map((id) => (
         <Message key={id} id={id} isFinal={false} />
       ))}
@@ -90,7 +90,7 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
                 className={clsx("transition-transform duration-200", expanded && "rotate-180")}
               />
             </button>
-            <div className="h-px bg-line-soft mt-2.5" />
+            <div className="h-px bg-line-soft mt-1.5" />
           </motion.div>
         )}
       </AnimatePresence>
