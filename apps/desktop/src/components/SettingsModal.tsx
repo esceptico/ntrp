@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Boxes, Brain, Database, Palette, Plug, Sparkles, X, type LucideIcon } from "lucide-react";
+import { Boxes, Brain, Database, KeyRound, Palette, Plug, Sparkles, X, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
 import { saveAndReconnect, fetchServerConfig } from "../actions";
 import { ConnectionTab } from "./settings/ConnectionTab";
+import { ProvidersTab } from "./settings/ProvidersTab";
 import { ModelsTab } from "./settings/ModelsTab";
 import { AgentTab } from "./settings/AgentTab";
 import { ContextTab } from "./settings/ContextTab";
@@ -11,7 +12,7 @@ import { MCPTab } from "./settings/MCPTab";
 import { AppearanceTab } from "./settings/AppearanceTab";
 import { PageModal } from "./PageModal";
 
-type TabId = "connection" | "models" | "agent" | "context" | "mcp" | "appearance";
+type TabId = "connection" | "providers" | "models" | "agent" | "context" | "mcp" | "appearance";
 
 interface Tab {
   id: TabId;
@@ -21,6 +22,7 @@ interface Tab {
 
 const TABS: Tab[] = [
   { id: "connection", label: "Connection", icon: Plug },
+  { id: "providers", label: "Providers", icon: KeyRound },
   { id: "models", label: "Models", icon: Sparkles },
   { id: "agent", label: "Agent", icon: Brain },
   { id: "context", label: "Context", icon: Database },
@@ -130,6 +132,7 @@ export function SettingsModal() {
                 onSubmit={submitConnection}
               />
             )}
+            {active === "providers" && <ProvidersTab />}
             {active === "models" && <ModelsTab />}
             {active === "agent" && <AgentTab serverConfig={serverConfig} />}
             {active === "context" && <ContextTab serverConfig={serverConfig} />}

@@ -832,6 +832,74 @@ export async function fetchSkillContent(config: AppConfig, name: string): Promis
   return apiWithConfig<SkillContent>(config, `/skills/${encodeURIComponent(name)}/content`);
 }
 
+export interface CustomModelSummary {
+  id: string;
+  base_url: string | null;
+  context_window: number;
+}
+
+export interface ModelProvider {
+  id: string;
+  name: string;
+  connected: boolean;
+  key_hint: string | null;
+  from_env: boolean;
+  auth_type?: "api_key" | "oauth";
+  model_count?: number;
+  models: string[] | CustomModelSummary[];
+  embedding_models: string[];
+}
+
+export interface OpenAICodexOAuthStart {
+  status: string;
+  url: string;
+  opened: boolean;
+  expires_at: number;
+  instructions?: string;
+}
+
+export interface OpenAICodexOAuthStatus {
+  connected: boolean;
+  status: string;
+  account_id?: string | null;
+  expires?: number;
+  error?: string | null;
+  url?: string;
+  opened?: boolean;
+  expires_at?: number;
+}
+
+export async function listModelProvidersApi(config: AppConfig): Promise<ModelProvider[]> {
+  const r = await apiWithConfig<{ providers: ModelProvider[] }>(config, "/providers");
+  return r.providers;
+}
+
+export async function connectModelProviderApi(
+  config: AppConfig,
+  providerId: string,
+  apiKey: string,
+  chatModel?: string | null,
+): Promise<void> {
+  await apiWithConfig(config, `/providers/${encodeURIComponent(providerId)}/connect`, {
+    method: "POST",
+    body: JSON.stringify({ api_key: apiKey, chat_model: chatModel || undefined }),
+  });
+}
+
+export async function disconnectModelProviderApi(config: AppConfig, providerId: string): Promise<void> {
+  await apiWithConfig(config, `/providers/${encodeURIComponent(providerId)}`, { method: "DELETE" });
+}
+
+export async function startOpenAICodexOAuthApi(config: AppConfig): Promise<OpenAICodexOAuthStart> {
+  return apiWithConfig<OpenAICodexOAuthStart>(config, "/providers/openai-codex/oauth/browser/start", {
+    method: "POST",
+  });
+}
+
+export async function getOpenAICodexOAuthStatusApi(config: AppConfig): Promise<OpenAICodexOAuthStatus> {
+  return apiWithConfig<OpenAICodexOAuthStatus>(config, "/providers/openai-codex/oauth/status");
+}
+
 export interface ServerConfig {
   chat_model: string;
   research_model: string;
