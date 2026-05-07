@@ -1,5 +1,6 @@
 export type PaletteId =
   | "warm"
+  | "graphite"
   | "vercel"
   | "raycast"
   | "github"
@@ -32,6 +33,12 @@ export const PALETTES: PaletteMeta[] = [
     label: "Warm",
     light: { bg: "#ffffff", accent: "#b85c1f" },
     dark: { bg: "#1c1b1a", accent: "#da702c" },
+  },
+  {
+    id: "graphite",
+    label: "Graphite",
+    light: { bg: "#ffffff", accent: "#0f8d76" },
+    dark: { bg: "#101112", accent: "#55d6be" },
   },
   {
     id: "vercel",

@@ -810,6 +810,50 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    :root (light) or :root.dark blocks above. The active palette
    class is set by `useThemeEffect`. */
 
+/* Graphite — ntrp's native direction. Cool technical neutrals with a
+   mint accent reserved for live agent state. Light variant uses a
+   deeper teal so the accent meets AA contrast on white surfaces. */
+:root.palette-graphite {
+  --color-bg: #f3f4f6;
+  --color-bg-main: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-soft: #ebecee;
+  --color-surface-sunken: #dee0e3;
+  --color-code-bg: #f0f1f3;
+  --color-line: #e2e3e6;
+  --color-line-soft: #ecedef;
+  --color-line-strong: #c8cacf;
+  --color-ink: #101112;
+  --color-ink-soft: #2a2c2f;
+  --color-on-ink: #ffffff;
+  --color-muted: #6b6e74;
+  --color-faint: #93969c;
+  --color-whisper: #b8babf;
+  --color-accent: #0f8d76;
+  --color-accent-soft: rgba(15, 141, 118, 0.10);
+  --color-accent-strong: #0a6b59;
+}
+:root.dark.palette-graphite {
+  --color-bg: #101112;
+  --color-bg-main: #121314;
+  --color-surface: #171819;
+  --color-surface-soft: #1e2022;
+  --color-surface-sunken: #25272a;
+  --color-code-bg: #1e2022;
+  --color-line: #26282b;
+  --color-line-soft: #1d1f21;
+  --color-line-strong: #34373b;
+  --color-ink: #f0f1f2;
+  --color-ink-soft: #d6d7d9;
+  --color-on-ink: #101112;
+  --color-muted: #9a9da3;
+  --color-faint: #6b6e74;
+  --color-whisper: #4a4d52;
+  --color-accent: #55d6be;
+  --color-accent-soft: rgba(85, 214, 190, 0.16);
+  --color-accent-strong: #7ce0cd;
+}
+
 /* Vercel — Geist tokens */
 :root.palette-vercel {
   --color-bg: #fafafa;
