@@ -7,7 +7,7 @@ export function EmptyState() {
     <div className="mt-[14vh] grid gap-5 justify-items-center text-center">
       <span
         aria-hidden
-        className="grid place-items-center w-12 h-12 rounded-2xl bg-[var(--color-live-soft)] text-[var(--color-live)]"
+        className="grid place-items-center w-12 h-12 rounded-2xl bg-accent-soft text-accent-strong"
       >
         <Sparkles size={20} strokeWidth={1.6} />
       </span>

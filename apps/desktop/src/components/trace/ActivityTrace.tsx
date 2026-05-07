@@ -113,7 +113,7 @@ export function ActivityTail({
       }}
       transition={{ duration: MOTION.trace, ease: EASE }}
       style={{ overflow: "hidden" }}
-      className="relative mt-1 ml-[5px] pl-4 border-l border-line-soft"
+      className="pl-4 mt-0.5"
     >
       {rolling ? (
         <AnimatePresence mode="popLayout" initial={false}>
@@ -242,7 +242,7 @@ function ItemButton({
       title={`${item.kind} — click to inspect`}
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
       className={clsx(
-        "group/row relative flex items-center gap-2 font-mono truncate text-left bg-transparent border-0 p-0 m-0 transition-colors cursor-pointer",
+        "flex items-baseline gap-1.5 font-mono truncate text-left bg-transparent border-0 p-0 m-0 transition-colors cursor-pointer",
         errored
           ? "text-bad hover:text-bad"
           : running
@@ -250,6 +250,9 @@ function ItemButton({
             : "text-faint hover:text-ink-soft",
       )}
     >
+      {depth > 0 && (
+        <span className="text-whisper select-none" aria-hidden="true">↳</span>
+      )}
       <StateDot running={running} errored={errored} />
       <span className="truncate">{item.target || item.kind}</span>
     </button>
@@ -260,26 +263,15 @@ function StateDot({ running, errored }: { running: boolean; errored: boolean }) 
   return (
     <span
       aria-hidden
-      className="relative grid place-items-center w-[7px] h-[7px] shrink-0 -ml-[18px]"
-    >
-      {running && !errored && (
-        <span
-          aria-hidden
-          className="absolute inset-0 rounded-full bg-[var(--color-live)] opacity-50 animate-[pulseSoft_1.4s_ease-in-out_infinite]"
-          style={{ transform: "scale(1.9)" }}
-        />
+      className={clsx(
+        "inline-block w-[5px] h-[5px] rounded-full self-center shrink-0",
+        errored
+          ? "bg-bad"
+          : running
+            ? "bg-accent animate-[pulseSoft_1.2s_ease-in-out_infinite]"
+            : "bg-whisper",
       )}
-      <span
-        className={clsx(
-          "relative w-[7px] h-[7px] rounded-full ring-2 ring-[var(--color-bg-main)]",
-          errored
-            ? "bg-bad"
-            : running
-              ? "bg-[var(--color-live)]"
-              : "bg-line-strong",
-        )}
-      />
-    </span>
+    />
   );
 }
 
@@ -294,23 +286,20 @@ function AgentButton({
 }) {
   const task = useMemo(() => extractTask(item.args), [item.args]);
   const label = friendlyAgentLabel(item.kind);
-  const running = item.result == null;
   return (
     <button
       type="button"
       onClick={() => onOpen(item)}
       title={`${item.kind} — click to inspect`}
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
-      className="relative flex items-center gap-2 min-w-0 text-left bg-transparent border-0 p-0 m-0 cursor-pointer group/agent"
+      className="flex items-baseline gap-2 min-w-0 text-left bg-transparent border-0 p-0 m-0 cursor-pointer group/agent"
     >
+      {depth > 0 && (
+        <span className="text-whisper select-none self-center" aria-hidden="true">↳</span>
+      )}
       <span
         aria-hidden
-        className={clsx(
-          "relative grid place-items-center w-[18px] h-[18px] rounded-md shrink-0 -ml-[24px] ring-2 ring-[var(--color-bg-main)] transition-colors",
-          running
-            ? "bg-[var(--color-live-soft)] text-[var(--color-live)]"
-            : "bg-accent-soft text-accent-strong",
-        )}
+        className="grid place-items-center w-[18px] h-[18px] rounded-md bg-accent-soft text-accent-strong shrink-0 self-center"
       >
         <Bot size={11} strokeWidth={2} />
       </span>

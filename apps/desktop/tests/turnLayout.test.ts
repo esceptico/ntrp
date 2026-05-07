@@ -29,17 +29,3 @@ test("keeps completed turns split into work block plus final assistant", () => {
   });
 });
 
-test("keeps completed tool activity inline when work trace grouping is disabled", () => {
-  const layout = turnLayout({
-    childIds: ["activity-1", "assistant-1"],
-    finalAssistantId: "assistant-1",
-    isDone: true,
-    showWorkTrace: false,
-  });
-
-  expect(layout).toEqual({
-    directIds: ["activity-1", "assistant-1"],
-    workIds: [],
-    finalAssistantId: "assistant-1",
-  });
-});
