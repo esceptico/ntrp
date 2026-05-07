@@ -77,7 +77,11 @@ def _source_ref_for_fact(
     evidence_message_ids: list[str] | None,
 ) -> str:
     wanted = set(evidence_message_ids or [])
-    source_messages = [msg for msg in window if _message_ref_id(msg) in wanted]
+    source_messages = [
+        msg
+        for msg in window
+        if msg.get("role") == "user" and _message_ref_id(msg) in wanted
+    ]
     if not source_messages:
         source_messages = list(window)
 
