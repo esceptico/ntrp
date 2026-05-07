@@ -5,6 +5,7 @@ import { useStore } from "../store";
 import type { Fact, Observation } from "../api";
 import { switchSession } from "../actions";
 import type { FactChatSourceFocus } from "../lib/memoryProvenance";
+import { resolveMessageSourceFocus } from "../lib/messageSourceFocus";
 import { advancedMemoryTabsVisible, isAdvancedMemoryTab, type MemoryTab } from "../lib/memoryTabs";
 import { nextMemoryTarget, type MemoryTarget } from "../lib/memoryTargets";
 import { PageModal } from "./PageModal";
@@ -50,7 +51,14 @@ export function MemoryModal() {
       around: focus.messageStartId,
       aroundSeq: focus.messageStart,
     });
-    setSourceFocus({ ...focus, nonce: Date.now() });
+    const state = useStore.getState();
+    const nextFocus = resolveMessageSourceFocus(
+      state.order,
+      state.messages,
+      { ...focus, nonce: Date.now() },
+      state.currentSessionId,
+    );
+    setSourceFocus(nextFocus);
     close();
   };
 
