@@ -217,6 +217,7 @@ interface Actions {
   appendHistoryPage: (messages: UiMessage[], page?: HistoryPage) => void;
   setHistoryLoading: (direction: "before" | "after", loading: boolean) => void;
   appendMessage: (message: UiMessage) => void;
+  insertMessageBefore: (message: UiMessage, beforeId: string | null) => void;
   mutateMessage: (id: string, patch: Partial<UiMessage>) => void;
   truncateFrom: (id: string) => void;
   setConnected: (connected: boolean) => void;
@@ -449,7 +450,22 @@ export const useStore = create<State & Actions>((set) => ({
     set((s) => {
       const messages = new Map(s.messages);
       messages.set(message.id, message);
+      if (s.messages.has(message.id)) return { messages };
       return { messages, order: [...s.order, message.id] };
+    }),
+
+  insertMessageBefore: (message, beforeId) =>
+    set((s) => {
+      const messages = new Map(s.messages);
+      messages.set(message.id, message);
+      if (s.messages.has(message.id)) return { messages };
+
+      const beforeIndex = beforeId ? s.order.indexOf(beforeId) : -1;
+      if (beforeIndex < 0) return { messages, order: [...s.order, message.id] };
+
+      const order = s.order.slice();
+      order.splice(beforeIndex, 0, message.id);
+      return { messages, order };
     }),
 
   mutateMessage: (id, patch) =>

@@ -67,7 +67,54 @@ const pendingToolCalls = new Map<
   }
 >();
 
-function handleServerEvent(event: ServerEvent) {
+let activeAssistantMessageId: string | null = null;
+
+function assistantIdFrom(event: { message_id?: string }): string {
+  return event.message_id || crypto.randomUUID();
+}
+
+function ensureAssistantMessage(id: string, startedAt: number): void {
+  const state = getState();
+  activeAssistantMessageId = id;
+  const existing = state.messages.get(id);
+  if (existing?.role === "assistant") return;
+
+  endActivity(state);
+  state.appendMessage({
+    id,
+    role: "assistant",
+    content: "",
+    turn: { startedAt, endedAt: null, durationMs: null },
+  });
+}
+
+function appendAssistantDelta(id: string, delta: string, startedAt: number): void {
+  const state = getState();
+  activeAssistantMessageId = id;
+  const existing = state.messages.get(id);
+  if (existing?.role === "assistant") {
+    state.mutateMessage(id, { content: existing.content + delta });
+    return;
+  }
+
+  endActivity(state);
+  state.appendMessage({
+    id,
+    role: "assistant",
+    content: delta,
+    turn: { startedAt, endedAt: null, durationMs: null },
+  });
+}
+
+function activityInsertAnchor(): string | null {
+  if (!activeAssistantMessageId) return null;
+  const state = getState();
+  return state.messages.get(activeAssistantMessageId)?.role === "assistant"
+    ? activeAssistantMessageId
+    : null;
+}
+
+export function handleServerEvent(event: ServerEvent) {
   const s = getState();
   const ts = event.timestamp ?? Date.now();
 
@@ -75,12 +122,14 @@ function handleServerEvent(event: ServerEvent) {
     // ─── Run lifecycle ───────────────────────────────────────────────
     case "RUN_STARTED":
       endActivity(s);
+      activeAssistantMessageId = null;
       setState({ running: true, error: null, currentRunId: event.run_id });
       return;
     case "RUN_FINISHED":
       if (event.usage) s.accumulateUsage(event.usage);
       endActivity(s);
       endTurn(s, ts);
+      activeAssistantMessageId = null;
       setState({ running: false, currentRunId: null });
       // We deliberately do NOT call loadHistory here. Refreshing the
       // history map mid-stream caused two visible bugs: (1) a flicker
@@ -95,6 +144,7 @@ function handleServerEvent(event: ServerEvent) {
       endActivity(s);
       s.appendMessage({ id: crypto.randomUUID(), role: "error", content: event.message });
       endTurn(s, ts);
+      activeAssistantMessageId = null;
       setState({ running: false, currentRunId: null });
       return;
 
@@ -104,24 +154,11 @@ function handleServerEvent(event: ServerEvent) {
     // chat to avoid bleed-through.
     case "TEXT_MESSAGE_START":
       if (event.depth) return;
-      endActivity(s);
+      ensureAssistantMessage(assistantIdFrom(event), ts);
       return;
     case "TEXT_MESSAGE_CONTENT": {
       if (event.depth) return;
-      const lastId = s.order[s.order.length - 1];
-      const last = lastId ? s.messages.get(lastId) : null;
-      if (last && last.role === "assistant" && last.id === event.message_id) {
-        s.mutateMessage(last.id, { content: last.content + event.delta });
-      } else {
-        endActivity(s);
-        const id = event.message_id || crypto.randomUUID();
-        s.appendMessage({
-          id,
-          role: "assistant",
-          content: event.delta,
-          turn: { startedAt: Date.now(), endedAt: null, durationMs: null },
-        });
-      }
+      appendAssistantDelta(assistantIdFrom(event), event.delta, ts);
       return;
     }
     case "TEXT_MESSAGE_END":
@@ -191,12 +228,12 @@ function handleServerEvent(event: ServerEvent) {
       const aid = s.activeActivityId;
       if (!aid) {
         const newId = crypto.randomUUID();
-        s.appendMessage({
+        s.insertMessageBefore({
           id: newId,
           role: "activity",
           content: "",
           activity: { items: [item], label: "Calling", done: false },
-        });
+        }, activityInsertAnchor());
         s.setActiveActivityId(newId);
         nextItemRenderAt = Date.now();
       } else {
@@ -349,5 +386,8 @@ export function useEvents(sessionId: string | null) {
  *  half-built tool calls or a stale stagger queue behind. */
 function resetStreamState(): void {
   pendingToolCalls.clear();
+  activeAssistantMessageId = null;
   nextItemRenderAt = 0;
 }
+
+export const resetStreamStateForTest = resetStreamState;
