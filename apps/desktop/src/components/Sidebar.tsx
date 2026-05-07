@@ -139,7 +139,7 @@ function SessionRow({
 
   if (renaming) {
     return (
-      <div className="w-full px-2 py-0.5">
+      <div className="grid grid-cols-[minmax(0,1fr)] w-full px-2 py-1.5 rounded-lg bg-surface text-ink shadow-[var(--shadow-sm)]">
         <input
           ref={inputRef}
           value={draft}
@@ -154,7 +154,7 @@ function SessionRow({
               onCancelRename();
             }
           }}
-          className="block w-full h-[28px] px-2 rounded-lg border border-line bg-surface text-ink text-[13px] outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+          className="min-w-0 w-full bg-transparent border-0 p-0 text-[13px] font-medium tracking-[-0.005em] text-ink outline-none"
         />
       </div>
     );
