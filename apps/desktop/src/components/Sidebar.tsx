@@ -139,24 +139,22 @@ function SessionRow({
 
   if (renaming) {
     return (
-      <div className="grid grid-cols-[minmax(0,1fr)] w-full px-2 py-1">
-        <input
-          ref={inputRef}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => void commitRename()}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              void commitRename();
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              onCancelRename();
-            }
-          }}
-          className="w-full h-[26px] px-2 border border-line rounded-md bg-surface text-ink text-[13px] outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
-        />
-      </div>
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => void commitRename()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void commitRename();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onCancelRename();
+          }
+        }}
+        className="block w-full h-[31px] px-2 rounded-lg border border-line bg-surface text-ink text-[13px] outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+      />
     );
   }
 
