@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import {
   CalendarDays,
@@ -23,9 +23,10 @@ import {
 import { fetchServerConfig, updateServerConfig } from "../../actions";
 import { useStore } from "../../store";
 import {
-  gmailAccountSummary,
+  googleConnectionSummary,
+  type GoogleConnectionSummary,
   serviceActionLabel,
-  serviceConnectionLabel,
+  serviceConnectionPill,
 } from "../../lib/integrationConnection";
 import {
   settingsErrorMessage,
@@ -50,6 +51,18 @@ export function IntegrationsTab() {
   const slackServices = useMemo(
     () => services.filter((service) => service.id.startsWith("slack_")),
     [services],
+  );
+  const connectedSlackServices = useMemo(
+    () => slackServices.filter((service) => service.connected),
+    [slackServices],
+  );
+  const setupSlackServices = useMemo(
+    () => slackServices.filter((service) => !service.connected),
+    [slackServices],
+  );
+  const googleSummary = useMemo(
+    () => googleConnectionSummary(googleEnabled, gmailAccounts),
+    [gmailAccounts, googleEnabled],
   );
 
   const refresh = useCallback(async () => {
@@ -181,8 +194,14 @@ export function IntegrationsTab() {
         <SettingsConnectionHint />
       ) : (
         <>
+          <IntegrationsReadinessCard
+            google={googleSummary}
+            connectedSlackCount={connectedSlackServices.length}
+          />
+
           <GoogleCard
             enabled={googleEnabled}
+            summary={googleSummary}
             accounts={gmailAccounts}
             pendingId={pendingId}
             onToggle={toggleGoogle}
@@ -191,7 +210,8 @@ export function IntegrationsTab() {
           />
 
           <ServiceCard
-            services={slackServices}
+            connectedServices={connectedSlackServices}
+            setupServices={setupSlackServices}
             editingId={editingId}
             serviceKey={serviceKey}
             pendingId={pendingId}
@@ -213,8 +233,39 @@ export function IntegrationsTab() {
   );
 }
 
+function IntegrationsReadinessCard({
+  google,
+  connectedSlackCount,
+}: {
+  google: GoogleConnectionSummary;
+  connectedSlackCount: number;
+}) {
+  const readyCount = (google.tone === "ready" ? 1 : 0) + connectedSlackCount;
+  return (
+    <section className="rounded-[12px] border border-line-soft bg-surface-soft/45 px-3.5 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={clsx(
+            "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+            readyCount > 0 ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn",
+          )}
+        >
+          {readyCount > 0 ? "Tools ready" : "Connect tools"}
+        </span>
+        <div className="text-[12.5px] text-ink-soft">
+          Google: {google.label} · Slack: {connectedSlackCount || "none"}
+        </div>
+      </div>
+      <div className="mt-1.5 text-[11.5px] text-faint">
+        Tool integrations are optional, but connected tools become available to the agent.
+      </div>
+    </section>
+  );
+}
+
 function GoogleCard({
   enabled,
+  summary,
   accounts,
   pendingId,
   onToggle,
@@ -222,6 +273,7 @@ function GoogleCard({
   onRemove,
 }: {
   enabled: boolean;
+  summary: GoogleConnectionSummary;
   accounts: GmailAccount[];
   pendingId: string | null;
   onToggle: (enabled: boolean) => Promise<void>;
@@ -230,28 +282,28 @@ function GoogleCard({
 }) {
   const pendingGoogle = pendingId === "google";
   const pendingAdd = pendingId === "gmail:add";
+  const summaryTone = {
+    ready: "bg-ok-soft text-ok",
+    paused: "bg-warn-soft text-warn",
+    setup: "bg-surface-soft text-muted",
+  }[summary.tone];
 
   return (
     <section className="rounded-[12px] border border-line-soft bg-surface overflow-hidden">
       <div className="flex flex-wrap items-start gap-3 px-3.5 py-3">
-        <div className="min-w-[220px] flex-1 grid gap-1">
+        <div className="min-w-[150px] flex-1 grid gap-1">
           <div className="flex items-center gap-2 min-w-0">
             <GoogleIcon enabled={enabled} />
             <div className="text-[13px] font-medium text-ink truncate">Google Workspace</div>
-            <span
-              className={clsx(
-                "shrink-0 px-1.5 py-0.5 rounded-full text-[10.5px] font-medium",
-                enabled ? "bg-ok-soft text-ok" : "bg-surface-soft text-faint",
-              )}
-            >
-              {enabled ? "Enabled" : "Disabled"}
+            <span className={clsx("shrink-0 px-1.5 py-0.5 rounded-full text-[10.5px] font-medium", summaryTone)}>
+              {summary.label}
             </span>
           </div>
           <div className="text-[11.5px] text-faint leading-[1.4]">
             Gmail and Calendar share the same Google account token.
           </div>
           <div className="text-[11.5px] text-muted font-mono truncate">
-            {gmailAccountSummary(accounts)}
+            {summary.detail}
           </div>
         </div>
 
@@ -324,7 +376,8 @@ function GoogleCard({
 }
 
 function ServiceCard({
-  services,
+  connectedServices,
+  setupServices,
   editingId,
   serviceKey,
   pendingId,
@@ -334,7 +387,8 @@ function ServiceCard({
   onConnect,
   onDisconnect,
 }: {
-  services: ServiceConnection[];
+  connectedServices: ServiceConnection[];
+  setupServices: ServiceConnection[];
   editingId: string | null;
   serviceKey: string;
   pendingId: string | null;
@@ -356,24 +410,66 @@ function ServiceCard({
         </div>
       </div>
 
-      {services.length === 0 ? (
+      {connectedServices.length + setupServices.length === 0 ? (
         <div className="px-3.5 py-3 text-[12px] text-faint">No token-backed services are registered.</div>
       ) : (
-        <div className="divide-y divide-line-soft">
-          {services.map((service) => (
-            <ServiceRow
-              key={service.id}
-              service={service}
-              editing={editingId === service.id}
-              serviceKey={editingId === service.id ? serviceKey : ""}
-              pending={pendingId === service.id}
-              onEdit={() => onEdit(service)}
-              onCancel={onCancel}
-              onKeyChange={onKeyChange}
-              onConnect={() => void onConnect(service)}
-              onDisconnect={() => void onDisconnect(service)}
-            />
-          ))}
+        <div className="grid gap-3 px-3.5 py-3">
+          <ServiceSection title="Ready" empty="No Slack tokens connected.">
+            {connectedServices.map((service) => (
+              <ServiceRow
+                key={service.id}
+                service={service}
+                editing={editingId === service.id}
+                serviceKey={editingId === service.id ? serviceKey : ""}
+                pending={pendingId === service.id}
+                onEdit={() => onEdit(service)}
+                onCancel={onCancel}
+                onKeyChange={onKeyChange}
+                onConnect={() => void onConnect(service)}
+                onDisconnect={() => void onDisconnect(service)}
+              />
+            ))}
+          </ServiceSection>
+          <ServiceSection title="Set up" empty="All Slack token services are connected.">
+            {setupServices.map((service) => (
+              <ServiceRow
+                key={service.id}
+                service={service}
+                editing={editingId === service.id}
+                serviceKey={editingId === service.id ? serviceKey : ""}
+                pending={pendingId === service.id}
+                onEdit={() => onEdit(service)}
+                onCancel={onCancel}
+                onKeyChange={onKeyChange}
+                onConnect={() => void onConnect(service)}
+                onDisconnect={() => void onDisconnect(service)}
+              />
+            ))}
+          </ServiceSection>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ServiceSection({
+  title,
+  empty,
+  children,
+}: {
+  title: string;
+  empty: string;
+  children: ReactNode;
+}) {
+  const childCount = Array.isArray(children) ? children.length : children ? 1 : 0;
+  return (
+    <section className="grid gap-2">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">{title}</div>
+      {childCount > 0 ? (
+        <div className="grid gap-2">{children}</div>
+      ) : (
+        <div className="rounded-[9px] border border-line-soft bg-surface-soft/45 px-3 py-2 text-[12px] text-faint">
+          {empty}
         </div>
       )}
     </section>
@@ -403,23 +499,17 @@ function ServiceRow({
 }) {
   const actionLabel = pending ? "Working…" : serviceActionLabel(service);
   const readOnly = service.connected && service.from_env;
+  const connectionPill = serviceConnectionPill(service);
 
   return (
-    <div>
-      <div className="flex flex-wrap items-start gap-3 px-3.5 py-2.5">
-        <div className="min-w-[220px] flex-1 grid gap-1">
+    <div className="rounded-[10px] border border-line-soft bg-surface overflow-hidden">
+      <div className="flex flex-wrap items-start gap-3 px-3 py-2.5">
+        <div className="min-w-[150px] flex-1 grid gap-1">
           <div className="flex items-center gap-2 min-w-0">
             <ProviderDot connected={service.connected} />
             <div className="text-[12.5px] font-medium text-ink-soft truncate">{service.name}</div>
-            <span
-              className={clsx(
-                "shrink-0 px-1.5 py-0.5 rounded-full text-[10.5px] font-medium",
-                service.connected ? "bg-ok-soft text-ok" : "bg-surface-soft text-faint",
-              )}
-            >
-              {serviceConnectionLabel(service)}
-            </span>
           </div>
+          {connectionPill && <div className="text-[11.5px] text-muted font-mono truncate">{connectionPill}</div>}
         </div>
         <div className="ml-auto flex justify-end">
           {readOnly ? (
@@ -445,7 +535,7 @@ function ServiceRow({
       </div>
 
       {editing && !service.connected && (
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3.5 py-3 border-t border-line-soft bg-surface-soft/35">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3 py-3 border-t border-line-soft bg-surface-soft/35">
           <input
             type="password"
             value={serviceKey}

@@ -20,6 +20,11 @@ export function serviceConnectionLabel(service: ServiceConnectionLike): string {
   return "Connected";
 }
 
+export function serviceConnectionPill(service: ServiceConnectionLike): string | null {
+  if (!service.connected) return null;
+  return serviceConnectionLabel(service);
+}
+
 export function serviceActionLabel(service: ServiceConnectionLike): string {
   if (service.connected && service.from_env) return "Env-managed";
   if (service.connected) return "Disconnect";
@@ -30,4 +35,39 @@ export function gmailAccountSummary(accounts: readonly GmailAccountLike[]): stri
   const count = accounts.length;
   if (count === 0) return "No accounts";
   return `${count} ${count === 1 ? "account" : "accounts"}`;
+}
+
+export interface GoogleConnectionSummary {
+  label: string;
+  detail: string;
+  tone: "ready" | "paused" | "setup";
+}
+
+export function googleConnectionSummary(
+  enabled: boolean,
+  accounts: readonly GmailAccountLike[],
+): GoogleConnectionSummary {
+  const count = accounts.length;
+  if (count === 0) {
+    return {
+      label: "Connect Google",
+      detail: "No Google accounts",
+      tone: "setup",
+    };
+  }
+
+  const accountLabel = `${count} ${count === 1 ? "account" : "accounts"}`;
+  if (!enabled) {
+    return {
+      label: "Paused",
+      detail: `${accountLabel} connected`,
+      tone: "paused",
+    };
+  }
+
+  return {
+    label: "Ready",
+    detail: `${accountLabel} enabled`,
+    tone: "ready",
+  };
 }

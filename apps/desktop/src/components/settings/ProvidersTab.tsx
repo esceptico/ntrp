@@ -17,8 +17,10 @@ import { fetchServerConfig, updateServerConfig } from "../../actions";
 import { useStore } from "../../store";
 import {
   providerActionLabel,
-  providerConnectionLabel,
+  providerConnectionPill,
   providerModelCountLabel,
+  providerReadinessSummary,
+  type ProviderReadinessSummary,
 } from "../../lib/providerConnection";
 import {
   canSaveCustomModelDraft,
@@ -61,11 +63,6 @@ function providerDescription(id: string): string {
   }
 }
 
-function statusTone(provider: ModelProvider): string {
-  if (provider.connected) return "bg-ok-soft text-ok";
-  return "bg-surface-soft text-faint";
-}
-
 export function ProvidersTab() {
   const config = useStore((s) => s.config);
   const serverConfig = useStore((s) => s.serverConfig);
@@ -86,6 +83,18 @@ export function ProvidersTab() {
       .slice()
       .sort((a, b) => (rank.get(a.id) ?? 99) - (rank.get(b.id) ?? 99));
   }, [providers]);
+  const connectedProviders = useMemo(
+    () => sortedProviders.filter((provider) => provider.connected),
+    [sortedProviders],
+  );
+  const setupProviders = useMemo(
+    () => sortedProviders.filter((provider) => !provider.connected),
+    [sortedProviders],
+  );
+  const readiness = useMemo(
+    () => providerReadinessSummary(sortedProviders, serverConfig?.chat_model ?? null),
+    [serverConfig?.chat_model, sortedProviders],
+  );
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -233,6 +242,49 @@ export function ProvidersTab() {
   const hasLoadedData = loadedOnce || providers.length > 0;
   const showContent = shouldShowLoadedSettingsContent({ loading, error, hasData: hasLoadedData });
 
+  function renderProvider(provider: ModelProvider) {
+    return (
+      <ProviderRow
+        key={provider.id}
+        provider={provider}
+        editing={editingId === provider.id}
+        apiKey={editingId === provider.id ? apiKey : ""}
+        pending={pendingId === provider.id}
+        agentPending={pendingId === `${provider.id}:agent`}
+        currentAgentModel={serverConfig?.chat_model ?? null}
+        codexStatus={provider.id === "openai-codex" ? codexStatus : null}
+        customOpen={provider.id === "custom" ? customOpen : false}
+        onToggleCustom={() => setCustomOpen((value) => !value)}
+        onEdit={() => {
+          setEditingId(provider.id);
+          setApiKey("");
+        }}
+        onCancel={() => {
+          setEditingId(null);
+          setApiKey("");
+        }}
+        onKeyChange={setApiKey}
+        onConnect={() => void connect(provider)}
+        onDisconnect={() => void disconnect(provider)}
+        onCodexSignIn={() => void startCodexSignIn()}
+        onUseForAgent={() => void useForAgent(provider)}
+      >
+        {provider.id === "custom" && customOpen && (
+          <CustomModelsPanel
+            provider={provider}
+            draft={customDraft}
+            pendingId={pendingId}
+            currentAgentModel={serverConfig?.chat_model ?? null}
+            onDraftChange={updateCustomDraft}
+            onCreate={() => void createCustomModel()}
+            onDelete={(modelId) => void deleteCustomModel(modelId)}
+            onUseForAgent={(modelId) => void useModelForAgent(modelId, `custom:${modelId}`)}
+          />
+        )}
+      </ProviderRow>
+    );
+  }
+
   return (
     <div className="grid gap-4">
       <div className="flex items-start justify-between gap-3">
@@ -257,55 +309,83 @@ export function ProvidersTab() {
         />
       )}
 
-      <div className="grid gap-2">
+      <div className="grid gap-3">
         {loading && providers.length === 0 ? (
           <div className="text-[12.5px] text-faint">Loading providers…</div>
         ) : !showContent ? (
           <SettingsConnectionHint />
         ) : (
-          sortedProviders.map((provider) => (
-            <ProviderRow
-              key={provider.id}
-              provider={provider}
-              editing={editingId === provider.id}
-              apiKey={editingId === provider.id ? apiKey : ""}
-              pending={pendingId === provider.id}
-              agentPending={pendingId === `${provider.id}:agent`}
-              currentAgentModel={serverConfig?.chat_model ?? null}
-              codexStatus={provider.id === "openai-codex" ? codexStatus : null}
-              customOpen={provider.id === "custom" ? customOpen : false}
-              onToggleCustom={() => setCustomOpen((value) => !value)}
-              onEdit={() => {
-                setEditingId(provider.id);
-                setApiKey("");
-              }}
-              onCancel={() => {
-                setEditingId(null);
-                setApiKey("");
-              }}
-              onKeyChange={setApiKey}
-              onConnect={() => void connect(provider)}
-              onDisconnect={() => void disconnect(provider)}
-              onCodexSignIn={() => void startCodexSignIn()}
-              onUseForAgent={() => void useForAgent(provider)}
+          <>
+            <ProviderReadinessCard summary={readiness} />
+            <ProviderSection
+              title="Ready providers"
+              detail={`${connectedProviders.length} connected`}
+              empty="No model providers are connected yet."
             >
-              {provider.id === "custom" && customOpen && (
-                <CustomModelsPanel
-                  provider={provider}
-                  draft={customDraft}
-                  pendingId={pendingId}
-                  currentAgentModel={serverConfig?.chat_model ?? null}
-                  onDraftChange={updateCustomDraft}
-                  onCreate={() => void createCustomModel()}
-                  onDelete={(modelId) => void deleteCustomModel(modelId)}
-                  onUseForAgent={(modelId) => void useModelForAgent(modelId, `custom:${modelId}`)}
-                />
-              )}
-            </ProviderRow>
-          ))
+              {connectedProviders.map(renderProvider)}
+            </ProviderSection>
+            <ProviderSection
+              title="Set up more"
+              detail={`${setupProviders.length} available`}
+              empty="All configured providers are ready."
+            >
+              {setupProviders.map(renderProvider)}
+            </ProviderSection>
+          </>
         )}
       </div>
     </div>
+  );
+}
+
+function ProviderReadinessCard({ summary }: { summary: ProviderReadinessSummary }) {
+  return (
+    <section className="rounded-[12px] border border-line-soft bg-surface-soft/45 px-3.5 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={clsx(
+            "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+            summary.ready ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn",
+          )}
+        >
+          {summary.label}
+        </span>
+        <div className="text-[12.5px] text-ink-soft">{summary.detail}</div>
+      </div>
+      <div className="mt-1.5 text-[11.5px] text-faint">
+        {summary.connectedProviderCount} connected · {summary.availableModelCount} available models
+      </div>
+    </section>
+  );
+}
+
+function ProviderSection({
+  title,
+  detail,
+  empty,
+  children,
+}: {
+  title: string;
+  detail: string;
+  empty: string;
+  children: ReactNode;
+}) {
+  const childCount = Array.isArray(children) ? children.length : children ? 1 : 0;
+
+  return (
+    <section className="grid gap-2">
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">{title}</div>
+        <div className="text-[11.5px] text-faint">{detail}</div>
+      </div>
+      {childCount > 0 ? (
+        <div className="grid gap-2">{children}</div>
+      ) : (
+        <div className="rounded-[10px] border border-line-soft bg-surface px-3 py-2 text-[12px] text-faint">
+          {empty}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -352,6 +432,7 @@ function ProviderRow({
   const isOauth = provider.auth_type === "oauth";
   const actionLabel = isCustom ? (customOpen ? "Done" : "Manage") : pending ? "Working…" : providerActionLabel(provider);
   const readOnlyPrimary = provider.connected && provider.from_env;
+  const connectionPill = providerConnectionPill(provider);
 
   function primaryAction() {
     if (isCustom) {
@@ -369,19 +450,22 @@ function ProviderRow({
 
   return (
     <div className="rounded-[12px] border border-line-soft bg-surface overflow-hidden">
-      <div className="flex flex-wrap items-start gap-3 px-3.5 py-3">
-        <div className="min-w-[220px] flex-1 grid gap-1">
+      <div className="flex flex-wrap items-start gap-3 px-3.5 py-2.5">
+        <div className="min-w-[150px] flex-1 grid gap-1">
           <div className="flex items-center gap-2 min-w-0">
             <ProviderIcon connected={provider.connected} />
             <div className="text-[13px] font-medium text-ink truncate">{provider.name}</div>
-            <span className={clsx("shrink-0 px-1.5 py-0.5 rounded-full text-[10.5px] font-medium", statusTone(provider))}>
-              {providerConnectionLabel(provider)}
-            </span>
           </div>
-          <div className="text-[11.5px] text-faint leading-[1.4]">{providerDescription(provider.id)}</div>
           <div className="text-[11.5px] text-muted font-mono truncate">
-            {providerModelCountLabel(provider)}
+            {provider.connected
+              ? `${providerModelCountLabel(provider)}${connectionPill ? ` · ${connectionPill}` : ""}`
+              : providerDescription(provider.id)}
           </div>
+          {!provider.connected && (
+            <div className="text-[11.5px] text-faint font-mono truncate">
+              {providerModelCountLabel(provider)}
+            </div>
+          )}
         </div>
 
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">

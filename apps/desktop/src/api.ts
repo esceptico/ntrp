@@ -251,6 +251,7 @@ export async function saveConfig(config: AppConfig): Promise<AppConfig> {
     localStorage.removeItem(STORAGE_KEY);
     return saved;
   }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
   return normalized;
 }
 

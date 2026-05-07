@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import {
   gmailAccountSummary,
+  googleConnectionSummary,
   serviceConnectionLabel,
+  serviceConnectionPill,
   serviceActionLabel,
 } from "../src/lib/integrationConnection.js";
 
@@ -24,5 +26,28 @@ test("labels env-managed service tokens as read-only", () => {
   };
 
   expect(serviceConnectionLabel(service)).toBe("Connected via env");
+  expect(serviceConnectionPill(service)).toBe("Connected via env");
   expect(serviceActionLabel(service)).toBe("Env-managed");
+});
+
+test("keeps disconnected service rows quiet and summarizes google readiness", () => {
+  const service = {
+    id: "slack_bot_token",
+    name: "Slack bot token",
+    connected: false,
+    from_env: false,
+    key_hint: null,
+  };
+
+  expect(serviceConnectionPill(service)).toBeNull();
+  expect(googleConnectionSummary(false, [])).toEqual({
+    label: "Connect Google",
+    detail: "No Google accounts",
+    tone: "setup",
+  });
+  expect(googleConnectionSummary(true, [{ email: "one@example.com", token_file: "token.json" }])).toEqual({
+    label: "Ready",
+    detail: "1 account enabled",
+    tone: "ready",
+  });
 });

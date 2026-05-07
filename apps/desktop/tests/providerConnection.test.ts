@@ -2,7 +2,9 @@ import { expect, test } from "bun:test";
 import {
   providerActionLabel,
   providerConnectionLabel,
+  providerConnectionPill,
   providerModelCountLabel,
+  providerReadinessSummary,
 } from "../src/lib/providerConnection.js";
 
 test("labels env-managed provider connections", () => {
@@ -34,6 +36,7 @@ test("uses sign-in language for Codex OAuth", () => {
   } as const;
 
   expect(providerConnectionLabel(provider)).toBe("Not connected");
+  expect(providerConnectionPill(provider)).toBeNull();
   expect(providerActionLabel(provider)).toBe("Sign in");
 });
 
@@ -54,4 +57,35 @@ test("summarizes chat and embedding models without pretending custom is an api k
 
   expect(providerActionLabel(provider)).toBe("Manage");
   expect(providerModelCountLabel(provider)).toBe("2 models");
+});
+
+test("summarizes agent readiness from the active model provider", () => {
+  const summary = providerReadinessSummary(
+    [
+      {
+        id: "openai",
+        name: "OpenAI",
+        connected: true,
+        from_env: false,
+        auth_type: "api_key",
+        models: ["gpt-5.5"],
+        embedding_models: ["text-embedding-3-small"],
+      },
+      {
+        id: "anthropic",
+        name: "Anthropic",
+        connected: false,
+        from_env: false,
+        auth_type: "api_key",
+        models: ["claude-sonnet-4-6"],
+        embedding_models: [],
+      },
+    ],
+    "gpt-5.5",
+  );
+
+  expect(summary.ready).toBe(true);
+  expect(summary.currentProviderName).toBe("OpenAI");
+  expect(summary.connectedProviderCount).toBe(1);
+  expect(summary.availableModelCount).toBe(2);
 });
