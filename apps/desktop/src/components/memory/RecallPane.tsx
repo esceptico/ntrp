@@ -24,6 +24,7 @@ export function RecallPane({
   const config = useStore((s) => s.config);
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<MemoryRecallInspectResult | null>(null);
+  const [showPromptContext, setShowPromptContext] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,6 +35,7 @@ export function RecallPane({
     setError(null);
     try {
       setResult(await inspectMemoryRecallApi(config, trimmed));
+      setShowPromptContext(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -71,21 +73,26 @@ export function RecallPane({
         {!result ? (
           <div className="grid h-full place-items-center text-[13px] italic text-faint">Run a query to inspect recall</div>
         ) : (
-          <div className="grid grid-cols-[minmax(0,1fr)_340px] gap-6">
-            <section>
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <h3 className="m-0 text-[13px] font-semibold text-ink">Formatted context</h3>
+          <div className="grid gap-5">
+            <section className="min-w-0">
+              <div className="mb-3 flex min-h-7 flex-wrap items-center justify-between gap-2">
+                <h3 className="m-0 text-[13px] font-semibold text-ink">Recall results</h3>
                 <div className="flex items-center gap-1.5">
                   <Pill>{result.observations.length} patterns</Pill>
                   <Pill>{result.facts.length} facts</Pill>
+                  <GhostBtn onClick={() => setShowPromptContext((value) => !value)}>
+                    {showPromptContext ? "Hide prompt context" : "Show prompt context"}
+                  </GhostBtn>
                 </div>
               </div>
-              <pre className="m-0 min-h-[240px] whitespace-pre-wrap rounded-[8px] border border-line-soft bg-code-bg px-4 py-3 text-[12.5px] leading-relaxed text-ink-soft">
-                {result.formatted_recall || "No memory matches"}
-              </pre>
+              {showPromptContext && (
+                <pre className="m-0 max-h-[220px] overflow-y-auto whitespace-pre-wrap rounded-[8px] border border-line-soft bg-code-bg px-4 py-3 text-[12px] leading-relaxed text-ink-soft scroll-thin">
+                  {result.formatted_recall || "No memory matches"}
+                </pre>
+              )}
             </section>
 
-            <aside className="min-w-0">
+            <div className="min-w-0">
               <SourceList
                 title="Patterns"
                 items={result.observations}
@@ -114,7 +121,7 @@ export function RecallPane({
                   )}
                 />
               </div>
-            </aside>
+            </div>
           </div>
         )}
       </div>
@@ -137,7 +144,7 @@ function SourceList<T>({
       {items.length === 0 ? (
         <div className="rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2 text-[12px] italic text-faint">No matches</div>
       ) : (
-        <ul className="m-0 flex list-none flex-col gap-2 p-0">{items.map(render)}</ul>
+        <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0">{items.map(render)}</ul>
       )}
     </section>
   );
@@ -151,7 +158,7 @@ function FactSource({ fact, reasons, onOpen }: { fact: Fact; reasons: string[]; 
         onClick={onOpen}
         className="block w-full rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2 text-left transition-colors hover:border-line-strong hover:bg-surface-soft/40"
       >
-        <span className="mb-1 flex items-center gap-1.5">
+        <span className="mb-1 flex flex-wrap items-center gap-1.5">
           <Pill>{fact.kind}</Pill>
           <Pill tone={factStatusTone(fact.status)}>{factStatusLabel(fact.status)}</Pill>
           <span className="text-[11px] text-faint">
@@ -159,7 +166,7 @@ function FactSource({ fact, reasons, onOpen }: { fact: Fact; reasons: string[]; 
           </span>
         </span>
         <RecallReasons reasons={reasons} />
-        <span className="block text-[12.5px] leading-snug text-ink-soft">{fact.text}</span>
+        <span className="block text-[12.5px] leading-snug text-ink-soft line-clamp-4">{fact.text}</span>
       </button>
     </li>
   );
@@ -194,11 +201,11 @@ function PatternSource({
           </span>
         </span>
         <RecallReasons reasons={reasons} />
-        <span className="block text-[12.5px] leading-snug text-ink-soft">{observation.summary}</span>
+        <span className="block text-[12.5px] leading-snug text-ink-soft line-clamp-4">{observation.summary}</span>
       </button>
       {sources.length > 0 && (
         <ul className="mt-2 flex list-none flex-col gap-1 border-t border-line-soft pt-2">
-          {sources.slice(0, 3).map((fact) => (
+          {sources.slice(0, 2).map((fact) => (
             <li key={fact.id} className="min-w-0">
               <button
                 type="button"
@@ -209,12 +216,20 @@ function PatternSource({
                 <span aria-hidden> · </span>
                 <span>{factSourceSummary(fact)}</span>
                 <span aria-hidden> · </span>
-                <span>{fact.text}</span>
+                <span className="line-clamp-2">{fact.text}</span>
               </button>
             </li>
           ))}
-          {sources.length > 3 && (
-            <li className="text-[11px] text-faint">{sources.length - 3} more sources in pattern detail</li>
+          {sources.length > 2 && (
+            <li>
+              <button
+                type="button"
+                onClick={onOpen}
+                className="text-left text-[11px] text-faint hover:text-ink-soft"
+              >
+                {sources.length - 2} more sources in pattern detail
+              </button>
+            </li>
           )}
         </ul>
       )}
@@ -225,12 +240,8 @@ function PatternSource({
 function RecallReasons({ reasons }: { reasons: string[] }) {
   if (reasons.length === 0) return null;
   return (
-    <span className="mb-1 flex flex-wrap items-center gap-1">
-      {reasons.map((reason) => (
-        <span key={reason} className="rounded-md bg-surface-soft px-1.5 py-[2px] text-[10.5px] text-faint">
-          {memoryRecallReasonLabel(reason)}
-        </span>
-      ))}
+    <span className="mb-1 block text-[11px] leading-snug text-faint">
+      Why: {reasons.map(memoryRecallReasonLabel).join(", ")}
     </span>
   );
 }
