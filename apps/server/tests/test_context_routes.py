@@ -34,6 +34,22 @@ class _SessionService:
         state = SessionState(session_id=session_id or "sess-1", started_at=datetime.now(UTC))
         return SessionData(state=state, messages=[{"role": "user", "content": "hi"}], last_input_tokens=123)
 
+    async def list_episodes(self, session_id: str, limit: int = 100):
+        return [
+            {
+                "session_id": session_id,
+                "episode_id": f"{session_id}:0",
+                "turn_index": 0,
+                "user_message_id": "u-1",
+                "message_start_id": "u-1",
+                "message_end_id": "a-1",
+                "message_start_seq": 1,
+                "message_end_seq": 2,
+                "started_at": "2026-01-01T00:00:00+00:00",
+                "ended_at": "2026-01-01T00:00:01+00:00",
+            }
+        ][:limit]
+
 
 def test_context_usage_reports_loaded_deferred_tool_counts():
     runtime = _Runtime()
@@ -56,3 +72,15 @@ def test_context_usage_reports_loaded_deferred_tool_counts():
     assert data["loaded_tool_count"] == 1
     assert data["deferred_tool_count"] >= 1
     assert data["visible_tool_count"] < data["tool_count"]
+
+
+def test_session_episodes_route_returns_durable_turn_ranges():
+    app.dependency_overrides[require_session_service] = lambda: _SessionService()
+    try:
+        response = TestClient(app).get("/session/episodes?session_id=sess-1")
+    finally:
+        app.dependency_overrides.pop(require_session_service, None)
+
+    assert response.status_code == 200
+    assert response.json()["episodes"][0]["message_start_id"] == "u-1"
+    assert response.json()["episodes"][0]["message_end_id"] == "a-1"

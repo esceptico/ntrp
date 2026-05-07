@@ -7,6 +7,7 @@ from uuid import uuid4
 import aiosqlite
 from pydantic import BaseModel
 
+from ntrp.constants import SESSION_HANDOFF_MARKER
 from ntrp.context.models import SessionData, SessionState
 
 SCHEMA = """
@@ -39,6 +40,24 @@ CREATE INDEX IF NOT EXISTS idx_session_messages_session_seq
     ON session_messages(session_id, seq);
 CREATE INDEX IF NOT EXISTS idx_session_messages_client
     ON session_messages(session_id, client_id);
+
+CREATE TABLE IF NOT EXISTS session_episodes (
+    session_id TEXT NOT NULL,
+    episode_id TEXT NOT NULL,
+    turn_index INTEGER NOT NULL,
+    user_message_id TEXT NOT NULL,
+    message_start_id TEXT NOT NULL,
+    message_end_id TEXT NOT NULL,
+    message_start_seq INTEGER NOT NULL,
+    message_end_seq INTEGER NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, episode_id),
+    UNIQUE (session_id, turn_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_episodes_session_turn
+    ON session_episodes(session_id, turn_index);
 """
 
 SQL_SAVE_SESSION = """
@@ -138,6 +157,7 @@ class SessionStore:
     async def _mirror_session_messages(self, session_id: str, messages: list[dict]) -> None:
         if not messages:
             await self.conn.execute("DELETE FROM session_messages WHERE session_id = ?", (session_id,))
+            await self.conn.execute("DELETE FROM session_episodes WHERE session_id = ?", (session_id,))
             return
 
         rows = await self.conn.execute_fetchall(
@@ -176,6 +196,78 @@ class SessionStore:
                     (session_id, message_id, next_seq, role, message_json, client_id, created_at),
                 )
                 next_seq += 1
+        await self._rebuild_session_episodes(session_id)
+
+    def _message_row_payload(self, row: aiosqlite.Row) -> dict:
+        return {
+            "session_id": row["session_id"],
+            "message_id": row["message_id"],
+            "seq": row["seq"],
+            "role": row["role"],
+            "client_id": row["client_id"],
+            "created_at": row["created_at"],
+            "message": json.loads(row["message_json"]),
+        }
+
+    def _is_episode_message(self, row: aiosqlite.Row) -> bool:
+        if row["role"] == "system":
+            return False
+        message = json.loads(row["message_json"])
+        content = message.get("content", "")
+        return not (isinstance(content, str) and content.startswith(SESSION_HANDOFF_MARKER))
+
+    async def _rebuild_session_episodes(self, session_id: str) -> None:
+        rows = await self.conn.execute_fetchall(
+            "SELECT * FROM session_messages WHERE session_id = ? ORDER BY seq ASC",
+            (session_id,),
+        )
+        await self.conn.execute("DELETE FROM session_episodes WHERE session_id = ?", (session_id,))
+
+        current_start: aiosqlite.Row | None = None
+        current_end: aiosqlite.Row | None = None
+        turn_index = 0
+
+        async def flush_current() -> None:
+            nonlocal current_start, current_end, turn_index
+            if current_start is None or current_end is None:
+                return
+            episode_id = f"{session_id}:{turn_index}"
+            await self.conn.execute(
+                """
+                INSERT INTO session_episodes (
+                    session_id, episode_id, turn_index, user_message_id,
+                    message_start_id, message_end_id, message_start_seq, message_end_seq,
+                    started_at, ended_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    session_id,
+                    episode_id,
+                    turn_index,
+                    current_start["message_id"],
+                    current_start["message_id"],
+                    current_end["message_id"],
+                    current_start["seq"],
+                    current_end["seq"],
+                    current_start["created_at"],
+                    current_end["created_at"],
+                ),
+            )
+            turn_index += 1
+            current_start = None
+            current_end = None
+
+        for row in rows:
+            if not self._is_episode_message(row):
+                continue
+            if row["role"] == "user":
+                await flush_current()
+                current_start = row
+            if current_start is not None:
+                current_end = row
+
+        await flush_current()
 
     async def _ensure_session_messages(self, session_id: str) -> None:
         has_rows = await self.read_conn.execute_fetchall(SQL_LOAD_SESSION_MESSAGES_COUNT, (session_id,))
@@ -414,15 +506,7 @@ class SessionStore:
             rows = list(reversed(desc_rows))
 
         messages = [
-            {
-                "session_id": row["session_id"],
-                "message_id": row["message_id"],
-                "seq": row["seq"],
-                "role": row["role"],
-                "client_id": row["client_id"],
-                "created_at": row["created_at"],
-                "message": json.loads(row["message_json"]),
-            }
+            self._message_row_payload(row)
             for row in rows
         ]
         first_seq = messages[0]["seq"] if messages else None
@@ -477,5 +561,34 @@ class SessionStore:
             "DELETE FROM session_messages WHERE session_id = ? AND seq >= ?",
             (session_id, target_seq),
         )
+        await self._rebuild_session_episodes(session_id)
         await self.conn.commit()
         return cursor.rowcount > 0
+
+    async def list_session_episodes(self, session_id: str, limit: int = 100) -> list[dict]:
+        await self._ensure_session_messages(session_id)
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT *
+            FROM session_episodes
+            WHERE session_id = ?
+            ORDER BY turn_index ASC
+            LIMIT ?
+            """,
+            (session_id, max(1, min(limit, 500))),
+        )
+        return [
+            {
+                "session_id": row["session_id"],
+                "episode_id": row["episode_id"],
+                "turn_index": row["turn_index"],
+                "user_message_id": row["user_message_id"],
+                "message_start_id": row["message_start_id"],
+                "message_end_id": row["message_end_id"],
+                "message_start_seq": row["message_start_seq"],
+                "message_end_seq": row["message_end_seq"],
+                "started_at": row["started_at"],
+                "ended_at": row["ended_at"],
+            }
+            for row in rows
+        ]

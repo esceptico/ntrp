@@ -71,6 +71,9 @@ class SessionService:
             around_seq=around_seq,
         )
 
+    async def list_episodes(self, session_id: str, limit: int = 100) -> list[dict]:
+        return await self.store.list_session_episodes(session_id, limit=limit)
+
     async def rename(self, session_id: str, name: str) -> bool:
         return await self.store.update_session_name(session_id, name)
 

@@ -261,3 +261,56 @@ async def test_delete_session_messages_from_trims_reverted_future(store: Session
 
     page = await store.list_session_messages("test-session", limit=10)
     assert [row["message_id"] for row in page["messages"]] == ["m-0", "m-1"]
+
+    episodes = await store.list_session_episodes("test-session")
+    assert [episode["message_start_id"] for episode in episodes] == ["m-0", "m-1"]
+
+
+@pytest.mark.asyncio
+async def test_session_episodes_group_durable_transcript_by_user_turn(store: SessionStore):
+    state = _make_state()
+    messages = [
+        {"role": "system", "content": "sys", "client_id": "sys"},
+        {"role": "user", "content": "first", "client_id": "u-1", "created_at": "2026-01-01T00:00:00+00:00"},
+        {"role": "assistant", "content": "reply", "client_id": "a-1", "created_at": "2026-01-01T00:00:01+00:00"},
+        {"role": "tool", "content": "tool", "client_id": "t-1", "created_at": "2026-01-01T00:00:02+00:00"},
+        {"role": "user", "content": "second", "client_id": "u-2", "created_at": "2026-01-01T00:00:03+00:00"},
+        {"role": "assistant", "content": "reply 2", "client_id": "a-2", "created_at": "2026-01-01T00:00:04+00:00"},
+    ]
+    await store.save_session(state, messages)
+
+    episodes = await store.list_session_episodes("test-session")
+
+    assert [
+        (episode["message_start_id"], episode["message_end_id"])
+        for episode in episodes
+    ] == [("u-1", "t-1"), ("u-2", "a-2")]
+    assert episodes[0]["started_at"] == "2026-01-01T00:00:00+00:00"
+    assert episodes[0]["ended_at"] == "2026-01-01T00:00:02+00:00"
+
+
+@pytest.mark.asyncio
+async def test_session_episodes_survive_compaction_without_handoff_rows(store: SessionStore):
+    state = _make_state()
+    original = [
+        {"role": "user", "content": "first", "client_id": "u-1"},
+        {"role": "assistant", "content": "reply", "client_id": "a-1"},
+        {"role": "user", "content": "second", "client_id": "u-2"},
+        {"role": "assistant", "content": "reply 2", "client_id": "a-2"},
+    ]
+    await store.save_session(state, original)
+    await store.save_session(
+        state,
+        [
+            {"role": "assistant", "content": "[Session State Handoff]\nsummary", "client_id": "handoff"},
+            original[-2],
+            original[-1],
+        ],
+    )
+
+    episodes = await store.list_session_episodes("test-session")
+
+    assert [
+        (episode["message_start_id"], episode["message_end_id"])
+        for episode in episodes
+    ] == [("u-1", "a-1"), ("u-2", "a-2")]
