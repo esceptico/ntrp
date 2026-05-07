@@ -130,6 +130,7 @@ def create_spawn_fn(
     max_depth: int,
     current_depth: int,
     reasoning_effort: str | None = None,
+    model_reasoning_efforts: dict[str, str] | None = None,
 ):
     async def spawn_child(
         calling_ctx: ToolContext,
@@ -148,6 +149,11 @@ def create_spawn_fn(
         allowed_tool_names = tool_schema_names(filtered_tools)
         child_state = _create_session_state(calling_ctx, isolation)
         child_model = model_override or model
+        child_reasoning_effort = (
+            model_reasoning_efforts.get(child_model)
+            if model_reasoning_efforts is not None
+            else reasoning_effort
+        )
 
         child_run = RunContext(
             run_id=calling_ctx.run.run_id,
@@ -179,7 +185,8 @@ def create_spawn_fn(
             model=child_model,
             max_depth=max_depth,
             current_depth=current_depth + 1,
-            reasoning_effort=reasoning_effort,
+            reasoning_effort=child_reasoning_effort,
+            model_reasoning_efforts=model_reasoning_efforts,
         )
 
         child_executor = NtrpToolExecutor(executor, child_ctx, ledger=calling_ctx.ledger)
@@ -199,7 +206,7 @@ def create_spawn_fn(
             max_depth=max_depth,
             current_depth=current_depth + 1,
             parent_id=parent_id,
-            reasoning_effort=reasoning_effort,
+            reasoning_effort=child_reasoning_effort,
             prompt_cache_key=child_state.session_id,
             model_request_middlewares=(
                 DeferredToolsModelRequestMiddleware(

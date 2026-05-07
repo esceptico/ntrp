@@ -116,7 +116,7 @@ def _reasoning_efforts(model_id: str | None) -> tuple[str, ...]:
 
 
 def _validate_reasoning_patch(fields: dict, config) -> None:
-    target_model = fields.get("chat_model", config.chat_model)
+    target_model = fields.pop("reasoning_model", None) or fields.get("chat_model", config.chat_model)
     efforts = _reasoning_efforts(target_model)
 
     if "reasoning_effort" in fields:
@@ -155,6 +155,11 @@ async def get_models(runtime: Runtime = Depends(get_runtime)):
     return {
         "models": list_models(),
         "groups": [{"provider": p, "models": ms} for p, ms in groups.items()],
+        "reasoning_efforts": {
+            mid: list(model.reasoning_efforts)
+            for mid, model in all_models.items()
+            if model.reasoning_efforts
+        },
         "chat_model": config.chat_model,
         "research_model": config.research_model,
         "memory_model": config.memory_model,

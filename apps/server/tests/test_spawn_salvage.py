@@ -160,6 +160,58 @@ async def test_spawn_returns_salvage_when_inner_agent_fails(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_spawn_uses_reasoning_effort_for_model_override(monkeypatch):
+    captured: dict = {}
+
+    class FakeLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            captured["model"] = model
+            captured["reasoning_effort"] = reasoning_effort
+            yield CompletionResponse(
+                choices=[
+                    Choice(
+                        message=Message(role="assistant", content="done", tool_calls=None, reasoning_content=None),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=Usage(),
+                model=model,
+            )
+
+    monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    executor = make_executor()
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+        io=IOBridge(),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+    )
+
+    spawn = create_spawn_fn(
+        executor=executor,
+        model="chat-model",
+        max_depth=3,
+        current_depth=0,
+        reasoning_effort="low",
+        model_reasoning_efforts={"research-model": "max"},
+    )
+    result = await spawn(
+        ctx,
+        "research task",
+        system_prompt="sys",
+        tools=[],
+        model_override="research-model",
+        parent_id="call",
+        timeout=1,
+    )
+
+    assert result == "done"
+    assert captured == {"model": "research-model", "reasoning_effort": "max"}
+
+
+@pytest.mark.asyncio
 async def test_spawn_salvage_preserves_tool_results_after_loop_progress(monkeypatch):
     """The real scenario: sub-agent runs several tool calls successfully,
     then the LLM dies on the next iteration. Salvage must see the tool

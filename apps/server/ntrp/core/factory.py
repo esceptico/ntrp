@@ -21,6 +21,7 @@ class AgentConfig:
     research_model: str | None
     max_depth: int
     reasoning_effort: str | None = None
+    model_reasoning_efforts: dict[str, str] | None = None
     deferred_tools: bool = True
     compactor: Compactor | None = None
 
@@ -31,6 +32,7 @@ class AgentConfig:
             research_model=config.research_model,
             max_depth=config.max_depth,
             reasoning_effort=config.reasoning_effort_for(model or config.chat_model),
+            model_reasoning_efforts=dict(config.model_reasoning_efforts),
             deferred_tools=config.deferred_tools,
             compactor=SummaryCompactor(
                 threshold=config.compression_threshold,
@@ -80,6 +82,7 @@ def create_agent(
         max_depth=config.max_depth,
         current_depth=0,
         reasoning_effort=config.reasoning_effort,
+        model_reasoning_efforts=config.model_reasoning_efforts or {},
     )
 
     ntrp_executor = NtrpToolExecutor(executor, tool_ctx, ledger=tool_ctx.ledger)

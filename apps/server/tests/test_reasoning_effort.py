@@ -25,6 +25,17 @@ def test_reasoning_effort_patch_stores_value_for_target_model():
     assert fields["model_reasoning_efforts"] == {"gpt-5.2": "high"}
 
 
+def test_reasoning_effort_patch_can_target_non_chat_model():
+    fields = {"reasoning_model": "claude-opus-4-7", "reasoning_effort": "max"}
+    config = Config(memory=False, chat_model="gpt-5.2")
+
+    _validate_reasoning_patch(fields, config)
+
+    assert "reasoning_model" not in fields
+    assert fields["reasoning_effort"] is None
+    assert fields["model_reasoning_efforts"] == {"claude-opus-4-7": "max"}
+
+
 def test_reasoning_effort_patch_preserves_per_model_value_when_chat_model_changes():
     fields = {"chat_model": "qwen/qwen3.5-27b"}
     config = Config(memory=False, chat_model="gpt-5.2", model_reasoning_efforts={"gpt-5.2": "high"})
