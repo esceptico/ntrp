@@ -219,11 +219,12 @@ button:not(:disabled):active {
   transform: scale(0.96);
 }
 
-/* Hover dish — radial gradient that follows the cursor on hover. Apply
-   `hover-dish` to any container; set the CSS vars `--mx` and `--my`
-   from a mousemove handler (see lib/hoverDish.ts). The gradient is
-   muted enough to layer on top of the row's own hover-bg without
-   fighting it. */
+/* Hover dish — soft radial gradient that follows the cursor on hover.
+   Apply `hover-dish` to any row; the row's mousemove handler (see
+   lib/hoverDish.ts) writes `--mx`/`--my`. The gradient stays subtle
+   enough to read as "the row breathes when you point at it", not as a
+   spotlight. The pseudo-element renders behind the row's content
+   automatically — no need to re-stack children. */
 .hover-dish { position: relative; isolation: isolate; }
 .hover-dish::before {
   content: "";
@@ -231,17 +232,15 @@ button:not(:disabled):active {
   inset: 0;
   border-radius: inherit;
   background: radial-gradient(
-    140px circle at var(--mx, 50%) var(--my, 50%),
-    color-mix(in oklab, var(--color-ink) 7%, transparent),
-    transparent 55%
+    100px circle at var(--mx, 50%) var(--my, 50%),
+    color-mix(in oklab, var(--color-ink) 4%, transparent),
+    transparent 65%
   );
   opacity: 0;
-  transition: opacity 200ms ease-out;
+  transition: opacity 180ms ease-out;
   pointer-events: none;
-  z-index: 0;
 }
 .hover-dish:hover::before { opacity: 1; }
-.hover-dish > * { position: relative; z-index: 1; }
 
 /* ─── Drag regions ─────────────────────────────────────────── */
 .sidebar { -webkit-app-region: drag; }

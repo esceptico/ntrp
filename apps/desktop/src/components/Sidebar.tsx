@@ -160,24 +160,13 @@ function SessionRow({
       onMouseMove={trackHoverDish}
       data-streaming={streaming ? "true" : undefined}
       className={clsx(
-        "session-row hover-dish relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full pl-3 pr-2.5 py-1.5 rounded-lg text-left transition-colors",
+        "session-row hover-dish grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full px-3 py-1.5 rounded-lg text-left transition-colors",
         active
-          ? "bg-[rgba(0,0,0,0.075)] text-ink"
-          : "text-ink-soft hover:bg-[rgba(0,0,0,0.045)]",
+          ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
+          : "text-ink-soft hover:bg-surface/60",
       )}
     >
-      {active && (
-        <span
-          aria-hidden
-          className="absolute left-1 top-1.5 bottom-1.5 w-[2px] rounded-full bg-accent-strong"
-        />
-      )}
-      <span
-        className={clsx(
-          "min-w-0 flex items-center gap-1.5 text-[13px] tracking-[-0.005em]",
-          active ? "font-semibold" : "font-medium",
-        )}
-      >
+      <span className="min-w-0 flex items-center gap-1.5 text-[13px] font-medium tracking-[-0.005em]">
         <span className="truncate">{name || "untitled"}</span>
       </span>
       {unread && !streaming ? (
