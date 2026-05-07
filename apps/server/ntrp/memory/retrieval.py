@@ -284,6 +284,12 @@ def _is_recallable_fact(fact: Fact, now: datetime | None = None) -> bool:
     return fact.expires_at > (now or datetime.now(UTC))
 
 
+def _add_recall_reason(reasons: dict[int, list[str]], item_id: int, reason: str) -> None:
+    existing = reasons.setdefault(item_id, [])
+    if reason not in existing:
+        existing.append(reason)
+
+
 async def retrieve_facts(
     repo: FactRepository,
     query_text: str,
@@ -298,9 +304,14 @@ async def retrieve_facts(
     # Top-K seeds
     seeds = dict(heapq.nlargest(seed_limit, rrf_scores.items(), key=lambda x: x[1]))
     seed_ids = list(seeds.keys())
+    fact_reasons: dict[int, list[str]] = {}
+    for fid in seed_ids:
+        _add_recall_reason(fact_reasons, fid, "fact_match")
 
     # Entity expansion
     expansion = await entity_expand(repo, seed_ids)
+    for fid in expansion:
+        _add_recall_reason(fact_reasons, fid, "shared_entity")
 
     # Temporal+vector expansion: get temporally close facts, filter by vector similarity
     if query_time:
@@ -312,6 +323,8 @@ async def retrieve_facts(
         )
     else:
         temporal_ids = {}
+    for fid in temporal_ids:
+        _add_recall_reason(fact_reasons, fid, "temporal_neighbor")
 
     # Collect all candidate fact IDs
     candidate_ids: set[int] = set(seeds.keys())
@@ -355,7 +368,11 @@ async def retrieve_facts(
             scored.append((facts_by_id[fid], score_query_fact(facts_by_id[fid], base)))
 
     scored.sort(key=lambda x: x[1], reverse=True)
-    return FactContext(facts=[f for f, _ in scored[:ENTITY_EXPANSION_MAX_FACTS]])
+    facts = [f for f, _ in scored[:ENTITY_EXPANSION_MAX_FACTS]]
+    return FactContext(
+        facts=facts,
+        fact_reasons={fact.id: fact_reasons.get(fact.id, ["fact_match"]) for fact in facts},
+    )
 
 
 async def _observation_hybrid_search(
@@ -397,6 +414,9 @@ async def retrieve_with_observations(
     obs_rrf = await _observation_hybrid_search(obs_repo, query_text, query_embedding, RECALL_OBSERVATION_LIMIT)
 
     obs_by_id = await obs_repo.get_batch(list(obs_rrf.keys()))
+    observation_reasons: dict[int, list[str]] = {}
+    for oid in obs_rrf:
+        _add_recall_reason(observation_reasons, oid, "pattern_match")
 
     # Exact source-fact matches are direct evidence for their consolidated observations.
     # This lets a query hit the substrate and still surface the derived memory layer.
@@ -407,6 +427,7 @@ async def retrieve_with_observations(
     )
     for obs in evidence_observations:
         obs_by_id.setdefault(obs.id, obs)
+        _add_recall_reason(observation_reasons, obs.id, "source_fact_match")
 
     obs_by_id = {oid: o for oid, o in obs_by_id.items() if o.archived_at is None}
 
@@ -466,4 +487,6 @@ async def retrieve_with_observations(
         facts=standalone_facts,
         observations=observations,
         bundled_sources=bundled_sources,
+        fact_reasons={fact.id: fact_context.fact_reasons.get(fact.id, ["fact_match"]) for fact in standalone_facts},
+        observation_reasons={obs.id: observation_reasons.get(obs.id, ["pattern_match"]) for obs in observations},
     )

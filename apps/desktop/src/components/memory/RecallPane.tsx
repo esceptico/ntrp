@@ -5,6 +5,7 @@ import { useStore } from "../../store";
 import { type Fact, type MemoryRecallInspectResult, type Observation, inspectMemoryRecallApi } from "../../api";
 import { formatRelativePast } from "../../lib/format";
 import { factSourceSummary } from "../../lib/memoryProvenance";
+import { memoryRecallReasonLabel } from "../../lib/memoryRecallReasons";
 import {
   factStatusLabel,
   factStatusTone,
@@ -93,6 +94,7 @@ export function RecallPane({
                     key={obs.id}
                     observation={obs}
                     sources={result.bundled_sources[String(obs.id)] ?? []}
+                    reasons={result.observation_reasons[String(obs.id)] ?? []}
                     onOpen={() => onOpenPattern?.(obs)}
                     onOpenFact={onOpenFact}
                   />
@@ -102,7 +104,14 @@ export function RecallPane({
                 <SourceList
                   title="Facts"
                   items={result.facts}
-                  render={(fact) => <FactSource key={fact.id} fact={fact} onOpen={() => onOpenFact?.(fact)} />}
+                  render={(fact) => (
+                    <FactSource
+                      key={fact.id}
+                      fact={fact}
+                      reasons={result.fact_reasons[String(fact.id)] ?? []}
+                      onOpen={() => onOpenFact?.(fact)}
+                    />
+                  )}
                 />
               </div>
             </aside>
@@ -134,7 +143,7 @@ function SourceList<T>({
   );
 }
 
-function FactSource({ fact, onOpen }: { fact: Fact; onOpen?: () => void }) {
+function FactSource({ fact, reasons, onOpen }: { fact: Fact; reasons: string[]; onOpen?: () => void }) {
   return (
     <li>
       <button
@@ -149,6 +158,7 @@ function FactSource({ fact, onOpen }: { fact: Fact; onOpen?: () => void }) {
             {factSourceSummary(fact)} · {fact.access_count}× · {formatRelativePast(fact.last_accessed_at)}
           </span>
         </span>
+        <RecallReasons reasons={reasons} />
         <span className="block text-[12.5px] leading-snug text-ink-soft">{fact.text}</span>
       </button>
     </li>
@@ -158,11 +168,13 @@ function FactSource({ fact, onOpen }: { fact: Fact; onOpen?: () => void }) {
 function PatternSource({
   observation,
   sources,
+  reasons,
   onOpen,
   onOpenFact,
 }: {
   observation: Observation;
   sources: Fact[];
+  reasons: string[];
   onOpen?: () => void;
   onOpenFact?: (fact: Fact) => void;
 }) {
@@ -181,6 +193,7 @@ function PatternSource({
             {observation.evidence_count} sources · {observation.access_count}× · {formatRelativePast(observation.last_accessed_at)}
           </span>
         </span>
+        <RecallReasons reasons={reasons} />
         <span className="block text-[12.5px] leading-snug text-ink-soft">{observation.summary}</span>
       </button>
       {sources.length > 0 && (
@@ -206,5 +219,18 @@ function PatternSource({
         </ul>
       )}
     </li>
+  );
+}
+
+function RecallReasons({ reasons }: { reasons: string[] }) {
+  if (reasons.length === 0) return null;
+  return (
+    <span className="mb-1 flex flex-wrap items-center gap-1">
+      {reasons.map((reason) => (
+        <span key={reason} className="rounded-md bg-surface-soft px-1.5 py-[2px] text-[10.5px] text-faint">
+          {memoryRecallReasonLabel(reason)}
+        </span>
+      ))}
+    </span>
   );
 }

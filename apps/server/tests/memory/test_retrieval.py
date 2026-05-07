@@ -289,7 +289,7 @@ class TestRetrieveFacts:
     @pytest.mark.asyncio
     async def test_retrieves_matching_facts(self, repo: FactRepository):
         emb = mock_embedding("guitar music")
-        await repo.create(
+        fact = await repo.create(
             text="I play guitar",
             source_type=SourceType.EXPLICIT,
             embedding=emb,
@@ -299,6 +299,7 @@ class TestRetrieveFacts:
 
         assert len(context.facts) >= 1
         assert any("guitar" in f.text for f in context.facts)
+        assert context.fact_reasons[fact.id] == ["fact_match"]
 
     @pytest.mark.asyncio
     async def test_returns_empty_on_no_match(self, repo: FactRepository):
@@ -322,6 +323,8 @@ class TestRetrieveFacts:
         fact_ids = [f.id for f in context.facts]
         assert f1.id in fact_ids
         assert f2.id in fact_ids
+        assert "fact_match" in context.fact_reasons[f1.id]
+        assert context.fact_reasons[f2.id] == ["shared_entity"]
 
     @pytest.mark.asyncio
     async def test_retrieves_consolidated_facts(self, repo: FactRepository):
@@ -422,6 +425,7 @@ class TestRetrieveWithObservations:
         )
 
         assert observation.id in [obs.id for obs in context.observations]
+        assert "source_fact_match" in context.observation_reasons[observation.id]
 
     @pytest.mark.asyncio
     async def test_observations_sorted_by_score(self, repo: FactRepository, obs_repo: ObservationRepository):

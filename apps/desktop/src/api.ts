@@ -600,6 +600,8 @@ export interface MemoryRecallInspectResult {
   facts: Fact[];
   observations: Observation[];
   bundled_sources: Record<string, Fact[]>;
+  fact_reasons: Record<string, string[]>;
+  observation_reasons: Record<string, string[]>;
 }
 
 export async function getMemoryStatsApi(config: AppConfig): Promise<MemoryStats> {

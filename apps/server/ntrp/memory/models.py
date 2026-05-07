@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import Any
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ntrp.database import deserialize_embedding
 
@@ -307,3 +307,5 @@ class FactContext(_FrozenModel):
     facts: list[Fact]
     observations: list[Observation] = []
     bundled_sources: dict[int, list[Fact]] = {}  # observation_id -> source facts
+    fact_reasons: dict[int, list[str]] = Field(default_factory=dict)
+    observation_reasons: dict[int, list[str]] = Field(default_factory=dict)

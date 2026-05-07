@@ -373,6 +373,10 @@ async def inspect_memory_recall(request: MemoryRecallInspectRequest, svc: Memory
             str(observation_id): [_fact_payload(f) for f in facts]
             for observation_id, facts in context.bundled_sources.items()
         },
+        "fact_reasons": {str(fact_id): reasons for fact_id, reasons in context.fact_reasons.items()},
+        "observation_reasons": {
+            str(observation_id): reasons for observation_id, reasons in context.observation_reasons.items()
+        },
     }
 
 

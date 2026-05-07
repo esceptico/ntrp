@@ -760,6 +760,7 @@ class TestMemoryAuditAPI:
         assert "SQLite memory retrieval" in data["formatted_recall"]
         assert data["observations"][0]["id"] == obs.id
         assert data["bundled_sources"][str(obs.id)][0]["id"] == fact.id
+        assert data["observation_reasons"][str(obs.id)] == ["pattern_match", "source_fact_match"]
 
         stored_fact = await test_runtime.memory.facts.get(fact.id)
         stored_obs = await test_runtime.memory.observations.get(obs.id)
