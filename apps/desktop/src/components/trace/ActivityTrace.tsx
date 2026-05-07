@@ -10,13 +10,13 @@ import { MOTION, EASE_EMPHASIZED } from "../../lib/motion";
 export type { ActivityItem };
 
 const EASE = EASE_EMPHASIZED;
-const ROW_HEIGHT_EM = 1.5;
-const NEST_PX = 14;
+const ROW_HEIGHT_EM = 1.55;
+const NEST_PX = 16;
 const MAX_NEST_DEPTH = 4; // visual cap; deeper nesting collapses to the same indent
 
 export function ActivityTrace({ children }: { children: ReactNode }) {
   return (
-    <div className="font-sans text-[12.5px] leading-[1.5] text-muted">
+    <div className="font-sans text-[13px] leading-[1.55] text-muted">
       {children}
     </div>
   );
@@ -120,9 +120,9 @@ export function ActivityTail({
               initial={{ y: 8, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: -8, opacity: 0 }}
-              transition={{ duration: MOTION.row, ease: EASE }}
+              transition={{ duration: MOTION.panel, ease: EASE }}
               style={{ height: `${ROW_HEIGHT_EM}em` }}
-              className="flex items-stretch min-w-0"
+              className="flex items-baseline min-w-0"
             >
               <ItemButton item={item} onOpen={setViewingTool} />
             </motion.div>
@@ -231,7 +231,6 @@ function ItemButton({
   }
   const running = item.result == null;
   const errored = !!item.error;
-  const showTarget = item.target && item.target !== item.kind;
   return (
     <button
       type="button"
@@ -239,43 +238,21 @@ function ItemButton({
       title={`${item.kind} — click to inspect`}
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
       className={clsx(
-        "group/row flex items-center gap-2 px-1.5 -mx-1.5 rounded-md text-left bg-transparent border-0 transition-colors cursor-pointer w-full h-full min-w-0",
-        errored ? "hover:bg-bad-soft/40" : "hover:bg-surface-soft/60",
+        "flex items-baseline gap-1.5 font-mono truncate text-left bg-transparent border-0 p-0 m-0 transition-colors cursor-pointer",
+        errored
+          ? "text-bad hover:text-bad"
+          : running
+            ? "text-ink-soft"
+            : "text-faint hover:text-ink-soft",
       )}
     >
       {depth > 0 && (
-        <span className="text-whisper select-none shrink-0" aria-hidden="true">↳</span>
+        <span className="text-whisper select-none" aria-hidden="true">↳</span>
       )}
       <StateDot running={running} errored={errored} />
-      <span
-        className={clsx(
-          "shrink-0 font-medium tracking-[-0.005em]",
-          errored ? "text-bad" : "text-ink-soft",
-        )}
-      >
-        {item.kind}
-      </span>
-      {showTarget && (
-        <span className="font-mono text-faint truncate min-w-0">
-          {item.target}
-        </span>
-      )}
-      {item.durationMs != null && !running && (
-        <span className="ml-auto shrink-0 text-[11px] tabular-nums text-faint group-hover/row:text-muted transition-colors">
-          {formatDuration(item.durationMs)}
-        </span>
-      )}
+      <span className="truncate">{item.target || item.kind}</span>
     </button>
   );
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`;
-  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
-  const m = Math.floor(ms / 60_000);
-  const s = Math.round((ms % 60_000) / 1000);
-  return s === 0 ? `${m}m` : `${m}m${s}s`;
 }
 
 function StateDot({ running, errored }: { running: boolean; errored: boolean }) {
@@ -283,12 +260,12 @@ function StateDot({ running, errored }: { running: boolean; errored: boolean }) 
     <span
       aria-hidden
       className={clsx(
-        "inline-block w-[5px] h-[5px] rounded-full self-center shrink-0 transition-opacity",
+        "inline-block w-[5px] h-[5px] rounded-full self-center shrink-0",
         errored
           ? "bg-bad"
           : running
             ? "bg-accent animate-[pulseSoft_1.2s_ease-in-out_infinite]"
-            : "bg-accent/50",
+            : "bg-whisper",
       )}
     />
   );

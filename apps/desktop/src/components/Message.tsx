@@ -254,6 +254,11 @@ const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: 
   const running = useStore((s) => s.running);
   const isStreaming = Boolean(message && running && message.turn?.endedAt === null);
   if (!message) return null;
+  // Drop intermediate assistant messages that finished empty — the model
+  // opens TEXT_MESSAGE_START before deciding to tool-call instead, leaving
+  // a zero-content article that would otherwise stack ~30px of phantom
+  // padding inside the work block.
+  if (!isFinal && !isStreaming && !message.content.trim()) return null;
   return (
     <article
       className={clsx("assistant-message group grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 animate-fade-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
@@ -283,7 +288,7 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
 
   return (
     <article
-      className={clsx("grid grid-cols-[minmax(0,1fr)] min-w-0 animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx("grid grid-cols-[minmax(0,1fr)] min-w-0 my-1 animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
@@ -406,7 +411,7 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
 
   return (
     <article
-      className={clsx("grid grid-cols-[minmax(0,1fr)] animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx("grid grid-cols-[minmax(0,1fr)] my-1 animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
