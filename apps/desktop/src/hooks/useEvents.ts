@@ -151,7 +151,6 @@ export function handleServerEvent(event: ServerEvent) {
       return;
     case "REASONING_MESSAGE_START":
       if (event.depth) return;
-      endActivity(s);
       s.appendMessage({ id: event.message_id, role: "reasoning", title: "Reasoning", content: "" });
       return;
     case "REASONING_MESSAGE_CONTENT": {
@@ -159,7 +158,6 @@ export function handleServerEvent(event: ServerEvent) {
       const m = s.messages.get(event.message_id);
       if (m) s.mutateMessage(event.message_id, { content: m.content + event.delta });
       else {
-        endActivity(s);
         s.appendMessage({
           id: event.message_id,
           role: "reasoning",

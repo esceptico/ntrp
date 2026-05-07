@@ -26,6 +26,7 @@ export type ThemeChoice = "light" | "dark" | "system";
 
 export type PaletteId =
   | "warm"
+  | "graphite"
   | "vercel"
   | "raycast"
   | "github"

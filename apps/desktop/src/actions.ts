@@ -84,7 +84,7 @@ function historyBoundaryId(s: ReturnType<typeof getState>, edge: "first" | "last
   return null;
 }
 
-function historyMessagesToUi(messages: HistoryMessage[], activeRunId: string | null): UiMessage[] {
+export function historyMessagesToUi(messages: HistoryMessage[], activeRunId: string | null): UiMessage[] {
   // Pre-index tool results so we can attach them to their calls regardless
   // of ordering between the assistant message and its `tool` follow-ups.
   const resultsById = new Map<string, string>();
@@ -129,7 +129,6 @@ function historyMessagesToUi(messages: HistoryMessage[], activeRunId: string | n
 
     // assistant
     if (msg.reasoning_content) {
-      activeActivityId = null;
       items.push({
         id: `${stableId}-reasoning`,
         role: "reasoning",

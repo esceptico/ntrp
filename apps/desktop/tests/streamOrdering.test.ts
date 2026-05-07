@@ -107,3 +107,53 @@ test("does not mutate a finalized activity group after a tool burst", async () =
     "tool-2",
   ]);
 });
+
+test("keeps one activity group across top-level reasoning events", () => {
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-1",
+    session_id: "session-1",
+    timestamp: 1,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-1",
+    tool_call_name: "ReadFile",
+    timestamp: 2,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-1",
+    timestamp: 3,
+  });
+  handleServerEvent({
+    type: "REASONING_MESSAGE_START",
+    message_id: "reasoning-1",
+    timestamp: 4,
+  });
+  handleServerEvent({
+    type: "REASONING_MESSAGE_CONTENT",
+    message_id: "reasoning-1",
+    delta: "thinking",
+    timestamp: 5,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-2",
+    tool_call_name: "ListFiles",
+    timestamp: 6,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-2",
+    timestamp: 7,
+  });
+
+  const state = getState();
+  const activityIds = state.order.filter((id) => state.messages.get(id)?.role === "activity");
+  expect(activityIds).toHaveLength(1);
+  expect(state.messages.get(activityIds[0])?.activity?.items.map((item) => item.id)).toEqual([
+    "tool-1",
+    "tool-2",
+  ]);
+});
