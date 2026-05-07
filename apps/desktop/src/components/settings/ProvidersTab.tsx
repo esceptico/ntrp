@@ -455,7 +455,7 @@ function ProviderRow({
       </div>
 
       {editing && !provider.connected && !isOauth && !isCustom && (
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3.5 py-3 border-t border-line-soft bg-surface-soft/35">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3.5 py-3 bg-surface-soft/35">
           <input
             type="password"
             value={apiKey}
@@ -483,7 +483,7 @@ function ProviderRow({
       )}
 
       {codexStatus?.status === "pending" && (
-        <div className="flex items-center gap-2 px-3.5 py-2.5 border-t border-line-soft bg-surface-soft/35 text-[12px] text-muted">
+        <div className="flex items-center gap-2 px-3.5 py-2.5 bg-surface-soft/35 text-[12px] text-muted">
           <Loader2 size={13} strokeWidth={1.8} className="animate-spin" />
           <span>Waiting for browser sign-in…</span>
           {codexStatus.url && (
@@ -500,7 +500,7 @@ function ProviderRow({
       )}
 
       {codexStatus?.error && (
-        <div className="px-3.5 py-2.5 border-t border-line-soft bg-bad-soft text-[12px] text-bad">
+        <div className="px-3.5 py-2.5 bg-bad-soft text-[12px] text-bad">
           {codexStatus.error}
         </div>
       )}
@@ -529,7 +529,7 @@ function CustomModelsPanel({
   const creating = pendingId === "custom:create";
 
   return (
-    <div className="grid gap-3 px-3.5 py-3 border-t border-line-soft bg-surface-soft/35">
+    <div className="grid gap-3 px-3.5 py-3 bg-surface-soft/35">
       <div className="grid gap-1.5">
         {models.length === 0 ? (
           <div className="text-[12px] text-faint">No custom models configured.</div>

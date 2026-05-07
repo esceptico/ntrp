@@ -29,7 +29,7 @@ export const ApprovalCard = memo(function ApprovalCard({ id }: { id: string }) {
           pending ? "border-accent/40" : "border-line",
         )}
       >
-        <header className="flex items-center gap-2 px-3 py-2 border-b border-line-soft bg-surface-soft/60">
+        <header className="flex items-center gap-2 px-3 py-2 bg-surface-soft/60">
           <Shield
             size={13}
             strokeWidth={1.8}

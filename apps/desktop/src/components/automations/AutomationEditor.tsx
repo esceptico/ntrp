@@ -301,7 +301,7 @@ export function AutomationEditor({
               </div>
             )}
 
-            <footer className="flex items-center justify-between gap-2 px-3 py-2.5 border-t border-line-soft bg-surface-soft/40">
+            <footer className="flex items-center justify-between gap-2 px-3 py-2.5 bg-surface-soft/40">
               <div className="flex items-center gap-2">
                 <ScheduleChip
                   schedule={form.schedule}

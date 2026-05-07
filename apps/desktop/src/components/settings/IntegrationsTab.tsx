@@ -333,7 +333,7 @@ function GoogleCard({
       </div>
 
       {accounts.length > 0 && (
-        <div className="grid gap-1 px-3.5 py-2.5 border-t border-line-soft bg-surface-soft/35">
+        <div className="grid gap-1 px-3.5 py-2.5 bg-surface-soft/35">
           {accounts.map((account) => (
             <div
               key={account.token_file}
@@ -535,7 +535,7 @@ function ServiceRow({
       </div>
 
       {editing && !service.connected && (
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3 py-3 border-t border-line-soft bg-surface-soft/35">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3 py-3 bg-surface-soft/35">
           <input
             type="password"
             value={serviceKey}

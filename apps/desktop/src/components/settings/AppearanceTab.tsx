@@ -40,7 +40,7 @@ export function AppearanceTab() {
 
   return (
     <div className="grid gap-6">
-      <section className="rounded-[12px] border border-line-soft bg-bg-main/30 overflow-hidden">
+      <section className="rounded-[12px] border border-line-soft bg-bg-main/30 overflow-hidden divide-y divide-line-soft/50">
         <SettingRow
           title="Mode"
           hint="Light, Dark, or follow your system preference."
@@ -69,13 +69,11 @@ export function AppearanceTab() {
             </div>
           }
         />
-        <div className="border-t border-line-soft" />
         <SettingRow
           title="Palette"
           hint="Color scheme used across the app."
           control={<PalettePicker value={palette} onChange={(id) => setPref("palette", id)} />}
         />
-        <div className="border-t border-line-soft" />
         <SettingRow
           title="Reasoning in chat"
           hint="Show or hide reasoning rows. Tool calls stay visible."
@@ -88,7 +86,7 @@ export function AppearanceTab() {
         />
       </section>
 
-      <section className="rounded-[12px] border border-line-soft bg-bg-main/30 overflow-hidden">
+      <section className="rounded-[12px] border border-line-soft bg-bg-main/30 overflow-hidden divide-y divide-line-soft/50">
         <SettingRow
           title="Thinking indicator"
           hint="Shown on the composer while the agent is running but has not yet streamed its first token."
@@ -100,7 +98,6 @@ export function AppearanceTab() {
             />
           }
         />
-        <div className="border-t border-line-soft" />
         <div className="px-4 py-4 grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-2">
           {VARIANTS.map((v) => (
             <button

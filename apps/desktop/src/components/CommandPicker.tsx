@@ -188,7 +188,7 @@ function Section({
 function Footer({ activeName }: { activeName?: string }) {
   if (!activeName) return null;
   return (
-    <div className="flex items-center gap-3 px-3 py-1.5 border-t border-line-soft bg-surface-soft/60 text-[10.5px] text-faint select-none">
+    <div className="flex items-center gap-3 px-3 py-1.5 bg-surface-soft/60 text-[10.5px] text-faint select-none">
       <Hint icon={<span className="font-mono">↑↓</span>} label="navigate" />
       <Hint icon={<CornerDownLeft size={10} strokeWidth={2} />} label={`run /${activeName}`} />
       <span className="ml-auto">

@@ -270,7 +270,7 @@ export function Composer() {
           </div>
         )}
         {editingId && (
-          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-line-soft text-[11.5px] text-accent-strong bg-accent-soft/40 rounded-t-[14px]">
+          <div className="flex items-center gap-2 px-3 py-1.5 text-[11.5px] text-accent-strong bg-accent-soft/40 rounded-t-[14px]">
             <span>Editing previous message — pressing send will replace it.</span>
             <button
               type="button"
