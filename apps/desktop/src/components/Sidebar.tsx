@@ -179,7 +179,7 @@ function SessionRow({
       onMouseMove={trackHoverDish}
       data-streaming={streaming ? "true" : undefined}
       className={clsx(
-        "session-row hover-dish group/row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full px-3 py-1.5 rounded-lg text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+        "session-row hover-dish group/row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-1.5 rounded-lg text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
         active
           ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
           : "text-ink-soft hover:bg-surface/60",
@@ -280,7 +280,7 @@ function SessionList() {
 
   return (
     <div className="group/sessions flex flex-col flex-1 min-h-0">
-      <div className="flex items-center gap-1 pl-[18px] pr-5 pt-4 pb-1.5 h-[34px]">
+      <div className="flex items-center gap-1 px-[18px] pt-4 pb-1.5 h-[34px]">
         {searchActive ? (
           <SessionSearch
             value={query}
@@ -293,7 +293,7 @@ function SessionList() {
             <span className="flex-1 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint leading-none select-none">
               Sessions
             </span>
-            <div className="flex items-center gap-0.5 shrink-0 -mr-1 opacity-0 group-hover/sessions:opacity-100 focus-within:opacity-100 transition-opacity">
+            <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover/sessions:opacity-100 focus-within:opacity-100 transition-opacity">
               <HeaderIconBtn
                 icon={<Search size={13} strokeWidth={1.8} />}
                 label="Filter sessions"
@@ -319,7 +319,7 @@ function SessionList() {
         ) : (
           bucketByTime(filtered).map((bucket) => (
             <div key={bucket.label}>
-              <div className="sticky top-0 z-10 px-3 pt-3 pb-1.5 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint bg-bg">
+              <div className="sticky top-0 z-10 px-[18px] pt-3 pb-1.5 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint bg-bg">
                 {bucket.label}
               </div>
               <div className="px-2.5 flex flex-col gap-px">
