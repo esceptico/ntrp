@@ -29,10 +29,10 @@ export function MemoryModal() {
   const open = useStore((s) => s.memoryOpen);
   const close = useStore((s) => s.closeMemory);
   const [tab, setTab] = useState<MemoryTab>("search");
-  const [targetFact, setTargetFact] = useState<MemoryTarget<Fact> | null>(null);
+  const [targetFact, setTargetFact] = useState<MemoryTarget<Fact | number> | null>(null);
   const [targetPattern, setTargetPattern] = useState<MemoryTarget<Observation | number> | null>(null);
 
-  const openFact = (fact: Fact) => {
+  const openFact = (fact: Fact | number) => {
     setTargetFact((current) => nextMemoryTarget(current, fact));
     setTab("facts");
   };
@@ -80,7 +80,7 @@ export function MemoryModal() {
         {tab === "sent" && <SentPane onOpenFact={openFact} onOpenPattern={openPattern} />}
         {tab === "facts" && <FactsPane targetFact={targetFact} />}
         {tab === "patterns" && <ObservationsPane targetPattern={targetPattern} onOpenFact={openFact} />}
-        {tab === "cleanup" && <CleanupPane onOpenPattern={openPattern} />}
+        {tab === "cleanup" && <CleanupPane onOpenFact={openFact} onOpenPattern={openPattern} />}
         {tab === "audit" && <AuditPane />}
       </div>
     </PageModal>

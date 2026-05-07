@@ -54,7 +54,7 @@ function statusFilterForFact(fact: Fact): FactStatus {
   return "active";
 }
 
-export function FactsPane({ targetFact }: { targetFact?: MemoryTarget<Fact> | null }) {
+export function FactsPane({ targetFact }: { targetFact?: MemoryTarget<Fact | number> | null }) {
   const config = useStore((s) => s.config);
   const [facts, setFacts] = useState<Fact[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -89,7 +89,12 @@ export function FactsPane({ targetFact }: { targetFact?: MemoryTarget<Fact> | nu
 
   useEffect(() => {
     if (!targetFact) return;
-    const fact = targetFact.item;
+    const targetItem = targetFact.item;
+    if (typeof targetItem === "number") {
+      void openFactById(targetItem);
+      return;
+    }
+    const fact = targetItem;
     setFacts((prev) => upsertById(prev, fact));
     setSelectedId(fact.id);
     setTargetHighlightId(fact.id);

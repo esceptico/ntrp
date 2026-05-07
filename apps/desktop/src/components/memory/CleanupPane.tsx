@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Archive, ExternalLink, RefreshCw } from "lucide-react";
+import { Archive, ExternalLink, GitCompareArrows, RefreshCw } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../../store";
 import {
+  type Fact,
   type MemoryPruneCandidate,
   type MemoryPruneDryRun,
   applyMemoryPruneApi,
@@ -12,16 +13,34 @@ import {
 import { formatAbs, formatRelativePast } from "../../lib/format";
 import {
   MEMORY_MAINTENANCE_REVIEW_ACTION,
+  type DuplicateMemoryCandidate,
   type MemoryMaintenanceReview,
   latestMemoryMaintenanceReview,
 } from "../../lib/memoryMaintenance";
 import { DetailPlaceholder, ErrorPill, GhostBtn, ListColumn, PaneShell, Pill, PrimaryBtn, SearchInput } from "./shared";
 
-export function CleanupPane({ onOpenPattern }: { onOpenPattern?: (patternId: number) => void }) {
+type DuplicateCandidateKind = "fact" | "pattern";
+
+type CleanupListItem =
+  | { kind: "cleanup"; key: string; candidate: MemoryPruneCandidate }
+  | {
+      kind: "duplicate";
+      duplicateKind: DuplicateCandidateKind;
+      key: string;
+      candidate: DuplicateMemoryCandidate;
+    };
+
+export function CleanupPane({
+  onOpenFact,
+  onOpenPattern,
+}: {
+  onOpenFact?: (fact: Fact | number) => void;
+  onOpenPattern?: (patternId: number) => void;
+}) {
   const config = useStore((s) => s.config);
   const [dryRun, setDryRun] = useState<MemoryPruneDryRun | null>(null);
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [maintenanceReview, setMaintenanceReview] = useState<MemoryMaintenanceReview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +53,6 @@ export function CleanupPane({ onOpenPattern }: { onOpenPattern?: (patternId: num
     ]);
     setDryRun(result);
     setMaintenanceReview(latestMemoryMaintenanceReview(eventResult.events));
-    setSelectedId((current) => current ?? result.candidates[0]?.id ?? null);
   }
 
   useEffect(() => {
@@ -42,21 +60,29 @@ export function CleanupPane({ onOpenPattern }: { onOpenPattern?: (patternId: num
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config]);
 
+  const listItems = useMemo(() => buildCleanupListItems(dryRun, maintenanceReview), [dryRun, maintenanceReview]);
+
+  useEffect(() => {
+    setSelectedKey((current) => {
+      if (current && listItems.some((item) => item.key === current)) return current;
+      return listItems[0]?.key ?? null;
+    });
+  }, [listItems]);
+
   const filtered = useMemo(() => {
     if (!dryRun) return null;
     const q = query.trim().toLowerCase();
-    if (!q) return dryRun.candidates;
-    return dryRun.candidates.filter((candidate) =>
-      candidate.summary.toLowerCase().includes(q) || candidate.reason.toLowerCase().includes(q)
-    );
-  }, [dryRun, query]);
+    if (!q) return listItems;
+    return listItems.filter((item) => cleanupListItemText(item).toLowerCase().includes(q));
+  }, [dryRun, listItems, query]);
 
-  const selected = dryRun?.candidates.find((candidate) => candidate.id === selectedId) ?? null;
+  const selected = listItems.find((item) => item.key === selectedKey) ?? null;
+  const selectedCleanup = selected?.kind === "cleanup" ? selected.candidate : null;
 
   async function archiveSelected() {
-    if (!dryRun || !selected) return;
+    if (!dryRun || !selectedCleanup) return;
     if (!confirm("Archive this cleanup candidate?")) return;
-    await apply(false, selected.id);
+    await apply(false, selectedCleanup.id);
   }
 
   async function archiveAll() {
@@ -96,40 +122,95 @@ export function CleanupPane({ onOpenPattern }: { onOpenPattern?: (patternId: num
             </div>
           }
           loading={dryRun === null && !error}
-          empty="No cleanup candidates."
-          totalLabel={dryRun ? `${filtered?.length ?? 0} of ${dryRun.summary.total}` : null}
+          empty="No maintenance candidates."
+          totalLabel={dryRun ? `${filtered?.length ?? 0} of ${listItems.length}` : null}
           items={filtered ?? []}
-          renderItem={(candidate) => (
-            <CleanupRow
-              key={candidate.id}
-              candidate={candidate}
-              selected={candidate.id === selectedId}
-              onSelect={() => setSelectedId(candidate.id)}
-            />
-          )}
+          renderItem={(item) =>
+            item.kind === "cleanup" ? (
+              <CleanupRow
+                key={item.key}
+                candidate={item.candidate}
+                selected={item.key === selectedKey}
+                onSelect={() => setSelectedKey(item.key)}
+              />
+            ) : (
+              <DuplicateCandidateRow
+                key={item.key}
+                item={item}
+                selected={item.key === selectedKey}
+                onSelect={() => setSelectedKey(item.key)}
+              />
+            )
+          }
         />
       }
       detail={
-        selected && dryRun ? (
+        selected?.kind === "cleanup" && dryRun ? (
           <CleanupDetail
             dryRun={dryRun}
-            candidate={selected}
+            candidate={selected.candidate}
             busy={busy}
             error={error}
             onRefresh={() => void refresh().catch((e) => setError(e instanceof Error ? e.message : String(e)))}
-            onOpenPattern={() => onOpenPattern?.(selected.id)}
+            onOpenPattern={() => onOpenPattern?.(selected.candidate.id)}
             onArchiveSelected={() => void archiveSelected()}
             onArchiveAll={() => void archiveAll()}
             maintenanceReview={maintenanceReview}
           />
+        ) : selected?.kind === "duplicate" ? (
+          <DuplicateCandidateDetail
+            item={selected}
+            error={error}
+            onRefresh={() => void refresh().catch((e) => setError(e instanceof Error ? e.message : String(e)))}
+            onOpenFact={onOpenFact}
+            onOpenPattern={onOpenPattern}
+          />
         ) : error ? (
           <DetailPlaceholder>{error}</DetailPlaceholder>
         ) : (
-          <DetailPlaceholder>Select a cleanup candidate</DetailPlaceholder>
+          <DetailPlaceholder>Select a maintenance candidate</DetailPlaceholder>
         )
       }
     />
   );
+}
+
+function buildCleanupListItems(
+  dryRun: MemoryPruneDryRun | null,
+  review: MemoryMaintenanceReview | null,
+): CleanupListItem[] {
+  const cleanupItems: CleanupListItem[] =
+    dryRun?.candidates.map((candidate) => ({
+      kind: "cleanup",
+      key: `cleanup:${candidate.id}`,
+      candidate,
+    })) ?? [];
+  const factDuplicates = (review?.duplicateFactCandidates ?? []).map((candidate) =>
+    duplicateListItem("fact", candidate),
+  );
+  const patternDuplicates = (review?.duplicateObservationCandidates ?? []).map((candidate) =>
+    duplicateListItem("pattern", candidate),
+  );
+  return [...cleanupItems, ...factDuplicates, ...patternDuplicates];
+}
+
+function duplicateListItem(
+  duplicateKind: DuplicateCandidateKind,
+  candidate: DuplicateMemoryCandidate,
+): CleanupListItem {
+  return {
+    kind: "duplicate",
+    duplicateKind,
+    key: `duplicate:${duplicateKind}:${candidate.ids[0]}:${candidate.ids[1]}`,
+    candidate,
+  };
+}
+
+function cleanupListItemText(item: CleanupListItem): string {
+  if (item.kind === "cleanup") {
+    return `${item.candidate.summary} ${item.candidate.reason}`;
+  }
+  return `${item.duplicateKind} duplicate ${item.candidate.ids.join(" ")} ${item.candidate.left} ${item.candidate.right}`;
 }
 
 function MaintenanceReviewNote({ review }: { review: MemoryMaintenanceReview | null }) {
@@ -178,6 +259,129 @@ function CleanupRow({
         <span>{formatRelativePast(candidate.created_at)}</span>
       </div>
     </button>
+  );
+}
+
+function DuplicateCandidateRow({
+  item,
+  selected,
+  onSelect,
+}: {
+  item: Extract<CleanupListItem, { kind: "duplicate" }>;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const label = item.duplicateKind === "fact" ? "duplicate facts" : "duplicate patterns";
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={clsx(
+        "w-full rounded-md px-4 py-2.5 text-left transition-colors",
+        selected ? "bg-surface-soft text-ink" : "text-ink-soft hover:bg-surface-soft/50",
+      )}
+    >
+      <div className="mb-1 flex items-center gap-1.5">
+        <GitCompareArrows size={11} strokeWidth={1.8} className="text-faint" />
+        <span className="text-[11px] uppercase tracking-[0.06em] text-faint">{label}</span>
+        <span className="text-[11px] tabular-nums text-faint">{Math.round(item.candidate.score * 100)}%</span>
+      </div>
+      <div className="text-[12.5px] leading-snug line-clamp-2">{item.candidate.left}</div>
+      <div className="mt-1 text-[11.5px] leading-snug text-faint line-clamp-1">{item.candidate.right}</div>
+    </button>
+  );
+}
+
+function DuplicateCandidateDetail({
+  item,
+  error,
+  onRefresh,
+  onOpenFact,
+  onOpenPattern,
+}: {
+  item: Extract<CleanupListItem, { kind: "duplicate" }>;
+  error: string | null;
+  onRefresh: () => void;
+  onOpenFact?: (fact: Fact | number) => void;
+  onOpenPattern?: (patternId: number) => void;
+}) {
+  const label = item.duplicateKind === "fact" ? "duplicate fact candidate" : "duplicate pattern candidate";
+  const noun = item.duplicateKind === "fact" ? "fact" : "pattern";
+  const open = item.duplicateKind === "fact" ? onOpenFact : onOpenPattern;
+  return (
+    <div className="flex h-full flex-col">
+      <div className="px-7 pt-6 pb-3">
+        <div className="mb-2 flex items-center gap-2">
+          <h3 className="m-0 text-[15px] font-semibold tracking-[-0.01em] text-ink">Review {label}</h3>
+          <Pill>review-only</Pill>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-faint">
+          <span className="tabular-nums">score {(item.candidate.score * 100).toFixed(1)}%</span>
+          <span aria-hidden>·</span>
+          <span>
+            {noun} #{item.candidate.ids[0]} and #{item.candidate.ids[1]}
+          </span>
+          <span aria-hidden>·</span>
+          <span>no automatic merge</span>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto scroll-thin px-7">
+        <div className="grid gap-3">
+          <DuplicateSide
+            label={`Left ${noun}`}
+            id={item.candidate.ids[0]}
+            text={item.candidate.left}
+            onOpen={open ? () => open(item.candidate.ids[0]) : undefined}
+          />
+          <DuplicateSide
+            label={`Right ${noun}`}
+            id={item.candidate.ids[1]}
+            text={item.candidate.right}
+            onOpen={open ? () => open(item.candidate.ids[1]) : undefined}
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end gap-2 px-7 py-3">
+        {error && <ErrorPill message={error} />}
+        <GhostBtn onClick={onRefresh}>
+          <RefreshCw size={12} strokeWidth={1.8} /> Refresh
+        </GhostBtn>
+      </div>
+    </div>
+  );
+}
+
+function DuplicateSide({
+  label,
+  id,
+  text,
+  onOpen,
+}: {
+  label: string;
+  id: number;
+  text: string;
+  onOpen?: () => void;
+}) {
+  return (
+    <section className="rounded-[8px] border border-line-soft bg-bg-main/50 px-4 py-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-[11px] uppercase tracking-[0.06em] text-faint">
+          {label} <span className="tabular-nums">#{id}</span>
+        </div>
+        {onOpen && (
+          <button
+            type="button"
+            onClick={onOpen}
+            className="text-[11.5px] font-medium text-muted transition-colors hover:text-ink"
+          >
+            Open
+          </button>
+        )}
+      </div>
+      <p className="m-0 whitespace-pre-wrap text-[13px] leading-relaxed text-ink-soft">{text}</p>
+    </section>
   );
 }
 
