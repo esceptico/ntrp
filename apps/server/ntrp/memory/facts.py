@@ -26,6 +26,7 @@ from ntrp.memory.audit import memory_audit, observation_prune_dry_run
 from ntrp.memory.consolidation_runner import ConsolidationRunner
 from ntrp.memory.decay import decay_score
 from ntrp.memory.extraction import Extractor
+from ntrp.memory.maintenance import duplicate_memory_candidates
 from ntrp.memory.models import (
     ExtractedEntity,
     ExtractionResult,
@@ -200,9 +201,10 @@ class FactMemory:
         return await self._consolidation.run_consolidation()
 
     async def run_memory_maintenance(self) -> str:
-        audit, prune = await asyncio.gather(
+        audit, prune, duplicates = await asyncio.gather(
             memory_audit(self.facts.read_conn),
             observation_prune_dry_run(self.observations.read_conn, limit=50),
+            duplicate_memory_candidates(self.facts, self.observations),
         )
         storage_issues = _storage_issue_count(audit["storage"])
         provenance_issues = _provenance_issue_count(audit["provenance"])
@@ -210,8 +212,19 @@ class FactMemory:
         cleanup_summary = prune.get("summary", {})
         cleanup_candidate_count = int(cleanup_summary.get("total") or 0)
         cleanup_candidate_ids = [int(row["id"]) for row in prune.get("candidates", [])]
+        duplicate_fact_candidates = duplicates["facts"]
+        duplicate_observation_candidates = duplicates["observations"]
+        duplicate_fact_candidate_count = len(duplicate_fact_candidates)
+        duplicate_observation_candidate_count = len(duplicate_observation_candidates)
 
-        if cleanup_candidate_count or storage_issues or provenance_issues or relation_issues:
+        if (
+            cleanup_candidate_count
+            or duplicate_fact_candidate_count
+            or duplicate_observation_candidate_count
+            or storage_issues
+            or provenance_issues
+            or relation_issues
+        ):
             async with self.transaction():
                 await self.events.create(
                     actor="automation",
@@ -222,6 +235,10 @@ class FactMemory:
                     details={
                         "cleanup_candidate_count": cleanup_candidate_count,
                         "cleanup_candidate_ids": cleanup_candidate_ids,
+                        "duplicate_fact_candidate_count": duplicate_fact_candidate_count,
+                        "duplicate_fact_candidates": duplicate_fact_candidates,
+                        "duplicate_observation_candidate_count": duplicate_observation_candidate_count,
+                        "duplicate_observation_candidates": duplicate_observation_candidates,
                         "storage_issues": storage_issues,
                         "provenance_issues": provenance_issues,
                         "relation_issues": relation_issues,
@@ -231,6 +248,8 @@ class FactMemory:
 
         return (
             f"maintenance review: cleanup candidates={cleanup_candidate_count} "
+            f"duplicate facts={duplicate_fact_candidate_count} "
+            f"duplicate patterns={duplicate_observation_candidate_count} "
             f"storage_issues={storage_issues} provenance_issues={provenance_issues} "
             f"relation_issues={relation_issues}"
         )

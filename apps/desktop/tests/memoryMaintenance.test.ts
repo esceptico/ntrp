@@ -25,6 +25,8 @@ test("extracts latest memory maintenance review details", () => {
       details: {
         cleanup_candidate_count: 3,
         cleanup_candidate_ids: [10, 11, "skip"],
+        duplicate_fact_candidate_count: 2,
+        duplicate_observation_candidate_count: 4,
         storage_issues: 1,
         provenance_issues: 2,
         relation_issues: 0,
@@ -34,6 +36,8 @@ test("extracts latest memory maintenance review details", () => {
 
   expect(review?.cleanupCandidateCount).toBe(3);
   expect(review?.cleanupCandidateIds).toEqual([10, 11]);
+  expect(review?.duplicateFactCandidateCount).toBe(2);
+  expect(review?.duplicateObservationCandidateCount).toBe(4);
   expect(review?.storageIssues).toBe(1);
   expect(review?.provenanceIssues).toBe(2);
 });

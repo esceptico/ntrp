@@ -136,35 +136,6 @@ Return your actions as a JSON object with an "actions" array:
   {"action": "skip", "reason": "atomic fact/no supported pattern"}
 ]}""")
 
-OBSERVATION_MERGE_PROMPT = env.from_string("""You are merging two similar observations from a memory system into one.
-
-OBSERVATION A (id={{ id_a }}, {{ evidence_a }} supporting facts):
-{{ text_a }}
-
-OBSERVATION B (id={{ id_b }}, {{ evidence_b }} supporting facts):
-{{ text_b }}
-
-Rules:
-- If these describe the SAME topic: merge into ONE observation that preserves all specific details, dates, and context from both. Don't lose information.
-- If these are RELATED but genuinely DISTINCT topics: skip.
-- The merged observation should be at least as specific as the more detailed of the two.
-- Keep it concise — one clear statement, not a paragraph.""")
-
-FACT_MERGE_PROMPT = env.from_string("""Two facts from a memory system. Decide if they describe the SAME thing or are genuinely DIFFERENT.
-
-FACT A (id={{ id_a }}):
-{{ text_a }}
-
-FACT B (id={{ id_b }}):
-{{ text_b }}
-
-Rules:
-- "same" = both facts capture the same event/state/preference, just worded differently or with different detail levels. Keep the more informative version.
-- "different" = facts share structure or vocabulary but describe genuinely different events, people, companies, dates, or topics.
-- Changed preferences, corrections, and contradictions are "different"; do not merge them into one fact. Supersession review handles which older fact should be hidden.
-- When merging, produce a single fact text that preserves all specific details (dates, names, numbers) from both.
-- CRITICAL: "User applied to X on date1" and "User applied to Y on date2" are DIFFERENT facts even if structurally similar.""")
-
 TEMPORAL_PATTERN_PROMPT = env.from_string("""You are a temporal pattern detector for a memory system. Given chronological facts about an entity, identify temporal patterns that no single fact captures.
 
 ## WHAT TO LOOK FOR

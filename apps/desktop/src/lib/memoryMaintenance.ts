@@ -6,6 +6,8 @@ export interface MemoryMaintenanceReview {
   event: MemoryEvent;
   cleanupCandidateCount: number;
   cleanupCandidateIds: number[];
+  duplicateFactCandidateCount: number;
+  duplicateObservationCandidateCount: number;
   storageIssues: number;
   provenanceIssues: number;
   relationIssues: number;
@@ -29,6 +31,8 @@ export function latestMemoryMaintenanceReview(events: MemoryEvent[]): MemoryMain
     event,
     cleanupCandidateCount: numberDetail(event.details, "cleanup_candidate_count"),
     cleanupCandidateIds: numberListDetail(event.details, "cleanup_candidate_ids"),
+    duplicateFactCandidateCount: numberDetail(event.details, "duplicate_fact_candidate_count"),
+    duplicateObservationCandidateCount: numberDetail(event.details, "duplicate_observation_candidate_count"),
     storageIssues: numberDetail(event.details, "storage_issues"),
     provenanceIssues: numberDetail(event.details, "provenance_issues"),
     relationIssues: numberDetail(event.details, "relation_issues"),

@@ -135,6 +135,7 @@ export function CleanupPane({ onOpenPattern }: { onOpenPattern?: (patternId: num
 function MaintenanceReviewNote({ review }: { review: MemoryMaintenanceReview | null }) {
   if (!review) return null;
   const issueCount = review.storageIssues + review.provenanceIssues + review.relationIssues;
+  const duplicateCount = review.duplicateFactCandidateCount + review.duplicateObservationCandidateCount;
   return (
     <div className="rounded-md border border-line-soft bg-surface px-2.5 py-2">
       <div className="flex items-center justify-between gap-2 text-[11px] text-faint">
@@ -143,6 +144,7 @@ function MaintenanceReviewNote({ review }: { review: MemoryMaintenanceReview | n
       </div>
       <div className="mt-1 text-[12px] text-ink-soft">
         {review.cleanupCandidateCount} cleanup candidates
+        {duplicateCount > 0 ? ` · ${duplicateCount} duplicate candidates` : ""}
         {issueCount > 0 ? ` · ${issueCount} integrity issues` : ""}
       </div>
     </div>
@@ -200,6 +202,10 @@ function CleanupDetail({
   onArchiveAll: () => void;
   maintenanceReview: MemoryMaintenanceReview | null;
 }) {
+  const duplicateCandidateCount = maintenanceReview
+    ? maintenanceReview.duplicateFactCandidateCount + maintenanceReview.duplicateObservationCandidateCount
+    : 0;
+
   return (
     <div className="flex h-full flex-col">
       <div className="px-7 pt-6 pb-3">
@@ -217,6 +223,12 @@ function CleanupDetail({
             <>
               <span aria-hidden>·</span>
               <span>maintenance saw {maintenanceReview.cleanupCandidateCount}</span>
+              {duplicateCandidateCount > 0 && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span>{duplicateCandidateCount} duplicate candidates</span>
+                </>
+              )}
             </>
           )}
         </div>

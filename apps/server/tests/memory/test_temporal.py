@@ -292,3 +292,57 @@ class TestTemporalPass:
 
         assert created == 0
         mock_client.completion.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skips_duplicate_observation(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
+        """Temporal pass adds evidence to an existing similar observation instead of creating a duplicate."""
+        entity = await fact_repo.create_entity("TestEntity")
+        now = datetime.now(UTC)
+        facts = []
+        for index in range(5):
+            fact = await fact_repo.create(
+                text=f"TestEntity did thing {index}",
+                source_type=SourceType.EXPLICIT,
+                embedding=mock_embedding(f"entity-fact-{index}"),
+                happened_at=now - timedelta(days=10 - index),
+            )
+            await fact_repo.add_entity_ref(fact.id, "TestEntity", entity.id)
+            facts.append(fact)
+
+        existing_embedding = mock_embedding("TestEntity shows a pattern of doing things")
+        await obs_repo.create(
+            summary="TestEntity shows a pattern of doing things",
+            embedding=existing_embedding,
+            source_fact_id=facts[0].id,
+        )
+        await fact_repo.conn.commit()
+
+        mock_client = AsyncMock()
+        mock_client.completion.return_value = mock_llm_response(
+            json.dumps(
+                {
+                    "actions": [
+                        {
+                            "action": "create",
+                            "text": "TestEntity shows a pattern of doing things repeatedly",
+                            "reason": "temporal pattern",
+                            "source_fact_ids": [facts[0].id, facts[1].id, facts[2].id],
+                        }
+                    ]
+                }
+            )
+        )
+        with patch("ntrp.memory.temporal.get_completion_client", return_value=mock_client):
+            created = await temporal_consolidation_pass(
+                fact_repo,
+                obs_repo,
+                "test-model",
+                AsyncMock(return_value=existing_embedding.copy()),
+                days=30,
+                min_facts=3,
+            )
+
+        assert created == 0
+        assert await obs_repo.count() == 1
+        existing = await obs_repo.list_recent(limit=1)
+        assert facts[1].id in existing[0].source_fact_ids or facts[2].id in existing[0].source_fact_ids

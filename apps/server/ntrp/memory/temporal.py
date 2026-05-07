@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from ntrp.agent import Role
-from ntrp.constants import CONSOLIDATION_TEMPERATURE, OBSERVATION_MERGE_SIMILARITY_THRESHOLD
+from ntrp.constants import CONSOLIDATION_TEMPERATURE, OBSERVATION_DUPLICATE_SIMILARITY_THRESHOLD
 from ntrp.llm.router import get_completion_client
 from ntrp.logging import get_logger
 from ntrp.memory.models import Embedding
@@ -92,7 +92,7 @@ async def temporal_consolidation_pass(
             action = action.model_copy(update={"source_fact_ids": source_fact_ids})
             embedding = await embed_fn(action.text)
             similar = await obs_repo.search_vector(embedding, limit=1)
-            if similar and similar[0][1] >= OBSERVATION_MERGE_SIMILARITY_THRESHOLD:
+            if similar and similar[0][1] >= OBSERVATION_DUPLICATE_SIMILARITY_THRESHOLD:
                 existing_obs, sim = similar[0]
                 if action.source_fact_ids:
                     to_reinforce.append((existing_obs.id, action.source_fact_ids))

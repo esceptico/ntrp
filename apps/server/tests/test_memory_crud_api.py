@@ -1112,6 +1112,54 @@ class TestMemoryAuditAPI:
         assert event["details"]["cleanup_candidate_ids"] == [sample_observation]
 
     @pytest.mark.asyncio
+    async def test_memory_maintenance_records_duplicate_candidates_without_merging(
+        self,
+        test_client: AsyncClient,
+        test_runtime: Runtime,
+    ):
+        memory = test_runtime.memory
+        fact_embedding = mock_embedding("duplicate candidate fact")
+        fact_a = await memory.facts.create(
+            "User likes concise implementation reports",
+            SourceType.EXPLICIT,
+            embedding=fact_embedding,
+        )
+        fact_b = await memory.facts.create(
+            "User prefers concise implementation reports",
+            SourceType.EXPLICIT,
+            embedding=fact_embedding,
+        )
+        obs_embedding = mock_embedding("duplicate candidate pattern")
+        obs_a = await memory.observations.create(
+            "User prefers concise implementation reports",
+            embedding=obs_embedding,
+            source_fact_id=fact_a.id,
+        )
+        obs_b = await memory.observations.create(
+            "User likes concise implementation summaries",
+            embedding=obs_embedding,
+            source_fact_id=fact_b.id,
+        )
+        await memory.db.conn.commit()
+
+        result = await memory.run_memory_maintenance()
+
+        assert "duplicate facts=1" in result
+        assert "duplicate patterns=1" in result
+        assert await memory.facts.get(fact_a.id) is not None
+        assert await memory.facts.get(fact_b.id) is not None
+        assert await memory.observations.get(obs_a.id) is not None
+        assert await memory.observations.get(obs_b.id) is not None
+
+        events = await test_client.get("/memory/events", params={"action": "memory.maintenance.reviewed"})
+        assert events.status_code == 200
+        event = events.json()["events"][0]
+        assert event["details"]["duplicate_fact_candidate_count"] == 1
+        assert event["details"]["duplicate_observation_candidate_count"] == 1
+        assert event["details"]["duplicate_fact_candidates"][0]["ids"] == [fact_a.id, fact_b.id]
+        assert event["details"]["duplicate_observation_candidates"][0]["ids"] == [obs_a.id, obs_b.id]
+
+    @pytest.mark.asyncio
     async def test_prune_apply_archives_only_matching_candidates(
         self,
         test_client: AsyncClient,
