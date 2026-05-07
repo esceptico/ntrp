@@ -134,35 +134,18 @@ body {
   will-change: transform;
 }
 
-/* Chat fills the window and animates its left/right edges in lockstep
-   with the sidebar (left) and the inspector pane (right) so content
-   always sits flush with their adjacent edges. */
+/* Chat fills the window and animates its left padding in lockstep
+   with the sidebar's translateX so content always sits flush with the
+   sidebar's right edge. */
 .chat-shell {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
   left: 244px;
-  transition:
-    left var(--motion-route) var(--motion-ease-emphasized),
-    right var(--motion-route) var(--motion-ease-emphasized);
+  transition: left var(--motion-route) var(--motion-ease-emphasized);
 }
 .chat-shell[data-sidebar-hidden="true"] { left: 0; }
-.chat-shell[data-inspector-open="true"] { right: 380px; }
-
-/* Right-side inspector pane — slides in from the right when the user
-   opens a tool/activity item. Mirrors the sidebar wrap pattern. */
-.inspector-wrap {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 380px;
-  height: 100%;
-  z-index: 30;
-  background: var(--color-bg-main);
-  border-left: 1px solid var(--color-line-soft);
-  will-change: transform;
-}
 
 /* Fixed-position sidebar toggle, just right of the macOS traffic
    lights. Lives inside the chat-header so it inherits its no-drag

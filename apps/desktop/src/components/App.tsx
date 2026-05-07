@@ -79,29 +79,13 @@ export function App() {
         <Sidebar />
       </motion.div>
       <Chat />
-      <InspectorPane />
       <SettingsModal />
       <AutomationsModal />
       <ArchiveModal />
       <MemoryModal />
       <CommandPalette />
       <MarkdownViewer />
-    </>
-  );
-}
-
-function InspectorPane() {
-  const open = useStore((s) => s.viewingTool != null);
-  return (
-    <motion.div
-      className="inspector-wrap"
-      initial={false}
-      animate={{ x: open ? 0 : 380 }}
-      transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
-      style={{ pointerEvents: open ? "auto" : "none" }}
-      aria-hidden={!open}
-    >
       <ToolViewer />
-    </motion.div>
+    </>
   );
 }
