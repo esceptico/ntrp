@@ -5,6 +5,7 @@ import { useStickToBottom } from "use-stick-to-bottom";
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
 import { messagesScroll } from "../lib/messagesScroll";
+import { firstMessageIdInSourceFocus } from "../lib/messageSourceFocus";
 import { EmptyState } from "./EmptyState";
 import { Message } from "./Message";
 import { CompactionIndicator } from "./CompactionIndicator";
@@ -14,6 +15,11 @@ import { TurnGroup } from "./TurnGroup";
 // so each session starts fresh — no carryover scroll state.
 export function Messages() {
   const order = useStore((s) => s.order);
+  const currentSessionId = useStore((s) => s.currentSessionId);
+  const sourceFocus = useStore((s) => s.sourceFocus);
+  const firstSourceFocusId = useStore((s) =>
+    firstMessageIdInSourceFocus(s.order, s.messages, s.sourceFocus, s.currentSessionId),
+  );
 
   const { scrollRef, contentRef, scrollToBottom, isNearBottom } = useStickToBottom({
     initial: "instant",
@@ -41,6 +47,15 @@ export function Messages() {
       messagesScroll.scrollToBottom = null;
     };
   }, [scrollToBottom]);
+
+  useEffect(() => {
+    if (!sourceFocus || sourceFocus.sessionId !== currentSessionId || !firstSourceFocusId) return;
+    const frame = requestAnimationFrame(() => {
+      const target = scrollRef.current?.querySelector<HTMLElement>('[data-source-focus="true"]');
+      target?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [currentSessionId, firstSourceFocusId, scrollRef, sourceFocus]);
 
   const roles = useStore(
     useShallow((s) => order.map((id) => s.messages.get(id)?.role ?? null)),

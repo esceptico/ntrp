@@ -9,6 +9,7 @@ import {
   type SkillDescriptor,
   DEFAULT_CONFIG,
 } from "./api";
+import type { MessageSourceFocus } from "./lib/messageSourceFocus";
 
 export type Role = "user" | "assistant" | "reasoning" | "tool" | "status" | "error" | "activity" | "approval";
 
@@ -121,6 +122,7 @@ export interface ImageBlock {
 export interface UiMessage {
   id: string;
   role: Role;
+  sourceIndex?: number;
   title?: string;
   subtitle?: string;
   content: string;
@@ -185,6 +187,7 @@ interface State {
   compacting: boolean;
   lastCompaction: { before: number; after: number; at: number } | null;
   memoryOpen: boolean;
+  sourceFocus: MessageSourceFocus | null;
   paletteOpen: boolean;
   prefs: Prefs;
 }
@@ -247,6 +250,7 @@ interface Actions {
   setLastCompaction: (info: State["lastCompaction"]) => void;
   openMemory: () => void;
   closeMemory: () => void;
+  setSourceFocus: (focus: MessageSourceFocus | null) => void;
   openPalette: () => void;
   closePalette: () => void;
   togglePalette: () => void;
@@ -294,6 +298,7 @@ export const useStore = create<State & Actions>((set) => ({
   compacting: false,
   lastCompaction: null,
   memoryOpen: false,
+  sourceFocus: null,
   paletteOpen: false,
   prefs: loadPrefs(),
 
@@ -357,6 +362,7 @@ export const useStore = create<State & Actions>((set) => ({
         running: false,
         compacting: false,
         lastCompaction: null,
+        sourceFocus: null,
         historyLoadedFor: null,
         ...(unread !== s.unreadDoneSessionIds ? { unreadDoneSessionIds: unread } : {}),
       };
@@ -519,6 +525,7 @@ export const useStore = create<State & Actions>((set) => ({
   setLastCompaction: (lastCompaction) => set({ lastCompaction }),
   openMemory: () => set({ memoryOpen: true }),
   closeMemory: () => set({ memoryOpen: false }),
+  setSourceFocus: (sourceFocus) => set({ sourceFocus }),
   openPalette: () => set({ paletteOpen: true }),
   closePalette: () => set({ paletteOpen: false }),
   togglePalette: () => set((s) => ({ paletteOpen: !s.paletteOpen })),

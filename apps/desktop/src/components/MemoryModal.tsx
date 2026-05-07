@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { useStore } from "../store";
 import type { Fact, Observation } from "../api";
 import { switchSession } from "../actions";
+import type { FactChatSourceFocus } from "../lib/memoryProvenance";
 import { advancedMemoryTabsVisible, isAdvancedMemoryTab, type MemoryTab } from "../lib/memoryTabs";
 import { nextMemoryTarget, type MemoryTarget } from "../lib/memoryTargets";
 import { PageModal } from "./PageModal";
@@ -29,6 +30,7 @@ const ADVANCED_TABS: { id: MemoryTab; label: string }[] = [
 export function MemoryModal() {
   const open = useStore((s) => s.memoryOpen);
   const close = useStore((s) => s.closeMemory);
+  const setSourceFocus = useStore((s) => s.setSourceFocus);
   const [tab, setTab] = useState<MemoryTab>("search");
   const [targetFact, setTargetFact] = useState<MemoryTarget<Fact | number> | null>(null);
   const [targetPattern, setTargetPattern] = useState<MemoryTarget<Observation | number> | null>(null);
@@ -43,8 +45,9 @@ export function MemoryModal() {
     setTab("patterns");
   };
 
-  const openSourceSession = async (sessionId: string) => {
-    await switchSession(sessionId);
+  const openSourceSession = async (focus: FactChatSourceFocus) => {
+    await switchSession(focus.sessionId);
+    setSourceFocus({ ...focus, nonce: Date.now() });
     close();
   };
 

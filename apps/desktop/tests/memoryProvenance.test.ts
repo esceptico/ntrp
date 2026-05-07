@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  factChatSourceFocus,
   factChatSourceSessionId,
   factSourceDetail,
   factSourceLabel,
@@ -27,10 +28,16 @@ test("formats parsed chat segment refs as readable provenance", () => {
   expect(factSourceDetail(fact)).toBe("session-123 · messages 4-9");
   expect(factSourceSummary(fact)).toBe("Chat · session-123 · messages 4-9");
   expect(factChatSourceSessionId(fact)).toBe("session-123");
+  expect(factChatSourceFocus(fact)).toEqual({
+    sessionId: "session-123",
+    messageStart: 4,
+    messageEnd: 9,
+  });
 });
 
 test("does not expose a chat source action for unparsed refs", () => {
   expect(factChatSourceSessionId({ source_type: "chat", source_ref: "session-123" })).toBeNull();
+  expect(factChatSourceFocus({ source_type: "chat", source_ref: "session-123" })).toBeNull();
   expect(factChatSourceSessionId({ source_type: "explicit", source_ref: null })).toBeNull();
 });
 

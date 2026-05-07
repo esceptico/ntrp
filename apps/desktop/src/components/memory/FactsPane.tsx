@@ -16,7 +16,12 @@ import {
 } from "../../api";
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { formatAbs, formatRelativePast } from "../../lib/format";
-import { factChatSourceSessionId, factSourceDetail, factSourceLabel } from "../../lib/memoryProvenance";
+import {
+  factChatSourceFocus,
+  factSourceDetail,
+  factSourceLabel,
+  type FactChatSourceFocus,
+} from "../../lib/memoryProvenance";
 import { type MemoryTarget, upsertById } from "../../lib/memoryTargets";
 import { factStatusFilterLabel, factStatusLabel, factStatusTone } from "../../lib/memoryTrust";
 import {
@@ -59,7 +64,7 @@ export function FactsPane({
   onOpenSource,
 }: {
   targetFact?: MemoryTarget<Fact | number> | null;
-  onOpenSource?: (sessionId: string) => void;
+  onOpenSource?: (focus: FactChatSourceFocus) => void;
 }) {
   const config = useStore((s) => s.config);
   const [facts, setFacts] = useState<Fact[] | null>(null);
@@ -258,7 +263,7 @@ function FactDetail({
   linkedFacts: LinkedFact[];
   onSaved: () => Promise<void>;
   onOpenFact: (factId: number) => void;
-  onOpenSource?: (sessionId: string) => void;
+  onOpenSource?: (focus: FactChatSourceFocus) => void;
   onSuperseded: (oldFact: Fact, newFact: Fact) => Promise<void>;
   onArchived: (archived: boolean) => Promise<void>;
 }) {
@@ -275,7 +280,7 @@ function FactDetail({
 
   const dirty = mode !== null && draft.trim() !== fact.text.trim();
   const sourceRef = factSourceDetail(fact);
-  const sourceSessionId = factChatSourceSessionId(fact);
+  const sourceFocus = factChatSourceFocus(fact);
 
   async function save() {
     if (!dirty || !draft.trim()) return;
@@ -390,8 +395,8 @@ function FactDetail({
             </>
           ) : (
             <>
-              {sourceSessionId && (
-                <GhostBtn onClick={() => onOpenSource?.(sourceSessionId)} disabled={busy}>
+              {sourceFocus && (
+                <GhostBtn onClick={() => onOpenSource?.(sourceFocus)} disabled={busy}>
                   <ExternalLink size={12} strokeWidth={1.8} /> Open source
                 </GhostBtn>
               )}

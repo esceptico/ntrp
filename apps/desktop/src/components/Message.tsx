@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Brain, Check, ChevronDown, Copy, GitBranch, Pencil, Sparkles, Terminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type UiMessage } from "../store";
+import { messageInSourceFocus } from "../lib/messageSourceFocus";
 import { ActivityHeader, ActivityTail, ActivityTrace } from "./trace/ActivityTrace";
 import { ApprovalCard } from "./ApprovalCard";
 import type { SkillDescriptor } from "../api";
@@ -10,6 +11,7 @@ import { branchAtMessage, viewSkill } from "../actions";
 import { Markdown } from "./Markdown";
 
 const EASE = [0.32, 0.72, 0, 1] as const;
+const SOURCE_FOCUS_CLASS = "scroll-mt-20 rounded-[10px] bg-accent-soft/35 shadow-[0_0_0_1px_var(--color-accent-strong)]";
 
 export function Message({ id, isFinal = true }: { id: string; isFinal?: boolean }) {
   const role = useStore((s) => s.messages.get(id)?.role);
@@ -32,6 +34,10 @@ function useMessage(id: string): UiMessage | undefined {
 
 function useIsLast(id: string): boolean {
   return useStore((s) => s.order[s.order.length - 1] === id);
+}
+
+function useSourceFocused(id: string): boolean {
+  return useStore((s) => messageInSourceFocus(s.messages.get(id), s.sourceFocus, s.currentSessionId));
 }
 
 function formatMessageTime(ms: number): string {
@@ -199,6 +205,7 @@ function SkillChip({ skill }: { skill: SkillDescriptor }) {
 const UserMessage = memo(function UserMessage({ id }: { id: string }) {
   const message = useMessage(id);
   const skills = useStore((s) => s.skills);
+  const sourceFocused = useSourceFocused(id);
   if (!message) return null;
 
   const skillMatch = useMemo(
@@ -211,7 +218,12 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
   const images = message.images ?? [];
 
   return (
-    <article className="group flex flex-col items-end animate-fade-in" data-id={id}>
+    <article
+      className={clsx("group flex flex-col items-end animate-fade-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      data-id={id}
+      data-source-focus={sourceFocused ? "true" : undefined}
+      data-source-index={message.sourceIndex}
+    >
       {images.length > 0 && (
         <div className="flex flex-wrap justify-end gap-1.5 max-w-[75%] mb-1.5">
           {images.map((img, i) => (
@@ -237,9 +249,15 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
 
 const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: { id: string; isFinal?: boolean }) {
   const message = useMessage(id);
+  const sourceFocused = useSourceFocused(id);
   if (!message) return null;
   return (
-    <article className="group grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 animate-fade-in" data-id={id}>
+    <article
+      className={clsx("group grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 animate-fade-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      data-id={id}
+      data-source-focus={sourceFocused ? "true" : undefined}
+      data-source-index={message.sourceIndex}
+    >
       <Markdown
         content={message.content}
         className="py-0.5 text-[14px] leading-[1.62] text-ink tracking-[-0.005em] break-words"
@@ -253,12 +271,18 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
   const message = useMessage(id);
   const isLast = useIsLast(id);
   const running = useStore((s) => s.running);
+  const sourceFocused = useSourceFocused(id);
   const [expanded, setExpanded] = useState(false);
   if (!message) return null;
   const isStreaming = isLast && running;
 
   return (
-    <article className="grid grid-cols-[minmax(0,1fr)] min-w-0 my-1 animate-roll-in" data-id={id}>
+    <article
+      className={clsx("grid grid-cols-[minmax(0,1fr)] min-w-0 my-1 animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      data-id={id}
+      data-source-focus={sourceFocused ? "true" : undefined}
+      data-source-index={message.sourceIndex}
+    >
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -297,11 +321,17 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
 
 const ToolMessage = memo(function ToolMessage({ id }: { id: string }) {
   const message = useMessage(id);
+  const sourceFocused = useSourceFocused(id);
   if (!message) return null;
   const isRunning = !message.content;
 
   return (
-    <article className="grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 font-mono text-[12.5px] leading-[1.55] animate-roll-in" data-id={id}>
+    <article
+      className={clsx("grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 font-mono text-[12.5px] leading-[1.55] animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      data-id={id}
+      data-source-focus={sourceFocused ? "true" : undefined}
+      data-source-index={message.sourceIndex}
+    >
       <div className="tool-line flex items-baseline gap-2 min-w-0" data-state={isRunning ? "running" : "done"}>
         <span className="text-faint shrink-0">↗</span>
         <Terminal size={12} strokeWidth={1.8} className="text-muted shrink-0 self-center" />
@@ -319,10 +349,16 @@ const ToolMessage = memo(function ToolMessage({ id }: { id: string }) {
 
 const StatusMessage = memo(function StatusMessage({ id }: { id: string }) {
   const message = useMessage(id);
+  const sourceFocused = useSourceFocused(id);
   if (!message) return null;
   const text = message.title ? `${message.title} · ${message.content}` : message.content;
   return (
-    <article className="self-center grid grid-cols-[minmax(0,1fr)] animate-fade-in" data-id={id}>
+    <article
+      className={clsx("self-center grid grid-cols-[minmax(0,1fr)] animate-fade-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      data-id={id}
+      data-source-focus={sourceFocused ? "true" : undefined}
+      data-source-index={message.sourceIndex}
+    >
       <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface-soft font-mono text-[11px] text-muted tracking-[-0.005em]">
         {text}
       </div>
@@ -332,9 +368,15 @@ const StatusMessage = memo(function StatusMessage({ id }: { id: string }) {
 
 const ErrorMessage = memo(function ErrorMessage({ id }: { id: string }) {
   const message = useMessage(id);
+  const sourceFocused = useSourceFocused(id);
   if (!message) return null;
   return (
-    <article className="grid grid-cols-[minmax(0,1fr)] animate-fade-in" data-id={id}>
+    <article
+      className={clsx("grid grid-cols-[minmax(0,1fr)] animate-fade-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      data-id={id}
+      data-source-focus={sourceFocused ? "true" : undefined}
+      data-source-index={message.sourceIndex}
+    >
       <div className="px-3.5 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.18)] text-bad text-[13px] leading-[1.5] whitespace-pre-wrap break-words">
         {message.content}
       </div>
@@ -344,6 +386,7 @@ const ErrorMessage = memo(function ErrorMessage({ id }: { id: string }) {
 
 const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
   const message = useMessage(id);
+  const sourceFocused = useSourceFocused(id);
   const [expanded, setExpanded] = useState(false);
   if (!message?.activity || message.activity.items.length === 0) return null;
   const { items, label, done } = message.activity;
@@ -357,7 +400,12 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
   const max = done ? undefined : 3;
 
   return (
-    <article className="grid grid-cols-[minmax(0,1fr)] my-1 animate-roll-in" data-id={id}>
+    <article
+      className={clsx("grid grid-cols-[minmax(0,1fr)] my-1 animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      data-id={id}
+      data-source-focus={sourceFocused ? "true" : undefined}
+      data-source-index={message.sourceIndex}
+    >
       <ActivityTrace>
         <ActivityHeader
           label={label}

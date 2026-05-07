@@ -86,6 +86,7 @@ export async function loadHistory(sessionId: string): Promise<void> {
       items.push({
         id: stableId,
         role: "user",
+        sourceIndex: index,
         content: msg.content,
         turn: { startedAt: stampedAt, endedAt: stampedAt, durationMs: null },
         images: msg.images,
@@ -104,6 +105,7 @@ export async function loadHistory(sessionId: string): Promise<void> {
       items.push({
         id: `${stableId}-reasoning`,
         role: "reasoning",
+        sourceIndex: index,
         title: "Reasoning",
         content: msg.reasoning_content,
       });
@@ -114,6 +116,7 @@ export async function loadHistory(sessionId: string): Promise<void> {
       items.push({
         id: stableId,
         role: "assistant",
+        sourceIndex: index,
         content: msg.content,
         turn: stampedAt
           ? { startedAt: stampedAt, endedAt: stampedAt, durationMs: null }
@@ -127,6 +130,7 @@ export async function loadHistory(sessionId: string): Promise<void> {
         items.push({
           id: activeActivityId,
           role: "activity",
+          sourceIndex: index,
           content: "",
           activity: { items: [], label: "Called", done: true },
         });

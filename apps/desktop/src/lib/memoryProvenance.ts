@@ -1,3 +1,5 @@
+import type { MessageSourceFocus } from "./messageSourceFocus";
+
 export type FactSourceRefParts =
   | {
       kind: "chat_segment";
@@ -15,6 +17,8 @@ export interface FactSourceLike {
   source_ref: string | null;
   source_ref_parts?: FactSourceRefParts | null;
 }
+
+export type FactChatSourceFocus = Omit<MessageSourceFocus, "nonce">;
 
 function chatSegmentParts(parts: FactSourceRefParts | null | undefined): Extract<FactSourceRefParts, { kind: "chat_segment" }> | null {
   if (parts?.kind !== "chat_segment") return null;
@@ -47,6 +51,16 @@ export function factSourceSummary(fact: FactSourceLike): string {
 }
 
 export function factChatSourceSessionId(fact: FactSourceLike): string | null {
+  return factChatSourceFocus(fact)?.sessionId ?? null;
+}
+
+export function factChatSourceFocus(fact: FactSourceLike): FactChatSourceFocus | null {
   if (fact.source_type !== "chat") return null;
-  return chatSegmentParts(fact.source_ref_parts)?.session_id ?? null;
+  const chatSegment = chatSegmentParts(fact.source_ref_parts);
+  if (!chatSegment) return null;
+  return {
+    sessionId: chatSegment.session_id,
+    messageStart: chatSegment.message_start,
+    messageEnd: chatSegment.message_end,
+  };
 }
