@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ExternalLink, X } from "lucide-react";
 import { useStore } from "../store";
 import { Markdown } from "./Markdown";
+import { SPRING_SMOOTH } from "../lib/motion";
 
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
@@ -48,7 +49,7 @@ export function MarkdownViewer() {
             initial={{ opacity: 0, scale: 0.96, y: 6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 6 }}
-            transition={{ duration: 0.22, ease: MODAL_EASE }}
+            transition={SPRING_SMOOTH}
             onClick={(e) => e.stopPropagation()}
           >
             <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 border-b border-line-soft">

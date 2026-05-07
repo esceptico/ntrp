@@ -21,3 +21,21 @@ export const EASE_EMPHASIZED = [0.32, 0.72, 0, 1] as const;
 
 /** Ease-out used for landings on popovers and small UI scale-ins. */
 export const EASE_OUT = [0.2, 0.8, 0.2, 1] as const;
+
+/**
+ * Apple SwiftUI spring presets, converted to framer-motion via
+ * stiffness = (2π / duration)², damping = 4π × (1 − bounce) / duration.
+ * Use for any user-driven motion: sheets, drawers, sidebars, popovers,
+ * navigation. Defaults are SwiftUI's: duration 0.5s. Bounce baked in.
+ *
+ * Spec lives in docs/internal/apple-design-intel.md.
+ */
+export const SPRING_SMOOTH = { type: "spring", stiffness: 158, damping: 25.1, mass: 1 } as const;
+export const SPRING_SNAPPY = { type: "spring", stiffness: 158, damping: 21.4, mass: 1 } as const;
+export const SPRING_BOUNCY = { type: "spring", stiffness: 158, damping: 17.6, mass: 1 } as const;
+
+/** Popover / menu reveal — origin-anchored, snappy with a hint of bounce. */
+export const SPRING_POPOVER = { type: "spring", stiffness: 350, damping: 26, mass: 1 } as const;
+
+/** Tap release — snappy spring so an interrupted release re-targets cleanly. */
+export const SPRING_TAP_RELEASE = { type: "spring", stiffness: 400, damping: 22, mass: 0.8 } as const;

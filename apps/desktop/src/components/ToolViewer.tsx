@@ -8,6 +8,7 @@ import { useStore, type ActivityItem } from "../store";
 import { highlight } from "../highlight";
 import { extractTask, friendlyAgentLabel, isAgent } from "../lib/agent";
 import { Markdown } from "./Markdown";
+import { SPRING_SMOOTH } from "../lib/motion";
 
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
@@ -125,7 +126,7 @@ export function ToolViewer() {
             initial={{ opacity: 0, scale: 0.96, y: 6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 6 }}
-            transition={{ duration: 0.22, ease: MODAL_EASE }}
+            transition={SPRING_SMOOTH}
             onClick={(e) => e.stopPropagation()}
           >
             <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 border-b border-line-soft min-w-0">

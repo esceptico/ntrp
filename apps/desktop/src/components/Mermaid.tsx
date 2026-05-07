@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, Copy, Maximize2, Minimize2, Minus, Plus, RotateCcw } from "lucide-react";
 import clsx from "clsx";
 import { getMermaid, invalidateMermaidTheme } from "../lib/mermaidTheme";
+import { SPRING_SMOOTH } from "../lib/motion";
 
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
@@ -102,7 +103,7 @@ function MermaidPanel({ svg, source }: { svg: string; source: string }) {
                   initial={{ opacity: 0, scale: 0.96, y: 6 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96, y: 6 }}
-                  transition={{ duration: 0.22, ease: MODAL_EASE }}
+                  transition={SPRING_SMOOTH}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <PanelInner svg={svg} source={source} fullscreen onToggleFullscreen={toggle} />

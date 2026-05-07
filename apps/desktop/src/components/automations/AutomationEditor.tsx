@@ -9,9 +9,9 @@ import type {
   CreateAutomationPayload,
   UpdateAutomationPayload,
 } from "../../api";
+import { SPRING_SMOOTH } from "../../lib/motion";
 
 const MODAL_BACKDROP_DURATION = 0.2;
-const MODAL_PANEL_DURATION = 0.22;
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
 export type EditorSeed =
@@ -249,7 +249,7 @@ export function AutomationEditor({
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
-            transition={{ duration: MODAL_PANEL_DURATION, ease: MODAL_EASE }}
+            transition={SPRING_SMOOTH}
             onClick={(e) => e.stopPropagation()}
           >
             <header className="flex items-center justify-between gap-2 px-5 pt-4 pb-2">

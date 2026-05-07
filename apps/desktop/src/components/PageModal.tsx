@@ -1,9 +1,9 @@
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
+import { SPRING_SMOOTH } from "../lib/motion";
 
 const BACKDROP_DURATION = 0.2;
-const PANEL_DURATION = 0.22;
 const EASE = [0.2, 0.8, 0.2, 1] as const;
 
 export interface PageModalProps {
@@ -73,7 +73,7 @@ export function PageModal({
             initial={{ opacity: 0, scale: 0.96, y: 6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 6 }}
-            transition={{ duration: PANEL_DURATION, ease: EASE }}
+            transition={SPRING_SMOOTH}
             onClick={(e) => e.stopPropagation()}
           >
             {children}

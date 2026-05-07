@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
+import { SPRING_SNAPPY } from "../lib/motion";
 import { Sidebar } from "./Sidebar";
 import { Chat } from "./Chat";
 import { SettingsModal } from "./SettingsModal";
@@ -74,7 +74,7 @@ export function App() {
         className="sidebar-wrap"
         initial={false}
         animate={{ x: sidebarHidden ? -244 : 0 }}
-        transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
+        transition={SPRING_SNAPPY}
       >
         <Sidebar />
       </motion.div>
