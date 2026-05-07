@@ -5,6 +5,7 @@ import clsx from "clsx";
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
 import { Message } from "./Message";
+import { turnLayout } from "../lib/turnLayout";
 
 const EASE = [0.32, 0.72, 0, 1] as const;
 
@@ -44,10 +45,8 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
     wasDone.current = isDone;
   }, [isDone]);
 
-  const interimIds = finalAssistantId
-    ? childIds.filter((id) => id !== finalAssistantId)
-    : childIds;
-  const hasInterim = interimIds.length > 0;
+  const layout = turnLayout({ childIds, finalAssistantId, isDone });
+  const hasWork = layout.workIds.length > 0;
   // Live runs have a real durationMs; historic ones don't (we don't persist
   // turn timing). Show the time when we have it, plain "Worked" otherwise.
   const headerLabel = turn?.durationMs != null
@@ -57,12 +56,12 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
   const showInterim = !isDone || expanded;
   const interimList = (
     <div className={clsx("flex flex-col gap-3.5", isDone && "pt-3.5")}>
-      {interimIds.map((id) => (
+      {layout.workIds.map((id) => (
         <Message key={id} id={id} isFinal={false} />
       ))}
     </div>
   );
-  const workBlock = hasInterim ? (
+  const workBlock = hasWork ? (
     <div className="flex flex-col">
       <AnimatePresence initial={false}>
         {isDone && (
@@ -115,7 +114,9 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
 
       {isDone && workBlock}
 
-      {finalAssistantId && <Message id={finalAssistantId} isFinal={isDone} />}
+      {layout.directIds.map((id) => (
+        <Message key={id} id={id} isFinal={isDone && id === layout.finalAssistantId} />
+      ))}
 
       {!isDone && workBlock}
     </>
