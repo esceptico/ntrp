@@ -233,14 +233,14 @@ function GoogleCard({
 
   return (
     <section className="rounded-[12px] border border-line-soft bg-surface overflow-hidden">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3.5 py-3">
-        <div className="min-w-0 grid gap-1">
+      <div className="flex flex-wrap items-start gap-3 px-3.5 py-3">
+        <div className="min-w-[220px] flex-1 grid gap-1">
           <div className="flex items-center gap-2 min-w-0">
             <GoogleIcon enabled={enabled} />
             <div className="text-[13px] font-medium text-ink truncate">Google Workspace</div>
             <span
               className={clsx(
-                "px-1.5 py-0.5 rounded-full text-[10.5px] font-medium",
+                "shrink-0 px-1.5 py-0.5 rounded-full text-[10.5px] font-medium",
                 enabled ? "bg-ok-soft text-ok" : "bg-surface-soft text-faint",
               )}
             >
@@ -255,7 +255,7 @@ function GoogleCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
             onClick={() => void onAdd()}
@@ -406,14 +406,14 @@ function ServiceRow({
 
   return (
     <div>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3.5 py-2.5">
-        <div className="min-w-0 grid gap-1">
+      <div className="flex flex-wrap items-start gap-3 px-3.5 py-2.5">
+        <div className="min-w-[220px] flex-1 grid gap-1">
           <div className="flex items-center gap-2 min-w-0">
             <ProviderDot connected={service.connected} />
             <div className="text-[12.5px] font-medium text-ink-soft truncate">{service.name}</div>
             <span
               className={clsx(
-                "px-1.5 py-0.5 rounded-full text-[10.5px] font-medium",
+                "shrink-0 px-1.5 py-0.5 rounded-full text-[10.5px] font-medium",
                 service.connected ? "bg-ok-soft text-ok" : "bg-surface-soft text-faint",
               )}
             >
@@ -421,25 +421,27 @@ function ServiceRow({
             </span>
           </div>
         </div>
-        {readOnly ? (
-          <span className="inline-flex items-center h-8 px-3 rounded-md border border-line-soft bg-surface-soft text-[12px] font-medium text-muted">
-            {actionLabel}
-          </span>
-        ) : (
-          <button
-            type="button"
-            onClick={service.connected ? onDisconnect : onEdit}
-            disabled={pending}
-            className={clsx(
-              "h-8 px-3 rounded-md text-[12px] font-medium transition-colors disabled:opacity-50",
-              service.connected
-                ? "border border-line bg-surface text-ink-soft hover:border-line-strong"
-                : "bg-ink text-on-ink hover:opacity-90",
-            )}
-          >
-            {actionLabel}
-          </button>
-        )}
+        <div className="ml-auto flex justify-end">
+          {readOnly ? (
+            <span className="inline-flex items-center h-8 px-3 rounded-md border border-line-soft bg-surface-soft text-[12px] font-medium text-muted">
+              {actionLabel}
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={service.connected ? onDisconnect : onEdit}
+              disabled={pending}
+              className={clsx(
+                "h-8 px-3 rounded-md text-[12px] font-medium transition-colors disabled:opacity-50",
+                service.connected
+                  ? "border border-line bg-surface text-ink-soft hover:border-line-strong"
+                  : "bg-ink text-on-ink hover:opacity-90",
+              )}
+            >
+              {actionLabel}
+            </button>
+          )}
+        </div>
       </div>
 
       {editing && !service.connected && (

@@ -369,12 +369,12 @@ function ProviderRow({
 
   return (
     <div className="rounded-[12px] border border-line-soft bg-surface overflow-hidden">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3.5 py-3">
-        <div className="min-w-0 grid gap-1">
+      <div className="flex flex-wrap items-start gap-3 px-3.5 py-3">
+        <div className="min-w-[220px] flex-1 grid gap-1">
           <div className="flex items-center gap-2 min-w-0">
             <ProviderIcon connected={provider.connected} />
             <div className="text-[13px] font-medium text-ink truncate">{provider.name}</div>
-            <span className={clsx("px-1.5 py-0.5 rounded-full text-[10.5px] font-medium", statusTone(provider))}>
+            <span className={clsx("shrink-0 px-1.5 py-0.5 rounded-full text-[10.5px] font-medium", statusTone(provider))}>
               {providerConnectionLabel(provider)}
             </span>
           </div>
@@ -384,7 +384,7 @@ function ProviderRow({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {canUseForAgent && (
             <button
               type="button"
