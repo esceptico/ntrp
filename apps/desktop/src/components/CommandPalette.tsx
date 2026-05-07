@@ -19,9 +19,9 @@ import { useStore } from "../store";
 import { archiveSession, branchAtMessage, createSession, switchSession } from "../actions";
 import { apiWithConfig } from "../api";
 import { formatRelativePast } from "../lib/format";
-import { SPRING_POPOVER } from "../lib/motion";
 
 const BACKDROP_DURATION = 0.16;
+const PANEL_DURATION = 0.18;
 const EASE = [0.2, 0.8, 0.2, 1] as const;
 
 interface CommandEntry {
@@ -88,7 +88,7 @@ export function CommandPalette() {
             initial={{ opacity: 0, scale: 0.96, y: -6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: -6 }}
-            transition={SPRING_POPOVER}
+            transition={{ duration: PANEL_DURATION, ease: EASE }}
             onClick={(e) => e.stopPropagation()}
           >
             <PaletteBody

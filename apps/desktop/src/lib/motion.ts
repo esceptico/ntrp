@@ -25,12 +25,15 @@ export const EASE_OUT = [0.2, 0.8, 0.2, 1] as const;
 /**
  * Apple SwiftUI spring presets, converted to framer-motion via
  * stiffness = (2π / duration)², damping = 4π × (1 − bounce) / duration.
- * Use for any user-driven motion: sheets, drawers, sidebars, popovers,
- * navigation. Defaults are SwiftUI's: duration 0.5s. Bounce baked in.
+ *
+ * `SPRING_SMOOTH` is tuned to ~0.3s instead of SwiftUI's 0.5s default —
+ * the longer duration felt too slow on modal entries. Other presets
+ * keep the SwiftUI defaults for now; reach for these only when a user
+ * test confirms the feel is right.
  *
  * Spec lives in docs/internal/apple-design-intel.md.
  */
-export const SPRING_SMOOTH = { type: "spring", stiffness: 158, damping: 25.1, mass: 1 } as const;
+export const SPRING_SMOOTH = { type: "spring", stiffness: 439, damping: 42, mass: 1 } as const;
 export const SPRING_SNAPPY = { type: "spring", stiffness: 158, damping: 21.4, mass: 1 } as const;
 export const SPRING_BOUNCY = { type: "spring", stiffness: 158, damping: 17.6, mass: 1 } as const;
 
