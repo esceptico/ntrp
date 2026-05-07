@@ -91,6 +91,7 @@ function SessionRow({
   renaming,
   onStartRename,
   onCancelRename,
+  onArchive,
   onContextMenu,
 }: {
   sessionId: string;
@@ -102,6 +103,7 @@ function SessionRow({
   renaming: boolean;
   onStartRename: () => void;
   onCancelRename: () => void;
+  onArchive: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const [draft, setDraft] = useState(name ?? "");
@@ -149,9 +151,16 @@ function SessionRow({
   }
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => void switchSession(sessionId)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          void switchSession(sessionId);
+        }
+      }}
       onContextMenu={onContextMenu}
       onDoubleClick={(e) => {
         e.preventDefault();
@@ -160,7 +169,7 @@ function SessionRow({
       onMouseMove={trackHoverDish}
       data-streaming={streaming ? "true" : undefined}
       className={clsx(
-        "session-row hover-dish grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full px-3 py-1.5 rounded-lg text-left transition-colors",
+        "session-row hover-dish group/row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full px-3 py-1.5 rounded-lg text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
         active
           ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
           : "text-ink-soft hover:bg-surface/60",
@@ -169,18 +178,62 @@ function SessionRow({
       <span className="min-w-0 flex items-center gap-1.5 text-[13px] font-medium tracking-[-0.005em]">
         <span className="truncate">{name || "untitled"}</span>
       </span>
-      {unread && !streaming ? (
-        <span aria-hidden className="session-unread-dot shrink-0" title="New activity" />
-      ) : (
-        <span
-          className={clsx(
-            "text-[11px] tabular-nums shrink-0",
-            active ? "text-muted" : "text-faint",
+      <span className="relative shrink-0 grid place-items-center min-w-[36px] h-[18px]">
+        {/* default state: timestamp or unread dot */}
+        <span className="col-start-1 row-start-1 transition-opacity duration-150 group-hover/row:opacity-0 pointer-events-none">
+          {unread && !streaming ? (
+            <span aria-hidden className="session-unread-dot block" title="New activity" />
+          ) : (
+            <span
+              className={clsx(
+                "text-[11px] tabular-nums",
+                active ? "text-muted" : "text-faint",
+              )}
+            >
+              {formatAge(lastActivity)}
+            </span>
           )}
-        >
-          {formatAge(lastActivity)}
         </span>
-      )}
+        {/* hover state: inline actions */}
+        <span className="absolute inset-0 flex items-center justify-end gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity duration-150">
+          <RowAction
+            icon={<Pencil size={11} strokeWidth={1.8} />}
+            label="Rename"
+            onClick={onStartRename}
+          />
+          <RowAction
+            icon={<Archive size={11} strokeWidth={1.8} />}
+            label="Archive"
+            onClick={onArchive}
+          />
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function RowAction({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+      className="grid place-items-center w-[22px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
+    >
+      {icon}
     </button>
   );
 }
@@ -268,6 +321,10 @@ function SessionList() {
                     renaming={renamingId === session.session_id}
                     onStartRename={() => setRenamingId(session.session_id)}
                     onCancelRename={() => setRenamingId(null)}
+                    onArchive={() => {
+                      if (!confirm("Archive this session? You can restore it later from the server.")) return;
+                      void archiveSession(session.session_id);
+                    }}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       setMenu({ sessionId: session.session_id, x: e.clientX, y: e.clientY });
