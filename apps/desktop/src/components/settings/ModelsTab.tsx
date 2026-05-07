@@ -1,9 +1,8 @@
-import { useMemo, useState } from "react";
-import clsx from "clsx";
-import { Check } from "lucide-react";
+import { useState } from "react";
 import { useStore } from "../../store";
 import { updateServerConfig, fetchServerConfig } from "../../actions";
 import type { ModelGroup } from "../../api";
+import { ModelReasoningPicker } from "../ComposerSelectors";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
 
 type ModelKind = "research_model" | "memory_model";
@@ -21,20 +20,11 @@ const KIND_LABELS: Record<ModelKind, { title: string; description: string }> = {
 
 const SETTINGS_MODEL_KINDS: ModelKind[] = ["research_model", "memory_model"];
 
-const PROVIDER_LABELS: Record<string, string> = {
-  anthropic: "Anthropic",
-  openai: "OpenAI",
-  google: "Google",
-  openrouter: "OpenRouter",
-  xai: "xAI",
-  custom: "Custom",
-};
-
 export function ModelsTab() {
   const connected = useStore((s) => s.connected);
   const cfg = useStore((s) => s.serverConfig);
   const models = useStore((s) => s.serverModels);
-  const [savingKind, setSavingKind] = useState<ModelKind | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (!cfg) {
@@ -54,6 +44,18 @@ export function ModelsTab() {
           detail="Connect at least one model provider in Providers, then refresh this view."
         />
       </div>
+    );
+  }
+
+  if (
+    !Object.prototype.hasOwnProperty.call(cfg, "model_reasoning_efforts") ||
+    !Object.prototype.hasOwnProperty.call(models, "reasoning_efforts")
+  ) {
+    return (
+      <SettingsInlineError
+        title="Model settings contract changed"
+        message="The desktop UI and server model metadata are out of sync. Restart the server, then reopen Settings."
+      />
     );
   }
 
@@ -77,11 +79,14 @@ export function ModelsTab() {
               title={meta.title}
               description={meta.description}
               current={current}
-              saving={savingKind === kind}
+              savingModel={saving === `${kind}:model`}
+              savingReasoning={saving === `${kind}:reasoning`}
               groups={groups}
+              reasoningEfforts={models.reasoning_efforts}
+              currentReasoning={cfg.model_reasoning_efforts[current] ?? null}
               onSelect={async (model) => {
-                if (model === current || savingKind) return;
-                setSavingKind(kind);
+                if (model === current || saving) return;
+                setSaving(`${kind}:model`);
                 setError(null);
                 try {
                   await updateServerConfig({ [kind]: model });
@@ -89,7 +94,23 @@ export function ModelsTab() {
                   setError(err instanceof Error ? err.message : String(err));
                   await fetchServerConfig();
                 } finally {
-                  setSavingKind(null);
+                  setSaving(null);
+                }
+              }}
+              onSetReasoning={async (effort) => {
+                if (saving) return;
+                setSaving(`${kind}:reasoning`);
+                setError(null);
+                try {
+                  await updateServerConfig({
+                    reasoning_model: current,
+                    reasoning_effort: effort,
+                  });
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : String(err));
+                  await fetchServerConfig();
+                } finally {
+                  setSaving(null);
                 }
               }}
             />
@@ -108,25 +129,25 @@ function Section({
   description,
   current,
   groups,
-  saving,
+  savingModel,
+  savingReasoning,
+  reasoningEfforts,
+  currentReasoning,
   onSelect,
+  onSetReasoning,
 }: {
   title: string;
   description: string;
   current: string;
   groups: ModelGroup[];
-  saving: boolean;
+  savingModel: boolean;
+  savingReasoning: boolean;
+  reasoningEfforts: Record<string, string[]>;
+  currentReasoning: string | null;
   onSelect: (model: string) => void;
+  onSetReasoning: (effort: string | null) => void;
 }) {
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const filteredGroups = useMemo(() => {
-    if (!query.trim()) return groups;
-    const q = query.toLowerCase();
-    return groups
-      .map((g) => ({ ...g, models: g.models.filter((m) => m.toLowerCase().includes(q)) }))
-      .filter((g) => g.models.length > 0);
-  }, [groups, query]);
+  const efforts = reasoningEfforts[current] ?? [];
 
   return (
     <div className="grid gap-2.5 py-3">
@@ -135,69 +156,17 @@ function Section({
         <div className="text-[11.5px] text-faint leading-[1.4]">{description}</div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        disabled={saving}
-        className="min-w-0 inline-flex w-full items-center justify-between gap-2 min-h-8 px-2.5 py-1.5 rounded-md border border-line bg-surface text-ink-soft text-[12px] font-medium font-mono text-left hover:border-line-strong transition-colors disabled:opacity-60"
-      >
-        <span className="min-w-0 truncate">
-          {saving ? "Saving..." : current || "-"}
-        </span>
-        <span className="shrink-0 text-[11px] font-sans text-faint">
-          Change
-        </span>
-      </button>
-
-      {open && (
-        <div className="rounded-[10px] border border-line-soft bg-surface-soft/40 overflow-hidden">
-          <input
-            type="text"
-            placeholder="Search models..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="w-full h-8 px-3 border-0 border-b border-line-soft bg-transparent text-[12.5px] text-ink outline-none placeholder:text-whisper"
-            autoFocus
-          />
-          <div className="max-h-[280px] overflow-y-auto scroll-thin py-1">
-            {filteredGroups.length === 0 && (
-              <div className="px-3 py-2 text-[12px] text-faint italic">No matches.</div>
-            )}
-            {filteredGroups.map((g) => (
-              <div key={g.provider}>
-                {groups.length > 1 && (
-                  <div className="px-3 pt-2 pb-1 text-[10px] font-medium uppercase tracking-[0.08em] text-faint select-none">
-                    {PROVIDER_LABELS[g.provider] ?? g.provider}
-                  </div>
-                )}
-                {g.models.map((m) => {
-                  const isCurrent = m === current;
-                  return (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => {
-                        onSelect(m);
-                        setOpen(false);
-                        setQuery("");
-                      }}
-                      className={clsx(
-                        "w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12.5px] font-mono transition-colors",
-                        isCurrent ? "text-ink" : "text-ink-soft hover:bg-surface/60",
-                      )}
-                    >
-                      <span className="grid place-items-center w-3 h-3 shrink-0">
-                        {isCurrent && <Check size={11} strokeWidth={2.4} className="text-accent" />}
-                      </span>
-                      <span className="min-w-0 truncate">{m}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <ModelReasoningPicker
+        buttonLabel={savingModel ? "Saving..." : undefined}
+        currentModel={current}
+        currentEffort={currentReasoning}
+        efforts={efforts}
+        groups={groups}
+        disabled={savingModel || savingReasoning}
+        placement="below-left"
+        onSelectModel={onSelect}
+        onSelectEffort={onSetReasoning}
+      />
     </div>
   );
 }

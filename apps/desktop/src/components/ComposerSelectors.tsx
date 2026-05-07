@@ -3,6 +3,7 @@ import { Check, ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
 import { updateServerConfig, fetchServerConfig } from "../actions";
+import type { ModelGroup } from "../api";
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
@@ -19,7 +20,7 @@ function shortModelLabel(model: string): string {
   return slash >= 0 ? model.slice(slash + 1) : model;
 }
 
-function useOutsideClick(
+export function useOutsideClick(
   ref: React.RefObject<HTMLElement | null>,
   open: boolean,
   onClose: () => void,
@@ -34,22 +35,33 @@ function useOutsideClick(
   }, [open, ref, onClose]);
 }
 
-/** Combined model + reasoning chip used at the right edge of the composer. */
-export function ModelReasoningChip() {
-  const cfg = useStore((s) => s.serverConfig);
-  const models = useStore((s) => s.serverModels);
+export function ModelReasoningPicker({
+  buttonLabel,
+  currentModel,
+  currentEffort,
+  efforts,
+  groups,
+  disabled = false,
+  modelReasoningEfforts = {},
+  placement = "above-right",
+  onSelectModel,
+  onSelectEffort,
+}: {
+  buttonLabel?: string;
+  currentModel: string;
+  currentEffort: string | null;
+  efforts: string[];
+  groups: ModelGroup[];
+  disabled?: boolean;
+  modelReasoningEfforts?: Record<string, string>;
+  placement?: "above-right" | "below-left";
+  onSelectModel: (model: string) => void;
+  onSelectEffort: (effort: string | null) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [busy, setBusy] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   useOutsideClick(wrapRef, open, () => setOpen(false));
-
-  const groups = useMemo(() => {
-    if (!models) return [];
-    return models.groups.length > 0
-      ? models.groups
-      : [{ provider: "all", models: models.models }];
-  }, [models]);
 
   const filteredGroups = useMemo(() => {
     if (!query.trim()) return groups;
@@ -59,39 +71,24 @@ export function ModelReasoningChip() {
       .filter((g) => g.models.length > 0);
   }, [groups, query]);
 
-  if (!cfg) return null;
-  const currentModel = cfg.chat_model;
-  const efforts = cfg.reasoning_efforts;
-  const currentEffort = cfg.reasoning_effort;
-  const modelReasoningEfforts = cfg.model_reasoning_efforts;
-
-  const apply = async (patch: Record<string, unknown>) => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await updateServerConfig(patch);
-    } catch {
-      await fetchServerConfig();
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <div ref={wrapRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        disabled={busy || !models}
+        disabled={disabled}
         title={efforts.length > 0 ? `${currentModel} · thinking ${currentEffort ?? "off"}` : currentModel}
         className={clsx(
           "inline-flex items-center gap-1.5 h-7 pl-2.5 pr-2 rounded-full text-[11.5px] font-medium tracking-[-0.005em] transition-colors select-none max-w-[260px]",
           open
             ? "bg-surface-soft text-ink"
             : "text-muted hover:bg-surface-soft hover:text-ink",
+          disabled && "opacity-60",
         )}
       >
-        <span className="truncate font-mono text-[11px] text-ink-soft">{shortModelLabel(currentModel)}</span>
+        <span className="truncate font-mono text-[11px] text-ink-soft">
+          {buttonLabel ?? shortModelLabel(currentModel)}
+        </span>
         {efforts.length > 0 && (
           <>
             <span className="text-whisper">·</span>
@@ -101,25 +98,32 @@ export function ModelReasoningChip() {
         <ChevronDown size={11} strokeWidth={1.8} className="shrink-0 opacity-70" />
       </button>
 
-      {open && models && (
-        <div className="absolute bottom-[calc(100%+6px)] right-0 z-30 w-[300px] rounded-[12px] border border-line-soft bg-surface shadow-[var(--shadow-pop)] overflow-hidden">
+      {open && (
+        <div
+          className={clsx(
+            "absolute z-30 w-[300px] rounded-[12px] border border-line-soft bg-surface shadow-[var(--shadow-pop)] overflow-hidden",
+            placement === "above-right"
+              ? "bottom-[calc(100%+6px)] right-0"
+              : "top-[calc(100%+6px)] left-0",
+          )}
+        >
           {efforts.length > 0 && (
             <div className="grid gap-1 px-3 pt-2.5 pb-2 border-b border-line-soft">
               <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
-                Thinking for this model
+                Reasoning effort
               </div>
               <div className="flex flex-wrap gap-1">
                 <EffortPill
                   label="off"
                   active={currentEffort === null}
-                  onClick={() => void apply({ reasoning_effort: null })}
+                  onClick={() => onSelectEffort(null)}
                 />
                 {efforts.map((eff) => (
                   <EffortPill
                     key={eff}
                     label={eff}
                     active={currentEffort === eff}
-                    onClick={() => void apply({ reasoning_effort: eff })}
+                    onClick={() => onSelectEffort(eff)}
                   />
                 ))}
               </div>
@@ -153,7 +157,7 @@ export function ModelReasoningChip() {
                         key={m}
                         type="button"
                         onClick={() => {
-                          if (m !== currentModel) void apply({ chat_model: m });
+                          if (m !== currentModel) onSelectModel(m);
                           setQuery("");
                         }}
                         className={clsx(
@@ -180,6 +184,53 @@ export function ModelReasoningChip() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Combined model + reasoning chip used at the right edge of the composer. */
+export function ModelReasoningChip() {
+  const cfg = useStore((s) => s.serverConfig);
+  const models = useStore((s) => s.serverModels);
+  const [busy, setBusy] = useState(false);
+
+  const groups = useMemo(() => {
+    if (!models) return [];
+    return models.groups.length > 0
+      ? models.groups
+      : [{ provider: "all", models: models.models }];
+  }, [models]);
+
+  if (!cfg) return null;
+  if (!Object.prototype.hasOwnProperty.call(cfg, "model_reasoning_efforts")) return null;
+  const currentModel = cfg.chat_model;
+  const efforts = cfg.reasoning_efforts;
+  const currentEffort = cfg.reasoning_effort;
+  const modelReasoningEfforts = cfg.model_reasoning_efforts;
+
+  const apply = async (patch: Record<string, unknown>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await updateServerConfig(patch);
+    } catch {
+      await fetchServerConfig();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ModelReasoningPicker
+      currentModel={currentModel}
+      currentEffort={currentEffort}
+      efforts={efforts}
+      groups={groups}
+      disabled={busy || !models}
+      modelReasoningEfforts={modelReasoningEfforts}
+      placement="above-right"
+      onSelectModel={(model) => void apply({ chat_model: model })}
+      onSelectEffort={(effort) => void apply({ reasoning_effort: effort })}
+    />
   );
 }
 
