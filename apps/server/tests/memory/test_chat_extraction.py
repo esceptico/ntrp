@@ -30,18 +30,18 @@ def mock_llm_response(content: str):
 
 
 SAMPLE_MESSAGES = (
-    {"role": "user", "content": "I decided to use Postgres for the new project"},
-    {"role": "assistant", "content": "Good choice. I'll set up the schema."},
-    {"role": "user", "content": "Also, John will handle the deployment"},
-    {"role": "assistant", "content": "Got it."},
+    {"role": "user", "content": "I decided to use Postgres for the new project", "message_id": "m-1"},
+    {"role": "assistant", "content": "Good choice. I'll set up the schema.", "message_id": "m-2"},
+    {"role": "user", "content": "Also, John will handle the deployment", "message_id": "m-3"},
+    {"role": "assistant", "content": "Got it.", "message_id": "m-4"},
 )
 
 
 class TestFormatMessages:
     def test_basic_formatting(self):
         result = _format_messages(SAMPLE_MESSAGES)
-        assert "USER (evidence): I decided to use Postgres" in result
-        assert "ASSISTANT (context only): Good choice" in result
+        assert "USER [m-1] (evidence): I decided to use Postgres" in result
+        assert "ASSISTANT [m-2] (context only): Good choice" in result
 
     def test_skips_tool_messages(self):
         messages = (
@@ -51,8 +51,8 @@ class TestFormatMessages:
         )
         result = _format_messages(messages)
         assert "tool output" not in result
-        assert "USER (evidence): hello" in result
-        assert "ASSISTANT (context only): response" in result
+        assert "USER [message-0] (evidence): hello" in result
+        assert "ASSISTANT [message-2] (context only): response" in result
 
     def test_skips_session_handoff(self):
         messages = (
@@ -61,7 +61,7 @@ class TestFormatMessages:
         )
         result = _format_messages(messages)
         assert "Session State Handoff" not in result
-        assert "USER (evidence): continuing now" in result
+        assert "USER [message-1] (evidence): continuing now" in result
 
     def test_skips_empty_content(self):
         messages = (
@@ -69,7 +69,7 @@ class TestFormatMessages:
             {"role": "assistant", "content": "response"},
         )
         result = _format_messages(messages)
-        assert result == "ASSISTANT (context only): response"
+        assert result == "ASSISTANT [message-1] (context only): response"
 
     def test_skips_non_string_content(self):
         messages = (
@@ -77,7 +77,7 @@ class TestFormatMessages:
             {"role": "assistant", "content": "response"},
         )
         result = _format_messages(messages)
-        assert result == "ASSISTANT (context only): response"
+        assert result == "ASSISTANT [message-1] (context only): response"
 
     def test_empty_messages(self):
         result = _format_messages(())
@@ -115,11 +115,13 @@ class TestExtractFromChat:
                     kind=FactKind.DECISION,
                     salience=1,
                     entities=["User", "Postgres"],
+                    evidence_message_ids=["m-1"],
                 ),
                 ExtractedChatFact(
                     text="John handles deployment",
                     kind=FactKind.RELATIONSHIP,
                     entities=["John"],
+                    evidence_message_ids=["m-3"],
                 ),
             ]
         )
@@ -133,6 +135,7 @@ class TestExtractFromChat:
         assert facts[0].kind == FactKind.DECISION
         assert facts[0].salience == 1
         assert facts[0].entities == ["User", "Postgres"]
+        assert facts[0].evidence_message_ids == ["m-1"]
 
     @pytest.mark.asyncio
     async def test_returns_empty_for_no_facts(self):

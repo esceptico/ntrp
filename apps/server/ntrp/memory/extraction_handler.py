@@ -45,8 +45,8 @@ def create_chat_extraction_handler(memory: FactMemory, store: AutomationStore) -
             return None
 
         _logger.info("Extracted %d facts from chat (session %s)", len(facts), sid[:8])
-        source_ref = _source_ref_for_window(sid, context_start, len(messages), window)
         for fact in facts:
+            source_ref = _source_ref_for_fact(sid, context_start, len(messages), window, fact.evidence_message_ids)
             await memory.remember(
                 text=fact.text,
                 source_type=SourceType.CHAT,
@@ -69,8 +69,19 @@ def _message_ref_id(msg: dict) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
-def _source_ref_for_window(sid: str, context_start: int, message_end: int, window: tuple[dict, ...]) -> str:
-    ids = [_message_ref_id(msg) for msg in window]
+def _source_ref_for_fact(
+    sid: str,
+    context_start: int,
+    message_end: int,
+    window: tuple[dict, ...],
+    evidence_message_ids: list[str] | None,
+) -> str:
+    wanted = set(evidence_message_ids or [])
+    source_messages = [msg for msg in window if _message_ref_id(msg) in wanted]
+    if not source_messages:
+        source_messages = list(window)
+
+    ids = [_message_ref_id(msg) for msg in source_messages]
     ids = [value for value in ids if value]
     if ids:
         return chat_message_range_ref(sid, ids[0], ids[-1])

@@ -18,6 +18,7 @@ Do not write observations, patterns, summaries, or inferred biography. Those are
 
 Evidence rules:
 - User messages are the evidence source.
+- Every transcript line has a message id in square brackets; include the user message id(s) that directly support each fact.
 - Assistant messages are context only; never turn assistant wording into memory unless a later user message explicitly confirms it.
 - User corrections override earlier assistant claims and earlier extracted-looking context.
 - Do not store meta-commentary about the current task unless it is a reusable preference, standing rule, or durable decision.
@@ -56,6 +57,7 @@ RULES:
 - Temporary facts must include expires_at; otherwise skip them
 - Durable facts must not include expires_at
 - Include concrete entity names used by the fact, including User when the fact is about the user
+- Include evidence_message_ids with only USER message ids that directly state or confirm the fact
 - If nothing useful to remember was discussed, return an empty list
 
 CONVERSATION:
@@ -71,6 +73,7 @@ class ExtractedChatFact(BaseModel):
     happened_at: datetime | None = None
     expires_at: datetime | None = None
     entities: list[str] = Field(default_factory=list)
+    evidence_message_ids: list[str] = Field(default_factory=list)
 
     @field_validator("text")
     @classmethod
@@ -82,14 +85,24 @@ class ExtractedChatFact(BaseModel):
     def _strip_entities(cls, value: list[str]) -> list[str]:
         return [name.strip() for name in value if name.strip()]
 
+    @field_validator("evidence_message_ids")
+    @classmethod
+    def _strip_evidence_message_ids(cls, value: list[str]) -> list[str]:
+        return [mid.strip() for mid in value if mid.strip()]
+
 
 class ChatExtractionSchema(BaseModel):
     facts: list[ExtractedChatFact] = Field(default_factory=list)
 
 
+def _message_id_for_prompt(msg: dict, index: int) -> str:
+    value = msg.get("message_id") or msg.get("client_id")
+    return value if isinstance(value, str) and value else f"message-{index}"
+
+
 def _format_messages(messages: tuple[dict, ...]) -> str:
     parts = []
-    for msg in messages:
+    for index, msg in enumerate(messages):
         role = msg["role"]
         if role in ("tool", "system"):
             continue
@@ -99,7 +112,7 @@ def _format_messages(messages: tuple[dict, ...]) -> str:
         if content.startswith(SESSION_HANDOFF_MARKER):
             continue
         label = "USER (evidence)" if role == "user" else "ASSISTANT (context only)"
-        parts.append(f"{label}: {content}")
+        parts.append(f"{label.replace(' ', f' [{_message_id_for_prompt(msg, index)}] ', 1)}: {content}")
     return "\n\n".join(parts)
 
 

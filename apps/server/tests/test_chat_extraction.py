@@ -36,14 +36,14 @@ def _make_messages(n: int) -> tuple[dict, ...]:
 def test_extraction_transcript_marks_assistant_as_context_only():
     transcript = _format_messages(
         (
-            {"role": "user", "content": "I prefer raw SQL."},
-            {"role": "assistant", "content": "You prefer Prisma."},
+            {"role": "user", "content": "I prefer raw SQL.", "message_id": "u-1"},
+            {"role": "assistant", "content": "You prefer Prisma.", "message_id": "a-1"},
             {"role": "tool", "content": "irrelevant"},
         )
     )
 
-    assert "USER (evidence): I prefer raw SQL." in transcript
-    assert "ASSISTANT (context only): You prefer Prisma." in transcript
+    assert "USER [u-1] (evidence): I prefer raw SQL." in transcript
+    assert "ASSISTANT [a-1] (context only): You prefer Prisma." in transcript
     assert "irrelevant" not in transcript
 
 
@@ -53,8 +53,15 @@ def _fact(
     kind: FactKind = FactKind.NOTE,
     salience: int = 0,
     entities: list[str] | None = None,
+    evidence_message_ids: list[str] | None = None,
 ) -> ExtractedChatFact:
-    return ExtractedChatFact(text=text, kind=kind, salience=salience, entities=entities or [])
+    return ExtractedChatFact(
+        text=text,
+        kind=kind,
+        salience=salience,
+        entities=entities or [],
+        evidence_message_ids=evidence_message_ids or [],
+    )
 
 
 @pytest_asyncio.fixture
@@ -269,6 +276,38 @@ class TestExtractionRemember:
 
         facts = await memory.facts.list_recent(limit=10)
         assert facts[0].source_ref == "chatmsg:sess-1:msg-0..msg-3"
+
+    @pytest.mark.asyncio
+    async def test_uses_fact_evidence_message_ids_for_source_ref(
+        self,
+        memory: FactMemory,
+        automation_store: AutomationStore,
+    ):
+        handler = create_chat_extraction_handler(memory, automation_store)
+        messages = tuple(
+            {**msg, "message_id": f"msg-{index}"}
+            for index, msg in enumerate(_make_messages(4))
+        )
+
+        mock_extract = AsyncMock(
+            return_value=[
+                _fact(
+                    "User prefers terse reports",
+                    evidence_message_ids=["msg-2"],
+                )
+            ]
+        )
+        with patch("ntrp.memory.extraction_handler.extract_from_chat", mock_extract):
+            await handler(
+                {
+                    "trigger_type": "count",
+                    "session_id": "sess-1",
+                    "messages": list(messages),
+                }
+            )
+
+        facts = await memory.facts.list_recent(limit=10)
+        assert facts[0].source_ref == "chatmsg:sess-1:msg-2..msg-2"
 
 
 class TestExtractionSkips:
