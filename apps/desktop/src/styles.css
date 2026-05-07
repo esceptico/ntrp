@@ -233,12 +233,19 @@ button:not(:disabled):active {
   border-radius: inherit;
   background: radial-gradient(
     100px circle at var(--mx, 50%) var(--my, 50%),
-    color-mix(in oklab, var(--color-ink) 4%, transparent),
+    color-mix(in oklab, var(--color-ink) 8%, transparent),
     transparent 65%
   );
   opacity: 0;
   transition: opacity 180ms ease-out;
   pointer-events: none;
+}
+:root.dark .hover-dish::before {
+  background: radial-gradient(
+    100px circle at var(--mx, 50%) var(--my, 50%),
+    color-mix(in oklab, var(--color-ink) 3%, transparent),
+    transparent 65%
+  );
 }
 .hover-dish:hover::before { opacity: 1; }
 
@@ -249,11 +256,12 @@ button:not(:disabled):active {
 .chat-header { -webkit-app-region: drag; }
 .chat-header > * { -webkit-app-region: no-drag; }
 
-/* Subtle specular highlight on the chat shell's leading edge — gives a
-   hint of light hitting the panel from above, mirrors the composer
-   card's edge feel. Light/dark variants tuned per material. */
+/* Subtle leading-edge separator on the chat shell. Light mode uses a
+   dark hairline (a separator); dark mode uses a faint specular high-
+   light (a lifted edge). Either way: just enough to read the seam
+   between the sidebar and the chat panel. */
 .chat-shell {
-  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.6);
+  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.06);
 }
 :root.dark .chat-shell {
   box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.06);
