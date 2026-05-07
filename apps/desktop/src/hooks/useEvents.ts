@@ -32,8 +32,8 @@ function endTurn(s: ReturnType<typeof getState>, endedAt: number) {
  *  Sub-agents can fire tens of nested tools nearly simultaneously, so we
  *  also cap how far the queue can fall behind real time — without the cap a
  *  burst of 30 items would visibly drip out over 3+ seconds. */
-const ITEM_STAGGER_MS = 60;
-const MAX_STAGGER_LAG_MS = 240;
+const ITEM_STAGGER_MS = 40;
+const MAX_STAGGER_LAG_MS = 120;
 let nextItemRenderAt = 0;
 
 function enqueueActivityItem(aid: string, item: ActivityItem) {

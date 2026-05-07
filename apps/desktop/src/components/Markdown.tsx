@@ -43,19 +43,25 @@ const sanitizeSchema = {
 export function Markdown({
   content,
   className,
+  streaming = false,
 }: {
   content: string;
   className?: string;
+  streaming?: boolean;
 }) {
   return (
     <div className={clsx("md", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[
-          [rehypeHighlight, { languages: HL_LANGUAGES, detect: false, ignoreMissing: true }],
-          [rehypeSanitize, sanitizeSchema],
-        ]}
-        components={{ pre: PreBlock, a: Anchor }}
+        rehypePlugins={
+          streaming
+            ? [[rehypeSanitize, sanitizeSchema]]
+            : [
+                [rehypeHighlight, { languages: HL_LANGUAGES, detect: false, ignoreMissing: true }],
+                [rehypeSanitize, sanitizeSchema],
+              ]
+        }
+        components={{ pre: streaming ? StreamingPreBlock : PreBlock, a: Anchor }}
       >
         {content}
       </ReactMarkdown>
@@ -69,6 +75,10 @@ function Anchor({ href, children, ...rest }: React.AnchorHTMLAttributes<HTMLAnch
       {children}
     </a>
   );
+}
+
+function StreamingPreBlock({ children }: { children?: ReactNode }) {
+  return <pre className="streaming-code">{children}</pre>;
 }
 
 /** Custom <pre> wrapper: pulls language + raw text from the inner <code>
