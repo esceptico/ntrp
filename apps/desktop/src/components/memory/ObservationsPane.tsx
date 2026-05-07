@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { ExternalLink, Pencil, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../../store";
 import {
@@ -13,7 +13,11 @@ import {
 } from "../../api";
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { formatAbs, formatRelativePast } from "../../lib/format";
-import { factSourceSummary } from "../../lib/memoryProvenance";
+import {
+  factChatSourceFocus,
+  factSourceSummary,
+  type FactChatSourceFocus,
+} from "../../lib/memoryProvenance";
 import { memoryTargetId, type MemoryTarget, upsertById } from "../../lib/memoryTargets";
 import {
   factStatusLabel,
@@ -39,9 +43,11 @@ import {
 export function ObservationsPane({
   targetPattern,
   onOpenFact,
+  onOpenSource,
 }: {
   targetPattern?: MemoryTarget<Observation | number> | null;
   onOpenFact?: (fact: Fact) => void;
+  onOpenSource?: (focus: FactChatSourceFocus) => void;
 }) {
   const config = useStore((s) => s.config);
   const [items, setItems] = useState<Observation[] | null>(null);
@@ -134,6 +140,7 @@ export function ObservationsPane({
             key={detail.observation.id}
             detail={detail}
             onOpenFact={onOpenFact}
+            onOpenSource={onOpenSource}
             onSaved={async () => {
               await refresh();
               const fresh = await getObservationApi(config, detail.observation.id);
@@ -191,11 +198,13 @@ function ObservationRow({
 function ObservationView({
   detail,
   onOpenFact,
+  onOpenSource,
   onSaved,
   onDeleted,
 }: {
   detail: ObservationDetail;
   onOpenFact?: (fact: Fact) => void;
+  onOpenSource?: (focus: FactChatSourceFocus) => void;
   onSaved: () => Promise<void>;
   onDeleted: () => Promise<void>;
 }) {
@@ -273,7 +282,14 @@ function ObservationView({
           </p>
         )
       }
-      meta={<SupportingFacts facts={detail.supporting_facts} missing={detail.missing_source_fact_ids} onOpenFact={onOpenFact} />}
+      meta={
+        <SupportingFacts
+          facts={detail.supporting_facts}
+          missing={detail.missing_source_fact_ids}
+          onOpenFact={onOpenFact}
+          onOpenSource={onOpenSource}
+        />
+      }
       actions={
         <>
           {error && <ErrorPill message={error} />}
@@ -308,7 +324,17 @@ function ObservationView({
   );
 }
 
-function SupportingFacts({ facts, missing, onOpenFact }: { facts: Fact[]; missing: number[]; onOpenFact?: (fact: Fact) => void }) {
+export function SupportingFacts({
+  facts,
+  missing,
+  onOpenFact,
+  onOpenSource,
+}: {
+  facts: Fact[];
+  missing: number[];
+  onOpenFact?: (fact: Fact) => void;
+  onOpenSource?: (focus: FactChatSourceFocus) => void;
+}) {
   if (facts.length === 0 && missing.length === 0) return null;
   return (
     <section>
@@ -316,26 +342,42 @@ function SupportingFacts({ facts, missing, onOpenFact }: { facts: Fact[]; missin
         Supporting facts ({facts.length + missing.length})
       </h3>
       <ul className="flex flex-col gap-2">
-        {facts.map((f) => (
-          <li key={f.id} className="flex items-start gap-3">
-            <span className="mt-[2px] text-[10px] uppercase tracking-[0.06em] text-faint shrink-0 w-[80px]">
-              {f.kind}
-            </span>
-            <div className="min-w-0 flex-1">
-              <button
-                type="button"
-                onClick={() => onOpenFact?.(f)}
-                className="min-w-0 text-left text-[12.5px] leading-snug text-ink-soft hover:text-ink"
-              >
-                {f.text}
-              </button>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                <Pill tone={factStatusTone(f.status)}>{factStatusLabel(f.status)}</Pill>
-                <span className="text-[11px] text-faint">{factSourceSummary(f)}</span>
+        {facts.map((f) => {
+          const sourceFocus = factChatSourceFocus(f);
+          return (
+            <li key={f.id} className="flex items-start gap-3">
+              <span className="mt-[2px] text-[10px] uppercase tracking-[0.06em] text-faint shrink-0 w-[80px]">
+                {f.kind}
+              </span>
+              <div className="min-w-0 flex-1">
+                <button
+                  type="button"
+                  onClick={() => onOpenFact?.(f)}
+                  className="min-w-0 text-left text-[12.5px] leading-snug text-ink-soft hover:text-ink"
+                >
+                  {f.text}
+                </button>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  <Pill tone={factStatusTone(f.status)}>{factStatusLabel(f.status)}</Pill>
+                  {sourceFocus && onOpenSource ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpenSource(sourceFocus)}
+                      className="inline-flex min-w-0 items-center gap-1 text-left text-[11px] text-faint hover:text-ink-soft"
+                      aria-label={`Open source for fact ${f.id}`}
+                    >
+                      <ExternalLink size={11} strokeWidth={1.8} className="shrink-0" />
+                      <span className="min-w-0 break-all">{factSourceSummary(f)}</span>
+                      <span className="sr-only">Open source</span>
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-faint">{factSourceSummary(f)}</span>
+                  )}
+                </div>
               </div>
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
         {missing.map((id) => (
           <li key={`missing-${id}`} className="flex items-start gap-3 italic">
             <span className="mt-[2px] text-[10px] uppercase tracking-[0.06em] text-faint shrink-0 w-[80px]">

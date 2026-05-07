@@ -93,7 +93,13 @@ export function MemoryModal() {
             onOpenSource={(sessionId) => void openSourceSession(sessionId)}
           />
         )}
-        {tab === "patterns" && <ObservationsPane targetPattern={targetPattern} onOpenFact={openFact} />}
+        {tab === "patterns" && (
+          <ObservationsPane
+            targetPattern={targetPattern}
+            onOpenFact={openFact}
+            onOpenSource={(focus) => void openSourceSession(focus)}
+          />
+        )}
         {tab === "cleanup" && <CleanupPane onOpenFact={openFact} onOpenPattern={openPattern} />}
         {tab === "audit" && <AuditPane />}
       </div>

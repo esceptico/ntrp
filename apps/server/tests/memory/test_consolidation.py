@@ -340,6 +340,48 @@ class TestConsolidateFact:
         assert await obs_repo.count() == 0
 
     @pytest.mark.asyncio
+    async def test_salient_durable_preference_can_seed_single_fact_pattern(
+        self, fact_repo: FactRepository, obs_repo: ObservationRepository
+    ):
+        """Durable high-salience facts can seed explicitly marked single-fact patterns."""
+        fact = await fact_repo.create(
+            text="Alice prefers concise reports",
+            source_type=SourceType.EXPLICIT,
+            embedding=mock_embedding("alice concise reports"),
+            kind=FactKind.PREFERENCE,
+            lifetime=FactLifetime.DURABLE,
+            salience=1,
+            confidence=0.9,
+        )
+        embedding = mock_embedding("alice concise reports")
+
+        mock_client = AsyncMock()
+        mock_client.completion.return_value.choices = [
+            type(
+                "Choice",
+                (),
+                {
+                    "message": type(
+                        "Message",
+                        (),
+                        {
+                            "content": '{"actions": [{"action": "create", "text": "Alice tends to prefer concise reporting", "reason": "durable preference"}]}'
+                        },
+                    )()
+                },
+            )()
+        ]
+        with patch("ntrp.memory.consolidation.get_completion_client", return_value=mock_client):
+            result = await consolidate_fact(fact, fact_repo, obs_repo, "test-model", embedding)
+
+        assert result.action == "created"
+        assert result.observation_id is not None
+        obs = await obs_repo.get(result.observation_id)
+        assert obs is not None
+        assert obs.source_fact_ids == [fact.id]
+        assert obs.evidence_level == "single_fact_seed"
+
+    @pytest.mark.asyncio
     async def test_fact_updates_existing_observation(self, fact_repo: FactRepository, obs_repo: ObservationRepository):
         """New fact updates existing observation instead of creating new one."""
         emb = mock_embedding("alice developer")

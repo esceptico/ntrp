@@ -23,7 +23,7 @@ import {
   factSourceStatus,
   type FactChatSourceFocus,
 } from "../../lib/memoryProvenance";
-import { type MemoryTarget, upsertById } from "../../lib/memoryTargets";
+import { selectedMemoryItem, type MemoryTarget, upsertById } from "../../lib/memoryTargets";
 import { factStatusFilterLabel, factStatusLabel, factStatusTone } from "../../lib/memoryTrust";
 import {
   DetailMeta,
@@ -137,7 +137,7 @@ export function FactsPane({
     return facts.filter((f) => f.text.toLowerCase().includes(q));
   }, [facts, query]);
 
-  const selected = facts?.find((f) => f.id === selectedId) ?? null;
+  const selected = selectedMemoryItem(facts, selectedId, detail?.fact);
 
   return (
     <PaneShell

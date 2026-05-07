@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { memoryTargetId, memoryTargetItem, nextMemoryTarget, upsertById } from "../src/lib/memoryTargets.js";
+import {
+  memoryTargetId,
+  memoryTargetItem,
+  nextMemoryTarget,
+  selectedMemoryItem,
+  upsertById,
+} from "../src/lib/memoryTargets.js";
 
 test("increments target nonce even for the same item", () => {
   const first = nextMemoryTarget(null, { id: 7, text: "one" });
@@ -24,4 +30,13 @@ test("uses a loaded record when available and falls back to the numeric id", () 
 
 test("upserts target item at the top without duplicates", () => {
   expect(upsertById([{ id: 1 }, { id: 2 }], { id: 2 })).toEqual([{ id: 2 }, { id: 1 }]);
+});
+
+test("keeps selected detail when a refreshed list does not include the target", () => {
+  const refreshed = [{ id: 1, text: "visible list item" }];
+  const detail = { id: 2, text: "selected supporting fact" };
+
+  expect(selectedMemoryItem(refreshed, 2, detail)).toEqual(detail);
+  expect(selectedMemoryItem(refreshed, 1, detail)).toEqual(refreshed[0]);
+  expect(selectedMemoryItem(refreshed, null, detail)).toBeNull();
 });

@@ -21,6 +21,16 @@ export function memoryTargetItem<T>(itemsById: Map<number, T>, id: number): T | 
   return itemsById.get(id) ?? id;
 }
 
+export function selectedMemoryItem<T extends { id: number }>(
+  items: T[] | null | undefined,
+  selectedId: number | null,
+  detailItem?: T | null,
+): T | null {
+  if (selectedId === null) return null;
+  if (detailItem?.id === selectedId) return detailItem;
+  return items?.find((item) => item.id === selectedId) ?? null;
+}
+
 export function upsertById<T extends { id: number }>(items: T[] | null | undefined, item: T): T[] {
   const existing = items ?? [];
   return [item, ...existing.filter((candidate) => candidate.id !== item.id)];

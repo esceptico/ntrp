@@ -20,6 +20,15 @@ from ntrp.memory.store.observations import ObservationRepository
 _logger = get_logger(__name__)
 
 PATTERN_POLICY_VERSION = "memory.pattern.v2"
+SINGLE_FACT_PATTERN_KINDS = frozenset(
+    {
+        FactKind.IDENTITY,
+        FactKind.PREFERENCE,
+        FactKind.CONSTRAINT,
+        FactKind.PROCEDURE,
+        FactKind.PROJECT,
+    }
+)
 
 
 class ConsolidationAction(BaseModel):
@@ -81,6 +90,13 @@ def _can_create_observation_from_fact(fact: Fact) -> tuple[bool, str]:
         return False, "temporary_fact"
     if fact.source_type == SourceType.CHAT and fact.kind == FactKind.NOTE and fact.salience <= 0:
         return False, "chat_note_low_salience"
+    if (
+        fact.kind in SINGLE_FACT_PATTERN_KINDS
+        and fact.lifetime == FactLifetime.DURABLE
+        and fact.salience >= 1
+        and fact.confidence >= 0.8
+    ):
+        return True, "single_fact_seed"
     return False, "single_fact_pattern"
 
 
