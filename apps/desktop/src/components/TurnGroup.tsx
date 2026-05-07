@@ -35,6 +35,13 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
     }),
   );
 
+  // Only group into a "Worked Xs" block when the turn actually invoked
+  // tools. A turn with just reasoning + a final reply has no work to
+  // collapse — render its children inline instead.
+  const hasTools = useStore(
+    useShallow((s) => childIds.some((id) => s.messages.get(id)?.role === "activity")),
+  );
+
   const isDone = turn?.endedAt != null;
   // Default historic turns to collapsed; default in-progress turns to expanded.
   const [expanded, setExpanded] = useState(!isDone);
@@ -46,11 +53,9 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
     wasDone.current = isDone;
   }, [isDone]);
 
-  const layout = turnLayout({
-    childIds,
-    finalAssistantId,
-    isDone,
-  });
+  const layout = hasTools
+    ? turnLayout({ childIds, finalAssistantId, isDone })
+    : { directIds: childIds, workIds: [], finalAssistantId };
   const hasWork = layout.workIds.length > 0;
   // Live runs have a real durationMs; historic ones don't (we don't persist
   // turn timing). Show the time when we have it, plain "Worked" otherwise.
