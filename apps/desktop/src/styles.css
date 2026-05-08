@@ -312,7 +312,7 @@ button:not(:disabled):active {
 /* ─── Markdown content ─────────────────────────────────────── */
 .md > *:first-child { margin-top: 0; }
 .md > *:last-child { margin-bottom: 0; }
-.md p { margin: 0 0 0.6em; }
+.md p { margin: 0 0 1em; }
 .md ul, .md ol { margin: 0.3em 0 0.7em; padding-left: 1.4em; }
 .md ul { list-style: disc outside; }
 .md ol { list-style: decimal outside; }
