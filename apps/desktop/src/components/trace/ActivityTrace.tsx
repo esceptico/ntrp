@@ -241,25 +241,8 @@ function ItemButton({
       {depth > 0 && (
         <span className="text-whisper select-none" aria-hidden="true">↳</span>
       )}
-      <StateDot running={running} errored={errored} />
       <span className="truncate">{item.target || item.kind}</span>
     </button>
-  );
-}
-
-function StateDot({ running, errored }: { running: boolean; errored: boolean }) {
-  return (
-    <span
-      aria-hidden
-      className={clsx(
-        "inline-block w-[5px] h-[5px] rounded-full self-center shrink-0",
-        errored
-          ? "bg-bad"
-          : running
-            ? "bg-accent animate-[pulseSoft_1.2s_ease-in-out_infinite]"
-            : "bg-whisper",
-      )}
-    />
   );
 }
 
