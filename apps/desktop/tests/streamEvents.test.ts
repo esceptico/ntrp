@@ -9,7 +9,7 @@ import {
   resetReplayGapReloadStateForTest,
   resetStreamStateForTest,
 } from "../src/hooks/useEvents.js";
-import { loadHistory, stopRun } from "../src/actions.js";
+import { historyMessagesToUi, loadHistory, stopRun } from "../src/actions.js";
 import { getState, setState } from "../src/store.js";
 
 beforeEach(() => {
@@ -259,6 +259,59 @@ test("loadHistory seeds event cursor from active stream checkpoint", async () =>
   } finally {
     (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
   }
+});
+
+test("active history renders checkpointed tools as in-progress work", () => {
+  const items = historyMessagesToUi(
+    [
+      {
+        role: "user",
+        content: "do work",
+        id: "user-1",
+        message_id: "user-1",
+        seq: 1,
+        created_at: "2026-05-08T12:00:00.000Z",
+      },
+      {
+        role: "assistant",
+        content: "",
+        id: "assistant-1",
+        message_id: "assistant-1",
+        seq: 2,
+        tool_calls: [{ id: "tool-1", name: "Research", arguments: "{}" }],
+      },
+    ],
+    "run-active",
+  );
+
+  const user = items.find((item) => item.id === "user-1");
+  const activity = items.find((item) => item.role === "activity");
+
+  expect(user?.turn?.endedAt).toBeNull();
+  expect(activity?.activity?.label).toBe("Calling");
+  expect(activity?.activity?.done).toBe(false);
+});
+
+test("RUN_STARTED reopens a history turn that loaded as completed", () => {
+  setState({
+    messages: new Map([
+      [
+        "user-1",
+        {
+          id: "user-1",
+          role: "user",
+          content: "do work",
+          turn: { startedAt: 1, endedAt: 2, durationMs: 1 },
+        },
+      ],
+    ]),
+    order: ["user-1"],
+  });
+
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", seq: 1 });
+
+  expect(getState().messages.get("user-1")?.turn?.endedAt).toBeNull();
+  expect(getState().messages.get("user-1")?.turn?.durationMs).toBeNull();
 });
 
 test("exposes the last event sequence for bridge reconnects", () => {

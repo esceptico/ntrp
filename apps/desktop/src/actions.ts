@@ -90,6 +90,7 @@ function historyBoundaryId(s: ReturnType<typeof getState>, edge: "first" | "last
 }
 
 export function historyMessagesToUi(messages: HistoryMessage[], activeRunId: string | null): UiMessage[] {
+  const isActiveRun = Boolean(activeRunId);
   // Pre-index tool results so we can attach them to their calls regardless
   // of ordering between the assistant message and its `tool` follow-ups.
   const resultsById = new Map<string, string>();
@@ -167,7 +168,11 @@ export function historyMessagesToUi(messages: HistoryMessage[], activeRunId: str
           sourceIndex,
           sourceMessageId,
           content: "",
-          activity: { items: [], label: "Called", done: true },
+          activity: {
+            items: [],
+            label: isActiveRun ? "Calling" : "Called",
+            done: !isActiveRun,
+          },
         });
       }
       const activity = findActivity(activeActivityId);
@@ -192,7 +197,7 @@ export function historyMessagesToUi(messages: HistoryMessage[], activeRunId: str
   // turn is still in flight. Clear its `endedAt` so TurnGroup doesn't
   // collapse it under "Worked for Xs" — the SSE replay + live events
   // build the in-flight UI on top of the history.
-  if (activeRunId) {
+  if (isActiveRun) {
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
       if (it.role === "user" && it.turn) {
