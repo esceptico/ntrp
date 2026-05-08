@@ -186,62 +186,66 @@ function SwipeableRow({
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const revealRef = useRef<HTMLDivElement>(null);
-  const suppressClickRef = useRef(false);
 
-  // Apple Mail swipe-to-archive. Drag the row left; the red reveal
-  // fades in as the row slides. Past ~60% of the row's width, releasing
-  // commits the archive (row continues off, then onArchive fires).
-  // Below threshold, the row springs back. A short suppressClick guard
-  // stops the trailing click event from also switching session after a
-  // drag.
-  const onSwipeStart = (event: React.MouseEvent) => {
-    if (event.button !== 0) return;
+  // Apple Mail swipe-to-archive via two-finger trackpad swipe. Wheel
+  // events fire continuously during the gesture; we accumulate the
+  // horizontal delta and translate the row left in lockstep. After
+  // ~120ms with no further wheel events the gesture is considered
+  // released — past 60% of the row width, archive commits; otherwise
+  // the row springs back. We only intercept when the swipe is mostly
+  // horizontal (deltaX dominates), so vertical scrolling stays normal.
+  useEffect(() => {
     const row = rowRef.current;
     const reveal = revealRef.current;
     if (!row || !reveal) return;
-    const startX = event.clientX;
-    const rowWidth = row.offsetWidth;
-    const commitAt = rowWidth * 0.6;
-    let dragging = false;
-    row.style.transition = "none";
-    reveal.style.transition = "none";
+    let accumulated = 0;
+    let releaseTimer: number | undefined;
 
-    const onMove = (mv: MouseEvent) => {
-      const dx = mv.clientX - startX;
-      if (!dragging) {
-        if (Math.abs(dx) < 6) return;
-        dragging = true;
-      }
-      const offset = Math.min(0, dx);
-      row.style.transform = `translateX(${offset}px)`;
-      reveal.style.opacity = `${Math.min(1, -offset / commitAt)}`;
-    };
-
-    const onUp = (up: MouseEvent) => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      const dx = up.clientX - startX;
+    const settle = () => {
+      const rowWidth = row.offsetWidth;
+      const commitAt = rowWidth * 0.6;
       row.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
       reveal.style.transition = "opacity 220ms ease-out";
-      if (dragging && dx <= -commitAt) {
+      if (accumulated >= commitAt) {
         row.style.transform = `translateX(-${rowWidth}px)`;
         reveal.style.opacity = "1";
-        setTimeout(onArchive, 200);
+        window.setTimeout(onArchiveRef.current, 200);
       } else {
         row.style.transform = "translateX(0)";
         reveal.style.opacity = "0";
       }
-      if (dragging) {
-        suppressClickRef.current = true;
-        setTimeout(() => {
-          suppressClickRef.current = false;
-        }, 50);
-      }
+      accumulated = 0;
     };
 
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  };
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+      // Don't kick in for upward (right) swipes when nothing is exposed.
+      if (event.deltaX < 0 && accumulated <= 0) return;
+      event.preventDefault();
+      accumulated = Math.max(0, accumulated + event.deltaX);
+      const rowWidth = row.offsetWidth;
+      const commitAt = rowWidth * 0.6;
+      row.style.transition = "none";
+      reveal.style.transition = "none";
+      row.style.transform = `translateX(-${accumulated}px)`;
+      reveal.style.opacity = `${Math.min(1, accumulated / commitAt)}`;
+      if (releaseTimer) window.clearTimeout(releaseTimer);
+      releaseTimer = window.setTimeout(settle, 120);
+    };
+
+    row.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      row.removeEventListener("wheel", onWheel);
+      if (releaseTimer) window.clearTimeout(releaseTimer);
+    };
+  }, []);
+
+  // Hold onArchive in a ref so the wheel-listener effect doesn't have
+  // to re-bind every time the parent passes a fresh callback.
+  const onArchiveRef = useRef(onArchive);
+  useEffect(() => {
+    onArchiveRef.current = onArchive;
+  }, [onArchive]);
 
   return (
     <div className="relative">
@@ -257,10 +261,7 @@ function SwipeableRow({
         ref={rowRef}
         role="button"
         tabIndex={0}
-        onClick={() => {
-          if (suppressClickRef.current) return;
-          void switchSession(sessionId);
-        }}
+        onClick={() => void switchSession(sessionId)}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
@@ -272,7 +273,6 @@ function SwipeableRow({
           e.preventDefault();
           onStartRename();
         }}
-        onMouseDown={onSwipeStart}
         onMouseMove={trackHoverDish}
         data-streaming={streaming ? "true" : undefined}
         className={clsx(
