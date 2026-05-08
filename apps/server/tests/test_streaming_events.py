@@ -175,6 +175,48 @@ async def test_run_agent_loop_emits_text_end_before_run_cancelled():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_loop_closes_open_text_on_cooperative_cancel():
+    run = RunState(run_id="run-1", session_id="sess-1")
+
+    class CancelAfterSecondContentBus(SessionBus):
+        def __init__(self):
+            super().__init__(session_id="sess-1")
+            self.content_count = 0
+
+        async def emit(self, event):
+            await super().emit(event)
+            if isinstance(event, TextMessageContentEvent):
+                self.content_count += 1
+                if self.content_count == 2:
+                    run.cancelled = True
+
+    class CooperativeCancellingAgent:
+        async def stream(self, messages):
+            yield TextStarted(depth=1, parent_id="call-research", message_id="text-1")
+            yield TextDelta(depth=1, parent_id="call-research", message_id="text-1", content="hello")
+            yield TextDelta(depth=1, parent_id="call-research", message_id="text-1", content=" world")
+            yield TextDelta(depth=1, parent_id="call-research", message_id="text-1", content=" dropped")
+
+    bus = CancelAfterSecondContentBus()
+
+    await run_agent_loop(SimpleNamespace(run=run), CooperativeCancellingAgent(), bus)
+
+    assert [event.type.value for event in bus._recent] == [
+        "TEXT_MESSAGE_START",
+        "TEXT_MESSAGE_CONTENT",
+        "TEXT_MESSAGE_CONTENT",
+        "TEXT_MESSAGE_END",
+        "run_cancelled",
+    ]
+    end = bus._recent[3]
+    assert isinstance(end, TextMessageEndEvent)
+    assert end.message_id == "text-1"
+    assert end.content == "hello world"
+    assert end.depth == 1
+    assert end.parent_id == "call-research"
+
+
+@pytest.mark.asyncio
 async def test_run_agent_loop_closes_text_before_backgrounding():
     run = RunState(run_id="run-1", session_id="sess-1")
     bus = SessionBus(session_id="sess-1")

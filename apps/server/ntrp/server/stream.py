@@ -88,6 +88,7 @@ async def run_agent_loop(
         result = ""
 
     if ctx.run.cancelled:
+        await close_open_text()
         await bus.emit(RunCancelledEvent(run_id=ctx.run.run_id))
         return None, None
 
