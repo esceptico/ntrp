@@ -218,11 +218,13 @@ function SwipeableRow({
     };
 
     const onWheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
-      // Don't kick in for upward (right) swipes when nothing is exposed.
+      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY) * 1.2) return;
+      // Don't kick in for right swipes when nothing is exposed.
       if (event.deltaX < 0 && accumulated <= 0) return;
       event.preventDefault();
-      accumulated = Math.max(0, accumulated + event.deltaX);
+      // Scale the trackpad delta so the row tracks fingers more
+      // responsively instead of crawling.
+      accumulated = Math.max(0, accumulated + event.deltaX * 1.6);
       const rowWidth = row.offsetWidth;
       const commitAt = rowWidth * 0.6;
       row.style.transition = "none";
@@ -230,7 +232,9 @@ function SwipeableRow({
       row.style.transform = `translateX(-${accumulated}px)`;
       reveal.style.opacity = `${Math.min(1, accumulated / commitAt)}`;
       if (releaseTimer) window.clearTimeout(releaseTimer);
-      releaseTimer = window.setTimeout(settle, 120);
+      // Long enough to outlast trackpad inertia and natural mid-swipe
+      // pauses; short enough that a real release feels prompt.
+      releaseTimer = window.setTimeout(settle, 280);
     };
 
     row.addEventListener("wheel", onWheel, { passive: false });
