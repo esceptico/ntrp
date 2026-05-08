@@ -50,7 +50,7 @@ export function ActivityHeader({
         interactive ? "cursor-pointer hover:opacity-70 select-none" : "cursor-default",
       )}
     >
-      <span className="font-medium text-ink-soft mr-1.5">
+      <span className="mr-1.5">
         <RollingToken value={label} />
       </span>
       <span>
