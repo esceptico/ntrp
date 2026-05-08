@@ -131,6 +131,12 @@ class RunRegistry:
         self._active_by_session.pop(session_id, None)
         return None
 
+    def get_accepting_run(self, session_id: str) -> RunState | None:
+        run = self.get_active_run(session_id)
+        if run and not run.cancelled:
+            return run
+        return None
+
     def complete_run(self, run_id: str) -> None:
         run = self._runs.get(run_id)
         if run:
@@ -187,10 +193,14 @@ class RunRegistry:
             if run.drain_task and not run.drain_task.done():
                 run.drain_task.cancel()
                 tasks.append(run.drain_task)
+        background_cancelled = 0
+        for registry in self._bg_registries.values():
+            for _task_id, _command in registry.cancel_all():
+                background_cancelled += 1
         self._active_by_session.clear()
         if tasks:
             await asyncio.wait(tasks, timeout=timeout)
-        return len(tasks)
+        return len(tasks) + background_cancelled
 
     def error_run(self, run_id: str) -> None:
         run = self._runs.get(run_id)

@@ -19,8 +19,9 @@ from ntrp.events.sse import (
 )
 from ntrp.server.bus import BusRegistry, SessionBus
 from ntrp.server.routers.chat import _event_stream
-from ntrp.server.state import RunRegistry, RunState
+from ntrp.server.state import RunRegistry, RunState, RunStatus
 from ntrp.server.stream import run_agent_loop
+from ntrp.services.chat import ChatContext, run_chat
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from tests.helpers import make_executor, make_text_response
 
@@ -291,8 +292,11 @@ async def test_run_agent_loop_hard_task_cancel_emits_terminal_cancelled():
 
     task = asyncio.create_task(run_agent_loop(SimpleNamespace(run=run), AgentWithBlockingStream(), bus))
 
-    while len(bus._recent) < 2:
-        await asyncio.sleep(0)
+    async def wait_for_streamed_content():
+        while len(bus._recent) < 2:
+            await asyncio.sleep(0)
+
+    await asyncio.wait_for(wait_for_streamed_content(), timeout=1)
 
     task.cancel()
     await task
@@ -312,6 +316,56 @@ async def test_run_agent_loop_hard_task_cancel_emits_terminal_cancelled():
     assert end.depth == 1
     assert end.parent_id == "call-research"
     assert run.cancelled is True
+
+
+@pytest.mark.asyncio
+async def test_run_chat_emits_cancelled_when_task_cancelled_before_agent_loop():
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
+
+    class NoopSessionService:
+        async def save(self, session_state, messages, metadata=None):
+            return None
+
+    class CancellingInitialEmitBus(SessionBus):
+        async def emit(self, event):
+            await super().emit(event)
+            if event.type.value == "RUN_STARTED":
+                task = asyncio.current_task()
+                assert task is not None
+                task.cancel()
+                await asyncio.sleep(0)
+
+    bus = CancellingInitialEmitBus(session_id="sess-1")
+    queue = bus.subscribe()
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(),
+        tools=[],
+        config=SimpleNamespace(),
+        available_integrations=[],
+        integration_errors={},
+        session_service=NoopSessionService(),
+        run_registry=registry,
+    )
+
+    await run_chat(ctx, bus)
+
+    events = []
+    while not queue.empty():
+        record = queue.get_nowait()
+        assert record is not None
+        events.append(record.event.type.value)
+
+    assert events.count("run_cancelled") == 1
+    assert events == ["RUN_STARTED", "run_cancelled"]
+    assert run.cancelled is True
+    assert run.cancel_terminal_emitted is True
+    assert run.status == RunStatus.CANCELLED
+    assert registry.get_active_run("sess-1") is None
 
 
 @pytest.mark.asyncio

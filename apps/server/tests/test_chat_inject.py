@@ -1,8 +1,12 @@
+import asyncio
 import json
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
 
+from ntrp.context.models import SessionData, SessionState
+from ntrp.core.factory import AgentConfig
 from ntrp.events.sse import (
     MessageIngestedEvent,
     TextDeltaEvent,
@@ -17,7 +21,7 @@ from ntrp.server.routers.chat import _event_stream
 from ntrp.server.runtime import get_runtime
 from ntrp.server.schemas import ChatRequest
 from ntrp.server.state import RunRegistry, RunState, RunStatus
-from ntrp.services.chat import expand_skill_command
+from ntrp.services.chat import ChatDeps, expand_skill_command
 from ntrp.skills.registry import SkillRegistry
 
 
@@ -310,6 +314,63 @@ def test_cancel_returns_202_for_running_run(client_with_active_run):
     assert resp.json()["found"] is True
     assert run.cancelled is True
     assert run.status == RunStatus.RUNNING
+
+
+@pytest.mark.asyncio
+async def test_submit_message_after_cancel_starts_new_run(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+    old_run = registry.create_run("sess-1")
+    old_run.status = RunStatus.RUNNING
+    registry.cancel_run(old_run.run_id)
+
+    class FakeSessionService:
+        async def load(self, session_id=None):
+            state = SessionState(
+                session_id=session_id or "sess-1",
+                started_at=datetime.now(UTC),
+            )
+            return SessionData(state=state, messages=[])
+
+        async def save_progress(self, session_state, messages):
+            return None
+
+    class FakeExecutor:
+        def get_tools(self):
+            return []
+
+    async def noop_run_chat(ctx, bus):
+        return None
+
+    monkeypatch.setattr(chat_service, "run_chat", noop_run_chat)
+    deps = ChatDeps(
+        chat_model="gpt-5.2",
+        agent_config=AgentConfig(model="gpt-5.2", research_model=None, max_depth=1, deferred_tools=False),
+        executor=FakeExecutor(),
+        session_service=FakeSessionService(),
+        run_registry=registry,
+        available_integrations=[],
+        integration_errors={},
+    )
+
+    result = await chat_service.submit_chat_message(
+        registry,
+        lambda: deps,
+        BusRegistry(),
+        message="follow-up",
+        session_id="sess-1",
+        client_id="cid-follow-up",
+    )
+
+    new_run = registry.get_run(result["run_id"])
+    assert result["run_id"] != old_run.run_id
+    assert old_run.pending_injection_count == 0
+    assert new_run is not None
+    assert new_run.messages[-1]["content"] == "follow-up"
+    assert new_run.messages[-1]["client_id"] == "cid-follow-up"
+    if new_run.task:
+        await asyncio.wait_for(new_run.task, timeout=1)
 
 
 # --- Full chain: agent.stream + real closure + real bus + mid-run inject ---

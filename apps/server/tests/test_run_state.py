@@ -1,4 +1,7 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
+
+import pytest
 
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 
@@ -94,3 +97,25 @@ def test_cancel_run_keeps_run_active_until_terminal_cancel():
 
     assert run.status == RunStatus.CANCELLED
     assert registry.get_active_run("sess-1") is None
+
+
+@pytest.mark.asyncio
+async def test_cancel_all_cancels_background_registry_tasks():
+    registry = RunRegistry()
+    bg_registry = registry.get_background_registry("sess-1")
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def background_work():
+        started.set()
+        await release.wait()
+
+    task = asyncio.create_task(background_work())
+    await asyncio.wait_for(started.wait(), timeout=1)
+    bg_registry.register("task-1", task, "research")
+
+    cancelled = await registry.cancel_all(timeout=0.1)
+
+    assert cancelled == 1
+    await asyncio.gather(task, return_exceptions=True)
+    assert task.cancelled()

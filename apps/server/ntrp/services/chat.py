@@ -14,6 +14,7 @@ from ntrp.events.internal import RunCompleted
 from ntrp.events.sse import (
     MessageIngestedEvent,
     RunBackgroundedEvent,
+    RunCancelledEvent,
     RunErrorEvent,
     RunFinishedEvent,
     RunStartedEvent,
@@ -279,7 +280,7 @@ async def submit_chat_message(
     context: list[dict] | None = None,
     client_id: str | None = None,
 ) -> dict[str, str]:
-    active_run = run_registry.get_active_run(session_id)
+    active_run = run_registry.get_accepting_run(session_id)
     if active_run:
         entry: dict = {
             "role": Role.USER,
@@ -404,25 +405,33 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
     """Run agent loop, push all events to bus. Fire-and-forget."""
     run = ctx.run
     session_state = ctx.session_state
-
-    run.approval_queue = asyncio.Queue()
-
-    await bus.emit(
-        RunStartedEvent(
-            session_id=session_state.session_id,
-            run_id=run.run_id,
-            integrations=ctx.available_integrations,
-            integration_errors=ctx.integration_errors,
-            skip_approvals=session_state.skip_approvals,
-            session_name=session_state.name or "",
-        )
-    )
-
-    await bus.emit(ThinkingEvent(status="processing..."))
     agent: Agent | None = None
     tracker = UsageTracker()
     result: str | None = None
+    run_finished = False
+
+    async def _emit_cancelled_terminal() -> None:
+        if run.cancel_terminal_emitted:
+            return
+        await bus.emit(RunCancelledEvent(run_id=run.run_id))
+        ctx.run_registry.finish_cancelled(run.run_id)
+
     try:
+        run.approval_queue = asyncio.Queue()
+
+        await bus.emit(
+            RunStartedEvent(
+                session_id=session_state.session_id,
+                run_id=run.run_id,
+                integrations=ctx.available_integrations,
+                integration_errors=ctx.integration_errors,
+                skip_approvals=session_state.skip_approvals,
+                session_name=session_state.name or "",
+            )
+        )
+
+        await bus.emit(ThinkingEvent(status="processing..."))
+
         bg_registry = ctx.run_registry.get_background_registry(session_state.session_id)
         io = IOBridge(approval_queue=run.approval_queue, emit=bus.emit)
         agent = create_agent(
@@ -454,7 +463,6 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         agent.hooks.on_step_finish = _checkpoint
 
         run.status = RunStatus.RUNNING
-        run_finished = False
 
         agent.hooks.get_pending_messages = _build_get_pending(bus, run)
 
@@ -489,6 +497,11 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         await bus.emit(RunFinishedEvent(run_id=run.run_id, usage=usage_dict))
         ctx.run_registry.complete_run(run.run_id)
 
+    except asyncio.CancelledError:
+        run.cancelled = True
+        await _emit_cancelled_terminal()
+        return
+
     except Exception as e:
         _logger.exception("Chat failed (run_id=%s, session_id=%s)", run.run_id, session_state.session_id)
         await bus.emit(RunErrorEvent(message=str(e), recoverable=False))
@@ -519,6 +532,8 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             # replay buffer so reconnects don't re-apply already-saved
             # events on top of fresh history.
             bus.clear_buffer()
+            if run.cancelled:
+                return
             event = RunCompleted(
                 run_id=run.run_id,
                 session_id=session_state.session_id,
