@@ -74,8 +74,12 @@ async def run_agent_loop(
                 result = item.text
             else:
                 for sse in agent_events_to_sse(item):
-                    await bus.emit(sse)
-                    note_text_event(sse)
+                    if isinstance(sse, TextMessageEndEvent):
+                        await bus.emit(sse)
+                        note_text_event(sse)
+                    else:
+                        note_text_event(sse)
+                        await bus.emit(sse)
                     await asyncio.sleep(0)
                 if ctx.run.cancelled:
                     break

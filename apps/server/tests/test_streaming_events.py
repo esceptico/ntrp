@@ -211,9 +211,9 @@ async def test_run_agent_loop_closes_text_when_task_cancelled_during_content_flu
 
     class AgentWithOpenText:
         async def stream(self, messages):
-            yield TextStarted(message_id="text-1")
-            yield TextDelta(message_id="text-1", content="hello")
-            yield TextEnded(message_id="text-1", content="hello")
+            yield TextStarted(depth=1, parent_id="call-research", message_id="text-1")
+            yield TextDelta(depth=1, parent_id="call-research", message_id="text-1", content="hello")
+            yield TextEnded(depth=1, parent_id="call-research", message_id="text-1", content="hello")
 
     bus = CancellingContentFlushBus(session_id="sess-1")
     task = asyncio.create_task(run_agent_loop(SimpleNamespace(run=run), AgentWithOpenText(), bus))
@@ -227,6 +227,12 @@ async def test_run_agent_loop_closes_text_when_task_cancelled_during_content_flu
         "TEXT_MESSAGE_END",
         "run_cancelled",
     ]
+    end = bus._recent[2]
+    assert isinstance(end, TextMessageEndEvent)
+    assert end.message_id == "text-1"
+    assert end.content == "hello"
+    assert end.depth == 1
+    assert end.parent_id == "call-research"
 
 
 @pytest.mark.asyncio
