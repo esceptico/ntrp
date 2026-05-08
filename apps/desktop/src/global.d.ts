@@ -21,7 +21,11 @@ interface Window {
       }>;
     };
     events: {
-      connect: (config: { serverUrl: string; apiKey: string }, sessionId: string) => Promise<string>;
+      connect: (
+        config: { serverUrl: string; apiKey: string },
+        sessionId: string,
+        afterSeq?: number,
+      ) => Promise<string>;
       disconnect: (connectionId: string) => Promise<void>;
       onData: (
         callback: (payload: {

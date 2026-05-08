@@ -184,16 +184,21 @@ async function apiRequest(configInput, requestInput, signal) {
   }
 }
 
-async function streamEvents(connectionId, webContents, configInput, sessionId, signal) {
+function eventStreamUrl(config, sessionId, afterSeq) {
+  const params = new URLSearchParams({ stream: "true" });
+  if (typeof afterSeq === "number" && Number.isFinite(afterSeq)) {
+    params.set("after_seq", String(afterSeq));
+  }
+  return new URL(`/chat/events/${encodeURIComponent(sessionId)}?${params.toString()}`, config.serverUrl);
+}
+
+async function streamEvents(connectionId, webContents, configInput, sessionId, afterSeq, signal) {
   const config = normalizeConfig(configInput);
   try {
-    const response = await fetch(
-      new URL(`/chat/events/${encodeURIComponent(sessionId)}?stream=true`, config.serverUrl),
-      {
-        headers: apiHeaders(config),
-        signal,
-      },
-    );
+    const response = await fetch(eventStreamUrl(config, sessionId, afterSeq), {
+      headers: apiHeaders(config),
+      signal,
+    });
     if (!response.ok || !response.body) {
       throw new Error(`event stream failed: ${response.status}`);
     }
@@ -293,12 +298,12 @@ app.whenReady().then(() => {
     assertTrustedSender(event);
     return apiRequest(config, request);
   });
-  ipcMain.handle("events:connect", (event, config, sessionId) => {
+  ipcMain.handle("events:connect", (event, config, sessionId, afterSeq) => {
     assertTrustedSender(event);
     const connectionId = crypto.randomUUID();
     const controller = new AbortController();
     eventStreams.set(connectionId, controller);
-    void streamEvents(connectionId, event.sender, config, sessionId, controller.signal);
+    void streamEvents(connectionId, event.sender, config, sessionId, afterSeq, controller.signal);
     return connectionId;
   });
   ipcMain.handle("events:disconnect", (event, connectionId) => {

@@ -1,5 +1,10 @@
 import { beforeEach, expect, test } from "bun:test";
-import { eventStreamUrl, handleServerEvent, resetStreamStateForTest } from "../src/hooks/useEvents.js";
+import {
+  eventStreamUrl,
+  handleServerEvent,
+  lastEventSeqForSession,
+  resetStreamStateForTest,
+} from "../src/hooks/useEvents.js";
 import { getState, setState } from "../src/store.js";
 
 beforeEach(() => {
@@ -188,6 +193,19 @@ test("event stream URL includes after_seq once a session sequence is known", () 
   expect(eventStreamUrl(config, "other-url-session")).toBe(
     "http://localhost:6877/chat/events/other-url-session?stream=true",
   );
+});
+
+test("exposes the last event sequence for bridge reconnects", () => {
+  expect(lastEventSeqForSession("bridge-session")).toBeUndefined();
+
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-bridge",
+    session_id: "bridge-session",
+    seq: 44,
+  });
+
+  expect(lastEventSeqForSession("bridge-session")).toBe(44);
 });
 
 test("keeps tool results when result arrives before delayed burst item renders", async () => {

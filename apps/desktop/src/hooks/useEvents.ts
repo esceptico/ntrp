@@ -77,6 +77,10 @@ const pendingToolCalls = new Map<
 let activeAssistantMessageId: string | null = null;
 const lastEventSeqBySession = new Map<string, number>();
 
+export function lastEventSeqForSession(sessionId: string): number | undefined {
+  return lastEventSeqBySession.get(sessionId);
+}
+
 function shouldDropServerEvent(event: ServerEvent): boolean {
   if (typeof event.seq !== "number" || !event.session_id) return false;
 
@@ -335,7 +339,7 @@ function headersFor(config: AppConfig): HeadersInit {
 
 export function eventStreamUrl(config: AppConfig, sessionId: string): string {
   const params = new URLSearchParams({ stream: "true" });
-  const lastSeq = lastEventSeqBySession.get(sessionId);
+  const lastSeq = lastEventSeqForSession(sessionId);
   if (lastSeq !== undefined) params.set("after_seq", String(lastSeq));
   return `${config.serverUrl}/chat/events/${encodeURIComponent(sessionId)}?${params.toString()}`;
 }
@@ -365,7 +369,7 @@ export function useEvents(sessionId: string | null) {
       });
 
       void desktopEvents
-        .connect(config, sessionId)
+        .connect(config, sessionId, lastEventSeqForSession(sessionId))
         .then((id) => {
           if (disposed) {
             void desktopEvents.disconnect(id);

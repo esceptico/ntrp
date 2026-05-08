@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld("ntrpDesktop", {
     request: (config, request) => ipcRenderer.invoke("api:request", config, request),
   },
   events: {
-    connect: (config, sessionId) => ipcRenderer.invoke("events:connect", config, sessionId),
+    connect: (config, sessionId, afterSeq) => ipcRenderer.invoke("events:connect", config, sessionId, afterSeq),
     disconnect: connectionId => ipcRenderer.invoke("events:disconnect", connectionId),
     onData: callback => {
       const listener = (_event, payload) => callback(payload);
