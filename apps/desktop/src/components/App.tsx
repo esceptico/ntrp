@@ -10,6 +10,7 @@ import { MemoryModal } from "./MemoryModal";
 import { CommandPalette } from "./CommandPalette";
 import { MarkdownViewer } from "./MarkdownViewer";
 import { ToolViewer } from "./ToolViewer";
+import { ApprovalReviewModal } from "./ApprovalReviewModal";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { Demo as TraceDemo } from "./trace/Demo";
 import { useStore } from "../store";
@@ -126,6 +127,7 @@ export function App() {
       <CommandPalette />
       <MarkdownViewer />
       <ToolViewer />
+      <ApprovalReviewModal />
     </>
   );
 }

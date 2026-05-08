@@ -1,0 +1,127 @@
+import { useEffect } from "react";
+import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
+import { Check, X } from "lucide-react";
+import { useStore } from "../store";
+import { respondToApproval } from "../actions";
+import { SPRING_SMOOTH } from "../lib/motion";
+
+const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
+
+function diffClassFor(line: string): string {
+  if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) {
+    return "diff-line diff-hunk";
+  }
+  if (line.startsWith("+")) return "diff-line diff-add";
+  if (line.startsWith("-")) return "diff-line diff-del";
+  return "diff-line";
+}
+
+/** Diff/preview review for a pending approval. Opens when the banner's
+ *  Review button is clicked. Approve/Reject actions live here too so the
+ *  user doesn't have to dismiss the modal first. */
+export function ApprovalReviewModal() {
+  const reviewing = useStore((s) => s.reviewingApprovalToolId);
+  const approval = useStore((s) =>
+    reviewing ? s.pendingApprovals.find((a) => a.toolId === reviewing) ?? null : null,
+  );
+  const close = useStore((s) => s.setReviewingApproval);
+
+  useEffect(() => {
+    if (!approval) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [approval, close]);
+
+  const root = document.querySelector("#app");
+  if (!root) return null;
+  const open = !!approval;
+
+  return createPortal(
+    <AnimatePresence>
+      {open && approval && (
+        <motion.div
+          key="approval-review"
+          className="absolute inset-0 z-50 grid place-items-center p-8 bg-[rgba(0,0,0,0.32)] backdrop-blur-md"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: MODAL_EASE }}
+          onClick={() => close(null)}
+        >
+          <motion.div
+            className="w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)_auto] rounded-2xl bg-surface shadow-[var(--shadow-pop)] overflow-hidden border border-line-soft"
+            initial={{ opacity: 0, scale: 0.96, y: 6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 6 }}
+            transition={SPRING_SMOOTH}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="flex items-center gap-2 px-5 pt-4 pb-3 border-b border-line-soft min-w-0">
+              <span className="font-mono text-[13px] font-medium text-ink truncate">
+                {approval.toolName}
+              </span>
+              {approval.path && (
+                <span className="font-mono text-[12px] text-faint truncate">{approval.path}</span>
+              )}
+              <button
+                type="button"
+                onClick={() => close(null)}
+                aria-label="Close"
+                className="ml-auto grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors shrink-0"
+              >
+                <X size={13} strokeWidth={1.8} />
+              </button>
+            </header>
+
+            <div className="overflow-y-auto scroll-thin">
+              {approval.diff ? (
+                <div className="diff-preview scroll-thin">
+                  <div>
+                    {approval.diff.split("\n").map((line, i) => (
+                      <span key={i} className={diffClassFor(line)}>
+                        {line || " "}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : approval.preview ? (
+                <pre className="m-0 px-5 py-4 font-mono text-[12px] leading-[1.55] text-ink-soft whitespace-pre-wrap">
+                  {approval.preview}
+                </pre>
+              ) : (
+                <div className="px-5 py-6 text-[12.5px] text-faint italic">
+                  No diff or preview available.
+                </div>
+              )}
+            </div>
+
+            <footer className="flex items-center gap-2 px-5 py-3 bg-surface-soft/40">
+              <span className="text-[11px] text-faint font-mono">{approval.toolId.slice(0, 8)}</span>
+              <button
+                type="button"
+                onClick={() => void respondToApproval(approval.toolId, false)}
+                className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-surface text-ink-soft border border-line text-[12px] font-medium hover:bg-surface-soft hover:border-line-strong transition-colors"
+              >
+                <X size={12} strokeWidth={2} />
+                Reject
+              </button>
+              <button
+                type="button"
+                onClick={() => void respondToApproval(approval.toolId, true)}
+                className="inline-flex items-center gap-1.5 h-8 px-4 rounded-md bg-ink text-on-ink text-[12px] font-medium hover:opacity-90 transition-opacity"
+              >
+                <Check size={12} strokeWidth={2.4} />
+                Approve
+              </button>
+            </footer>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    root,
+  );
+}

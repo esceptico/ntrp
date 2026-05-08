@@ -5,7 +5,6 @@ import clsx from "clsx";
 import { useStore, type UiMessage } from "../store";
 import { messageInSourceFocus } from "../lib/messageSourceFocus";
 import { ActivityHeader, ActivityTail, ActivityTrace } from "./trace/ActivityTrace";
-import { ApprovalCard } from "./ApprovalCard";
 import type { SkillDescriptor } from "../api";
 import { branchAtMessage, viewSkill } from "../actions";
 import { Markdown } from "./Markdown";
@@ -23,7 +22,6 @@ export function Message({ id, isFinal = true }: { id: string; isFinal?: boolean 
     case "reasoning": return <ReasoningMessage id={id} />;
     case "tool": return <ToolMessage id={id} />;
     case "activity": return <ActivityMessage id={id} />;
-    case "approval": return <ApprovalCard id={id} />;
     case "error": return <ErrorMessage id={id} />;
     case "status": return <StatusMessage id={id} />;
   }

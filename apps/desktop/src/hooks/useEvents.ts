@@ -254,18 +254,13 @@ export function handleServerEvent(event: ServerEvent) {
 
     // ─── ntrp-specific (non-AG-UI) ───────────────────────────────────
     case "approval_needed":
-      s.appendMessage({
-        id: `approval-${event.tool_id}`,
-        role: "approval",
-        content: "",
-        approval: {
-          toolId: event.tool_id,
-          toolName: event.name,
-          path: event.path ?? undefined,
-          diff: event.diff ?? undefined,
-          preview: event.content_preview ?? undefined,
-          status: "pending",
-        },
+      s.addPendingApproval({
+        toolId: event.tool_id,
+        toolName: event.name,
+        path: event.path ?? undefined,
+        diff: event.diff ?? undefined,
+        preview: event.content_preview ?? undefined,
+        status: "pending",
       });
       return;
     case "background_task":

@@ -224,6 +224,13 @@ interface State {
   memoryOpen: boolean;
   sourceFocus: MessageSourceFocus | null;
   paletteOpen: boolean;
+  /** Tool approvals waiting on the user. Lives outside `messages` so the
+   *  approval UI can render as its own surface (sticky banner above the
+   *  composer) without interleaving with the agent's narrative trace. */
+  pendingApprovals: ApprovalState[];
+  /** When non-null, the approval UI is showing a diff/preview modal for
+   *  this approval's `toolId`. */
+  reviewingApprovalToolId: string | null;
   prefs: Prefs;
 }
 
@@ -268,6 +275,9 @@ interface Actions {
   setCurrentRunId: (runId: string | null) => void;
   setSkipApprovals: (skip: boolean) => void;
   setApprovalStatus: (id: string, status: ApprovalStatus) => void;
+  addPendingApproval: (approval: ApprovalState) => void;
+  resolvePendingApproval: (toolId: string) => void;
+  setReviewingApproval: (toolId: string | null) => void;
   setSkills: (skills: SkillDescriptor[]) => void;
   setCommandPickerOpen: (open: boolean) => void;
   setCommandPickerIndex: (index: number) => void;
@@ -343,6 +353,8 @@ export const useStore = create<State & Actions>((set) => ({
   memoryOpen: false,
   sourceFocus: null,
   paletteOpen: false,
+  pendingApprovals: [],
+  reviewingApprovalToolId: null,
   prefs: loadPrefs(),
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
@@ -610,6 +622,20 @@ export const useStore = create<State & Actions>((set) => ({
       messages.set(id, { ...existing, approval: { ...existing.approval, status } });
       return { messages };
     }),
+
+  addPendingApproval: (approval) =>
+    set((s) => {
+      // Dedupe by toolId — same tool re-emitting approval shouldn't stack.
+      const filtered = s.pendingApprovals.filter((a) => a.toolId !== approval.toolId);
+      return { pendingApprovals: [...filtered, approval] };
+    }),
+  resolvePendingApproval: (toolId) =>
+    set((s) => ({
+      pendingApprovals: s.pendingApprovals.filter((a) => a.toolId !== toolId),
+      reviewingApprovalToolId:
+        s.reviewingApprovalToolId === toolId ? null : s.reviewingApprovalToolId,
+    })),
+  setReviewingApproval: (toolId) => set({ reviewingApprovalToolId: toolId }),
 
   setSkills: (skills) => set({ skills }),
   setCommandPickerOpen: (commandPickerOpen) => set({ commandPickerOpen, commandPickerIndex: 0 }),

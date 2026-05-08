@@ -3,6 +3,7 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useStore } from "../store";
 import { Messages } from "./Messages";
 import { Composer } from "./Composer";
+import { ApprovalBanner } from "./ApprovalBanner";
 
 function SidebarToggle() {
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
@@ -57,10 +58,11 @@ export function Chat() {
   return (
     <main
       data-sidebar-hidden={sidebarHidden ? "true" : "false"}
-      className="chat-shell grid grid-rows-[auto_minmax(0,1fr)_auto] bg-bg-main rounded-tl-xl overflow-hidden"
+      className="chat-shell grid grid-rows-[auto_minmax(0,1fr)_auto_auto] bg-bg-main rounded-tl-xl overflow-hidden"
     >
       <ChatHeader />
       <Messages key={sessionId ?? "none"} />
+      <ApprovalBanner />
       <Composer />
     </main>
   );

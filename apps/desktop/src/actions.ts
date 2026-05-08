@@ -503,14 +503,13 @@ export async function stopRun(): Promise<void> {
 }
 
 export async function respondToApproval(
-  approvalId: string,
   toolId: string,
   approved: boolean,
   feedback = "",
 ): Promise<void> {
   const s = getState();
   if (!s.currentRunId) return;
-  s.setApprovalStatus(approvalId, approved ? "approved" : "rejected");
+  s.resolvePendingApproval(toolId);
   try {
     await submitToolResult(s.config, {
       run_id: s.currentRunId,
@@ -519,7 +518,6 @@ export async function respondToApproval(
       approved,
     });
   } catch (error) {
-    s.setApprovalStatus(approvalId, "pending");
     s.appendMessage({
       id: crypto.randomUUID(),
       role: "error",
