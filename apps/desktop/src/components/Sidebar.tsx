@@ -160,31 +160,128 @@ function SessionRow({
     );
   }
 
+  return <SwipeableRow {...{ sessionId, name, lastActivity, active, streaming, unread, onStartRename, onArchive, onContextMenu }} />;
+}
+
+function SwipeableRow({
+  sessionId,
+  name,
+  lastActivity,
+  active,
+  streaming,
+  unread,
+  onStartRename,
+  onArchive,
+  onContextMenu,
+}: {
+  sessionId: string;
+  name: string | null;
+  lastActivity: string;
+  active: boolean;
+  streaming: boolean;
+  unread: boolean;
+  onStartRename: () => void;
+  onArchive: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+}) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const revealRef = useRef<HTMLDivElement>(null);
+  const suppressClickRef = useRef(false);
+
+  // Apple Mail swipe-to-archive. Drag the row left; the red reveal
+  // fades in as the row slides. Past ~60% of the row's width, releasing
+  // commits the archive (row continues off, then onArchive fires).
+  // Below threshold, the row springs back. A short suppressClick guard
+  // stops the trailing click event from also switching session after a
+  // drag.
+  const onSwipeStart = (event: React.MouseEvent) => {
+    if (event.button !== 0) return;
+    const row = rowRef.current;
+    const reveal = revealRef.current;
+    if (!row || !reveal) return;
+    const startX = event.clientX;
+    const rowWidth = row.offsetWidth;
+    const commitAt = rowWidth * 0.6;
+    let dragging = false;
+    row.style.transition = "none";
+    reveal.style.transition = "none";
+
+    const onMove = (mv: MouseEvent) => {
+      const dx = mv.clientX - startX;
+      if (!dragging) {
+        if (Math.abs(dx) < 6) return;
+        dragging = true;
+      }
+      const offset = Math.min(0, dx);
+      row.style.transform = `translateX(${offset}px)`;
+      reveal.style.opacity = `${Math.min(1, -offset / commitAt)}`;
+    };
+
+    const onUp = (up: MouseEvent) => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      const dx = up.clientX - startX;
+      row.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+      reveal.style.transition = "opacity 220ms ease-out";
+      if (dragging && dx <= -commitAt) {
+        row.style.transform = `translateX(-${rowWidth}px)`;
+        reveal.style.opacity = "1";
+        setTimeout(onArchive, 200);
+      } else {
+        row.style.transform = "translateX(0)";
+        reveal.style.opacity = "0";
+      }
+      if (dragging) {
+        suppressClickRef.current = true;
+        setTimeout(() => {
+          suppressClickRef.current = false;
+        }, 50);
+      }
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => void switchSession(sessionId)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
+    <div className="relative">
+      <div
+        ref={revealRef}
+        aria-hidden
+        className="absolute inset-0 flex items-center justify-end pr-3 rounded-lg bg-bad-soft text-bad pointer-events-none"
+        style={{ opacity: 0 }}
+      >
+        <Archive size={14} strokeWidth={1.8} />
+      </div>
+      <div
+        ref={rowRef}
+        role="button"
+        tabIndex={0}
+        onClick={() => {
+          if (suppressClickRef.current) return;
           void switchSession(sessionId);
-        }
-      }}
-      onContextMenu={onContextMenu}
-      onDoubleClick={(e) => {
-        e.preventDefault();
-        onStartRename();
-      }}
-      onMouseMove={trackHoverDish}
-      data-streaming={streaming ? "true" : undefined}
-      className={clsx(
-        "session-row hover-dish group/row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-1.5 rounded-lg text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
-        active
-          ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
-          : "text-ink-soft hover:bg-surface/60",
-      )}
-    >
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            void switchSession(sessionId);
+          }
+        }}
+        onContextMenu={onContextMenu}
+        onDoubleClick={(e) => {
+          e.preventDefault();
+          onStartRename();
+        }}
+        onMouseDown={onSwipeStart}
+        onMouseMove={trackHoverDish}
+        data-streaming={streaming ? "true" : undefined}
+        className={clsx(
+          "session-row hover-dish group/row relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-1.5 rounded-lg text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+          active
+            ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
+            : "bg-bg text-ink-soft hover:bg-surface/60",
+        )}
+      >
       <span className="min-w-0 flex items-center gap-1.5 text-[13px] font-medium tracking-[-0.005em]">
         <span className="truncate">{name || "untitled"}</span>
       </span>
@@ -221,6 +318,7 @@ function SessionRow({
           />
         </span>
       </span>
+      </div>
     </div>
   );
 }
