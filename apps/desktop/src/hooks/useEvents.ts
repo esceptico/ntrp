@@ -220,6 +220,8 @@ export function handleIncomingServerEvent(
   event: ServerEvent,
   reload?: HistoryReloader,
 ): Promise<void> | null {
+  if (event.type === "stream_replay_done") return null;
+
   const sessionId = event.session_id ?? getState().currentSessionId;
   const activeSessionId = getState().currentSessionId;
   if (event.session_id && activeSessionId !== event.session_id) return null;
@@ -509,13 +511,21 @@ export function useEvents(sessionId: string | null) {
     const desktopEvents = window.ntrpDesktop?.events;
     if (desktopEvents) {
       let connectionId: string | null = null;
+      let replayingConnection = true;
       const dispose = desktopEvents.onData((payload) => {
         if (!connectionId || payload.connectionId !== connectionId) return;
         if (payload.error) {
           setState({ error: payload.error });
           return;
         }
-        if (payload.event) void handleIncomingServerEvent(payload.event as ServerEvent);
+        if (payload.event) {
+          const event = payload.event as ServerEvent;
+          if (event.type === "stream_replay_done") {
+            replayingConnection = false;
+            return;
+          }
+          void handleIncomingServerEvent(replayingConnection ? { ...event, replay: true } : event);
+        }
       });
 
       void desktopEvents
@@ -543,6 +553,7 @@ export function useEvents(sessionId: string | null) {
     void (async () => {
       while (!disposed && !controller.signal.aborted) {
         try {
+          let replayingConnection = true;
           const response = await fetch(eventStreamUrl(config, sessionId), {
             headers: headersFor(config),
             signal: controller.signal,
@@ -562,7 +573,12 @@ export function useEvents(sessionId: string | null) {
             for (const line of lines) {
               if (!line.startsWith("data: ")) continue;
               try {
-                void handleIncomingServerEvent(JSON.parse(line.slice(6)) as ServerEvent);
+                const event = JSON.parse(line.slice(6)) as ServerEvent;
+                if (event.type === "stream_replay_done") {
+                  replayingConnection = false;
+                  continue;
+                }
+                void handleIncomingServerEvent(replayingConnection ? { ...event, replay: true } : event);
               } catch {
                 /* keep-alive */
               }

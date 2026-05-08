@@ -174,16 +174,19 @@ async def test_event_stream_marks_snapshot_records_as_replay_only():
     stream = _event_stream("sess-1", buses, RunRegistry(), stream=True)
     try:
         replay_chunk = await anext(stream)
+        replay_done_chunk = await anext(stream)
         await bus.emit(ToolCallEndEvent(tool_call_id="tool-1"))
         live_chunk = await anext(stream)
     finally:
         await stream.aclose()
 
     replay_payload = json.loads(replay_chunk.split("data: ", 1)[1].strip())
+    replay_done_payload = json.loads(replay_done_chunk.split("data: ", 1)[1].strip())
     live_payload = json.loads(live_chunk.split("data: ", 1)[1].strip())
 
     assert replay_payload["type"] == "TOOL_CALL_START"
     assert replay_payload["replay"] is True
+    assert replay_done_payload["type"] == "stream_replay_done"
     assert live_payload["type"] == "TOOL_CALL_END"
     assert "replay" not in live_payload
 

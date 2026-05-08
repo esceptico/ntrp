@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 from collections.abc import AsyncGenerator
 from typing import Annotated
@@ -24,6 +25,11 @@ router = APIRouter(tags=["chat"])
 
 SSE_KEEPALIVE = ":\n\n"
 KEEPALIVE_INTERVAL = 5
+
+
+def stream_replay_done_sse_string(session_id: str) -> str:
+    payload = json.dumps({"type": "stream_replay_done", "session_id": session_id})
+    return f"event: stream_replay_done\ndata: {payload}\n\n"
 
 
 async def _event_stream(
@@ -59,6 +65,9 @@ async def _event_stream(
                 continue
             yield stream_record_to_sse_string(session_id, record, replay=True)
             await asyncio.sleep(0)
+
+        yield stream_replay_done_sse_string(session_id)
+        await asyncio.sleep(0)
 
         while True:
             try:
