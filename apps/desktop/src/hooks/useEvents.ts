@@ -274,7 +274,12 @@ export function handleServerEvent(event: ServerEvent) {
         patch.durationMs = event.duration_ms;
       }
       const merged = s.mergeActivityItem(event.tool_call_id, patch);
-      if (!merged) pendingResultPatches.set(event.tool_call_id, patch);
+      if (!merged) {
+        pendingResultPatches.set(event.tool_call_id, {
+          ...pendingResultPatches.get(event.tool_call_id),
+          ...patch,
+        });
+      }
       return;
     }
 
