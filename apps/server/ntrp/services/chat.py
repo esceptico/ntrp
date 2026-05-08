@@ -528,7 +528,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
 
     except Exception as e:
         _logger.exception("Chat failed (run_id=%s, session_id=%s)", run.run_id, session_state.session_id)
-        await bus.emit(RunErrorEvent(message=str(e), recoverable=False))
+        await bus.emit(RunErrorEvent(run_id=run.run_id, message=str(e), recoverable=False))
         ctx.run_registry.error_run(run.run_id)
 
     finally:

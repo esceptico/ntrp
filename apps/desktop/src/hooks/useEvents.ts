@@ -225,6 +225,7 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
       setState({ running: true, error: null, currentRunId: event.run_id });
       return;
     case "RUN_FINISHED":
+      if (s.currentRunId && s.currentRunId !== event.run_id) return;
       if (event.usage) s.accumulateUsage(event.usage);
       endActivity(s);
       endTurn(s, ts);
@@ -249,6 +250,7 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
       setState({ running: false, currentRunId: null });
       return;
     case "RUN_ERROR":
+      if (s.currentRunId && s.currentRunId !== event.run_id) return;
       endActivity(s);
       s.appendMessage({ id: crypto.randomUUID(), role: "error", content: event.message });
       endTurn(s, ts);

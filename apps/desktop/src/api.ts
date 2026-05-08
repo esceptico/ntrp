@@ -74,7 +74,7 @@ export type ServerEvent = CommonServerEventFields & (
   | { type: "RUN_STARTED"; run_id: string; session_id: string; session_name?: string | null; skip_approvals?: boolean }
   | { type: "RUN_FINISHED"; run_id: string; usage?: { prompt: number; completion: number; cache_read: number; cost: number } }
   | { type: "run_cancelled"; run_id: string }
-  | { type: "RUN_ERROR"; message: string }
+  | { type: "RUN_ERROR"; run_id: string; message: string }
 
   // ─── Text messages (Start / Content / End) ─────────────────────────
   | { type: "TEXT_MESSAGE_START"; message_id: string; role?: string; depth?: number }

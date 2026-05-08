@@ -112,6 +112,7 @@ class RunFinishedEvent(SSEEvent):
 @dataclass(frozen=True)
 class RunErrorEvent(SSEEvent):
     type: EventType = field(default=EventType.RUN_ERROR, init=False)
+    run_id: str = ""
     message: str = ""
     recoverable: bool = False
 
