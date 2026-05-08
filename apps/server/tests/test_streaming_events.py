@@ -19,8 +19,6 @@ from ntrp.events.sse import (
     TextMessageEndEvent,
     TextMessageStartEvent,
     ThinkingEvent,
-    ToolCallEndEvent,
-    ToolCallStartEvent,
     agent_events_to_sse,
 )
 from ntrp.server.bus import BusRegistry, SessionBus
@@ -163,29 +161,6 @@ async def test_event_stream_does_not_synthesize_text_boundaries():
         "TEXT_MESSAGE_END",
     ]
     assert [payload["message_id"] for payload in payloads] == ["text-1", "text-1", "text-1"]
-
-
-@pytest.mark.asyncio
-async def test_event_stream_marks_snapshot_records_as_replay_only():
-    buses = BusRegistry()
-    bus = buses.get_or_create("sess-1")
-    await bus.emit(ToolCallStartEvent(tool_call_id="tool-1", tool_call_name="ReadFile"))
-
-    stream = _event_stream("sess-1", buses, RunRegistry(), stream=True)
-    try:
-        replay_chunk = await anext(stream)
-        await bus.emit(ToolCallEndEvent(tool_call_id="tool-1"))
-        live_chunk = await anext(stream)
-    finally:
-        await stream.aclose()
-
-    replay_payload = json.loads(replay_chunk.split("data: ", 1)[1].strip())
-    live_payload = json.loads(live_chunk.split("data: ", 1)[1].strip())
-
-    assert replay_payload["type"] == "TOOL_CALL_START"
-    assert replay_payload["replay"] is True
-    assert live_payload["type"] == "TOOL_CALL_END"
-    assert "replay" not in live_payload
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { type AppConfig, type ServerEvent } from "../api";
-import { getState, setState, useStore, type ActivityItem, type UiMessage } from "../store";
+import { getState, setState, useStore, type ActivityItem } from "../store";
 import { previewArgs } from "../lib/format";
 import { SEMANTIC_KIND_AGENT } from "../lib/agent";
 
@@ -132,21 +132,7 @@ function assistantIdFrom(event: { message_id?: string }): string {
   return event.message_id || crypto.randomUUID();
 }
 
-function replaySourceFor(
-  event: Pick<ServerEvent, "replay" | "seq"> & {
-    message_id?: string;
-    tool_call_id?: string;
-    task_id?: string;
-  },
-): Pick<UiMessage, "sourceIndex" | "sourceMessageId"> {
-  if (!event.replay) return {};
-  return {
-    sourceIndex: event.seq,
-    sourceMessageId: event.message_id ?? event.tool_call_id ?? event.task_id,
-  };
-}
-
-function ensureAssistantMessage(id: string, startedAt: number, event?: ServerEvent): void {
+function ensureAssistantMessage(id: string, startedAt: number): void {
   const state = getState();
   activeAssistantMessageId = id;
   const existing = state.messages.get(id);
@@ -156,13 +142,12 @@ function ensureAssistantMessage(id: string, startedAt: number, event?: ServerEve
   state.appendMessage({
     id,
     role: "assistant",
-    ...replaySourceFor(event ?? {}),
     content: "",
     turn: { startedAt, endedAt: null, durationMs: null },
   });
 }
 
-function appendAssistantDelta(id: string, delta: string, startedAt: number, event?: ServerEvent): void {
+function appendAssistantDelta(id: string, delta: string, startedAt: number): void {
   const state = getState();
   activeAssistantMessageId = id;
   const existing = state.messages.get(id);
@@ -175,7 +160,6 @@ function appendAssistantDelta(id: string, delta: string, startedAt: number, even
   state.appendMessage({
     id,
     role: "assistant",
-    ...replaySourceFor(event ?? {}),
     content: delta,
     turn: { startedAt, endedAt: null, durationMs: null },
   });
@@ -307,11 +291,11 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
     // chat to avoid bleed-through.
     case "TEXT_MESSAGE_START":
       if (event.depth) return;
-      ensureAssistantMessage(assistantIdFrom(event), ts, event);
+      ensureAssistantMessage(assistantIdFrom(event), ts);
       return;
     case "TEXT_MESSAGE_CONTENT": {
       if (event.depth) return;
-      appendAssistantDelta(assistantIdFrom(event), event.delta, ts, event);
+      appendAssistantDelta(assistantIdFrom(event), event.delta, ts);
       return;
     }
     case "TEXT_MESSAGE_END":
@@ -324,13 +308,7 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
       return;
     case "REASONING_MESSAGE_START":
       if (event.depth) return;
-      s.appendMessage({
-        id: event.message_id,
-        role: "reasoning",
-        ...replaySourceFor(event),
-        title: "Reasoning",
-        content: "",
-      });
+      s.appendMessage({ id: event.message_id, role: "reasoning", title: "Reasoning", content: "" });
       return;
     case "REASONING_MESSAGE_CONTENT": {
       if (event.depth) return;
@@ -340,7 +318,6 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
         s.appendMessage({
           id: event.message_id,
           role: "reasoning",
-          ...replaySourceFor(event),
           title: "Reasoning",
           content: event.delta,
         });
@@ -395,7 +372,6 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
           {
             id: newId,
             role: "activity",
-            ...replaySourceFor(event),
             content: "",
             activity: { items: [item], label: "Calling", done: false },
           },
