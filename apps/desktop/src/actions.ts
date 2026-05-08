@@ -497,6 +497,11 @@ export async function stopRun(): Promise<void> {
   if (!runId) return;
   try {
     await cancelRun(s.config, runId);
+    const latest = getState();
+    if (latest.currentRunId === runId) {
+      latest.setRunning(false);
+      latest.setCurrentRunId(null);
+    }
   } catch (error) {
     s.appendMessage({
       id: crypto.randomUUID(),

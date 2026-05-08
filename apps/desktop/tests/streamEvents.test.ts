@@ -7,6 +7,7 @@ import {
   resetEventSeqStateForTest,
   resetStreamStateForTest,
 } from "../src/hooks/useEvents.js";
+import { stopRun } from "../src/actions.js";
 import { getState, setState } from "../src/store.js";
 
 beforeEach(() => {
@@ -226,6 +227,48 @@ test("exposes the last event sequence for bridge reconnects", () => {
   });
 
   expect(lastEventSeqForSession("bridge-session")).toBe(44);
+});
+
+test("stopRun clears running state after successful cancel request", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  const requests: Array<{ path: string; method: string; body?: string }> = [];
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async (_config: unknown, request: { path: string; method: string; body?: string }) => {
+          requests.push(request);
+          return {
+            ok: true,
+            status: 202,
+            statusText: "Accepted",
+            contentType: "application/json",
+            data: { status: "cancelling" },
+            text: "",
+          };
+        },
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      running: true,
+      currentRunId: "run-1",
+    });
+
+    await stopRun();
+
+    expect(requests).toEqual([
+      { path: "/cancel", method: "POST", body: JSON.stringify({ run_id: "run-1" }) },
+    ]);
+    expect(getState().running).toBe(false);
+    expect(getState().currentRunId).toBeNull();
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
 });
 
 test("keeps tool results when result arrives before delayed burst item renders", async () => {

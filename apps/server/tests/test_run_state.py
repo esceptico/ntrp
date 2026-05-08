@@ -76,3 +76,21 @@ def test_run_registry_status_reports_active_runs_only():
     assert status["active_runs"][0]["run_id"] == active.run_id
     assert status["active_runs"][0]["pending_injections"] == 1
     assert status["background_task_sessions"] == []
+
+
+def test_cancel_run_keeps_run_active_until_terminal_cancel():
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.status = RunStatus.RUNNING
+
+    result = registry.cancel_run(run.run_id)
+
+    assert result["found"] is True
+    assert run.cancelled is True
+    assert run.status == RunStatus.RUNNING
+    assert registry.get_active_run("sess-1") is run
+
+    registry.finish_cancelled(run.run_id)
+
+    assert run.status == RunStatus.CANCELLED
+    assert registry.get_active_run("sess-1") is None

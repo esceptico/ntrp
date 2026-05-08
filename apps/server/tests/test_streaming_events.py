@@ -278,6 +278,43 @@ async def test_run_agent_loop_closes_text_when_task_cancelled_during_content_flu
 
 
 @pytest.mark.asyncio
+async def test_run_agent_loop_hard_task_cancel_emits_terminal_cancelled():
+    run = RunState(run_id="run-1", session_id="sess-1")
+    bus = SessionBus(session_id="sess-1")
+    released = asyncio.Event()
+
+    class AgentWithBlockingStream:
+        async def stream(self, messages):
+            yield TextStarted(depth=1, parent_id="call-research", message_id="text-1")
+            yield TextDelta(depth=1, parent_id="call-research", message_id="text-1", content="partial")
+            await released.wait()
+
+    task = asyncio.create_task(run_agent_loop(SimpleNamespace(run=run), AgentWithBlockingStream(), bus))
+
+    while len(bus._recent) < 2:
+        await asyncio.sleep(0)
+
+    task.cancel()
+    await task
+
+    event_types = [record.event.type.value for record in bus._recent]
+    assert event_types == [
+        "TEXT_MESSAGE_START",
+        "TEXT_MESSAGE_CONTENT",
+        "TEXT_MESSAGE_END",
+        "run_cancelled",
+    ]
+    assert event_types.count("run_cancelled") == 1
+    end = bus._recent[2].event
+    assert isinstance(end, TextMessageEndEvent)
+    assert end.message_id == "text-1"
+    assert end.content == "partial"
+    assert end.depth == 1
+    assert end.parent_id == "call-research"
+    assert run.cancelled is True
+
+
+@pytest.mark.asyncio
 async def test_run_agent_loop_retries_text_end_when_emit_is_cancelled():
     run = RunState(run_id="run-1", session_id="sess-1")
 

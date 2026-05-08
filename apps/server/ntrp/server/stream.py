@@ -10,6 +10,7 @@ from ntrp.events.sse import (
     TextMessageStartEvent,
     agent_events_to_sse,
 )
+from ntrp.server.state import RunStatus
 
 if TYPE_CHECKING:
     from ntrp.agent import Agent
@@ -69,6 +70,18 @@ async def run_agent_loop(
         open_text_depth = 0
         open_text_parent_id = None
 
+    async def emit_cancelled_terminal() -> None:
+        if ctx.run.cancel_terminal_emitted:
+            return
+        await close_open_text()
+        await bus.emit(RunCancelledEvent(run_id=ctx.run.run_id))
+        registry = getattr(ctx, "run_registry", None)
+        if registry is not None:
+            registry.finish_cancelled(ctx.run.run_id)
+        else:
+            ctx.run.cancel_terminal_emitted = True
+            ctx.run.status = RunStatus.CANCELLED
+
     try:
         async for item in gen:
             if ctx.run.backgrounded:
@@ -91,12 +104,11 @@ async def run_agent_loop(
                 if ctx.run.cancelled:
                     break
     except asyncio.CancelledError:
-        await close_open_text()
+        ctx.run.cancelled = True
         result = ""
 
     if ctx.run.cancelled:
-        await close_open_text()
-        await bus.emit(RunCancelledEvent(run_id=ctx.run.run_id))
+        await emit_cancelled_terminal()
         return None, None
 
     return result, None

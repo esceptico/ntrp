@@ -293,6 +293,25 @@ def test_delete_inject_returns_404_when_no_active_run(client_no_active_run):
     assert resp.status_code == 404
 
 
+def test_cancel_returns_404_for_unknown_run(client_no_active_run):
+    resp = client_no_active_run.post("/cancel", json={"run_id": "missing"})
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Run not found"
+
+
+def test_cancel_returns_202_for_running_run(client_with_active_run):
+    c, run = client_with_active_run
+
+    resp = c.post("/cancel", json={"run_id": run.run_id})
+
+    assert resp.status_code == 202
+    assert resp.json()["status"] == "cancelling"
+    assert resp.json()["found"] is True
+    assert run.cancelled is True
+    assert run.status == RunStatus.RUNNING
+
+
 # --- Full chain: agent.stream + real closure + real bus + mid-run inject ---
 
 

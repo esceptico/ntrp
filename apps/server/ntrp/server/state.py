@@ -31,6 +31,7 @@ class RunState:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     cancelled: bool = False
+    cancel_terminal_emitted: bool = False
     backgrounded: bool = False
     drain_task: asyncio.Task | None = None
 
@@ -125,7 +126,7 @@ class RunRegistry:
         if not run_id:
             return None
         run = self._runs.get(run_id)
-        if run and run.status == RunStatus.RUNNING:
+        if run and run.status in (RunStatus.PENDING, RunStatus.RUNNING):
             return run
         self._active_by_session.pop(session_id, None)
         return None
@@ -138,16 +139,42 @@ class RunRegistry:
             self._active_by_session.pop(run.session_id, None)
         self.cleanup_old_runs()
 
-    def cancel_run(self, run_id: str) -> None:
+    def cancel_run(self, run_id: str) -> dict[str, bool]:
         run = self._runs.get(run_id)
-        if run:
-            run.cancelled = True
-            run.status = RunStatus.CANCELLED
-            run.updated_at = datetime.now(UTC)
+        if not run:
+            return {"found": False, "cancel_requested": False}
+
+        run.cancelled = True
+        run.updated_at = datetime.now(UTC)
+
+        cancel_requested = False
+        if run.task and not run.task.done():
+            run.task.cancel()
+            cancel_requested = True
+        if run.drain_task and not run.drain_task.done():
+            run.drain_task.cancel()
+            cancel_requested = True
+
+        registry = self._bg_registries.get(run.session_id)
+        if registry:
+            for _task_id, _command in registry.cancel_all():
+                cancel_requested = True
+
+        return {"found": True, "cancel_requested": cancel_requested}
+
+    def finish_cancelled(self, run_id: str) -> bool:
+        run = self._runs.get(run_id)
+        if not run:
+            return False
+
+        run.cancelled = True
+        run.cancel_terminal_emitted = True
+        run.status = RunStatus.CANCELLED
+        run.updated_at = datetime.now(UTC)
+        if self._active_by_session.get(run.session_id) == run_id:
             self._active_by_session.pop(run.session_id, None)
-            if run.task and not run.task.done():
-                run.task.cancel()
         self.cleanup_old_runs()
+        return True
 
     async def cancel_all(self, timeout: float = 5.0) -> int:
         tasks = []

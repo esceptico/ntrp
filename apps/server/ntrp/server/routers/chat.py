@@ -168,10 +168,12 @@ async def submit_tool_result(request: ToolResultRequest, run_registry: RunRegist
     return {"status": "ok"}
 
 
-@router.post("/cancel")
+@router.post("/cancel", status_code=202)
 async def cancel_run(request: CancelRequest, run_registry: RunRegistry = Depends(require_run_registry)):
-    run_registry.cancel_run(request.run_id)
-    return {"status": "cancelled"}
+    result = run_registry.cancel_run(request.run_id)
+    if not result["found"]:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {"status": "cancelling", **result}
 
 
 @router.post("/chat/background")
