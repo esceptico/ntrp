@@ -19,7 +19,7 @@ export function ActivityTrace({ children }: { children: ReactNode }) {
     <motion.div
       layout
       transition={{ layout: { duration: MOTION.panel, ease: EASE } }}
-      className="font-sans text-[14px] leading-[1.55] text-muted"
+      className="font-sans text-[13px] leading-[1.55] text-muted"
     >
       {children}
     </motion.div>
@@ -113,7 +113,7 @@ export function ActivityTail({
       }}
       transition={{ duration: MOTION.trace, ease: EASE }}
       style={{ overflow: "hidden" }}
-      className="pl-4 mt-0.5"
+      className="pl-4"
     >
       {rolling ? (
         <AnimatePresence mode="popLayout" initial={false}>
