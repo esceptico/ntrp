@@ -4,8 +4,7 @@ from ntrp.agent import Role
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
 from ntrp.core.compactor import is_handoff_message
 from ntrp.core.content import blocks_to_text
-from ntrp.server.bus import BusRegistry
-from ntrp.server.deps import get_bus_registry, require_session_service
+from ntrp.server.deps import require_session_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
     BranchRequest,
@@ -24,7 +23,6 @@ router = APIRouter(tags=["session"])
 async def get_session_history(
     svc: SessionService = Depends(require_session_service),
     runtime: Runtime = Depends(get_runtime),
-    buses: BusRegistry = Depends(get_bus_registry),
     session_id: str | None = None,
     limit: int = Query(default=HISTORY_MESSAGE_LIMIT, ge=1, le=250),
     before: str | None = None,
@@ -41,8 +39,6 @@ async def get_session_history(
     sid = data.state.session_id
     active_run = runtime.run_registry.get_active_run(sid) if runtime.run_registry else None
     active_run_id = active_run.run_id if active_run else None
-    bus = buses.get(sid) if active_run else None
-    stream_checkpoint_seq = bus.replay_checkpoint_seq if bus else None
 
     # Tools carry a `kind` ("tool" | "agent") that the desktop renderer uses
     # to pick a row surface. We thread it into the history payload so a
@@ -127,7 +123,6 @@ async def get_session_history(
     return {
         "messages": history,
         "active_run_id": active_run_id,
-        "stream_checkpoint_seq": stream_checkpoint_seq,
         "page": {
             "has_more_before": page["has_more_before"],
             "has_more_after": page["has_more_after"],
