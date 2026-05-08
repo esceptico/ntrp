@@ -6,6 +6,8 @@ from ntrp.agent.types.events import (
     Result,
     TextBlock,
     TextDelta,
+    TextEnded,
+    TextStarted,
     ToolCompleted,
     ToolStarted,
 )
@@ -34,6 +36,8 @@ __all__ = [
     "StopReason",
     "TextBlock",
     "TextDelta",
+    "TextEnded",
+    "TextStarted",
     "ToolCall",
     "ToolChoice",
     "ToolChoiceMode",

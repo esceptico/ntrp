@@ -23,6 +23,8 @@ from ntrp.agent import (
     ReasoningStarted,
     TextBlock,
     TextDelta,
+    TextEnded,
+    TextStarted,
     ToolCompleted,
     ToolStarted,
 )
@@ -343,10 +345,21 @@ def agent_events_to_sse(event) -> tuple[SSEEvent, ...]:
     """
     base = {"depth": event.depth, "parent_id": event.parent_id}
     match event:
+        case TextStarted():
+            return (
+                TextMessageStartEvent(
+                    message_id=event.message_id,
+                    role="assistant",
+                ),
+            )
+        case TextEnded():
+            return (
+                TextMessageEndEvent(
+                    message_id=event.message_id,
+                    content=event.content,
+                ),
+            )
         case TextDelta():
-            # We don't have an explicit "text started" agent event, so the
-            # client synthesises a START on first CONTENT; we just emit the
-            # streaming delta.
             return (
                 TextMessageContentEvent(
                     message_id=getattr(event, "message_id", "") or "",

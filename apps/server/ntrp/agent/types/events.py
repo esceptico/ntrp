@@ -11,6 +11,17 @@ class AgentEventBase:
 
 
 @dataclass(frozen=True, kw_only=True)
+class TextStarted(AgentEventBase):
+    message_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class TextEnded(AgentEventBase):
+    message_id: str
+    content: str = ""
+
+
+@dataclass(frozen=True, kw_only=True)
 class TextDelta(AgentEventBase):
     content: str
     message_id: str | None = None

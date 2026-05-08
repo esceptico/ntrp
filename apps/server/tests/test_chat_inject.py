@@ -3,7 +3,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from ntrp.events.sse import MessageIngestedEvent, TextDeltaEvent
+from ntrp.events.sse import MessageIngestedEvent, TextDeltaEvent, TextMessageEndEvent, TextMessageStartEvent
 from ntrp.server.app import app
 from ntrp.server.bus import BusRegistry, SessionBus
 from ntrp.server.deps import get_bus_registry
@@ -38,25 +38,26 @@ def test_chat_request_client_id_optional():
 
 
 @pytest.mark.asyncio
-async def test_event_stream_uses_text_delta_message_id_for_boundaries():
+async def test_event_stream_replays_explicit_text_boundaries():
     buses = BusRegistry()
     bus = buses.get_or_create("sess-1")
+    await bus.emit(TextMessageStartEvent(message_id="text-1"))
     await bus.emit(TextDeltaEvent(message_id="text-1", delta="hello"))
+    await bus.emit(TextMessageEndEvent(message_id="text-1", content="hello"))
 
     stream = _event_stream("sess-1", buses, RunRegistry(), stream=True)
     try:
-        start = await anext(stream)
-        content = await anext(stream)
+        chunks = [await anext(stream), await anext(stream), await anext(stream)]
     finally:
         await stream.aclose()
 
-    start_payload = json.loads(start.split("data: ", 1)[1].strip())
-    content_payload = json.loads(content.split("data: ", 1)[1].strip())
-
-    assert start_payload["type"] == "TEXT_MESSAGE_START"
-    assert start_payload["message_id"] == "text-1"
-    assert content_payload["type"] == "TEXT_MESSAGE_CONTENT"
-    assert content_payload["message_id"] == "text-1"
+    payloads = [json.loads(chunk.split("data: ", 1)[1].strip()) for chunk in chunks]
+    assert [payload["type"] for payload in payloads] == [
+        "TEXT_MESSAGE_START",
+        "TEXT_MESSAGE_CONTENT",
+        "TEXT_MESSAGE_END",
+    ]
+    assert [payload["message_id"] for payload in payloads] == ["text-1", "text-1", "text-1"]
 
 
 def test_expand_skill_command_injects_skill_path(tmp_path):

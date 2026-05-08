@@ -17,6 +17,8 @@ from ntrp.agent.types.events import (
     Result,
     TextBlock,
     TextDelta,
+    TextEnded,
+    TextStarted,
     ToolCompleted,
     ToolStarted,
 )
@@ -26,7 +28,9 @@ from ntrp.agent.types.tool_choice import ToolChoice, ToolChoiceMode
 from ntrp.agent.types.usage import Usage
 
 AgentEvent = (
-    TextDelta
+    TextStarted
+    | TextDelta
+    | TextEnded
     | TextBlock
     | ReasoningBlock
     | ReasoningStarted
@@ -196,7 +200,13 @@ class Agent:
                 kwargs["prompt_cache_key"] = self.prompt_cache_key
             async for item in self.client.stream(messages, model, tools, **kwargs):
                 if isinstance(item, str):
-                    text_started = True
+                    if not text_started:
+                        text_started = True
+                        yield TextStarted(
+                            depth=self.current_depth,
+                            parent_id=self.parent_id,
+                            message_id=text_id,
+                        )
                     yield TextDelta(
                         depth=self.current_depth,
                         parent_id=self.parent_id,
@@ -238,6 +248,14 @@ class Agent:
         elif reasoning := response.choices[0].message.reasoning_content:
             yield ReasoningBlock(depth=self.current_depth, parent_id=self.parent_id, content=reasoning)
         assistant_msg = normalize_assistant_message(response.choices[0].message)
+        if text_started:
+            final_text = response.choices[0].message.content or ""
+            yield TextEnded(
+                depth=self.current_depth,
+                parent_id=self.parent_id,
+                message_id=text_id,
+                content=final_text,
+            )
         if text_started:
             # Persist the same id we streamed, so the desktop client's
             # locally-keyed message and the saved row share an id. Branching

@@ -3,13 +3,35 @@ from datetime import UTC, datetime
 
 import pytest
 
-from ntrp.agent import ReasoningContentDelta, ReasoningDelta
+from ntrp.agent import ReasoningContentDelta, ReasoningDelta, TextDelta, TextEnded, TextStarted
 from ntrp.context.models import SessionState
 from ntrp.core import spawner as spawner_module
 from ntrp.core.spawner import create_spawn_fn
-from ntrp.events.sse import ReasoningMessageContentEvent, agent_events_to_sse
+from ntrp.events.sse import (
+    ReasoningMessageContentEvent,
+    TextDeltaEvent,
+    TextMessageEndEvent,
+    TextMessageStartEvent,
+    agent_events_to_sse,
+)
+from ntrp.server.bus import BusRegistry
+from ntrp.server.routers.chat import _event_stream
+from ntrp.server.state import RunRegistry
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from tests.helpers import make_executor, make_text_response
+
+
+def test_text_boundary_events_convert_to_sse():
+    (start,) = agent_events_to_sse(TextStarted(message_id="text-1"))
+    (content,) = agent_events_to_sse(TextDelta(message_id="text-1", content="hello"))
+    (end,) = agent_events_to_sse(TextEnded(message_id="text-1", content="hello"))
+
+    assert isinstance(start, TextMessageStartEvent)
+    assert start.message_id == "text-1"
+    assert content.message_id == "text-1"
+    assert isinstance(end, TextMessageEndEvent)
+    assert end.message_id == "text-1"
+    assert end.content == "hello"
 
 
 def test_reasoning_sse_preserves_nested_scope():
@@ -66,3 +88,26 @@ async def test_research_child_reasoning_is_not_emitted_to_parent(monkeypatch):
     assert emitted == []
     assert len(prompt_cache_keys) == 1
     assert prompt_cache_keys[0].startswith("test::")
+
+
+@pytest.mark.asyncio
+async def test_event_stream_does_not_synthesize_text_boundaries():
+    buses = BusRegistry()
+    bus = buses.get_or_create("sess-1")
+    await bus.emit(TextMessageStartEvent(message_id="text-1"))
+    await bus.emit(TextDeltaEvent(message_id="text-1", delta="hello"))
+    await bus.emit(TextMessageEndEvent(message_id="text-1", content="hello"))
+
+    stream = _event_stream("sess-1", buses, RunRegistry(), stream=True)
+    try:
+        chunks = [await anext(stream), await anext(stream), await anext(stream)]
+    finally:
+        await stream.aclose()
+
+    payloads = [json.loads(chunk.split("data: ", 1)[1].strip()) for chunk in chunks]
+    assert [payload["type"] for payload in payloads] == [
+        "TEXT_MESSAGE_START",
+        "TEXT_MESSAGE_CONTENT",
+        "TEXT_MESSAGE_END",
+    ]
+    assert [payload["message_id"] for payload in payloads] == ["text-1", "text-1", "text-1"]
