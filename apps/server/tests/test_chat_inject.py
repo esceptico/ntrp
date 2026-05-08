@@ -3,7 +3,13 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from ntrp.events.sse import MessageIngestedEvent, TextDeltaEvent, TextMessageEndEvent, TextMessageStartEvent, ThinkingEvent
+from ntrp.events.sse import (
+    MessageIngestedEvent,
+    TextDeltaEvent,
+    TextMessageEndEvent,
+    TextMessageStartEvent,
+    ThinkingEvent,
+)
 from ntrp.server.app import app
 from ntrp.server.bus import BusRegistry, SessionBus
 from ntrp.server.deps import get_bus_registry
