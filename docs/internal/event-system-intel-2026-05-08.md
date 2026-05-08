@@ -79,9 +79,11 @@ Useful files:
 
 What to copy: control request/response/cancel request as a shape, task lifecycle events, parent tool use id.
 
-## NTRP Findings
+## Pre-Implementation NTRP Findings
 
-### High Confidence Bugs
+These findings describe the state before the stable event-system implementation pass later in this file.
+
+### High Confidence Bugs Found
 
 - Desktop can permanently lose tool results in fast bursts. `TOOL_CALL_END` can delay non-first activity rows with `setTimeout`, while `TOOL_CALL_RESULT` immediately tries to merge into a row that may not exist yet. Relevant files:
   - `/Users/escept1co/src/ntrp/apps/desktop/src/hooks/useEvents.ts:39`
@@ -95,13 +97,13 @@ What to copy: control request/response/cancel request as a shape, task lifecycle
   - `/Users/escept1co/src/ntrp/apps/server/ntrp/server/runtime/outbox.py:48`
   - `/Users/escept1co/src/ntrp/apps/server/ntrp/automation/scheduler.py:173`
 - The TUI streaming protocol is stale, but TUI is out of scope for the first implementation pass.
-- SSE replay has no event id, no cursor, and no `Last-Event-ID`. The replay buffer is cleared after checkpoint saves, so reconnect can miss events. Relevant files:
+- SSE replay had no event id, no cursor, and no `Last-Event-ID`. The replay buffer was cleared after checkpoint saves, so reconnect could miss events. Relevant files:
   - `/Users/escept1co/src/ntrp/apps/server/ntrp/events/sse.py:75`
   - `/Users/escept1co/src/ntrp/apps/server/ntrp/server/bus.py:54`
   - `/Users/escept1co/src/ntrp/apps/server/ntrp/services/chat.py:451`
   - `/Users/escept1co/src/ntrp/apps/desktop/src/hooks/useEvents.ts:347`
   - `/Users/escept1co/src/ntrp/apps/desktop/electron/main.cjs:187`
-- `/cancel` returns cancelled even for unknown run ids, only cancels `run.task`, and does not cancel `drain_task` or background tasks.
+- `/cancel` returned cancelled even for unknown run ids, only cancelled `run.task`, and did not cancel `drain_task` or background tasks.
 - Blocking subprocess tools are not truly abortable. `bash` runs through `asyncio.to_thread`, so cancellation does not necessarily kill the underlying process.
 
 ### Architectural Fault Line
@@ -152,3 +154,26 @@ Do not rewrite the whole chat system. Fix in this order:
 4. Cancellation terminal contract.
 5. Sub-agent task lifecycle events.
 6. Durable event store if in-memory cursor replay is not enough for reconnect behavior under real desktop use.
+
+## Implemented Pass - 2026-05-08
+
+This pass intentionally kept the system in-process and server/desktop scoped. TUI remains deferred.
+
+Implemented:
+
+- Server emits explicit text start/content/end events before events enter the bus.
+- `SessionBus` owns per-session `seq` assignment and serializes SSE frames with `id: <seq>`.
+- Desktop tracks the last applied sequence per session and reconnects with `after_seq`.
+- Replay gaps emit `stream_reset`; desktop reloads history, blocks tail events until the reload succeeds, drops old-session tail events after navigation, and recovers the block after a later successful replace history load.
+- Desktop fixed fast tool-result races by buffering result patches until delayed activity rows render.
+- Cancel is two-phase: `/cancel` accepts the request and `run_cancelled` is emitted only after worker acknowledgement.
+- Cancelled runs no longer enqueue `run.completed` outbox work.
+- Sub-agent foreground spawns emit `task_started`, `task_progress`, and `task_finished` linked to the parent tool call.
+- Terminal desktop events are guarded by `run_id` so stale finish/error/cancel events cannot clear a newer active run.
+- Contract tests now lock terminal wire identity, SSE cursor identity, desktop sequence dedupe, stale terminal guards, replay-gap recovery, and ordered text projection.
+
+Remaining risks:
+
+- Replay is still bounded to the in-memory recent-record buffer plus history reload. A durable event table would be the next step if reconnect across process restart needs exact event replay rather than history reconstruction.
+- Browser/Electron cancellation of blocking subprocess tools is not fully process-tree-aware yet.
+- TUI still needs to adopt the server-owned contract after desktop settles.

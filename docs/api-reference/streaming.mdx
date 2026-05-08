@@ -9,6 +9,24 @@ ntrp uses a persistent SSE connection per session. Connect to `GET /chat/events/
 
 Each event has a `type` field indicating what happened.
 
+## Event envelope
+
+Every chat stream event includes server-owned ordering metadata:
+
+```json
+{
+  "type": "TEXT_MESSAGE_CONTENT",
+  "session_id": "20260508_120000_000",
+  "run_id": "cool-otter",
+  "seq": 12,
+  "timestamp": 1778241600000
+}
+```
+
+The SSE `id` field is the same value as `seq`. Clients should reconnect with `after_seq=<last seen seq>` and ignore events whose sequence is not greater than the last applied sequence for that session.
+
+If `after_seq` is older than the server replay buffer, or points past the server's known stream generation, the server emits `stream_reset`. Desktop responds by reloading session history before applying more events for that session.
+
 ## Event types
 
 ### `thinking`
@@ -16,52 +34,75 @@ Each event has a `type` field indicating what happened.
 Agent is processing. Includes a status message.
 
 ```json
-{"type": "thinking", "content": "Searching memory..."}
+{"type": "thinking", "status": "Searching memory..."}
 ```
 
-### `text`
+### `TEXT_MESSAGE_START`
 
-Complete response text block.
+Assistant text block started.
 
 ```json
-{"type": "text", "content": "Based on your calendar, you have 3 meetings today."}
+{"type": "TEXT_MESSAGE_START", "message_id": "msg_abc", "role": "assistant"}
 ```
 
-### `text_delta`
+### `TEXT_MESSAGE_CONTENT`
 
-Streamed token-level text delta. Only sent when streaming is enabled (pass `?stream=true` on the SSE connection, or enable in **Settings > Connection**).
+Streamed assistant text delta. Only sent when streaming is enabled with `?stream=true`.
 
 ```json
-{"type": "text_delta", "content": "Based"}
+{"type": "TEXT_MESSAGE_CONTENT", "message_id": "msg_abc", "delta": "Based"}
 ```
 
-Deltas arrive as individual tokens. Accumulate them to build the full response. A final `text` event is also sent as a complete fallback.
+Deltas arrive in order by `seq`. Accumulate them by `message_id`.
 
-### `tool_call`
+### `TEXT_MESSAGE_END`
+
+Assistant text block ended. Includes the cumulative content as a convenience.
+
+```json
+{"type": "TEXT_MESSAGE_END", "message_id": "msg_abc", "content": "Based on your calendar..."}
+```
+
+### `TOOL_CALL_START`
 
 Agent invoked a tool.
 
 ```json
 {
-  "type": "tool_call",
-  "name": "recall",
-  "args": {"query": "meeting notes"},
-  "tool_id": "tc_abc123",
+  "type": "TOOL_CALL_START",
+  "tool_call_name": "recall",
+  "tool_call_id": "tc_abc123",
   "depth": 0
 }
 ```
 
-### `tool_result`
+### `TOOL_CALL_ARGS`
+
+Tool arguments. NTRP currently emits arguments atomically as a JSON string.
+
+```json
+{"type": "TOOL_CALL_ARGS", "tool_call_id": "tc_abc123", "delta": "{\"query\":\"meeting notes\"}"}
+```
+
+### `TOOL_CALL_END`
+
+Tool call input finished.
+
+```json
+{"type": "TOOL_CALL_END", "tool_call_id": "tc_abc123"}
+```
+
+### `TOOL_CALL_RESULT`
 
 Tool execution completed.
 
 ```json
 {
-  "type": "tool_result",
-  "tool_id": "tc_abc123",
+  "type": "TOOL_CALL_RESULT",
+  "tool_call_id": "tc_abc123",
   "content": "Found 3 relevant facts...",
   "preview": "3 facts found",
-  "duration": 0.45
+  "duration_ms": 450
 }
 ```
 
@@ -74,47 +115,47 @@ Tool requires user approval before executing.
   "type": "approval_needed",
   "tool_id": "tc_abc123",
   "name": "send_email",
-  "args": {"to": "alice@example.com", "subject": "..."},
-  "description": "Send email to alice@example.com"
+  "content_preview": "Send email to alice@example.com"
 }
 ```
 
 Respond with `POST /tools/result` to approve or reject.
 
-### `session_info`
+### `RUN_STARTED`
 
-Session metadata update.
+Run started.
 
 ```json
 {
-  "type": "session_info",
+  "type": "RUN_STARTED",
   "session_id": "abc-123",
-  "session_name": "Work planning"
+  "run_id": "run_abc"
 }
 ```
 
-### `done`
+### `RUN_FINISHED`
 
 Execution complete. Includes token usage.
 
 ```json
 {
-  "type": "done",
+  "type": "RUN_FINISHED",
+  "run_id": "run_abc",
   "usage": {
-    "prompt_tokens": 1500,
-    "completion_tokens": 200,
-    "cache_read_tokens": 800,
+    "prompt": 1500,
+    "completion": 200,
+    "cache_read": 800,
     "cost": 0.012
   }
 }
 ```
 
-### `error`
+### `RUN_ERROR`
 
 An error occurred.
 
 ```json
-{"type": "error", "content": "Rate limit exceeded", "fatal": false}
+{"type": "RUN_ERROR", "run_id": "run_abc", "message": "Rate limit exceeded", "recoverable": false}
 ```
 
 ### `background_task`
@@ -125,20 +166,45 @@ A background task changed state (started, completed, failed, or cancelled).
 {"type": "background_task", "task_id": "bg_abc123", "command": "research(deep): research topic", "status": "completed"}
 ```
 
-### `backgrounded`
+### `run_backgrounded`
 
 A running agent was moved to background mode.
 
 ```json
-{"type": "backgrounded", "run_id": "run_abc"}
+{"type": "run_backgrounded", "run_id": "run_abc"}
 ```
 
-### `cancelled`
+### `run_cancelled`
 
-User cancelled the run.
+Worker acknowledged cancellation and reached the terminal cancelled state.
 
 ```json
-{"type": "cancelled", "run_id": "run_abc"}
+{"type": "run_cancelled", "run_id": "run_abc"}
+```
+
+Cancellation is asynchronous. `POST /cancel` returns `202` when the run exists and cancellation has been requested. The stream emits `run_cancelled` when the worker acknowledges cancellation and the run reaches its terminal cancelled state.
+
+### `task_started`, `task_progress`, `task_finished`
+
+Sub-agent task lifecycle. These events link child work back to the parent tool row.
+
+```json
+{
+  "type": "task_started",
+  "run_id": "run_abc",
+  "task_id": "call_research",
+  "parent_tool_call_id": "call_research",
+  "status": "running",
+  "depth": 1
+}
+```
+
+### `stream_reset`
+
+The requested `after_seq` cursor cannot be replayed from the server buffer.
+
+```json
+{"type": "stream_reset", "reason": "replay_gap"}
 ```
 
 ## Approval flow
