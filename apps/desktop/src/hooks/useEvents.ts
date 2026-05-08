@@ -36,6 +36,8 @@ const ITEM_STAGGER_MS = 40;
 const MAX_STAGGER_LAG_MS = 120;
 let nextItemRenderAt = 0;
 
+const pendingResultPatches = new Map<string, Partial<ActivityItem>>();
+
 function enqueueActivityItem(aid: string, item: ActivityItem) {
   const now = Date.now();
   const queued = nextItemRenderAt + ITEM_STAGGER_MS;
@@ -45,7 +47,12 @@ function enqueueActivityItem(aid: string, item: ActivityItem) {
   const delay = renderAt - now;
   const apply = () => {
     const state = getState();
-    if (state.messages.get(aid)?.activity) {
+    if (!state.messages.get(aid)?.activity) return;
+    const pendingPatch = pendingResultPatches.get(item.id);
+    if (pendingPatch) {
+      pendingResultPatches.delete(item.id);
+      state.appendActivityItem(aid, { ...item, ...pendingPatch });
+    } else {
       state.appendActivityItem(aid, item);
     }
   };
@@ -233,15 +240,23 @@ export function handleServerEvent(event: ServerEvent) {
         depth: pending.depth || undefined,
         parentToolId: pending.parentId ?? undefined,
       };
+      const pendingPatch = pendingResultPatches.get(item.id);
+      if (pendingPatch) {
+        pendingResultPatches.delete(item.id);
+        Object.assign(item, pendingPatch);
+      }
       const aid = s.activeActivityId;
       if (!aid) {
         const newId = crypto.randomUUID();
-        s.insertMessageBefore({
-          id: newId,
-          role: "activity",
-          content: "",
-          activity: { items: [item], label: "Calling", done: false },
-        }, activityInsertAnchor());
+        s.insertMessageBefore(
+          {
+            id: newId,
+            role: "activity",
+            content: "",
+            activity: { items: [item], label: "Calling", done: false },
+          },
+          activityInsertAnchor(),
+        );
         s.setActiveActivityId(newId);
         nextItemRenderAt = Date.now();
       } else {
@@ -258,7 +273,8 @@ export function handleServerEvent(event: ServerEvent) {
       if (typeof event.duration_ms === "number" && event.duration_ms > 0) {
         patch.durationMs = event.duration_ms;
       }
-      s.mergeActivityItem(event.tool_call_id, patch);
+      const merged = s.mergeActivityItem(event.tool_call_id, patch);
+      if (!merged) pendingResultPatches.set(event.tool_call_id, patch);
       return;
     }
 
@@ -393,6 +409,7 @@ export function useEvents(sessionId: string | null) {
  *  half-built tool calls or a stale stagger queue behind. */
 function resetStreamState(): void {
   pendingToolCalls.clear();
+  pendingResultPatches.clear();
   activeAssistantMessageId = null;
   nextItemRenderAt = 0;
 }

@@ -270,7 +270,7 @@ interface Actions {
   setConnectionSaving: (saving: boolean) => void;
   setActiveActivityId: (id: string | null) => void;
   appendActivityItem: (activityId: string, item: ActivityItem) => void;
-  mergeActivityItem: (itemId: string, patch: Partial<ActivityItem>) => void;
+  mergeActivityItem: (itemId: string, patch: Partial<ActivityItem>) => boolean;
   finalizeActivity: (activityId: string, label?: string) => void;
   setCurrentRunId: (runId: string | null) => void;
   setSkipApprovals: (skip: boolean) => void;
@@ -580,10 +580,9 @@ export const useStore = create<State & Actions>((set) => ({
       return { messages };
     }),
 
-  mergeActivityItem: (itemId, patch) =>
+  mergeActivityItem: (itemId, patch) => {
+    let didTouch = false;
     set((s) => {
-      // Tool results may arrive after the next activity has already opened —
-      // scan all activity messages for the matching item id.
       let touched = false;
       const messages = new Map(s.messages);
       for (const [mid, msg] of messages) {
@@ -596,8 +595,11 @@ export const useStore = create<State & Actions>((set) => ({
         touched = true;
         break;
       }
+      didTouch = touched;
       return touched ? { messages } : s;
-    }),
+    });
+    return didTouch;
+  },
 
   finalizeActivity: (activityId, label = "Called") =>
     set((s) => {

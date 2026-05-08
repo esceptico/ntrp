@@ -35,3 +35,27 @@ test("continues assistant content by message id without moving prior text below 
   expect(state.messages.get("assistant-1")?.content).toBe("hello world");
   expect(roles).toEqual(["assistant", "activity"]);
 });
+
+test("keeps tool results when result arrives before delayed burst item renders", async () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", timestamp: 1 });
+  handleServerEvent({ type: "TOOL_CALL_START", tool_call_id: "tool-1", tool_call_name: "ReadFile", timestamp: 2 });
+  handleServerEvent({ type: "TOOL_CALL_END", tool_call_id: "tool-1", timestamp: 3 });
+  handleServerEvent({ type: "TOOL_CALL_START", tool_call_id: "tool-2", tool_call_name: "ListFiles", timestamp: 4 });
+  handleServerEvent({ type: "TOOL_CALL_END", tool_call_id: "tool-2", timestamp: 5 });
+  handleServerEvent({
+    type: "TOOL_CALL_RESULT",
+    tool_call_id: "tool-2",
+    name: "ListFiles",
+    content: "second result",
+    preview: "second result",
+    timestamp: 6,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  const state = getState();
+  const activityId = state.order.find((id) => state.messages.get(id)?.role === "activity");
+  expect(activityId).toBeTruthy();
+  const item = state.messages.get(activityId!)?.activity?.items.find((it) => it.id === "tool-2");
+  expect(item?.result).toBe("second result");
+});
