@@ -176,6 +176,27 @@ async def test_call_llm_closes_started_text_when_stream_raises():
 
 
 @pytest.mark.asyncio
+async def test_stream_closes_started_text_when_completion_response_is_missing():
+    class MissingResponseAfterTextLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None):
+            yield "partial"
+
+        async def complete(self, *args, **kwargs):
+            raise NotImplementedError
+
+    agent = _make_agent(MissingResponseAfterTextLLM(), FakeExecutor({}))
+    events = []
+
+    with pytest.raises(RuntimeError, match="LLM stream ended without a CompletionResponse"):
+        async for event in agent.stream(_msgs()):
+            events.append(event)
+
+    assert [type(event) for event in events] == [TextStarted, TextDelta, TextEnded]
+    assert events[1].content == "partial"
+    assert events[2].content == "partial"
+
+
+@pytest.mark.asyncio
 async def test_call_llm_closes_started_text_when_cancelled():
     blocked = asyncio.Event()
 

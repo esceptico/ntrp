@@ -191,9 +191,23 @@ class Agent:
             text_id = f"text-{uuid4().hex[:10]}"
             text_started = False
             text_chunks: list[str] = []
+            text_ended = False
             reasoning_id = f"reasoning-{uuid4().hex[:10]}"
             reasoning_started = False
             reasoning_parts: list[str] = []
+
+            def close_text(content: str | None = None) -> TextEnded | None:
+                nonlocal text_ended
+                if not text_started or text_ended:
+                    return None
+                text_ended = True
+                return TextEnded(
+                    depth=self.current_depth,
+                    parent_id=self.parent_id,
+                    message_id=text_id,
+                    content="".join(text_chunks) if content is None else content,
+                )
+
             kwargs = {"tool_choice": tool_choice}
             if reasoning_effort is not None:
                 kwargs["reasoning_effort"] = reasoning_effort
@@ -236,27 +250,19 @@ class Agent:
                 elif isinstance(item, CompletionResponse):
                     response = item
         except asyncio.CancelledError:
-            if text_started:
-                yield TextEnded(
-                    depth=self.current_depth,
-                    parent_id=self.parent_id,
-                    message_id=text_id,
-                    content="".join(text_chunks),
-                )
+            if event := close_text():
+                yield event
             raise
         except Exception as exc:
-            if text_started:
-                yield TextEnded(
-                    depth=self.current_depth,
-                    parent_id=self.parent_id,
-                    message_id=text_id,
-                    content="".join(text_chunks),
-                )
+            if event := close_text():
+                yield event
             if self.hooks.on_error:
                 await self.hooks.on_error(exc)
             raise
 
         if response is None:
+            if event := close_text():
+                yield event
             raise RuntimeError("LLM stream ended without a CompletionResponse")
 
         self._last_response = response
@@ -275,13 +281,7 @@ class Agent:
         else:
             self._last_text_id = None
         messages.append(assistant_msg)
-        if text_started:
-            final_text = response.choices[0].message.content or ""
-            yield TextEnded(
-                depth=self.current_depth,
-                parent_id=self.parent_id,
-                message_id=text_id,
-                content=final_text,
-            )
+        if event := close_text(response.choices[0].message.content or ""):
+            yield event
         if self.hooks.on_response:
             await self.hooks.on_response(response)
