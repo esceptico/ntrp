@@ -296,9 +296,11 @@ button:not(:disabled):active {
 .scroll-thin::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
 .scroll-thin:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.08); }
 
-.scroll-messages::-webkit-scrollbar { width: 10px; }
-.scroll-messages::-webkit-scrollbar-thumb { background: transparent; border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
-.scroll-messages:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.12); background-clip: padding-box; border: 2px solid transparent; }
+/* Messages list scrollbar is replaced by the custom progress notch
+   rendered by Messages.tsx — hide the native one to avoid the two
+   stacking on hover. */
+.scroll-messages { scrollbar-width: none; }
+.scroll-messages::-webkit-scrollbar { display: none; }
 
 /* ─── Markdown content ─────────────────────────────────────── */
 .md > *:first-child { margin-top: 0; }
@@ -858,7 +860,6 @@ button:not(:disabled):active {
 
 /* Scrollbar thumbs: lighter for visibility */
 :root.dark .scroll-thin:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); }
-:root.dark .scroll-messages:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); background-clip: padding-box; }
 
 /* Selection */
 :root.dark ::selection { background: rgba(231, 138, 77, 0.28); }
