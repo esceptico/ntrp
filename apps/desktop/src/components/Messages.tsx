@@ -41,69 +41,6 @@ export function Messages() {
     resize: { damping: 0.92, stiffness: 0.025, mass: 1.5 },
   });
   const topAnchorRef = useRef<{ height: number; top: number } | null>(null);
-  const progressTrackRef = useRef<HTMLDivElement>(null);
-  const progressRef = useRef<HTMLDivElement>(null);
-
-  // Updates the right-edge scroll-progress notch in place — DOM-only so
-  // it doesn't trigger a React render on every scroll frame. The track
-  // (8px wide) catches the drag; the visible thumb sits inside it and
-  // is animated via transform/height for cheap updates.
-  const updateProgress = useCallback(() => {
-    const el = scrollRef.current;
-    const ind = progressRef.current;
-    const track = progressTrackRef.current;
-    if (!el || !ind || !track) return;
-    const overflow = el.scrollHeight - el.clientHeight;
-    if (overflow <= 0) {
-      ind.style.opacity = "0";
-      track.style.pointerEvents = "none";
-      return;
-    }
-    const minThumb = 24;
-    const thumbHeight = Math.max(minThumb, (el.clientHeight / el.scrollHeight) * el.clientHeight);
-    const trackHeight = el.clientHeight - thumbHeight;
-    const thumbTop = (el.scrollTop / overflow) * trackHeight;
-    ind.style.height = `${thumbHeight}px`;
-    ind.style.transform = `translateY(${thumbTop}px)`;
-    ind.style.opacity = "1";
-    track.style.pointerEvents = "auto";
-  }, [scrollRef]);
-
-  // Drag the thumb to scroll. delta_y on the track maps to delta scroll
-  // by the inverse of (overflow / track_height) — so dragging the thumb
-  // a fixed number of pixels traverses a corresponding chunk of the
-  // total scroll range.
-  const onProgressDrag = useCallback(
-    (event: React.MouseEvent) => {
-      event.preventDefault();
-      const el = scrollRef.current;
-      if (!el) return;
-      const overflow = el.scrollHeight - el.clientHeight;
-      if (overflow <= 0) return;
-      const minThumb = 24;
-      const thumbHeight = Math.max(minThumb, (el.clientHeight / el.scrollHeight) * el.clientHeight);
-      const trackHeight = el.clientHeight - thumbHeight;
-      const ratio = trackHeight > 0 ? overflow / trackHeight : 0;
-      const startY = event.clientY;
-      const startScrollTop = el.scrollTop;
-
-      document.body.style.cursor = "grabbing";
-      document.body.style.userSelect = "none";
-
-      const onMove = (mv: MouseEvent) => {
-        el.scrollTop = startScrollTop + (mv.clientY - startY) * ratio;
-      };
-      const onUp = () => {
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-        document.removeEventListener("mousemove", onMove);
-        document.removeEventListener("mouseup", onUp);
-      };
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
-    },
-    [scrollRef],
-  );
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -117,20 +54,7 @@ export function Messages() {
     if (bottomGap < 120 && historyPaging.hasMoreAfter && !historyPaging.loadingAfter) {
       void loadNewerHistory();
     }
-
-    updateProgress();
-  }, [historyPaging.hasMoreAfter, historyPaging.hasMoreBefore, historyPaging.loadingAfter, historyPaging.loadingBefore, scrollRef, updateProgress]);
-
-  // Re-measure the progress notch when content height changes (history
-  // pages loading, streaming text growing). Cheaper than reacting to
-  // every store update; the observer fires once per layout.
-  useEffect(() => {
-    const content = contentRef.current;
-    if (!content) return;
-    const obs = new ResizeObserver(updateProgress);
-    obs.observe(content);
-    return () => obs.disconnect();
-  }, [contentRef, updateProgress]);
+  }, [historyPaging.hasMoreAfter, historyPaging.hasMoreBefore, historyPaging.loadingAfter, historyPaging.loadingBefore, scrollRef]);
 
   // First time content lands after mount (loadHistory fills `order`),
   // snap instantly. Without this, the library treats the empty→full
@@ -222,19 +146,6 @@ export function Messages() {
               )}
           <CompactionIndicator />
         </div>
-      </div>
-      <div
-        ref={progressTrackRef}
-        onMouseDown={onProgressDrag}
-        className="absolute top-0 right-0 w-2 h-full group/scroll cursor-grab active:cursor-grabbing"
-        style={{ pointerEvents: "none" }}
-      >
-        <div
-          ref={progressRef}
-          aria-hidden
-          className="absolute top-0 right-0.5 w-[2px] rounded-full bg-line-strong/60 group-hover/scroll:w-[6px] group-hover/scroll:bg-line-strong/90 group-active/scroll:w-[6px] group-active/scroll:bg-line-strong transition-[width,background-color,opacity] duration-150 pointer-events-none"
-          style={{ opacity: 0 }}
-        />
       </div>
       <AnimatePresence>
         {!isNearBottom && order.length > 0 && (

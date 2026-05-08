@@ -296,11 +296,18 @@ button:not(:disabled):active {
 .scroll-thin::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
 .scroll-thin:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.08); }
 
-/* Messages list scrollbar is replaced by the custom progress notch
-   rendered by Messages.tsx — hide the native one to avoid the two
-   stacking on hover. */
-.scroll-messages { scrollbar-width: none; }
-.scroll-messages::-webkit-scrollbar { display: none; }
+/* Messages list scrollbar — always visible, draggable, slim. */
+.scroll-messages::-webkit-scrollbar { width: 8px; }
+.scroll-messages::-webkit-scrollbar-track { background: transparent; }
+.scroll-messages::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.16);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 4px;
+}
+.scroll-messages::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.32); background-clip: padding-box; }
+:root.dark .scroll-messages::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); background-clip: padding-box; }
+:root.dark .scroll-messages::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.28); background-clip: padding-box; }
 
 /* ─── Markdown content ─────────────────────────────────────── */
 .md > *:first-child { margin-top: 0; }
