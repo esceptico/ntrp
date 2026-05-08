@@ -105,6 +105,52 @@ async def test_subscribe_with_replay_after_seq_returns_only_later_records():
 
 
 @pytest.mark.asyncio
+async def test_subscribe_with_replay_reports_gap_for_old_cursor():
+    bus = SessionBus(session_id="sess-1")
+    await bus.emit(ThinkingEvent(status="a"))
+    await bus.emit(ThinkingEvent(status="b"))
+    bus.clear_buffer()
+    await bus.emit(ThinkingEvent(status="c"))
+
+    subscription = bus.subscribe_with_replay(after_seq=1)
+    snapshot, queue = subscription
+
+    assert subscription.replay_gap is True
+    assert _seqs(snapshot) == [3]
+    assert queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_subscribe_with_replay_reports_no_gap_for_satisfiable_cursor():
+    bus = SessionBus(session_id="sess-1")
+    await bus.emit(ThinkingEvent(status="a"))
+    await bus.emit(ThinkingEvent(status="b"))
+    await bus.emit(ThinkingEvent(status="c"))
+
+    subscription = bus.subscribe_with_replay(after_seq=1)
+    snapshot, queue = subscription
+
+    assert subscription.replay_gap is False
+    assert _seqs(snapshot) == [2, 3]
+    assert queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_subscribe_with_replay_reports_no_gap_without_cursor():
+    bus = SessionBus(session_id="sess-1")
+    await bus.emit(ThinkingEvent(status="a"))
+    bus.clear_buffer()
+    await bus.emit(ThinkingEvent(status="b"))
+
+    subscription = bus.subscribe_with_replay()
+    snapshot, queue = subscription
+
+    assert subscription.replay_gap is False
+    assert _seqs(snapshot) == [2]
+    assert queue.empty()
+
+
+@pytest.mark.asyncio
 async def test_clear_buffer_drops_replay_state_without_resetting_sequence():
     """Buffer is wiped at every checkpoint save so disk and buffer never
     overlap. After clear, new subscribers get no replay — only live."""

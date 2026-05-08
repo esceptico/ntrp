@@ -37,6 +37,7 @@ const MAX_STAGGER_LAG_MS = 120;
 let nextItemRenderAt = 0;
 
 const pendingResultPatches = new Map<string, Partial<ActivityItem>>();
+const replayGapReloadingSessions = new Set<string>();
 
 function bufferActivityPatch(itemId: string, patch: Partial<ActivityItem>) {
   pendingResultPatches.set(itemId, {
@@ -83,6 +84,9 @@ const pendingToolCalls = new Map<
 
 let activeAssistantMessageId: string | null = null;
 const lastEventSeqBySession = new Map<string, number>();
+
+type ServerEventEffect = { type: "replay_gap"; sessionId: string };
+type HistoryReloader = (sessionId: string) => Promise<void>;
 
 export function lastEventSeqForSession(sessionId: string): number | undefined {
   return lastEventSeqBySession.get(sessionId);
@@ -149,7 +153,37 @@ function activityInsertAnchor(): string | null {
   return message.content.trim().length === 0 ? activeAssistantMessageId : null;
 }
 
-export function handleServerEvent(event: ServerEvent) {
+async function defaultReplayGapHistoryReload(sessionId: string): Promise<void> {
+  const { loadHistory } = await import("../actions");
+  await loadHistory(sessionId);
+}
+
+export function reloadHistoryAfterReplayGap(
+  sessionId: string,
+  reload: HistoryReloader = defaultReplayGapHistoryReload,
+): Promise<void> | null {
+  if (replayGapReloadingSessions.has(sessionId)) return null;
+  replayGapReloadingSessions.add(sessionId);
+  const task = reload(sessionId)
+    .catch((error) => {
+      setState({ error: error instanceof Error ? error.message : String(error) });
+    })
+    .finally(() => {
+      replayGapReloadingSessions.delete(sessionId);
+    });
+  return task;
+}
+
+export function handleIncomingServerEvent(
+  event: ServerEvent,
+  reload?: HistoryReloader,
+): Promise<void> | null {
+  const effect = handleServerEvent(event);
+  if (effect?.type !== "replay_gap") return null;
+  return reloadHistoryAfterReplayGap(effect.sessionId, reload);
+}
+
+export function handleServerEvent(event: ServerEvent): ServerEventEffect | undefined {
   if (shouldDropServerEvent(event)) return;
 
   const s = getState();
@@ -193,6 +227,15 @@ export function handleServerEvent(event: ServerEvent) {
       activeAssistantMessageId = null;
       setState({ running: false, currentRunId: null });
       return;
+    case "stream_reset": {
+      if (event.reason !== "replay_gap") return;
+      resetStreamState();
+      s.setActiveActivityId(null);
+      const resetSessionId = event.session_id ?? s.currentSessionId;
+      if (!resetSessionId) return;
+      forgetEventSeqForSession(resetSessionId);
+      return { type: "replay_gap", sessionId: resetSessionId };
+    }
 
     // ─── Text messages ───────────────────────────────────────────────
     // Sub-agent text (depth > 0) is the inner agent's output — the parent
@@ -400,7 +443,7 @@ export function useEvents(sessionId: string | null) {
           setState({ error: payload.error });
           return;
         }
-        if (payload.event) handleServerEvent(payload.event as ServerEvent);
+        if (payload.event) void handleIncomingServerEvent(payload.event as ServerEvent);
       });
 
       void desktopEvents
@@ -447,7 +490,7 @@ export function useEvents(sessionId: string | null) {
             for (const line of lines) {
               if (!line.startsWith("data: ")) continue;
               try {
-                handleServerEvent(JSON.parse(line.slice(6)) as ServerEvent);
+                void handleIncomingServerEvent(JSON.parse(line.slice(6)) as ServerEvent);
               } catch {
                 /* keep-alive */
               }
@@ -482,4 +525,8 @@ export const resetStreamStateForTest = resetStreamState;
 
 export function resetEventSeqStateForTest(): void {
   lastEventSeqBySession.clear();
+}
+
+export function resetReplayGapReloadStateForTest(): void {
+  replayGapReloadingSessions.clear();
 }

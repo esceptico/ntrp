@@ -22,6 +22,17 @@ class StreamRecord:
     event: SSEEvent
 
 
+@dataclass(frozen=True, slots=True)
+class ReplaySubscription:
+    snapshot: list[StreamRecord]
+    queue: asyncio.Queue[StreamRecord | None]
+    replay_gap: bool = False
+
+    def __iter__(self):
+        yield self.snapshot
+        yield self.queue
+
+
 def stream_record_to_sse_string(session_id: str, record: StreamRecord) -> str:
     sse = record.event.to_sse()
     payload = json.loads(sse["data"])
@@ -64,17 +75,24 @@ class SessionBus:
 
     def subscribe_with_replay(
         self, after_seq: int | None = None
-    ) -> tuple[list[StreamRecord], asyncio.Queue[StreamRecord | None]]:
+    ) -> ReplaySubscription:
         """Atomically snapshot the replay buffer AND register a live queue.
         emit() never awaits, so no event can interleave between snapshot and
         queue registration."""
         if after_seq is None:
             snapshot = list(self._recent)
+            replay_gap = False
         else:
             snapshot = [record for record in self._recent if record.seq > after_seq]
+            replay_gap = self._has_replay_gap(after_seq)
         queue: asyncio.Queue[StreamRecord | None] = asyncio.Queue(maxsize=self.subscriber_queue_size)
         self._subscribers.append(queue)
-        return snapshot, queue
+        return ReplaySubscription(snapshot=snapshot, queue=queue, replay_gap=replay_gap)
+
+    def _has_replay_gap(self, after_seq: int) -> bool:
+        if self._recent:
+            return after_seq < self._recent[0].seq - 1
+        return after_seq < self._next_seq - 1
 
     def subscribe(self) -> asyncio.Queue[StreamRecord | None]:
         """Live-only subscription — for feeds that don't replay (e.g. the

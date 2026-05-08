@@ -97,6 +97,7 @@ export type ServerEvent = CommonServerEventFields & (
   // ─── ntrp-specific (non-AG-UI canonical) ───────────────────────────
   | { type: "approval_needed"; tool_id: string; name: string; path?: string | null; diff?: string | null; content_preview?: string | null }
   | { type: "background_task"; command: string; status: string; detail?: string }
+  | { type: "stream_reset"; reason: "replay_gap" | string }
   | { type: "task_started"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; name?: string; summary?: string; depth?: number }
   | { type: "task_progress"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; status?: string; summary?: string; depth?: number }
   | { type: "task_finished"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; status: "completed" | "failed" | "cancelled"; summary?: string; depth?: number }

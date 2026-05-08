@@ -59,6 +59,7 @@ class EventType(StrEnum):
     RUN_CANCELLED = "run_cancelled"
     RUN_BACKGROUNDED = "run_backgrounded"
     MESSAGE_INGESTED = "message_ingested"
+    STREAM_RESET = "stream_reset"
     TASK_STARTED = "task_started"
     TASK_PROGRESS = "task_progress"
     TASK_FINISHED = "task_finished"
@@ -335,6 +336,12 @@ class MessageIngestedEvent(SSEEvent):
     type: EventType = field(default=EventType.MESSAGE_INGESTED, init=False)
     client_id: str = ""
     run_id: str = ""
+
+
+@dataclass(frozen=True)
+class StreamResetEvent(SSEEvent):
+    type: EventType = field(default=EventType.STREAM_RESET, init=False)
+    reason: str = ""
 
 
 @dataclass(frozen=True)

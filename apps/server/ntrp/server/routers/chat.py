@@ -5,8 +5,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ntrp.events.sse import TextDeltaEvent
-from ntrp.server.bus import BusRegistry, stream_record_to_sse_string
+from ntrp.events.sse import StreamResetEvent, TextDeltaEvent
+from ntrp.server.bus import BusRegistry, StreamRecord, stream_record_to_sse_string
 from ntrp.server.deps import get_bus_registry, require_run_registry
 from ntrp.server.middleware import SSEStreamingResponse
 from ntrp.server.runtime import Runtime, get_runtime
@@ -34,13 +34,24 @@ async def _event_stream(
     after_seq: int | None = None,
 ) -> AsyncGenerator[str]:
     bus = bus_registry.get_or_create(session_id)
-    snapshot, queue = bus.subscribe_with_replay(after_seq=after_seq)
+    subscription = bus.subscribe_with_replay(after_seq=after_seq)
+    snapshot, queue = subscription
     last_event_at = time.monotonic()
 
     def should_emit(event) -> bool:
         return stream or not isinstance(event, TextDeltaEvent)
 
     try:
+        if subscription.replay_gap and after_seq is not None:
+            reset_record = StreamRecord(
+                seq=after_seq + 1,
+                session_id=session_id,
+                event=StreamResetEvent(reason="replay_gap"),
+            )
+            yield stream_record_to_sse_string(session_id, reset_record)
+            last_event_at = time.monotonic()
+            await asyncio.sleep(0)
+
         for record in snapshot:
             event = record.event
             if not should_emit(event):

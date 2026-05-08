@@ -2,9 +2,11 @@ import { beforeEach, expect, test } from "bun:test";
 import {
   eventStreamUrl,
   forgetEventSeqForSession,
+  handleIncomingServerEvent,
   handleServerEvent,
   lastEventSeqForSession,
   resetEventSeqStateForTest,
+  resetReplayGapReloadStateForTest,
   resetStreamStateForTest,
 } from "../src/hooks/useEvents.js";
 import { loadHistory, stopRun } from "../src/actions.js";
@@ -13,6 +15,7 @@ import { getState, setState } from "../src/store.js";
 beforeEach(() => {
   resetStreamStateForTest();
   resetEventSeqStateForTest();
+  resetReplayGapReloadStateForTest();
   setState({
     messages: new Map(),
     order: [],
@@ -227,6 +230,58 @@ test("exposes the last event sequence for bridge reconnects", () => {
   });
 
   expect(lastEventSeqForSession("bridge-session")).toBe(44);
+});
+
+test("stream_reset clears transient buffers and schedules one history reload", async () => {
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-reset",
+    session_id: "reset-session",
+    seq: 1,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-reset",
+    tool_call_name: "ReadFile",
+    session_id: "reset-session",
+    seq: 2,
+  });
+
+  const resetEvent = {
+    type: "stream_reset",
+    reason: "replay_gap",
+    session_id: "reset-session",
+    seq: 3,
+  } as const;
+
+  let releaseReload!: () => void;
+  const reloadGate = new Promise<void>((resolve) => {
+    releaseReload = resolve;
+  });
+  const reloads: string[] = [];
+  const firstReload = handleIncomingServerEvent(resetEvent, async (sessionId) => {
+    reloads.push(sessionId);
+    await reloadGate;
+  });
+  const secondReload = handleIncomingServerEvent(resetEvent, async (sessionId) => {
+    reloads.push(sessionId);
+  });
+
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-reset",
+    session_id: "reset-session",
+    seq: 4,
+  });
+
+  expect(lastEventSeqForSession("reset-session")).toBe(4);
+  expect(getState().activeActivityId).toBeNull();
+  expect(getState().order).toEqual([]);
+  expect(secondReload).toBeNull();
+
+  releaseReload();
+  await firstReload;
+  expect(reloads).toEqual(["reset-session"]);
 });
 
 test("stopRun clears running state after successful cancel request", async () => {
