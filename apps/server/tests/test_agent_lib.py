@@ -22,6 +22,8 @@ from ntrp.agent import (
     StopReason,
     TextBlock,
     TextDelta,
+    TextEnded,
+    TextStarted,
     ToolCall,
     ToolChoiceMode,
     ToolMeta,
@@ -142,6 +144,68 @@ async def test_stream_yields_text_deltas_then_result():
     assert any(isinstance(e, TextDelta) and e.content == "answer" for e in events)
     assert isinstance(events[-1], Result)
     assert events[-1].text == "answer"
+
+
+@pytest.mark.asyncio
+async def test_call_llm_closes_started_text_when_stream_raises():
+    class FailingAfterTextLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None):
+            yield "partial"
+            raise RuntimeError("boom")
+
+        async def complete(self, *args, **kwargs):
+            raise NotImplementedError
+
+    errors = []
+
+    async def on_error(exc):
+        errors.append(exc)
+
+    agent = _make_agent(FailingAfterTextLLM(), FakeExecutor({}), hooks=AgentHooks(on_error=on_error))
+    events = []
+
+    with pytest.raises(RuntimeError, match="boom"):
+        async for event in agent._call_llm(_msgs(), "test", [], ToolChoiceMode.AUTO, None):
+            events.append(event)
+
+    assert [type(event) for event in events] == [TextStarted, TextDelta, TextEnded]
+    assert events[1].content == "partial"
+    assert events[2].content == "partial"
+    assert len(errors) == 1
+    assert str(errors[0]) == "boom"
+
+
+@pytest.mark.asyncio
+async def test_call_llm_closes_started_text_when_cancelled():
+    blocked = asyncio.Event()
+
+    class BlockingAfterTextLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None):
+            yield "partial"
+            blocked.set()
+            await asyncio.Event().wait()
+
+        async def complete(self, *args, **kwargs):
+            raise NotImplementedError
+
+    agent = _make_agent(BlockingAfterTextLLM(), FakeExecutor({}))
+    events = []
+
+    async def consume():
+        async for event in agent._call_llm(_msgs(), "test", [], ToolChoiceMode.AUTO, None):
+            events.append(event)
+
+    task = asyncio.create_task(consume())
+    await asyncio.wait_for(blocked.wait(), timeout=1)
+    await asyncio.sleep(0)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert [type(event) for event in events] == [TextStarted, TextDelta, TextEnded]
+    assert events[1].content == "partial"
+    assert events[2].content == "partial"
 
 
 @pytest.mark.asyncio

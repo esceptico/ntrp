@@ -190,6 +190,7 @@ class Agent:
             # the saved message so callers (e.g. branching) can reference it.
             text_id = f"text-{uuid4().hex[:10]}"
             text_started = False
+            text_chunks: list[str] = []
             reasoning_id = f"reasoning-{uuid4().hex[:10]}"
             reasoning_started = False
             reasoning_parts: list[str] = []
@@ -207,6 +208,7 @@ class Agent:
                             parent_id=self.parent_id,
                             message_id=text_id,
                         )
+                    text_chunks.append(item)
                     yield TextDelta(
                         depth=self.current_depth,
                         parent_id=self.parent_id,
@@ -233,7 +235,23 @@ class Agent:
                     )
                 elif isinstance(item, CompletionResponse):
                     response = item
+        except asyncio.CancelledError:
+            if text_started:
+                yield TextEnded(
+                    depth=self.current_depth,
+                    parent_id=self.parent_id,
+                    message_id=text_id,
+                    content="".join(text_chunks),
+                )
+            raise
         except Exception as exc:
+            if text_started:
+                yield TextEnded(
+                    depth=self.current_depth,
+                    parent_id=self.parent_id,
+                    message_id=text_id,
+                    content="".join(text_chunks),
+                )
             if self.hooks.on_error:
                 await self.hooks.on_error(exc)
             raise
@@ -249,14 +267,6 @@ class Agent:
             yield ReasoningBlock(depth=self.current_depth, parent_id=self.parent_id, content=reasoning)
         assistant_msg = normalize_assistant_message(response.choices[0].message)
         if text_started:
-            final_text = response.choices[0].message.content or ""
-            yield TextEnded(
-                depth=self.current_depth,
-                parent_id=self.parent_id,
-                message_id=text_id,
-                content=final_text,
-            )
-        if text_started:
             # Persist the same id we streamed, so the desktop client's
             # locally-keyed message and the saved row share an id. Branching
             # by message id then doesn't need a history refresh.
@@ -265,5 +275,13 @@ class Agent:
         else:
             self._last_text_id = None
         messages.append(assistant_msg)
+        if text_started:
+            final_text = response.choices[0].message.content or ""
+            yield TextEnded(
+                depth=self.current_depth,
+                parent_id=self.parent_id,
+                message_id=text_id,
+                content=final_text,
+            )
         if self.hooks.on_response:
             await self.hooks.on_response(response)
