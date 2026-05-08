@@ -34,3 +34,22 @@ test("keeps one loaded activity group across reasoning-only history messages", (
     "tool-2",
   ]);
 });
+
+test("keeps assistant content before tool activity when history row has both", () => {
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "send it", id: "user-1" },
+    {
+      role: "assistant",
+      content: "I'll draft/send it to yourself.",
+      id: "assistant-1",
+      tool_calls: [{ id: "tool-1", name: "SendEmail", arguments: '{"account":"me"}' }],
+    },
+    { role: "tool", content: "sent", id: "tool-result-1", tool_call_id: "tool-1" },
+  ];
+
+  const items = historyMessagesToUi(messages, null);
+
+  expect(items.map((item) => item.role)).toEqual(["user", "assistant", "activity"]);
+  expect(items[1].content).toBe("I'll draft/send it to yourself.");
+  expect(items[2].activity?.items[0].result).toBe("sent");
+});

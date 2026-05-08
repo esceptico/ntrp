@@ -3,10 +3,11 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from ntrp.events.sse import MessageIngestedEvent
+from ntrp.events.sse import MessageIngestedEvent, TextDeltaEvent
 from ntrp.server.app import app
 from ntrp.server.bus import BusRegistry, SessionBus
 from ntrp.server.deps import get_bus_registry
+from ntrp.server.routers.chat import _event_stream
 from ntrp.server.runtime import get_runtime
 from ntrp.server.schemas import ChatRequest
 from ntrp.server.state import RunRegistry, RunState, RunStatus
@@ -34,6 +35,28 @@ def test_chat_request_accepts_client_id():
 def test_chat_request_client_id_optional():
     req = ChatRequest(message="hi")
     assert req.client_id is None
+
+
+@pytest.mark.asyncio
+async def test_event_stream_uses_text_delta_message_id_for_boundaries():
+    buses = BusRegistry()
+    bus = buses.get_or_create("sess-1")
+    await bus.emit(TextDeltaEvent(message_id="text-1", delta="hello"))
+
+    stream = _event_stream("sess-1", buses, RunRegistry(), stream=True)
+    try:
+        start = await anext(stream)
+        content = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    start_payload = json.loads(start.split("data: ", 1)[1].strip())
+    content_payload = json.loads(content.split("data: ", 1)[1].strip())
+
+    assert start_payload["type"] == "TEXT_MESSAGE_START"
+    assert start_payload["message_id"] == "text-1"
+    assert content_payload["type"] == "TEXT_MESSAGE_CONTENT"
+    assert content_payload["message_id"] == "text-1"
 
 
 def test_expand_skill_command_injects_skill_path(tmp_path):

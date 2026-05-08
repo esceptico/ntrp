@@ -38,7 +38,7 @@ export function Messages() {
   // stiffness + high damping so scroll trails the latest content gently
   // instead of snapping or overshooting. Spec: docs/internal/apple-design-
   // intel.md and https://github.com/StonkDog/use-stick-to-bottom.
-  const { scrollRef, contentRef, scrollToBottom, isNearBottom } = useStickToBottom({
+  const { scrollRef, contentRef, scrollToBottom, stopScroll, isNearBottom } = useStickToBottom({
     initial: "instant",
     resize: { damping: 0.92, stiffness: 0.025, mass: 1.5 },
   });
@@ -145,7 +145,7 @@ export function Messages() {
               ? <EmptyState />
               : segments.map((seg) =>
                   seg.userId
-                    ? <TurnGroup key={seg.userId} userId={seg.userId} childIds={seg.childIds} />
+                    ? <TurnGroup key={seg.userId} userId={seg.userId} childIds={seg.childIds} onManualResize={stopScroll} />
                     : <div key="preamble" className="contents">{seg.childIds.map((id) => <Message key={id} id={id} />)}</div>
                 )}
           <CompactionIndicator />

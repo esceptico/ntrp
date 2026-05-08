@@ -52,9 +52,10 @@ async def _event_stream(
     # whether the events came from the buffer or the live stream.
     in_text_message = False
     msg_counter = 0
+    text_message_id: str | None = None
 
     def _process(event) -> list[str]:
-        nonlocal in_text_message, msg_counter, last_event_at
+        nonlocal in_text_message, msg_counter, text_message_id, last_event_at
         is_text = isinstance(event, TextDeltaEvent | TextEvent)
         # Passthrough events fly past the text-message-boundary state machine
         # without closing an open text block. Anything not in this list will
@@ -77,11 +78,13 @@ async def _event_stream(
         chunks: list[str] = []
         if is_text and not in_text_message:
             msg_counter += 1
+            text_message_id = getattr(event, "message_id", "") or f"msg-{msg_counter}"
             in_text_message = True
-            chunks.append(TextMessageStartEvent(message_id=f"msg-{msg_counter}").to_sse_string())
+            chunks.append(TextMessageStartEvent(message_id=text_message_id).to_sse_string())
         elif not is_text and not is_passthrough and in_text_message:
             in_text_message = False
-            chunks.append(TextMessageEndEvent(message_id=f"msg-{msg_counter}").to_sse_string())
+            chunks.append(TextMessageEndEvent(message_id=text_message_id or f"msg-{msg_counter}").to_sse_string())
+            text_message_id = None
 
         if not stream and isinstance(event, TextDeltaEvent):
             return chunks
@@ -110,7 +113,7 @@ async def _event_stream(
 
             if event is None:
                 if in_text_message:
-                    yield TextMessageEndEvent(message_id=f"msg-{msg_counter}").to_sse_string()
+                    yield TextMessageEndEvent(message_id=text_message_id or f"msg-{msg_counter}").to_sse_string()
                 break
 
             for chunk in _process(event):

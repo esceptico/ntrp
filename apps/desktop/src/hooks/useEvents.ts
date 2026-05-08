@@ -109,9 +109,11 @@ function appendAssistantDelta(id: string, delta: string, startedAt: number): voi
 function activityInsertAnchor(): string | null {
   if (!activeAssistantMessageId) return null;
   const state = getState();
-  return state.messages.get(activeAssistantMessageId)?.role === "assistant"
-    ? activeAssistantMessageId
-    : null;
+  const message = state.messages.get(activeAssistantMessageId);
+  if (message?.role !== "assistant") return null;
+  // Keep a bare TEXT_MESSAGE_START placeholder behind tool activity, but
+  // preserve the actual stream order once assistant text has appeared.
+  return message.content.trim().length === 0 ? activeAssistantMessageId : null;
 }
 
 export function handleServerEvent(event: ServerEvent) {

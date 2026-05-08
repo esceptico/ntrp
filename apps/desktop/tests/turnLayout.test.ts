@@ -3,29 +3,104 @@ import { turnLayout } from "../src/lib/turnLayout.js";
 
 test("keeps active turns in stream order instead of hoisting streaming assistant text", () => {
   const layout = turnLayout({
-    childIds: ["assistant-1", "activity-1", "assistant-2", "activity-2"],
-    finalAssistantId: "assistant-2",
+    children: [
+      { id: "assistant-1", role: "assistant" },
+      { id: "activity-1", role: "activity" },
+      { id: "assistant-2", role: "assistant" },
+      { id: "activity-2", role: "activity" },
+    ],
     isDone: false,
   });
 
   expect(layout).toEqual({
-    directIds: ["assistant-1", "activity-1", "assistant-2", "activity-2"],
     workIds: [],
+    afterWorkIds: ["assistant-1", "activity-1", "assistant-2", "activity-2"],
     finalAssistantId: "assistant-2",
   });
 });
 
 test("keeps completed turns split into work block plus final assistant", () => {
   const layout = turnLayout({
-    childIds: ["assistant-1", "activity-1", "assistant-2"],
-    finalAssistantId: "assistant-2",
+    children: [
+      { id: "activity-1", role: "activity" },
+      { id: "assistant-1", role: "assistant" },
+    ],
     isDone: true,
   });
 
   expect(layout).toEqual({
-    directIds: ["assistant-2"],
+    workIds: ["activity-1"],
+    afterWorkIds: ["assistant-1"],
+    finalAssistantId: "assistant-1",
+  });
+});
+
+test("puts pre-tool assistant text inside completed work when there is a final response", () => {
+  const layout = turnLayout({
+    children: [
+      { id: "assistant-1", role: "assistant" },
+      { id: "activity-1", role: "activity" },
+      { id: "assistant-2", role: "assistant" },
+    ],
+    isDone: true,
+  });
+
+  expect(layout).toEqual({
     workIds: ["assistant-1", "activity-1"],
+    afterWorkIds: ["assistant-2"],
     finalAssistantId: "assistant-2",
   });
 });
 
+test("puts everything except the final assistant message inside completed work", () => {
+  const layout = turnLayout({
+    children: [
+      { id: "assistant-1", role: "assistant" },
+      { id: "activity-1", role: "activity" },
+      { id: "assistant-2", role: "assistant" },
+      { id: "activity-2", role: "activity" },
+      { id: "assistant-3", role: "assistant" },
+    ],
+    isDone: true,
+  });
+
+  expect(layout).toEqual({
+    workIds: ["assistant-1", "activity-1", "assistant-2", "activity-2"],
+    afterWorkIds: ["assistant-3"],
+    finalAssistantId: "assistant-3",
+  });
+});
+
+test("keeps post-tool nonfinal items inside the completed work block", () => {
+  const layout = turnLayout({
+    children: [
+      { id: "assistant-1", role: "assistant" },
+      { id: "activity-1", role: "activity" },
+      { id: "reasoning-1", role: "reasoning" },
+      { id: "assistant-2", role: "assistant" },
+    ],
+    isDone: true,
+  });
+
+  expect(layout).toEqual({
+    workIds: ["assistant-1", "activity-1", "reasoning-1"],
+    afterWorkIds: ["assistant-2"],
+    finalAssistantId: "assistant-2",
+  });
+});
+
+test("does not move a pre-tool assistant message when no final assistant exists", () => {
+  const layout = turnLayout({
+    children: [
+      { id: "assistant-1", role: "assistant" },
+      { id: "activity-1", role: "activity" },
+    ],
+    isDone: true,
+  });
+
+  expect(layout).toEqual({
+    workIds: ["assistant-1", "activity-1"],
+    afterWorkIds: [],
+    finalAssistantId: null,
+  });
+});

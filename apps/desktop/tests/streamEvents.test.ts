@@ -14,7 +14,7 @@ beforeEach(() => {
   });
 });
 
-test("continues assistant content by message id after late tool activity", () => {
+test("continues assistant content by message id without moving prior text below tools", () => {
   handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1" });
   handleServerEvent({ type: "TEXT_MESSAGE_START", message_id: "assistant-1" });
   handleServerEvent({ type: "TEXT_MESSAGE_CONTENT", message_id: "assistant-1", delta: "hello" });
@@ -33,5 +33,5 @@ test("continues assistant content by message id after late tool activity", () =>
 
   expect(assistantIds).toEqual(["assistant-1"]);
   expect(state.messages.get("assistant-1")?.content).toBe("hello world");
-  expect(roles).toEqual(["activity", "assistant"]);
+  expect(roles).toEqual(["assistant", "activity"]);
 });

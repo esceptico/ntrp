@@ -14,7 +14,7 @@ beforeEach(() => {
   });
 });
 
-test("anchors a new activity group before already-streaming assistant text", () => {
+test("appends a new activity group after assistant text that already streamed", () => {
   handleServerEvent({
     type: "RUN_STARTED",
     run_id: "run-1",
@@ -48,6 +48,36 @@ test("anchors a new activity group before already-streaming assistant text", () 
     type: "TOOL_CALL_END",
     tool_call_id: "tool-1",
     timestamp: 6,
+  });
+
+  const state = getState();
+  expect(state.order).toHaveLength(2);
+  expect(state.messages.get(state.order[0])?.role).toBe("assistant");
+  expect(state.messages.get(state.order[1])?.role).toBe("activity");
+});
+
+test("anchors a new activity group before an empty assistant placeholder", () => {
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-1",
+    session_id: "session-1",
+    timestamp: 1,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_START",
+    message_id: "assistant-1",
+    timestamp: 2,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-1",
+    tool_call_name: "ReadFile",
+    timestamp: 3,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-1",
+    timestamp: 4,
   });
 
   const state = getState();

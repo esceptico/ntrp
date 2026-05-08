@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown } from "lucide-react";
 import clsx from "clsx";
@@ -22,25 +22,29 @@ function formatDuration(ms: number): string {
   return remM === 0 ? `${h}h` : `${h}h ${remM}m`;
 }
 
-export function TurnGroup({ userId, childIds }: { userId: string; childIds: string[] }) {
+export function TurnGroup({
+  userId,
+  childIds,
+  onManualResize,
+}: {
+  userId: string;
+  childIds: string[];
+  onManualResize?: () => void;
+}) {
   const turn = useStore((s) => s.messages.get(userId)?.turn);
 
-  const finalAssistantId = useStore(
-    useShallow((s) => {
-      for (let i = childIds.length - 1; i >= 0; i--) {
-        const m = s.messages.get(childIds[i]);
-        if (m?.role === "assistant") return childIds[i];
-      }
-      return null;
-    }),
+  const childRoles = useStore(
+    useShallow((s) => childIds.map((id) => s.messages.get(id)?.role ?? null)),
+  );
+  const children = useMemo(
+    () => childIds.map((id, index) => ({ id, role: childRoles[index] ?? null })),
+    [childIds, childRoles],
   );
 
   // Only group into a "Worked Xs" block when the turn actually invoked
   // tools. A turn with just reasoning + a final reply has no work to
   // collapse — render its children inline instead.
-  const hasTools = useStore(
-    useShallow((s) => childIds.some((id) => s.messages.get(id)?.role === "activity")),
-  );
+  const hasTools = children.some((child) => child.role === "activity");
 
   const isDone = turn?.endedAt != null;
   // Default historic turns to collapsed; default in-progress turns to expanded.
@@ -54,8 +58,12 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
   }, [isDone]);
 
   const layout = hasTools
-    ? turnLayout({ childIds, finalAssistantId, isDone })
-    : { directIds: childIds, workIds: [], finalAssistantId };
+    ? turnLayout({ children, isDone })
+    : {
+        workIds: [],
+        afterWorkIds: childIds,
+        finalAssistantId: lastAssistantId(children),
+      };
   const hasWork = layout.workIds.length > 0;
   // Live runs have a real durationMs; historic ones don't (we don't persist
   // turn timing). Show the time when we have it, plain "Worked" otherwise.
@@ -64,15 +72,9 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
     : "Worked";
 
   const showInterim = !isDone || expanded;
-  const includeFinalInExpandedWork = isDone && expanded;
-  const directIdsInWork = includeFinalInExpandedWork ? layout.directIds : [];
-  const directIdsAfterWork = includeFinalInExpandedWork ? [] : layout.directIds;
   const interimList = (
     <div className={clsx("chat-work-trace flex flex-col gap-[var(--work-row-gap)]", isDone && "pt-1.5")}>
       {layout.workIds.map((id) => (
-        <Message key={id} id={id} isFinal={false} />
-      ))}
-      {directIdsInWork.map((id) => (
         <Message key={id} id={id} isFinal={false} />
       ))}
     </div>
@@ -91,7 +93,10 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
           >
             <button
               type="button"
-              onClick={() => setExpanded((v) => !v)}
+              onClick={() => {
+                onManualResize?.();
+                setExpanded((v) => !v);
+              }}
               className="self-start inline-flex items-center gap-1.5 chat-text text-muted hover:text-ink-soft transition-colors select-none"
             >
               <span>{headerLabel}</span>
@@ -101,7 +106,6 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
                 className={clsx("transition-transform duration-200", expanded && "rotate-180")}
               />
             </button>
-            <div className="h-px bg-line-soft mt-2" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -116,6 +120,7 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
           transition={{ duration: MOTION.route, ease: EASE }}
           style={{ overflow: "hidden" }}
         >
+          <div className="h-px bg-line-soft mt-2" />
           {interimList}
         </motion.div>
       ) : (
@@ -130,11 +135,18 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
 
       {isDone && workBlock}
 
-      {directIdsAfterWork.map((id) => (
+      {layout.afterWorkIds.map((id) => (
         <Message key={id} id={id} isFinal={isDone && id === layout.finalAssistantId} />
       ))}
 
       {!isDone && workBlock}
     </div>
   );
+}
+
+function lastAssistantId(children: { id: string; role: string | null }[]): string | null {
+  for (let i = children.length - 1; i >= 0; i--) {
+    if (children[i].role === "assistant") return children[i].id;
+  }
+  return null;
 }
