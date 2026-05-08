@@ -4,7 +4,7 @@ import { Bot, ChevronDown, SquareTerminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ActivityItem } from "../../store";
 import { extractTask, friendlyAgentLabel, isAgent } from "../../lib/agent";
-import { MOTION, EASE_EMPHASIZED } from "../../lib/motion";
+import { MOTION, EASE_EMPHASIZED, SPRING_SMOOTH } from "../../lib/motion";
 
 export type { ActivityItem };
 
@@ -99,7 +99,7 @@ export function ActivityTail({
         opacity: collapsed ? 0 : 1,
         height: collapsed ? 0 : targetHeight,
       }}
-      transition={{ duration: MOTION.trace, ease: EASE }}
+      transition={SPRING_SMOOTH}
       style={{ overflow: "hidden" }}
       className="pl-3 mt-0.5"
     >
