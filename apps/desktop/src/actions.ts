@@ -34,7 +34,11 @@ import {
 import { getState, type ImageBlock, type UiMessage } from "./store";
 import { SEMANTIC_KIND_AGENT } from "./lib/agent";
 import { messagesScroll } from "./lib/messagesScroll";
-import { clearReplayGapBlockForSession, forgetEventSeqForSession } from "./hooks/useEvents";
+import {
+  clearReplayGapBlockForSession,
+  forgetEventSeqForSession,
+  setEventSeqForSession,
+} from "./hooks/useEvents";
 
 function formatCall(name: string, argsJson: string): string {
   try {
@@ -203,16 +207,21 @@ export function historyMessagesToUi(messages: HistoryMessage[], activeRunId: str
 
 export async function loadHistory(sessionId: string, options: LoadHistoryOptions = {}): Promise<void> {
   const s = getState();
-  const { messages, active_run_id, page } = await apiWithConfig<{
+  const { messages, active_run_id, stream_checkpoint_seq, page } = await apiWithConfig<{
     messages: HistoryMessage[];
     active_run_id: string | null;
+    stream_checkpoint_seq?: number | null;
     page?: HistoryPage;
   }>(s.config, historyPath(sessionId, options));
 
   if (getState().currentSessionId !== sessionId) return;
   const mode = options.mode ?? "replace";
   if (mode === "replace") {
-    forgetEventSeqForSession(sessionId);
+    if (typeof stream_checkpoint_seq === "number") {
+      setEventSeqForSession(sessionId, stream_checkpoint_seq);
+    } else {
+      forgetEventSeqForSession(sessionId);
+    }
     clearReplayGapBlockForSession(sessionId);
   }
 

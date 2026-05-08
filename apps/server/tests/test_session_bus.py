@@ -182,6 +182,22 @@ async def test_clear_buffer_drops_replay_state_without_resetting_sequence():
 
 
 @pytest.mark.asyncio
+async def test_clear_buffer_records_checkpoint_sequence_for_history_reconnects():
+    bus = SessionBus(session_id="sess-1")
+    await bus.emit(ThinkingEvent(status="persisted"))
+
+    bus.clear_buffer()
+
+    assert bus.replay_checkpoint_seq == 1
+    after = ThinkingEvent(status="live-tail")
+    await bus.emit(after)
+    snapshot, _q = bus.subscribe_with_replay(after_seq=bus.replay_checkpoint_seq)
+
+    assert _seqs(snapshot) == [2]
+    assert snapshot[0].event == after
+
+
+@pytest.mark.asyncio
 async def test_existing_subscribers_keep_receiving_after_clear_buffer():
     """clear_buffer only affects the replay snapshot for FUTURE subscribers;
     live subscribers' queues are not touched."""

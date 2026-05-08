@@ -220,6 +220,47 @@ test("event stream URL includes after_seq once a session sequence is known", () 
   );
 });
 
+test("loadHistory seeds event cursor from active stream checkpoint", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: {
+            messages: [],
+            active_run_id: "run-active",
+            stream_checkpoint_seq: 44,
+            page: { has_more_before: false, has_more_after: false },
+          },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: "active-replay-session",
+    });
+
+    await loadHistory("active-replay-session");
+
+    expect(lastEventSeqForSession("active-replay-session")).toBe(44);
+    expect(eventStreamUrl(getState().config, "active-replay-session")).toBe(
+      "http://localhost:6877/chat/events/active-replay-session?stream=true&after_seq=44",
+    );
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
 test("exposes the last event sequence for bridge reconnects", () => {
   expect(lastEventSeqForSession("bridge-session")).toBeUndefined();
 

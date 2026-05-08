@@ -48,6 +48,7 @@ class SessionBus:
     initial_next_seq: InitVar[int] = 1
     _subscribers: list[asyncio.Queue[StreamRecord | None]] = field(default_factory=list)
     _next_seq: int = field(default=1, init=False)
+    _replay_checkpoint_seq: int | None = field(default=None, init=False)
     # Replay buffer for events emitted since the last `clear_buffer()`.
     # Paired with checkpoint saves: every `on_step_finish` (and the final
     # save in chat.py) commits messages to disk and then wipes this. So
@@ -62,6 +63,10 @@ class SessionBus:
     @property
     def next_seq(self) -> int:
         return self._next_seq
+
+    @property
+    def replay_checkpoint_seq(self) -> int | None:
+        return self._replay_checkpoint_seq
 
     async def emit(self, event: SSEEvent) -> None:
         record = StreamRecord(seq=self._next_seq, session_id=self.session_id, event=event)
@@ -108,6 +113,7 @@ class SessionBus:
         """Drop every buffered event. Called by the chat service right
         after each checkpoint save so the buffer never holds events that
         are also on disk (which would re-apply on reconnect)."""
+        self._replay_checkpoint_seq = self._next_seq - 1
         self._recent.clear()
 
     def unsubscribe(self, queue: asyncio.Queue[StreamRecord | None]) -> None:

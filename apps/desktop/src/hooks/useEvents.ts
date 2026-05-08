@@ -97,6 +97,10 @@ export function forgetEventSeqForSession(sessionId: string): void {
   lastEventSeqBySession.delete(sessionId);
 }
 
+export function setEventSeqForSession(sessionId: string, seq: number): void {
+  lastEventSeqBySession.set(sessionId, seq);
+}
+
 export function clearReplayGapBlockForSession(sessionId: string): void {
   replayGapBlockedSessions.delete(sessionId);
 }
