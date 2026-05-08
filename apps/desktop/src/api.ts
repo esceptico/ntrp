@@ -73,6 +73,7 @@ export type ServerEvent = WithTs & (
   // ─── Run lifecycle ──────────────────────────────────────────────────
   | { type: "RUN_STARTED"; run_id: string; session_id: string; session_name?: string | null; skip_approvals?: boolean }
   | { type: "RUN_FINISHED"; run_id: string; usage?: { prompt: number; completion: number; cache_read: number; cost: number } }
+  | { type: "run_cancelled"; run_id: string }
   | { type: "RUN_ERROR"; message: string }
 
   // ─── Text messages (Start / Content / End) ─────────────────────────

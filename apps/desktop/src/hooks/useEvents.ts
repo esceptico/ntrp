@@ -142,6 +142,14 @@ export function handleServerEvent(event: ServerEvent) {
       // branching from the *most recent* turn doesn't light up until
       // the user navigates away and back — a fair trade.
       return;
+    case "run_cancelled":
+      // Server cancelled the run (user clicked Stop). Mirror RUN_FINISHED's
+      // teardown but without accumulating usage — the run was cut short.
+      endActivity(s);
+      endTurn(s, ts);
+      activeAssistantMessageId = null;
+      setState({ running: false, currentRunId: null });
+      return;
     case "RUN_ERROR":
       endActivity(s);
       s.appendMessage({ id: crypto.randomUUID(), role: "error", content: event.message });
