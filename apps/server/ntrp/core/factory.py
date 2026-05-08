@@ -83,6 +83,7 @@ def create_agent(
         current_depth=0,
         reasoning_effort=config.reasoning_effort,
         model_reasoning_efforts=config.model_reasoning_efforts or {},
+        compactor=config.compactor,
     )
 
     ntrp_executor = NtrpToolExecutor(executor, tool_ctx, ledger=tool_ctx.ledger)

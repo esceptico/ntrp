@@ -15,6 +15,8 @@ from ntrp.agent import (
 )
 from ntrp.constants import SUBAGENT_DEFAULT_TIMEOUT
 from ntrp.context.models import SessionState
+from ntrp.core.compaction_model_request_middleware import CompactionModelRequestMiddleware
+from ntrp.core.compactor import Compactor
 from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddleware
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.llm_client import llm_client
@@ -131,6 +133,7 @@ def create_spawn_fn(
     current_depth: int,
     reasoning_effort: str | None = None,
     model_reasoning_efforts: dict[str, str] | None = None,
+    compactor: Compactor | None = None,
 ):
     async def spawn_child(
         calling_ctx: ToolContext,
@@ -187,6 +190,7 @@ def create_spawn_fn(
             current_depth=current_depth + 1,
             reasoning_effort=child_reasoning_effort,
             model_reasoning_efforts=model_reasoning_efforts,
+            compactor=compactor,
         )
 
         child_executor = NtrpToolExecutor(executor, child_ctx, ledger=calling_ctx.ledger)
@@ -198,6 +202,30 @@ def create_spawn_fn(
             enabled=child_run.deferred_tools_enabled,
         )
 
+        parent_emit = calling_ctx.io.emit if not silent else None
+
+        # Sub-agents reuse the parent's compactor so a long-running tool
+        # sweep doesn't blow past the model's context window mid-run. The
+        # salvage path stays as a backstop, but compaction prevents the
+        # underlying failure in the first place.
+        middlewares: tuple = (
+            DeferredToolsModelRequestMiddleware(
+                registry=executor.registry,
+                run=child_run,
+                get_services=lambda: child_ctx.services,
+            ),
+        )
+        if compactor is not None:
+            middlewares = (
+                *middlewares,
+                CompactionModelRequestMiddleware(
+                    compactor=compactor,
+                    on_compact=child_run.loaded_tools.clear,
+                    emit=parent_emit,
+                    run_id=calling_ctx.run.run_id,
+                ),
+            )
+
         sub_agent = Agent(
             tools=filtered_tools,
             client=llm_client,
@@ -208,21 +236,13 @@ def create_spawn_fn(
             parent_id=parent_id,
             reasoning_effort=child_reasoning_effort,
             prompt_cache_key=child_state.session_id,
-            model_request_middlewares=(
-                DeferredToolsModelRequestMiddleware(
-                    registry=executor.registry,
-                    run=child_run,
-                    get_services=lambda: child_ctx.services,
-                ),
-            ),
+            model_request_middlewares=middlewares,
         )
 
         child_messages = [
             {"role": Role.SYSTEM, "content": child_system_prompt},
             {"role": Role.USER, "content": task},
         ]
-
-        parent_emit = calling_ctx.io.emit if not silent else None
 
         def _foreground_child_events(event) -> tuple[SSEEvent, ...]:
             if isinstance(event, _REASONING_EVENTS):
