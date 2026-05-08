@@ -227,3 +227,38 @@ async def test_run_agent_loop_closes_text_when_task_cancelled_during_content_flu
         "TEXT_MESSAGE_END",
         "run_cancelled",
     ]
+
+
+@pytest.mark.asyncio
+async def test_run_agent_loop_retries_text_end_when_emit_is_cancelled():
+    run = RunState(run_id="run-1", session_id="sess-1")
+
+    class CancellingFirstEndBus(SessionBus):
+        def __init__(self):
+            super().__init__(session_id="sess-1")
+            self.cancelled_end_once = False
+
+        async def emit(self, event):
+            if isinstance(event, TextMessageEndEvent) and not self.cancelled_end_once:
+                self.cancelled_end_once = True
+                run.cancelled = True
+                raise asyncio.CancelledError
+            await super().emit(event)
+
+    class AgentWithTextEnd:
+        async def stream(self, messages):
+            yield TextStarted(message_id="text-1")
+            yield TextDelta(message_id="text-1", content="hello")
+            yield TextEnded(message_id="text-1", content="hello")
+
+    bus = CancellingFirstEndBus()
+
+    await run_agent_loop(SimpleNamespace(run=run), AgentWithTextEnd(), bus)
+
+    assert [event.type.value for event in bus._recent] == [
+        "TEXT_MESSAGE_START",
+        "TEXT_MESSAGE_CONTENT",
+        "TEXT_MESSAGE_END",
+        "run_cancelled",
+    ]
+    assert bus.cancelled_end_once is True

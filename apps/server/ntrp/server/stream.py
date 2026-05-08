@@ -57,11 +57,11 @@ async def run_agent_loop(
             depth=open_text_depth,
             parent_id=open_text_parent_id,
         )
+        await bus.emit(event)
         open_text_message_id = None
         open_text_parts = []
         open_text_depth = 0
         open_text_parent_id = None
-        await bus.emit(event)
 
     try:
         async for item in gen:
@@ -74,8 +74,8 @@ async def run_agent_loop(
                 result = item.text
             else:
                 for sse in agent_events_to_sse(item):
-                    note_text_event(sse)
                     await bus.emit(sse)
+                    note_text_event(sse)
                     await asyncio.sleep(0)
                 if ctx.run.cancelled:
                     break
