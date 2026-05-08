@@ -295,9 +295,9 @@ async def test_run_agent_loop_retries_text_end_when_emit_is_cancelled():
 
     class AgentWithTextEnd:
         async def stream(self, messages):
-            yield TextStarted(message_id="text-1")
-            yield TextDelta(message_id="text-1", content="hello")
-            yield TextEnded(message_id="text-1", content="hello")
+            yield TextStarted(depth=1, parent_id="call-research", message_id="text-1")
+            yield TextDelta(depth=1, parent_id="call-research", message_id="text-1", content="partial")
+            yield TextEnded(depth=2, parent_id="call-final", message_id="text-final", content="explicit final")
 
     bus = CancellingFirstEndBus()
 
@@ -309,4 +309,10 @@ async def test_run_agent_loop_retries_text_end_when_emit_is_cancelled():
         "TEXT_MESSAGE_END",
         "run_cancelled",
     ]
+    end = bus._recent[2]
+    assert isinstance(end, TextMessageEndEvent)
+    assert end.message_id == "text-final"
+    assert end.content == "explicit final"
+    assert end.depth == 2
+    assert end.parent_id == "call-final"
     assert bus.cancelled_end_once is True

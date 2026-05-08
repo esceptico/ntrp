@@ -28,9 +28,10 @@ async def run_agent_loop(
     open_text_parts: list[str] = []
     open_text_depth = 0
     open_text_parent_id: str | None = None
+    pending_text_end: TextMessageEndEvent | None = None
 
     def note_text_event(event) -> None:
-        nonlocal open_text_depth, open_text_message_id, open_text_parent_id, open_text_parts
+        nonlocal open_text_depth, open_text_message_id, open_text_parent_id, open_text_parts, pending_text_end
         if isinstance(event, TextMessageStartEvent):
             open_text_message_id = event.message_id
             open_text_parts = []
@@ -46,18 +47,23 @@ async def run_agent_loop(
             open_text_parts = []
             open_text_depth = 0
             open_text_parent_id = None
+            pending_text_end = None
 
     async def close_open_text() -> None:
-        nonlocal open_text_depth, open_text_message_id, open_text_parent_id, open_text_parts
-        if open_text_message_id is None:
+        nonlocal open_text_depth, open_text_message_id, open_text_parent_id, open_text_parts, pending_text_end
+        if pending_text_end is not None:
+            event = pending_text_end
+        elif open_text_message_id is not None:
+            event = TextMessageEndEvent(
+                message_id=open_text_message_id,
+                content="".join(open_text_parts),
+                depth=open_text_depth,
+                parent_id=open_text_parent_id,
+            )
+        else:
             return
-        event = TextMessageEndEvent(
-            message_id=open_text_message_id,
-            content="".join(open_text_parts),
-            depth=open_text_depth,
-            parent_id=open_text_parent_id,
-        )
         await bus.emit(event)
+        pending_text_end = None
         open_text_message_id = None
         open_text_parts = []
         open_text_depth = 0
@@ -75,6 +81,7 @@ async def run_agent_loop(
             else:
                 for sse in agent_events_to_sse(item):
                     if isinstance(sse, TextMessageEndEvent):
+                        pending_text_end = sse
                         await bus.emit(sse)
                         note_text_event(sse)
                     else:
