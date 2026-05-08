@@ -121,6 +121,19 @@ async def test_subscribe_with_replay_reports_gap_for_old_cursor():
 
 
 @pytest.mark.asyncio
+async def test_subscribe_with_replay_reports_gap_for_future_cursor():
+    bus = SessionBus(session_id="sess-1")
+    await bus.emit(ThinkingEvent(status="a"))
+
+    subscription = bus.subscribe_with_replay(after_seq=44)
+    snapshot, queue = subscription
+
+    assert subscription.replay_gap is True
+    assert snapshot == []
+    assert queue.empty()
+
+
+@pytest.mark.asyncio
 async def test_subscribe_with_replay_reports_no_gap_for_satisfiable_cursor():
     bus = SessionBus(session_id="sess-1")
     await bus.emit(ThinkingEvent(status="a"))

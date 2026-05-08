@@ -37,7 +37,8 @@ const MAX_STAGGER_LAG_MS = 120;
 let nextItemRenderAt = 0;
 
 const pendingResultPatches = new Map<string, Partial<ActivityItem>>();
-const replayGapReloadingSessions = new Set<string>();
+const replayGapReloadingSessions = new Map<string, Promise<boolean>>();
+const replayGapBlockedSessions = new Set<string>();
 
 function bufferActivityPatch(itemId: string, patch: Partial<ActivityItem>) {
   pendingResultPatches.set(itemId, {
@@ -94,6 +95,10 @@ export function lastEventSeqForSession(sessionId: string): number | undefined {
 
 export function forgetEventSeqForSession(sessionId: string): void {
   lastEventSeqBySession.delete(sessionId);
+}
+
+export function clearReplayGapBlockForSession(sessionId: string): void {
+  replayGapBlockedSessions.delete(sessionId);
 }
 
 function shouldDropServerEvent(event: ServerEvent): boolean {
@@ -163,21 +168,44 @@ export function reloadHistoryAfterReplayGap(
   reload: HistoryReloader = defaultReplayGapHistoryReload,
 ): Promise<void> | null {
   if (replayGapReloadingSessions.has(sessionId)) return null;
-  replayGapReloadingSessions.add(sessionId);
+  replayGapBlockedSessions.delete(sessionId);
   const task = reload(sessionId)
+    .then(() => true)
     .catch((error) => {
       setState({ error: error instanceof Error ? error.message : String(error) });
+      replayGapBlockedSessions.add(sessionId);
+      return false;
     })
     .finally(() => {
       replayGapReloadingSessions.delete(sessionId);
     });
-  return task;
+  replayGapReloadingSessions.set(sessionId, task);
+  return task.then(() => undefined);
 }
 
 export function handleIncomingServerEvent(
   event: ServerEvent,
   reload?: HistoryReloader,
 ): Promise<void> | null {
+  const sessionId = event.session_id ?? getState().currentSessionId;
+  const activeSessionId = getState().currentSessionId;
+  if (event.session_id && activeSessionId !== event.session_id) return null;
+
+  const pendingReload =
+    event.type === "stream_reset" || !sessionId
+      ? undefined
+      : replayGapReloadingSessions.get(sessionId);
+  if (pendingReload) {
+    return pendingReload.then(async (loaded) => {
+      if (!loaded) return;
+      if (getState().currentSessionId !== sessionId) return;
+      await handleIncomingServerEvent(event, reload);
+    });
+  }
+  if (event.type !== "stream_reset" && sessionId && replayGapBlockedSessions.has(sessionId)) {
+    return null;
+  }
+
   const effect = handleServerEvent(event);
   if (effect?.type !== "replay_gap") return null;
   return reloadHistoryAfterReplayGap(effect.sessionId, reload);
@@ -529,4 +557,5 @@ export function resetEventSeqStateForTest(): void {
 
 export function resetReplayGapReloadStateForTest(): void {
   replayGapReloadingSessions.clear();
+  replayGapBlockedSessions.clear();
 }

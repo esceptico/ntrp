@@ -215,6 +215,28 @@ async def test_event_stream_emits_stream_reset_on_replay_gap():
 
 
 @pytest.mark.asyncio
+async def test_event_stream_emits_stream_reset_on_future_cursor():
+    buses = BusRegistry()
+    bus = buses.get_or_create("sess-1")
+    await bus.emit(ThinkingEvent(status="old-generation"))
+    bus.clear_buffer()
+
+    stream = _event_stream("sess-1", buses, RunRegistry(), stream=True, after_seq=44)
+    try:
+        reset_chunk = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    reset_payload = json.loads(reset_chunk.split("data: ", 1)[1].strip())
+
+    assert "event: stream_reset" in reset_chunk
+    assert reset_payload["type"] == "stream_reset"
+    assert reset_payload["reason"] == "replay_gap"
+    assert reset_payload["session_id"] == "sess-1"
+    assert reset_payload["seq"] == 45
+
+
+@pytest.mark.asyncio
 async def test_run_agent_loop_emits_text_end_before_run_cancelled():
     run = RunState(run_id="run-1", session_id="sess-1")
     bus = SessionBus(session_id="sess-1")

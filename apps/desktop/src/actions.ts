@@ -34,7 +34,7 @@ import {
 import { getState, type ImageBlock, type UiMessage } from "./store";
 import { SEMANTIC_KIND_AGENT } from "./lib/agent";
 import { messagesScroll } from "./lib/messagesScroll";
-import { forgetEventSeqForSession } from "./hooks/useEvents";
+import { clearReplayGapBlockForSession, forgetEventSeqForSession } from "./hooks/useEvents";
 
 function formatCall(name: string, argsJson: string): string {
   try {
@@ -211,7 +211,10 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
 
   if (getState().currentSessionId !== sessionId) return;
   const mode = options.mode ?? "replace";
-  if (mode === "replace") forgetEventSeqForSession(sessionId);
+  if (mode === "replace") {
+    forgetEventSeqForSession(sessionId);
+    clearReplayGapBlockForSession(sessionId);
+  }
 
   const items = historyMessagesToUi(messages, active_run_id);
   if (mode === "prepend") {

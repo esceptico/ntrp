@@ -90,9 +90,12 @@ class SessionBus:
         return ReplaySubscription(snapshot=snapshot, queue=queue, replay_gap=replay_gap)
 
     def _has_replay_gap(self, after_seq: int) -> bool:
+        newest_seq = self._next_seq - 1
+        if after_seq > newest_seq:
+            return True
         if self._recent:
             return after_seq < self._recent[0].seq - 1
-        return after_seq < self._next_seq - 1
+        return after_seq < newest_seq
 
     def subscribe(self) -> asyncio.Queue[StreamRecord | None]:
         """Live-only subscription — for feeds that don't replay (e.g. the

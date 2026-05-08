@@ -22,6 +22,7 @@ beforeEach(() => {
     activeActivityId: null,
     running: false,
     currentRunId: null,
+    currentSessionId: null,
     error: null,
   });
 });
@@ -233,6 +234,7 @@ test("exposes the last event sequence for bridge reconnects", () => {
 });
 
 test("stream_reset clears transient buffers and schedules one history reload", async () => {
+  setState({ currentSessionId: "reset-session" });
   handleServerEvent({
     type: "RUN_STARTED",
     run_id: "run-reset",
@@ -267,21 +269,126 @@ test("stream_reset clears transient buffers and schedules one history reload", a
     reloads.push(sessionId);
   });
 
-  handleServerEvent({
+  const tailEvent = {
     type: "TOOL_CALL_END",
     tool_call_id: "tool-reset",
     session_id: "reset-session",
     seq: 4,
-  });
+  } as const;
+  const tailApply = handleIncomingServerEvent(tailEvent);
 
-  expect(lastEventSeqForSession("reset-session")).toBe(4);
+  expect(lastEventSeqForSession("reset-session")).toBeUndefined();
   expect(getState().activeActivityId).toBeNull();
   expect(getState().order).toEqual([]);
   expect(secondReload).toBeNull();
 
   releaseReload();
   await firstReload;
+  await tailApply;
+
+  expect(lastEventSeqForSession("reset-session")).toBe(4);
   expect(reloads).toEqual(["reset-session"]);
+});
+
+test("stream_reset drops queued tail events after session navigation", async () => {
+  setState({ currentSessionId: "reset-session" });
+  const resetEvent = {
+    type: "stream_reset",
+    reason: "replay_gap",
+    session_id: "reset-session",
+    seq: 3,
+  } as const;
+
+  let releaseReload!: () => void;
+  const reloadGate = new Promise<void>((resolve) => {
+    releaseReload = resolve;
+  });
+  const resetReload = handleIncomingServerEvent(resetEvent, async () => {
+    await reloadGate;
+  });
+  const tailApply = handleIncomingServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "tail-message",
+    delta: "tail",
+    session_id: "reset-session",
+    seq: 4,
+  });
+
+  setState({ currentSessionId: "other-session" });
+  releaseReload();
+  await resetReload;
+  await tailApply;
+
+  expect(lastEventSeqForSession("reset-session")).toBeUndefined();
+  expect(getState().order).toEqual([]);
+});
+
+test("stream_reset keeps tail blocked when history reload fails", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  setState({ currentSessionId: "reset-session" });
+  const resetEvent = {
+    type: "stream_reset",
+    reason: "replay_gap",
+    session_id: "reset-session",
+    seq: 3,
+  } as const;
+
+  const resetReload = handleIncomingServerEvent(resetEvent, async () => {
+    throw new Error("reload failed");
+  });
+  const queuedTail = handleIncomingServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "tail-message",
+    delta: "tail",
+    session_id: "reset-session",
+    seq: 4,
+  });
+  await resetReload;
+  await queuedTail;
+  handleIncomingServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "late-tail-message",
+    delta: "late tail",
+    session_id: "reset-session",
+    seq: 5,
+  });
+
+  expect(lastEventSeqForSession("reset-session")).toBeUndefined();
+  expect(getState().order).toEqual([]);
+  expect(getState().error).toBe("reload failed");
+
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: { messages: [], active_run_id: null },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    await loadHistory("reset-session");
+    handleIncomingServerEvent({
+      type: "TEXT_MESSAGE_CONTENT",
+      message_id: "recovered-message",
+      delta: "recovered",
+      session_id: "reset-session",
+      seq: 5,
+    });
+
+    expect(lastEventSeqForSession("reset-session")).toBe(5);
+    expect(getState().messages.get("recovered-message")?.content).toBe("recovered");
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
 });
 
 test("stopRun clears running state after successful cancel request", async () => {
