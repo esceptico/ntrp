@@ -19,6 +19,7 @@ import { TurnGroup } from "./TurnGroup";
 export function Messages() {
   const order = useStore((s) => s.order);
   const currentSessionId = useStore((s) => s.currentSessionId);
+  const historyLoadedFor = useStore((s) => s.historyLoadedFor);
   const sourceFocus = useStore((s) => s.sourceFocus);
   const historyPaging = useStore(
     useShallow((s) => ({
@@ -28,6 +29,7 @@ export function Messages() {
       loadingAfter: s.historyLoadingAfter,
     })),
   );
+  const sessionReady = currentSessionId === null || historyLoadedFor === currentSessionId;
   const firstSourceFocusId = useStore((s) =>
     firstMessageIdInSourceFocus(s.order, s.messages, s.sourceFocus, s.currentSessionId),
   );
@@ -137,13 +139,15 @@ export function Messages() {
         className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-messages px-0 pt-7 pb-9"
       >
         <div ref={contentRef} className="messages-inner mx-auto max-w-[760px] min-w-0 px-7 flex flex-col gap-3.5">
-          {visibleOrder.length === 0
-            ? <EmptyState />
-            : segments.map((seg) =>
-                seg.userId
-                  ? <TurnGroup key={seg.userId} userId={seg.userId} childIds={seg.childIds} />
-                  : <div key="preamble" className="contents">{seg.childIds.map((id) => <Message key={id} id={id} />)}</div>
-              )}
+          {!sessionReady
+            ? null
+            : visibleOrder.length === 0
+              ? <EmptyState />
+              : segments.map((seg) =>
+                  seg.userId
+                    ? <TurnGroup key={seg.userId} userId={seg.userId} childIds={seg.childIds} />
+                    : <div key="preamble" className="contents">{seg.childIds.map((id) => <Message key={id} id={id} />)}</div>
+                )}
           <CompactionIndicator />
         </div>
       </div>

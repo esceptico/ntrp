@@ -335,10 +335,7 @@ function SessionList() {
                     renaming={renamingId === session.session_id}
                     onStartRename={() => setRenamingId(session.session_id)}
                     onCancelRename={() => setRenamingId(null)}
-                    onArchive={() => {
-                      if (!confirm("Archive this session? You can restore it later from the server.")) return;
-                      void archiveSession(session.session_id);
-                    }}
+                    onArchive={() => void archiveSession(session.session_id)}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       setMenu({ sessionId: session.session_id, x: e.clientX, y: e.clientY });
@@ -373,7 +370,6 @@ function SessionList() {
           }}
           onArchive={async () => {
             closeMenu();
-            if (!confirm("Archive this session? You can restore it later from the server.")) return;
             try {
               await archiveSession(menu.sessionId);
             } catch {
