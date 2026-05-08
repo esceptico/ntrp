@@ -142,7 +142,8 @@ class RunRegistry:
         if run:
             run.status = RunStatus.COMPLETED
             run.updated_at = datetime.now(UTC)
-            self._active_by_session.pop(run.session_id, None)
+            if self._active_by_session.get(run.session_id) == run_id:
+                self._active_by_session.pop(run.session_id, None)
         self.cleanup_old_runs()
 
     def cancel_run(self, run_id: str) -> dict[str, bool]:
@@ -152,6 +153,7 @@ class RunRegistry:
 
         run.cancelled = True
         run.updated_at = datetime.now(UTC)
+        is_current = self._active_by_session.get(run.session_id) == run_id
 
         cancel_requested = False
         if run.task and not run.task.done():
@@ -161,10 +163,11 @@ class RunRegistry:
             run.drain_task.cancel()
             cancel_requested = True
 
-        registry = self._bg_registries.get(run.session_id)
-        if registry:
-            for _task_id, _command in registry.cancel_all():
-                cancel_requested = True
+        if is_current:
+            registry = self._bg_registries.get(run.session_id)
+            if registry:
+                for _task_id, _command in registry.cancel_all():
+                    cancel_requested = True
 
         return {"found": True, "cancel_requested": cancel_requested}
 
@@ -207,7 +210,8 @@ class RunRegistry:
         if run:
             run.status = RunStatus.ERROR
             run.updated_at = datetime.now(UTC)
-            self._active_by_session.pop(run.session_id, None)
+            if self._active_by_session.get(run.session_id) == run_id:
+                self._active_by_session.pop(run.session_id, None)
         self.cleanup_old_runs()
 
     def cleanup_old_runs(self, max_age_hours: int = 24) -> int:

@@ -369,6 +369,102 @@ async def test_run_chat_emits_cancelled_when_task_cancelled_before_agent_loop():
 
 
 @pytest.mark.asyncio
+async def test_cancelled_run_finally_drops_pending_without_persisting():
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.messages = [{"role": "user", "content": "old request"}]
+    run.queue_injection({"role": "user", "content": "dead follow-up", "client_id": "cid-dead"})
+    session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
+
+    class RecordingSessionService:
+        def __init__(self):
+            self.saved: list[list[dict]] = []
+
+        async def save(self, session_state, messages, metadata=None):
+            self.saved.append(list(messages))
+
+    class CancellingInitialEmitBus(SessionBus):
+        async def emit(self, event):
+            await super().emit(event)
+            if event.type.value == "RUN_STARTED":
+                task = asyncio.current_task()
+                assert task is not None
+                task.cancel()
+                await asyncio.sleep(0)
+
+    session_service = RecordingSessionService()
+    bus = CancellingInitialEmitBus(session_id="sess-1")
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(),
+        tools=[],
+        config=SimpleNamespace(),
+        available_integrations=[],
+        integration_errors={},
+        session_service=session_service,
+        run_registry=registry,
+    )
+
+    await run_chat(ctx, bus)
+
+    assert session_service.saved == []
+    assert run.pending_injection_count == 0
+    assert run.messages == [{"role": "user", "content": "old request"}]
+
+
+@pytest.mark.asyncio
+async def test_background_result_after_cancel_is_ignored_for_cancelled_run(monkeypatch):
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
+    stream_started = asyncio.Event()
+    release = asyncio.Event()
+
+    class NoopSessionService:
+        async def save(self, session_state, messages, metadata=None):
+            return None
+
+    class FakeAgent:
+        def __init__(self):
+            self.hooks = SimpleNamespace(on_response=None, on_step_finish=None, get_pending_messages=None)
+            self.tools = []
+
+        async def stream(self, messages):
+            stream_started.set()
+            await release.wait()
+            if False:
+                yield None
+
+    monkeypatch.setattr(chat_service, "create_agent", lambda **_kwargs: FakeAgent())
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(),
+        tools=[],
+        config=SimpleNamespace(),
+        available_integrations=[],
+        integration_errors={},
+        session_service=NoopSessionService(),
+        run_registry=registry,
+    )
+
+    task = asyncio.create_task(run_chat(ctx, SessionBus(session_id="sess-1")))
+    await asyncio.wait_for(stream_started.wait(), timeout=1)
+    run.cancelled = True
+
+    await registry.get_background_registry("sess-1").inject([{"role": "user", "content": "late background"}])
+
+    assert run.pending_injection_count == 0
+    task.cancel()
+    await asyncio.wait_for(task, timeout=1)
+
+
+@pytest.mark.asyncio
 async def test_run_agent_loop_retries_text_end_when_emit_is_cancelled():
     run = RunState(run_id="run-1", session_id="sess-1")
 

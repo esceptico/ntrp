@@ -467,7 +467,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         agent.hooks.get_pending_messages = _build_get_pending(bus, run)
 
         async def _on_bg_result(messages: list[dict]) -> None:
-            if not run_finished:
+            if not run_finished and not run.cancelled:
                 run.queue_injections(messages)
 
         bg_registry.on_result = _on_bg_result
@@ -509,6 +509,12 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
 
     finally:
         if not run.backgrounded:
+            if run.cancelled:
+                run.drain_injections()
+                run.usage = tracker.usage
+                run_finished = True
+                bus.clear_buffer()
+                return
             pending_messages = run.drain_injections()
             if pending_messages:
                 # Emit ingestion events for any client-stamped entries so the
@@ -532,8 +538,6 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             # replay buffer so reconnects don't re-apply already-saved
             # events on top of fresh history.
             bus.clear_buffer()
-            if run.cancelled:
-                return
             event = RunCompleted(
                 run_id=run.run_id,
                 session_id=session_state.session_id,

@@ -271,6 +271,42 @@ test("stopRun clears running state after successful cancel request", async () =>
   }
 });
 
+test("stopRun clears running state when server no longer knows the run", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => ({
+          ok: false,
+          status: 404,
+          statusText: "Not Found",
+          contentType: "application/json",
+          data: { detail: "Run not found" },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      running: true,
+      currentRunId: "run-stale",
+    });
+
+    await stopRun();
+
+    expect(getState().running).toBe(false);
+    expect(getState().currentRunId).toBeNull();
+    expect(getState().order).toEqual([]);
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
 test("keeps tool results when result arrives before delayed burst item renders", async () => {
   handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", timestamp: 1 });
   handleServerEvent({ type: "TOOL_CALL_START", tool_call_id: "tool-1", tool_call_name: "ReadFile", timestamp: 2 });

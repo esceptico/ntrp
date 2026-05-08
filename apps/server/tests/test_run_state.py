@@ -99,6 +99,60 @@ def test_cancel_run_keeps_run_active_until_terminal_cancel():
     assert registry.get_active_run("sess-1") is None
 
 
+def test_stale_complete_and_error_do_not_clear_newer_active_run():
+    registry = RunRegistry()
+    old = registry.create_run("sess-1")
+    old.status = RunStatus.RUNNING
+    newer = registry.create_run("sess-1")
+    newer.status = RunStatus.RUNNING
+
+    registry.complete_run(old.run_id)
+
+    assert registry.get_active_run("sess-1") is newer
+
+    older_error = registry.create_run("sess-2")
+    older_error.status = RunStatus.RUNNING
+    newer_after_error = registry.create_run("sess-2")
+    newer_after_error.status = RunStatus.RUNNING
+
+    registry.error_run(older_error.run_id)
+
+    assert registry.get_active_run("sess-2") is newer_after_error
+
+
+@pytest.mark.asyncio
+async def test_stale_cancel_does_not_cancel_newer_background_tasks():
+    registry = RunRegistry()
+    old = registry.create_run("sess-1")
+    old.status = RunStatus.RUNNING
+    newer = registry.create_run("sess-1")
+    newer.status = RunStatus.RUNNING
+    bg_registry = registry.get_background_registry("sess-1")
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def background_work():
+        started.set()
+        await release.wait()
+
+    task = asyncio.create_task(background_work())
+    await asyncio.wait_for(started.wait(), timeout=1)
+    bg_registry.register("task-1", task, "research")
+
+    try:
+        result = registry.cancel_run(old.run_id)
+
+        assert result["found"] is True
+        assert result["cancel_requested"] is False
+        assert not task.cancelled()
+        assert not task.done()
+        assert bg_registry.pending_count == 1
+        assert registry.get_active_run("sess-1") is newer
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
 @pytest.mark.asyncio
 async def test_cancel_all_cancels_background_registry_tasks():
     registry = RunRegistry()

@@ -495,18 +495,26 @@ export async function stopRun(): Promise<void> {
   const s = getState();
   const runId = s.currentRunId;
   if (!runId) return;
-  try {
-    await cancelRun(s.config, runId);
+  const clearStoppedRun = () => {
     const latest = getState();
     if (latest.currentRunId === runId) {
       latest.setRunning(false);
       latest.setCurrentRunId(null);
     }
+  };
+  try {
+    await cancelRun(s.config, runId);
+    clearStoppedRun();
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === "Run not found") {
+      clearStoppedRun();
+      return;
+    }
     s.appendMessage({
       id: crypto.randomUUID(),
       role: "error",
-      content: error instanceof Error ? error.message : String(error),
+      content: message,
     });
   }
 }
