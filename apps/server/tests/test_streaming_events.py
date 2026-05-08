@@ -111,3 +111,25 @@ async def test_event_stream_does_not_synthesize_text_boundaries():
         "TEXT_MESSAGE_END",
     ]
     assert [payload["message_id"] for payload in payloads] == ["text-1", "text-1", "text-1"]
+
+
+@pytest.mark.asyncio
+async def test_event_stream_filters_snapshot_text_deltas_when_stream_false():
+    buses = BusRegistry()
+    bus = buses.get_or_create("sess-1")
+    await bus.emit(TextMessageStartEvent(message_id="text-1"))
+    await bus.emit(TextDeltaEvent(message_id="text-1", delta="hello"))
+    await bus.emit(TextMessageEndEvent(message_id="text-1", content="hello"))
+
+    stream = _event_stream("sess-1", buses, RunRegistry(), stream=False)
+    try:
+        chunks = [await anext(stream), await anext(stream)]
+    finally:
+        await stream.aclose()
+
+    payloads = [json.loads(chunk.split("data: ", 1)[1].strip()) for chunk in chunks]
+    assert [payload["type"] for payload in payloads] == [
+        "TEXT_MESSAGE_START",
+        "TEXT_MESSAGE_END",
+    ]
+    assert all(payload["type"] != "TEXT_MESSAGE_CONTENT" for payload in payloads)

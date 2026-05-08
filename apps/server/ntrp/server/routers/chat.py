@@ -4,9 +4,7 @@ from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ntrp.events.sse import (
-    TextDeltaEvent,
-)
+from ntrp.events.sse import TextDeltaEvent
 from ntrp.server.bus import BusRegistry
 from ntrp.server.deps import get_bus_registry, require_run_registry
 from ntrp.server.middleware import SSEStreamingResponse
@@ -34,8 +32,14 @@ async def _event_stream(
     snapshot, queue = bus.subscribe_with_replay()
     last_event_at = time.monotonic()
 
+    def should_emit(event) -> bool:
+        return stream or not isinstance(event, TextDeltaEvent)
+
     try:
         for event in snapshot:
+            if not should_emit(event):
+                last_event_at = time.monotonic()
+                continue
             yield event.to_sse_string()
             await asyncio.sleep(0)
 
@@ -51,7 +55,7 @@ async def _event_stream(
             if event is None:
                 break
 
-            if not stream and isinstance(event, TextDeltaEvent):
+            if not should_emit(event):
                 last_event_at = time.monotonic()
                 continue
 
