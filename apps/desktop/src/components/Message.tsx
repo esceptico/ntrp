@@ -270,7 +270,7 @@ const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: 
       <Markdown
         content={message.content}
         streaming={isStreaming}
-        className="py-0.5 text-[14px] leading-[1.62] text-ink tracking-[-0.005em] break-words"
+        className="text-[14px] leading-[1.62] text-ink tracking-[-0.005em] break-words"
       />
       {isFinal && <MessageActions id={id} role="assistant" />}
     </article>
