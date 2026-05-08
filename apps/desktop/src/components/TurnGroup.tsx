@@ -65,7 +65,7 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
 
   const showInterim = !isDone || expanded;
   const interimList = (
-    <div className={clsx("flex flex-col gap-4", isDone && "pt-2")}>
+    <div className={clsx("flex flex-col gap-3.5", isDone && "pt-2")}>
       {layout.workIds.map((id) => (
         <Message key={id} id={id} isFinal={false} />
       ))}

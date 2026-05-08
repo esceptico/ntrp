@@ -138,7 +138,7 @@ export function Messages() {
         onScroll={handleScroll}
         className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-messages px-0 pt-7 pb-9"
       >
-        <div ref={contentRef} className="messages-inner mx-auto max-w-[760px] min-w-0 px-7 flex flex-col gap-4">
+        <div ref={contentRef} className="messages-inner mx-auto max-w-[760px] min-w-0 px-7 flex flex-col gap-3.5">
           {!sessionReady
             ? null
             : visibleOrder.length === 0
