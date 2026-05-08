@@ -1,14 +1,17 @@
 import { beforeEach, expect, test } from "bun:test";
 import {
   eventStreamUrl,
+  forgetEventSeqForSession,
   handleServerEvent,
   lastEventSeqForSession,
+  resetEventSeqStateForTest,
   resetStreamStateForTest,
 } from "../src/hooks/useEvents.js";
 import { getState, setState } from "../src/store.js";
 
 beforeEach(() => {
   resetStreamStateForTest();
+  resetEventSeqStateForTest();
   setState({
     messages: new Map(),
     order: [],
@@ -171,6 +174,23 @@ test("resetStreamStateForTest keeps sequence tracking across reconnect-style res
   });
 
   expect(getState().messages.get("assistant-reset-seq")?.content).toBe("first");
+});
+
+test("forgetEventSeqForSession lets a discarded projection replay the same sequenced event", () => {
+  const event = {
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-forget-seq",
+    delta: "restored",
+    session_id: "sequence-forget-session",
+    seq: 12,
+  } as const;
+
+  handleServerEvent(event);
+  setState({ messages: new Map(), order: [], activeActivityId: null });
+  forgetEventSeqForSession("sequence-forget-session");
+  handleServerEvent(event);
+
+  expect(getState().messages.get("assistant-forget-seq")?.content).toBe("restored");
 });
 
 test("event stream URL includes after_seq once a session sequence is known", () => {

@@ -34,6 +34,7 @@ import {
 import { getState, type ImageBlock, type UiMessage } from "./store";
 import { SEMANTIC_KIND_AGENT } from "./lib/agent";
 import { messagesScroll } from "./lib/messagesScroll";
+import { forgetEventSeqForSession } from "./hooks/useEvents";
 
 function formatCall(name: string, argsJson: string): string {
   try {
@@ -209,10 +210,13 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
   }>(s.config, historyPath(sessionId, options));
 
   if (getState().currentSessionId !== sessionId) return;
+  const mode = options.mode ?? "replace";
+  if (mode === "replace") forgetEventSeqForSession(sessionId);
+
   const items = historyMessagesToUi(messages, active_run_id);
-  if (options.mode === "prepend") {
+  if (mode === "prepend") {
     s.prependHistory(items, page);
-  } else if (options.mode === "append") {
+  } else if (mode === "append") {
     s.appendHistoryPage(items, page);
   } else {
     s.setHistory(items, page);
@@ -595,6 +599,7 @@ export async function runBuiltinCommand(name: string, args: string): Promise<voi
           method: "POST",
           body: JSON.stringify({ session_id: s.currentSessionId }),
         });
+        forgetEventSeqForSession(s.currentSessionId);
         s.setHistory([]);
         s.resetUsage();
       } catch (error) {

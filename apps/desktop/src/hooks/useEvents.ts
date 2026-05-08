@@ -81,6 +81,10 @@ export function lastEventSeqForSession(sessionId: string): number | undefined {
   return lastEventSeqBySession.get(sessionId);
 }
 
+export function forgetEventSeqForSession(sessionId: string): void {
+  lastEventSeqBySession.delete(sessionId);
+}
+
 function shouldDropServerEvent(event: ServerEvent): boolean {
   if (typeof event.seq !== "number" || !event.session_id) return false;
 
@@ -444,3 +448,7 @@ function resetStreamState(): void {
 }
 
 export const resetStreamStateForTest = resetStreamState;
+
+export function resetEventSeqStateForTest(): void {
+  lastEventSeqBySession.clear();
+}
