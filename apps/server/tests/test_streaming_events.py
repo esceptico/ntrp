@@ -166,7 +166,7 @@ async def test_run_agent_loop_emits_text_end_before_run_cancelled():
 
     await run_agent_loop(SimpleNamespace(run=run), CancellingAgent(), bus)
 
-    assert [event.type.value for event in bus._recent] == [
+    assert [record.event.type.value for record in bus._recent] == [
         "TEXT_MESSAGE_START",
         "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_END",
@@ -201,14 +201,14 @@ async def test_run_agent_loop_closes_open_text_on_cooperative_cancel():
 
     await run_agent_loop(SimpleNamespace(run=run), CooperativeCancellingAgent(), bus)
 
-    assert [event.type.value for event in bus._recent] == [
+    assert [record.event.type.value for record in bus._recent] == [
         "TEXT_MESSAGE_START",
         "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_END",
         "run_cancelled",
     ]
-    end = bus._recent[3]
+    end = bus._recent[3].event
     assert isinstance(end, TextMessageEndEvent)
     assert end.message_id == "text-1"
     assert end.content == "hello world"
@@ -232,7 +232,7 @@ async def test_run_agent_loop_closes_text_before_backgrounding():
 
     assert result is None
     assert bg_gen is not None
-    assert [event.type.value for event in bus._recent] == [
+    assert [record.event.type.value for record in bus._recent] == [
         "TEXT_MESSAGE_START",
         "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_END",
@@ -263,13 +263,13 @@ async def test_run_agent_loop_closes_text_when_task_cancelled_during_content_flu
 
     await task
 
-    assert [event.type.value for event in bus._recent] == [
+    assert [record.event.type.value for record in bus._recent] == [
         "TEXT_MESSAGE_START",
         "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_END",
         "run_cancelled",
     ]
-    end = bus._recent[2]
+    end = bus._recent[2].event
     assert isinstance(end, TextMessageEndEvent)
     assert end.message_id == "text-1"
     assert end.content == "hello"
@@ -303,13 +303,13 @@ async def test_run_agent_loop_retries_text_end_when_emit_is_cancelled():
 
     await run_agent_loop(SimpleNamespace(run=run), AgentWithTextEnd(), bus)
 
-    assert [event.type.value for event in bus._recent] == [
+    assert [record.event.type.value for record in bus._recent] == [
         "TEXT_MESSAGE_START",
         "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_END",
         "run_cancelled",
     ]
-    end = bus._recent[2]
+    end = bus._recent[2].event
     assert isinstance(end, TextMessageEndEvent)
     assert end.message_id == "text-final"
     assert end.content == "explicit final"

@@ -14,40 +14,54 @@ SSE_QUEUE_MAXSIZE = 256
 RECENT_BUFFER_MAX = 10000
 
 
+@dataclass(frozen=True, slots=True)
+class StreamRecord:
+    seq: int
+    event: SSEEvent
+
+
 @dataclass
 class SessionBus:
     session_id: str
     subscriber_queue_size: int = SSE_QUEUE_MAXSIZE
-    _subscribers: list[asyncio.Queue[SSEEvent | None]] = field(default_factory=list)
+    _subscribers: list[asyncio.Queue[StreamRecord | None]] = field(default_factory=list)
+    _next_seq: int = field(default=1, init=False)
     # Replay buffer for events emitted since the last `clear_buffer()`.
     # Paired with checkpoint saves: every `on_step_finish` (and the final
     # save in chat.py) commits messages to disk and then wipes this. So
     # disk holds everything up to the last checkpoint and the buffer
     # holds everything since — together they reconstruct current state
     # without overlap, no cursor needed.
-    _recent: deque[SSEEvent] = field(default_factory=lambda: deque(maxlen=RECENT_BUFFER_MAX))
+    _recent: deque[StreamRecord] = field(default_factory=lambda: deque(maxlen=RECENT_BUFFER_MAX))
 
     async def emit(self, event: SSEEvent) -> None:
-        self._recent.append(event)
+        record = StreamRecord(seq=self._next_seq, event=event)
+        self._next_seq += 1
+        self._recent.append(record)
         for queue in tuple(self._subscribers):
             try:
-                queue.put_nowait(event)
+                queue.put_nowait(record)
             except asyncio.QueueFull:
                 self._close_slow_subscriber(queue)
 
-    def subscribe_with_replay(self) -> tuple[list[SSEEvent], asyncio.Queue[SSEEvent | None]]:
+    def subscribe_with_replay(
+        self, after_seq: int | None = None
+    ) -> tuple[list[StreamRecord], asyncio.Queue[StreamRecord | None]]:
         """Atomically snapshot the replay buffer AND register a live queue.
         emit() never awaits, so no event can interleave between snapshot and
         queue registration."""
-        snapshot = list(self._recent)
-        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue(maxsize=self.subscriber_queue_size)
+        if after_seq is None:
+            snapshot = list(self._recent)
+        else:
+            snapshot = [record for record in self._recent if record.seq > after_seq]
+        queue: asyncio.Queue[StreamRecord | None] = asyncio.Queue(maxsize=self.subscriber_queue_size)
         self._subscribers.append(queue)
         return snapshot, queue
 
-    def subscribe(self) -> asyncio.Queue[SSEEvent | None]:
+    def subscribe(self) -> asyncio.Queue[StreamRecord | None]:
         """Live-only subscription — for feeds that don't replay (e.g. the
         global automation stream)."""
-        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue(maxsize=self.subscriber_queue_size)
+        queue: asyncio.Queue[StreamRecord | None] = asyncio.Queue(maxsize=self.subscriber_queue_size)
         self._subscribers.append(queue)
         return queue
 
@@ -57,7 +71,7 @@ class SessionBus:
         are also on disk (which would re-apply on reconnect)."""
         self._recent.clear()
 
-    def unsubscribe(self, queue: asyncio.Queue[SSEEvent | None]) -> None:
+    def unsubscribe(self, queue: asyncio.Queue[StreamRecord | None]) -> None:
         try:
             self._subscribers.remove(queue)
         except ValueError:
@@ -68,12 +82,12 @@ class SessionBus:
             self.unsubscribe(queue)
             self._close_queue(queue)
 
-    def _close_slow_subscriber(self, queue: asyncio.Queue[SSEEvent | None]) -> None:
+    def _close_slow_subscriber(self, queue: asyncio.Queue[StreamRecord | None]) -> None:
         self.unsubscribe(queue)
         self._close_queue(queue)
 
     @staticmethod
-    def _close_queue(queue: asyncio.Queue[SSEEvent | None]) -> None:
+    def _close_queue(queue: asyncio.Queue[StreamRecord | None]) -> None:
         while True:
             try:
                 queue.get_nowait()

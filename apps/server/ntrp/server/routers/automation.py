@@ -84,18 +84,18 @@ async def _automation_event_stream(bus_registry: BusRegistry):
     try:
         while True:
             try:
-                event = await asyncio.wait_for(queue.get(), timeout=0.5)
+                record = await asyncio.wait_for(queue.get(), timeout=0.5)
             except TimeoutError:
                 if time.monotonic() - last_event_at >= KEEPALIVE_INTERVAL:
                     last_event_at = time.monotonic()
                     yield SSE_KEEPALIVE
                 continue
 
-            if event is None:
+            if record is None:
                 break
 
             last_event_at = time.monotonic()
-            yield event.to_sse_string()
+            yield f"id: {record.seq}\n{record.event.to_sse_string()}"
             await asyncio.sleep(0)
     except asyncio.CancelledError:
         pass

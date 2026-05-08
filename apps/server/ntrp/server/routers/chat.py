@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator
 from fastapi import APIRouter, Depends, HTTPException
 
 from ntrp.events.sse import TextDeltaEvent
-from ntrp.server.bus import BusRegistry
+from ntrp.server.bus import BusRegistry, StreamRecord
 from ntrp.server.deps import get_bus_registry, require_run_registry
 from ntrp.server.middleware import SSEStreamingResponse
 from ntrp.server.runtime import Runtime, get_runtime
@@ -25,42 +25,52 @@ SSE_KEEPALIVE = ":\n\n"
 KEEPALIVE_INTERVAL = 5
 
 
+def _record_to_sse_string(record: StreamRecord) -> str:
+    return f"id: {record.seq}\n{record.event.to_sse_string()}"
+
+
 async def _event_stream(
-    session_id: str, bus_registry: BusRegistry, run_registry: RunRegistry, stream: bool = False
+    session_id: str,
+    bus_registry: BusRegistry,
+    run_registry: RunRegistry,
+    stream: bool = False,
+    after_seq: int | None = None,
 ) -> AsyncGenerator[str]:
     bus = bus_registry.get_or_create(session_id)
-    snapshot, queue = bus.subscribe_with_replay()
+    snapshot, queue = bus.subscribe_with_replay(after_seq=after_seq)
     last_event_at = time.monotonic()
 
     def should_emit(event) -> bool:
         return stream or not isinstance(event, TextDeltaEvent)
 
     try:
-        for event in snapshot:
+        for record in snapshot:
+            event = record.event
             if not should_emit(event):
                 last_event_at = time.monotonic()
                 continue
-            yield event.to_sse_string()
+            yield _record_to_sse_string(record)
             await asyncio.sleep(0)
 
         while True:
             try:
-                event = await asyncio.wait_for(queue.get(), timeout=0.5)
+                record = await asyncio.wait_for(queue.get(), timeout=0.5)
             except TimeoutError:
                 if time.monotonic() - last_event_at >= KEEPALIVE_INTERVAL:
                     last_event_at = time.monotonic()
                     yield SSE_KEEPALIVE
                 continue
 
-            if event is None:
+            if record is None:
                 break
 
+            event = record.event
             if not should_emit(event):
                 last_event_at = time.monotonic()
                 continue
 
             last_event_at = time.monotonic()
-            yield event.to_sse_string()
+            yield _record_to_sse_string(record)
             await asyncio.sleep(0)
     except asyncio.CancelledError:
         pass
@@ -74,11 +84,12 @@ async def _event_stream(
 async def chat_events(
     session_id: str,
     stream: bool = False,
+    after_seq: int | None = None,
     buses: BusRegistry = Depends(get_bus_registry),
     run_registry: RunRegistry = Depends(require_run_registry),
 ):
     return SSEStreamingResponse(
-        _event_stream(session_id, buses, run_registry, stream=stream),
+        _event_stream(session_id, buses, run_registry, stream=stream, after_seq=after_seq),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

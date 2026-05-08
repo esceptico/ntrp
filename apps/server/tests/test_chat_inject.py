@@ -3,7 +3,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from ntrp.events.sse import MessageIngestedEvent, TextDeltaEvent, TextMessageEndEvent, TextMessageStartEvent
+from ntrp.events.sse import MessageIngestedEvent, TextDeltaEvent, TextMessageEndEvent, TextMessageStartEvent, ThinkingEvent
 from ntrp.server.app import app
 from ntrp.server.bus import BusRegistry, SessionBus
 from ntrp.server.deps import get_bus_registry
@@ -13,6 +13,14 @@ from ntrp.server.schemas import ChatRequest
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 from ntrp.services.chat import expand_skill_command
 from ntrp.skills.registry import SkillRegistry
+
+
+def _parse_sse_chunk(chunk: str) -> tuple[int, str, dict]:
+    lines = chunk.splitlines()
+    assert lines[0].startswith("id: ")
+    assert lines[1].startswith("event: ")
+    payload = json.loads(chunk.split("data: ", 1)[1].strip())
+    return int(lines[0].split(": ", 1)[1]), lines[1].split(": ", 1)[1], payload
 
 
 def test_message_ingested_event_serialization():
@@ -51,13 +59,56 @@ async def test_event_stream_replays_explicit_text_boundaries():
     finally:
         await stream.aclose()
 
-    payloads = [json.loads(chunk.split("data: ", 1)[1].strip()) for chunk in chunks]
+    parsed = [_parse_sse_chunk(chunk) for chunk in chunks]
+    assert [seq for seq, _event_name, _payload in parsed] == [1, 2, 3]
+    payloads = [payload for _seq, _event_name, payload in parsed]
     assert [payload["type"] for payload in payloads] == [
         "TEXT_MESSAGE_START",
         "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_END",
     ]
     assert [payload["message_id"] for payload in payloads] == ["text-1", "text-1", "text-1"]
+
+
+@pytest.mark.asyncio
+async def test_event_stream_replay_honors_after_seq_without_old_duplicates():
+    buses = BusRegistry()
+    bus = buses.get_or_create("sess-1")
+    await bus.emit(ThinkingEvent(status="old"))
+    await bus.emit(ThinkingEvent(status="new-1"))
+    await bus.emit(ThinkingEvent(status="new-2"))
+
+    stream = _event_stream("sess-1", buses, RunRegistry(), stream=True, after_seq=1)
+    try:
+        chunks = [await anext(stream), await anext(stream)]
+    finally:
+        await stream.aclose()
+
+    parsed = [_parse_sse_chunk(chunk) for chunk in chunks]
+    assert [seq for seq, _event_name, _payload in parsed] == [2, 3]
+    assert [payload["status"] for _seq, _event_name, payload in parsed] == ["new-1", "new-2"]
+
+
+@pytest.mark.asyncio
+async def test_event_stream_stream_false_filters_text_deltas_but_preserves_sequence_ids():
+    buses = BusRegistry()
+    bus = buses.get_or_create("sess-1")
+    await bus.emit(TextMessageStartEvent(message_id="text-1"))
+    await bus.emit(TextDeltaEvent(message_id="text-1", delta="hello"))
+    await bus.emit(TextMessageEndEvent(message_id="text-1", content="hello"))
+
+    stream = _event_stream("sess-1", buses, RunRegistry(), stream=False)
+    try:
+        chunks = [await anext(stream), await anext(stream)]
+    finally:
+        await stream.aclose()
+
+    parsed = [_parse_sse_chunk(chunk) for chunk in chunks]
+    assert [seq for seq, _event_name, _payload in parsed] == [1, 3]
+    assert [payload["type"] for _seq, _event_name, payload in parsed] == [
+        "TEXT_MESSAGE_START",
+        "TEXT_MESSAGE_END",
+    ]
 
 
 def test_expand_skill_command_injects_skill_path(tmp_path):
@@ -155,7 +206,7 @@ async def test_drain_emits_ingested_for_entries_with_client_id():
         {"role": "user", "content": "third", "client_id": "cid-3"},
     ]
     # Two ingestion events emitted, in order
-    events = [queue.get_nowait() for _ in range(2)]
+    events = [queue.get_nowait().event for _ in range(2)]
     assert all(isinstance(e, MessageIngestedEvent) for e in events)
     assert [e.client_id for e in events] == ["cid-1", "cid-3"]
     assert all(e.run_id == "cool-otter" for e in events)
@@ -267,7 +318,7 @@ async def test_full_chain_inject_during_run_emits_ingested_and_lands_in_messages
     # The bus must have received a MessageIngestedEvent with the right client_id.
     received: list = []
     while not sub.empty():
-        received.append(sub.get_nowait())
+        received.append(sub.get_nowait().event)
     ingested = [e for e in received if isinstance(e, MessageIngestedEvent)]
     assert len(ingested) == 1, f"expected 1 ingestion event, got {len(ingested)}: {received}"
     assert ingested[0].client_id == "cid-XYZ"
@@ -328,7 +379,7 @@ async def test_full_chain_inject_during_final_response_continues_loop():
     # Ingestion event was emitted.
     received: list = []
     while not sub.empty():
-        received.append(sub.get_nowait())
+        received.append(sub.get_nowait().event)
     ingested = [e for e in received if isinstance(e, MessageIngestedEvent)]
     assert len(ingested) == 1
     assert ingested[0].client_id == "cid-LATE"
