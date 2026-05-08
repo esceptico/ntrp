@@ -88,11 +88,20 @@ class RunState:
         }
 
 
+OTID_DEDUP_TTL = timedelta(seconds=30)
+
+
 class RunRegistry:
     def __init__(self):
         self._runs: dict[str, RunState] = {}
         self._active_by_session: dict[str, str] = {}
         self._bg_registries: dict[str, BackgroundTaskRegistry] = {}
+        # `(session_id, client_id) -> (run_id, registered_at)`. A duplicate
+        # `/chat/message` POST within OTID_DEDUP_TTL returns the existing
+        # run_id instead of starting a second run. Covers network retries
+        # and double-clicks; longer-term duplicate guarding is the
+        # client's job.
+        self._otid_runs: dict[tuple[str, str], tuple[str, datetime]] = {}
 
     def get_background_registry(self, session_id: str) -> BackgroundTaskRegistry:
         if session_id not in self._bg_registries:
@@ -136,6 +145,31 @@ class RunRegistry:
         if run and not run.cancelled:
             return run
         return None
+
+    def lookup_otid(self, session_id: str, client_id: str) -> RunState | None:
+        """Return the run_id a given (session_id, client_id) was last
+        registered against, if still within the dedup window."""
+        if not client_id:
+            return None
+        entry = self._otid_runs.get((session_id, client_id))
+        if not entry:
+            return None
+        run_id, registered_at = entry
+        if datetime.now(UTC) - registered_at > OTID_DEDUP_TTL:
+            self._otid_runs.pop((session_id, client_id), None)
+            return None
+        return self._runs.get(run_id)
+
+    def register_otid(self, session_id: str, client_id: str, run_id: str) -> None:
+        if not client_id:
+            return
+        self._otid_runs[(session_id, client_id)] = (run_id, datetime.now(UTC))
+
+    def _prune_otids(self, now: datetime) -> None:
+        cutoff = now - OTID_DEDUP_TTL
+        expired = [key for key, (_, at) in self._otid_runs.items() if at < cutoff]
+        for key in expired:
+            self._otid_runs.pop(key, None)
 
     def complete_run(self, run_id: str) -> None:
         run = self._runs.get(run_id)
@@ -216,6 +250,7 @@ class RunRegistry:
 
     def cleanup_old_runs(self, max_age_hours: int = 24) -> int:
         now = datetime.now(UTC)
+        self._prune_otids(now)
         to_remove = []
 
         for run_id, run in self._runs.items():

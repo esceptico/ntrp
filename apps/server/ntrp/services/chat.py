@@ -280,6 +280,14 @@ async def submit_chat_message(
     context: list[dict] | None = None,
     client_id: str | None = None,
 ) -> dict[str, str]:
+    # Idempotent retry: a POST with a client_id we already accepted within
+    # the dedup window returns the same run_id instead of starting a
+    # second run or re-queueing the message.
+    if client_id:
+        existing = run_registry.lookup_otid(session_id, client_id)
+        if existing:
+            return {"run_id": existing.run_id, "session_id": session_id}
+
     active_run = run_registry.get_accepting_run(session_id)
     if active_run:
         entry: dict = {
@@ -289,6 +297,8 @@ async def submit_chat_message(
         if client_id:
             entry["client_id"] = client_id
         active_run.queue_injection(entry)
+        if client_id:
+            run_registry.register_otid(session_id, client_id, active_run.run_id)
         return {"run_id": active_run.run_id, "session_id": session_id}
 
     deps = build_deps()
@@ -312,6 +322,8 @@ async def submit_chat_message(
     task = asyncio.create_task(run_chat(ctx, bus))
     ctx.run.task = task
     _install_cancel_fallback(ctx.run, bus, run_registry, task)
+    if client_id:
+        run_registry.register_otid(session_id, client_id, ctx.run.run_id)
 
     return {"run_id": ctx.run.run_id, "session_id": ctx.session_state.session_id}
 
@@ -477,12 +489,13 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             # snapshot. Lightweight UPDATE, leaves metadata alone — the
             # final save in `finally` re-stamps last_input_tokens.
             #
-            # The bus replay buffer is wiped right after the save so disk
-            # and buffer never overlap: disk has everything up to here,
-            # the buffer holds only events emitted between this checkpoint
-            # and the next. Reconnecting clients get the union, no dups.
+            # mark_checkpoint advances the bus's "events <= this seq are
+            # on disk" watermark. The buffer keeps growing (bounded by
+            # RECENT_BUFFER_MAX); a reconnecting client with a cursor at
+            # or above this watermark gets a clean buffered replay, while
+            # a cursor below it triggers a stream_reset → history reload.
             await ctx.session_service.save_progress(session_state, messages)
-            bus.clear_buffer()
+            bus.mark_checkpoint()
 
         agent.hooks.on_step_finish = _checkpoint
 
@@ -557,10 +570,10 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 input_tokens = None
             metadata = {"last_input_tokens": input_tokens} if input_tokens is not None else None
             await ctx.session_service.save(session_state, run.messages, metadata=metadata)
-            # Disk now holds the canonical end-of-run state; drop the
-            # replay buffer so reconnects don't re-apply already-saved
-            # events on top of fresh history.
-            bus.clear_buffer()
+            # Disk now holds the canonical end-of-run state; advance the
+            # checkpoint watermark so any cursor below it gets a
+            # stream_reset → history reload on reconnect.
+            bus.mark_checkpoint()
             event = RunCompleted(
                 run_id=run.run_id,
                 session_id=session_state.session_id,

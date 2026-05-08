@@ -22,8 +22,18 @@ from ntrp.services.chat import submit_chat_message
 
 router = APIRouter(tags=["chat"])
 
-SSE_KEEPALIVE = ":\n\n"
 KEEPALIVE_INTERVAL = 5
+
+
+def _keepalive(latest_seq: int) -> str:
+    """Comment frame carrying the bus's latest emitted seq.
+
+    Lets a long-silent subscriber confirm it is up-to-date (its cursor ==
+    latest_seq) without waiting for a real event. Comment frames don't
+    update the EventSource Last-Event-ID, but the desktop client uses
+    `?after_seq=` and can read this directly.
+    """
+    return f": seq={latest_seq}\n\n"
 
 
 async def _event_stream(
@@ -66,7 +76,7 @@ async def _event_stream(
             except TimeoutError:
                 if time.monotonic() - last_event_at >= KEEPALIVE_INTERVAL:
                     last_event_at = time.monotonic()
-                    yield SSE_KEEPALIVE
+                    yield _keepalive(bus.next_seq - 1)
                 continue
 
             if record is None:

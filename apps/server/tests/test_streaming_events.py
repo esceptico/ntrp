@@ -191,7 +191,7 @@ async def test_event_stream_emits_stream_reset_on_replay_gap():
     bus = buses.get_or_create("sess-1")
     await bus.emit(ThinkingEvent(status="saved-a"))
     await bus.emit(ThinkingEvent(status="saved-b"))
-    bus.clear_buffer()
+    bus.mark_checkpoint()
     await bus.emit(ThinkingEvent(status="live-tail"))
 
     stream = _event_stream("sess-1", buses, RunRegistry(), stream=True, after_seq=1)
@@ -219,7 +219,7 @@ async def test_event_stream_emits_stream_reset_on_future_cursor():
     buses = BusRegistry()
     bus = buses.get_or_create("sess-1")
     await bus.emit(ThinkingEvent(status="old-generation"))
-    bus.clear_buffer()
+    bus.mark_checkpoint()
 
     stream = _event_stream("sess-1", buses, RunRegistry(), stream=True, after_seq=44)
     try:

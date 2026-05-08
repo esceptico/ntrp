@@ -105,17 +105,18 @@ async def test_subscribe_with_replay_after_seq_returns_only_later_records():
 
 
 @pytest.mark.asyncio
-async def test_subscribe_with_replay_reports_gap_for_old_cursor():
+async def test_subscribe_with_replay_reports_gap_for_cursor_below_checkpoint():
     bus = SessionBus(session_id="sess-1")
     await bus.emit(ThinkingEvent(status="a"))
     await bus.emit(ThinkingEvent(status="b"))
-    bus.clear_buffer()
+    bus.mark_checkpoint()
     await bus.emit(ThinkingEvent(status="c"))
 
     subscription = bus.subscribe_with_replay(after_seq=1)
     snapshot, queue = subscription
 
     assert subscription.replay_gap is True
+    # Only post-checkpoint events are replayed; client must reload history.
     assert _seqs(snapshot) == [3]
     assert queue.empty()
 
@@ -152,43 +153,70 @@ async def test_subscribe_with_replay_reports_no_gap_for_satisfiable_cursor():
 async def test_subscribe_with_replay_reports_no_gap_without_cursor():
     bus = SessionBus(session_id="sess-1")
     await bus.emit(ThinkingEvent(status="a"))
-    bus.clear_buffer()
+    bus.mark_checkpoint()
     await bus.emit(ThinkingEvent(status="b"))
 
     subscription = bus.subscribe_with_replay()
     snapshot, queue = subscription
 
     assert subscription.replay_gap is False
+    # Without cursor, only post-checkpoint events are replayed (the live
+    # tail). Pre-checkpoint events are on disk and the client is expected
+    # to reach those via the history endpoint.
     assert _seqs(snapshot) == [2]
     assert queue.empty()
 
 
 @pytest.mark.asyncio
-async def test_clear_buffer_drops_replay_state_without_resetting_sequence():
-    """Buffer is wiped at every checkpoint save so disk and buffer never
-    overlap. After clear, new subscribers get no replay — only live."""
+async def test_subscribe_with_replay_no_gap_for_cursor_at_or_above_checkpoint():
+    """The fast-path tab-switch case: client comes back with a cursor
+    that's >= the latest checkpoint. We just ship the buffered tail and
+    don't force a history reload, even though a checkpoint fired while
+    the client was away."""
     bus = SessionBus(session_id="sess-1")
-    await bus.emit(ThinkingEvent(status="before-save"))
+    await bus.emit(ThinkingEvent(status="a"))
+    await bus.emit(ThinkingEvent(status="b"))
+    bus.mark_checkpoint()  # checkpoint at seq=2
+    await bus.emit(ThinkingEvent(status="c"))
+    await bus.emit(ThinkingEvent(status="d"))
 
-    bus.clear_buffer()  # checkpoint just saved messages to disk
+    # Cursor at the checkpoint: smooth replay, no gap.
+    subscription = bus.subscribe_with_replay(after_seq=2)
+    assert subscription.replay_gap is False
+    assert _seqs(subscription.snapshot) == [3, 4]
 
-    snapshot, queue = bus.subscribe_with_replay()
-    assert snapshot == []
-    after = ThinkingEvent(status="after-save")
-    await bus.emit(after)
-    record = queue.get_nowait()
-    assert record.seq == 2
-    assert record.event == after
+    # Cursor above the checkpoint: same.
+    subscription = bus.subscribe_with_replay(after_seq=3)
+    assert subscription.replay_gap is False
+    assert _seqs(subscription.snapshot) == [4]
 
 
 @pytest.mark.asyncio
-async def test_existing_subscribers_keep_receiving_after_clear_buffer():
-    """clear_buffer only affects the replay snapshot for FUTURE subscribers;
-    live subscribers' queues are not touched."""
+async def test_mark_checkpoint_keeps_events_in_buffer():
+    """Unlike the prior clear_buffer behavior, mark_checkpoint leaves the
+    buffer intact. This lets clients with cursors right at the checkpoint
+    see the pre-checkpoint events in their queue (they won't, because the
+    snapshot filters by max(after_seq, checkpoint_seq), but emit() to
+    existing subscribers is unaffected and the deque retains everything
+    until it overflows)."""
+    bus = SessionBus(session_id="sess-1")
+    await bus.emit(ThinkingEvent(status="a"))
+    await bus.emit(ThinkingEvent(status="b"))
+    bus.mark_checkpoint()
+    await bus.emit(ThinkingEvent(status="c"))
+
+    assert _seqs(list(bus._recent)) == [1, 2, 3]
+    assert bus.checkpoint_seq == 2
+
+
+@pytest.mark.asyncio
+async def test_existing_subscribers_keep_receiving_after_checkpoint():
+    """mark_checkpoint only affects future subscribers' replay snapshot
+    boundary; live subscribers' queues are not touched."""
     bus = SessionBus(session_id="sess-1")
     queue = bus.subscribe()
     await bus.emit(ThinkingEvent(status="one"))
-    bus.clear_buffer()
+    bus.mark_checkpoint()
     await bus.emit(ThinkingEvent(status="two"))
 
     assert queue.get_nowait().event.status == "one"
@@ -196,27 +224,38 @@ async def test_existing_subscribers_keep_receiving_after_clear_buffer():
 
 
 @pytest.mark.asyncio
-async def test_emit_save_clear_subscribe_invariant():
-    """The 'no overlap' invariant: events emitted before the checkpoint
-    only appear on disk, events emitted after only appear in the buffer.
-    Reconnects compose the two without seeing duplicates."""
+async def test_emit_checkpoint_subscribe_invariant():
+    """A new subscriber attached after a checkpoint only sees post-
+    checkpoint events in its replay snapshot. Pre-checkpoint events are
+    in the buffer but filtered out — the client is expected to fetch
+    them via history."""
     bus = SessionBus(session_id="sess-1")
 
-    # Step 1: events fly during a step.
     await bus.emit(ThinkingEvent(status="step1-a"))
     await bus.emit(ThinkingEvent(status="step1-b"))
-
-    # Checkpoint fires: caller saves messages to disk, then wipes buffer.
-    bus.clear_buffer()
-
-    # Step 2: more events.
+    bus.mark_checkpoint()
     e3 = ThinkingEvent(status="step2-a")
     await bus.emit(e3)
 
-    # New subscriber gets ONLY the post-clear events.
     snapshot, _q = bus.subscribe_with_replay()
     assert _seqs(snapshot) == [3]
     assert _events(snapshot) == [e3]
+
+
+@pytest.mark.asyncio
+async def test_bus_registry_preserves_checkpoint_seq_across_recreation():
+    registry = BusRegistry()
+    bus = registry.get_or_create("sess-1")
+    await bus.emit(ThinkingEvent(status="a"))
+    await bus.emit(ThinkingEvent(status="b"))
+    bus.mark_checkpoint()
+    assert bus.checkpoint_seq == 2
+
+    registry.remove("sess-1")
+    recreated = registry.get_or_create("sess-1")
+    assert recreated.checkpoint_seq == 2
+    # next_seq is also preserved.
+    assert recreated.next_seq == 3
 
 
 @pytest.mark.asyncio

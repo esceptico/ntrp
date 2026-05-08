@@ -195,3 +195,43 @@ async def test_cancel_all_cancels_pending_run_task():
     assert cancelled == 1
     await asyncio.gather(task, return_exceptions=True)
     assert task.cancelled()
+
+
+def test_lookup_otid_returns_none_for_unknown():
+    registry = RunRegistry()
+    assert registry.lookup_otid("sess-1", "cid-missing") is None
+    assert registry.lookup_otid("sess-1", "") is None
+
+
+def test_lookup_otid_returns_run_when_registered():
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    registry.register_otid("sess-1", "cid-1", run.run_id)
+    assert registry.lookup_otid("sess-1", "cid-1") is run
+
+
+def test_lookup_otid_expires_after_ttl():
+    from ntrp.server.state import OTID_DEDUP_TTL
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    registry.register_otid("sess-1", "cid-1", run.run_id)
+    expired = datetime.now(UTC) - OTID_DEDUP_TTL - timedelta(seconds=1)
+    registry._otid_runs[("sess-1", "cid-1")] = (run.run_id, expired)
+
+    assert registry.lookup_otid("sess-1", "cid-1") is None
+    assert ("sess-1", "cid-1") not in registry._otid_runs
+
+
+def test_register_otid_ignores_empty_client_id():
+    registry = RunRegistry()
+    registry.register_otid("sess-1", "", "run-A")
+    assert registry._otid_runs == {}
+
+
+def test_otid_scoped_per_session():
+    registry = RunRegistry()
+    registry.create_run("sess-1")
+    registry.create_run("sess-2")
+    registry.register_otid("sess-1", "cid-1", "run-A")
+    assert registry.lookup_otid("sess-2", "cid-1") is None

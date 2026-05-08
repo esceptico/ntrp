@@ -205,6 +205,22 @@ def test_post_chat_message_stores_client_id_when_run_active(client_with_active_r
     assert entry["content"] == "follow-up"
 
 
+def test_duplicate_post_returns_existing_run_without_requeueing(client_with_active_run):
+    """A retry of the same client_id POST resolves to the same run_id and
+    does NOT re-queue the message."""
+    c, run = client_with_active_run
+    payload = {"message": "follow-up", "session_id": "sess-1", "client_id": "cid-1"}
+
+    first = c.post("/chat/message", json=payload)
+    second = c.post("/chat/message", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["run_id"] == second.json()["run_id"] == run.run_id
+    # Only the first POST queued the message; the second was deduped.
+    assert len(run.inject_queue) == 1
+
+
 def _drain_factory(bus: SessionBus, run: RunState):
     """Mirror the closure built inside services.chat.run_chat for testing."""
     from ntrp.services.chat import _build_get_pending
