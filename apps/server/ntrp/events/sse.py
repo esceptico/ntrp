@@ -120,6 +120,8 @@ class TextMessageStartEvent(SSEEvent):
     type: EventType = field(default=EventType.TEXT_MESSAGE_START, init=False)
     message_id: str = ""
     role: str = "assistant"
+    depth: int = 0
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -136,6 +138,8 @@ class TextMessageEndEvent(SSEEvent):
     type: EventType = field(default=EventType.TEXT_MESSAGE_END, init=False)
     message_id: str = ""
     content: str = ""  # cumulative final text, optional convenience for clients
+    depth: int = 0
+    parent_id: str | None = None
 
 
 # ─── Tool calls (AG-UI Start / Args / End / Result) ──────────────────
@@ -350,6 +354,7 @@ def agent_events_to_sse(event) -> tuple[SSEEvent, ...]:
                 TextMessageStartEvent(
                     message_id=event.message_id,
                     role="assistant",
+                    **base,
                 ),
             )
         case TextEnded():
@@ -357,6 +362,7 @@ def agent_events_to_sse(event) -> tuple[SSEEvent, ...]:
                 TextMessageEndEvent(
                     message_id=event.message_id,
                     content=event.content,
+                    **base,
                 ),
             )
         case TextDelta():

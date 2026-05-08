@@ -52,6 +52,19 @@ def test_reasoning_sse_preserves_nested_scope():
     assert data["parent_id"] == "call-research"
 
 
+def test_text_boundary_sse_preserves_nested_scope():
+    (start,) = agent_events_to_sse(TextStarted(depth=1, parent_id="call-research", message_id="text-1"))
+    (content,) = agent_events_to_sse(
+        TextDelta(depth=1, parent_id="call-research", message_id="text-1", content="hello")
+    )
+    (end,) = agent_events_to_sse(TextEnded(depth=1, parent_id="call-research", message_id="text-1", content="hello"))
+
+    for event in (start, content, end):
+        data = json.loads(event.to_sse()["data"])
+        assert data["depth"] == 1
+        assert data["parent_id"] == "call-research"
+
+
 @pytest.mark.asyncio
 async def test_research_child_reasoning_is_not_emitted_to_parent(monkeypatch):
     prompt_cache_keys = []
@@ -158,6 +171,29 @@ async def test_run_agent_loop_emits_text_end_before_run_cancelled():
         "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_END",
         "run_cancelled",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_run_agent_loop_closes_text_before_backgrounding():
+    run = RunState(run_id="run-1", session_id="sess-1")
+    bus = SessionBus(session_id="sess-1")
+
+    class BackgroundingAgent:
+        async def stream(self, messages):
+            yield TextStarted(message_id="text-1")
+            yield TextDelta(message_id="text-1", content="hello")
+            run.backgrounded = True
+            yield TextEnded(message_id="text-1", content="hello")
+
+    result, bg_gen = await run_agent_loop(SimpleNamespace(run=run), BackgroundingAgent(), bus)
+
+    assert result is None
+    assert bg_gen is not None
+    assert [event.type.value for event in bus._recent] == [
+        "TEXT_MESSAGE_START",
+        "TEXT_MESSAGE_CONTENT",
+        "TEXT_MESSAGE_END",
     ]
 
 

@@ -26,31 +26,47 @@ async def run_agent_loop(
     gen = agent.stream(messages)
     open_text_message_id: str | None = None
     open_text_parts: list[str] = []
+    open_text_depth = 0
+    open_text_parent_id: str | None = None
 
     def note_text_event(event) -> None:
-        nonlocal open_text_message_id, open_text_parts
+        nonlocal open_text_depth, open_text_message_id, open_text_parent_id, open_text_parts
         if isinstance(event, TextMessageStartEvent):
             open_text_message_id = event.message_id
             open_text_parts = []
+            open_text_depth = event.depth
+            open_text_parent_id = event.parent_id
         elif isinstance(event, TextMessageContentEvent):
             open_text_message_id = open_text_message_id or event.message_id
             open_text_parts.append(event.delta)
+            open_text_depth = event.depth
+            open_text_parent_id = event.parent_id
         elif isinstance(event, TextMessageEndEvent):
             open_text_message_id = None
             open_text_parts = []
+            open_text_depth = 0
+            open_text_parent_id = None
 
     async def close_open_text() -> None:
-        nonlocal open_text_message_id, open_text_parts
+        nonlocal open_text_depth, open_text_message_id, open_text_parent_id, open_text_parts
         if open_text_message_id is None:
             return
-        event = TextMessageEndEvent(message_id=open_text_message_id, content="".join(open_text_parts))
+        event = TextMessageEndEvent(
+            message_id=open_text_message_id,
+            content="".join(open_text_parts),
+            depth=open_text_depth,
+            parent_id=open_text_parent_id,
+        )
         open_text_message_id = None
         open_text_parts = []
+        open_text_depth = 0
+        open_text_parent_id = None
         await bus.emit(event)
 
     try:
         async for item in gen:
             if ctx.run.backgrounded:
+                await close_open_text()
                 return None, gen
             if isinstance(item, Result):
                 if ctx.run.cancelled:
