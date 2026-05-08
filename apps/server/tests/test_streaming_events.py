@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ from ntrp.core.spawner import create_spawn_fn
 from ntrp.events.sse import (
     ReasoningMessageContentEvent,
     TextDeltaEvent,
+    TextMessageContentEvent,
     TextMessageEndEvent,
     TextMessageStartEvent,
     agent_events_to_sse,
@@ -150,6 +152,38 @@ async def test_run_agent_loop_emits_text_end_before_run_cancelled():
             yield TextEnded(message_id="text-1", content="hello")
 
     await run_agent_loop(SimpleNamespace(run=run), CancellingAgent(), bus)
+
+    assert [event.type.value for event in bus._recent] == [
+        "TEXT_MESSAGE_START",
+        "TEXT_MESSAGE_CONTENT",
+        "TEXT_MESSAGE_END",
+        "run_cancelled",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_run_agent_loop_closes_text_when_task_cancelled_during_content_flush():
+    run_registry = RunRegistry()
+    run = run_registry.create_run("sess-1")
+
+    class CancellingContentFlushBus(SessionBus):
+        async def emit(self, event):
+            await super().emit(event)
+            if isinstance(event, TextMessageContentEvent):
+                run_registry.cancel_run(run.run_id)
+                await asyncio.sleep(0)
+
+    class AgentWithOpenText:
+        async def stream(self, messages):
+            yield TextStarted(message_id="text-1")
+            yield TextDelta(message_id="text-1", content="hello")
+            yield TextEnded(message_id="text-1", content="hello")
+
+    bus = CancellingContentFlushBus(session_id="sess-1")
+    task = asyncio.create_task(run_agent_loop(SimpleNamespace(run=run), AgentWithOpenText(), bus))
+    run.task = task
+
+    await task
 
     assert [event.type.value for event in bus._recent] == [
         "TEXT_MESSAGE_START",
