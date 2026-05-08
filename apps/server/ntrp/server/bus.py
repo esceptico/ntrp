@@ -18,6 +18,7 @@ RECENT_BUFFER_MAX = 10000
 @dataclass(frozen=True, slots=True)
 class StreamRecord:
     seq: int
+    session_id: str
     event: SSEEvent
 
 
@@ -25,7 +26,7 @@ def stream_record_to_sse_string(session_id: str, record: StreamRecord) -> str:
     sse = record.event.to_sse()
     payload = json.loads(sse["data"])
     payload["seq"] = record.seq
-    payload["session_id"] = session_id
+    payload["session_id"] = record.session_id
     return f"id: {record.seq}\nevent: {sse['event']}\ndata: {json.dumps(payload)}\n\n"
 
 
@@ -52,7 +53,7 @@ class SessionBus:
         return self._next_seq
 
     async def emit(self, event: SSEEvent) -> None:
-        record = StreamRecord(seq=self._next_seq, event=event)
+        record = StreamRecord(seq=self._next_seq, session_id=self.session_id, event=event)
         self._next_seq += 1
         self._recent.append(record)
         for queue in tuple(self._subscribers):
