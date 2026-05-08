@@ -303,10 +303,7 @@ app.whenReady().then(() => {
     const connectionId = crypto.randomUUID();
     const controller = new AbortController();
     eventStreams.set(connectionId, controller);
-    setImmediate(() => {
-      if (eventStreams.get(connectionId) !== controller) return;
-      void streamEvents(connectionId, event.sender, config, sessionId, afterSeq, controller.signal);
-    });
+    void streamEvents(connectionId, event.sender, config, sessionId, afterSeq, controller.signal);
     return connectionId;
   });
   ipcMain.handle("events:disconnect", (event, connectionId) => {
