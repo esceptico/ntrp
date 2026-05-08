@@ -353,7 +353,17 @@ export async function viewSkill(name: string): Promise<void> {
 export async function switchSession(sessionId: string, historyOptions: LoadHistoryOptions = {}): Promise<void> {
   const s = getState();
   s.setCurrentSession(sessionId);
-  await loadHistory(sessionId, historyOptions);
+  // If the per-session cache had this view, setCurrentSession just
+  // hydrated `historyLoadedFor` to match. Skip the network reload —
+  // SSE replay (with the bus checkpoint watermark) catches up live;
+  // a real divergence above the watermark fires stream_reset which
+  // calls loadHistory through the gap-recovery path anyway.
+  const cacheHit =
+    historyOptions.mode === undefined &&
+    getState().historyLoadedFor === sessionId;
+  if (!cacheHit) {
+    await loadHistory(sessionId, historyOptions);
+  }
 }
 
 export async function createSession(): Promise<void> {

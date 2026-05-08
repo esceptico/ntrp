@@ -171,6 +171,31 @@ export interface SessionUsage {
   totalCost: number;
 }
 
+/** Per-session view state cached across `setCurrentSession` switches.
+ *  Snapshotted on switch-out, hydrated on switch-back, so flipping
+ *  between sessions doesn't blank the UI while history reloads. The
+ *  SSE replay (with the bus's checkpoint watermark) catches up any
+ *  events that landed while the session was in the background. */
+export interface CachedSessionState {
+  messages: Map<string, UiMessage>;
+  order: string[];
+  historyLoadedFor: string | null;
+  historyHasMoreBefore: boolean;
+  historyHasMoreAfter: boolean;
+  historyLoadingBefore: boolean;
+  historyLoadingAfter: boolean;
+  running: boolean;
+  currentRunId: string | null;
+  usage: SessionUsage;
+  editingId: string | null;
+  activeActivityId: string | null;
+  compacting: boolean;
+  lastCompaction: { before: number; after: number; at: number } | null;
+  sourceFocus: MessageSourceFocus | null;
+  pendingApprovals: ApprovalState[];
+  reviewingApprovalToolId: string | null;
+}
+
 interface State {
   config: AppConfig;
   sessions: SessionListItem[];
@@ -195,6 +220,10 @@ interface State {
    *  them. Cleared when the user opens the session. Renders as an
    *  "unread" dot in the sidebar. */
   unreadDoneSessionIds: Set<string>;
+  /** Per-session UI state preserved across `setCurrentSession` swaps.
+   *  Outgoing session is snapshotted in, incoming is hydrated out.
+   *  See `CachedSessionState`. */
+  sessionCache: Map<string, CachedSessionState>;
   connected: boolean;
   running: boolean;
   error: string | null;
@@ -311,6 +340,50 @@ interface Actions {
 
 const initialUsage: SessionUsage = { lastPrompt: 0, totalTokens: 0, totalCost: 0 };
 
+function blankSessionView(): CachedSessionState {
+  return {
+    messages: new Map(),
+    order: [],
+    historyLoadedFor: null,
+    historyHasMoreBefore: false,
+    historyHasMoreAfter: false,
+    historyLoadingBefore: false,
+    historyLoadingAfter: false,
+    running: false,
+    currentRunId: null,
+    usage: initialUsage,
+    editingId: null,
+    activeActivityId: null,
+    compacting: false,
+    lastCompaction: null,
+    sourceFocus: null,
+    pendingApprovals: [],
+    reviewingApprovalToolId: null,
+  };
+}
+
+function snapshotSession(s: State): CachedSessionState {
+  return {
+    messages: s.messages,
+    order: s.order,
+    historyLoadedFor: s.historyLoadedFor,
+    historyHasMoreBefore: s.historyHasMoreBefore,
+    historyHasMoreAfter: s.historyHasMoreAfter,
+    historyLoadingBefore: s.historyLoadingBefore,
+    historyLoadingAfter: s.historyLoadingAfter,
+    running: s.running,
+    currentRunId: s.currentRunId,
+    usage: s.usage,
+    editingId: s.editingId,
+    activeActivityId: s.activeActivityId,
+    compacting: s.compacting,
+    lastCompaction: s.lastCompaction,
+    sourceFocus: s.sourceFocus,
+    pendingApprovals: s.pendingApprovals,
+    reviewingApprovalToolId: s.reviewingApprovalToolId,
+  };
+}
+
 export const useStore = create<State & Actions>((set) => ({
   config: { ...DEFAULT_CONFIG },
   sessions: [],
@@ -324,6 +397,7 @@ export const useStore = create<State & Actions>((set) => ({
   historyLoadingAfter: false,
   activeRunSessionIds: new Set(),
   unreadDoneSessionIds: new Set(),
+  sessionCache: new Map(),
   connected: false,
   running: false,
   error: null,
@@ -404,27 +478,41 @@ export const useStore = create<State & Actions>((set) => ({
         unread = new Set(unread);
         unread.delete(currentSessionId);
       }
+      // Re-selecting the same session is a no-op for view state — the
+      // global slots ARE that session's live state. Touching cache here
+      // would clobber it with a stale snapshot.
+      if (s.currentSessionId === currentSessionId) {
+        return unread !== s.unreadDoneSessionIds ? { unreadDoneSessionIds: unread } : {};
+      }
+      // Snapshot outgoing session into cache so a switch-back can
+      // restore the UI instantly and the SSE replay (with the bus
+      // checkpoint watermark) only fills in what's new.
+      const cache = new Map(s.sessionCache);
+      if (s.currentSessionId) {
+        cache.set(s.currentSessionId, snapshotSession(s));
+      }
+      const restored = currentSessionId ? cache.get(currentSessionId) : undefined;
+      const view = restored ?? blankSessionView();
       return {
         currentSessionId,
-        messages: new Map(),
-        order: [],
-        usage: initialUsage,
-        editingId: null,
-        activeActivityId: null,
-        currentRunId: null,
-        // The previous session's RUN_FINISHED arrives on a bus we no
-        // longer subscribe to — reset here so we don't carry a stale
-        // "thinking" indicator into the new session. loadHistory turns
-        // it back on if the destination session is itself in-flight.
-        running: false,
-        compacting: false,
-        lastCompaction: null,
-        sourceFocus: null,
-        historyLoadedFor: null,
-        historyHasMoreBefore: false,
-        historyHasMoreAfter: false,
-        historyLoadingBefore: false,
-        historyLoadingAfter: false,
+        sessionCache: cache,
+        messages: view.messages,
+        order: view.order,
+        usage: view.usage,
+        editingId: view.editingId,
+        activeActivityId: view.activeActivityId,
+        currentRunId: view.currentRunId,
+        running: view.running,
+        compacting: view.compacting,
+        lastCompaction: view.lastCompaction,
+        sourceFocus: view.sourceFocus,
+        historyLoadedFor: view.historyLoadedFor,
+        historyHasMoreBefore: view.historyHasMoreBefore,
+        historyHasMoreAfter: view.historyHasMoreAfter,
+        historyLoadingBefore: view.historyLoadingBefore,
+        historyLoadingAfter: view.historyLoadingAfter,
+        pendingApprovals: view.pendingApprovals,
+        reviewingApprovalToolId: view.reviewingApprovalToolId,
         ...(unread !== s.unreadDoneSessionIds ? { unreadDoneSessionIds: unread } : {}),
       };
     }),
