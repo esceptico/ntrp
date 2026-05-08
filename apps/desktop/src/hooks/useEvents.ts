@@ -26,19 +26,6 @@ function endTurn(s: ReturnType<typeof getState>, endedAt: number) {
   }
 }
 
-function reopenLatestUserTurn(s: ReturnType<typeof getState>): void {
-  for (let i = s.order.length - 1; i >= 0; i--) {
-    const id = s.order[i];
-    const msg = s.messages.get(id);
-    if (msg?.role !== "user" || !msg.turn) continue;
-    if (msg.turn.endedAt == null) return;
-    s.mutateMessage(id, {
-      turn: { ...msg.turn, endedAt: null, durationMs: null },
-    });
-    return;
-  }
-}
-
 /** Stagger activity-item insertions so a burst of tool calls in one stream
  *  chunk rolls in one-by-one rather than as a single chord.
  *
@@ -239,7 +226,6 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
     case "RUN_STARTED":
       endActivity(s);
       activeAssistantMessageId = null;
-      reopenLatestUserTurn(s);
       setState({ running: true, error: null, currentRunId: event.run_id });
       return;
     case "RUN_FINISHED":
