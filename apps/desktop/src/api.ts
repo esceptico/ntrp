@@ -67,9 +67,9 @@ export interface ApiBridgeResponse {
 }
 
 /** AG-UI-shaped event protocol. Every event carries a `timestamp` (Unix ms). */
-type WithTs = { timestamp?: number };
+type CommonServerEventFields = { timestamp?: number; seq?: number; session_id?: string };
 
-export type ServerEvent = WithTs & (
+export type ServerEvent = CommonServerEventFields & (
   // ─── Run lifecycle ──────────────────────────────────────────────────
   | { type: "RUN_STARTED"; run_id: string; session_id: string; session_name?: string | null; skip_approvals?: boolean }
   | { type: "RUN_FINISHED"; run_id: string; usage?: { prompt: number; completion: number; cache_read: number; cost: number } }

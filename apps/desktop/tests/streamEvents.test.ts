@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
-import { handleServerEvent, resetStreamStateForTest } from "../src/hooks/useEvents.js";
+import { eventStreamUrl, handleServerEvent, resetStreamStateForTest } from "../src/hooks/useEvents.js";
 import { getState, setState } from "../src/store.js";
 
 beforeEach(() => {
@@ -34,6 +34,160 @@ test("continues assistant content by message id without moving prior text below 
   expect(assistantIds).toEqual(["assistant-1"]);
   expect(state.messages.get("assistant-1")?.content).toBe("hello world");
   expect(roles).toEqual(["assistant", "activity"]);
+});
+
+test("ignores duplicate same-session replay events without duplicating text or tools", () => {
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-1",
+    session_id: "sequence-session-1",
+    seq: 1,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_START",
+    message_id: "assistant-seq-1",
+    session_id: "sequence-session-1",
+    seq: 2,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-seq-1",
+    delta: "hello",
+    session_id: "sequence-session-1",
+    seq: 3,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-seq-1",
+    delta: " duplicate",
+    session_id: "sequence-session-1",
+    seq: 3,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-seq-1",
+    delta: " older",
+    session_id: "sequence-session-1",
+    seq: 2,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-seq-1",
+    tool_call_name: "ReadFile",
+    session_id: "sequence-session-1",
+    seq: 4,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-seq-1",
+    session_id: "sequence-session-1",
+    seq: 5,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-seq-1",
+    tool_call_name: "ReadFile",
+    session_id: "sequence-session-1",
+    seq: 4,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-seq-1",
+    session_id: "sequence-session-1",
+    seq: 5,
+  });
+
+  const state = getState();
+  const activityId = state.order.find((id) => state.messages.get(id)?.role === "activity");
+
+  expect(state.messages.get("assistant-seq-1")?.content).toBe("hello");
+  expect(state.messages.get(activityId!)?.activity?.items.map((item) => item.id)).toEqual([
+    "tool-seq-1",
+  ]);
+});
+
+test("accepts higher sequence events for the same session", () => {
+  handleServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-seq-2",
+    delta: "first",
+    session_id: "sequence-session-2",
+    seq: 10,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-seq-2",
+    delta: " second",
+    session_id: "sequence-session-2",
+    seq: 11,
+  });
+
+  expect(getState().messages.get("assistant-seq-2")?.content).toBe("first second");
+});
+
+test("accepts the same sequence number for a different session", () => {
+  handleServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-session-a",
+    delta: "A",
+    session_id: "sequence-session-a",
+    seq: 1,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-session-b",
+    delta: "B",
+    session_id: "sequence-session-b",
+    seq: 1,
+  });
+
+  const state = getState();
+  expect(state.messages.get("assistant-session-a")?.content).toBe("A");
+  expect(state.messages.get("assistant-session-b")?.content).toBe("B");
+});
+
+test("resetStreamStateForTest keeps sequence tracking across reconnect-style resets", () => {
+  handleServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-reset-seq",
+    delta: "first",
+    session_id: "sequence-reset-session",
+    seq: 12,
+  });
+
+  resetStreamStateForTest();
+
+  handleServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-reset-seq",
+    delta: " duplicate",
+    session_id: "sequence-reset-session",
+    seq: 12,
+  });
+
+  expect(getState().messages.get("assistant-reset-seq")?.content).toBe("first");
+});
+
+test("event stream URL includes after_seq once a session sequence is known", () => {
+  const config = { serverUrl: "http://localhost:6877", apiKey: "" };
+
+  expect(eventStreamUrl(config, "url-session")).toBe(
+    "http://localhost:6877/chat/events/url-session?stream=true",
+  );
+
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-url",
+    session_id: "url-session",
+    seq: 23,
+  });
+
+  expect(eventStreamUrl(config, "url-session")).toBe(
+    "http://localhost:6877/chat/events/url-session?stream=true&after_seq=23",
+  );
+  expect(eventStreamUrl(config, "other-url-session")).toBe(
+    "http://localhost:6877/chat/events/other-url-session?stream=true",
+  );
 });
 
 test("keeps tool results when result arrives before delayed burst item renders", async () => {

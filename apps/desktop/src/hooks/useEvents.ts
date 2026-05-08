@@ -75,6 +75,17 @@ const pendingToolCalls = new Map<
 >();
 
 let activeAssistantMessageId: string | null = null;
+const lastEventSeqBySession = new Map<string, number>();
+
+function shouldDropServerEvent(event: ServerEvent): boolean {
+  if (typeof event.seq !== "number" || !event.session_id) return false;
+
+  const lastSeq = lastEventSeqBySession.get(event.session_id);
+  if (lastSeq !== undefined && event.seq <= lastSeq) return true;
+
+  lastEventSeqBySession.set(event.session_id, event.seq);
+  return false;
+}
 
 function assistantIdFrom(event: { message_id?: string }): string {
   return event.message_id || crypto.randomUUID();
@@ -124,6 +135,8 @@ function activityInsertAnchor(): string | null {
 }
 
 export function handleServerEvent(event: ServerEvent) {
+  if (shouldDropServerEvent(event)) return;
+
   const s = getState();
   const ts = event.timestamp ?? Date.now();
 
@@ -320,6 +333,13 @@ function headersFor(config: AppConfig): HeadersInit {
   return config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {};
 }
 
+export function eventStreamUrl(config: AppConfig, sessionId: string): string {
+  const params = new URLSearchParams({ stream: "true" });
+  const lastSeq = lastEventSeqBySession.get(sessionId);
+  if (lastSeq !== undefined) params.set("after_seq", String(lastSeq));
+  return `${config.serverUrl}/chat/events/${encodeURIComponent(sessionId)}?${params.toString()}`;
+}
+
 export function useEvents(sessionId: string | null) {
   const config = useStore((s) => s.config);
   const historyLoadedFor = useStore((s) => s.historyLoadedFor);
@@ -369,10 +389,10 @@ export function useEvents(sessionId: string | null) {
     void (async () => {
       while (!disposed && !controller.signal.aborted) {
         try {
-          const response = await fetch(
-            `${config.serverUrl}/chat/events/${encodeURIComponent(sessionId)}?stream=true`,
-            { headers: headersFor(config), signal: controller.signal },
-          );
+          const response = await fetch(eventStreamUrl(config, sessionId), {
+            headers: headersFor(config),
+            signal: controller.signal,
+          });
           if (!response.ok || !response.body) throw new Error(`event stream failed: ${response.status}`);
 
           const reader = response.body.getReader();
