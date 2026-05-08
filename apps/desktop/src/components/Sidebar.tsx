@@ -160,132 +160,31 @@ function SessionRow({
     );
   }
 
-  return <SwipeableRow {...{ sessionId, name, lastActivity, active, streaming, unread, onStartRename, onArchive, onContextMenu }} />;
-}
-
-function SwipeableRow({
-  sessionId,
-  name,
-  lastActivity,
-  active,
-  streaming,
-  unread,
-  onStartRename,
-  onArchive,
-  onContextMenu,
-}: {
-  sessionId: string;
-  name: string | null;
-  lastActivity: string;
-  active: boolean;
-  streaming: boolean;
-  unread: boolean;
-  onStartRename: () => void;
-  onArchive: () => void;
-  onContextMenu: (e: React.MouseEvent) => void;
-}) {
-  const rowRef = useRef<HTMLDivElement>(null);
-  const revealRef = useRef<HTMLDivElement>(null);
-
-  // Apple Mail swipe-to-archive via two-finger trackpad swipe. Wheel
-  // events fire continuously during the gesture; we accumulate the
-  // horizontal delta and translate the row left in lockstep. After
-  // ~120ms with no further wheel events the gesture is considered
-  // released — past 60% of the row width, archive commits; otherwise
-  // the row springs back. We only intercept when the swipe is mostly
-  // horizontal (deltaX dominates), so vertical scrolling stays normal.
-  useEffect(() => {
-    const row = rowRef.current;
-    const reveal = revealRef.current;
-    if (!row || !reveal) return;
-    let accumulated = 0;
-    let releaseTimer: number | undefined;
-
-    const settle = () => {
-      const rowWidth = row.offsetWidth;
-      const commitAt = rowWidth * 0.6;
-      row.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
-      reveal.style.transition = "opacity 220ms ease-out";
-      if (accumulated >= commitAt) {
-        row.style.transform = `translateX(-${rowWidth}px)`;
-        reveal.style.opacity = "1";
-        window.setTimeout(onArchiveRef.current, 200);
-      } else {
-        row.style.transform = "translateX(0)";
-        reveal.style.opacity = "0";
-      }
-      accumulated = 0;
-    };
-
-    const onWheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY) * 1.2) return;
-      // Don't kick in for right swipes when nothing is exposed.
-      if (event.deltaX < 0 && accumulated <= 0) return;
-      event.preventDefault();
-      // Scale the trackpad delta so the row tracks fingers more
-      // responsively instead of crawling.
-      accumulated = Math.max(0, accumulated + event.deltaX * 1.6);
-      const rowWidth = row.offsetWidth;
-      const commitAt = rowWidth * 0.6;
-      row.style.transition = "none";
-      reveal.style.transition = "none";
-      row.style.transform = `translateX(-${accumulated}px)`;
-      reveal.style.opacity = `${Math.min(1, accumulated / commitAt)}`;
-      if (releaseTimer) window.clearTimeout(releaseTimer);
-      // Long enough to outlast trackpad inertia and natural mid-swipe
-      // pauses; short enough that a real release feels prompt.
-      releaseTimer = window.setTimeout(settle, 280);
-    };
-
-    row.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
-      row.removeEventListener("wheel", onWheel);
-      if (releaseTimer) window.clearTimeout(releaseTimer);
-    };
-  }, []);
-
-  // Hold onArchive in a ref so the wheel-listener effect doesn't have
-  // to re-bind every time the parent passes a fresh callback.
-  const onArchiveRef = useRef(onArchive);
-  useEffect(() => {
-    onArchiveRef.current = onArchive;
-  }, [onArchive]);
-
   return (
-    <div className="relative">
-      <div
-        ref={revealRef}
-        aria-hidden
-        className="absolute inset-0 flex items-center justify-end pr-3 rounded-lg bg-bad-soft text-bad pointer-events-none"
-        style={{ opacity: 0 }}
-      >
-        <Archive size={14} strokeWidth={1.8} />
-      </div>
-      <div
-        ref={rowRef}
-        role="button"
-        tabIndex={0}
-        onClick={() => void switchSession(sessionId)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            void switchSession(sessionId);
-          }
-        }}
-        onContextMenu={onContextMenu}
-        onDoubleClick={(e) => {
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => void switchSession(sessionId)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onStartRename();
-        }}
-        onMouseMove={trackHoverDish}
-        data-streaming={streaming ? "true" : undefined}
-        className={clsx(
-          "session-row hover-dish group/row relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-1.5 rounded-lg text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
-          active
-            ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
-            : "bg-bg text-ink-soft hover:bg-surface/60",
-        )}
-      >
+          void switchSession(sessionId);
+        }
+      }}
+      onContextMenu={onContextMenu}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        onStartRename();
+      }}
+      onMouseMove={trackHoverDish}
+      data-streaming={streaming ? "true" : undefined}
+      className={clsx(
+        "session-row hover-dish group/row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-1.5 rounded-lg text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+        active
+          ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
+          : "text-ink-soft hover:bg-surface/60",
+      )}
+    >
       <span className="min-w-0 flex items-center gap-1.5 text-[13px] font-medium tracking-[-0.005em]">
         <span className="truncate">{name || "untitled"}</span>
       </span>
@@ -322,7 +221,6 @@ function SwipeableRow({
           />
         </span>
       </span>
-      </div>
     </div>
   );
 }
