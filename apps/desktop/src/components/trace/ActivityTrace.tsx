@@ -1,8 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bot, ChevronDown } from "lucide-react";
+import { Bot, ChevronDown, SquareTerminal } from "lucide-react";
 import clsx from "clsx";
-import { RollingToken } from "./RollingToken";
 import { useStore, type ActivityItem } from "../../store";
 import { extractTask, friendlyAgentLabel, isAgent } from "../../lib/agent";
 import { MOTION, EASE_EMPHASIZED } from "../../lib/motion";
@@ -10,7 +9,7 @@ import { MOTION, EASE_EMPHASIZED } from "../../lib/motion";
 export type { ActivityItem };
 
 const EASE = EASE_EMPHASIZED;
-const ROW_HEIGHT_EM = 1.55;
+const ROW_HEIGHT_EM = 1.4;
 const NEST_PX = 16;
 const MAX_NEST_DEPTH = 4; // visual cap; deeper nesting collapses to the same indent
 
@@ -19,7 +18,7 @@ export function ActivityTrace({ children }: { children: ReactNode }) {
     <motion.div
       layout
       transition={{ layout: { duration: MOTION.panel, ease: EASE } }}
-      className="font-sans text-[13px] leading-[1.55] text-muted"
+      className="font-sans chat-meta text-muted"
     >
       {children}
     </motion.div>
@@ -39,6 +38,7 @@ export function ActivityHeader({
 }) {
   const word = count === 1 ? "tool" : "tools";
   const interactive = !!onToggle;
+  const summary = `${label} ${count} ${word}`;
 
   return (
     <button
@@ -46,18 +46,12 @@ export function ActivityHeader({
       onClick={onToggle}
       disabled={!interactive}
       className={clsx(
-        "flex items-baseline gap-1 m-0 p-0 bg-transparent border-0 text-left",
-        interactive ? "cursor-pointer hover:opacity-70 select-none" : "cursor-default",
+        "flex h-[18px] items-center gap-2 m-0 p-0 bg-transparent border-0 text-left chat-meta text-faint",
+        interactive ? "cursor-pointer hover:text-muted select-none" : "cursor-default",
       )}
     >
-      <span className="mr-1.5">
-        <RollingToken value={label} />
-      </span>
-      <span>
-        <RollingToken value={String(count)} mono />
-        {" "}
-        <RollingToken value={word} />
-      </span>
+      <SquareTerminal size={13} strokeWidth={1.8} className="shrink-0" />
+      <span>{summary}</span>
       {interactive && (
         <ChevronDown
           size={12}
@@ -104,16 +98,18 @@ export function ActivityTail({
   // the visible "jumping" / "wait then batch move" the user reported.
   const targetHeight = `${visible.length * ROW_HEIGHT_EM}em`;
 
+  if (collapsed) return null;
+
   return (
     <motion.div
       initial={false}
       animate={{
-        opacity: collapsed ? 0 : 1,
-        height: collapsed ? 0 : targetHeight,
+        opacity: 1,
+        height: targetHeight,
       }}
       transition={{ duration: MOTION.trace, ease: EASE }}
       style={{ overflow: "hidden" }}
-      className="pl-4"
+      className="pl-3 mt-0.5"
     >
       {rolling ? (
         <AnimatePresence mode="popLayout" initial={false}>
@@ -314,4 +310,3 @@ function AgentButton({
     </button>
   );
 }
-

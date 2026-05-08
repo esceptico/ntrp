@@ -64,9 +64,15 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
     : "Worked";
 
   const showInterim = !isDone || expanded;
+  const includeFinalInExpandedWork = isDone && expanded;
+  const directIdsInWork = includeFinalInExpandedWork ? layout.directIds : [];
+  const directIdsAfterWork = includeFinalInExpandedWork ? [] : layout.directIds;
   const interimList = (
-    <div className={clsx("flex flex-col gap-3.5", isDone && "pt-2")}>
+    <div className={clsx("chat-work-trace flex flex-col gap-[var(--work-row-gap)]", isDone && "pt-1.5")}>
       {layout.workIds.map((id) => (
+        <Message key={id} id={id} isFinal={false} />
+      ))}
+      {directIdsInWork.map((id) => (
         <Message key={id} id={id} isFinal={false} />
       ))}
     </div>
@@ -86,7 +92,7 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
             <button
               type="button"
               onClick={() => setExpanded((v) => !v)}
-              className="self-start inline-flex items-center gap-1.5 text-[12px] text-faint hover:text-muted transition-colors select-none"
+              className="self-start inline-flex items-center gap-1.5 chat-text text-muted hover:text-ink-soft transition-colors select-none"
             >
               <span>{headerLabel}</span>
               <ChevronDown
@@ -95,7 +101,7 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
                 className={clsx("transition-transform duration-200", expanded && "rotate-180")}
               />
             </button>
-            <div className="h-px bg-line-soft mt-2.5" />
+            <div className="h-px bg-line-soft mt-2" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -119,16 +125,16 @@ export function TurnGroup({ userId, childIds }: { userId: string; childIds: stri
   ) : null;
 
   return (
-    <>
+    <div className="flex flex-col gap-2.5">
       <Message id={userId} />
 
       {isDone && workBlock}
 
-      {layout.directIds.map((id) => (
+      {directIdsAfterWork.map((id) => (
         <Message key={id} id={id} isFinal={isDone && id === layout.finalAssistantId} />
       ))}
 
       {!isDone && workBlock}
-    </>
+    </div>
   );
 }

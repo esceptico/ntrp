@@ -238,7 +238,7 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
         </div>
       )}
       {showBubble && (
-        <div className="max-w-[75%] px-3.5 py-2 rounded-[18px] bg-surface-sunken text-ink text-[13.5px] leading-[1.5] whitespace-pre-wrap break-words text-left">
+        <div className="max-w-[75%] px-3.5 py-2 rounded-[18px] bg-surface-sunken text-ink chat-text whitespace-pre-wrap break-words text-left">
           {visibleText}
         </div>
       )}
@@ -270,7 +270,7 @@ const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: 
       <Markdown
         content={message.content}
         streaming={isStreaming}
-        className="text-[14px] leading-[1.62] text-ink tracking-[-0.005em] break-words"
+        className="chat-message-text chat-text text-ink break-words"
       />
       {isFinal && <MessageActions id={id} role="assistant" />}
     </article>
@@ -296,7 +296,7 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="reasoning-head self-start inline-flex items-center gap-1.5 text-[12px] font-medium text-muted tracking-[-0.005em] hover:text-ink-soft transition-colors select-none"
+        className="reasoning-head self-start inline-flex items-center gap-1.5 chat-detail font-medium text-muted hover:text-ink-soft transition-colors select-none"
         data-state={isStreaming ? "streaming" : "done"}
       >
         <Brain size={12} strokeWidth={1.7} />
@@ -320,7 +320,7 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
           >
             <Markdown
               content={message.content}
-              className="mt-2 pl-3.5 border-l-2 border-line text-[13px] leading-[1.6] text-muted italic break-words"
+              className="chat-message-text mt-2 pl-3.5 border-l-2 border-line chat-detail text-muted italic break-words"
             />
           </motion.div>
         )}
@@ -337,7 +337,7 @@ const ToolMessage = memo(function ToolMessage({ id }: { id: string }) {
 
   return (
     <article
-      className={clsx("grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 font-mono text-[12.5px] leading-[1.55] animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx("grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 font-mono chat-detail animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
@@ -349,7 +349,7 @@ const ToolMessage = memo(function ToolMessage({ id }: { id: string }) {
         <span className="text-muted truncate min-w-0 flex-1">{message.subtitle || ""}</span>
       </div>
       {!isRunning && (
-        <pre className="tool-preview-fade m-0 mt-[3px] ml-[18px] text-faint font-mono text-[11.5px] leading-[1.5] whitespace-pre-wrap max-h-[80px] overflow-hidden">
+        <pre className="tool-preview-fade m-0 mt-[3px] ml-[18px] text-faint font-mono text-[12px] leading-[1.45] whitespace-pre-wrap max-h-[80px] overflow-hidden">
           {message.content}
         </pre>
       )}
@@ -369,7 +369,7 @@ const StatusMessage = memo(function StatusMessage({ id }: { id: string }) {
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
     >
-      <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface-soft font-mono text-[11px] text-muted tracking-[-0.005em]">
+      <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface-soft font-mono text-[12px] leading-[1.4] text-muted">
         {text}
       </div>
     </article>
@@ -387,7 +387,7 @@ const ErrorMessage = memo(function ErrorMessage({ id }: { id: string }) {
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
     >
-      <div className="px-3.5 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.18)] text-bad text-[13px] leading-[1.5] whitespace-pre-wrap break-words">
+      <div className="px-3.5 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.18)] text-bad chat-text whitespace-pre-wrap break-words">
         {message.content}
       </div>
     </article>

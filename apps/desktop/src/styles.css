@@ -114,6 +114,32 @@ body {
   font-size: 13.5px;
 }
 
+.chat-text {
+  font-size: 13.5px;
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+
+.chat-meta {
+  font-size: 12.5px;
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+
+.chat-detail {
+  font-size: 12px;
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+
+.chat-work-trace {
+  --work-row-gap: 14px;
+}
+
+.chat-work-trace .chat-text {
+  line-height: 1.45;
+}
+
 #app {
   position: relative;
   width: 100vw;
@@ -203,20 +229,21 @@ body {
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: 0.45; }
 
-/* Tap feedback — buttons scale to 0.96 on press, easing back on release.
-   Spec: docs/internal/apple-design-intel.md "Tap / Active States".
-   `!important` wins over Tailwind's `transition-colors`; we re-state the
-   hover transitions in the same shorthand so they keep working. */
-button:not(:disabled) {
+/* Tap feedback — scoped to UI chrome (sidebar) so chat/trace buttons
+   don't jump on press. `.sidebar button` selector beats Tailwind's
+   `.transition-colors` on specificity (0,1,1 vs 0,1,0) so we don't
+   need `!important`.
+   Spec: docs/internal/apple-design-intel.md "Tap / Active States". */
+.sidebar button:not(:disabled) {
   transition:
     transform var(--motion-check) cubic-bezier(0.25, 0.1, 0.25, 1),
     background-color var(--motion-palette) ease,
     color var(--motion-palette) ease,
     border-color var(--motion-palette) ease,
     box-shadow var(--motion-palette) ease,
-    opacity var(--motion-palette) ease !important;
+    opacity var(--motion-palette) ease;
 }
-button:not(:disabled):active {
+.sidebar button:not(:disabled):active {
   transform: scale(0.96);
 }
 
@@ -313,6 +340,7 @@ button:not(:disabled):active {
 .md > *:first-child { margin-top: 0; }
 .md > *:last-child { margin-bottom: 0; }
 .md p { margin: 0 0 1em; }
+.chat-message-text p { margin: 0; }
 .md ul, .md ol { margin: 0.3em 0 0.7em; padding-left: 1.4em; }
 .md ul { list-style: disc outside; }
 .md ol { list-style: decimal outside; }
