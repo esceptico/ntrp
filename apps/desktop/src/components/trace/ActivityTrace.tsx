@@ -64,12 +64,10 @@ export function ActivityTail({
   items,
   max,
   collapsed = false,
-  animateRows = true,
 }: {
   items: ActivityItem[];
   max?: number;
   collapsed?: boolean;
-  animateRows?: boolean;
 }) {
   // Two render modes:
   //   - "rolling" (max set): used live during a run. Each level (top, plus
@@ -105,7 +103,7 @@ export function ActivityTail({
       style={{ overflow: "hidden" }}
       className="pl-3 mt-0.5"
     >
-      {rolling && animateRows ? (
+      {rolling ? (
         <AnimatePresence mode="popLayout" initial={false}>
           {visible.map((item) => (
             <motion.div
