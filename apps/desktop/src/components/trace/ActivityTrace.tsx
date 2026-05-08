@@ -92,14 +92,12 @@ export function ActivityTail({
   // the visible "jumping" / "wait then batch move" the user reported.
   const targetHeight = `${visible.length * ROW_HEIGHT_EM}em`;
 
-  if (collapsed) return null;
-
   return (
     <motion.div
       initial={false}
       animate={{
-        opacity: 1,
-        height: targetHeight,
+        opacity: collapsed ? 0 : 1,
+        height: collapsed ? 0 : targetHeight,
       }}
       transition={{ duration: MOTION.trace, ease: EASE }}
       style={{ overflow: "hidden" }}
