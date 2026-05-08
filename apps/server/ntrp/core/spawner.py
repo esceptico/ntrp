@@ -21,7 +21,13 @@ from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddlew
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.llm_client import llm_client
 from ntrp.core.tool_executor import NtrpToolExecutor
-from ntrp.events.sse import BackgroundTaskEvent, SSEEvent, agent_events_to_sse
+from ntrp.events.sse import (
+    BackgroundTaskEvent,
+    SSEEvent,
+    TaskFinishedEvent,
+    TaskStartedEvent,
+    agent_events_to_sse,
+)
 from ntrp.logging import get_logger
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 from ntrp.tools.deferred import append_deferred_tools_prompt, tool_schema_names
@@ -203,6 +209,9 @@ def create_spawn_fn(
         )
 
         parent_emit = calling_ctx.io.emit if not silent else None
+        lifecycle_task_id = parent_id or f"task-{uuid4().hex[:10]}"
+        task_summary = task[:120]
+        task_depth = current_depth + 1
 
         # Sub-agents reuse the parent's compactor so a long-running tool
         # sweep doesn't blow past the model's context window mid-run. The
@@ -249,7 +258,10 @@ def create_spawn_fn(
                 return ()
             return agent_events_to_sse(event)
 
+        stream_failed = False
+
         async def _stream_to(to_events) -> str:
+            nonlocal stream_failed
             text = ""
             try:
                 async for event in sub_agent.stream(child_messages):
@@ -271,16 +283,64 @@ def create_spawn_fn(
                     len(child_messages),
                     exc,
                 )
+                stream_failed = True
                 summary = await _salvage_summary(child_model, child_messages, str(exc), task)
                 if summary:
                     return f"[partial — sub-agent errored: {exc}]\n\n{summary}"
                 return _deterministic_salvage(child_messages, str(exc))
 
         if not background:
+            if parent_emit:
+                await parent_emit(
+                    TaskStartedEvent(
+                        run_id=calling_ctx.run.run_id,
+                        task_id=lifecycle_task_id,
+                        parent_tool_call_id=parent_id,
+                        name="Sub-agent",
+                        summary=task_summary,
+                        depth=task_depth,
+                    )
+                )
             try:
-                return await asyncio.wait_for(_stream_to(_foreground_child_events), timeout=timeout)
+                text = await asyncio.wait_for(_stream_to(_foreground_child_events), timeout=timeout)
+                if parent_emit:
+                    await parent_emit(
+                        TaskFinishedEvent(
+                            run_id=calling_ctx.run.run_id,
+                            task_id=lifecycle_task_id,
+                            parent_tool_call_id=parent_id,
+                            status="failed" if stream_failed else "completed",
+                            summary="failed" if stream_failed else "completed",
+                            depth=task_depth,
+                        )
+                    )
+                return text
+            except asyncio.CancelledError:
+                if parent_emit:
+                    await parent_emit(
+                        TaskFinishedEvent(
+                            run_id=calling_ctx.run.run_id,
+                            task_id=lifecycle_task_id,
+                            parent_tool_call_id=parent_id,
+                            status="cancelled",
+                            summary="cancelled",
+                            depth=task_depth,
+                        )
+                    )
+                raise
             except TimeoutError:
                 # Same idea on timeout — try to salvage what we collected.
+                if parent_emit:
+                    await parent_emit(
+                        TaskFinishedEvent(
+                            run_id=calling_ctx.run.run_id,
+                            task_id=lifecycle_task_id,
+                            parent_tool_call_id=parent_id,
+                            status="failed",
+                            summary=f"timed out after {timeout}s",
+                            depth=task_depth,
+                        )
+                    )
                 _logger.warning("Sub-agent timed out after %ss, salvaging", timeout)
                 summary = await _salvage_summary(
                     child_model, child_messages, f"timed out after {timeout}s", task

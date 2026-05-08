@@ -59,6 +59,9 @@ class EventType(StrEnum):
     RUN_CANCELLED = "run_cancelled"
     RUN_BACKGROUNDED = "run_backgrounded"
     MESSAGE_INGESTED = "message_ingested"
+    TASK_STARTED = "task_started"
+    TASK_PROGRESS = "task_progress"
+    TASK_FINISHED = "task_finished"
     AUTOMATION_PROGRESS = "automation_progress"
     AUTOMATION_FINISHED = "automation_finished"
     COMPACTION_STARTED = "compaction_started"
@@ -277,6 +280,42 @@ class BackgroundTaskEvent(SSEEvent):
     command: str = ""
     status: str = ""  # "started", "completed", "failed", "cancelled", "activity"
     detail: str | None = None
+
+
+@dataclass(frozen=True)
+class TaskStartedEvent(SSEEvent):
+    type: EventType = field(default=EventType.TASK_STARTED, init=False)
+    run_id: str = ""
+    task_id: str = ""
+    parent_task_id: str | None = None
+    parent_tool_call_id: str | None = None
+    name: str = ""
+    summary: str = ""
+    depth: int = 0
+
+
+@dataclass(frozen=True)
+class TaskProgressEvent(SSEEvent):
+    type: EventType = field(default=EventType.TASK_PROGRESS, init=False)
+    run_id: str = ""
+    task_id: str = ""
+    parent_task_id: str | None = None
+    parent_tool_call_id: str | None = None
+    status: str = "running"
+    summary: str = ""
+    depth: int = 0
+
+
+@dataclass(frozen=True)
+class TaskFinishedEvent(SSEEvent):
+    type: EventType = field(default=EventType.TASK_FINISHED, init=False)
+    run_id: str = ""
+    task_id: str = ""
+    parent_task_id: str | None = None
+    parent_tool_call_id: str | None = None
+    status: str = "completed"
+    summary: str = ""
+    depth: int = 0
 
 
 @dataclass(frozen=True)

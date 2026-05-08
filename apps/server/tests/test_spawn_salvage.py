@@ -15,6 +15,7 @@ from ntrp.core.spawner import (
     _salvage_summary,
     create_spawn_fn,
 )
+from ntrp.events.sse import TaskFinishedEvent, TaskStartedEvent
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from tests.helpers import make_executor
 
@@ -105,6 +106,57 @@ async def test_salvage_summary_returns_empty_when_llm_also_fails(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_spawn_emits_foreground_task_lifecycle_on_success(monkeypatch):
+    class FakeLLM:
+        async def stream(self, messages, model, tools, tool_choice=None, reasoning_effort=None, prompt_cache_key=None):
+            yield CompletionResponse(
+                choices=[
+                    Choice(
+                        message=Message(role="assistant", content="done", tool_calls=None, reasoning_content=None),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=Usage(),
+                model=model,
+            )
+
+    monkeypatch.setattr(spawner_module, "llm_client", FakeLLM())
+
+    emitted = []
+
+    async def emit(event):
+        emitted.append(event)
+
+    executor = make_executor()
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=executor.registry,
+        run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
+        io=IOBridge(emit=emit),
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+    )
+
+    spawn = create_spawn_fn(executor=executor, model="test-model", max_depth=3, current_depth=0)
+    result = await spawn(
+        ctx,
+        "research task",
+        system_prompt="sys",
+        tools=[],
+        parent_id="call-research",
+        timeout=1,
+    )
+
+    assert result == "done"
+    task_events = [event for event in emitted if isinstance(event, (TaskStartedEvent, TaskFinishedEvent))]
+    assert [event.type.value for event in task_events] == ["task_started", "task_finished"]
+    assert task_events[0].run_id == "run-1"
+    assert task_events[0].task_id == "call-research"
+    assert task_events[0].parent_tool_call_id == "call-research"
+    assert task_events[0].depth == 1
+    assert task_events[1].status == "completed"
+
+
+@pytest.mark.asyncio
 async def test_spawn_returns_salvage_when_inner_agent_fails(monkeypatch):
     """End-to-end: the inner agent's LLM call raises, and spawn returns
     a partial-summary string instead of letting the exception escape."""
@@ -135,12 +187,17 @@ async def test_spawn_returns_salvage_when_inner_agent_fails(monkeypatch):
     fake = FakeLLM()
     monkeypatch.setattr(spawner_module, "llm_client", fake)
 
+    emitted = []
+
+    async def emit(event):
+        emitted.append(event)
+
     executor = make_executor()
     ctx = ToolContext(
         session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
         registry=executor.registry,
         run=RunContext(run_id="run-1", current_depth=0, max_depth=3),
-        io=IOBridge(),
+        io=IOBridge(emit=emit),
         background_tasks=BackgroundTaskRegistry(session_id="test"),
     )
 
@@ -157,6 +214,9 @@ async def test_spawn_returns_salvage_when_inner_agent_fails(monkeypatch):
     assert "[partial — sub-agent errored:" in result
     assert salvage_text in result
     assert fake.complete_calls == 1
+    task_events = [event for event in emitted if isinstance(event, (TaskStartedEvent, TaskFinishedEvent))]
+    assert [event.type.value for event in task_events] == ["task_started", "task_finished"]
+    assert task_events[1].status == "failed"
 
 
 @pytest.mark.asyncio

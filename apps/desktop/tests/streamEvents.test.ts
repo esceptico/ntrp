@@ -411,3 +411,42 @@ test("merges duplicate buffered tool result patches before delayed render", asyn
   expect(item?.error).toBe(true);
   expect(item?.durationMs).toBe(25);
 });
+
+test("updates an agent activity item from task lifecycle events", () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", timestamp: 1 });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "call-research",
+    tool_call_name: "research",
+    kind: "agent",
+    description: "research(task='event systems')",
+    timestamp: 2,
+  });
+  handleServerEvent({ type: "TOOL_CALL_END", tool_call_id: "call-research", timestamp: 3 });
+  handleServerEvent({
+    type: "task_started",
+    run_id: "run-1",
+    task_id: "call-research",
+    parent_tool_call_id: "call-research",
+    name: "Research",
+    summary: "event systems",
+    depth: 1,
+    timestamp: 4,
+  });
+  handleServerEvent({
+    type: "task_finished",
+    run_id: "run-1",
+    task_id: "call-research",
+    parent_tool_call_id: "call-research",
+    status: "completed",
+    summary: "done",
+    depth: 1,
+    timestamp: 5,
+  });
+
+  const state = getState();
+  const activityId = state.order.find((id) => state.messages.get(id)?.role === "activity");
+  const item = state.messages.get(activityId!)?.activity?.items.find((it) => it.id === "call-research");
+  expect(item?.taskStatus).toBe("completed");
+  expect(item?.progress).toBe("done");
+});

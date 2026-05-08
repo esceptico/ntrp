@@ -12,6 +12,8 @@ from ntrp.core.spawner import create_spawn_fn
 from ntrp.core.usage_tracker import UsageTracker
 from ntrp.events.sse import (
     ReasoningMessageContentEvent,
+    TaskFinishedEvent,
+    TaskStartedEvent,
     TextDeltaEvent,
     TextMessageContentEvent,
     TextMessageEndEvent,
@@ -68,6 +70,34 @@ def test_text_boundary_sse_preserves_nested_scope():
         assert data["parent_id"] == "call-research"
 
 
+def test_task_lifecycle_events_include_parent_tool_call():
+    start = TaskStartedEvent(
+        run_id="run-1",
+        task_id="call-research",
+        parent_tool_call_id="call-research",
+        name="Research",
+        summary="look up event systems",
+        depth=1,
+    )
+    done = TaskFinishedEvent(
+        run_id="run-1",
+        task_id="call-research",
+        parent_tool_call_id="call-research",
+        status="completed",
+        summary="done",
+        depth=1,
+    )
+
+    start_payload = json.loads(start.to_sse()["data"])
+    done_payload = json.loads(done.to_sse()["data"])
+
+    assert start_payload["type"] == "task_started"
+    assert start_payload["task_id"] == "call-research"
+    assert start_payload["parent_tool_call_id"] == "call-research"
+    assert done_payload["type"] == "task_finished"
+    assert done_payload["status"] == "completed"
+
+
 @pytest.mark.asyncio
 async def test_research_child_reasoning_is_not_emitted_to_parent(monkeypatch):
     prompt_cache_keys = []
@@ -105,7 +135,7 @@ async def test_research_child_reasoning_is_not_emitted_to_parent(monkeypatch):
     )
 
     assert result == "child answer"
-    assert emitted == []
+    assert [event.type.value for event in emitted] == ["task_started", "task_finished"]
     assert len(prompt_cache_keys) == 1
     assert prompt_cache_keys[0].startswith("test::")
 

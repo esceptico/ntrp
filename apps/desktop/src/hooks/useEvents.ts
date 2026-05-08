@@ -38,6 +38,13 @@ let nextItemRenderAt = 0;
 
 const pendingResultPatches = new Map<string, Partial<ActivityItem>>();
 
+function bufferActivityPatch(itemId: string, patch: Partial<ActivityItem>) {
+  pendingResultPatches.set(itemId, {
+    ...pendingResultPatches.get(itemId),
+    ...patch,
+  });
+}
+
 function enqueueActivityItem(aid: string, item: ActivityItem) {
   const now = Date.now();
   const queued = nextItemRenderAt + ITEM_STAGGER_MS;
@@ -296,12 +303,35 @@ export function handleServerEvent(event: ServerEvent) {
         patch.durationMs = event.duration_ms;
       }
       const merged = s.mergeActivityItem(event.tool_call_id, patch);
-      if (!merged) {
-        pendingResultPatches.set(event.tool_call_id, {
-          ...pendingResultPatches.get(event.tool_call_id),
-          ...patch,
-        });
-      }
+      if (!merged) bufferActivityPatch(event.tool_call_id, patch);
+      return;
+    }
+
+    // ─── Sub-agent task lifecycle ───────────────────────────────────
+    case "task_started": {
+      const patch: Partial<ActivityItem> = {
+        taskStatus: "running",
+        progress: event.summary ?? "running",
+      };
+      if (!s.mergeActivityItem(event.task_id, patch)) bufferActivityPatch(event.task_id, patch);
+      return;
+    }
+    case "task_progress": {
+      const taskStatus =
+        event.status === "failed" || event.status === "cancelled" ? event.status : "running";
+      const patch: Partial<ActivityItem> = {
+        taskStatus,
+        progress: event.summary ?? event.status ?? "running",
+      };
+      if (!s.mergeActivityItem(event.task_id, patch)) bufferActivityPatch(event.task_id, patch);
+      return;
+    }
+    case "task_finished": {
+      const patch: Partial<ActivityItem> = {
+        taskStatus: event.status,
+        progress: event.summary ?? event.status,
+      };
+      if (!s.mergeActivityItem(event.task_id, patch)) bufferActivityPatch(event.task_id, patch);
       return;
     }
 

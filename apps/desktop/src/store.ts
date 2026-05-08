@@ -117,6 +117,8 @@ export interface ActivityItem {
   /** Wall-clock duration of the tool call in milliseconds. Set on
    *  TOOL_CALL_RESULT — undefined while running. */
   durationMs?: number;
+  taskStatus?: "running" | "completed" | "failed" | "cancelled";
+  progress?: string;
 }
 
 export interface ActivityState {

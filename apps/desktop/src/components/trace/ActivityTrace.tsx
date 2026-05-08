@@ -258,6 +258,8 @@ function AgentButton({
 }) {
   const task = useMemo(() => extractTask(item.args), [item.args]);
   const label = friendlyAgentLabel(item.kind);
+  const status = item.taskStatus ?? (item.result == null ? "running" : "completed");
+  const statusText = item.progress ?? status;
   return (
     <button
       type="button"
@@ -283,6 +285,14 @@ function AgentButton({
           {task}
         </span>
       )}
+      <span
+        className={clsx(
+          "text-faint shrink-0 max-w-[9rem] truncate",
+          (status === "failed" || status === "cancelled") && "text-bad",
+        )}
+      >
+        {statusText}
+      </span>
     </button>
   );
 }
