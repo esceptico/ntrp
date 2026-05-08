@@ -41,6 +41,28 @@ export function Messages() {
     resize: { damping: 0.92, stiffness: 0.025, mass: 1.5 },
   });
   const topAnchorRef = useRef<{ height: number; top: number } | null>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
+
+  // Updates the right-edge scroll-progress notch in place — DOM-only so
+  // it doesn't trigger a React render on every scroll frame. Hidden when
+  // there's nothing to scroll past.
+  const updateProgress = useCallback(() => {
+    const el = scrollRef.current;
+    const ind = progressRef.current;
+    if (!el || !ind) return;
+    const overflow = el.scrollHeight - el.clientHeight;
+    if (overflow <= 0) {
+      ind.style.opacity = "0";
+      return;
+    }
+    const minThumb = 24;
+    const thumbHeight = Math.max(minThumb, (el.clientHeight / el.scrollHeight) * el.clientHeight);
+    const trackHeight = el.clientHeight - thumbHeight;
+    const thumbTop = (el.scrollTop / overflow) * trackHeight;
+    ind.style.height = `${thumbHeight}px`;
+    ind.style.transform = `translateY(${thumbTop}px)`;
+    ind.style.opacity = "1";
+  }, [scrollRef]);
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -54,7 +76,20 @@ export function Messages() {
     if (bottomGap < 120 && historyPaging.hasMoreAfter && !historyPaging.loadingAfter) {
       void loadNewerHistory();
     }
-  }, [historyPaging.hasMoreAfter, historyPaging.hasMoreBefore, historyPaging.loadingAfter, historyPaging.loadingBefore, scrollRef]);
+
+    updateProgress();
+  }, [historyPaging.hasMoreAfter, historyPaging.hasMoreBefore, historyPaging.loadingAfter, historyPaging.loadingBefore, scrollRef, updateProgress]);
+
+  // Re-measure the progress notch when content height changes (history
+  // pages loading, streaming text growing). Cheaper than reacting to
+  // every store update; the observer fires once per layout.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    const obs = new ResizeObserver(updateProgress);
+    obs.observe(content);
+    return () => obs.disconnect();
+  }, [contentRef, updateProgress]);
 
   // First time content lands after mount (loadHistory fills `order`),
   // snap instantly. Without this, the library treats the empty→full
@@ -147,6 +182,12 @@ export function Messages() {
           <CompactionIndicator />
         </div>
       </div>
+      <div
+        ref={progressRef}
+        aria-hidden
+        className="absolute top-0 right-1 w-[2px] rounded-full bg-line-strong/70 pointer-events-none transition-opacity duration-200"
+        style={{ opacity: 0 }}
+      />
       <AnimatePresence>
         {!isNearBottom && order.length > 0 && (
           <motion.button
