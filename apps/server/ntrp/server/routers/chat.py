@@ -1,11 +1,12 @@
 import asyncio
 import time
 from collections.abc import AsyncGenerator
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ntrp.events.sse import TextDeltaEvent
-from ntrp.server.bus import BusRegistry, StreamRecord
+from ntrp.server.bus import BusRegistry, stream_record_to_sse_string
 from ntrp.server.deps import get_bus_registry, require_run_registry
 from ntrp.server.middleware import SSEStreamingResponse
 from ntrp.server.runtime import Runtime, get_runtime
@@ -23,10 +24,6 @@ router = APIRouter(tags=["chat"])
 
 SSE_KEEPALIVE = ":\n\n"
 KEEPALIVE_INTERVAL = 5
-
-
-def _record_to_sse_string(record: StreamRecord) -> str:
-    return f"id: {record.seq}\n{record.event.to_sse_string()}"
 
 
 async def _event_stream(
@@ -49,7 +46,7 @@ async def _event_stream(
             if not should_emit(event):
                 last_event_at = time.monotonic()
                 continue
-            yield _record_to_sse_string(record)
+            yield stream_record_to_sse_string(session_id, record)
             await asyncio.sleep(0)
 
         while True:
@@ -70,7 +67,7 @@ async def _event_stream(
                 continue
 
             last_event_at = time.monotonic()
-            yield _record_to_sse_string(record)
+            yield stream_record_to_sse_string(session_id, record)
             await asyncio.sleep(0)
     except asyncio.CancelledError:
         pass
@@ -84,7 +81,7 @@ async def _event_stream(
 async def chat_events(
     session_id: str,
     stream: bool = False,
-    after_seq: int | None = None,
+    after_seq: Annotated[int | None, Query(ge=0)] = None,
     buses: BusRegistry = Depends(get_bus_registry),
     run_registry: RunRegistry = Depends(require_run_registry),
 ):

@@ -1,6 +1,7 @@
 import asyncio
+import json
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 
 from ntrp.events.sse import SSEEvent
 
@@ -20,10 +21,19 @@ class StreamRecord:
     event: SSEEvent
 
 
+def stream_record_to_sse_string(session_id: str, record: StreamRecord) -> str:
+    sse = record.event.to_sse()
+    payload = json.loads(sse["data"])
+    payload["seq"] = record.seq
+    payload["session_id"] = session_id
+    return f"id: {record.seq}\nevent: {sse['event']}\ndata: {json.dumps(payload)}\n\n"
+
+
 @dataclass
 class SessionBus:
     session_id: str
     subscriber_queue_size: int = SSE_QUEUE_MAXSIZE
+    initial_next_seq: InitVar[int] = 1
     _subscribers: list[asyncio.Queue[StreamRecord | None]] = field(default_factory=list)
     _next_seq: int = field(default=1, init=False)
     # Replay buffer for events emitted since the last `clear_buffer()`.
@@ -33,6 +43,13 @@ class SessionBus:
     # holds everything since — together they reconstruct current state
     # without overlap, no cursor needed.
     _recent: deque[StreamRecord] = field(default_factory=lambda: deque(maxlen=RECENT_BUFFER_MAX))
+
+    def __post_init__(self, initial_next_seq: int) -> None:
+        self._next_seq = initial_next_seq
+
+    @property
+    def next_seq(self) -> int:
+        return self._next_seq
 
     async def emit(self, event: SSEEvent) -> None:
         record = StreamRecord(seq=self._next_seq, event=event)
@@ -99,20 +116,27 @@ class SessionBus:
 class BusRegistry:
     def __init__(self):
         self._buses: dict[str, SessionBus] = {}
+        self._next_seq_by_session: dict[str, int] = {}
 
     def get_or_create(self, session_id: str) -> SessionBus:
         if session_id not in self._buses:
-            self._buses[session_id] = SessionBus(session_id=session_id)
+            self._buses[session_id] = SessionBus(
+                session_id=session_id,
+                initial_next_seq=self._next_seq_by_session.get(session_id, 1),
+            )
         return self._buses[session_id]
 
     def get(self, session_id: str) -> SessionBus | None:
         return self._buses.get(session_id)
 
     def remove(self, session_id: str) -> None:
-        self._buses.pop(session_id, None)
+        bus = self._buses.pop(session_id, None)
+        if bus:
+            self._next_seq_by_session[session_id] = bus.next_seq
 
     def close_all_sync(self) -> None:
         for bus in self._buses.values():
+            self._next_seq_by_session[bus.session_id] = bus.next_seq
             bus.close_all_sync()
 
     async def close_all(self) -> None:

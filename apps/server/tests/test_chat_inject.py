@@ -12,7 +12,7 @@ from ntrp.events.sse import (
 )
 from ntrp.server.app import app
 from ntrp.server.bus import BusRegistry, SessionBus
-from ntrp.server.deps import get_bus_registry
+from ntrp.server.deps import get_bus_registry, require_run_registry
 from ntrp.server.routers.chat import _event_stream
 from ntrp.server.runtime import get_runtime
 from ntrp.server.schemas import ChatRequest
@@ -26,7 +26,9 @@ def _parse_sse_chunk(chunk: str) -> tuple[int, str, dict]:
     assert lines[0].startswith("id: ")
     assert lines[1].startswith("event: ")
     payload = json.loads(chunk.split("data: ", 1)[1].strip())
-    return int(lines[0].split(": ", 1)[1]), lines[1].split(": ", 1)[1], payload
+    seq = int(lines[0].split(": ", 1)[1])
+    assert payload["seq"] == seq
+    return seq, lines[1].split(": ", 1)[1], payload
 
 
 def test_message_ingested_event_serialization():
@@ -68,6 +70,7 @@ async def test_event_stream_replays_explicit_text_boundaries():
     parsed = [_parse_sse_chunk(chunk) for chunk in chunks]
     assert [seq for seq, _event_name, _payload in parsed] == [1, 2, 3]
     payloads = [payload for _seq, _event_name, payload in parsed]
+    assert [payload["session_id"] for payload in payloads] == ["sess-1", "sess-1", "sess-1"]
     assert [payload["type"] for payload in payloads] == [
         "TEXT_MESSAGE_START",
         "TEXT_MESSAGE_CONTENT",
@@ -92,6 +95,7 @@ async def test_event_stream_replay_honors_after_seq_without_old_duplicates():
 
     parsed = [_parse_sse_chunk(chunk) for chunk in chunks]
     assert [seq for seq, _event_name, _payload in parsed] == [2, 3]
+    assert [payload["session_id"] for _seq, _event_name, payload in parsed] == ["sess-1", "sess-1"]
     assert [payload["status"] for _seq, _event_name, payload in parsed] == ["new-1", "new-2"]
 
 
@@ -111,10 +115,24 @@ async def test_event_stream_stream_false_filters_text_deltas_but_preserves_seque
 
     parsed = [_parse_sse_chunk(chunk) for chunk in chunks]
     assert [seq for seq, _event_name, _payload in parsed] == [1, 3]
+    assert [payload["session_id"] for _seq, _event_name, payload in parsed] == ["sess-1", "sess-1"]
     assert [payload["type"] for _seq, _event_name, payload in parsed] == [
         "TEXT_MESSAGE_START",
         "TEXT_MESSAGE_END",
     ]
+
+
+def test_chat_events_rejects_negative_after_seq():
+    app.dependency_overrides[get_bus_registry] = lambda: BusRegistry()
+    app.dependency_overrides[require_run_registry] = lambda: RunRegistry()
+
+    try:
+        response = TestClient(app).get("/chat/events/sess-1?after_seq=-1")
+    finally:
+        app.dependency_overrides.pop(get_bus_registry, None)
+        app.dependency_overrides.pop(require_run_registry, None)
+
+    assert response.status_code == 422
 
 
 def test_expand_skill_command_injects_skill_path(tmp_path):

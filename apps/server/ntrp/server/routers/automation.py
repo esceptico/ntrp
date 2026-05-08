@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ntrp.automation.models import Automation
 from ntrp.automation.service import AutomationService
 from ntrp.notifiers.service import NotifierService
-from ntrp.server.bus import BusRegistry
+from ntrp.server.bus import BusRegistry, stream_record_to_sse_string
 from ntrp.server.deps import get_bus_registry, require_automation_service, require_notifier_service
 from ntrp.server.middleware import SSEStreamingResponse
 from ntrp.server.runtime import Runtime, get_runtime
@@ -95,7 +95,7 @@ async def _automation_event_stream(bus_registry: BusRegistry):
                 break
 
             last_event_at = time.monotonic()
-            yield f"id: {record.seq}\n{record.event.to_sse_string()}"
+            yield stream_record_to_sse_string(bus.session_id, record)
             await asyncio.sleep(0)
     except asyncio.CancelledError:
         pass
