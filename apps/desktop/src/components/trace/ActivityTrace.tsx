@@ -228,9 +228,10 @@ function ItemButton({
       type="button"
       onClick={() => onOpen(item)}
       title={`${item.kind} — click to inspect`}
+      data-state={running && !errored ? "running" : undefined}
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
       className={clsx(
-        "flex items-baseline gap-1.5 font-mono truncate text-left bg-transparent border-0 p-0 m-0 transition-colors cursor-pointer",
+        "tool-line flex items-baseline gap-1.5 font-mono truncate text-left bg-transparent border-0 p-0 m-0 transition-colors cursor-pointer",
         errored
           ? "text-bad hover:text-bad"
           : running
