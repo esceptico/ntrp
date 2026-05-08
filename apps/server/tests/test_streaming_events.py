@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,9 +15,10 @@ from ntrp.events.sse import (
     TextMessageStartEvent,
     agent_events_to_sse,
 )
-from ntrp.server.bus import BusRegistry
+from ntrp.server.bus import BusRegistry, SessionBus
 from ntrp.server.routers.chat import _event_stream
-from ntrp.server.state import RunRegistry
+from ntrp.server.state import RunRegistry, RunState
+from ntrp.server.stream import run_agent_loop
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from tests.helpers import make_executor, make_text_response
 
@@ -133,3 +135,25 @@ async def test_event_stream_filters_snapshot_text_deltas_when_stream_false():
         "TEXT_MESSAGE_END",
     ]
     assert all(payload["type"] != "TEXT_MESSAGE_CONTENT" for payload in payloads)
+
+
+@pytest.mark.asyncio
+async def test_run_agent_loop_emits_text_end_before_run_cancelled():
+    run = RunState(run_id="run-1", session_id="sess-1")
+    bus = SessionBus(session_id="sess-1")
+
+    class CancellingAgent:
+        async def stream(self, messages):
+            yield TextStarted(message_id="text-1")
+            yield TextDelta(message_id="text-1", content="hello")
+            run.cancelled = True
+            yield TextEnded(message_id="text-1", content="hello")
+
+    await run_agent_loop(SimpleNamespace(run=run), CancellingAgent(), bus)
+
+    assert [event.type.value for event in bus._recent] == [
+        "TEXT_MESSAGE_START",
+        "TEXT_MESSAGE_CONTENT",
+        "TEXT_MESSAGE_END",
+        "run_cancelled",
+    ]

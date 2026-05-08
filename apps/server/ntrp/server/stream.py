@@ -20,16 +20,18 @@ async def run_agent_loop(
     gen = agent.stream(messages)
     try:
         async for item in gen:
-            if ctx.run.cancelled:
-                break
             if ctx.run.backgrounded:
                 return None, gen
             if isinstance(item, Result):
+                if ctx.run.cancelled:
+                    break
                 result = item.text
             else:
                 for sse in agent_events_to_sse(item):
                     await bus.emit(sse)
                     await asyncio.sleep(0)
+                if ctx.run.cancelled:
+                    break
     except asyncio.CancelledError:
         result = ""
 
