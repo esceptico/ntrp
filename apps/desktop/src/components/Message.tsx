@@ -426,6 +426,7 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
   const sourceFocused = useSourceFocused(id);
   const [expanded, setExpanded] = useState(false);
   if (!message?.activity || message.activity.items.length === 0) return null;
+  const fromHistory = isHistoryMessage(message);
   const { items, label, done } = message.activity;
 
   // While the run is producing tools, show the rolling tail (last 3).
@@ -440,7 +441,7 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
     <article
       className={clsx(
         "grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-300",
-        !isHistoryMessage(message) && "animate-roll-in",
+        !fromHistory && "animate-roll-in",
         sourceFocused && SOURCE_FOCUS_CLASS,
       )}
       data-id={id}
@@ -454,7 +455,7 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
           onToggle={done ? () => setExpanded((v) => !v) : undefined}
           expanded={expanded}
         />
-        <ActivityTail items={items} max={max} collapsed={collapsed} />
+        <ActivityTail items={items} max={max} collapsed={collapsed} animateRows={!fromHistory} />
       </ActivityTrace>
     </article>
   );
