@@ -39,6 +39,10 @@ function useSourceFocused(id: string): boolean {
   return useStore((s) => messageInSourceFocus(s.messages.get(id), s.sourceFocus, s.currentSessionId));
 }
 
+function isHistoryMessage(message: UiMessage): boolean {
+  return message.sourceMessageId != null || message.sourceIndex != null;
+}
+
 function formatMessageTime(ms: number): string {
   const d = new Date(ms);
   const now = new Date();
@@ -218,7 +222,11 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
 
   return (
     <article
-      className={clsx("group flex flex-col items-end animate-fade-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx(
+        "group flex flex-col items-end transition-[background-color,box-shadow] duration-300",
+        !isHistoryMessage(message) && "animate-fade-in",
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
@@ -250,7 +258,8 @@ const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: 
   const message = useMessage(id);
   const sourceFocused = useSourceFocused(id);
   const running = useStore((s) => s.running);
-  const isStreaming = Boolean(message && running && message.turn?.endedAt === null);
+  const fromHistory = Boolean(message && isHistoryMessage(message));
+  const isStreaming = Boolean(message && !fromHistory && running && message.turn?.endedAt === null);
   if (!message) return null;
   // Drop intermediate assistant messages that finished empty — the model
   // opens TEXT_MESSAGE_START before deciding to tool-call instead, leaving
@@ -259,7 +268,11 @@ const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: 
   if (!isFinal && !isStreaming && !message.content.trim()) return null;
   return (
     <article
-      className={clsx("assistant-message group grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 animate-fade-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx(
+        "assistant-message group grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 transition-[background-color,box-shadow] duration-300",
+        !fromHistory && "animate-fade-in",
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
       data-streaming={isStreaming ? "true" : undefined}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
@@ -286,7 +299,11 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
 
   return (
     <article
-      className={clsx("grid grid-cols-[minmax(0,1fr)] min-w-0 animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx(
+        "grid grid-cols-[minmax(0,1fr)] min-w-0 transition-[background-color,box-shadow] duration-300",
+        !isHistoryMessage(message) && "animate-roll-in",
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
@@ -335,7 +352,11 @@ const ToolMessage = memo(function ToolMessage({ id }: { id: string }) {
 
   return (
     <article
-      className={clsx("grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 font-mono chat-detail animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx(
+        "grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0 font-mono chat-detail transition-[background-color,box-shadow] duration-300",
+        !isHistoryMessage(message) && "animate-roll-in",
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
@@ -362,7 +383,11 @@ const StatusMessage = memo(function StatusMessage({ id }: { id: string }) {
   const text = message.title ? `${message.title} · ${message.content}` : message.content;
   return (
     <article
-      className={clsx("self-center grid grid-cols-[minmax(0,1fr)] animate-fade-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx(
+        "self-center grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-300",
+        !isHistoryMessage(message) && "animate-fade-in",
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
@@ -380,7 +405,11 @@ const ErrorMessage = memo(function ErrorMessage({ id }: { id: string }) {
   if (!message) return null;
   return (
     <article
-      className={clsx("grid grid-cols-[minmax(0,1fr)] animate-fade-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx(
+        "grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-300",
+        !isHistoryMessage(message) && "animate-fade-in",
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
@@ -409,7 +438,11 @@ const ActivityMessage = memo(function ActivityMessage({ id }: { id: string }) {
 
   return (
     <article
-      className={clsx("grid grid-cols-[minmax(0,1fr)] animate-roll-in transition-[background-color,box-shadow] duration-300", sourceFocused && SOURCE_FOCUS_CLASS)}
+      className={clsx(
+        "grid grid-cols-[minmax(0,1fr)] transition-[background-color,box-shadow] duration-300",
+        !isHistoryMessage(message) && "animate-roll-in",
+        sourceFocused && SOURCE_FOCUS_CLASS,
+      )}
       data-id={id}
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
