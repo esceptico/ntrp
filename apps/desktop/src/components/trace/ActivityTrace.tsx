@@ -101,7 +101,7 @@ export function ActivityTail({
         opacity: collapsed ? 0 : 1,
         height: collapsed ? 0 : targetHeight,
       }}
-      transition={animateRows ? SPRING_SMOOTH : { duration: 0 }}
+      transition={SPRING_SMOOTH}
       style={{ overflow: "hidden" }}
       className="pl-3 mt-0.5"
     >

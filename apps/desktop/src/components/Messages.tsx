@@ -97,25 +97,6 @@ export function Messages() {
     return () => cancelAnimationFrame(frame);
   }, [currentSessionId, firstSourceFocusId, scrollRef, sourceFocus]);
 
-  const preserveScrollForManualResize = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const top = el.scrollTop;
-    stopScroll();
-
-    const restore = () => {
-      const next = scrollRef.current;
-      if (!next) return;
-      next.scrollTop = top;
-      stopScroll();
-    };
-
-    requestAnimationFrame(() => {
-      restore();
-      requestAnimationFrame(restore);
-    });
-  }, [scrollRef, stopScroll]);
-
   const roles = useStore(
     useShallow((s) => order.map((id) => s.messages.get(id)?.role ?? null)),
   );
@@ -164,7 +145,7 @@ export function Messages() {
               ? <EmptyState />
               : segments.map((seg) =>
                   seg.userId
-                    ? <TurnGroup key={seg.userId} userId={seg.userId} childIds={seg.childIds} onManualResize={preserveScrollForManualResize} />
+                    ? <TurnGroup key={seg.userId} userId={seg.userId} childIds={seg.childIds} onManualResize={stopScroll} />
                     : <div key="preamble" className="contents">{seg.childIds.map((id) => <Message key={id} id={id} />)}</div>
                 )}
           <CompactionIndicator />
