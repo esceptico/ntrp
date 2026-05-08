@@ -57,7 +57,7 @@ async def _event_stream(
             if not should_emit(event):
                 last_event_at = time.monotonic()
                 continue
-            yield stream_record_to_sse_string(session_id, record)
+            yield stream_record_to_sse_string(session_id, record, replay=True)
             await asyncio.sleep(0)
 
         while True:

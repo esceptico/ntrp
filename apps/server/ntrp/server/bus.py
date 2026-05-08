@@ -33,11 +33,13 @@ class ReplaySubscription:
         yield self.queue
 
 
-def stream_record_to_sse_string(session_id: str, record: StreamRecord) -> str:
+def stream_record_to_sse_string(session_id: str, record: StreamRecord, *, replay: bool = False) -> str:
     sse = record.event.to_sse()
     payload = json.loads(sse["data"])
     payload["seq"] = record.seq
     payload["session_id"] = record.session_id
+    if replay:
+        payload["replay"] = True
     return f"id: {record.seq}\nevent: {sse['event']}\ndata: {json.dumps(payload)}\n\n"
 
 

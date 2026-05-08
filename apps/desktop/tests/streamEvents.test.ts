@@ -292,6 +292,50 @@ test("active history renders checkpointed tools as in-progress work", () => {
   expect(activity?.activity?.done).toBe(false);
 });
 
+test("marks replayed assistant stream messages as static history", () => {
+  handleServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-replay-1",
+    delta: "already streamed",
+    session_id: "replay-session",
+    seq: 10,
+    replay: true,
+  });
+
+  const message = getState().messages.get("assistant-replay-1");
+
+  expect(message?.content).toBe("already streamed");
+  expect(message?.sourceIndex).toBe(10);
+  expect(message?.sourceMessageId).toBe("assistant-replay-1");
+});
+
+test("marks replayed activity messages as static history", () => {
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-replay-1",
+    tool_call_name: "ReadFile",
+    description: "read file",
+    session_id: "replay-session",
+    seq: 11,
+    replay: true,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-replay-1",
+    session_id: "replay-session",
+    seq: 12,
+    replay: true,
+  });
+
+  const state = getState();
+  const activityId = state.order.find((id) => state.messages.get(id)?.role === "activity");
+  const message = state.messages.get(activityId!);
+
+  expect(message?.activity?.items.map((item) => item.id)).toEqual(["tool-replay-1"]);
+  expect(message?.sourceIndex).toBe(12);
+  expect(message?.sourceMessageId).toBe("tool-replay-1");
+});
+
 test("RUN_STARTED reopens a history turn that loaded as completed", () => {
   setState({
     messages: new Map([
