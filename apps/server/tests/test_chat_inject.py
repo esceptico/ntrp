@@ -373,6 +373,64 @@ async def test_submit_message_after_cancel_starts_new_run(monkeypatch):
         await asyncio.wait_for(new_run.task, timeout=1)
 
 
+@pytest.mark.asyncio
+async def test_pre_start_cancelled_task_emits_terminal_fallback():
+    from ntrp.services import chat as chat_service
+
+    registry = RunRegistry()
+
+    class FakeSessionService:
+        async def load(self, session_id=None):
+            state = SessionState(
+                session_id=session_id or "sess-1",
+                started_at=datetime.now(UTC),
+            )
+            return SessionData(state=state, messages=[])
+
+        async def save_progress(self, session_state, messages):
+            return None
+
+    class FakeExecutor:
+        def get_tools(self):
+            return []
+
+    deps = ChatDeps(
+        chat_model="gpt-5.2",
+        agent_config=AgentConfig(model="gpt-5.2", research_model=None, max_depth=1, deferred_tools=False),
+        executor=FakeExecutor(),
+        session_service=FakeSessionService(),
+        run_registry=registry,
+        available_integrations=[],
+        integration_errors={},
+    )
+    buses = BusRegistry()
+
+    result = await chat_service.submit_chat_message(
+        registry,
+        lambda: deps,
+        buses,
+        message="cancel before start",
+        session_id="sess-1",
+        client_id="cid-prestart",
+    )
+    run = registry.get_run(result["run_id"])
+    assert run is not None
+
+    registry.cancel_run(run.run_id)
+
+    async def wait_for_terminal_cancel():
+        while not run.cancel_terminal_emitted:
+            await asyncio.sleep(0)
+
+    await asyncio.wait_for(wait_for_terminal_cancel(), timeout=1)
+
+    bus = buses.get("sess-1")
+    assert bus is not None
+    assert [record.event.type.value for record in bus._recent] == ["run_cancelled"]
+    assert run.cancel_terminal_emitted is True
+    assert run.status == RunStatus.CANCELLED
+
+
 # --- Full chain: agent.stream + real closure + real bus + mid-run inject ---
 
 

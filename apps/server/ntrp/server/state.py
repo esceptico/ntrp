@@ -188,7 +188,7 @@ class RunRegistry:
     async def cancel_all(self, timeout: float = 5.0) -> int:
         tasks = []
         for run in self._runs.values():
-            if run.status == RunStatus.RUNNING and run.task and not run.task.done():
+            if run.status in (RunStatus.PENDING, RunStatus.RUNNING) and run.task and not run.task.done():
                 run.cancelled = True
                 run.status = RunStatus.CANCELLED
                 run.task.cancel()

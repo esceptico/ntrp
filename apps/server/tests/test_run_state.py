@@ -173,3 +173,25 @@ async def test_cancel_all_cancels_background_registry_tasks():
     assert cancelled == 1
     await asyncio.gather(task, return_exceptions=True)
     assert task.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_cancel_all_cancels_pending_run_task():
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def pending_work():
+        started.set()
+        await release.wait()
+
+    task = asyncio.create_task(pending_work())
+    await asyncio.wait_for(started.wait(), timeout=1)
+    run.task = task
+
+    cancelled = await registry.cancel_all(timeout=0.1)
+
+    assert cancelled == 1
+    await asyncio.gather(task, return_exceptions=True)
+    assert task.cancelled()

@@ -173,6 +173,7 @@ export function handleServerEvent(event: ServerEvent) {
     case "run_cancelled":
       // Server cancelled the run (user clicked Stop). Mirror RUN_FINISHED's
       // teardown but without accumulating usage — the run was cut short.
+      if (s.currentRunId && s.currentRunId !== event.run_id) return;
       endActivity(s);
       endTurn(s, ts);
       activeAssistantMessageId = null;

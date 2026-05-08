@@ -6,22 +6,24 @@ from types import SimpleNamespace
 import pytest
 
 from ntrp.agent import ReasoningContentDelta, ReasoningDelta, TextDelta, TextEnded, TextStarted
-from ntrp.context.models import SessionState
+from ntrp.context.models import SessionData, SessionState
 from ntrp.core import spawner as spawner_module
 from ntrp.core.spawner import create_spawn_fn
+from ntrp.core.usage_tracker import UsageTracker
 from ntrp.events.sse import (
     ReasoningMessageContentEvent,
     TextDeltaEvent,
     TextMessageContentEvent,
     TextMessageEndEvent,
     TextMessageStartEvent,
+    ThinkingEvent,
     agent_events_to_sse,
 )
 from ntrp.server.bus import BusRegistry, SessionBus
 from ntrp.server.routers.chat import _event_stream
 from ntrp.server.state import RunRegistry, RunState, RunStatus
 from ntrp.server.stream import run_agent_loop
-from ntrp.services.chat import ChatContext, run_chat
+from ntrp.services.chat import ChatContext, _drain_backgrounded, run_chat
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from tests.helpers import make_executor, make_text_response
 
@@ -415,6 +417,49 @@ async def test_cancelled_run_finally_drops_pending_without_persisting():
 
 
 @pytest.mark.asyncio
+async def test_cancelled_run_finally_does_not_clear_newer_replay_events():
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
+
+    class NoopSessionService:
+        async def save(self, session_state, messages, metadata=None):
+            return None
+
+    class CancellingInitialEmitBus(SessionBus):
+        async def emit(self, event):
+            await super().emit(event)
+            if event.type.value == "RUN_STARTED":
+                task = asyncio.current_task()
+                assert task is not None
+                task.cancel()
+                await asyncio.sleep(0)
+
+    bus = CancellingInitialEmitBus(session_id="sess-1")
+    await bus.emit(ThinkingEvent(status="newer run replay"))
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(),
+        tools=[],
+        config=SimpleNamespace(),
+        available_integrations=[],
+        integration_errors={},
+        session_service=NoopSessionService(),
+        run_registry=registry,
+    )
+
+    await run_chat(ctx, bus)
+
+    assert [record.event.type.value for record in bus._recent] == [
+        "thinking",
+        "RUN_STARTED",
+        "run_cancelled",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_background_result_after_cancel_is_ignored_for_cancelled_run(monkeypatch):
     from ntrp.services import chat as chat_service
 
@@ -462,6 +507,58 @@ async def test_background_result_after_cancel_is_ignored_for_cancelled_run(monke
     assert run.pending_injection_count == 0
     task.cancel()
     await asyncio.wait_for(task, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_backgrounded_drain_cancel_does_not_save_merged_output():
+    run = RunState(run_id="run-1", session_id="sess-1", backgrounded=True)
+    session_state = SessionState(session_id="sess-1", started_at=datetime.now(UTC))
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class RecordingSessionService:
+        def __init__(self):
+            self.saved: list[list[dict]] = []
+
+        async def load(self, session_id=None):
+            return SessionData(state=session_state, messages=[{"role": "user", "content": "newer"}])
+
+        async def save(self, session_state, messages, metadata=None):
+            self.saved.append(list(messages))
+
+    async def gen():
+        started.set()
+        await release.wait()
+        if False:
+            yield None
+
+    ctx = ChatContext(
+        run=run,
+        session_state=session_state,
+        is_init=False,
+        executor=SimpleNamespace(registry=SimpleNamespace(get=lambda _name: None)),
+        tools=[],
+        config=SimpleNamespace(),
+        available_integrations=[],
+        integration_errors={},
+        session_service=RecordingSessionService(),
+        run_registry=RunRegistry(),
+    )
+    task = asyncio.create_task(
+        _drain_backgrounded(
+            gen(),
+            SimpleNamespace(tools=[]),
+            ctx,
+            BackgroundTaskRegistry(session_id="sess-1"),
+            UsageTracker(),
+        )
+    )
+    await asyncio.wait_for(started.wait(), timeout=1)
+
+    task.cancel()
+    await asyncio.wait_for(task, timeout=1)
+
+    assert ctx.session_service.saved == []
 
 
 @pytest.mark.asyncio

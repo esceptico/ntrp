@@ -311,8 +311,33 @@ async def submit_chat_message(
     bus = buses.get_or_create(session_id)
     task = asyncio.create_task(run_chat(ctx, bus))
     ctx.run.task = task
+    _install_cancel_fallback(ctx.run, bus, run_registry, task)
 
     return {"run_id": ctx.run.run_id, "session_id": ctx.session_state.session_id}
+
+
+async def _emit_cancelled_terminal_fallback(run: RunState, bus: SessionBus, run_registry: RunRegistry) -> None:
+    if run.cancel_terminal_emitted:
+        return
+    await bus.emit(RunCancelledEvent(run_id=run.run_id))
+    run_registry.finish_cancelled(run.run_id)
+
+
+def _install_cancel_fallback(
+    run: RunState,
+    bus: SessionBus,
+    run_registry: RunRegistry,
+    task: asyncio.Task,
+) -> None:
+    loop = asyncio.get_running_loop()
+
+    def _on_done(done: asyncio.Task) -> None:
+        if not done.cancelled() or run.cancel_terminal_emitted:
+            return
+        run.cancelled = True
+        loop.create_task(_emit_cancelled_terminal_fallback(run, bus, run_registry))
+
+    task.add_done_callback(_on_done)
 
 
 async def _drain_backgrounded(
@@ -335,38 +360,37 @@ async def _drain_backgrounded(
         async for _ in gen:
             pass
     except asyncio.CancelledError:
-        pass
+        return
     except Exception:
         _logger.exception("Backgrounded drain failed (run_id=%s)", ctx.run.run_id)
-    finally:
-        ctx.run.usage = tracker.usage
+    ctx.run.usage = tracker.usage
 
-        save_lock = asyncio.Lock()
+    save_lock = asyncio.Lock()
 
-        async def _save_snapshot() -> None:
-            latest = await ctx.session_service.load(ctx.session_state.session_id)
-            current_messages = list(latest.messages) if latest else []
-            state = latest.state if latest else ctx.session_state
-            await ctx.session_service.save(state, _merge_background_messages(current_messages, messages))
+    async def _save_snapshot() -> None:
+        latest = await ctx.session_service.load(ctx.session_state.session_id)
+        current_messages = list(latest.messages) if latest else []
+        state = latest.state if latest else ctx.session_state
+        await ctx.session_service.save(state, _merge_background_messages(current_messages, messages))
 
-        async def _save_directly(injected: list[dict]) -> None:
-            async with save_lock:
-                messages.extend(injected)
-                try:
-                    await _save_snapshot()
-                except Exception:
-                    _logger.exception("Background direct-save failed (run_id=%s)", ctx.run.run_id)
-
-        bg_registry.on_result = _save_directly
-
-        if injected := ctx.run.drain_injections():
+    async def _save_directly(injected: list[dict]) -> None:
+        async with save_lock:
             messages.extend(injected)
-
-        try:
-            async with save_lock:
+            try:
                 await _save_snapshot()
-        except Exception:
-            _logger.exception("Backgrounded final save failed (run_id=%s)", ctx.run.run_id)
+            except Exception:
+                _logger.exception("Background direct-save failed (run_id=%s)", ctx.run.run_id)
+
+    bg_registry.on_result = _save_directly
+
+    if injected := ctx.run.drain_injections():
+        messages.extend(injected)
+
+    try:
+        async with save_lock:
+            await _save_snapshot()
+    except Exception:
+        _logger.exception("Backgrounded final save failed (run_id=%s)", ctx.run.run_id)
 
 
 async def _emit_ingested_for_client_entries(batch: list[dict], bus: SessionBus, run: RunState) -> None:
@@ -513,7 +537,6 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 run.drain_injections()
                 run.usage = tracker.usage
                 run_finished = True
-                bus.clear_buffer()
                 return
             pending_messages = run.drain_injections()
             if pending_messages:

@@ -307,6 +307,15 @@ test("stopRun clears running state when server no longer knows the run", async (
   }
 });
 
+test("stale run_cancelled does not clear a newer active run", () => {
+  setState({ running: true, currentRunId: "run-new" });
+
+  handleServerEvent({ type: "run_cancelled", run_id: "run-old", timestamp: 1 });
+
+  expect(getState().running).toBe(true);
+  expect(getState().currentRunId).toBe("run-new");
+});
+
 test("keeps tool results when result arrives before delayed burst item renders", async () => {
   handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", timestamp: 1 });
   handleServerEvent({ type: "TOOL_CALL_START", tool_call_id: "tool-1", tool_call_name: "ReadFile", timestamp: 2 });
