@@ -221,7 +221,10 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
   } else {
     s.setHistory(items, page);
   }
-  if (active_run_id) s.setRunning(true);
+  if (active_run_id) {
+    s.setRunning(true);
+    s.setCurrentRunId(active_run_id);
+  }
 }
 
 export async function loadOlderHistory(): Promise<void> {

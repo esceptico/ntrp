@@ -7,7 +7,7 @@ import {
   resetEventSeqStateForTest,
   resetStreamStateForTest,
 } from "../src/hooks/useEvents.js";
-import { stopRun } from "../src/actions.js";
+import { loadHistory, stopRun } from "../src/actions.js";
 import { getState, setState } from "../src/store.js";
 
 beforeEach(() => {
@@ -314,6 +314,42 @@ test("stale run_cancelled does not clear a newer active run", () => {
 
   expect(getState().running).toBe(true);
   expect(getState().currentRunId).toBe("run-new");
+});
+
+test("loadHistory restores currentRunId for active sessions", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: { messages: [], active_run_id: "active-run-1" },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: "active-session",
+      running: false,
+      currentRunId: null,
+    });
+
+    await loadHistory("active-session");
+
+    expect(getState().running).toBe(true);
+    expect(getState().currentRunId).toBe("active-run-1");
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
 });
 
 test("keeps tool results when result arrives before delayed burst item renders", async () => {
