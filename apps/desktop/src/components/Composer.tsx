@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { ArrowUp, ImagePlus, ShieldOff, ShieldCheck, Sparkles, Square, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ImageBlock } from "../store";
-import { enqueueMessage, isBuiltin, runBuiltinCommand, sendMessage, stopRun, viewSkill } from "../actions";
+import { enqueueMessage, isBuiltin, respondToAllApprovals, runBuiltinCommand, sendMessage, stopRun, viewSkill } from "../actions";
 import { QueueCard } from "./QueueCard";
 import {
   CommandPicker,
@@ -82,6 +82,7 @@ export function Composer() {
   const setDraft = useStore((s) => s.setDraft);
   const running = useStore((s) => s.running);
   const connected = useStore((s) => s.connected);
+  const pendingApprovalCount = useStore((s) => s.pendingApprovals.length);
   const editingId = useStore((s) => s.editingId);
   const setEditingId = useStore((s) => s.setEditingId);
   const skipApprovals = useStore((s) => s.skipApprovals);
@@ -203,10 +204,23 @@ export function Composer() {
     }
     setPickerOpen(false);
 
+    const trimmed = text.trim();
+
+    // Pending approvals + a typed draft → reject all and enqueue the
+    // text as a user message. The rejection itself uses the default
+    // feedback ("User rejected this action"); the user's actual
+    // wording lands in chat as a real message so it's visible and
+    // persists in history. Agent sees both: rejected tool results
+    // followed by the user's next message in the conversation.
+    if (pendingApprovalCount > 0 && trimmed) {
+      void respondToAllApprovals(false);
+      void enqueueMessage(trimmed, images);
+      return;
+    }
+
     // Pure builtin (no skill, no images) — route to the dispatcher.
     if (!skill && images.length === 0 && dispatchCommand(text)) return;
 
-    const trimmed = text.trim();
     const fullText = skill
       ? trimmed.length > 0
         ? `/${skill.name} ${trimmed}`

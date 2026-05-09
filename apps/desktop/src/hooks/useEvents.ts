@@ -251,12 +251,16 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
       // of discarding them, re-fire each pending entry as a fresh
       // request: the first POST starts a new run, the rest queue into
       // it. The user's typed-ahead work survives Stop.
+      //
+      // Pending approvals are also dropped: the agent task that was
+      // awaiting on each Future got CancelledError; the server-side
+      // futures are gone. Clear the UI state so the banner closes.
       if (s.currentRunId && s.currentRunId !== event.run_id) return;
       const toResend: QueuedMessage[] = s.queuedMessages.filter((q) => q.status === "pending");
       endActivity(s);
       endTurn(s, ts);
       activeAssistantMessageId = null;
-      setState({ running: false, currentRunId: null });
+      setState({ running: false, currentRunId: null, pendingApprovals: [], reviewingApprovalToolId: null });
       s.clearQueuedMessages();
       for (const msg of toResend) {
         void enqueueMessage(msg.text, msg.images ?? []);

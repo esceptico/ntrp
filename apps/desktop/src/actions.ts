@@ -617,6 +617,23 @@ export async function respondToApproval(
   }
 }
 
+/** Bulk approve/reject every pending approval. With parallel tool
+ *  execution the LLM can spawn N writable tools in one step; this lets
+ *  the user resolve them in a single click instead of N.
+ *
+ *  `feedback` is forwarded to each rejected tool as the rejection
+ *  reason — useful when the user typed a message in the composer to
+ *  explain *why* they're rejecting (Enter-with-draft path). */
+export async function respondToAllApprovals(
+  approved: boolean,
+  feedback = "",
+): Promise<void> {
+  const s = getState();
+  if (!s.currentRunId) return;
+  const pending = [...s.pendingApprovals];
+  await Promise.all(pending.map((a) => respondToApproval(a.toolId, approved, feedback)));
+}
+
 // ─── Builtin slash-commands ──────────────────────────────────────────
 
 export interface BuiltinCommand {
