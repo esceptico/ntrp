@@ -453,8 +453,6 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         ctx.run_registry.finish_cancelled(run.run_id)
 
     try:
-        run.approval_queue = asyncio.Queue()
-
         await bus.emit(
             RunStartedEvent(
                 session_id=session_state.session_id,
@@ -469,7 +467,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         await bus.emit(ThinkingEvent(status="processing..."))
 
         bg_registry = ctx.run_registry.get_background_registry(session_state.session_id)
-        io = IOBridge(approval_queue=run.approval_queue, emit=bus.emit)
+        io = IOBridge(pending_approvals=run.pending_approvals, emit=bus.emit)
         agent = create_agent(
             executor=ctx.executor,
             config=ctx.config,

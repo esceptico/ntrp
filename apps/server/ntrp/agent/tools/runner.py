@@ -87,13 +87,20 @@ class ToolRunner:
             kind=rc.kind,
         )
 
-    async def _execute_sequential(self, resolved: list[_ResolvedCall]) -> AsyncGenerator[ToolStarted | ToolCompleted]:
-        for rc in resolved:
-            yield self._started(rc)
-            result, duration_ms = await self._run_one(rc)
-            yield self._completed(rc, result, duration_ms)
+    async def execute_all(self, calls: list[PendingToolCall]) -> AsyncGenerator[ToolStarted | ToolCompleted]:
+        """Run every tool the model emitted in this step in parallel.
 
-    async def _execute_concurrent(self, resolved: list[_ResolvedCall]) -> AsyncGenerator[ToolStarted | ToolCompleted]:
+        Approvals are routed per `tool_id` via `IOBridge.pending_approvals`,
+        so multiple mutating tools can each await their own approval
+        Future without racing on a shared queue. Tools that don't need
+        approval (or have skip_approvals/auto_approve) just run straight
+        through. Either way, results stream back in completion order via
+        `queue` while every tool's `started` event fires up front.
+        """
+        resolved = [self._resolve(c) for c in calls]
+        if not resolved:
+            return
+
         queue: asyncio.Queue[_ConcurrentResult | object] = asyncio.Queue()
 
         for rc in resolved:
@@ -124,15 +131,3 @@ class ToolRunner:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
-
-    async def execute_all(self, calls: list[PendingToolCall]) -> AsyncGenerator[ToolStarted | ToolCompleted]:
-        resolved = [self._resolve(c) for c in calls]
-        mutating = [rc for rc in resolved if rc.mutates]
-        non_mutating = [rc for rc in resolved if not rc.mutates]
-
-        if non_mutating:
-            async for event in self._execute_concurrent(non_mutating):
-                yield event
-        if mutating:
-            async for event in self._execute_sequential(mutating):
-                yield event

@@ -361,7 +361,7 @@ async def test_approval_rejected_when_no_ui():
         session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
         registry=ToolRegistry(),
         run=RunContext(run_id="run-1"),
-        io=IOBridge(),  # no emit, no approval_queue
+        io=IOBridge(),  # no emit, no pending_approvals
         background_tasks=BackgroundTaskRegistry(session_id="test"),
     )
     execution = ToolExecution(tool_id="t1", tool_name="bash", ctx=ctx)
@@ -369,3 +369,55 @@ async def test_approval_rejected_when_no_ui():
     result = await execution.request_approval("rm -rf something")
     assert isinstance(result, Rejection)
     assert "No UI" in result.feedback
+
+
+@pytest.mark.asyncio
+async def test_parallel_approvals_resolve_independently():
+    """Two tools requesting approval at the same time each register
+    their own Future. Resolving one's Future doesn't affect the
+    other's — the old single-queue model would have raced."""
+    import asyncio
+    from ntrp.events.sse import ApprovalNeededEvent
+
+    emitted: list = []
+
+    async def emit(event):
+        emitted.append(event)
+
+    pending: dict[str, asyncio.Future] = {}
+    io = IOBridge(emit=emit, pending_approvals=pending)
+    ctx = ToolContext(
+        session_state=SessionState(session_id="test", started_at=datetime.now(UTC)),
+        registry=ToolRegistry(),
+        run=RunContext(run_id="run-1"),
+        io=io,
+        background_tasks=BackgroundTaskRegistry(session_id="test"),
+    )
+
+    e1 = ToolExecution(tool_id="t1", tool_name="bash", ctx=ctx)
+    e2 = ToolExecution(tool_id="t2", tool_name="bash", ctx=ctx)
+
+    task1 = asyncio.create_task(e1.request_approval("first"))
+    task2 = asyncio.create_task(e2.request_approval("second"))
+
+    # Wait for both to register their futures.
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert set(pending.keys()) == {"t1", "t2"}
+
+    # Resolve t2 first — t1 must still be pending.
+    pending["t2"].set_result({"approved": True, "result": "ok"})
+    result2 = await task2
+    assert result2 is None
+    assert not task1.done()
+
+    # Now resolve t1 with rejection.
+    pending["t1"].set_result({"approved": False, "result": "no"})
+    result1 = await task1
+    from ntrp.tools.core.context import Rejection
+    assert isinstance(result1, Rejection)
+    assert result1.feedback == "no"
+
+    # Both events were emitted up front, both Futures are gone now.
+    assert len([e for e in emitted if isinstance(e, ApprovalNeededEvent)]) == 2
+    assert pending == {}

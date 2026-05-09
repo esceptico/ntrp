@@ -174,18 +174,20 @@ async def submit_tool_result(request: ToolResultRequest, run_registry: RunRegist
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    if run.approval_queue:
-        await run.approval_queue.put(
-            {
-                "type": "tool_response",
-                "tool_id": request.tool_id,
-                "result": request.result,
-                "approved": request.approved,
-            }
-        )
-    else:
-        raise HTTPException(status_code=400, detail="No active stream for this run")
+    future = run.pending_approvals.get(request.tool_id)
+    if future is None:
+        raise HTTPException(status_code=404, detail="No pending approval for this tool")
+    if future.done():
+        raise HTTPException(status_code=409, detail="Approval already resolved")
 
+    future.set_result(
+        {
+            "type": "tool_response",
+            "tool_id": request.tool_id,
+            "result": request.result,
+            "approved": request.approved,
+        }
+    )
     return {"status": "ok"}
 
 

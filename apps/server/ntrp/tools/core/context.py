@@ -54,7 +54,10 @@ class IOBridge:
     """Communication channels to the UI."""
 
     emit: Callable[[Any], Awaitable[None]] | None = None
-    approval_queue: asyncio.Queue[ApprovalResponse] | None = None
+    # Per-tool approval response routing. Each tool that needs approval
+    # registers `pending_approvals[tool_id] = Future()` and awaits it;
+    # the /tools/result endpoint resolves the matching Future.
+    pending_approvals: dict[str, "asyncio.Future[ApprovalResponse]"] | None = None
 
 
 RESULT_BASE = Path(NTRP_TMP_BASE)
@@ -191,20 +194,29 @@ class ToolExecution:
         if self.ctx.skip_approvals or self.tool_name in self.ctx.auto_approve:
             return None
 
-        if not self.ctx.io.emit or not self.ctx.io.approval_queue:
+        if not self.ctx.io.emit or self.ctx.io.pending_approvals is None:
             return Rejection(feedback="No UI connected — cannot approve")
 
-        await self.ctx.io.emit(
-            ApprovalNeededEvent(
-                tool_id=self.tool_id,
-                name=self.tool_name,
-                path=description,
-                diff=diff,
-                content_preview=preview if not diff else None,
-            )
-        )
+        # Register a Future scoped to THIS tool_id and await it. Multiple
+        # tools approving in parallel each wait on their own Future, so
+        # responses don't race a shared queue.
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[ApprovalResponse] = loop.create_future()
+        self.ctx.io.pending_approvals[self.tool_id] = future
 
-        response = await self.ctx.io.approval_queue.get()
+        try:
+            await self.ctx.io.emit(
+                ApprovalNeededEvent(
+                    tool_id=self.tool_id,
+                    name=self.tool_name,
+                    path=description,
+                    diff=diff,
+                    content_preview=preview if not diff else None,
+                )
+            )
+            response = await future
+        finally:
+            self.ctx.io.pending_approvals.pop(self.tool_id, None)
 
         if not response["approved"]:
             feedback = response.get("result", "").strip() or None

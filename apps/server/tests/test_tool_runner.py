@@ -1,0 +1,98 @@
+"""Tests for the unified parallel tool runner.
+
+Mutating + non-mutating calls now run in one TaskGroup instead of being
+split into sequential mutating + parallel non-mutating phases. Approvals
+are routed per tool_id via Future, so multiple mutating tools can each
+await their own approval without racing on a shared queue.
+"""
+import asyncio
+
+import pytest
+
+from ntrp.agent.tools.runner import ToolRunner
+from ntrp.agent.types.events import ToolCompleted, ToolStarted
+from ntrp.agent.types.tool_call import FunctionCall, PendingToolCall, ToolCall
+from ntrp.agent.types.tools import ToolMeta, ToolResult
+
+
+class _FakeExecutor:
+    """Records execute() arrival order and lets each tool be released
+    independently so we can prove "all started before any completed"."""
+
+    def __init__(self, metas: dict[str, ToolMeta], release: dict[str, asyncio.Event]):
+        self._metas = metas
+        self._release = release
+        self.arrived: list[str] = []
+
+    def get_meta(self, name: str) -> ToolMeta | None:
+        return self._metas.get(name)
+
+    async def execute(self, name: str, args: dict, tool_call_id: str) -> ToolResult:
+        self.arrived.append(tool_call_id)
+        await self._release[tool_call_id].wait()
+        return ToolResult(content=f"ok-{tool_call_id}", preview=name)
+
+
+def _make_call(call_id: str, name: str) -> PendingToolCall:
+    return PendingToolCall(
+        tool_call=ToolCall(id=call_id, type="function", function=FunctionCall(name=name, arguments="{}")),
+        name=name,
+        args={},
+    )
+
+
+@pytest.mark.asyncio
+async def test_runner_executes_mutating_and_non_mutating_in_one_batch():
+    """All tools should start in parallel — no second phase for mutating."""
+    metas = {
+        "read_file": ToolMeta(name="read_file", display_name="Read", mutates=False, volatile=False),
+        "write_file": ToolMeta(name="write_file", display_name="Write", mutates=True, volatile=False),
+        "bash": ToolMeta(name="bash", display_name="Bash", mutates=True, volatile=False),
+    }
+    release = {cid: asyncio.Event() for cid in ("c1", "c2", "c3")}
+    executor = _FakeExecutor(metas, release)
+    runner = ToolRunner(executor=executor, depth=0, parent_id=None)
+
+    calls = [
+        _make_call("c1", "read_file"),
+        _make_call("c2", "write_file"),
+        _make_call("c3", "bash"),
+    ]
+
+    started: list[str] = []
+    completed: list[str] = []
+
+    async def consume() -> None:
+        async for event in runner.execute_all(calls):
+            if isinstance(event, ToolStarted):
+                started.append(event.tool_id)
+            elif isinstance(event, ToolCompleted):
+                completed.append(event.tool_id)
+
+    consumer = asyncio.create_task(consume())
+
+    # Yield until every tool has reached executor.execute() — proves
+    # they're all dispatched concurrently before any has returned.
+    for _ in range(20):
+        if len(executor.arrived) == 3:
+            break
+        await asyncio.sleep(0)
+    assert set(executor.arrived) == {"c1", "c2", "c3"}
+    assert started == ["c1", "c2", "c3"]
+    assert completed == []  # nobody finished yet — gating on release events
+
+    # Release in reverse order; results should arrive in completion order.
+    release["c3"].set()
+    release["c1"].set()
+    release["c2"].set()
+    await consumer
+    assert set(completed) == {"c1", "c2", "c3"}
+
+
+@pytest.mark.asyncio
+async def test_runner_handles_empty_call_list():
+    metas: dict[str, ToolMeta] = {}
+    executor = _FakeExecutor(metas, {})
+    runner = ToolRunner(executor=executor, depth=0, parent_id=None)
+    events = [event async for event in runner.execute_all([])]
+    assert events == []

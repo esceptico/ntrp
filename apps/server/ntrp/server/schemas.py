@@ -47,8 +47,7 @@ class ChatRunStatusResponse(BaseModel):
     idle_seconds: int
     message_count: int
     pending_injections: int
-    approval_queue_open: bool
-    approval_responses_pending: int
+    approvals_pending: int
     task_running: bool
     drain_task_running: bool
     cancelled: bool

@@ -24,7 +24,12 @@ class RunState:
     status: RunStatus = RunStatus.PENDING
     messages: list[dict] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
-    approval_queue: asyncio.Queue[dict] | None = None
+    # Per-tool approval response routing. Each tool that needs approval
+    # registers its tool_id → Future and awaits it. The /tools/result
+    # endpoint looks up the Future by tool_id and resolves it.
+    # Replaces the old single Queue[dict] which forced mutating tools to
+    # serialize because they all raced on one shared response stream.
+    pending_approvals: dict[str, "asyncio.Future[dict]"] = field(default_factory=dict)
     task: asyncio.Task | None = None
     inject_queue: list[dict] = field(default_factory=list)
     loaded_tools: set[str] = field(default_factory=set)
@@ -68,7 +73,6 @@ class RunState:
     def get_status(self, now: datetime) -> dict:
         age_seconds = max(0, int((now - self.created_at).total_seconds()))
         idle_seconds = max(0, int((now - self.updated_at).total_seconds()))
-        approval_responses_pending = self.approval_queue.qsize() if self.approval_queue else 0
         return {
             "run_id": self.run_id,
             "session_id": self.session_id,
@@ -79,8 +83,7 @@ class RunState:
             "idle_seconds": idle_seconds,
             "message_count": len(self.messages),
             "pending_injections": self.pending_injection_count,
-            "approval_queue_open": self.approval_queue is not None,
-            "approval_responses_pending": approval_responses_pending,
+            "approvals_pending": len(self.pending_approvals),
             "task_running": self.task is not None and not self.task.done(),
             "drain_task_running": self.drain_task is not None and not self.drain_task.done(),
             "cancelled": self.cancelled,
