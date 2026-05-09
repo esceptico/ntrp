@@ -3,6 +3,7 @@ import {
   apiWithConfig,
   archiveSessionApi,
   branchSessionApi,
+  cancelQueuedMessageApi,
   cancelRun,
   checkHealth,
   createAutomationApi,
@@ -504,6 +505,63 @@ export async function sendMessage(text: string, images: ImageBlock[] = []): Prom
       role: "error",
       content: error instanceof Error ? error.message : String(error),
     });
+  }
+}
+
+/** Submit a message while a run is in flight. Server queues it onto the
+ *  active run's inject_queue; we render it as a "Queued" bubble above
+ *  the composer until `message_ingested` arrives. */
+export async function enqueueMessage(text: string, images: ImageBlock[] = []): Promise<void> {
+  const s = getState();
+  if (!s.currentSessionId) return;
+  const trimmed = text.trim();
+  if (!trimmed && images.length === 0) return;
+
+  const clientId = crypto.randomUUID();
+  s.addQueuedMessage({
+    clientId,
+    text: trimmed,
+    images: images.length > 0 ? images : undefined,
+    status: "pending",
+    enqueuedAt: Date.now(),
+  });
+
+  try {
+    await apiWithConfig<{ run_id: string }>(s.config, "/chat/message", {
+      method: "POST",
+      body: JSON.stringify({
+        message: trimmed,
+        session_id: s.currentSessionId,
+        skip_approvals: s.skipApprovals,
+        images: images.length > 0 ? images : undefined,
+        client_id: clientId,
+      }),
+    });
+  } catch {
+    s.setQueuedMessageStatus(clientId, "failed");
+  }
+}
+
+/** Cancel a queued (not yet ingested) message. The server returns:
+ *    cancelled         — removed; we drop the bubble
+ *    already_ingested  — too late, the agent has it; the imminent
+ *                        message_ingested event will absorb the bubble
+ *    no_run            — no active run, drop the bubble */
+export async function cancelQueuedMessage(clientId: string): Promise<void> {
+  const s = getState();
+  if (!s.currentSessionId) return;
+  s.setQueuedMessageStatus(clientId, "cancelling");
+  let result;
+  try {
+    result = await cancelQueuedMessageApi(s.config, s.currentSessionId, clientId);
+  } catch {
+    s.setQueuedMessageStatus(clientId, "pending");
+    return;
+  }
+  if (result === "cancelled" || result === "no_run") {
+    s.removeQueuedMessage(clientId);
+  } else {
+    s.setQueuedMessageStatus(clientId, "sent");
   }
 }
 

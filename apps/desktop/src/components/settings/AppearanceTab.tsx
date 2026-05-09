@@ -16,6 +16,7 @@ const VARIANTS: { id: ThinkingAnimation; label: string; hint: string }[] = [
   { id: "breath", label: "Breath", hint: "Wide diffuse halo that breathes slowly" },
   { id: "hue-cycle", label: "Border tint", hint: "Border color drifts toward accent — no motion" },
   { id: "send-orbit", label: "Send orbit", hint: "Spinner around the send button only" },
+  { id: "dvd", label: "DVD", hint: "Bouncing logo that changes color at the edges" },
 ];
 
 const THEMES: { id: ThemeChoice; label: string; icon: LucideIcon }[] = [

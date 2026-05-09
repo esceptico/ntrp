@@ -22,6 +22,7 @@ function blank() {
     lastCompaction: null,
     sourceFocus: null,
     editingId: null,
+    queuedMessages: [],
   });
 }
 
@@ -90,4 +91,29 @@ test("running state persists across switches", () => {
   s.setCurrentSession("A");
   expect(getState().running).toBe(true);
   expect(getState().currentRunId).toBe("run-A");
+});
+
+test("queued messages persist across switches", () => {
+  const s = getState();
+  s.setCurrentSession("A");
+  s.addQueuedMessage({
+    clientId: "cid-1",
+    text: "follow-up",
+    status: "pending",
+    enqueuedAt: 0,
+  });
+  s.setCurrentSession("B");
+  expect(getState().queuedMessages).toEqual([]);
+  s.setCurrentSession("A");
+  expect(getState().queuedMessages).toHaveLength(1);
+  expect(getState().queuedMessages[0].clientId).toBe("cid-1");
+});
+
+test("resetCancellingQueuedMessages flips cancelling back to pending", () => {
+  const s = getState();
+  s.setCurrentSession("A");
+  s.addQueuedMessage({ clientId: "cid-1", text: "a", status: "cancelling", enqueuedAt: 0 });
+  s.addQueuedMessage({ clientId: "cid-2", text: "b", status: "pending", enqueuedAt: 0 });
+  s.resetCancellingQueuedMessages();
+  expect(getState().queuedMessages.map((q) => q.status)).toEqual(["pending", "pending"]);
 });

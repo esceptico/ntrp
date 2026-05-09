@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { ArrowUp, ImagePlus, ShieldOff, ShieldCheck, Sparkles, Square, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ImageBlock } from "../store";
-import { isBuiltin, runBuiltinCommand, sendMessage, stopRun, viewSkill } from "../actions";
+import { enqueueMessage, isBuiltin, runBuiltinCommand, sendMessage, stopRun, viewSkill } from "../actions";
+import { QueueCard } from "./QueueCard";
 import {
   CommandPicker,
   filterCommands,
@@ -129,12 +130,11 @@ export function Composer() {
   }, [query, filteredCommands.length, pickerOpen, setPickerOpen]);
 
   const hasDraft = draft.trim().length > 0;
-  // With a skill attached or images pending, the user can submit even with an
-  // empty draft (the skill body / images alone are the full request).
-  const disabled =
-    running ||
-    !connected ||
-    (!hasDraft && !selectedSkill && pendingImages.length === 0);
+  const hasContent = hasDraft || Boolean(selectedSkill) || pendingImages.length > 0;
+  // While a run is in flight, submit enqueues onto the active run instead
+  // of being blocked. Disable only when disconnected or there's nothing
+  // to send.
+  const disabled = !connected || !hasContent;
 
   // Composer shows a "thinking" indicator while we're waiting for the
   // agent's first token (running but no assistant turn streaming yet).
@@ -212,7 +212,11 @@ export function Composer() {
         ? `/${skill.name} ${trimmed}`
         : `/${skill.name}`
       : text;
-    void sendMessage(fullText, images);
+    if (running) {
+      void enqueueMessage(fullText, images);
+    } else {
+      void sendMessage(fullText, images);
+    }
   }
 
   function cancelEdit() {
@@ -232,15 +236,30 @@ export function Composer() {
     addPendingImages(blocks);
   }
 
+  // The DVD variant runs as a viewport-wide screensaver, not inside the
+  // composer card — pass an empty style to the composer in that case so
+  // the in-card animation doesn't duplicate the viewport one.
+  const composerThinkingStyle = thinkingStyle === "dvd" ? "" : thinkingStyle;
+
   return (
-    <div className="px-7 pb-[18px]">
+    <div className="px-7 pb-[18px] flex flex-col">
+      {awaitingFirstToken && thinkingStyle === "dvd" && (
+        <div className="dvd-screensaver" aria-hidden>
+          <div className="dvd-x">
+            <span className="dvd-y">DVD</span>
+          </div>
+        </div>
+      )}
+      <div className="max-w-[760px] mx-auto w-full">
+        <QueueCard />
+      </div>
       <form
         onSubmit={(e) => {
           e.preventDefault();
           submit();
         }}
         data-thinking={awaitingFirstToken ? "true" : undefined}
-        data-thinking-style={thinkingStyle}
+        data-thinking-style={composerThinkingStyle}
         data-thinking-intensity={thinkingIntensity}
         className="composer-card relative max-w-[760px] mx-auto flex flex-col border border-line rounded-[14px] bg-surface focus-within:border-line-strong transition-colors"
       >

@@ -231,6 +231,7 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
       endTurn(s, ts);
       activeAssistantMessageId = null;
       setState({ running: false, currentRunId: null });
+      s.resetCancellingQueuedMessages();
       // We deliberately do NOT call loadHistory here. Refreshing the
       // history map mid-stream caused two visible bugs: (1) a flicker
       // where every message remounts as the UUID-keyed live items get
@@ -248,6 +249,7 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
       endTurn(s, ts);
       activeAssistantMessageId = null;
       setState({ running: false, currentRunId: null });
+      s.resetCancellingQueuedMessages();
       return;
     case "RUN_ERROR":
       if (s.currentRunId && s.currentRunId !== event.run_id) return;
@@ -256,7 +258,23 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
       endTurn(s, ts);
       activeAssistantMessageId = null;
       setState({ running: false, currentRunId: null });
+      s.resetCancellingQueuedMessages();
       return;
+    case "message_ingested": {
+      // The queued message was just consumed by the agent. Move the
+      // bubble from the queue card into the chat as a real user message.
+      const queued = s.queuedMessages.find((q) => q.clientId === event.client_id);
+      if (!queued) return;
+      s.removeQueuedMessage(event.client_id);
+      s.appendMessage({
+        id: event.client_id,
+        role: "user",
+        content: queued.text,
+        turn: { startedAt: ts, endedAt: null, durationMs: null },
+        images: queued.images,
+      });
+      return;
+    }
     case "stream_reset": {
       if (event.reason !== "replay_gap") return;
       resetStreamState();

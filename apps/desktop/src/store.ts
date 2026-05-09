@@ -18,7 +18,21 @@ export type ThinkingAnimation =
   | "comet"
   | "breath"
   | "hue-cycle"
-  | "send-orbit";
+  | "send-orbit"
+  | "dvd";
+
+/** A user message submitted while a run was already active. The server
+ *  queues it into the active run's inject_queue and consumes it on the
+ *  next agent step; until then it lives only on the client. */
+export type QueuedMessageStatus = "pending" | "cancelling" | "sent" | "failed";
+
+export interface QueuedMessage {
+  clientId: string;
+  text: string;
+  images?: ImageBlock[];
+  status: QueuedMessageStatus;
+  enqueuedAt: number;
+}
 
 export type ThinkingIntensity = "subtle" | "normal" | "strong";
 
@@ -194,6 +208,7 @@ export interface CachedSessionState {
   sourceFocus: MessageSourceFocus | null;
   pendingApprovals: ApprovalState[];
   reviewingApprovalToolId: string | null;
+  queuedMessages: QueuedMessage[];
 }
 
 interface State {
@@ -262,6 +277,11 @@ interface State {
   /** When non-null, the approval UI is showing a diff/preview modal for
    *  this approval's `toolId`. */
   reviewingApprovalToolId: string | null;
+  /** Messages submitted while a run was in flight. Server queues them
+   *  into the active run's inject_queue; we mirror them here so the
+   *  composer can show them as a stack of pending bubbles above the
+   *  input until `message_ingested` arrives. */
+  queuedMessages: QueuedMessage[];
   prefs: Prefs;
 }
 
@@ -309,6 +329,11 @@ interface Actions {
   addPendingApproval: (approval: ApprovalState) => void;
   resolvePendingApproval: (toolId: string) => void;
   setReviewingApproval: (toolId: string | null) => void;
+  addQueuedMessage: (message: QueuedMessage) => void;
+  setQueuedMessageStatus: (clientId: string, status: QueuedMessageStatus) => void;
+  removeQueuedMessage: (clientId: string) => void;
+  clearQueuedMessages: () => void;
+  resetCancellingQueuedMessages: () => void;
   setSkills: (skills: SkillDescriptor[]) => void;
   setCommandPickerOpen: (open: boolean) => void;
   setCommandPickerIndex: (index: number) => void;
@@ -359,6 +384,7 @@ function blankSessionView(): CachedSessionState {
     sourceFocus: null,
     pendingApprovals: [],
     reviewingApprovalToolId: null,
+    queuedMessages: [],
   };
 }
 
@@ -381,6 +407,7 @@ function snapshotSession(s: State): CachedSessionState {
     sourceFocus: s.sourceFocus,
     pendingApprovals: s.pendingApprovals,
     reviewingApprovalToolId: s.reviewingApprovalToolId,
+    queuedMessages: s.queuedMessages,
   };
 }
 
@@ -431,6 +458,7 @@ export const useStore = create<State & Actions>((set) => ({
   paletteOpen: false,
   pendingApprovals: [],
   reviewingApprovalToolId: null,
+  queuedMessages: [],
   prefs: loadPrefs(),
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
@@ -513,6 +541,7 @@ export const useStore = create<State & Actions>((set) => ({
         historyLoadingAfter: view.historyLoadingAfter,
         pendingApprovals: view.pendingApprovals,
         reviewingApprovalToolId: view.reviewingApprovalToolId,
+        queuedMessages: view.queuedMessages,
         ...(unread !== s.unreadDoneSessionIds ? { unreadDoneSessionIds: unread } : {}),
       };
     }),
@@ -728,6 +757,29 @@ export const useStore = create<State & Actions>((set) => ({
         s.reviewingApprovalToolId === toolId ? null : s.reviewingApprovalToolId,
     })),
   setReviewingApproval: (toolId) => set({ reviewingApprovalToolId: toolId }),
+
+  addQueuedMessage: (message) =>
+    set((s) => ({ queuedMessages: [...s.queuedMessages, message] })),
+  setQueuedMessageStatus: (clientId, status) =>
+    set((s) => ({
+      queuedMessages: s.queuedMessages.map((q) =>
+        q.clientId === clientId ? { ...q, status } : q,
+      ),
+    })),
+  removeQueuedMessage: (clientId) =>
+    set((s) => ({
+      queuedMessages: s.queuedMessages.filter((q) => q.clientId !== clientId),
+    })),
+  clearQueuedMessages: () => set({ queuedMessages: [] }),
+  // After a run terminates without ingesting a queued message, the
+  // server dropped its inject_queue. Any "cancelling" entries are now
+  // stuck — flip them back to "pending" so the user can retry/cancel.
+  resetCancellingQueuedMessages: () =>
+    set((s) => ({
+      queuedMessages: s.queuedMessages.map((q) =>
+        q.status === "cancelling" ? { ...q, status: "pending" } : q,
+      ),
+    })),
 
   setSkills: (skills) => set({ skills }),
   setCommandPickerOpen: (commandPickerOpen) => set({ commandPickerOpen, commandPickerIndex: 0 }),

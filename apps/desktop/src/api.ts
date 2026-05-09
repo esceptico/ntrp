@@ -103,6 +103,7 @@ export type ServerEvent = CommonServerEventFields & (
   | { type: "task_finished"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; status: "completed" | "failed" | "cancelled"; summary?: string; depth?: number }
   | { type: "compaction_started"; run_id: string }
   | { type: "compaction_finished"; run_id: string; messages_before: number; messages_after: number }
+  | { type: "message_ingested"; client_id: string; run_id: string }
 );
 
 export const STORAGE_KEY = "ntrp.desktop.config";
@@ -275,6 +276,37 @@ export async function cancelRun(config: AppConfig, runId: string): Promise<void>
     method: "POST",
     body: JSON.stringify({ run_id: runId }),
   });
+}
+
+export type CancelQueuedResult = "cancelled" | "already_ingested" | "no_run";
+
+/** Cancel a message we queued via /chat/message while a run was active.
+ *  Status codes from the server:
+ *    200 — removed from inject_queue
+ *    409 — already pulled into the agent loop, can't cancel
+ *    404 — no active run for that session, nothing to cancel */
+export async function cancelQueuedMessageApi(
+  config: AppConfig,
+  sessionId: string,
+  clientId: string,
+): Promise<CancelQueuedResult> {
+  const path = `/chat/inject/${encodeURIComponent(clientId)}?session_id=${encodeURIComponent(sessionId)}`;
+  const desktopApi = window.ntrpDesktop?.api;
+  let status: number;
+  if (desktopApi) {
+    const response = await desktopApi.request(config, { path, method: "DELETE" });
+    status = response.status;
+  } else {
+    const response = await fetch(`${config.serverUrl}${path}`, {
+      method: "DELETE",
+      headers: headersForConfig(config, false),
+    });
+    status = response.status;
+  }
+  if (status === 200) return "cancelled";
+  if (status === 409) return "already_ingested";
+  if (status === 404) return "no_run";
+  throw new Error(`cancelQueuedMessage: unexpected status ${status}`);
 }
 
 export async function renameSessionApi(
