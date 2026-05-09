@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { type AppConfig, type ServerEvent } from "../api";
-import { getState, setState, useStore, type ActivityItem } from "../store";
+import { enqueueMessage } from "../actions";
+import { getState, setState, useStore, type ActivityItem, type QueuedMessage } from "../store";
 import { previewArgs } from "../lib/format";
 import { SEMANTIC_KIND_AGENT } from "../lib/agent";
 
@@ -241,16 +242,27 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
       // branching from the *most recent* turn doesn't light up until
       // the user navigates away and back — a fair trade.
       return;
-    case "run_cancelled":
+    case "run_cancelled": {
       // Server cancelled the run (user clicked Stop). Mirror RUN_FINISHED's
       // teardown but without accumulating usage — the run was cut short.
+      //
+      // The server's cancel branch silently drops inject_queue, so any
+      // queued messages would otherwise hang stuck in the UI. Instead
+      // of discarding them, re-fire each pending entry as a fresh
+      // request: the first POST starts a new run, the rest queue into
+      // it. The user's typed-ahead work survives Stop.
       if (s.currentRunId && s.currentRunId !== event.run_id) return;
+      const toResend: QueuedMessage[] = s.queuedMessages.filter((q) => q.status === "pending");
       endActivity(s);
       endTurn(s, ts);
       activeAssistantMessageId = null;
       setState({ running: false, currentRunId: null });
-      s.resetCancellingQueuedMessages();
+      s.clearQueuedMessages();
+      for (const msg of toResend) {
+        void enqueueMessage(msg.text, msg.images ?? []);
+      }
       return;
+    }
     case "RUN_ERROR":
       if (s.currentRunId && s.currentRunId !== event.run_id) return;
       endActivity(s);

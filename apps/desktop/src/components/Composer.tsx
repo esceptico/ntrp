@@ -242,7 +242,7 @@ export function Composer() {
   const composerThinkingStyle = thinkingStyle === "dvd" ? "" : thinkingStyle;
 
   return (
-    <div className="px-7 pb-[18px] flex flex-col">
+    <div className="px-7 pb-[18px]">
       {awaitingFirstToken && thinkingStyle === "dvd" && (
         <div className="dvd-screensaver" aria-hidden>
           <div className="dvd-x">
@@ -250,7 +250,7 @@ export function Composer() {
           </div>
         </div>
       )}
-      <div className="max-w-[760px] mx-auto w-full">
+      <div className="max-w-[760px] mx-auto">
         <QueueCard />
       </div>
       <form
