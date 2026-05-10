@@ -505,20 +505,23 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 
 /* ─── Periodic shine on running tool lines + streaming reasoning ─
-   Adapted from Magic UI's `animated-shiny-text` — a narrow bright
-   stripe glides through the text once every ~8s with long holds
-   offscreen between passes. Reads as "still working" without the
-   constant left-to-right sweep that the previous shimmer had (felt
-   frantic during long-running tools).
+   A narrow bright stripe glides left→right through the text, then
+   pauses briefly offscreen before another pass. Single direction,
+   short cycle, so it reads as a continuous "still working" rhythm
+   without feeling frantic or laggy.
 
    Two background layers stacked: a static `--color-muted` base
    covers the whole text width, and an 80px shine stripe rides on
    top, only its position animated. `background-clip: text` clips
    both layers to the text glyphs. Children inherit the gradient so
-   the shine reads as a continuous pass across the whole line. */
+   the shine reads as a continuous pass across the whole line.
+
+   Keyframe shape: hold offscreen-left for 40% of the cycle, then
+   sweep across the remaining 60%. Loop reset snaps from
+   offscreen-right back to offscreen-left — invisible. */
 @keyframes shineText {
-  0%, 90%, 100% { background-position: calc(-100% - var(--shine-width)) 0, 0 0; }
-  30%, 60%      { background-position: calc(100% + var(--shine-width)) 0, 0 0; }
+  0%, 40% { background-position: calc(-100% - var(--shine-width)) 0, 0 0; }
+  100%    { background-position: calc(100% + var(--shine-width)) 0, 0 0; }
 }
 
 .tool-line[data-state="running"],
@@ -533,7 +536,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   background-repeat: no-repeat;
   -webkit-background-clip: text;
   background-clip: text;
-  animation: shineText 8s infinite;
+  animation: shineText 2.2s linear infinite;
 }
 
 .tool-line[data-state="running"] * {

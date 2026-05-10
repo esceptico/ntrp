@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Archive, Brain, MessageSquare, MoreHorizontal, Pencil, Search, Settings as SettingsIcon, Sparkles, X, Zap } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { Archive, Brain, ChevronDown, MoreHorizontal, Pencil, Search, Settings as SettingsIcon, Sparkles, X, Zap } from "lucide-react";
 import clsx from "clsx";
+import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
 import { useStore } from "../store";
 import { apiWithConfig } from "../api";
 import { archiveSession, createSession, renameSession, switchSession } from "../actions";
@@ -60,6 +62,10 @@ function bucketByTime<T extends { last_activity: string }>(
   return buckets;
 }
 
+/** Primary nav row — matches the SessionRow grid (16px icon column +
+ *  label) so the top and bottom blocks of the sidebar read as the
+ *  same visual rhythm. No boxed icon container; flat stroked icon
+ *  inherits the row's text color for hover/active states. */
 function NavRow({
   icon,
   label,
@@ -73,12 +79,12 @@ function NavRow({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-[9px] w-full px-2 py-1.5 rounded-lg text-[13px] font-medium text-ink-soft text-left tracking-[-0.005em] hover:bg-[rgba(0,0,0,0.045)] transition-colors"
+      className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-1 rounded-lg text-[13px] font-medium text-ink-soft text-left tracking-[-0.005em] hover:bg-surface-soft/60 transition-colors"
     >
-      <span className="nav-icon grid place-items-center w-[22px] h-[22px] rounded-md text-ink-soft shrink-0">
+      <span className="grid place-items-center w-4 h-4 shrink-0">
         {icon}
       </span>
-      <span>{label}</span>
+      <span className="truncate">{label}</span>
     </button>
   );
 }
@@ -183,7 +189,7 @@ function SessionRow({
           : "text-ink-soft hover:bg-surface-soft/60",
       )}
     >
-      <SessionStateIcon streaming={streaming} unread={unread} active={active} />
+      <SessionStateIcon streaming={streaming} unread={unread} />
       <span className="min-w-0 truncate text-[13px] font-medium tracking-[-0.005em]">
         {name || "untitled"}
       </span>
@@ -216,19 +222,17 @@ function SessionRow({
   );
 }
 
-/** Leading state glyph on each session row. Three cases:
- *  - streaming: animated triple-dot in accent color (typing indicator)
- *  - unread done: solid filled dot in accent-strong (badge)
- *  - idle: small outline circle in faint color (subtle marker, keeps
- *    column rhythm consistent across all rows) */
+/** Leading state glyph on each session row. Only rendered for
+ *  states with something to indicate — streaming (animated dots in
+ *  accent) and unread done (solid dot in accent-strong). Idle rows
+ *  return an empty span that preserves the grid column width so the
+ *  text alignment stays consistent across all rows. */
 function SessionStateIcon({
   streaming,
   unread,
-  active,
 }: {
   streaming: boolean;
   unread: boolean;
-  active: boolean;
 }) {
   if (streaming) {
     return (
@@ -244,15 +248,7 @@ function SessionStateIcon({
       </span>
     );
   }
-  return (
-    <span className="grid place-items-center w-4 h-4 shrink-0" aria-hidden>
-      <MessageSquare
-        size={11}
-        strokeWidth={1.7}
-        className={clsx(active ? "text-muted" : "text-whisper")}
-      />
-    </span>
-  );
+  return <span aria-hidden />;
 }
 
 function RowAction({
@@ -293,11 +289,24 @@ function SessionList() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
+  // Buckets that the user has explicitly collapsed. Local state — not
+  // persisted, since "what's open" tends to be answer-where-you-left-off
+  // and resetting on app launch is fine.
+  const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set());
 
   const searchActive = searchOpen || query.length > 0;
   const closeSearch = () => {
     setQuery("");
     setSearchOpen(false);
+  };
+
+  const toggleBucket = (label: string) => {
+    setCollapsedBuckets((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
   };
 
   const filtered = useMemo(() => {
@@ -310,7 +319,9 @@ function SessionList() {
 
   return (
     <div className="group/sessions flex flex-col flex-1 min-h-0">
-      <div className="flex items-center gap-1 px-[18px] pt-4 pb-1.5 h-[34px]">
+      {/* Slim action bar — no label. Search input expands inline when
+          active; otherwise just two icon buttons aligned right. */}
+      <div className="flex items-center justify-end gap-0.5 px-2.5 pt-3 pb-1 h-[28px]">
         {searchActive ? (
           <SessionSearch
             value={query}
@@ -320,70 +331,90 @@ function SessionList() {
           />
         ) : (
           <>
-            <span className="flex-1 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint leading-none select-none">
-              Sessions
-            </span>
-            <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover/sessions:opacity-100 focus-within:opacity-100 transition-opacity">
-              <HeaderIconBtn
-                icon={<Search size={13} strokeWidth={1.8} />}
-                label="Filter sessions"
-                onClick={() => setSearchOpen(true)}
-              />
-              <HeaderIconBtn
-                icon={<Archive size={13} strokeWidth={1.8} />}
-                label="View archived sessions"
-                onClick={openArchive}
-              />
-            </div>
+            <HeaderIconBtn
+              icon={<Search size={13} strokeWidth={1.8} />}
+              label="Filter sessions"
+              onClick={() => setSearchOpen(true)}
+            />
+            <HeaderIconBtn
+              icon={<Archive size={13} strokeWidth={1.8} />}
+              label="View archived sessions"
+              onClick={openArchive}
+            />
           </>
         )}
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin pb-3">
         {sessions.length === 0 ? (
-          <div className="px-3 py-3 text-[12px] italic text-faint">
+          <div className="px-3 py-3 text-[12.5px] italic text-faint">
             {connected ? "No sessions yet." : "Connect to load sessions."}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="px-3 py-3 text-[12px] italic text-faint">No matches.</div>
+          <div className="px-3 py-3 text-[12.5px] italic text-faint">No matches.</div>
         ) : (
-          bucketByTime(filtered).map((bucket, bucketIdx) => (
-            <div key={bucket.label}>
-              <div
-                className={clsx(
-                  "sticky top-0 z-10 px-[18px] pb-1 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint bg-bg-main",
-                  // First bucket sits flush under the "Sessions" header
-                  // (which already has its own padding); later buckets get
-                  // a clear gap above so the time groups read as distinct
-                  // blocks rather than a continuous list.
-                  bucketIdx === 0 ? "pt-1" : "pt-4",
-                )}
-              >
-                {bucket.label}
-              </div>
-              <div className="px-2.5 flex flex-col gap-0">
-                {bucket.items.map((session) => (
-                  <SessionRow
-                    key={session.session_id}
-                    sessionId={session.session_id}
-                    name={session.name ?? null}
-                    lastActivity={session.last_activity}
-                    active={session.session_id === currentSessionId}
-                    streaming={activeRunSessionIds.has(session.session_id)}
-                    unread={unreadDoneSessionIds.has(session.session_id)}
-                    renaming={renamingId === session.session_id}
-                    onStartRename={() => setRenamingId(session.session_id)}
-                    onCancelRename={() => setRenamingId(null)}
-                    onArchive={() => void archiveSession(session.session_id)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      setMenu({ sessionId: session.session_id, x: e.clientX, y: e.clientY });
-                    }}
+          bucketByTime(filtered).map((bucket, bucketIdx) => {
+            const isCollapsed = collapsedBuckets.has(bucket.label);
+            return (
+              <div key={bucket.label}>
+                <button
+                  type="button"
+                  onClick={() => toggleBucket(bucket.label)}
+                  aria-expanded={!isCollapsed}
+                  className={clsx(
+                    "sticky top-0 z-10 w-full flex items-center gap-1 px-[18px] pb-1 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint hover:text-muted bg-bg-main transition-colors cursor-pointer select-none",
+                    // First bucket flush under the action bar; later
+                    // buckets get a real gap so groups read as distinct.
+                    bucketIdx === 0 ? "pt-1" : "pt-4",
+                  )}
+                >
+                  <ChevronDown
+                    size={10}
+                    strokeWidth={2.2}
+                    className={clsx(
+                      "transition-transform duration-150",
+                      isCollapsed && "-rotate-90",
+                    )}
                   />
-                ))}
+                  <span>{bucket.label}</span>
+                </button>
+                <AnimatePresence initial={false}>
+                  {!isCollapsed && (
+                    <motion.div
+                      key="rows"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: MOTION.panel, ease: EASE_EMPHASIZED }}
+                      style={{ overflow: "hidden" }}
+                    >
+                      <div className="px-2.5 flex flex-col gap-0">
+                        {bucket.items.map((session) => (
+                          <SessionRow
+                            key={session.session_id}
+                            sessionId={session.session_id}
+                            name={session.name ?? null}
+                            lastActivity={session.last_activity}
+                            active={session.session_id === currentSessionId}
+                            streaming={activeRunSessionIds.has(session.session_id)}
+                            unread={unreadDoneSessionIds.has(session.session_id)}
+                            renaming={renamingId === session.session_id}
+                            onStartRename={() => setRenamingId(session.session_id)}
+                            onCancelRename={() => setRenamingId(null)}
+                            onArchive={() => void archiveSession(session.session_id)}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              setMenu({ sessionId: session.session_id, x: e.clientX, y: e.clientY });
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -483,7 +514,7 @@ function SessionSearch({
         }}
         placeholder="Filter sessions"
         spellCheck={false}
-        className="w-full h-full pl-[22px] pr-6 rounded-md bg-[rgba(0,0,0,0.05)] focus:bg-[rgba(0,0,0,0.07)] text-[12px] leading-none text-ink-soft placeholder:text-faint outline-none transition-[background-color] border border-transparent focus:border-line-soft"
+        className="w-full h-full pl-[22px] pr-6 rounded-md bg-[rgba(0,0,0,0.05)] focus:bg-[rgba(0,0,0,0.07)] text-[12.5px] leading-none text-ink-soft placeholder:text-faint outline-none transition-[background-color] border border-transparent focus:border-line-soft"
       />
       <button
         type="button"
