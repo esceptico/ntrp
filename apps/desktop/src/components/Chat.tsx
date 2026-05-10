@@ -15,9 +15,9 @@ function SidebarToggle() {
       onClick={toggleSidebar}
       title={sidebarHidden ? "Show sidebar (⌘B)" : "Hide sidebar (⌘B)"}
       aria-label={sidebarHidden ? "Show sidebar" : "Hide sidebar"}
-      className="sidebar-toggle grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
+      className="sidebar-toggle grid place-items-center w-[22px] h-[22px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
     >
-      <Icon size={14} strokeWidth={1.7} />
+      <Icon size={16} strokeWidth={1.5} />
     </button>
   );
 }
@@ -58,7 +58,7 @@ export function Chat() {
   return (
     <main
       data-sidebar-hidden={sidebarHidden ? "true" : "false"}
-      className="chat-shell grid grid-rows-[auto_minmax(0,1fr)_auto_auto] bg-bg-main rounded-tl-xl overflow-hidden"
+      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,244px)] data-[sidebar-hidden=true]:left-0 transition-[left] duration-route ease-emphasized grid grid-rows-[auto_minmax(0,1fr)_auto_auto] bg-bg overflow-hidden"
     >
       <ChatHeader />
       <Messages key={sessionId ?? "none"} />

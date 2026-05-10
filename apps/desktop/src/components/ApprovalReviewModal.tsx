@@ -8,13 +8,18 @@ import { SPRING_SMOOTH } from "../lib/motion";
 
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
+const DIFF_LINE = "block px-2 min-w-max";
+const DIFF_ADD = "bg-[rgba(79,138,58,0.10)] text-[#2e6620] dark:bg-[rgba(135,154,57,0.16)] dark:text-[#afc463]";
+const DIFF_DEL = "bg-[rgba(184,68,43,0.10)] text-[#8a3220] dark:bg-[rgba(209,77,65,0.16)] dark:text-[#e58075]";
+const DIFF_HUNK = "text-info";
+
 function diffClassFor(line: string): string {
   if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) {
-    return "diff-line diff-hunk";
+    return `${DIFF_LINE} ${DIFF_HUNK}`;
   }
-  if (line.startsWith("+")) return "diff-line diff-add";
-  if (line.startsWith("-")) return "diff-line diff-del";
-  return "diff-line";
+  if (line.startsWith("+")) return `${DIFF_LINE} ${DIFF_ADD}`;
+  if (line.startsWith("-")) return `${DIFF_LINE} ${DIFF_DEL}`;
+  return DIFF_LINE;
 }
 
 /** Diff/preview review for a pending approval. Opens when the banner's
@@ -79,7 +84,7 @@ export function ApprovalReviewModal() {
 
             <div className="overflow-y-auto scroll-thin">
               {approval.diff ? (
-                <div className="diff-preview scroll-thin">
+                <div className="font-mono text-[11.5px] leading-[1.5] whitespace-pre overflow-x-auto overflow-y-auto max-h-60 scroll-thin">
                   <div>
                     {approval.diff.split("\n").map((line, i) => (
                       <span key={i} className={diffClassFor(line)}>

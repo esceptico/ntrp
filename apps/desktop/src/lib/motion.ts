@@ -1,8 +1,9 @@
 /**
  * Motion duration tokens (seconds, framer-motion friendly) and shared
- * easing curves. Mirrors the CSS --motion-* tokens in styles.css so the
- * timing language stays consistent across CSS transitions and
- * framer-motion `transition` props.
+ * easing curves. Mirrors the CSS --duration-* / --ease-* tokens in
+ * styles.css so the timing language stays consistent across CSS
+ * transitions (Tailwind utilities like `duration-fast`,
+ * `ease-emphasized`) and framer-motion `transition` props.
  *
  * Spec lives in docs/internal/ui-ux-intelligence.md "Motion Direction".
  */

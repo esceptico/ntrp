@@ -37,9 +37,10 @@ export function App() {
   const toggleSidebar = useStore((s) => s.toggleSidebar);
   const openSettings = useStore((s) => s.openSettings);
 
-  // Publish the sidebar width as a CSS var so the chat-shell can stay
-  // flush with the sidebar's right edge as it resizes (without React
-  // having to re-render Chat on every drag tick).
+  // Publish the sidebar width as a CSS var so the chat shell's
+  // `left-[var(--sidebar-width,244px)]` can stay flush with the
+  // sidebar's right edge as it resizes (without React having to
+  // re-render Chat on every drag tick).
   useEffect(() => {
     document.documentElement.style.setProperty("--sidebar-width", `${sidebarWidth}px`);
   }, [sidebarWidth]);
@@ -110,8 +111,7 @@ export function App() {
   return (
     <>
       <motion.div
-        className="sidebar-wrap"
-        style={{ width: sidebarWidth }}
+        className="absolute top-2 left-2 bottom-2 z-30 w-[calc(var(--sidebar-width,244px)-16px)] bg-bg-main border border-line rounded-xl shadow-sm overflow-hidden will-change-transform"
         initial={false}
         animate={{ x: sidebarHidden ? -sidebarWidth : 0 }}
         transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}

@@ -65,7 +65,11 @@ export function Mermaid({ code }: { code: string }) {
     return <MermaidErrorBlock source={code} message={error} />;
   }
   if (!svg) {
-    return <div className="mermaid-loading">Rendering…</div>;
+    return (
+      <div className="my-[0.6em] px-4 py-3.5 border border-dashed border-line-soft rounded-xl text-faint text-xs italic text-center">
+        Rendering…
+      </div>
+    );
   }
   return <MermaidPanel svg={svg} source={code} />;
 }
@@ -236,10 +240,15 @@ function PanelInner({
   }, [fullscreen, onToggleFullscreen]);
 
   return (
-    <div className={clsx("mermaid-panel", fullscreen && "fullscreen")}>
-      <header className="mermaid-panel-header">
-        <div className="mermaid-panel-title">Diagram</div>
-        <div className="mermaid-panel-toolbar">
+    <div
+      className={clsx(
+        "grid grid-rows-[auto_1fr] my-[0.6em] h-[480px] border border-line-soft rounded-xl bg-code-bg overflow-hidden",
+        fullscreen && "!m-0 !h-full !rounded-2xl !shadow-pop !bg-surface",
+      )}
+    >
+      <header className="flex items-center justify-between gap-2 py-1.5 pl-3 pr-2.5 border-b border-line-soft bg-surface">
+        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">Diagram</div>
+        <div className="flex items-center gap-0.5">
           <ToolbarButton
             label="Zoom out"
             onClick={() => zoomBy(1 / ZOOM_STEP)}
@@ -247,7 +256,7 @@ function PanelInner({
           >
             <Minus size={13} strokeWidth={1.8} />
           </ToolbarButton>
-          <span className="mermaid-panel-zoom">{Math.round(view.zoom * 100)}%</span>
+          <span className="w-11 text-center text-[11.5px] tabular-nums text-muted select-none">{Math.round(view.zoom * 100)}%</span>
           <ToolbarButton
             label="Zoom in"
             onClick={() => zoomBy(ZOOM_STEP)}
@@ -258,7 +267,7 @@ function PanelInner({
           <ToolbarButton label="Fit to view" onClick={fitToView}>
             <RotateCcw size={12} strokeWidth={1.8} />
           </ToolbarButton>
-          <span className="mermaid-panel-divider" />
+          <span className="w-px h-4 bg-line mx-1" />
           <ToolbarButton
             label={copied ? "Copied" : "Copy source"}
             onClick={() => void onCopy()}
@@ -283,13 +292,16 @@ function PanelInner({
       </header>
       <div
         ref={surfaceRef}
-        className={clsx("mermaid-panel-surface", dragging && "is-dragging")}
+        className={clsx(
+          "relative overflow-hidden select-none touch-none bg-code-bg",
+          dragging ? "cursor-grabbing" : "cursor-grab",
+        )}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={endDrag}
         onMouseLeave={endDrag}
       >
-        <div ref={innerRef} className="mermaid-panel-inner" />
+        <div ref={innerRef} className="absolute inset-0 [&>svg]:block" />
       </div>
     </div>
   );
@@ -334,21 +346,23 @@ function MermaidErrorBlock({ source, message }: { source: string; message: strin
     setTimeout(() => setCopied(false), 1200);
   };
   return (
-    <div className="mermaid-error">
-      <div className="mermaid-error-row">
-        <strong className="mermaid-error-head">Couldn't render diagram</strong>
+    <div className="my-[0.6em] px-3.5 py-3 border border-[rgba(184,68,43,0.18)] rounded-xl bg-bad-soft">
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <strong className="text-xs font-semibold text-bad">Couldn't render diagram</strong>
         <button
           type="button"
           onClick={() => void onCopy()}
           aria-label={copied ? "Copied" : "Copy source"}
           title={copied ? "Copied" : "Copy source"}
-          className="mermaid-error-copy"
+          className="grid place-items-center w-[22px] h-[22px] rounded-md bg-transparent border border-[rgba(184,68,43,0.24)] text-bad cursor-pointer transition-[background-color,color] duration-150 ease-out hover:bg-[rgba(184,68,43,0.08)]"
         >
           {copied ? <Check size={12} strokeWidth={2.4} /> : <Copy size={12} strokeWidth={1.8} />}
         </button>
       </div>
-      <pre className="mermaid-error-body">{source}</pre>
-      {message && <div className="mermaid-error-detail">{message}</div>}
+      <pre className="m-0 text-xs text-ink-soft whitespace-pre-wrap break-words">{source}</pre>
+      {message && (
+        <div className="mt-1.5 text-[11px] text-bad font-mono opacity-80">{message}</div>
+      )}
     </div>
   );
 }
@@ -371,7 +385,7 @@ function ToolbarButton({
       disabled={disabled}
       aria-label={label}
       title={label}
-      className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      className="relative grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors [&_*]:pointer-events-none"
     >
       {children}
     </button>

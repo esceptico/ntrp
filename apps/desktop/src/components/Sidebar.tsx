@@ -5,7 +5,6 @@ import clsx from "clsx";
 import { useStore } from "../store";
 import { apiWithConfig } from "../api";
 import { archiveSession, createSession, renameSession, switchSession } from "../actions";
-import { trackHoverDish } from "../lib/hoverDish";
 
 function formatAge(value: string): string {
   const delta = Date.now() - new Date(value).getTime();
@@ -74,8 +73,7 @@ function NavRow({
     <button
       type="button"
       onClick={onClick}
-      onMouseMove={trackHoverDish}
-      className="hover-dish flex items-center gap-[9px] w-full px-2 py-1.5 rounded-lg text-[13px] font-medium text-ink-soft text-left tracking-[-0.005em] hover:bg-[rgba(0,0,0,0.045)] transition-colors"
+      className="flex items-center gap-[9px] w-full px-2 py-1.5 rounded-lg text-[13px] font-medium text-ink-soft text-left tracking-[-0.005em] hover:bg-[rgba(0,0,0,0.045)] transition-colors"
     >
       <span className="nav-icon grid place-items-center w-[22px] h-[22px] rounded-md text-ink-soft shrink-0">
         {icon}
@@ -139,7 +137,7 @@ function SessionRow({
 
   if (renaming) {
     return (
-      <div className="grid grid-cols-[minmax(0,1fr)] w-full px-2 py-1.5 rounded-lg bg-surface text-ink shadow-[var(--shadow-sm)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] w-full px-2 py-1.5 rounded-lg bg-surface-soft text-ink shadow-[var(--shadow-sm)]">
         <input
           ref={inputRef}
           value={draft}
@@ -176,26 +174,29 @@ function SessionRow({
         e.preventDefault();
         onStartRename();
       }}
-      onMouseMove={trackHoverDish}
       data-streaming={streaming ? "true" : undefined}
       className={clsx(
-        "session-row hover-dish group/row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-1.5 rounded-lg text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+        "session-row group/row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-1.5 rounded-lg text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
         active
-          ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
-          : "text-ink-soft hover:bg-surface/60",
+          ? "bg-surface-soft text-ink shadow-[var(--shadow-sm)]"
+          : "text-ink-soft hover:bg-surface-soft/60",
       )}
     >
       <span className="min-w-0 flex items-center gap-1.5 text-[13px] font-medium tracking-[-0.005em]">
         <span className="truncate">{name || "untitled"}</span>
       </span>
       <span className="relative shrink-0 h-[22px] w-[48px]">
-        {/* default state: timestamp or unread dot. The 6px right pad
-            moves the visible text/dot in to match where the icons in
-            the hover state sit (centered inside 22×22 buttons, so each
-            icon is ~5.5px inset from its button's right edge). */}
-        <span className="absolute inset-0 flex items-center justify-end pr-[6px] transition-opacity duration-150 group-hover/row:opacity-0 pointer-events-none">
+        {/* Default state: timestamp / unread dot. Right-flush with the
+            row's px-2 padding (matching the row's left padding) — the
+            old 6px nudge toward icon centers made the right margin
+            read as ~14px vs 8px on the left, which felt unbalanced. */}
+        <span className="absolute inset-0 flex items-center justify-end transition-opacity duration-150 group-hover/row:opacity-0 pointer-events-none">
           {unread && !streaming ? (
-            <span aria-hidden className="session-unread-dot block" title="New activity" />
+            <span
+              aria-hidden
+              title="New activity"
+              className="block w-[7px] h-[7px] rounded-full bg-accent-strong shadow-[0_0_8px_1px_color-mix(in_oklab,var(--color-accent)_50%,transparent)]"
+            />
           ) : (
             <span
               className={clsx(
@@ -319,7 +320,7 @@ function SessionList() {
         ) : (
           bucketByTime(filtered).map((bucket) => (
             <div key={bucket.label}>
-              <div className="sticky top-0 z-10 px-[18px] pt-3 pb-1.5 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint bg-bg">
+              <div className="sticky top-0 z-10 px-[18px] pt-3 pb-1.5 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint bg-bg-main">
                 {bucket.label}
               </div>
               <div className="px-2.5 flex flex-col gap-px">

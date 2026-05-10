@@ -73,7 +73,7 @@ export function TurnGroup({
 
   const showInterim = !isDone || expanded;
   const interimList = (
-    <div className={clsx("chat-work-trace flex flex-col gap-[var(--work-row-gap)]", isDone && "pt-1.5")}>
+    <div className={clsx("flex flex-col gap-3.5", isDone && "pt-1.5")}>
       {layout.workIds.map((id) => (
         <Message key={id} id={id} isFinal={false} />
       ))}
@@ -97,7 +97,7 @@ export function TurnGroup({
                 onManualResize?.();
                 setExpanded((v) => !v);
               }}
-              className="self-start inline-flex items-center gap-1.5 chat-text text-muted hover:text-ink-soft transition-colors select-none"
+              className="self-start inline-flex items-center gap-1.5 text-[13.5px] leading-[1.45] text-muted hover:text-ink-soft transition-colors select-none"
             >
               <span>{headerLabel}</span>
               <ChevronDown

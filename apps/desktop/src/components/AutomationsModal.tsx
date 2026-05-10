@@ -302,7 +302,7 @@ function AutomationCard({
         }
       }}
       className={clsx(
-        "group/auto-card auto-card relative grid gap-2 p-3.5 rounded-[10px] border border-line-soft bg-surface hover:border-line-strong focus-visible:outline-none focus-visible:border-line-strong focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]",
+        "group/auto-card relative grid gap-2 p-3.5 rounded-[10px] border border-line-soft bg-surface transition-colors duration-palette hover:border-line-strong focus-visible:outline-none focus-visible:border-line-strong focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]",
         editable && "cursor-pointer",
       )}
     >
@@ -475,7 +475,7 @@ function TemplateCard({
     <button
       type="button"
       onClick={onPick}
-      className="auto-card auto-card-template grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 rounded-[10px] border border-line-soft bg-surface text-left hover:border-line-strong hover:bg-surface-soft/30"
+      className="cursor-pointer grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 rounded-[10px] border border-line-soft bg-surface text-left transition-colors duration-palette hover:border-line-strong hover:bg-surface-soft/30 focus-visible:outline-none focus-visible:border-line-strong focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]"
     >
       <Icon size={14} strokeWidth={1.7} className="text-muted mt-[2px] shrink-0" />
       <div className="min-w-0 grid gap-1">

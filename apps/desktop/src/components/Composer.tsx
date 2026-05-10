@@ -256,7 +256,7 @@ export function Composer() {
   const composerThinkingStyle = thinkingStyle === "dvd" ? "" : thinkingStyle;
 
   return (
-    <div className="px-7 pb-[18px]">
+    <div className="px-7 pb-2">
       {awaitingFirstToken && thinkingStyle === "dvd" && (
         <div className="dvd-screensaver" aria-hidden>
           <div className="dvd-x">

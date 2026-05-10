@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* The `dark:` variant matches our `:root.dark` toggle (set in lib/theme.ts).
+   Lets components write `dark:bg-surface` / `dark:text-ink` inline without
+   maintaining a parallel `.dark .foo` selector block. */
+@custom-variant dark (&:where(:root.dark, :root.dark *));
+
 /* ─── Theme tokens (Flexoki-flavored) ──────────────────────── */
 @theme {
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
@@ -52,18 +57,19 @@
 
   /* Motion duration tokens — drive all transition-duration values through
      these so timing stays consistent with the UI/UX intelligence doc.
-     hover/check is the fastest tier; route is reserved for full pane
-     slides and is the slowest. */
-  --motion-fast: 100ms;
-  --motion-check: 120ms;
-  --motion-row: 140ms;
-  --motion-palette: 180ms;
-  --motion-trace: 200ms;
-  --motion-panel: 220ms;
-  --motion-route: 280ms;
+     Registered in Tailwind's --duration-* namespace so they're usable as
+     `duration-fast`, `duration-route`, etc. fast/check is the fastest
+     tier; route is reserved for full pane slides and is the slowest. */
+  --duration-fast: 100ms;
+  --duration-check: 120ms;
+  --duration-row: 140ms;
+  --duration-palette: 180ms;
+  --duration-trace: 200ms;
+  --duration-panel: 220ms;
+  --duration-route: 280ms;
 
-  --motion-ease-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
-  --motion-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @keyframes pulseSoft {
@@ -117,32 +123,6 @@ body {
   font-size: 13.5px;
 }
 
-.chat-text {
-  font-size: 13.5px;
-  line-height: 1.45;
-  letter-spacing: 0;
-}
-
-.chat-meta {
-  font-size: 12.5px;
-  line-height: 1.4;
-  letter-spacing: 0;
-}
-
-.chat-detail {
-  font-size: 12px;
-  line-height: 1.45;
-  letter-spacing: 0;
-}
-
-.chat-work-trace {
-  --work-row-gap: 14px;
-}
-
-.chat-work-trace .chat-text {
-  line-height: 1.45;
-}
-
 #app {
   position: relative;
   width: 100vw;
@@ -150,41 +130,14 @@ body {
   overflow: hidden;
 }
 
-/* Sidebar overlays the chat shell and slides via GPU-composited
-   transform — keeps the chat from reflowing every frame. Width is set
-   inline (App.tsx) and mirrored to --sidebar-width so chat-shell can
-   stay flush as the user drags the resize handle. */
-.sidebar-wrap {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  z-index: 30;
-  background: var(--color-bg);
-  will-change: transform;
-}
-
-/* Chat fills the window and animates its left padding in lockstep
-   with the sidebar's translateX so content always sits flush with the
-   sidebar's right edge. */
-.chat-shell {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: var(--sidebar-width, 244px);
-  transition: left var(--motion-route) var(--motion-ease-emphasized);
-}
-.chat-shell[data-sidebar-hidden="true"] { left: 0; }
-
 /* Fixed-position sidebar toggle, just right of the macOS traffic
    lights. Lives inside the chat-header so it inherits its no-drag
    region, but is fixed-positioned so it stays pinned regardless of
    how the chat-header reflows. */
 .sidebar-toggle {
   position: fixed;
-  top: 12px;
-  left: 88px;
+  top: 14px;
+  left: 84px;
   z-index: 60;
   -webkit-app-region: no-drag;
 }
@@ -201,32 +154,6 @@ body {
   50%      { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-accent) 60%, transparent); }
 }
 
-/* Unread "done" indicator — a steady soft-glow dot, like an unread
-   message badge. Replaces the timestamp on rows that have new activity
-   the user hasn't seen. */
-.session-unread-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 9999px;
-  background: var(--color-accent-strong);
-  box-shadow: 0 0 8px 1px color-mix(in oklab, var(--color-accent) 50%, transparent);
-}
-
-.scroll-to-bottom {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.06);
-  transition:
-    background-color var(--motion-fast) ease,
-    color var(--motion-fast) ease,
-    transform var(--motion-fast) ease;
-}
-.scroll-to-bottom:hover { background: var(--color-surface-soft); }
-:root.dark .scroll-to-bottom {
-  border-color: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
-}
-
 ::selection { background: rgba(184, 92, 31, 0.18); }
 
 button { cursor: pointer; }
@@ -239,46 +166,16 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    Spec: docs/internal/apple-design-intel.md "Tap / Active States". */
 .sidebar button:not(:disabled) {
   transition:
-    transform var(--motion-check) cubic-bezier(0.25, 0.1, 0.25, 1),
-    background-color var(--motion-palette) ease,
-    color var(--motion-palette) ease,
-    border-color var(--motion-palette) ease,
-    box-shadow var(--motion-palette) ease,
-    opacity var(--motion-palette) ease;
+    transform var(--duration-check) cubic-bezier(0.25, 0.1, 0.25, 1),
+    background-color var(--duration-palette) ease,
+    color var(--duration-palette) ease,
+    border-color var(--duration-palette) ease,
+    box-shadow var(--duration-palette) ease,
+    opacity var(--duration-palette) ease;
 }
 .sidebar button:not(:disabled):active {
   transform: scale(0.96);
 }
-
-/* Hover dish — soft radial gradient that follows the cursor on hover.
-   Apply `hover-dish` to any row; the row's mousemove handler (see
-   lib/hoverDish.ts) writes `--mx`/`--my`. The gradient stays subtle
-   enough to read as "the row breathes when you point at it", not as a
-   spotlight. The pseudo-element renders behind the row's content
-   automatically — no need to re-stack children. */
-.hover-dish { position: relative; isolation: isolate; }
-.hover-dish::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: radial-gradient(
-    100px circle at var(--mx, 50%) var(--my, 50%),
-    color-mix(in oklab, var(--color-ink) 8%, transparent),
-    transparent 65%
-  );
-  opacity: 0;
-  transition: opacity 180ms ease-out;
-  pointer-events: none;
-}
-:root.dark .hover-dish::before {
-  background: radial-gradient(
-    100px circle at var(--mx, 50%) var(--my, 50%),
-    color-mix(in oklab, var(--color-ink) 3%, transparent),
-    transparent 65%
-  );
-}
-.hover-dish:hover::before { opacity: 1; }
 
 /* ─── Drag regions ─────────────────────────────────────────── */
 .sidebar { -webkit-app-region: drag; }
@@ -287,16 +184,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .chat-header { -webkit-app-region: drag; }
 .chat-header > * { -webkit-app-region: no-drag; }
 
-/* Subtle leading-edge separator on the chat shell. Light mode uses a
-   dark hairline (a separator); dark mode uses a faint specular high-
-   light (a lifted edge). Either way: just enough to read the seam
-   between the sidebar and the chat panel. */
-.chat-shell {
-  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.06);
-}
-:root.dark .chat-shell {
-  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.06);
-}
+/* The seam between sidebar and chat is now the tonal step between
+   --color-bg-main (sidebar) and --color-bg (chat). No hairline needed —
+   adding one on top of a tonal step reads as visual noise. */
 
 /* Anything portaled above the main layout (modals, viewers) must
    explicitly opt out of the drag region — the sidebar / chat-header
@@ -304,22 +194,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    inside the modal as window-drag attempts. */
 #app > div.absolute.inset-0 { -webkit-app-region: no-drag; }
 #app > div.absolute.inset-0 * { -webkit-app-region: no-drag; }
-
-/* ─── Shimmer text ─────────────────────────────────────────── */
-.shimmer-text {
-  background: linear-gradient(
-    90deg,
-    rgba(168, 165, 156, 0.55) 0%,
-    var(--color-ink) 50%,
-    rgba(168, 165, 156, 0.55) 100%
-  );
-  background-size: 220% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: shimmer 2.4s linear infinite;
-}
-.shimmer-text * { color: transparent !important; background: inherit; -webkit-background-clip: text; background-clip: text; }
 
 /* ─── Scrollbars ───────────────────────────────────────────── */
 .scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -343,7 +217,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .md > *:first-child { margin-top: 0; }
 .md > *:last-child { margin-bottom: 0; }
 .md p { margin: 0 0 1em; }
-.chat-message-text p { margin: 0; }
 .md ul, .md ol { margin: 0.3em 0 0.7em; padding-left: 1.4em; }
 .md ul { list-style: disc outside; }
 .md ol { list-style: decimal outside; }
@@ -501,148 +374,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 .md th { background: var(--color-surface-soft); font-weight: 600; }
 
-/* ─── Mermaid diagrams ─────────────────────────────────────── */
-/* Inline panel: toolbar on top, pan/zoom canvas below. The canvas is the
-   default render — no separate "expand" affordance needed for normal use.
-   Fullscreen variant fills its parent (a portal modal). */
-.mermaid-panel {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  margin: 0.6em 0;
-  height: 480px;
-  border: 1px solid var(--color-line-soft);
-  border-radius: 12px;
-  background: var(--color-code-bg);
-  overflow: hidden;
-}
-.mermaid-panel.fullscreen {
-  margin: 0;
-  height: 100%;
-  border-radius: 16px;
-  box-shadow: var(--shadow-pop);
-  background: var(--color-surface);
-}
-.mermaid-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 10px 6px 12px;
-  border-bottom: 1px solid var(--color-line-soft);
-  background: var(--color-surface);
-}
-.mermaid-panel-title {
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--color-faint);
-}
-.mermaid-panel-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-/* Route pointer events on every descendant past the toolbar button so
-   clicks always land on the button itself. Direct-child only (`> *`)
-   isn't enough — SVG icons render <line>/<path> children whose default
-   `pointer-events: visiblePainted` will still grab clicks landing on the
-   stroke pixels and stop the click from registering on the button. */
-.mermaid-panel-toolbar button { position: relative; }
-.mermaid-panel-toolbar button * { pointer-events: none; }
-.mermaid-panel-zoom {
-  width: 44px;
-  text-align: center;
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-muted);
-  user-select: none;
-}
-.mermaid-panel-divider {
-  width: 1px;
-  height: 16px;
-  background: var(--color-line);
-  margin: 0 4px;
-}
-.mermaid-panel-surface {
-  position: relative;
-  overflow: hidden;
-  cursor: grab;
-  user-select: none;
-  touch-action: none;
-  background: var(--color-code-bg);
-}
-.mermaid-panel-surface.is-dragging { cursor: grabbing; }
-.mermaid-panel-inner {
-  position: absolute;
-  inset: 0;
-}
-.mermaid-panel-inner svg { display: block; }
-.mermaid-loading {
-  margin: 0.6em 0;
-  padding: 14px 16px;
-  border: 1px dashed var(--color-line-soft);
-  border-radius: 12px;
-  color: var(--color-faint);
-  font-size: 12px;
-  font-style: italic;
-  text-align: center;
-}
-.mermaid-error {
-  margin: 0.6em 0;
-  padding: 12px 14px;
-  border: 1px solid rgba(184, 68, 43, 0.18);
-  border-radius: 12px;
-  background: var(--color-bad-soft);
-}
-.mermaid-error-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-.mermaid-error-head {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-bad);
-}
-.mermaid-error-copy {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  background: transparent;
-  border: 1px solid rgba(184, 68, 43, 0.24);
-  color: var(--color-bad);
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.mermaid-error-copy:hover { background: rgba(184, 68, 43, 0.08); }
-.mermaid-error-body {
-  margin: 0;
-  font-size: 12px;
-  color: var(--color-ink-soft);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.mermaid-error-detail {
-  margin-top: 6px;
-  font-size: 11px;
-  color: var(--color-bad);
-  font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
-  opacity: 0.8;
-}
-
-/* ─── Automations modal polish ─────────────────────────────── */
-.auto-card { transition: border-color 0.18s ease, background-color 0.18s ease; }
-.auto-card-template { cursor: pointer; }
-.auto-card-template:focus-visible {
-  outline: none;
-  border-color: var(--color-line-strong);
-  box-shadow: 0 0 0 3px var(--color-accent-soft);
-}
+/* ─── Automations modal textarea scrollbar ─────────────────── */
 .auto-editor textarea::-webkit-scrollbar { width: 8px; }
 .auto-editor textarea::-webkit-scrollbar-track { background: transparent; }
 .auto-editor textarea::-webkit-scrollbar-thumb {
@@ -651,24 +383,12 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   border: 2px solid var(--color-surface);
 }
 .auto-editor textarea:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.16); }
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
 
 :root.dark .auto-editor textarea::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.08);
   border-color: var(--color-surface);
 }
 :root.dark .auto-editor textarea:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); }
-
-/* ─── Tool preview fade ────────────────────────────────────── */
-.tool-preview-fade {
-  mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
-  -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
-}
 
 .composer-card {
   box-shadow: var(--shadow-md);
@@ -917,21 +637,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 .reasoning-head[data-state="streaming"] svg { color: var(--color-muted); }
 
-/* ─── Diff preview (approval card) ─────────────────────────── */
-.diff-preview {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.5;
-  white-space: pre;
-  overflow-x: auto;
-  max-height: 240px;
-  overflow-y: auto;
-}
-.diff-preview .diff-line { display: block; padding: 0 8px; min-width: max-content; }
-.diff-preview .diff-add { background: rgba(79, 138, 58, 0.10); color: #2e6620; }
-.diff-preview .diff-del { background: rgba(184, 68, 43, 0.10); color: #8a3220; }
-.diff-preview .diff-hunk { color: var(--color-info); }
-
 /* ─── Reduce motion ────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   * {
@@ -1004,10 +709,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 /* Selection */
 :root.dark ::selection { background: rgba(231, 138, 77, 0.28); }
 
-/* Diff colors */
-:root.dark .diff-preview .diff-add { background: rgba(135, 154, 57, 0.16); color: #afc463; }
-:root.dark .diff-preview .diff-del { background: rgba(209, 77, 65, 0.16); color: #e58075; }
-:root.dark .diff-preview .diff-hunk { color: var(--color-info); }
 :root.dark .modal-error span { color: #e58075 !important; }
 
 :root.dark .md .code-block-copy:hover { background: rgba(255, 255, 255, 0.06); }
