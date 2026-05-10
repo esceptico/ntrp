@@ -16,7 +16,6 @@ const VARIANTS: { id: ThinkingAnimation; label: string; hint: string }[] = [
   { id: "breath", label: "Breath", hint: "Wide diffuse halo that breathes slowly" },
   { id: "hue-cycle", label: "Border tint", hint: "Border color drifts toward accent — no motion" },
   { id: "send-orbit", label: "Send orbit", hint: "Spinner around the send button only" },
-  { id: "dvd", label: "DVD", hint: "Bouncing logo that changes color at the edges" },
 ];
 
 const THEMES: { id: ThemeChoice; label: string; icon: LucideIcon }[] = [
@@ -101,25 +100,13 @@ export function AppearanceTab() {
         />
         <div className="px-4 py-4 grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-2">
           {VARIANTS.map((v) => (
-            <button
+            <VariantCard
               key={v.id}
-              type="button"
-              onClick={() => setPref("thinkingAnimation", v.id)}
-              className={clsx(
-                "group flex flex-col gap-2 p-3 rounded-[10px] border text-left transition-colors",
-                thinking === v.id
-                  ? "border-line-strong bg-surface-soft/60"
-                  : "border-line-soft bg-bg-main/30 hover:bg-surface-soft/40",
-              )}
-            >
-              <Preview variant={v.id} intensity={intensity} />
-              <div className="grid gap-0.5">
-                <div className="text-[12.5px] font-medium text-ink tracking-[-0.005em]">
-                  {v.label}
-                </div>
-                <div className="text-[11.5px] text-faint leading-snug">{v.hint}</div>
-              </div>
-            </button>
+              variant={v}
+              intensity={intensity}
+              selected={thinking === v.id}
+              onSelect={() => setPref("thinkingAnimation", v.id)}
+            />
           ))}
         </div>
       </section>
@@ -352,17 +339,60 @@ function useResolvedDark(theme: ThemeChoice): boolean {
 
 /** Mini composer-shaped box that runs the variant continuously so the
  *  user can compare them side-by-side without leaving Settings. */
+/** Wraps a Preview with hover-driven animation gating. Animations only
+ *  run when the variant is selected or its card is being hovered — five
+ *  always-on Houdini / conic-gradient previews on every settings open
+ *  was wasteful (each comet preview compositor-tickrates a registered
+ *  custom property at 60fps). */
+function VariantCard({
+  variant,
+  intensity,
+  selected,
+  onSelect,
+}: {
+  variant: { id: ThinkingAnimation; label: string; hint: string };
+  intensity: ThinkingIntensity;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={clsx(
+        "group flex flex-col gap-2 p-3 rounded-[10px] border text-left transition-colors",
+        selected
+          ? "border-line-strong bg-surface-soft/60"
+          : "border-line-soft bg-bg-main/30 hover:bg-surface-soft/40",
+      )}
+    >
+      <Preview variant={variant.id} intensity={intensity} animate={selected || hovered} />
+      <div className="grid gap-0.5">
+        <div className="text-[12.5px] font-medium text-ink tracking-[-0.005em]">
+          {variant.label}
+        </div>
+        <div className="text-[11.5px] text-faint leading-snug">{variant.hint}</div>
+      </div>
+    </button>
+  );
+}
+
 function Preview({
   variant,
   intensity,
+  animate,
 }: {
   variant: ThinkingAnimation;
   intensity: ThinkingIntensity;
+  animate: boolean;
 }) {
   return (
     <div
       className="composer-card relative h-[44px] rounded-[10px] border border-line bg-surface flex items-center pl-3 pr-1.5"
-      data-thinking="true"
+      data-thinking={animate ? "true" : undefined}
       data-thinking-style={variant}
       data-thinking-intensity={intensity}
     >

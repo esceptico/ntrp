@@ -146,9 +146,14 @@ function AdvancedRow({ activeTab, onSelect }: { activeTab: MemoryTab; onSelect: 
           className={clsx("transition-transform duration-200 ease-out", visible && "rotate-90")}
         />
       </button>
+      {/* max-width is still D-tier here, but dropping margin-left from
+          the transition list spares one layout property; the 4px ml
+          change snaps visually-invisibly behind the opacity fade. The
+          chevron sibling does NOT shift because the section's width is
+          still animated by max-width. */}
       <div
         className={clsx(
-          "flex items-center gap-1 overflow-hidden transition-[max-width,opacity,margin-left] duration-200 ease-out",
+          "flex items-center gap-1 overflow-hidden transition-[max-width,opacity] duration-200 ease-out",
           visible ? "ml-1 max-w-[260px] opacity-100" : "ml-0 max-w-0 opacity-0 pointer-events-none",
         )}
         aria-hidden={!visible}

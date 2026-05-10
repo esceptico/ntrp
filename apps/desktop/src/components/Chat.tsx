@@ -34,10 +34,9 @@ function ChatHeader() {
   return (
     <div
       className={clsx(
-        "chat-header flex items-center gap-3 h-[52px] pr-[18px]",
+        "chat-header flex items-center gap-3 h-[52px] pr-[18px] transition-[padding-left] duration-route ease-emphasized",
         sidebarHidden ? "pl-[128px]" : "pl-[18px]",
       )}
-      style={{ transition: "padding-left 320ms cubic-bezier(0.32, 0.72, 0, 1)" }}
     >
       <SidebarToggle />
       <div className="flex-1 min-w-0 flex items-baseline gap-2.5">

@@ -431,7 +431,13 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   --thinking-duration: 2s;
 }
 
-/* Variant: comet — single trailing arc travels around the rim. */
+/* Variant: comet — single trailing arc travels around the rim.
+   140° visible arc with the peak at 340° (so the bright head is
+   followed by a long tail trailing 120° backward). Rotation via
+   Houdini --snake-angle interpolation — paint-tier per frame, but
+   the layer is tiny (~card-size) and modern GPUs handle it. The
+   real perf win for this animation is gating it via useInView when
+   modals occlude the composer (TODO). */
 .composer-card[data-thinking="true"][data-thinking-style="comet"]::before {
   content: "";
   position: absolute;
@@ -483,104 +489,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   50% { border-color: color-mix(in oklab, var(--color-accent) var(--thinking-peak), var(--color-line)); }
 }
 
-/* Variant: dvd — the bouncing screensaver. Two independent linear
-   axes with mismatched periods give the classic constant-velocity
-   ricochet; color changes in steps so each bounce picks a fresh
-   hue. Linear timing (not ease-in-out) is the whole point — the
-   logo snaps direction at the wall, it doesn't slow down and turn
-   around.
-
-   The key trick: bounce against the *actual* edges, not against a
-   guessed bounding box. We translate by `100cqw - 100%` / `100cqh -
-   100%` — `100%` in `transform` is the element's own size, `100cq{w,h}`
-   is the screensaver container. The diff is exactly the room left
-   over, so the logo's right/bottom edge kisses the wall.
-
-   Container query units make the same math work at viewport scale
-   (full app overlay) and preview scale (the settings card). */
-.dvd-screensaver {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  pointer-events: none;
-  overflow: hidden;
-  container-type: size;
-}
-.dvd-screensaver .dvd-x {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: max-content;
-  height: max-content;
-  animation: dvdBounceX 8.7s linear infinite;
-}
-.dvd-screensaver .dvd-y {
-  display: block;
-  font-family: var(--font-mono);
-  font-weight: 800;
-  font-style: italic;
-  font-size: 88px;
-  letter-spacing: -0.02em;
-  line-height: 1;
-  color: var(--color-accent);
-  animation:
-    dvdBounceY 5.3s linear infinite,
-    dvdHue 1.6s steps(6, end) infinite;
-}
-
-/* Settings preview keeps the pseudo-element form: it's scoped to a
-   tiny composer-shaped card (44px tall) where the bounce is
-   approximate; the user picks DVD via the preview but the real-deal
-   viewport version takes over once the agent actually thinks. */
-.composer-card[data-thinking="true"][data-thinking-style="dvd"] {
-  position: relative;
-  overflow: hidden;
-}
-.composer-card[data-thinking="true"][data-thinking-style="dvd"]::after {
-  content: "DVD";
-  position: absolute;
-  top: 0;
-  left: 0;
-  font-family: var(--font-mono);
-  font-weight: 800;
-  font-style: italic;
-  font-size: 13px;
-  letter-spacing: -0.02em;
-  line-height: 1;
-  pointer-events: none;
-  color: var(--color-accent);
-  opacity: calc(var(--thinking-peak) / 100% * 1.4);
-  z-index: 1;
-  animation:
-    dvdPreviewX 4.4s linear infinite,
-    dvdPreviewY 2.7s linear infinite,
-    dvdHue 1.35s steps(6, end) infinite;
-}
-@keyframes dvdBounceX {
-  0%, 100% { transform: translateX(0); }
-  50%      { transform: translateX(calc(100cqw - 100%)); }
-}
-@keyframes dvdBounceY {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(calc(100cqh - 100%)); }
-}
-@keyframes dvdPreviewX {
-  0%, 100% { left: 6px; }
-  50%      { left: calc(100% - 30px); }
-}
-@keyframes dvdPreviewY {
-  0%, 100% { top: 6px; }
-  50%      { top: calc(100% - 18px); }
-}
-@keyframes dvdHue {
-  0%   { color: var(--color-accent); }
-  17%  { color: var(--color-ok); }
-  34%  { color: var(--color-info); }
-  50%  { color: var(--color-warn); }
-  67%  { color: var(--color-bad); }
-  84%  { color: var(--color-accent-strong); }
-  100% { color: var(--color-accent); }
-}
 
 /* Variant: send-orbit — only the send button gets a small spinner. */
 .composer-card[data-thinking="true"][data-thinking-style="send-orbit"] [data-send="true"] {

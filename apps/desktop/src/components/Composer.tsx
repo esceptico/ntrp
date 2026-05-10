@@ -250,20 +250,8 @@ export function Composer() {
     addPendingImages(blocks);
   }
 
-  // The DVD variant runs as a viewport-wide screensaver, not inside the
-  // composer card — pass an empty style to the composer in that case so
-  // the in-card animation doesn't duplicate the viewport one.
-  const composerThinkingStyle = thinkingStyle === "dvd" ? "" : thinkingStyle;
-
   return (
     <div className="px-7 pb-2">
-      {awaitingFirstToken && thinkingStyle === "dvd" && (
-        <div className="dvd-screensaver" aria-hidden>
-          <div className="dvd-x">
-            <span className="dvd-y">DVD</span>
-          </div>
-        </div>
-      )}
       <div className="max-w-[760px] mx-auto">
         <QueueCard />
       </div>
@@ -273,7 +261,7 @@ export function Composer() {
           submit();
         }}
         data-thinking={awaitingFirstToken ? "true" : undefined}
-        data-thinking-style={composerThinkingStyle}
+        data-thinking-style={thinkingStyle}
         data-thinking-intensity={thinkingIntensity}
         className="composer-card relative max-w-[760px] mx-auto flex flex-col border border-line rounded-[14px] bg-surface focus-within:border-line-strong transition-colors"
       >

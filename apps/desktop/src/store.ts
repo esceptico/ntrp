@@ -18,8 +18,7 @@ export type ThinkingAnimation =
   | "comet"
   | "breath"
   | "hue-cycle"
-  | "send-orbit"
-  | "dvd";
+  | "send-orbit";
 
 /** A user message submitted while a run was already active. The server
  *  queues it into the active run's inject_queue and consumes it on the

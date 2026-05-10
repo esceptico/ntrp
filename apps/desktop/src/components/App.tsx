@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { motion } from "motion/react";
+import { MotionConfig, motion } from "motion/react";
 import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
 import { Sidebar } from "./Sidebar";
 import { Chat } from "./Chat";
@@ -109,7 +109,12 @@ export function App() {
   }
 
   return (
-    <>
+    /* `reducedMotion="user"` makes every motion component honor the OS
+       prefers-reduced-motion setting without per-call plumbing. The CSS
+       @media (prefers-reduced-motion) block neutralizes CSS keyframes;
+       this covers the JS-driven side (motion.div springs, layout anims,
+       AnimatePresence). */
+    <MotionConfig reducedMotion="user">
       <motion.div
         className="absolute top-2 left-2 bottom-2 z-30 w-[calc(var(--sidebar-width,244px)-16px)] bg-bg-main border border-line rounded-xl shadow-sm overflow-hidden will-change-transform"
         initial={false}
@@ -128,6 +133,6 @@ export function App() {
       <MarkdownViewer />
       <ToolViewer />
       <ApprovalReviewModal />
-    </>
+    </MotionConfig>
   );
 }
