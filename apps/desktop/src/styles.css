@@ -52,7 +52,6 @@
   --animate-roll-in: rollIn 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --animate-fade-in: fadeIn 200ms ease-out;
   --animate-pop-in: popIn 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  --animate-shimmer: shimmer 2.4s linear infinite;
   --animate-pulse-soft: pulseSoft 1.2s ease-in-out infinite;
 
   /* Motion duration tokens — drive all transition-duration values through
@@ -87,10 +86,6 @@
 @keyframes rollIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
-}
-@keyframes shimmer {
-  0% { background-position: 220% 0; }
-  100% { background-position: -220% 0; }
 }
 
 /* ─── Base ─────────────────────────────────────────────────── */
@@ -509,20 +504,38 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   to { transform: rotate(360deg); }
 }
 
-/* ─── Tool shimmer (applies to running tool lines) ─────────── */
-.tool-line[data-state="running"] {
-  background: linear-gradient(
-    90deg,
-    rgba(168, 165, 156, 0.55) 0%,
-    var(--color-ink) 50%,
-    rgba(168, 165, 156, 0.55) 100%
-  );
-  background-size: 220% 100%;
+/* ─── Periodic shine on running tool lines + streaming reasoning ─
+   Adapted from Magic UI's `animated-shiny-text` — a narrow bright
+   stripe glides through the text once every ~8s with long holds
+   offscreen between passes. Reads as "still working" without the
+   constant left-to-right sweep that the previous shimmer had (felt
+   frantic during long-running tools).
+
+   Two background layers stacked: a static `--color-muted` base
+   covers the whole text width, and an 80px shine stripe rides on
+   top, only its position animated. `background-clip: text` clips
+   both layers to the text glyphs. Children inherit the gradient so
+   the shine reads as a continuous pass across the whole line. */
+@keyframes shineText {
+  0%, 90%, 100% { background-position: calc(-100% - var(--shine-width)) 0, 0 0; }
+  30%, 60%      { background-position: calc(100% + var(--shine-width)) 0, 0 0; }
+}
+
+.tool-line[data-state="running"],
+.reasoning-head[data-state="streaming"] {
+  --shine-width: 80px;
+  color: transparent;
+  background-image:
+    linear-gradient(to right, transparent, var(--color-ink) 50%, transparent),
+    linear-gradient(var(--color-muted), var(--color-muted));
+  background-size: var(--shine-width) 100%, 100% 100%;
+  background-position: calc(-100% - var(--shine-width)) 0, 0 0;
+  background-repeat: no-repeat;
   -webkit-background-clip: text;
   background-clip: text;
-  color: transparent;
-  animation: shimmer 2.4s linear infinite;
+  animation: shineText 8s infinite;
 }
+
 .tool-line[data-state="running"] * {
   color: transparent;
   background: inherit;
@@ -530,19 +543,8 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   background-clip: text;
 }
 
-.reasoning-head[data-state="streaming"] {
-  background: linear-gradient(
-    90deg,
-    rgba(168, 165, 156, 0.55) 0%,
-    var(--color-ink) 50%,
-    rgba(168, 165, 156, 0.55) 100%
-  );
-  background-size: 220% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: shimmer 2.4s linear infinite;
-}
+/* Reasoning head's icons (Brain, ChevronDown) stay muted instead of
+   getting masked into the gradient — they're chrome, not text. */
 .reasoning-head[data-state="streaming"] svg { color: var(--color-muted); }
 
 /* ─── Reduce motion ────────────────────────────────────────── */

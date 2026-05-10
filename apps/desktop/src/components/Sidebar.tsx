@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Archive, Brain, Pencil, Search, Settings as SettingsIcon, Sparkles, X, Zap } from "lucide-react";
+import { Archive, Brain, MessageSquare, MoreHorizontal, Pencil, Search, Settings as SettingsIcon, Sparkles, X, Zap } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
 import { apiWithConfig } from "../api";
@@ -137,7 +137,8 @@ function SessionRow({
 
   if (renaming) {
     return (
-      <div className="grid grid-cols-[minmax(0,1fr)] w-full px-2 py-1.5 rounded-lg bg-surface-soft text-ink shadow-[var(--shadow-sm)]">
+      <div className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-1 rounded-lg bg-surface-soft text-ink shadow-[var(--shadow-sm)]">
+        <span aria-hidden />
         <input
           ref={inputRef}
           value={draft}
@@ -176,39 +177,28 @@ function SessionRow({
       }}
       data-streaming={streaming ? "true" : undefined}
       className={clsx(
-        "session-row group/row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-1.5 rounded-lg text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+        "session-row group/row grid grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-1 rounded-lg text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
         active
           ? "bg-surface-soft text-ink shadow-[var(--shadow-sm)]"
           : "text-ink-soft hover:bg-surface-soft/60",
       )}
     >
-      <span className="min-w-0 flex items-center gap-1.5 text-[13px] font-medium tracking-[-0.005em]">
-        <span className="truncate">{name || "untitled"}</span>
+      <SessionStateIcon streaming={streaming} unread={unread} active={active} />
+      <span className="min-w-0 truncate text-[13px] font-medium tracking-[-0.005em]">
+        {name || "untitled"}
       </span>
-      <span className="relative shrink-0 h-[22px] w-[48px]">
-        {/* Default state: timestamp / unread dot. Right-flush with the
-            row's px-2 padding (matching the row's left padding) — the
-            old 6px nudge toward icon centers made the right margin
-            read as ~14px vs 8px on the left, which felt unbalanced. */}
+      <span className="relative shrink-0 h-[20px] w-[48px]">
+        {/* Default state: timestamp. Hover swaps to row actions. */}
         <span className="absolute inset-0 flex items-center justify-end transition-opacity duration-150 group-hover/row:opacity-0 pointer-events-none">
-          {unread && !streaming ? (
-            <span
-              aria-hidden
-              title="New activity"
-              className="block w-[7px] h-[7px] rounded-full bg-accent-strong shadow-[0_0_8px_1px_color-mix(in_oklab,var(--color-accent)_50%,transparent)]"
-            />
-          ) : (
-            <span
-              className={clsx(
-                "text-[11px] tabular-nums",
-                active ? "text-muted" : "text-faint",
-              )}
-            >
-              {formatAge(lastActivity)}
-            </span>
-          )}
+          <span
+            className={clsx(
+              "text-[11px] tabular-nums",
+              active ? "text-muted" : "text-faint",
+            )}
+          >
+            {formatAge(lastActivity)}
+          </span>
         </span>
-        {/* hover state: actions */}
         <span className="absolute inset-0 flex items-center justify-end gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity duration-150">
           <RowAction
             icon={<Pencil size={11} strokeWidth={1.8} />}
@@ -223,6 +213,45 @@ function SessionRow({
         </span>
       </span>
     </div>
+  );
+}
+
+/** Leading state glyph on each session row. Three cases:
+ *  - streaming: animated triple-dot in accent color (typing indicator)
+ *  - unread done: solid filled dot in accent-strong (badge)
+ *  - idle: small outline circle in faint color (subtle marker, keeps
+ *    column rhythm consistent across all rows) */
+function SessionStateIcon({
+  streaming,
+  unread,
+  active,
+}: {
+  streaming: boolean;
+  unread: boolean;
+  active: boolean;
+}) {
+  if (streaming) {
+    return (
+      <span className="grid place-items-center w-4 h-4 text-accent" aria-label="Running">
+        <MoreHorizontal size={14} strokeWidth={2.4} className="animate-pulse" />
+      </span>
+    );
+  }
+  if (unread) {
+    return (
+      <span className="grid place-items-center w-4 h-4" aria-label="Unread">
+        <span className="block w-[7px] h-[7px] rounded-full bg-accent-strong shadow-[0_0_6px_1px_color-mix(in_oklab,var(--color-accent)_45%,transparent)]" />
+      </span>
+    );
+  }
+  return (
+    <span className="grid place-items-center w-4 h-4 shrink-0" aria-hidden>
+      <MessageSquare
+        size={11}
+        strokeWidth={1.7}
+        className={clsx(active ? "text-muted" : "text-whisper")}
+      />
+    </span>
   );
 }
 
@@ -318,12 +347,21 @@ function SessionList() {
         ) : filtered.length === 0 ? (
           <div className="px-3 py-3 text-[12px] italic text-faint">No matches.</div>
         ) : (
-          bucketByTime(filtered).map((bucket) => (
+          bucketByTime(filtered).map((bucket, bucketIdx) => (
             <div key={bucket.label}>
-              <div className="sticky top-0 z-10 px-[18px] pt-3 pb-1.5 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint bg-bg-main">
+              <div
+                className={clsx(
+                  "sticky top-0 z-10 px-[18px] pb-1 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint bg-bg-main",
+                  // First bucket sits flush under the "Sessions" header
+                  // (which already has its own padding); later buckets get
+                  // a clear gap above so the time groups read as distinct
+                  // blocks rather than a continuous list.
+                  bucketIdx === 0 ? "pt-1" : "pt-4",
+                )}
+              >
                 {bucket.label}
               </div>
-              <div className="px-2.5 flex flex-col gap-px">
+              <div className="px-2.5 flex flex-col gap-0">
                 {bucket.items.map((session) => (
                   <SessionRow
                     key={session.session_id}
