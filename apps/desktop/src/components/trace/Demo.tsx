@@ -49,7 +49,7 @@ export function Demo() {
   return (
     <div className="grid place-items-center min-h-screen bg-bg-main">
       <div className="w-[560px] p-10 rounded-2xl border border-line bg-bg-main">
-        <p className="mb-6 text-[11px] uppercase tracking-[0.08em] text-faint">
+        <p className="mb-6 text-[11.5px] uppercase tracking-[0.08em] text-faint">
           Activity trace · demo
         </p>
         <ActivityTrace>
@@ -61,7 +61,7 @@ export function Demo() {
           />
           <ActivityTail items={items} max={max} collapsed={collapsed} />
         </ActivityTrace>
-        <p className="mt-10 text-[11px] text-faint">
+        <p className="mt-10 text-[11.5px] text-faint">
           Reload (<kbd className="font-mono">⌘R</kbd>) to restart. After 14s, click the header to expand the full list.
         </p>
       </div>

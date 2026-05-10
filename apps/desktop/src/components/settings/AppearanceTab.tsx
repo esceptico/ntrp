@@ -55,7 +55,7 @@ export function AppearanceTab() {
                     type="button"
                     onClick={() => setPref("theme", t.id)}
                     className={clsx(
-                      "inline-flex items-center gap-1.5 h-7 px-3 rounded-[7px] text-[12px] font-medium tracking-[-0.005em] transition-colors",
+                      "inline-flex items-center gap-1.5 h-7 px-3 rounded-[7px] text-[12.5px] font-medium tracking-[-0.005em] transition-colors",
                       active
                         ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
                         : "text-muted hover:text-ink",
@@ -126,8 +126,8 @@ function SettingRow({
   return (
     <div className="flex flex-col items-start gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="min-w-0">
-        <div className="text-[13px] font-medium text-ink tracking-[-0.005em]">{title}</div>
-        <div className="text-[12px] text-muted mt-0.5 leading-snug">{hint}</div>
+        <div className="text-[13.5px] font-medium text-ink tracking-[-0.005em]">{title}</div>
+        <div className="text-[12.5px] text-muted mt-0.5 leading-snug">{hint}</div>
       </div>
       <div className="shrink-0 max-w-full">{control}</div>
     </div>
@@ -182,7 +182,7 @@ function SegmentedControl<T extends string>({
             type="button"
             onClick={() => onChange(opt.id)}
             className={clsx(
-              "inline-flex items-center justify-center h-7 px-3 rounded-[7px] text-[12px] font-medium tracking-[-0.005em] transition-colors",
+              "inline-flex items-center justify-center h-7 px-3 rounded-[7px] text-[12.5px] font-medium tracking-[-0.005em] transition-colors",
               active
                 ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
                 : "text-muted hover:text-ink",
@@ -203,7 +203,7 @@ function PaletteIcon({ swatch }: { swatch: PaletteSwatch }) {
   return (
     <span
       aria-hidden
-      className="grid place-items-center w-[22px] h-[22px] rounded-md text-[11px] font-semibold shrink-0 border border-[rgba(0,0,0,0.06)]"
+      className="grid place-items-center w-[22px] h-[22px] rounded-md text-[11.5px] font-semibold shrink-0 border border-[rgba(0,0,0,0.06)]"
       style={{ background: swatch.bg, color: swatch.accent }}
     >
       Aa
@@ -261,7 +261,7 @@ function PalettePicker({
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-2 h-8 pl-1.5 pr-2 rounded-[8px] border border-line-soft bg-surface hover:bg-surface-soft/60 transition-colors text-[12.5px] font-medium text-ink-soft"
+        className="inline-flex items-center gap-2 h-8 pl-1.5 pr-2 rounded-[8px] border border-line-soft bg-surface hover:bg-surface-soft/60 transition-colors text-[13px] font-medium text-ink-soft"
       >
         <PaletteIcon swatch={triggerSwatch} />
         <span>{current.label}</span>
@@ -315,7 +315,7 @@ function PaletteRow({
       )}
     >
       <PaletteIcon swatch={swatch} />
-      <span className="text-[12.5px] text-ink flex-1">{palette.label}</span>
+      <span className="text-[13px] text-ink flex-1">{palette.label}</span>
       {active && <Check size={12} strokeWidth={2} className="text-accent-strong" />}
     </button>
   );
@@ -371,10 +371,10 @@ function VariantCard({
     >
       <Preview variant={variant.id} intensity={intensity} animate={selected || hovered} />
       <div className="grid gap-0.5">
-        <div className="text-[12.5px] font-medium text-ink tracking-[-0.005em]">
+        <div className="text-[13px] font-medium text-ink tracking-[-0.005em]">
           {variant.label}
         </div>
-        <div className="text-[11.5px] text-faint leading-snug">{variant.hint}</div>
+        <div className="text-[12px] text-faint leading-snug">{variant.hint}</div>
       </div>
     </button>
   );
@@ -396,7 +396,7 @@ function Preview({
       data-thinking-style={variant}
       data-thinking-intensity={intensity}
     >
-      <span className="text-[11.5px] text-faint flex-1">Ask anything…</span>
+      <span className="text-[12px] text-faint flex-1">Ask anything…</span>
       <span
         data-send="true"
         className="grid place-items-center w-6 h-6 rounded-full bg-ink text-on-ink shrink-0"

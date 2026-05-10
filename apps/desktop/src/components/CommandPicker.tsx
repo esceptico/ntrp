@@ -138,7 +138,7 @@ function Section({
     <>
       {withTopDivider && <div className="h-px bg-line-soft" />}
       <div className="py-1.5">
-        <div className="px-3 pb-1 pt-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-faint select-none">
+        <div className="px-3 pb-1 pt-0.5 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint select-none">
           {title}
         </div>
         {entries.map((entry, i) => {
@@ -171,10 +171,10 @@ function Section({
               >
                 <Icon size={12} strokeWidth={1.8} />
               </span>
-              <span className="font-mono text-[12.5px] font-medium text-ink shrink-0">
+              <span className="font-mono text-[13px] font-medium text-ink shrink-0">
                 /{entry.name}
               </span>
-              <span className="text-[12px] text-muted truncate flex-1 min-w-0 text-right">
+              <span className="text-[12.5px] text-muted truncate flex-1 min-w-0 text-right">
                 {entry.description}
               </span>
             </button>
@@ -188,7 +188,7 @@ function Section({
 function Footer({ activeName }: { activeName?: string }) {
   if (!activeName) return null;
   return (
-    <div className="flex items-center gap-3 px-3 py-1.5 bg-surface-soft/60 text-[10.5px] text-faint select-none">
+    <div className="flex items-center gap-3 px-3 py-1.5 bg-surface-soft/60 text-[11px] text-faint select-none">
       <Hint icon={<span className="font-mono">↑↓</span>} label="navigate" />
       <Hint icon={<CornerDownLeft size={10} strokeWidth={2} />} label={`run /${activeName}`} />
       <span className="ml-auto">
@@ -201,7 +201,7 @@ function Footer({ activeName }: { activeName?: string }) {
 function Hint({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-[4px] bg-surface border border-line text-[10px] text-muted">
+      <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-[4px] bg-surface border border-line text-[10.5px] text-muted">
         {icon}
       </span>
       <span>{label}</span>

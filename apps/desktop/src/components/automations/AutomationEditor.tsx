@@ -259,7 +259,7 @@ export function AutomationEditor({
                 placeholder="Untitled automation"
                 spellCheck={false}
                 autoFocus={seed.kind === "create" && !seed.preset}
-                className="flex-1 min-w-0 h-7 bg-transparent border-0 text-[16px] font-semibold tracking-[-0.012em] text-ink outline-none placeholder:text-faint"
+                className="flex-1 min-w-0 h-7 bg-transparent border-0 text-[16.5px] font-semibold tracking-[-0.012em] text-ink outline-none placeholder:text-faint"
               />
               <div className="flex items-center gap-0.5 text-faint">
                 <button
@@ -290,14 +290,14 @@ export function AutomationEditor({
                 placeholder="What should the agent do when this automation fires?"
                 spellCheck={false}
                 rows={6}
-                className="w-full h-full min-h-[180px] resize-none bg-transparent border-0 text-[14.5px] leading-[1.6] text-ink tracking-[-0.005em] outline-none placeholder:text-faint"
+                className="w-full h-full min-h-[180px] resize-none bg-transparent border-0 text-[15px] leading-[1.6] text-ink tracking-[-0.005em] outline-none placeholder:text-faint"
               />
             </div>
 
             {error && (
               <div className="mx-5 mb-3 grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.16)]">
-                <strong className="text-bad text-[12px] font-semibold">Couldn't save</strong>
-                <span className="text-[12px] text-[#8a3220] leading-[1.4]">{error}</span>
+                <strong className="text-bad text-[12.5px] font-semibold">Couldn't save</strong>
+                <span className="text-[12.5px] text-[#8a3220] leading-[1.4]">{error}</span>
               </div>
             )}
 
@@ -314,14 +314,14 @@ export function AutomationEditor({
                     onChange={(e) => setForm((p) => ({ ...p, writable: e.target.checked }))}
                     className="size-3 accent-accent"
                   />
-                  <span className="text-[12px] text-muted">Writable</span>
+                  <span className="text-[12.5px] text-muted">Writable</span>
                 </label>
               </div>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="inline-flex items-center h-8 px-3 rounded-[9px] text-[12.5px] font-medium text-muted hover:text-ink transition-colors"
+                  className="inline-flex items-center h-8 px-3 rounded-[9px] text-[13px] font-medium text-muted hover:text-ink transition-colors"
                 >
                   Cancel
                 </button>
@@ -329,7 +329,7 @@ export function AutomationEditor({
                   type="button"
                   onClick={() => void submit()}
                   disabled={!valid || saving}
-                  className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-[12.5px] font-medium tracking-[-0.005em] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+                  className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-[13px] font-medium tracking-[-0.005em] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
                 >
                   {saving ? "Saving…" : seed.kind === "edit" ? "Save" : "Create"}
                 </button>
@@ -482,7 +482,7 @@ function ScheduleChip({
               </div>
             )}
 
-            <div className="flex items-center gap-1 pt-1 text-[11px] text-faint">
+            <div className="flex items-center gap-1 pt-1 text-[11.5px] text-faint">
               <CalendarClock size={11} strokeWidth={1.7} />
               <span className="truncate">{scheduleLabel(schedule)}</span>
             </div>
@@ -496,12 +496,12 @@ function ScheduleChip({
 // ─── Atoms ──────────────────────────────────────────────────────────
 
 const schedFieldCls =
-  "w-full h-8 px-2 border border-line rounded-md bg-surface text-ink text-[12.5px] tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]";
+  "w-full h-8 px-2 border border-line rounded-md bg-surface text-ink text-[13px] tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]";
 
 function ScheduleField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="grid gap-1">
-      <span className="text-[10.5px] font-medium uppercase tracking-[0.06em] text-muted">{label}</span>
+      <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted">{label}</span>
       {children}
     </label>
   );
@@ -524,7 +524,7 @@ function SegmentedControl<T extends string>({
           type="button"
           onClick={() => onChange(opt.value)}
           className={clsx(
-            "flex-1 px-3 rounded-[5px] text-[12px] font-medium tracking-[-0.005em] transition-colors",
+            "flex-1 px-3 rounded-[5px] text-[12.5px] font-medium tracking-[-0.005em] transition-colors",
             value === opt.value
               ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
               : "text-muted hover:text-ink",
@@ -556,7 +556,7 @@ function Chip({
       onClick={onClick}
       title={title}
       className={clsx(
-        "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[8px] text-[12px] font-medium tracking-[-0.005em] transition-colors select-none",
+        "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[8px] text-[12.5px] font-medium tracking-[-0.005em] transition-colors select-none",
         active
           ? "bg-surface text-ink shadow-[var(--shadow-sm)] border border-line-soft"
           : "bg-transparent text-muted hover:bg-surface hover:text-ink border border-transparent",

@@ -15,7 +15,7 @@ const MAX_NEST_DEPTH = 4; // visual cap; deeper nesting collapses to the same in
 
 export function ActivityTrace({ children }: { children: ReactNode }) {
   return (
-    <div className="font-sans text-[12.5px] leading-[1.4] text-muted">{children}</div>
+    <div className="font-sans text-[13px] leading-[1.4] text-muted">{children}</div>
   );
 }
 
@@ -40,7 +40,7 @@ export function ActivityHeader({
       onClick={onToggle}
       disabled={!interactive}
       className={clsx(
-        "flex h-[18px] items-center gap-2 m-0 p-0 bg-transparent border-0 text-left text-[12.5px] leading-[1.4] text-faint",
+        "flex h-[18px] items-center gap-2 m-0 p-0 bg-transparent border-0 text-left text-[13px] leading-[1.4] text-faint",
         interactive ? "cursor-pointer hover:text-muted select-none" : "cursor-default",
       )}
     >

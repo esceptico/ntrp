@@ -11,7 +11,7 @@ export function AgentTab({ serverConfig }: { serverConfig: ServerConfig | null }
 
   if (!serverConfig) {
     if (!connected) return <SettingsConnectionHint />;
-    return <div className="text-[12.5px] text-faint">Loading agent settings…</div>;
+    return <div className="text-[13px] text-faint">Loading agent settings…</div>;
   }
 
   const apply = async <K extends string>(key: K, value: unknown) => {

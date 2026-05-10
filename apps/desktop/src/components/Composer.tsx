@@ -56,7 +56,7 @@ function UsageDisplay() {
   const usage = useStore((s) => s.usage);
   if (!usage.lastPrompt && !usage.totalCost) return <span />;
   return (
-    <span className="px-1.5 text-[11px] text-faint tabular-nums tracking-[-0.005em] select-none">
+    <span className="px-1.5 text-[11.5px] text-faint tabular-nums tracking-[-0.005em] select-none">
       {usage.lastPrompt > 0 && (
         <>
           <strong className="text-muted font-medium">{formatTokens(usage.lastPrompt)}</strong> ctx
@@ -274,7 +274,7 @@ export function Composer() {
               type="button"
               onClick={() => void viewSkill(selectedSkill.name)}
               title={selectedSkill.path ?? selectedSkill.name}
-              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-sunken/80 border border-line-soft text-[11.5px] font-medium text-ink-soft hover:bg-surface-soft hover:border-line transition-colors"
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-sunken/80 border border-line-soft text-[12px] font-medium text-ink-soft hover:bg-surface-soft hover:border-line transition-colors"
             >
               <Sparkles size={11} strokeWidth={2} className="text-accent" />
               <span className="capitalize">{selectedSkill.name.replace(/[_-]/g, " ")}</span>
@@ -291,7 +291,7 @@ export function Composer() {
           </div>
         )}
         {editingId && (
-          <div className="flex items-center gap-2 px-3 py-1.5 text-[11.5px] text-accent-strong bg-accent-soft/40 rounded-t-[14px]">
+          <div className="flex items-center gap-2 px-3 py-1.5 text-[12px] text-accent-strong bg-accent-soft/40 rounded-t-[14px]">
             <span>Editing previous message — pressing send will replace it.</span>
             <button
               type="button"
@@ -405,7 +405,7 @@ export function Composer() {
           }}
           rows={1}
           placeholder="Message ntrp…"
-          className="w-full min-h-[44px] max-h-[220px] resize-none border-0 bg-transparent px-4 pt-[13px] pb-1 text-[14px] leading-[1.5] text-ink outline-none tracking-[-0.005em] placeholder:text-whisper"
+          className="w-full min-h-[44px] max-h-[220px] resize-none border-0 bg-transparent px-4 pt-[13px] pb-1 text-[14.5px] leading-[1.5] text-ink outline-none tracking-[-0.005em] placeholder:text-whisper"
         />
         <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-2">
           <button
@@ -422,7 +422,7 @@ export function Composer() {
             onClick={() => setSkipApprovals(!skipApprovals)}
             title={skipApprovals ? "Auto-approving every tool call. Click to require approval." : "Approvals required for sensitive tools. Click to enable YOLO."}
             className={clsx(
-              "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11.5px] font-medium tracking-[-0.005em] transition-colors select-none",
+              "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[12px] font-medium tracking-[-0.005em] transition-colors select-none",
               skipApprovals
                 ? "bg-accent-soft text-accent-strong hover:bg-accent-soft/80"
                 : "text-muted hover:bg-surface-soft hover:text-ink",

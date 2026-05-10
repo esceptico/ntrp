@@ -66,11 +66,11 @@ export function ApprovalReviewModal() {
             onClick={(e) => e.stopPropagation()}
           >
             <header className="flex items-center gap-2 px-5 pt-4 pb-3 border-b border-line-soft min-w-0">
-              <span className="font-mono text-[13px] font-medium text-ink truncate">
+              <span className="font-mono text-[13.5px] font-medium text-ink truncate">
                 {approval.toolName}
               </span>
               {approval.path && (
-                <span className="font-mono text-[12px] text-faint truncate">{approval.path}</span>
+                <span className="font-mono text-[12.5px] text-faint truncate">{approval.path}</span>
               )}
               <button
                 type="button"
@@ -84,7 +84,7 @@ export function ApprovalReviewModal() {
 
             <div className="overflow-y-auto scroll-thin">
               {approval.diff ? (
-                <div className="font-mono text-[11.5px] leading-[1.5] whitespace-pre overflow-x-auto overflow-y-auto max-h-60 scroll-thin">
+                <div className="font-mono text-[12px] leading-[1.5] whitespace-pre overflow-x-auto overflow-y-auto max-h-60 scroll-thin">
                   <div>
                     {approval.diff.split("\n").map((line, i) => (
                       <span key={i} className={diffClassFor(line)}>
@@ -94,22 +94,22 @@ export function ApprovalReviewModal() {
                   </div>
                 </div>
               ) : approval.preview ? (
-                <pre className="m-0 px-5 py-4 font-mono text-[12px] leading-[1.55] text-ink-soft whitespace-pre-wrap">
+                <pre className="m-0 px-5 py-4 font-mono text-[12.5px] leading-[1.55] text-ink-soft whitespace-pre-wrap">
                   {approval.preview}
                 </pre>
               ) : (
-                <div className="px-5 py-6 text-[12.5px] text-faint italic">
+                <div className="px-5 py-6 text-[13px] text-faint italic">
                   No diff or preview available.
                 </div>
               )}
             </div>
 
             <footer className="flex items-center gap-2 px-5 py-3 bg-surface-soft/40">
-              <span className="text-[11px] text-faint font-mono">{approval.toolId.slice(0, 8)}</span>
+              <span className="text-[11.5px] text-faint font-mono">{approval.toolId.slice(0, 8)}</span>
               <button
                 type="button"
                 onClick={() => void respondToApproval(approval.toolId, false)}
-                className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-surface text-ink-soft border border-line text-[12px] font-medium hover:bg-surface-soft hover:border-line-strong transition-colors"
+                className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-surface text-ink-soft border border-line text-[12.5px] font-medium hover:bg-surface-soft hover:border-line-strong transition-colors"
               >
                 <X size={12} strokeWidth={2} />
                 Reject
@@ -117,7 +117,7 @@ export function ApprovalReviewModal() {
               <button
                 type="button"
                 onClick={() => void respondToApproval(approval.toolId, true)}
-                className="inline-flex items-center gap-1.5 h-8 px-4 rounded-md bg-ink text-on-ink text-[12px] font-medium hover:opacity-90 transition-opacity"
+                className="inline-flex items-center gap-1.5 h-8 px-4 rounded-md bg-ink text-on-ink text-[12.5px] font-medium hover:opacity-90 transition-opacity"
               >
                 <Check size={12} strokeWidth={2.4} />
                 Approve

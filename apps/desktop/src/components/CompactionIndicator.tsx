@@ -34,7 +34,7 @@ export function CompactionIndicator() {
             strokeWidth={2}
             className="text-muted animate-spin"
           />
-          <span className="text-[12px] font-medium text-muted">
+          <span className="text-[12.5px] font-medium text-muted">
             Compacting conversation…
           </span>
         </motion.div>
@@ -48,7 +48,7 @@ export function CompactionIndicator() {
           className="flex items-center gap-2 my-1"
         >
           <Sparkles size={12} strokeWidth={1.8} className="text-faint" />
-          <span className="text-[12px] text-faint">
+          <span className="text-[12.5px] text-faint">
             Conversation compacted ({lastCompaction.before} → {lastCompaction.after} messages)
           </span>
         </motion.div>

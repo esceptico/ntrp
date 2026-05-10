@@ -54,11 +54,11 @@ export function MarkdownViewer() {
           >
             <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 border-b border-line-soft">
               <div className="min-w-0">
-                <div className="text-[16px] font-semibold tracking-[-0.012em] text-ink truncate">
+                <div className="text-[16.5px] font-semibold tracking-[-0.012em] text-ink truncate">
                   {view.title}
                 </div>
                 {view.subtitle && (
-                  <div className="mt-0.5 text-[11.5px] text-faint font-mono truncate">
+                  <div className="mt-0.5 text-[12px] text-faint font-mono truncate">
                     {view.subtitle}
                   </div>
                 )}
@@ -86,7 +86,7 @@ export function MarkdownViewer() {
               </div>
             </header>
             <div className="overflow-y-auto scroll-thin px-5 py-4">
-              <Markdown content={view.content} className="text-[14px] leading-[1.6] text-ink" />
+              <Markdown content={view.content} className="text-[14.5px] leading-[1.6] text-ink" />
             </div>
           </motion.div>
         </motion.div>

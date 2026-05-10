@@ -29,7 +29,7 @@ export function ModelsTab() {
 
   if (!cfg) {
     if (!connected) return <SettingsConnectionHint />;
-    return <div className="text-[12.5px] text-faint">Loading models…</div>;
+    return <div className="text-[13px] text-faint">Loading models…</div>;
   }
 
   if (!models) {
@@ -65,7 +65,7 @@ export function ModelsTab() {
 
   return (
     <div className="grid gap-5">
-      <div className="rounded-[10px] border border-line-soft bg-surface-soft/45 px-3.5 py-3 text-[12px] leading-[1.45] text-muted">
+      <div className="rounded-[10px] border border-line-soft bg-surface-soft/45 px-3.5 py-3 text-[12.5px] leading-[1.45] text-muted">
         The chat model and reasoning level live in the composer. These defaults are for background work.
       </div>
 
@@ -152,8 +152,8 @@ function Section({
   return (
     <div className="grid gap-2.5 py-3">
       <div className="grid gap-0.5">
-        <div className="text-[13px] font-medium text-ink">{title}</div>
-        <div className="text-[11.5px] text-faint leading-[1.4]">{description}</div>
+        <div className="text-[13.5px] font-medium text-ink">{title}</div>
+        <div className="text-[12px] text-faint leading-[1.4]">{description}</div>
       </div>
 
       <ModelReasoningPicker

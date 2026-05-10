@@ -130,18 +130,18 @@ function ApprovalCard({
       className="rounded-xl border border-line-soft bg-surface shadow-[var(--shadow-sm)] overflow-hidden"
     >
       <header className="px-4 pt-3 pb-2 flex items-baseline gap-2">
-        <h3 className="m-0 text-[14px] font-medium text-ink tracking-[-0.005em]">
+        <h3 className="m-0 text-[14.5px] font-medium text-ink tracking-[-0.005em]">
           Approve <span className="font-mono">{toolName}</span>?
         </h3>
         {showBulk && (
-          <span className="ml-auto shrink-0 text-[11px] text-faint tabular-nums">
+          <span className="ml-auto shrink-0 text-[11.5px] text-faint tabular-nums">
             1 of {totalPending}
           </span>
         )}
       </header>
 
       {(path || previewLine) && (
-        <dl className="px-4 pb-3 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-1 text-[12.5px]">
+        <dl className="px-4 pb-3 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-1 text-[13px]">
           {path && (
             <>
               <dt className="text-faint">Target</dt>
@@ -163,7 +163,7 @@ function ApprovalCard({
             type="button"
             tabIndex={interactive ? 0 : -1}
             onClick={() => setReviewing(toolId)}
-            className="inline-flex items-center h-7 px-2.5 rounded-md text-[12px] text-muted hover:bg-surface hover:text-ink transition-colors"
+            className="inline-flex items-center h-7 px-2.5 rounded-md text-[12.5px] text-muted hover:bg-surface hover:text-ink transition-colors"
           >
             Review
           </button>
@@ -175,7 +175,7 @@ function ApprovalCard({
               type="button"
               tabIndex={interactive ? 0 : -1}
               onClick={() => void respondToAllApprovals(false)}
-              className="inline-flex items-center h-7 px-2.5 rounded-md text-[12px] text-muted hover:bg-surface hover:text-ink transition-colors"
+              className="inline-flex items-center h-7 px-2.5 rounded-md text-[12.5px] text-muted hover:bg-surface hover:text-ink transition-colors"
             >
               Reject all
             </button>
@@ -183,7 +183,7 @@ function ApprovalCard({
               type="button"
               tabIndex={interactive ? 0 : -1}
               onClick={() => void respondToAllApprovals(true)}
-              className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-[12px] text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-colors"
+              className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-[12.5px] text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-colors"
             >
               Approve all
             </button>
@@ -194,7 +194,7 @@ function ApprovalCard({
           type="button"
           tabIndex={interactive ? 0 : -1}
           onClick={() => void respondToApproval(toolId, false)}
-          className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-[12px] text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-colors"
+          className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-[12.5px] text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-colors"
         >
           Reject
         </button>
@@ -203,10 +203,10 @@ function ApprovalCard({
           tabIndex={interactive ? 0 : -1}
           onClick={() => void respondToApproval(toolId, true)}
           title="Approve (⌘↩)"
-          className="inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-md bg-ink text-on-ink text-[12px] font-medium hover:opacity-90 transition-opacity"
+          className="inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-md bg-ink text-on-ink text-[12.5px] font-medium hover:opacity-90 transition-opacity"
         >
           Approve
-          <span className="inline-flex items-center gap-0.5 opacity-70 text-[10.5px] font-mono leading-none">
+          <span className="inline-flex items-center gap-0.5 opacity-70 text-[11px] font-mono leading-none">
             ⌘
             <CornerDownLeft size={10} strokeWidth={2.2} />
           </span>

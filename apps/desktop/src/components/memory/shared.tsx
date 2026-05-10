@@ -51,7 +51,7 @@ export function ListColumn<T>({
         )}
       </div>
       {totalLabel && (
-        <div className="px-4 py-2 text-[11px] text-faint tabular-nums">{totalLabel}</div>
+        <div className="px-4 py-2 text-[11.5px] text-faint tabular-nums">{totalLabel}</div>
       )}
     </>
   );
@@ -60,8 +60,8 @@ export function ListColumn<T>({
 export function ListError({ title, message }: { title: string; message: string }) {
   return (
     <div className="rounded-[10px] border border-[rgba(184,68,43,0.16)] bg-bad-soft px-3 py-2.5">
-      <div className="text-[12px] font-semibold text-bad">{title}</div>
-      <div className="mt-0.5 text-[12px] leading-[1.4] text-[#8a3220]">{message}</div>
+      <div className="text-[12.5px] font-semibold text-bad">{title}</div>
+      <div className="mt-0.5 text-[12.5px] leading-[1.4] text-[#8a3220]">{message}</div>
     </div>
   );
 }
@@ -91,7 +91,7 @@ export function DetailShell({
 
 export function DetailMeta({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-center flex-wrap gap-2 text-[11.5px] text-faint">{children}</div>
+    <div className="flex items-center flex-wrap gap-2 text-[12px] text-faint">{children}</div>
   );
 }
 
@@ -114,7 +114,7 @@ export interface MetaGridRow {
 export function MetaGrid({ rows }: { rows: (MetaGridRow | null | false)[] }) {
   const present = rows.filter(Boolean) as MetaGridRow[];
   return (
-    <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-y-2.5 text-[12px]">
+    <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-y-2.5 text-[12.5px]">
       {present.map((row) => (
         <MetaRow key={row.label} row={row} />
       ))}
@@ -129,7 +129,7 @@ function MetaRow({ row }: { row: MetaGridRow }) {
       <dd
         className={clsx(
           "text-ink-soft min-w-0",
-          row.mono && "font-mono text-[11.5px] break-all whitespace-pre-wrap",
+          row.mono && "font-mono text-[12px] break-all whitespace-pre-wrap",
         )}
       >
         {row.value}
@@ -140,13 +140,13 @@ function MetaRow({ row }: { row: MetaGridRow }) {
 
 export function DetailPlaceholder({ children }: { children: ReactNode }) {
   return (
-    <div className="grid place-items-center h-full text-[13px] italic text-faint">{children}</div>
+    <div className="grid place-items-center h-full text-[13.5px] italic text-faint">{children}</div>
   );
 }
 
 export function Empty({ children }: { children: ReactNode }) {
   return (
-    <div className="grid place-items-center min-h-[200px] text-[13px] italic text-faint">
+    <div className="grid place-items-center min-h-[200px] text-[13.5px] italic text-faint">
       {children}
     </div>
   );
@@ -155,7 +155,7 @@ export function Empty({ children }: { children: ReactNode }) {
 export function ErrorPill({ message }: { message: string }) {
   return (
     <span
-      className="mr-auto inline-flex items-center max-w-[60%] truncate rounded-md bg-bad-soft border border-[rgba(184,68,43,0.18)] text-bad text-[11.5px] px-2 py-[3px]"
+      className="mr-auto inline-flex items-center max-w-[60%] truncate rounded-md bg-bad-soft border border-[rgba(184,68,43,0.18)] text-bad text-[12px] px-2 py-[3px]"
       title={message}
     >
       {message}
@@ -179,7 +179,7 @@ export function Pill({
   }[tone];
 
   return (
-    <span className={clsx("inline-flex items-center rounded-md border px-2 py-[3px] text-[11px]", classes)}>
+    <span className={clsx("inline-flex items-center rounded-md border px-2 py-[3px] text-[11.5px]", classes)}>
       {children}
     </span>
   );
@@ -187,7 +187,7 @@ export function Pill({
 
 export function JsonBlock({ value }: { value: unknown }) {
   return (
-    <pre className="m-0 max-h-[260px] overflow-auto scroll-thin rounded-[8px] border border-line-soft bg-code-bg px-3 py-2 text-[11.5px] leading-relaxed text-ink-soft whitespace-pre-wrap">
+    <pre className="m-0 max-h-[260px] overflow-auto scroll-thin rounded-[8px] border border-line-soft bg-code-bg px-3 py-2 text-[12px] leading-relaxed text-ink-soft whitespace-pre-wrap">
       {JSON.stringify(value, null, 2)}
     </pre>
   );
@@ -209,7 +209,7 @@ export function PrimaryBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center h-7 px-3 rounded-md bg-ink text-on-ink text-[12px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+      className="inline-flex items-center h-7 px-3 rounded-md bg-ink text-on-ink text-[12.5px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
     >
       {children}
     </button>
@@ -230,7 +230,7 @@ export function GhostBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12px] text-ink-soft hover:bg-surface-soft hover:text-ink transition-colors disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12.5px] text-ink-soft hover:bg-surface-soft hover:text-ink transition-colors disabled:opacity-50"
     >
       {children}
     </button>
@@ -251,7 +251,7 @@ export function DangerBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12px] text-ink-soft hover:bg-[rgba(220,38,38,0.08)] hover:text-[#b42318] transition-colors disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12.5px] text-ink-soft hover:bg-[rgba(220,38,38,0.08)] hover:text-[#b42318] transition-colors disabled:opacity-50"
     >
       {children}
     </button>
@@ -282,7 +282,7 @@ export function SearchInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         spellCheck={false}
-        className="w-full h-7 pl-7 pr-2 rounded-md bg-[rgba(0,0,0,0.04)] focus:bg-[rgba(0,0,0,0.06)] border border-transparent focus:border-line-soft text-[12px] text-ink-soft placeholder:text-faint outline-none transition-[background-color,border-color]"
+        className="w-full h-7 pl-7 pr-2 rounded-md bg-[rgba(0,0,0,0.04)] focus:bg-[rgba(0,0,0,0.06)] border border-transparent focus:border-line-soft text-[12.5px] text-ink-soft placeholder:text-faint outline-none transition-[background-color,border-color]"
       />
     </div>
   );

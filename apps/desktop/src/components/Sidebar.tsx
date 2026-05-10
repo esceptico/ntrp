@@ -79,7 +79,7 @@ function NavRow({
     <button
       type="button"
       onClick={onClick}
-      className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-1 rounded-lg text-[13px] font-medium text-ink-soft text-left tracking-[-0.005em] hover:bg-surface-soft/60 transition-colors"
+      className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-1 rounded-lg text-[13.5px] font-medium text-ink-soft text-left tracking-[-0.005em] hover:bg-surface-soft/60 transition-colors"
     >
       <span className="grid place-items-center w-4 h-4 shrink-0">
         {icon}
@@ -159,7 +159,7 @@ function SessionRow({
               onCancelRename();
             }
           }}
-          className="min-w-0 w-full bg-transparent border-0 p-0 text-[13px] font-medium tracking-[-0.005em] text-ink outline-none"
+          className="min-w-0 w-full bg-transparent border-0 p-0 text-[13.5px] font-medium tracking-[-0.005em] text-ink outline-none"
         />
       </div>
     );
@@ -190,7 +190,7 @@ function SessionRow({
       )}
     >
       <SessionStateIcon streaming={streaming} unread={unread} />
-      <span className="min-w-0 truncate text-[13px] font-medium tracking-[-0.005em]">
+      <span className="min-w-0 truncate text-[13.5px] font-medium tracking-[-0.005em]">
         {name || "untitled"}
       </span>
       <span className="relative shrink-0 h-[20px] w-[48px]">
@@ -198,7 +198,7 @@ function SessionRow({
         <span className="absolute inset-0 flex items-center justify-end transition-opacity duration-150 group-hover/row:opacity-0 pointer-events-none">
           <span
             className={clsx(
-              "text-[11px] tabular-nums",
+              "text-[11.5px] tabular-nums",
               active ? "text-muted" : "text-faint",
             )}
           >
@@ -347,11 +347,11 @@ function SessionList() {
 
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin pb-3">
         {sessions.length === 0 ? (
-          <div className="px-3 py-3 text-[12.5px] italic text-faint">
+          <div className="px-3 py-3 text-[13px] italic text-faint">
             {connected ? "No sessions yet." : "Connect to load sessions."}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="px-3 py-3 text-[12.5px] italic text-faint">No matches.</div>
+          <div className="px-3 py-3 text-[13px] italic text-faint">No matches.</div>
         ) : (
           bucketByTime(filtered).map((bucket, bucketIdx) => {
             const isCollapsed = collapsedBuckets.has(bucket.label);
@@ -362,7 +362,7 @@ function SessionList() {
                   onClick={() => toggleBucket(bucket.label)}
                   aria-expanded={!isCollapsed}
                   className={clsx(
-                    "sticky top-0 z-10 w-full flex items-center gap-1 px-[18px] pb-1 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint hover:text-muted bg-bg-main transition-colors cursor-pointer select-none",
+                    "sticky top-0 z-10 w-full flex items-center gap-1 px-[18px] pb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-faint hover:text-muted bg-bg-main transition-colors cursor-pointer select-none",
                     // First bucket flush under the action bar; later
                     // buckets get a real gap so groups read as distinct.
                     bucketIdx === 0 ? "pt-1" : "pt-4",
@@ -514,7 +514,7 @@ function SessionSearch({
         }}
         placeholder="Filter sessions"
         spellCheck={false}
-        className="w-full h-full pl-[22px] pr-6 rounded-md bg-[rgba(0,0,0,0.05)] focus:bg-[rgba(0,0,0,0.07)] text-[12.5px] leading-none text-ink-soft placeholder:text-faint outline-none transition-[background-color] border border-transparent focus:border-line-soft"
+        className="w-full h-full pl-[22px] pr-6 rounded-md bg-[rgba(0,0,0,0.05)] focus:bg-[rgba(0,0,0,0.07)] text-[13px] leading-none text-ink-soft placeholder:text-faint outline-none transition-[background-color] border border-transparent focus:border-line-soft"
       />
       <button
         type="button"
@@ -617,7 +617,7 @@ function ContextItem({
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-[12.5px] text-ink-soft hover:bg-surface-soft/60 hover:text-ink transition-colors"
+      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-[13px] text-ink-soft hover:bg-surface-soft/60 hover:text-ink transition-colors"
     >
       <span className="grid place-items-center w-3.5 h-3.5 shrink-0 text-faint">{icon}</span>
       {label}

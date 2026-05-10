@@ -140,11 +140,11 @@ export function ToolViewer() {
                   </span>
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="text-[16px] font-semibold tracking-[-0.012em] text-ink truncate">
+                  <div className="text-[16.5px] font-semibold tracking-[-0.012em] text-ink truncate">
                     {live && isAgent(live) ? friendlyAgentLabel(live.kind) : live?.kind}
                   </div>
                   {live && !isAgent(live) && live.target && live.target !== live.kind && (
-                    <div className="mt-0.5 text-[11.5px] text-faint font-mono truncate">
+                    <div className="mt-0.5 text-[12px] text-faint font-mono truncate">
                       {live.target}
                     </div>
                   )}
@@ -202,17 +202,17 @@ function AgentBody({
   return (
     <>
       <section className="grid gap-1.5">
-        <h3 className="m-0 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint">
+        <h3 className="m-0 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           Task
         </h3>
-        <p className="m-0 text-[13.5px] leading-relaxed text-ink whitespace-pre-wrap">
+        <p className="m-0 text-[14px] leading-relaxed text-ink whitespace-pre-wrap">
           {task || "(no task provided)"}
         </p>
       </section>
 
       <section className="grid gap-1.5">
         <div className="flex items-center gap-2">
-          <h3 className="m-0 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint">
+          <h3 className="m-0 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
             Result
           </h3>
           {item.result != null && item.result.length > 0 && (
@@ -220,11 +220,11 @@ function AgentBody({
           )}
         </div>
         {item.result == null ? (
-          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-[12.5px] text-faint italic">
+          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-[13px] text-faint italic">
             Working…
           </div>
         ) : item.result.trim().length === 0 ? (
-          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-[12.5px] text-faint italic">
+          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-[13px] text-faint italic">
             Empty result.
           </div>
         ) : (
@@ -237,10 +237,10 @@ function AgentBody({
       {descendants.length > 0 && (
         <section className="grid gap-1.5 min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="m-0 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint">
+            <h3 className="m-0 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
               Activity
             </h3>
-            <span className="text-[11px] text-faint tabular-nums">
+            <span className="text-[11.5px] text-faint tabular-nums">
               {stats.total} {stats.total === 1 ? "call" : "calls"}
               {stats.agents > 0 && ` · ${stats.agents} sub-agent${stats.agents === 1 ? "" : "s"}`}
             </span>
@@ -353,7 +353,7 @@ function ActivityTreeNode({
         )}
         <span
           className={clsx(
-            "text-[12px] shrink-0",
+            "text-[12.5px] shrink-0",
             agent ? "font-medium text-ink-soft" : "font-mono text-ink-soft",
           )}
         >
@@ -362,7 +362,7 @@ function ActivityTreeNode({
         {detail && (
           <span
             className={clsx(
-              "truncate min-w-0 flex-1 text-[11.5px]",
+              "truncate min-w-0 flex-1 text-[12px]",
               agent ? "text-faint" : "text-faint font-mono",
             )}
           >
@@ -370,7 +370,7 @@ function ActivityTreeNode({
           </span>
         )}
         {running && (
-          <span className="text-[10px] uppercase tracking-[0.08em] text-faint shrink-0">
+          <span className="text-[10.5px] uppercase tracking-[0.08em] text-faint shrink-0">
             running
           </span>
         )}
@@ -408,7 +408,7 @@ function CopyButton({ getValue }: { getValue: () => string }) {
       onClick={() => void onCopy()}
       aria-label={copied ? "Copied" : "Copy"}
       className={clsx(
-        "ml-auto inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[11px] font-medium tracking-[-0.005em] transition-colors",
+        "ml-auto inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[11.5px] font-medium tracking-[-0.005em] transition-colors",
         copied ? "text-accent-strong bg-accent-soft" : "text-muted hover:bg-surface-soft hover:text-ink",
       )}
     >
@@ -422,7 +422,7 @@ function ChildRuns({ items }: { items: ActivityItem[] }) {
   const setViewing = useStore((s) => s.setViewingTool);
   return (
     <section className="grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0">
-      <h3 className="m-0 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint">
+      <h3 className="m-0 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
         Child runs
       </h3>
       <ul className="grid gap-px m-0 p-0 list-none rounded-[10px] border border-line-soft bg-surface overflow-hidden">
@@ -434,8 +434,8 @@ function ChildRuns({ items }: { items: ActivityItem[] }) {
               className="flex items-baseline gap-2 w-full px-3 py-2 text-left bg-transparent border-0 hover:bg-surface-soft/60 transition-colors"
             >
               <ArrowRight size={11} strokeWidth={1.8} className="self-center text-whisper shrink-0" />
-              <span className="text-[12px] font-medium text-ink-soft shrink-0">{child.kind}</span>
-              <span className="text-[11.5px] text-faint font-mono truncate min-w-0 flex-1">
+              <span className="text-[12.5px] font-medium text-ink-soft shrink-0">{child.kind}</span>
+              <span className="text-[12px] text-faint font-mono truncate min-w-0 flex-1">
                 {child.target}
               </span>
             </button>
@@ -474,7 +474,7 @@ function Section({
   return (
     <section className="grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0">
       <div className="flex items-center gap-2">
-        <h3 className="m-0 text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint">
+        <h3 className="m-0 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           {title}
         </h3>
         {hasBody && (
@@ -483,7 +483,7 @@ function Section({
             onClick={() => void onCopy()}
             aria-label={copied ? "Copied" : "Copy"}
             className={clsx(
-              "ml-auto inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[11px] font-medium tracking-[-0.005em] transition-colors",
+              "ml-auto inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[11.5px] font-medium tracking-[-0.005em] transition-colors",
               copied
                 ? "text-accent-strong bg-accent-soft"
                 : "text-muted hover:bg-surface-soft hover:text-ink",
@@ -506,7 +506,7 @@ function Section({
           </pre>
         )
       ) : (
-        <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-[12.5px] text-faint italic">
+        <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-[13px] text-faint italic">
           {placeholder}
         </div>
       )}

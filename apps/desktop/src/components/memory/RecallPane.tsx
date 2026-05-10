@@ -57,26 +57,26 @@ export function RecallPane({
               }}
               spellCheck={false}
               placeholder="Ask what memory would retrieve for a query"
-              className="h-9 w-full rounded-[8px] border border-line-soft bg-bg-main pl-9 pr-3 text-[13px] text-ink outline-none transition-colors focus:border-line-strong"
+              className="h-9 w-full rounded-[8px] border border-line-soft bg-bg-main pl-9 pr-3 text-[13.5px] text-ink outline-none transition-colors focus:border-line-strong"
             />
           </div>
           <GhostBtn onClick={() => void run()} disabled={loading || !query.trim()}>
             {loading ? "Searching…" : "Run search"}
           </GhostBtn>
         </div>
-        <div className="mt-2 flex items-center gap-2 text-[11.5px] text-faint">
+        <div className="mt-2 flex items-center gap-2 text-[12px] text-faint">
           {error ? <ErrorPill message={error} /> : <span>Preview the exact memory context before it reaches a prompt.</span>}
         </div>
       </div>
 
       <div className="min-h-0 overflow-y-auto scroll-thin px-7 py-5">
         {!result ? (
-          <div className="grid h-full place-items-center text-[13px] italic text-faint">Run a query to inspect recall</div>
+          <div className="grid h-full place-items-center text-[13.5px] italic text-faint">Run a query to inspect recall</div>
         ) : (
           <div className="grid gap-5">
             <section className="min-w-0">
               <div className="mb-3 flex min-h-7 flex-wrap items-center justify-between gap-2">
-                <h3 className="m-0 text-[13px] font-semibold text-ink">Recall results</h3>
+                <h3 className="m-0 text-[13.5px] font-semibold text-ink">Recall results</h3>
                 <div className="flex items-center gap-1.5">
                   <Pill>{result.observations.length} patterns</Pill>
                   <Pill>{result.facts.length} facts</Pill>
@@ -86,7 +86,7 @@ export function RecallPane({
                 </div>
               </div>
               {showPromptContext && (
-                <pre className="m-0 max-h-[220px] overflow-y-auto whitespace-pre-wrap rounded-[8px] border border-line-soft bg-code-bg px-4 py-3 text-[12px] leading-relaxed text-ink-soft scroll-thin">
+                <pre className="m-0 max-h-[220px] overflow-y-auto whitespace-pre-wrap rounded-[8px] border border-line-soft bg-code-bg px-4 py-3 text-[12.5px] leading-relaxed text-ink-soft scroll-thin">
                   {result.formatted_recall || "No memory matches"}
                 </pre>
               )}
@@ -140,9 +140,9 @@ function SourceList<T>({
 }) {
   return (
     <section>
-      <h3 className="m-0 mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-faint">{title}</h3>
+      <h3 className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">{title}</h3>
       {items.length === 0 ? (
-        <div className="rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2 text-[12px] italic text-faint">No matches</div>
+        <div className="rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2 text-[12.5px] italic text-faint">No matches</div>
       ) : (
         <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0">{items.map(render)}</ul>
       )}
@@ -161,12 +161,12 @@ function FactSource({ fact, reasons, onOpen }: { fact: Fact; reasons: string[]; 
         <span className="mb-1 flex flex-wrap items-center gap-1.5">
           <Pill>{fact.kind}</Pill>
           <Pill tone={factStatusTone(fact.status)}>{factStatusLabel(fact.status)}</Pill>
-          <span className="text-[11px] text-faint">
+          <span className="text-[11.5px] text-faint">
             {factSourceSummary(fact)} · {fact.access_count}× · {formatRelativePast(fact.last_accessed_at)}
           </span>
         </span>
         <RecallReasons reasons={reasons} />
-        <span className="block text-[12.5px] leading-snug text-ink-soft line-clamp-4">{fact.text}</span>
+        <span className="block text-[13px] leading-snug text-ink-soft line-clamp-4">{fact.text}</span>
       </button>
     </li>
   );
@@ -196,12 +196,12 @@ function PatternSource({
           <Pill tone={observationEvidenceTone(observation.evidence_level)}>
             {observationEvidenceLabel(observation.evidence_level)}
           </Pill>
-          <span className="text-[11px] text-faint">
+          <span className="text-[11.5px] text-faint">
             {observation.evidence_count} sources · {observation.access_count}× · {formatRelativePast(observation.last_accessed_at)}
           </span>
         </span>
         <RecallReasons reasons={reasons} />
-        <span className="block text-[12.5px] leading-snug text-ink-soft line-clamp-4">{observation.summary}</span>
+        <span className="block text-[13px] leading-snug text-ink-soft line-clamp-4">{observation.summary}</span>
       </button>
       {sources.length > 0 && (
         <ul className="mt-2 flex list-none flex-col gap-1 border-t border-line-soft pt-2">
@@ -210,7 +210,7 @@ function PatternSource({
               <button
                 type="button"
                 onClick={() => onOpenFact?.(fact)}
-                className="block w-full text-left text-[11.5px] leading-snug text-faint hover:text-ink-soft"
+                className="block w-full text-left text-[12px] leading-snug text-faint hover:text-ink-soft"
               >
                 <span className="uppercase tracking-[0.06em]">{fact.kind}</span>
                 <span aria-hidden> · </span>
@@ -225,7 +225,7 @@ function PatternSource({
               <button
                 type="button"
                 onClick={onOpen}
-                className="text-left text-[11px] text-faint hover:text-ink-soft"
+                className="text-left text-[11.5px] text-faint hover:text-ink-soft"
               >
                 {sources.length - 2} more sources in pattern detail
               </button>
@@ -240,7 +240,7 @@ function PatternSource({
 function RecallReasons({ reasons }: { reasons: string[] }) {
   if (reasons.length === 0) return null;
   return (
-    <span className="mb-1 block text-[11px] leading-snug text-faint">
+    <span className="mb-1 block text-[11.5px] leading-snug text-faint">
       Why: {reasons.map(memoryRecallReasonLabel).join(", ")}
     </span>
   );

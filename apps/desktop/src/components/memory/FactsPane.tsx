@@ -248,8 +248,8 @@ function FactRow({
           <Pin size={11} strokeWidth={1.8} className="mt-[3px] shrink-0 text-accent-strong" />
         )}
         <div className="min-w-0 flex-1">
-          <div className="text-[12.5px] leading-snug line-clamp-2">{fact.text}</div>
-          <div className="mt-1 flex items-center gap-2 text-[11px] text-faint">
+          <div className="text-[13px] leading-snug line-clamp-2">{fact.text}</div>
+          <div className="mt-1 flex items-center gap-2 text-[11.5px] text-faint">
             <span className="uppercase tracking-[0.06em]">{fact.kind}</span>
             <span aria-hidden>·</span>
             <span>{factStatusLabel(fact.status)}</span>
@@ -372,10 +372,10 @@ function FactDetail({
             }}
             spellCheck={false}
             autoFocus
-            className="w-full min-h-[160px] resize-none bg-transparent text-[14px] leading-relaxed text-ink outline-none"
+            className="w-full min-h-[160px] resize-none bg-transparent text-[14.5px] leading-relaxed text-ink outline-none"
           />
         ) : (
-          <p className="text-[14px] leading-relaxed text-ink whitespace-pre-wrap m-0">
+          <p className="text-[14.5px] leading-relaxed text-ink whitespace-pre-wrap m-0">
             {fact.text}
           </p>
         )
@@ -453,19 +453,19 @@ function FactLinks({ links, onOpenFact }: { links: LinkedFact[]; onOpenFact: (fa
   if (links.length === 0) return null;
   return (
     <section>
-      <h3 className="m-0 mb-3 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-faint">
+      <h3 className="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">
         Fact links
       </h3>
       <ul className="flex flex-col gap-2">
         {links.map((link) => (
           <li key={`${link.link_type}-${link.id}`} className="flex items-start gap-3">
-            <span className="mt-[2px] text-[10px] uppercase tracking-[0.06em] text-faint shrink-0 w-[96px]">
+            <span className="mt-[2px] text-[10.5px] uppercase tracking-[0.06em] text-faint shrink-0 w-[96px]">
               {link.link_type === "superseded_by" ? "replaced by" : "replaces"}
             </span>
             <button
               type="button"
               onClick={() => onOpenFact(link.id)}
-              className="min-w-0 text-left text-[12.5px] leading-snug text-ink-soft hover:text-ink"
+              className="min-w-0 text-left text-[13px] leading-snug text-ink-soft hover:text-ink"
             >
               {link.text}
             </button>
@@ -508,7 +508,7 @@ function KindFilter({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={clsx(
-          "inline-flex items-center gap-1 h-7 pl-2.5 pr-1.5 rounded-md text-[11.5px] font-medium tracking-[-0.005em] transition-colors",
+          "inline-flex items-center gap-1 h-7 pl-2.5 pr-1.5 rounded-md text-[12px] font-medium tracking-[-0.005em] transition-colors",
           value
             ? "bg-ink text-on-ink"
             : "text-ink-soft bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)]",
@@ -577,7 +577,7 @@ function StatusFilter({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={clsx(
-          "inline-flex items-center gap-1 h-7 pl-2.5 pr-1.5 rounded-md text-[11.5px] font-medium tracking-[-0.005em] transition-colors",
+          "inline-flex items-center gap-1 h-7 pl-2.5 pr-1.5 rounded-md text-[12px] font-medium tracking-[-0.005em] transition-colors",
           value !== "active"
             ? "bg-ink text-on-ink"
             : "text-ink-soft bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)]",
@@ -619,7 +619,7 @@ function KindOption({
       type="button"
       onClick={onClick}
       className={clsx(
-        "w-full flex items-center px-2.5 py-1.5 text-left text-[12px] capitalize transition-colors",
+        "w-full flex items-center px-2.5 py-1.5 text-left text-[12.5px] capitalize transition-colors",
         active ? "text-ink font-medium" : "text-ink-soft hover:bg-surface-soft/60 hover:text-ink",
       )}
     >

@@ -86,12 +86,12 @@ function AuditRow({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-[12.5px] font-medium leading-snug">{event.action.replaceAll("_", " ")}</div>
-          <div className="mt-1 text-[11.5px] text-faint">{event.target_type}{event.target_id ? ` #${event.target_id}` : ""}</div>
+          <div className="text-[13px] font-medium leading-snug">{event.action.replaceAll("_", " ")}</div>
+          <div className="mt-1 text-[12px] text-faint">{event.target_type}{event.target_id ? ` #${event.target_id}` : ""}</div>
         </div>
         <Pill>{event.actor}</Pill>
       </div>
-      <div className="mt-1 text-[11px] text-faint">{formatRelativePast(event.created_at)}</div>
+      <div className="mt-1 text-[11.5px] text-faint">{formatRelativePast(event.created_at)}</div>
     </button>
   );
 }
@@ -100,7 +100,7 @@ function AuditDetail({ event }: { event: MemoryEvent }) {
   return (
     <div className="px-7 py-6">
       <div className="mb-5 flex items-center gap-2">
-        <h3 className="m-0 text-[15px] font-semibold tracking-[-0.01em] text-ink">{event.action.replaceAll("_", " ")}</h3>
+        <h3 className="m-0 text-[15.5px] font-semibold tracking-[-0.01em] text-ink">{event.action.replaceAll("_", " ")}</h3>
         <Pill>{event.actor}</Pill>
       </div>
 
@@ -117,7 +117,7 @@ function AuditDetail({ event }: { event: MemoryEvent }) {
         />
       </div>
 
-      <h4 className="m-0 mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-faint">Details</h4>
+      <h4 className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">Details</h4>
       <JsonBlock value={event.details} />
     </div>
   );

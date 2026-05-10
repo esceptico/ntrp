@@ -38,11 +38,11 @@ export function ArchiveModal() {
     >
       <header className="flex items-center justify-between gap-3 px-6 pt-5 pb-4 border-b border-line-soft">
         <div className="flex items-center gap-3">
-          <h2 className="m-0 text-[18px] font-semibold tracking-[-0.014em] text-ink">
+          <h2 className="m-0 text-[18.5px] font-semibold tracking-[-0.014em] text-ink">
             Archive
           </h2>
           {archived && archived.length > 0 && (
-            <span className="text-[12px] text-faint tabular-nums">
+            <span className="text-[12.5px] text-faint tabular-nums">
               {archived.length} session{archived.length === 1 ? "" : "s"}
             </span>
           )}
@@ -103,15 +103,15 @@ function ArchivedRow({ session }: { session: ArchivedSession }) {
   return (
     <li className="group flex items-center gap-3 px-3 py-2 rounded-[10px] hover:bg-surface-soft/50 transition-colors">
       <div className="min-w-0 flex-1">
-        <div className="text-[13px] font-medium text-ink tracking-[-0.005em] truncate">
+        <div className="text-[13.5px] font-medium text-ink tracking-[-0.005em] truncate">
           {session.name || "untitled"}
         </div>
-        <div className="text-[11.5px] text-faint tabular-nums">
+        <div className="text-[12px] text-faint tabular-nums">
           archived {formatRelativePast(session.archived_at)} ago · {session.message_count} msg
           {session.message_count === 1 ? "" : "s"}
         </div>
         {error && (
-          <div className="mt-1 text-[11px] text-bad truncate" title={error}>
+          <div className="mt-1 text-[11.5px] text-bad truncate" title={error}>
             {error}
           </div>
         )}
@@ -154,7 +154,7 @@ function RowAction({
       onClick={onClick}
       disabled={busy}
       className={clsx(
-        "inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-[11.5px] font-medium tracking-[-0.005em] transition-colors",
+        "inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-[12px] font-medium tracking-[-0.005em] transition-colors",
         busy
           ? "text-faint cursor-wait"
           : danger
@@ -170,7 +170,7 @@ function RowAction({
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid place-items-center min-h-[200px] text-[13px] italic text-faint">
+    <div className="grid place-items-center min-h-[200px] text-[13.5px] italic text-faint">
       {children}
     </div>
   );
@@ -196,7 +196,7 @@ function SearchInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder="Filter…"
         spellCheck={false}
-        className="w-full h-7 pl-7 pr-2 rounded-md border border-line-soft bg-[rgba(0,0,0,0.025)] text-[12px] text-ink-soft placeholder:text-faint outline-none focus:bg-surface focus:border-line transition-[background-color,border-color]"
+        className="w-full h-7 pl-7 pr-2 rounded-md border border-line-soft bg-[rgba(0,0,0,0.025)] text-[12.5px] text-ink-soft placeholder:text-faint outline-none focus:bg-surface focus:border-line transition-[background-color,border-color]"
       />
     </div>
   );

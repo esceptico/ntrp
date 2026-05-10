@@ -166,7 +166,7 @@ export function IntegrationsTab() {
   return (
     <div className="grid gap-5">
       <div className="flex items-start justify-between gap-3">
-        <p className="m-0 text-[12.5px] text-muted leading-[1.45] max-w-[540px]">
+        <p className="m-0 text-[13px] text-muted leading-[1.45] max-w-[540px]">
           Connect the data and action providers ntrp can use as tools. Model providers stay in
           Providers; MCP servers stay in MCP.
         </p>
@@ -174,7 +174,7 @@ export function IntegrationsTab() {
           type="button"
           onClick={() => void refresh()}
           disabled={loading}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-[12px] text-ink-soft hover:border-line-strong transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-[12.5px] text-ink-soft hover:border-line-strong transition-colors disabled:opacity-50"
         >
           <RefreshCw size={12} strokeWidth={1.8} className={clsx(loading && "animate-spin")} />
           Refresh
@@ -189,7 +189,7 @@ export function IntegrationsTab() {
       )}
 
       {loading && !hasLoadedData ? (
-        <div className="text-[12.5px] text-faint">Loading integrations…</div>
+        <div className="text-[13px] text-faint">Loading integrations…</div>
       ) : !showContent ? (
         <SettingsConnectionHint />
       ) : (
@@ -246,17 +246,17 @@ function IntegrationsReadinessCard({
       <div className="flex flex-wrap items-center gap-2">
         <span
           className={clsx(
-            "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+            "inline-flex items-center rounded-full px-2 py-0.5 text-[11.5px] font-medium",
             readyCount > 0 ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn",
           )}
         >
           {readyCount > 0 ? "Tools ready" : "Connect tools"}
         </span>
-        <div className="text-[12.5px] text-ink-soft">
+        <div className="text-[13px] text-ink-soft">
           Google: {google.label} · Slack: {connectedSlackCount || "none"}
         </div>
       </div>
-      <div className="mt-1.5 text-[11.5px] text-faint">
+      <div className="mt-1.5 text-[12px] text-faint">
         Tool integrations are optional, but connected tools become available to the agent.
       </div>
     </section>
@@ -294,15 +294,15 @@ function GoogleCard({
         <div className="min-w-[150px] flex-1 grid gap-1">
           <div className="flex items-center gap-2 min-w-0">
             <GoogleIcon enabled={enabled} />
-            <div className="text-[13px] font-medium text-ink truncate">Google Workspace</div>
-            <span className={clsx("shrink-0 px-1.5 py-0.5 rounded-full text-[10.5px] font-medium", summaryTone)}>
+            <div className="text-[13.5px] font-medium text-ink truncate">Google Workspace</div>
+            <span className={clsx("shrink-0 px-1.5 py-0.5 rounded-full text-[11px] font-medium", summaryTone)}>
               {summary.label}
             </span>
           </div>
-          <div className="text-[11.5px] text-faint leading-[1.4]">
+          <div className="text-[12px] text-faint leading-[1.4]">
             Gmail and Calendar share the same Google account token.
           </div>
-          <div className="text-[11.5px] text-muted font-mono truncate">
+          <div className="text-[12px] text-muted font-mono truncate">
             {summary.detail}
           </div>
         </div>
@@ -312,7 +312,7 @@ function GoogleCard({
             type="button"
             onClick={() => void onAdd()}
             disabled={pendingAdd}
-            className="h-8 px-2.5 rounded-md border border-line bg-surface text-[12px] text-ink-soft hover:border-line-strong transition-colors disabled:opacity-50"
+            className="h-8 px-2.5 rounded-md border border-line bg-surface text-[12.5px] text-ink-soft hover:border-line-strong transition-colors disabled:opacity-50"
           >
             {pendingAdd ? "Connecting…" : "Add account"}
           </button>
@@ -321,7 +321,7 @@ function GoogleCard({
             onClick={() => void onToggle(!enabled)}
             disabled={pendingGoogle}
             className={clsx(
-              "h-8 px-3 rounded-md text-[12px] font-medium transition-colors disabled:opacity-50",
+              "h-8 px-3 rounded-md text-[12.5px] font-medium transition-colors disabled:opacity-50",
               enabled
                 ? "border border-line bg-surface text-ink-soft hover:border-line-strong"
                 : "bg-ink text-on-ink hover:opacity-90",
@@ -337,13 +337,13 @@ function GoogleCard({
           {accounts.map((account) => (
             <div
               key={account.token_file}
-              className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-center text-[12px]"
+              className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-center text-[12.5px]"
             >
               <div className="min-w-0">
                 <div className="text-ink-soft truncate">{account.email || "Unknown account"}</div>
                 <div
                   className={clsx(
-                    "text-[11px] truncate",
+                    "text-[11.5px] truncate",
                     account.error ? "text-bad" : "text-faint",
                   )}
                 >
@@ -403,15 +403,15 @@ function ServiceCard({
       <div className="px-3.5 py-3 border-b border-line-soft">
         <div className="flex items-center gap-2">
           <MessageCircle size={14} strokeWidth={1.8} className="text-muted" />
-          <div className="text-[13px] font-medium text-ink">Slack</div>
+          <div className="text-[13.5px] font-medium text-ink">Slack</div>
         </div>
-        <div className="mt-1 text-[11.5px] text-faint leading-[1.4]">
+        <div className="mt-1 text-[12px] text-faint leading-[1.4]">
           Token-backed Slack tools. OAuth MCP servers stay in the MCP tab.
         </div>
       </div>
 
       {connectedServices.length + setupServices.length === 0 ? (
-        <div className="px-3.5 py-3 text-[12px] text-faint">No token-backed services are registered.</div>
+        <div className="px-3.5 py-3 text-[12.5px] text-faint">No token-backed services are registered.</div>
       ) : (
         <div className="grid gap-3 px-3.5 py-3">
           <ServiceSection title="Ready" empty="No Slack tokens connected.">
@@ -464,11 +464,11 @@ function ServiceSection({
   const childCount = Array.isArray(children) ? children.length : children ? 1 : 0;
   return (
     <section className="grid gap-2">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">{title}</div>
+      <div className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-faint">{title}</div>
       {childCount > 0 ? (
         <div className="grid gap-2">{children}</div>
       ) : (
-        <div className="rounded-[9px] border border-line-soft bg-surface-soft/45 px-3 py-2 text-[12px] text-faint">
+        <div className="rounded-[9px] border border-line-soft bg-surface-soft/45 px-3 py-2 text-[12.5px] text-faint">
           {empty}
         </div>
       )}
@@ -507,13 +507,13 @@ function ServiceRow({
         <div className="min-w-[150px] flex-1 grid gap-1">
           <div className="flex items-center gap-2 min-w-0">
             <ProviderDot connected={service.connected} />
-            <div className="text-[12.5px] font-medium text-ink-soft truncate">{service.name}</div>
+            <div className="text-[13px] font-medium text-ink-soft truncate">{service.name}</div>
           </div>
-          {connectionPill && <div className="text-[11.5px] text-muted font-mono truncate">{connectionPill}</div>}
+          {connectionPill && <div className="text-[12px] text-muted font-mono truncate">{connectionPill}</div>}
         </div>
         <div className="ml-auto flex justify-end">
           {readOnly ? (
-            <span className="inline-flex items-center h-8 px-3 rounded-md border border-line-soft bg-surface-soft text-[12px] font-medium text-muted">
+            <span className="inline-flex items-center h-8 px-3 rounded-md border border-line-soft bg-surface-soft text-[12.5px] font-medium text-muted">
               {actionLabel}
             </span>
           ) : (
@@ -522,7 +522,7 @@ function ServiceRow({
               onClick={service.connected ? onDisconnect : onEdit}
               disabled={pending}
               className={clsx(
-                "h-8 px-3 rounded-md text-[12px] font-medium transition-colors disabled:opacity-50",
+                "h-8 px-3 rounded-md text-[12.5px] font-medium transition-colors disabled:opacity-50",
                 service.connected
                   ? "border border-line bg-surface text-ink-soft hover:border-line-strong"
                   : "bg-ink text-on-ink hover:opacity-90",
@@ -542,20 +542,20 @@ function ServiceRow({
             onChange={(event) => onKeyChange(event.target.value)}
             placeholder="Token"
             autoFocus
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13.5px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
           />
           <button
             type="button"
             onClick={onConnect}
             disabled={!serviceKey.trim() || pending}
-            className="h-9 px-3 rounded-[9px] bg-ink text-on-ink text-[12px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+            className="h-9 px-3 rounded-[9px] bg-ink text-on-ink text-[12.5px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
           >
             Connect
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[12px] text-muted hover:text-ink hover:border-line-strong transition-colors"
+            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[12.5px] text-muted hover:text-ink hover:border-line-strong transition-colors"
           >
             Cancel
           </button>
