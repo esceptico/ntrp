@@ -435,25 +435,28 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .composer-card[data-thinking="true"] {
   position: relative;
   isolation: isolate;
-  /* Defaults match the "normal" intensity in case attr is missing. */
-  --thinking-peak: 55%;
-  --thinking-shoulder: 18%;
-  --thinking-duration: 3s;
+  /* Defaults match the "normal" intensity in case attr is missing.
+     Peak/shoulder are alpha % for the conic-gradient color stops; the
+     numbers were tuned upward after the original mix read too subtle
+     on the comet variant (1px rim, mostly-transparent arc). */
+  --thinking-peak: 78%;
+  --thinking-shoulder: 28%;
+  --thinking-duration: 2.6s;
 }
 .composer-card[data-thinking="true"][data-thinking-intensity="subtle"] {
-  --thinking-peak: 32%;
-  --thinking-shoulder: 10%;
-  --thinking-duration: 4.2s;
+  --thinking-peak: 50%;
+  --thinking-shoulder: 16%;
+  --thinking-duration: 3.6s;
 }
 .composer-card[data-thinking="true"][data-thinking-intensity="normal"] {
-  --thinking-peak: 55%;
-  --thinking-shoulder: 18%;
-  --thinking-duration: 3s;
+  --thinking-peak: 78%;
+  --thinking-shoulder: 28%;
+  --thinking-duration: 2.6s;
 }
 .composer-card[data-thinking="true"][data-thinking-intensity="strong"] {
-  --thinking-peak: 80%;
-  --thinking-shoulder: 28%;
-  --thinking-duration: 2s;
+  --thinking-peak: 100%;
+  --thinking-shoulder: 45%;
+  --thinking-duration: 1.8s;
 }
 
 /* Variant: comet — single trailing arc travels around the rim.
@@ -468,13 +471,20 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  padding: 1px;
+  /* Rim thickness — was 1px, bumped to 1.6 so the comet reads at a
+     glance without dominating the composer outline. */
+  padding: 1.6px;
+  /* The bright head holds across a small arc (340° → 350°) before
+     falling back into a shoulder, so it reads as a "head" rather than
+     a single instantaneous bright point. Tail now spans 200° (170° →
+     360°) for a more obvious comet shape. */
   background: conic-gradient(
     from var(--snake-angle),
     transparent 0deg,
-    transparent 220deg,
-    color-mix(in oklab, var(--color-accent) var(--thinking-shoulder), transparent) 270deg,
+    transparent 170deg,
+    color-mix(in oklab, var(--color-accent) var(--thinking-shoulder), transparent) 230deg,
     color-mix(in oklab, var(--color-accent) var(--thinking-peak), transparent) 340deg,
+    color-mix(in oklab, var(--color-accent) var(--thinking-peak), transparent) 350deg,
     color-mix(in oklab, var(--color-accent) var(--thinking-shoulder), transparent) 360deg
   );
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
