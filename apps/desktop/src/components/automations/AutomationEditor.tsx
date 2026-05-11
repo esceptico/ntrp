@@ -405,7 +405,7 @@ function ScheduleChip({
                     className={schedFieldCls}
                   />
                 </ScheduleField>
-                <ScheduleField label="Days" hint="daily · weekdays · mon,wed,fri">
+                <ScheduleField label="Days" hint="daily · weekdays · mon,fri">
                   <input
                     value={schedule.days}
                     onChange={(e) => onChange({ ...schedule, days: e.target.value })}
@@ -419,7 +419,7 @@ function ScheduleChip({
 
             {schedule.kind === "every" && (
               <div className="grid grid-cols-2 gap-2">
-                <ScheduleField label="Interval" hint="30m · 2h · 1h30m · 1d · 2d12h">
+                <ScheduleField label="Interval" hint="30m · 2h · 1d · 2d12h">
                   <input
                     value={schedule.every}
                     onChange={(e) => onChange({ ...schedule, every: e.target.value })}
@@ -428,7 +428,7 @@ function ScheduleChip({
                     className={schedFieldCls}
                   />
                 </ScheduleField>
-                <ScheduleField label="Days" hint="daily · weekdays · mon,wed,fri">
+                <ScheduleField label="Days" hint="daily · weekdays · mon,fri">
                   <input
                     value={schedule.days}
                     onChange={(e) => onChange({ ...schedule, days: e.target.value })}

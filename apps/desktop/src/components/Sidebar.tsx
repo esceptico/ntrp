@@ -723,7 +723,7 @@ function OngoingAutomations() {
                 {running.length} running
               </span>
             </div>
-            <div className="grid gap-1">
+            <div className="grid gap-1 min-w-0">
               {running.slice(0, 2).map((a) => (
                 <OngoingAutomationRow
                   key={a.task_id}
@@ -757,9 +757,13 @@ function OngoingAutomationRow({
   status: string | undefined;
 }) {
   return (
-    <motion.div layout="position" className="grid gap-0.5">
-      <div className="flex items-baseline justify-between gap-2 text-xs">
-        <span className="truncate text-ink-soft">{name}</span>
+    // `min-w-0` propagates the parent grid's column constraint down so the
+    // child `truncate`s actually have a width to clip against. Without it
+    // the name pushes the elapsed-time chip off-card and overflows the
+    // sidebar edge.
+    <motion.div layout="position" className="grid gap-0.5 min-w-0">
+      <div className="flex items-baseline justify-between gap-2 text-xs min-w-0">
+        <span className="truncate text-ink-soft min-w-0 flex-1">{name}</span>
         <span className="shrink-0 tabular-nums text-faint">
           {formatElapsed(runningSince)}
         </span>
@@ -772,7 +776,7 @@ function OngoingAutomationRow({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 4 }}
             transition={{ duration: 0.18, ease: EASE_EMPHASIZED }}
-            className="font-mono text-2xs text-faint truncate"
+            className="font-mono text-2xs text-faint truncate min-w-0"
           >
             {status}
           </motion.div>
