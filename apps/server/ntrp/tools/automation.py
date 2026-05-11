@@ -85,7 +85,7 @@ class CreateAutomationInput(BaseModel):
     )
     every: str | None = Field(
         default=None,
-        description="Interval: e.g. '30m', '2h', '1h30m'. For interval-based time triggers. Cannot be combined with 'at'.",
+        description="Interval: e.g. '30m', '2h', '1h30m', '1d', '2d12h'. For interval-based time triggers. Cannot be combined with 'at'.",
     )
     start: str | None = Field(
         default=None,
@@ -120,7 +120,7 @@ class UpdateAutomationInput(BaseModel):
         default=None, description="New days: 'daily', 'weekdays', or comma-separated (e.g. 'mon,wed,fri')"
     )
     every: str | None = Field(
-        default=None, description="New interval: e.g. '30m', '2h'. For interval-based time triggers."
+        default=None, description="New interval: e.g. '30m', '2h', '1d', '2d12h'. For interval-based time triggers."
     )
     start: str | None = Field(default=None, description="New active window start HH:MM (interval mode only)")
     end: str | None = Field(default=None, description="New active window end HH:MM (interval mode only)")

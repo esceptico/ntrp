@@ -30,7 +30,7 @@ DAY_KEYWORDS: dict[str, tuple[int, ...]] = {
 }
 VALID_DAY_SPECS = frozenset((*DAY_KEYWORDS.keys(), "weekly"))
 
-_INTERVAL_RE = re.compile(r"^(?:(\d+)h)?(?:(\d+)m?)?$")
+_INTERVAL_RE = re.compile(r"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m?)?$")
 _TIME_RE = re.compile(r"^(\d{1,2}):(\d{2})$")
 
 
@@ -67,20 +67,33 @@ class Interval:
 
     @classmethod
     def parse(cls, raw: str) -> "Interval":
-        if not (match := _INTERVAL_RE.match(raw.strip().lower())) or not (match.group(1) or match.group(2)):
-            raise ValueError(f"Invalid interval: '{raw}'. Use e.g. '30m', '2h', '1h30m'")
-        hours = int(match.group(1) or 0)
-        minutes = int(match.group(2) or 0)
-        return cls(delta=timedelta(hours=hours, minutes=minutes))
+        match = _INTERVAL_RE.match(raw.strip().lower())
+        if not match or not any(match.groups()):
+            raise ValueError(
+                f"Invalid interval: '{raw}'. Use combinations of days/hours/minutes, "
+                "e.g. '30m', '2h', '1h30m', '1d', '2d12h'"
+            )
+        days = int(match.group(1) or 0)
+        hours = int(match.group(2) or 0)
+        minutes = int(match.group(3) or 0)
+        return cls(delta=timedelta(days=days, hours=hours, minutes=minutes))
 
     def __str__(self) -> str:
         total_minutes = int(self.delta.total_seconds() / 60)
-        h, m = divmod(total_minutes, 60)
-        if h and m:
-            return f"{h}h{m}m"
+        # Emit days when the interval is a whole number of days so the round
+        # trip is symmetric — `parse('2d')` then `str(_)` returns `'2d'`,
+        # not `'48h'`. Mixed intervals keep the existing hh/mm form so we
+        # don't have to special-case partial days.
+        d, rem = divmod(total_minutes, 60 * 24)
+        h, m = divmod(rem, 60)
+        parts = []
+        if d:
+            parts.append(f"{d}d")
         if h:
-            return f"{h}h"
-        return f"{m}m"
+            parts.append(f"{h}h")
+        if m or not parts:
+            parts.append(f"{m}m")
+        return "".join(parts)
 
 
 @dataclass(frozen=True)

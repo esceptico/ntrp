@@ -405,7 +405,7 @@ function ScheduleChip({
                     className={schedFieldCls}
                   />
                 </ScheduleField>
-                <ScheduleField label="Days">
+                <ScheduleField label="Days" hint="daily · weekdays · mon,wed,fri">
                   <input
                     value={schedule.days}
                     onChange={(e) => onChange({ ...schedule, days: e.target.value })}
@@ -419,7 +419,7 @@ function ScheduleChip({
 
             {schedule.kind === "every" && (
               <div className="grid grid-cols-2 gap-2">
-                <ScheduleField label="Interval">
+                <ScheduleField label="Interval" hint="30m · 2h · 1h30m · 1d · 2d12h">
                   <input
                     value={schedule.every}
                     onChange={(e) => onChange({ ...schedule, every: e.target.value })}
@@ -428,7 +428,7 @@ function ScheduleChip({
                     className={schedFieldCls}
                   />
                 </ScheduleField>
-                <ScheduleField label="Days">
+                <ScheduleField label="Days" hint="daily · weekdays · mon,wed,fri">
                   <input
                     value={schedule.days}
                     onChange={(e) => onChange({ ...schedule, days: e.target.value })}
@@ -499,11 +499,24 @@ function ScheduleChip({
 const schedFieldCls =
   "w-full h-8 px-2 border border-line rounded-md bg-surface text-ink text-sm tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]";
 
-function ScheduleField({ label, children }: { label: string; children: React.ReactNode }) {
+function ScheduleField({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  /** Optional one-line example/format hint shown below the input. Keep it
+   *  to ~40 chars — anything longer wraps awkwardly in the 2-col grid. */
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="grid gap-1">
       <span className="text-2xs font-medium uppercase tracking-[0.06em] text-muted">{label}</span>
       {children}
+      {hint && (
+        <span className="text-2xs text-faint font-mono leading-snug">{hint}</span>
+      )}
     </label>
   );
 }
