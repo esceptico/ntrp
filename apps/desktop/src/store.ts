@@ -3,6 +3,7 @@ import {
   type AppConfig,
   type ArchivedSession,
   type Automation,
+  type CreateAutomationPayload,
   type HistoryPage,
   type ModelsResponse,
   type ServerConfig,
@@ -265,6 +266,10 @@ interface State {
   /** Live "current step" string per running automation, fed by the
    *  `/automations/events` SSE stream. Cleared on automation_finished. */
   automationStatuses: Record<string, string>;
+  /** Seed for the AutomationsModal's editor. When set, the modal opens
+   *  with the editor pre-filled (used by the propose-automation flow's
+   *  card). Cleared by the modal once consumed. */
+  automationEditorPreset: CreateAutomationPayload | null;
   archiveOpen: boolean;
   archivedSessions: ArchivedSession[] | null;
   compacting: boolean;
@@ -352,6 +357,7 @@ interface Actions {
   closeAutomations: () => void;
   setAutomationStatus: (taskId: string, status: string) => void;
   clearAutomationStatus: (taskId: string) => void;
+  setAutomationEditorPreset: (preset: CreateAutomationPayload | null) => void;
   setArchivedSessions: (sessions: ArchivedSession[] | null) => void;
   openArchive: () => void;
   closeArchive: () => void;
@@ -454,6 +460,7 @@ export const useStore = create<State & Actions>((set) => ({
   automations: null,
   automationsOpen: false,
   automationStatuses: {},
+  automationEditorPreset: null,
   archiveOpen: false,
   archivedSessions: null,
   compacting: false,
@@ -813,6 +820,7 @@ export const useStore = create<State & Actions>((set) => ({
       delete next[taskId];
       return { automationStatuses: next };
     }),
+  setAutomationEditorPreset: (automationEditorPreset) => set({ automationEditorPreset }),
   setArchivedSessions: (archivedSessions) => set({ archivedSessions }),
   openArchive: () => set({ archiveOpen: true }),
   closeArchive: () => set({ archiveOpen: false }),

@@ -17,6 +17,8 @@ export function AutomationsModal() {
   const open = useStore((s) => s.automationsOpen);
   const close = useStore((s) => s.closeAutomations);
   const automations = useStore((s) => s.automations);
+  const editorPreset = useStore((s) => s.automationEditorPreset);
+  const clearEditorPreset = useStore((s) => s.setAutomationEditorPreset);
   const [editor, setEditor] = useState<EditorSeed | null>(null);
   const [tab, setTab] = useState<Tab>("active");
 
@@ -24,6 +26,15 @@ export function AutomationsModal() {
     if (!open) return;
     void fetchAutomations();
   }, [open]);
+
+  // When the propose-automation card hands us a preset, open the editor
+  // immediately and clear the preset so reopening the modal later doesn't
+  // re-trigger the same prefill.
+  useEffect(() => {
+    if (!editorPreset) return;
+    setEditor({ kind: "create", preset: editorPreset });
+    clearEditorPreset(null);
+  }, [editorPreset, clearEditorPreset]);
 
   // When the user has nothing yet, default the page to Templates so the
   // empty Active tab doesn't feel like a dead end.

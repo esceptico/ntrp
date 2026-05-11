@@ -870,6 +870,22 @@ export async function fetchSkillContent(config: AppConfig, name: string): Promis
   return apiWithConfig<SkillContent>(config, `/skills/${encodeURIComponent(name)}/content`);
 }
 
+export interface CreateSkillPayload {
+  name: string;
+  description: string;
+  body: string;
+}
+
+export async function createSkill(
+  config: AppConfig,
+  payload: CreateSkillPayload,
+): Promise<{ name: string; description: string; path: string }> {
+  return apiWithConfig(config, "/skills/create", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export interface CustomModelSummary {
   id: string;
   base_url: string | null;

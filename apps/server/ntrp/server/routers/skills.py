@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from ntrp.server.deps import require_skill_service
-from ntrp.server.schemas import InstallRequest
+from ntrp.server.schemas import CreateSkillRequest, InstallRequest
 from ntrp.skills.service import SkillService
 
 router = APIRouter(tags=["skills"])
@@ -51,6 +51,26 @@ async def install_skill(request: InstallRequest, svc: SkillService = Depends(req
         "name": meta.name if meta else request.source,
         "description": meta.description if meta else "",
         "status": "installed",
+    }
+
+
+@router.post("/skills/create")
+async def create_skill(
+    request: CreateSkillRequest, svc: SkillService = Depends(require_skill_service)
+):
+    """Create a skill from inline content (the propose-skill proposal flow)."""
+    try:
+        meta = svc.create(request.name, request.description, request.body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except FileExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    return {
+        "name": meta.name,
+        "description": meta.description,
+        "path": str(meta.path / "SKILL.md"),
+        "status": "created",
     }
 
 
