@@ -250,8 +250,13 @@ function ItemButton({
       title={`${item.kind} — click to inspect`}
       data-state={running && !errored ? "running" : undefined}
       style={depth > 0 ? { paddingLeft: depth * NEST_PX } : undefined}
+      // No transition-colors here: when a tool finishes, the shine
+      // animation stops and `color: transparent` would otherwise fade
+      // to `text-faint` over 150ms — during which the gradient is
+      // already gone, leaving the text briefly invisible. The hover
+      // color snap is unnoticeable in exchange for no flicker.
       className={clsx(
-        "tool-line flex items-baseline gap-1.5 font-mono truncate text-left bg-transparent border-0 p-0 m-0 transition-colors cursor-pointer",
+        "tool-line flex items-baseline gap-1.5 font-mono truncate text-left bg-transparent border-0 p-0 m-0 cursor-pointer",
         errored
           ? "text-bad hover:text-bad"
           : running

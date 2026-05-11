@@ -558,9 +558,14 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .reasoning-head[data-state="streaming"] {
   --shine-width: 80px;
   color: transparent;
+  /* Base layer matches the done-state color (--color-faint) so the
+     instant the shine animation stops, the underlying text already
+     reads at the final color. Otherwise the text jumps muted→faint
+     while `color: transparent` is mid-transitioning back to faint —
+     visible as a flicker. */
   background-image:
     linear-gradient(to right, transparent, var(--color-ink) 50%, transparent),
-    linear-gradient(var(--color-muted), var(--color-muted));
+    linear-gradient(var(--color-faint), var(--color-faint));
   background-size: var(--shine-width) 100%, 100% 100%;
   background-position: calc(-100% - var(--shine-width)) 0, 0 0;
   background-repeat: no-repeat;
