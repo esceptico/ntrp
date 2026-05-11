@@ -7,6 +7,7 @@ import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
 import { useStore } from "../store";
 import { apiWithConfig } from "../api";
 import { archiveSession, createSession, renameSession, switchSession } from "../actions";
+import { ICON } from "../lib/icons";
 
 function formatAge(value: string): string {
   const delta = Date.now() - new Date(value).getTime();
@@ -79,7 +80,7 @@ function NavRow({
     <button
       type="button"
       onClick={onClick}
-      className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-1 rounded-lg text-[14px] font-medium text-ink-soft text-left tracking-[-0.005em] hover:bg-surface-soft/60 transition-colors"
+      className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-1 rounded-lg text-base font-medium text-ink-soft text-left tracking-[-0.005em] hover:bg-surface-soft/60 transition-colors"
     >
       <span className="grid place-items-center w-4 h-4 shrink-0">
         {icon}
@@ -159,7 +160,7 @@ function SessionRow({
               onCancelRename();
             }
           }}
-          className="min-w-0 w-full bg-transparent border-0 p-0 text-[14px] font-medium tracking-[-0.005em] text-ink outline-none"
+          className="min-w-0 w-full bg-transparent border-0 p-0 text-base font-medium tracking-[-0.005em] text-ink outline-none"
         />
       </div>
     );
@@ -190,7 +191,7 @@ function SessionRow({
       )}
     >
       <SessionStateIcon streaming={streaming} unread={unread} />
-      <span className="min-w-0 truncate text-[14px] font-medium tracking-[-0.005em]">
+      <span className="min-w-0 truncate text-base font-medium tracking-[-0.005em]">
         {name || "untitled"}
       </span>
       <span className="relative shrink-0 h-[20px] w-[48px]">
@@ -198,7 +199,7 @@ function SessionRow({
         <span className="absolute inset-0 flex items-center justify-end transition-opacity duration-150 group-hover/row:opacity-0 pointer-events-none">
           <span
             className={clsx(
-              "text-[12px] tabular-nums",
+              "text-xs tabular-nums",
               active ? "text-muted" : "text-faint",
             )}
           >
@@ -207,12 +208,12 @@ function SessionRow({
         </span>
         <span className="absolute inset-0 flex items-center justify-end gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity duration-150">
           <RowAction
-            icon={<Pencil size={12} strokeWidth={1.8} />}
+            icon={<Pencil size={ICON.SM} strokeWidth={1.8} />}
             label="Rename"
             onClick={onStartRename}
           />
           <RowAction
-            icon={<Archive size={12} strokeWidth={1.8} />}
+            icon={<Archive size={ICON.SM} strokeWidth={1.8} />}
             label="Archive"
             onClick={onArchive}
           />
@@ -284,7 +285,6 @@ function SessionList() {
   const activeRunSessionIds = useStore((s) => s.activeRunSessionIds);
   const unreadDoneSessionIds = useStore((s) => s.unreadDoneSessionIds);
   const connected = useStore((s) => s.connected);
-  const openArchive = useStore((s) => s.openArchive);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -299,6 +299,20 @@ function SessionList() {
     setQuery("");
     setSearchOpen(false);
   };
+
+  // Cmd/Ctrl+F opens the sidebar search. Replaces the previous always-
+  // visible search button — keeps the chrome minimal while preserving
+  // standard "filter this list" muscle memory.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const toggleBucket = (label: string) => {
     setCollapsedBuckets((prev) => {
@@ -319,45 +333,28 @@ function SessionList() {
 
   return (
     <div className="group/sessions flex flex-col flex-1 min-h-0">
-      {/* Header bar: "Recents" label on the left + search/archive icon
-          buttons on the right. Search input takes over the whole bar
-          when active. */}
-      <div className="flex items-center gap-1 px-[18px] pt-2 pb-1 h-[26px]">
-        {searchActive ? (
+      {/* No umbrella "Recents" label — the time buckets below are
+          themselves the section labels, so a redundant title would
+          just add chrome. Search expands inline at the top of the
+          list when triggered (button in bottom nav). */}
+      {searchActive && (
+        <div className="px-2.5 pt-3 pb-1">
           <SessionSearch
             value={query}
             onChange={setQuery}
             onClose={closeSearch}
             autoFocus
           />
-        ) : (
-          <>
-            <span className="flex-1 text-[11px] font-medium uppercase tracking-[0.08em] text-faint leading-none select-none">
-              Recents
-            </span>
-            <div className="flex items-center gap-0.5 shrink-0">
-              <HeaderIconBtn
-                icon={<Search size={14} strokeWidth={1.8} />}
-                label="Filter sessions"
-                onClick={() => setSearchOpen(true)}
-              />
-              <HeaderIconBtn
-                icon={<Archive size={14} strokeWidth={1.8} />}
-                label="View archived sessions"
-                onClick={openArchive}
-              />
-            </div>
-          </>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin pb-3">
+      <div className={clsx("flex-1 min-h-0 overflow-y-auto scroll-thin pb-3", !searchActive && "pt-3")}>
         {sessions.length === 0 ? (
-          <div className="px-3 py-3 text-[13.5px] italic text-faint">
+          <div className="px-3 py-3 text-sm italic text-faint">
             {connected ? "No sessions yet." : "Connect to load sessions."}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="px-3 py-3 text-[13.5px] italic text-faint">No matches.</div>
+          <div className="px-3 py-3 text-sm italic text-faint">No matches.</div>
         ) : (
           bucketByTime(filtered).map((bucket) => {
             const isCollapsed = collapsedBuckets.has(bucket.label);
@@ -368,11 +365,11 @@ function SessionList() {
                   onClick={() => toggleBucket(bucket.label)}
                   aria-expanded={!isCollapsed}
                   className={clsx(
-                    "sticky top-0 z-10 w-full flex items-center gap-1 px-[18px] pt-1.5 pb-1 text-[11.5px] font-medium uppercase tracking-[0.08em] text-faint hover:text-muted bg-bg-main transition-colors cursor-pointer select-none",
+                    "sticky top-0 z-10 w-full flex items-center gap-1 px-[18px] pt-1.5 pb-1 text-2xs font-medium uppercase tracking-[0.08em] text-faint hover:text-muted bg-bg-main transition-colors cursor-pointer select-none",
                   )}
                 >
                   <ChevronDown
-                    size={10}
+                    size={ICON.XS}
                     strokeWidth={2.2}
                     className={clsx(
                       "transition-transform duration-150",
@@ -455,28 +452,6 @@ function SessionList() {
   );
 }
 
-function HeaderIconBtn({
-  icon,
-  label,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className="grid place-items-center w-[22px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-[rgba(0,0,0,0.05)] transition-colors"
-    >
-      {icon}
-    </button>
-  );
-}
-
 function SessionSearch({
   value,
   onChange,
@@ -496,7 +471,7 @@ function SessionSearch({
   return (
     <div className="relative flex-1 h-[24px]">
       <Search
-        size={12}
+        size={ICON.SM}
         strokeWidth={1.8}
         className="absolute left-[7px] top-1/2 -translate-y-1/2 text-faint pointer-events-none"
       />
@@ -517,7 +492,7 @@ function SessionSearch({
         }}
         placeholder="Filter sessions"
         spellCheck={false}
-        className="w-full h-full pl-[22px] pr-6 rounded-md bg-[rgba(0,0,0,0.05)] focus:bg-[rgba(0,0,0,0.07)] text-[13.5px] leading-none text-ink-soft placeholder:text-faint outline-none transition-[background-color] border border-transparent focus:border-line-soft"
+        className="w-full h-full pl-[22px] pr-6 rounded-md bg-[rgba(0,0,0,0.05)] focus:bg-[rgba(0,0,0,0.07)] text-sm leading-none text-ink-soft placeholder:text-faint outline-none transition-[background-color] border border-transparent focus:border-line-soft"
       />
       <button
         type="button"
@@ -537,7 +512,7 @@ function SessionSearch({
         aria-label={value ? "Clear filter" : "Close filter"}
         className="absolute right-1 top-1/2 -translate-y-1/2 grid place-items-center w-4 h-4 rounded-[4px] text-faint hover:text-ink hover:bg-[rgba(0,0,0,0.06)] transition-colors"
       >
-        <X size={10} strokeWidth={2} />
+        <X size={ICON.XS} strokeWidth={2} />
       </button>
     </div>
   );
@@ -599,9 +574,9 @@ function SessionContextMenu({
       style={{ left: pos.left, top: pos.top, opacity: pos.ready ? 1 : 0 }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <ContextItem icon={<Pencil size={13} strokeWidth={1.8} />} label="Rename" onClick={onRename} />
-      <ContextItem icon={<Sparkles size={13} strokeWidth={1.8} />} label="Compact context" onClick={onCompact} />
-      <ContextItem icon={<Archive size={13} strokeWidth={1.8} />} label="Archive" onClick={onArchive} />
+      <ContextItem icon={<Pencil size={ICON.MD} strokeWidth={1.8} />} label="Rename" onClick={onRename} />
+      <ContextItem icon={<Sparkles size={ICON.MD} strokeWidth={1.8} />} label="Compact context" onClick={onCompact} />
+      <ContextItem icon={<Archive size={ICON.MD} strokeWidth={1.8} />} label="Archive" onClick={onArchive} />
     </div>,
     root,
   );
@@ -620,7 +595,7 @@ function ContextItem({
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-[13.5px] text-ink-soft hover:bg-surface-soft/60 hover:text-ink transition-colors"
+      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-sm text-ink-soft hover:bg-surface-soft/60 hover:text-ink transition-colors"
     >
       <span className="grid place-items-center w-3.5 h-3.5 shrink-0 text-faint">{icon}</span>
       {label}
@@ -632,30 +607,40 @@ export function Sidebar() {
   const openSettings = useStore((s) => s.openSettings);
   const openAutomations = useStore((s) => s.openAutomations);
   const openMemory = useStore((s) => s.openMemory);
+  const openArchive = useStore((s) => s.openArchive);
 
   return (
     <aside className="sidebar flex flex-col h-full">
       <div className="drag-spacer shrink-0 h-[38px]" />
       <nav className="flex flex-col gap-px px-2.5 pt-2">
         <NavRow
-          icon={<Pencil size={14} strokeWidth={1.7} />}
+          icon={<Pencil size={ICON.LG} strokeWidth={1.7} />}
           label="New session"
           onClick={() => void createSession()}
         />
         <NavRow
-          icon={<Zap size={14} strokeWidth={1.7} />}
+          icon={<Zap size={ICON.LG} strokeWidth={1.7} />}
           label="Automations"
           onClick={openAutomations}
         />
         <NavRow
-          icon={<Brain size={14} strokeWidth={1.7} />}
+          icon={<Brain size={ICON.LG} strokeWidth={1.7} />}
           label="Memory"
           onClick={openMemory}
         />
       </nav>
       <SessionList />
       <nav className="flex flex-col gap-px px-2.5 pt-1.5 pb-3">
-        <NavRow icon={<SettingsIcon size={14} strokeWidth={1.7} />} label="Settings" onClick={openSettings} />
+        <NavRow
+          icon={<Archive size={ICON.LG} strokeWidth={1.7} />}
+          label="Archived sessions"
+          onClick={openArchive}
+        />
+        <NavRow
+          icon={<SettingsIcon size={ICON.LG} strokeWidth={1.7} />}
+          label="Settings"
+          onClick={openSettings}
+        />
       </nav>
     </aside>
   );

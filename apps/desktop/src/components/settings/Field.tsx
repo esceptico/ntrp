@@ -15,7 +15,7 @@ export function Field({
 }) {
   return (
     <div className="grid gap-1">
-      <label className="text-[12px] font-medium uppercase tracking-[0.06em] text-muted">{label}</label>
+      <label className="text-xs font-medium uppercase tracking-[0.06em] text-muted">{label}</label>
       <input
         type={type}
         value={value}
@@ -23,9 +23,9 @@ export function Field({
         placeholder={placeholder}
         spellCheck={false}
         autoComplete="off"
-        className="w-full h-9 px-3 border border-line rounded-[9px] bg-surface text-ink text-[14px] outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+        className="w-full h-9 px-3 border border-line rounded-[9px] bg-surface text-ink text-base outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
       />
-      {help && <span className="text-[12.5px] text-faint leading-[1.4]">{help}</span>}
+      {help && <span className="text-xs text-faint leading-[1.4]">{help}</span>}
     </div>
   );
 }
@@ -51,10 +51,10 @@ export function NumberField({
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1">
       <div className="grid gap-0.5">
         <div className="flex items-baseline gap-1.5">
-          <label className="text-[13.5px] font-medium text-ink">{label}</label>
-          {suffix && <span className="text-[12.5px] text-faint">{suffix}</span>}
+          <label className="text-sm font-medium text-ink">{label}</label>
+          {suffix && <span className="text-xs text-faint">{suffix}</span>}
         </div>
-        {help && <span className="text-[12.5px] text-faint leading-[1.4]">{help}</span>}
+        {help && <span className="text-xs text-faint leading-[1.4]">{help}</span>}
       </div>
       <div className="flex items-center gap-2">
         <input
@@ -67,7 +67,7 @@ export function NumberField({
             const n = Number(e.target.value);
             if (Number.isFinite(n)) onChange(n);
           }}
-          className="w-[88px] h-8 px-2 border border-line rounded-md bg-surface text-ink text-[13.5px] tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+          className="w-[88px] h-8 px-2 border border-line rounded-md bg-surface text-ink text-sm tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
         />
       </div>
     </div>
@@ -94,8 +94,8 @@ export function PercentField({
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1">
       <div className="grid gap-0.5">
-        <label className="text-[13.5px] font-medium text-ink">{label}</label>
-        {help && <span className="text-[12.5px] text-faint leading-[1.4]">{help}</span>}
+        <label className="text-sm font-medium text-ink">{label}</label>
+        {help && <span className="text-xs text-faint leading-[1.4]">{help}</span>}
       </div>
       <div className="relative">
         <input
@@ -110,9 +110,9 @@ export function PercentField({
             const clamped = Math.max(min, Math.min(max, n));
             onChange(clamped / 100);
           }}
-          className="w-[88px] h-8 pl-2 pr-6 border border-line rounded-md bg-surface text-ink text-[13.5px] tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+          className="w-[88px] h-8 pl-2 pr-6 border border-line rounded-md bg-surface text-ink text-sm tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
         />
-        <span className="pointer-events-none absolute inset-y-0 right-2 grid place-items-center text-[12.5px] text-faint">
+        <span className="pointer-events-none absolute inset-y-0 right-2 grid place-items-center text-xs text-faint">
           %
         </span>
       </div>

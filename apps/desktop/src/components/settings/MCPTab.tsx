@@ -17,6 +17,7 @@ import {
 import { useMountedRef, useMutationState } from "../../lib/hooks";
 import { settingsErrorMessage } from "../../lib/settingsLoadState";
 import { SettingsConnectionHint, SettingsInlineError } from "./SettingsNotice";
+import { ICON } from "../../lib/icons";
 
 type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; name: string };
 
@@ -105,23 +106,23 @@ function ServerList({
   return (
     <div className="grid gap-4">
       <div>
-        <p className="m-0 text-[13.5px] text-muted leading-[1.45] max-w-[460px]">
+        <p className="m-0 text-sm text-muted leading-[1.45] max-w-[460px]">
           Connect external tools and data sources via Model Context Protocol.
         </p>
       </div>
 
       <div className="grid gap-2">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="m-0 text-[13px] font-medium uppercase tracking-[0.06em] text-faint">
+          <h3 className="m-0 text-sm font-medium uppercase tracking-[0.06em] text-faint">
             Servers
           </h3>
           {!loadError && (
             <button
               type="button"
               onClick={onAdd}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-[13px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
             >
-              <Plus size={12} strokeWidth={2.2} /> Add server
+              <Plus size={ICON.SM} strokeWidth={2.2} /> Add server
             </button>
           )}
         </div>
@@ -194,16 +195,16 @@ function ServerRow({
               server.connected ? "bg-ok" : server.error ? "bg-bad" : "bg-line",
             )}
           />
-          <span className="text-[14px] font-medium text-ink tracking-[-0.005em] truncate">
+          <span className="text-base font-medium text-ink tracking-[-0.005em] truncate">
             {server.name}
           </span>
         </div>
-        <div className="mt-0.5 ml-3.5 text-[12.5px] text-faint tabular-nums">
+        <div className="mt-0.5 ml-3.5 text-xs text-faint tabular-nums">
           {subtitleParts.join(" · ")}
         </div>
         {(error || server.error) && (
           <div
-            className="mt-1 ml-3.5 text-[12px] text-bad truncate"
+            className="mt-1 ml-3.5 text-xs text-bad truncate"
             title={error ?? server.error ?? ""}
           >
             {error ?? server.error}
@@ -216,7 +217,7 @@ function ServerRow({
             type="button"
             onClick={onAuthenticate}
             disabled={busy}
-            className="h-7 px-2.5 rounded-md text-[12.5px] font-medium tracking-[-0.005em] text-ink-soft border border-line-soft hover:bg-surface-soft hover:text-ink transition-colors disabled:opacity-50"
+            className="h-7 px-2.5 rounded-md text-xs font-medium tracking-[-0.005em] text-ink-soft border border-line-soft hover:bg-surface-soft hover:text-ink transition-colors disabled:opacity-50"
           >
             {busy ? "…" : "Authenticate"}
           </button>
@@ -227,7 +228,7 @@ function ServerRow({
           aria-label="Configure"
           className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
         >
-          <SettingsIcon size={14} strokeWidth={1.7} />
+          <SettingsIcon size={ICON.LG} strokeWidth={1.7} />
         </button>
         <Toggle checked={server.enabled} onChange={onToggle} disabled={busy} />
       </div>
@@ -321,23 +322,23 @@ function ServerForm({
         <button
           type="button"
           onClick={onClose}
-          className="inline-flex items-center gap-1.5 h-7 px-1.5 rounded-md text-[13px] text-muted hover:text-ink transition-colors"
+          className="inline-flex items-center gap-1.5 h-7 px-1.5 rounded-md text-sm text-muted hover:text-ink transition-colors"
         >
-          <ArrowLeft size={13} strokeWidth={1.8} /> Back
+          <ArrowLeft size={ICON.MD} strokeWidth={1.8} /> Back
         </button>
         {mode === "edit" && server && (
           <button
             type="button"
             onClick={() => void remove()}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[13px] font-medium text-bad bg-bad-soft hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm font-medium text-bad bg-bad-soft hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            <Trash2 size={13} strokeWidth={1.8} /> Uninstall
+            <Trash2 size={ICON.MD} strokeWidth={1.8} /> Uninstall
           </button>
         )}
       </div>
 
-      <h3 className="m-0 text-[16px] font-semibold tracking-[-0.012em] text-ink">
+      <h3 className="m-0 text-lg font-semibold tracking-[-0.012em] text-ink">
         {mode === "add" ? "Connect to a custom MCP" : `Update ${server?.name} MCP`}
       </h3>
 
@@ -350,7 +351,7 @@ function ServerForm({
             disabled={mode === "edit"}
             placeholder="MCP server name"
             spellCheck={false}
-            className="w-full h-8 px-2.5 rounded-md border border-line-soft bg-surface text-[14px] text-ink outline-none focus:border-line transition-colors disabled:bg-surface-soft disabled:text-muted"
+            className="w-full h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors disabled:bg-surface-soft disabled:text-muted"
           />
         </Field>
 
@@ -370,7 +371,7 @@ function ServerForm({
         </div>
 
         {transportLocked && (
-          <p className="m-0 text-[12.5px] text-faint">
+          <p className="m-0 text-xs text-faint">
             To switch transport type, uninstall first.
           </p>
         )}
@@ -405,7 +406,7 @@ function ServerForm({
           type="button"
           onClick={() => void save()}
           disabled={!valid || busy}
-          className="inline-flex items-center h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-[13.5px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+          className="inline-flex items-center h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {busy ? "Saving…" : "Save"}
         </button>
@@ -444,7 +445,7 @@ function ToolsSection({
 
   return (
     <div className="grid gap-2">
-      <h4 className="m-0 text-[12.5px] font-medium uppercase tracking-[0.06em] text-faint">
+      <h4 className="m-0 text-xs font-medium uppercase tracking-[0.06em] text-faint">
         Tools ({server.tools.length})
       </h4>
       <ul className="rounded-md border border-line-soft bg-bg-main/30 divide-y divide-line-soft m-0 p-0 list-none">
@@ -465,11 +466,11 @@ function ToolsSection({
                 className="mt-[3px] shrink-0 cursor-pointer"
               />
               <div className="min-w-0 flex-1">
-                <div className="text-[13.5px] font-medium text-ink tracking-[-0.005em] truncate">
+                <div className="text-sm font-medium text-ink tracking-[-0.005em] truncate">
                   {t.name}
                 </div>
                 {t.description && (
-                  <div className="text-[12.5px] text-faint leading-snug line-clamp-2">
+                  <div className="text-xs text-faint leading-snug line-clamp-2">
                     {t.description}
                   </div>
                 )}
@@ -524,7 +525,7 @@ function StdioFields({
           onChange={(e) => onCommand(e.target.value)}
           placeholder="openai-dev-mcp serve-sqlite"
           spellCheck={false}
-          className="w-full h-8 px-2.5 rounded-md border border-line-soft bg-surface text-[14px] text-ink outline-none focus:border-line transition-colors font-mono"
+          className="w-full h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors font-mono"
         />
       </Field>
 
@@ -565,7 +566,7 @@ function HttpFields({
           onChange={(e) => onUrl(e.target.value)}
           placeholder="https://mcp.example.com/mcp"
           spellCheck={false}
-          className="w-full h-8 px-2.5 rounded-md border border-line-soft bg-surface text-[14px] text-ink outline-none focus:border-line transition-colors font-mono"
+          className="w-full h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors font-mono"
         />
       </Field>
 
@@ -609,7 +610,7 @@ function ListEditor({
             placeholder={placeholder}
             spellCheck={false}
             className={clsx(
-              "flex-1 h-8 px-2.5 rounded-md border border-line-soft bg-surface text-[14px] text-ink outline-none focus:border-line transition-colors",
+              "flex-1 h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors",
               mono && "font-mono",
             )}
           />
@@ -649,7 +650,7 @@ function KeyValueEditor({
             onChange={(ev) => update(i, { key: ev.target.value })}
             placeholder="Key"
             spellCheck={false}
-            className="h-8 px-2.5 rounded-md border border-line-soft bg-surface text-[14px] text-ink outline-none focus:border-line transition-colors font-mono"
+            className="h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors font-mono"
           />
           <input
             type="text"
@@ -657,7 +658,7 @@ function KeyValueEditor({
             onChange={(ev) => update(i, { value: ev.target.value })}
             placeholder="Value"
             spellCheck={false}
-            className="h-8 px-2.5 rounded-md border border-line-soft bg-surface text-[14px] text-ink outline-none focus:border-line transition-colors font-mono"
+            className="h-8 px-2.5 rounded-md border border-line-soft bg-surface text-base text-ink outline-none focus:border-line transition-colors font-mono"
           />
           <RemoveBtn onClick={() => remove(i)} />
         </div>
@@ -672,9 +673,9 @@ function AddBtn({ label, onClick }: { label: string; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center justify-center gap-1.5 h-8 rounded-md bg-surface-soft hover:bg-surface-soft/80 text-[13px] text-muted hover:text-ink transition-colors"
+      className="inline-flex items-center justify-center gap-1.5 h-8 rounded-md bg-surface-soft hover:bg-surface-soft/80 text-sm text-muted hover:text-ink transition-colors"
     >
-      <Plus size={12} strokeWidth={1.8} /> {label}
+      <Plus size={ICON.SM} strokeWidth={1.8} /> {label}
     </button>
   );
 }
@@ -687,7 +688,7 @@ function RemoveBtn({ onClick }: { onClick: () => void }) {
       aria-label="Remove"
       className="grid place-items-center w-8 h-8 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors"
     >
-      <Trash2 size={13} strokeWidth={1.8} />
+      <Trash2 size={ICON.MD} strokeWidth={1.8} />
     </button>
   );
 }
@@ -695,7 +696,7 @@ function RemoveBtn({ onClick }: { onClick: () => void }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="grid gap-1.5">
-      <span className="text-[13px] font-medium tracking-[-0.005em] text-ink-soft">{label}</span>
+      <span className="text-sm font-medium tracking-[-0.005em] text-ink-soft">{label}</span>
       {children}
     </label>
   );
@@ -718,7 +719,7 @@ function TransportTab({
       onClick={onClick}
       disabled={disabled}
       className={clsx(
-        "inline-flex items-center justify-center h-7 rounded-[6px] text-[13px] font-medium tracking-[-0.005em] transition-colors",
+        "inline-flex items-center justify-center h-7 rounded-[6px] text-sm font-medium tracking-[-0.005em] transition-colors",
         active ? "bg-surface text-ink shadow-[var(--shadow-sm)]" : "text-muted hover:text-ink",
         disabled && "opacity-40 cursor-not-allowed",
       )}
@@ -763,7 +764,7 @@ function Toggle({
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-3 py-6 rounded-[10px] bg-bg-main/40 text-[13.5px] text-faint italic text-center">
+    <div className="px-3 py-6 rounded-[10px] bg-bg-main/40 text-sm text-faint italic text-center">
       {children}
     </div>
   );

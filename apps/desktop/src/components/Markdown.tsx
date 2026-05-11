@@ -11,6 +11,7 @@ import json from "highlight.js/lib/languages/json";
 import python from "highlight.js/lib/languages/python";
 import typescript from "highlight.js/lib/languages/typescript";
 import { Mermaid } from "./Mermaid";
+import { ICON } from "../lib/icons";
 
 const HL_LANGUAGES = {
   json,
@@ -143,7 +144,7 @@ function CopyButton({ text }: { text: string }) {
       aria-label={copied ? "Copied" : "Copy code"}
       className={clsx("code-block-copy", copied && "copied")}
     >
-      {copied ? <Check size={14} strokeWidth={2.4} /> : <Copy size={14} strokeWidth={2} />}
+      {copied ? <Check size={ICON.LG} strokeWidth={2.4} /> : <Copy size={ICON.LG} strokeWidth={2} />}
     </button>
   );
 }

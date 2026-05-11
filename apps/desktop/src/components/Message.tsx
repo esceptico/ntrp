@@ -9,6 +9,7 @@ import type { SkillDescriptor } from "../api";
 import { branchAtMessage, viewSkill } from "../actions";
 import { Markdown } from "./Markdown";
 import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
+import { ICON } from "../lib/icons";
 
 const EASE = EASE_EMPHASIZED;
 // Background tint only — the previous inset 1px ring stacked
@@ -113,7 +114,7 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
           copied ? "text-ok" : "text-faint hover:text-ink hover:bg-surface-soft",
         )}
       >
-        {copied ? <Check size={14} strokeWidth={2.4} /> : <Copy size={14} strokeWidth={2} />}
+        {copied ? <Check size={ICON.LG} strokeWidth={2.4} /> : <Copy size={ICON.LG} strokeWidth={2} />}
       </button>
       {role === "assistant" && (
         <button
@@ -123,7 +124,7 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
           title="Branch from this message"
           className="grid place-items-center w-6 h-6 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         >
-          <GitBranch size={14} strokeWidth={2} />
+          <GitBranch size={ICON.LG} strokeWidth={2} />
         </button>
       )}
       {role === "user" && (
@@ -133,13 +134,13 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
           title="Edit and resend"
           className="grid place-items-center w-6 h-6 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors"
         >
-          <Pencil size={14} strokeWidth={2} />
+          <Pencil size={ICON.LG} strokeWidth={2} />
         </button>
       )}
       {timeLabel && (
         <span
           className={clsx(
-            "text-[12px] text-faint tracking-[-0.005em] select-none",
+            "text-xs text-faint tracking-[-0.005em] select-none",
             role === "user" ? "order-first mr-0.5" : "ml-0.5",
           )}
         >
@@ -196,9 +197,9 @@ function SkillChip({ skill }: { skill: SkillDescriptor }) {
       type="button"
       onClick={() => void viewSkill(skill.name)}
       title={skill.path ?? skill.name}
-      className="inline-flex items-center gap-1.5 mt-1 px-2 py-1 rounded-md bg-surface-sunken/80 border border-line-soft text-[12.5px] font-medium text-ink-soft hover:bg-surface-soft hover:border-line transition-colors cursor-pointer"
+      className="inline-flex items-center gap-1.5 mt-1 px-2 py-1 rounded-md bg-surface-sunken/80 border border-line-soft text-xs font-medium text-ink-soft hover:bg-surface-soft hover:border-line transition-colors cursor-pointer"
     >
-      <Sparkles size={12} strokeWidth={2} className="text-accent" />
+      <Sparkles size={ICON.SM} strokeWidth={2} className="text-accent" />
       <span className="capitalize">{skill.name.replace(/[_-]/g, " ")}</span>
     </button>
   );
@@ -239,7 +240,7 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
         </div>
       )}
       {showBubble && (
-        <div className="max-w-[75%] px-3.5 py-2 rounded-[18px] bg-surface-sunken text-ink text-[14.5px] leading-[1.45] whitespace-pre-wrap break-words text-left">
+        <div className="max-w-[75%] px-3.5 py-2 rounded-[18px] bg-surface-sunken text-ink text-base leading-[1.45] whitespace-pre-wrap break-words text-left">
           {visibleText}
         </div>
       )}
@@ -271,7 +272,7 @@ const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: 
       <Markdown
         content={message.content}
         streaming={isStreaming}
-        className="text-[14.5px] leading-[1.45] text-ink break-words [&_p]:m-0"
+        className="text-base leading-[1.45] text-ink break-words [&_p]:m-0"
       />
       {isFinal && <MessageActions id={id} role="assistant" />}
     </article>
@@ -300,10 +301,10 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
         className="reasoning-head self-start inline-flex items-center gap-1.5 text-xs leading-[1.45] font-medium text-muted hover:text-ink-soft transition-colors select-none"
         data-state={isStreaming ? "streaming" : "done"}
       >
-        <Brain size={13} strokeWidth={1.7} />
+        <Brain size={ICON.MD} strokeWidth={1.7} />
         <span>{message.title || "Reasoning"}</span>
         <ChevronDown
-          size={13}
+          size={ICON.MD}
           strokeWidth={2}
           className={clsx("transition-transform duration-200", expanded && "rotate-180")}
         />
@@ -345,12 +346,12 @@ const ToolMessage = memo(function ToolMessage({ id }: { id: string }) {
     >
       <div className="tool-line flex items-baseline gap-2 min-w-0" data-state={isRunning ? "running" : "done"}>
         <span className="text-faint shrink-0">↗</span>
-        <Terminal size={13} strokeWidth={1.8} className="text-muted shrink-0 self-center" />
+        <Terminal size={ICON.MD} strokeWidth={1.8} className="text-muted shrink-0 self-center" />
         <span className="text-ink-soft font-medium shrink-0">{message.title || "tool"}</span>
         <span className="text-muted truncate min-w-0 flex-1">{message.subtitle || ""}</span>
       </div>
       {!isRunning && (
-        <pre className="m-0 mt-[3px] ml-[18px] text-faint font-mono text-[13px] leading-[1.45] whitespace-pre-wrap max-h-[80px] overflow-hidden [mask-image:linear-gradient(180deg,#000_60%,transparent)]">
+        <pre className="m-0 mt-[3px] ml-[18px] text-faint font-mono text-sm leading-[1.45] whitespace-pre-wrap max-h-[80px] overflow-hidden [mask-image:linear-gradient(180deg,#000_60%,transparent)]">
           {message.content}
         </pre>
       )}
@@ -370,7 +371,7 @@ const StatusMessage = memo(function StatusMessage({ id }: { id: string }) {
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
     >
-      <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface-soft font-mono text-[13px] leading-[1.4] text-muted">
+      <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface-soft font-mono text-sm leading-[1.4] text-muted">
         {text}
       </div>
     </article>
@@ -388,7 +389,7 @@ const ErrorMessage = memo(function ErrorMessage({ id }: { id: string }) {
       data-source-focus={sourceFocused ? "true" : undefined}
       data-source-index={message.sourceIndex}
     >
-      <div className="px-3.5 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.18)] text-bad text-[14.5px] leading-[1.45] whitespace-pre-wrap break-words">
+      <div className="px-3.5 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.18)] text-bad text-base leading-[1.45] whitespace-pre-wrap break-words">
         {message.content}
       </div>
     </article>

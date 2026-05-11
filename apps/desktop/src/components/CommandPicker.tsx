@@ -14,6 +14,7 @@ import {
 import clsx from "clsx";
 import { useStore } from "../store";
 import { BUILTIN_COMMANDS } from "../actions";
+import { ICON } from "../lib/icons";
 
 export interface CommandEntry {
   name: string;
@@ -138,7 +139,7 @@ function Section({
     <>
       {withTopDivider && <div className="h-px bg-line-soft" />}
       <div className="py-1.5">
-        <div className="px-3 pb-1 pt-0.5 text-[11px] font-medium uppercase tracking-[0.08em] text-faint select-none">
+        <div className="px-3 pb-1 pt-0.5 text-2xs font-medium uppercase tracking-[0.08em] text-faint select-none">
           {title}
         </div>
         {entries.map((entry, i) => {
@@ -169,12 +170,12 @@ function Section({
                   active ? "bg-surface text-ink-soft" : "text-faint",
                 )}
               >
-                <Icon size={13} strokeWidth={1.8} />
+                <Icon size={ICON.MD} strokeWidth={1.8} />
               </span>
-              <span className="font-mono text-[13.5px] font-medium text-ink shrink-0">
+              <span className="font-mono text-sm font-medium text-ink shrink-0">
                 /{entry.name}
               </span>
-              <span className="text-[13px] text-muted truncate flex-1 min-w-0 text-right">
+              <span className="text-sm text-muted truncate flex-1 min-w-0 text-right">
                 {entry.description}
               </span>
             </button>
@@ -188,9 +189,9 @@ function Section({
 function Footer({ activeName }: { activeName?: string }) {
   if (!activeName) return null;
   return (
-    <div className="flex items-center gap-3 px-3 py-1.5 bg-surface-soft/60 text-[11.5px] text-faint select-none">
+    <div className="flex items-center gap-3 px-3 py-1.5 bg-surface-soft/60 text-2xs text-faint select-none">
       <Hint icon={<span className="font-mono">↑↓</span>} label="navigate" />
-      <Hint icon={<CornerDownLeft size={10} strokeWidth={2} />} label={`run /${activeName}`} />
+      <Hint icon={<CornerDownLeft size={ICON.XS} strokeWidth={2} />} label={`run /${activeName}`} />
       <span className="ml-auto">
         <Hint icon={<span className="font-mono">esc</span>} label="dismiss" />
       </span>
@@ -201,7 +202,7 @@ function Footer({ activeName }: { activeName?: string }) {
 function Hint({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-[4px] bg-surface border border-line text-[11px] text-muted">
+      <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-[4px] bg-surface border border-line text-2xs text-muted">
         {icon}
       </span>
       <span>{label}</span>

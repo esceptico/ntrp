@@ -7,6 +7,7 @@ import { useStore } from "../store";
 import { Message } from "./Message";
 import { turnLayout } from "../lib/turnLayout";
 import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
+import { ICON } from "../lib/icons";
 
 const EASE = EASE_EMPHASIZED;
 
@@ -97,11 +98,11 @@ export function TurnGroup({
                 onManualResize?.();
                 setExpanded((v) => !v);
               }}
-              className="self-start inline-flex items-center gap-1.5 text-[14.5px] leading-[1.45] text-muted hover:text-ink-soft transition-colors select-none"
+              className="self-start inline-flex items-center gap-1.5 text-base leading-[1.45] text-muted hover:text-ink-soft transition-colors select-none"
             >
               <span>{headerLabel}</span>
               <ChevronDown
-                size={13}
+                size={ICON.MD}
                 strokeWidth={2}
                 className={clsx("transition-transform duration-200", expanded && "rotate-180")}
               />

@@ -5,6 +5,7 @@ import { Check, X } from "lucide-react";
 import { useStore } from "../store";
 import { respondToApproval } from "../actions";
 import { SPRING_SMOOTH } from "../lib/motion";
+import { ICON } from "../lib/icons";
 
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
@@ -66,11 +67,11 @@ export function ApprovalReviewModal() {
             onClick={(e) => e.stopPropagation()}
           >
             <header className="flex items-center gap-2 px-5 pt-4 pb-3 border-b border-line-soft min-w-0">
-              <span className="font-mono text-[14px] font-medium text-ink truncate">
+              <span className="font-mono text-base font-medium text-ink truncate">
                 {approval.toolName}
               </span>
               {approval.path && (
-                <span className="font-mono text-[13px] text-faint truncate">{approval.path}</span>
+                <span className="font-mono text-sm text-faint truncate">{approval.path}</span>
               )}
               <button
                 type="button"
@@ -78,13 +79,13 @@ export function ApprovalReviewModal() {
                 aria-label="Close"
                 className="ml-auto grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors shrink-0"
               >
-                <X size={14} strokeWidth={1.8} />
+                <X size={ICON.LG} strokeWidth={1.8} />
               </button>
             </header>
 
             <div className="overflow-y-auto scroll-thin">
               {approval.diff ? (
-                <div className="font-mono text-[12.5px] leading-[1.5] whitespace-pre overflow-x-auto overflow-y-auto max-h-60 scroll-thin">
+                <div className="font-mono text-xs leading-[1.5] whitespace-pre overflow-x-auto overflow-y-auto max-h-60 scroll-thin">
                   <div>
                     {approval.diff.split("\n").map((line, i) => (
                       <span key={i} className={diffClassFor(line)}>
@@ -94,32 +95,32 @@ export function ApprovalReviewModal() {
                   </div>
                 </div>
               ) : approval.preview ? (
-                <pre className="m-0 px-5 py-4 font-mono text-[13px] leading-[1.55] text-ink-soft whitespace-pre-wrap">
+                <pre className="m-0 px-5 py-4 font-mono text-sm leading-[1.55] text-ink-soft whitespace-pre-wrap">
                   {approval.preview}
                 </pre>
               ) : (
-                <div className="px-5 py-6 text-[13.5px] text-faint italic">
+                <div className="px-5 py-6 text-sm text-faint italic">
                   No diff or preview available.
                 </div>
               )}
             </div>
 
             <footer className="flex items-center gap-2 px-5 py-3 bg-surface-soft/40">
-              <span className="text-[12px] text-faint font-mono">{approval.toolId.slice(0, 8)}</span>
+              <span className="text-xs text-faint font-mono">{approval.toolId.slice(0, 8)}</span>
               <button
                 type="button"
                 onClick={() => void respondToApproval(approval.toolId, false)}
-                className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-surface text-ink-soft border border-line text-[13px] font-medium hover:bg-surface-soft hover:border-line-strong transition-colors"
+                className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-surface text-ink-soft border border-line text-sm font-medium hover:bg-surface-soft hover:border-line-strong transition-colors"
               >
-                <X size={13} strokeWidth={2} />
+                <X size={ICON.MD} strokeWidth={2} />
                 Reject
               </button>
               <button
                 type="button"
                 onClick={() => void respondToApproval(approval.toolId, true)}
-                className="inline-flex items-center gap-1.5 h-8 px-4 rounded-md bg-ink text-on-ink text-[13px] font-medium hover:opacity-90 transition-opacity"
+                className="inline-flex items-center gap-1.5 h-8 px-4 rounded-md bg-ink text-on-ink text-sm font-medium hover:opacity-90 transition-opacity"
               >
-                <Check size={13} strokeWidth={2.4} />
+                <Check size={ICON.MD} strokeWidth={2.4} />
                 Approve
               </button>
             </footer>

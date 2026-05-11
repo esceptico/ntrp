@@ -13,6 +13,7 @@ import { EmptyState } from "./EmptyState";
 import { Message } from "./Message";
 import { CompactionIndicator } from "./CompactionIndicator";
 import { TurnGroup } from "./TurnGroup";
+import { ICON } from "../lib/icons";
 
 // Parent (Chat) remounts this component on session change via key={sessionId}
 // so each session starts fresh — no carryover scroll state.
@@ -163,7 +164,7 @@ export function Messages() {
             aria-label="Scroll to bottom"
             className="absolute left-1/2 -translate-x-1/2 bottom-3 grid place-items-center w-8 h-8 rounded-full bg-surface text-muted border border-black/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.06)] transition-[background-color,color,transform] duration-fast hover:text-ink hover:bg-surface-soft dark:border-white/[0.08] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4),0_4px_14px_rgba(0,0,0,0.35)]"
           >
-            <ChevronDown size={16} strokeWidth={1.8} />
+            <ChevronDown size={ICON.XL} strokeWidth={1.8} />
           </motion.button>
         )}
       </AnimatePresence>

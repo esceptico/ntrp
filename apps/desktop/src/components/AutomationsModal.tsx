@@ -9,6 +9,7 @@ import { automationTrustLabel, automationTrustTone } from "../lib/automationTrus
 import { AutomationEditor, type EditorSeed } from "./automations/AutomationEditor";
 import { templatesByCategory, type AutomationTemplate } from "./automations/templates";
 import { PageModal } from "./PageModal";
+import { ICON } from "../lib/icons";
 
 type Tab = "active" | "internal" | "templates";
 
@@ -44,16 +45,16 @@ export function AutomationsModal() {
         disableEscape={!!editor}
       >
         <header className="flex items-center justify-between gap-3 px-6 pt-5 pb-4">
-          <h2 className="m-0 text-[19px] font-semibold tracking-[-0.014em] text-ink">
+          <h2 className="m-0 text-xl font-semibold tracking-[-0.014em] text-ink">
             Automations
           </h2>
           <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => setEditor({ kind: "create" })}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-[13px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
             >
-              <Plus size={12} strokeWidth={2.2} />
+              <Plus size={ICON.SM} strokeWidth={2.2} />
               New
             </button>
             <button
@@ -62,7 +63,7 @@ export function AutomationsModal() {
               aria-label="Close"
               className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
             >
-              <X size={14} strokeWidth={1.7} />
+              <X size={ICON.LG} strokeWidth={1.7} />
             </button>
           </div>
         </header>
@@ -116,7 +117,7 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={clsx(
-        "relative inline-flex items-center gap-1.5 h-9 text-[14px] font-medium tracking-[-0.005em] transition-colors",
+        "relative inline-flex items-center gap-1.5 h-9 text-base font-medium tracking-[-0.005em] transition-colors",
         active ? "text-ink" : "text-muted hover:text-ink",
       )}
     >
@@ -124,7 +125,7 @@ function TabButton({
       {count != null && count > 0 && (
         <span
           className={clsx(
-            "inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full text-[11.5px] font-medium tabular-nums",
+            "inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full text-2xs font-medium tabular-nums",
             active ? "bg-ink text-on-ink" : "bg-surface-soft text-muted",
           )}
         >
@@ -152,27 +153,27 @@ function ActiveList({
   onCreate: () => void;
 }) {
   if (automations === null) {
-    return <div className="text-[13.5px] text-faint">Loading…</div>;
+    return <div className="text-sm text-faint">Loading…</div>;
   }
   if (automations.length === 0) {
     return (
       <div className="grid gap-2 max-w-[420px] py-10">
-        <div className="text-[15px] font-medium text-ink">No automations yet.</div>
-        <div className="text-[13.5px] text-muted leading-[1.5]">
+        <div className="text-md font-medium text-ink">No automations yet.</div>
+        <div className="text-sm text-muted leading-[1.5]">
           Start from a template, or write a prompt and a schedule from scratch.
         </div>
         <div className="flex items-center gap-2 mt-1">
           <button
             type="button"
             onClick={onPickTemplate}
-            className="inline-flex items-center h-8 px-3 rounded-md border border-line-soft text-[13.5px] font-medium text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-colors"
+            className="inline-flex items-center h-8 px-3 rounded-md border border-line-soft text-sm font-medium text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-colors"
           >
             Browse templates
           </button>
           <button
             type="button"
             onClick={onCreate}
-            className="inline-flex items-center h-8 px-3 rounded-md text-[13.5px] font-medium text-muted hover:text-ink transition-colors"
+            className="inline-flex items-center h-8 px-3 rounded-md text-sm font-medium text-muted hover:text-ink transition-colors"
           >
             Start from scratch
           </button>
@@ -195,13 +196,13 @@ function ActiveList({
 
 function InternalList({ automations }: { automations: Automation[] | null }) {
   if (automations === null) {
-    return <div className="text-[13.5px] text-faint">Loading…</div>;
+    return <div className="text-sm text-faint">Loading…</div>;
   }
   if (automations.length === 0) {
     return (
       <div className="grid gap-2 max-w-[420px] py-10">
-        <div className="text-[15px] font-medium text-ink">No internal automations.</div>
-        <div className="text-[13.5px] text-muted leading-[1.5]">
+        <div className="text-md font-medium text-ink">No internal automations.</div>
+        <div className="text-sm text-muted leading-[1.5]">
           Internal memory maintenance tasks will appear here when available.
         </div>
       </div>
@@ -228,7 +229,7 @@ function TemplatesList({ onPick }: { onPick: (template: AutomationTemplate) => v
     <div className="grid gap-6 content-start">
       {groups.map(({ category, items }) => (
         <section key={category} className="grid gap-2">
-          <h3 className="m-0 text-[12px] font-medium uppercase tracking-[0.08em] text-faint">
+          <h3 className="m-0 text-xs font-medium uppercase tracking-[0.08em] text-faint">
             {category}
           </h3>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
@@ -323,7 +324,7 @@ function AutomationCard({
         />
         <div className="min-w-0 grid gap-1.5 pr-16">
           <div className="grid gap-1.5 min-w-0">
-            <h4 className="m-0 text-[14.5px] font-medium tracking-[-0.005em] text-ink truncate">
+            <h4 className="m-0 text-base font-medium tracking-[-0.005em] text-ink truncate">
               {automation.name || "Untitled"}
             </h4>
             {(running || automation.builtin || trustLabel) && (
@@ -339,7 +340,7 @@ function AutomationCard({
               </div>
             )}
           </div>
-          <p className="m-0 text-[13px] text-muted leading-[1.5] line-clamp-2">
+          <p className="m-0 text-sm text-muted leading-[1.5] line-clamp-2">
             {automation.description || "No description."}
           </p>
         </div>
@@ -377,7 +378,7 @@ function AutomationCard({
         </div>
       </div>
 
-      <div className="grid gap-1 pl-[19px] text-[12px] font-mono tabular-nums text-faint">
+      <div className="grid gap-1 pl-[19px] text-xs font-mono tabular-nums text-faint">
         <span className="min-w-0 truncate" title={trigger}>{trigger}</span>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         {(() => {
@@ -418,7 +419,7 @@ function Tag({
   return (
     <span
       className={clsx(
-        "inline-flex max-w-full shrink-0 items-center gap-1 px-1.5 h-[18px] rounded-full text-[11px] font-medium tracking-[0.005em] whitespace-nowrap",
+        "inline-flex max-w-full shrink-0 items-center gap-1 px-1.5 h-[18px] rounded-full text-2xs font-medium tracking-[0.005em] whitespace-nowrap",
         tone === "accent" && "bg-accent-soft text-accent-strong",
         tone === "neutral" && "bg-surface-sunken text-muted",
         tone === "bad" && "bg-bad-soft text-bad",
@@ -456,7 +457,7 @@ function CardAction({
         danger && "hover:!text-bad",
       )}
     >
-      <Icon size={12} strokeWidth={1.8} />
+      <Icon size={ICON.SM} strokeWidth={1.8} />
     </button>
   );
 }
@@ -477,12 +478,12 @@ function TemplateCard({
       onClick={onPick}
       className="cursor-pointer grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 rounded-[10px] border border-line-soft bg-surface text-left transition-colors duration-palette hover:border-line-strong hover:bg-surface-soft/30 focus-visible:outline-none focus-visible:border-line-strong focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]"
     >
-      <Icon size={14} strokeWidth={1.7} className="text-muted mt-[2px] shrink-0" />
+      <Icon size={ICON.LG} strokeWidth={1.7} className="text-muted mt-[2px] shrink-0" />
       <div className="min-w-0 grid gap-1">
-        <h4 className="m-0 text-[14.5px] font-medium tracking-[-0.005em] text-ink truncate">
+        <h4 className="m-0 text-base font-medium tracking-[-0.005em] text-ink truncate">
           {template.name}
         </h4>
-        <p className="m-0 text-[13px] text-muted leading-[1.5] line-clamp-2">
+        <p className="m-0 text-sm text-muted leading-[1.5] line-clamp-2">
           {template.blurb}
         </p>
       </div>

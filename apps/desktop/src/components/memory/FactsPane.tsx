@@ -26,6 +26,7 @@ import {
 } from "../../lib/memoryProvenance";
 import { selectedMemoryItem, type MemoryTarget, upsertById } from "../../lib/memoryTargets";
 import { factStatusFilterLabel, factStatusLabel, factStatusTone } from "../../lib/memoryTrust";
+import { ICON } from "../../lib/icons";
 import {
   DetailMeta,
   DetailPlaceholder,
@@ -245,11 +246,11 @@ function FactRow({
     >
       <div className="flex items-start gap-2">
         {fact.pinned_at && (
-          <Pin size={12} strokeWidth={1.8} className="mt-[3px] shrink-0 text-accent-strong" />
+          <Pin size={ICON.SM} strokeWidth={1.8} className="mt-[3px] shrink-0 text-accent-strong" />
         )}
         <div className="min-w-0 flex-1">
-          <div className="text-[13.5px] leading-snug line-clamp-2">{fact.text}</div>
-          <div className="mt-1 flex items-center gap-2 text-[12px] text-faint">
+          <div className="text-sm leading-snug line-clamp-2">{fact.text}</div>
+          <div className="mt-1 flex items-center gap-2 text-xs text-faint">
             <span className="uppercase tracking-[0.06em]">{fact.kind}</span>
             <span aria-hidden>·</span>
             <span>{factStatusLabel(fact.status)}</span>
@@ -353,7 +354,7 @@ function FactDetail({
             <>
               <Sep />
               <span className="inline-flex items-center gap-1 text-accent-strong">
-                <Pin size={10} strokeWidth={2} /> pinned
+                <Pin size={ICON.XS} strokeWidth={2} /> pinned
               </span>
             </>
           )}
@@ -372,10 +373,10 @@ function FactDetail({
             }}
             spellCheck={false}
             autoFocus
-            className="w-full min-h-[160px] resize-none bg-transparent text-[15px] leading-relaxed text-ink outline-none"
+            className="w-full min-h-[160px] resize-none bg-transparent text-md leading-relaxed text-ink outline-none"
           />
         ) : (
-          <p className="text-[15px] leading-relaxed text-ink whitespace-pre-wrap m-0">
+          <p className="text-md leading-relaxed text-ink whitespace-pre-wrap m-0">
             {fact.text}
           </p>
         )
@@ -423,23 +424,23 @@ function FactDetail({
             <>
               {sourceFocus && (
                 <GhostBtn onClick={() => onOpenSource?.(sourceFocus)} disabled={busy}>
-                  <ExternalLink size={13} strokeWidth={1.8} /> Open source
+                  <ExternalLink size={ICON.MD} strokeWidth={1.8} /> Open source
                 </GhostBtn>
               )}
               {fact.status === "archived" ? (
                 <GhostBtn onClick={() => void setArchived(false)} disabled={busy}>
-                  <ArchiveRestore size={13} strokeWidth={1.8} /> Restore
+                  <ArchiveRestore size={ICON.MD} strokeWidth={1.8} /> Restore
                 </GhostBtn>
               ) : (
                 <GhostBtn onClick={() => void setArchived(true)} disabled={busy}>
-                  <Archive size={13} strokeWidth={1.8} /> Archive
+                  <Archive size={ICON.MD} strokeWidth={1.8} /> Archive
                 </GhostBtn>
               )}
               <GhostBtn onClick={() => setMode("correct")} disabled={busy || fact.status === "superseded"}>
-                <GitCompareArrows size={13} strokeWidth={1.8} /> Replace claim
+                <GitCompareArrows size={ICON.MD} strokeWidth={1.8} /> Replace claim
               </GhostBtn>
               <GhostBtn onClick={() => setMode("edit")} disabled={busy}>
-                <Pencil size={13} strokeWidth={1.8} /> Fix typo
+                <Pencil size={ICON.MD} strokeWidth={1.8} /> Fix typo
               </GhostBtn>
             </>
           )}
@@ -453,19 +454,19 @@ function FactLinks({ links, onOpenFact }: { links: LinkedFact[]; onOpenFact: (fa
   if (links.length === 0) return null;
   return (
     <section>
-      <h3 className="m-0 mb-3 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-faint">
+      <h3 className="m-0 mb-3 text-2xs font-semibold uppercase tracking-[0.08em] text-faint">
         Fact links
       </h3>
       <ul className="flex flex-col gap-2">
         {links.map((link) => (
           <li key={`${link.link_type}-${link.id}`} className="flex items-start gap-3">
-            <span className="mt-[2px] text-[11px] uppercase tracking-[0.06em] text-faint shrink-0 w-[96px]">
+            <span className="mt-[2px] text-2xs uppercase tracking-[0.06em] text-faint shrink-0 w-[96px]">
               {link.link_type === "superseded_by" ? "replaced by" : "replaces"}
             </span>
             <button
               type="button"
               onClick={() => onOpenFact(link.id)}
-              className="min-w-0 text-left text-[13.5px] leading-snug text-ink-soft hover:text-ink"
+              className="min-w-0 text-left text-sm leading-snug text-ink-soft hover:text-ink"
             >
               {link.text}
             </button>
@@ -508,14 +509,14 @@ function KindFilter({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={clsx(
-          "inline-flex items-center gap-1 h-7 pl-2.5 pr-1.5 rounded-md text-[12.5px] font-medium tracking-[-0.005em] transition-colors",
+          "inline-flex items-center gap-1 h-7 pl-2.5 pr-1.5 rounded-md text-xs font-medium tracking-[-0.005em] transition-colors",
           value
             ? "bg-ink text-on-ink"
             : "text-ink-soft bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)]",
         )}
       >
         <span className="capitalize">{value ?? "All kinds"}</span>
-        <ChevronDown size={12} strokeWidth={1.8} className="opacity-70" />
+        <ChevronDown size={ICON.SM} strokeWidth={1.8} className="opacity-70" />
       </button>
       {open && (
         <div className="absolute top-full mt-1 right-0 z-10 w-[160px] py-1 rounded-[10px] border border-line-soft bg-surface shadow-[var(--shadow-pop)]">
@@ -577,14 +578,14 @@ function StatusFilter({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={clsx(
-          "inline-flex items-center gap-1 h-7 pl-2.5 pr-1.5 rounded-md text-[12.5px] font-medium tracking-[-0.005em] transition-colors",
+          "inline-flex items-center gap-1 h-7 pl-2.5 pr-1.5 rounded-md text-xs font-medium tracking-[-0.005em] transition-colors",
           value !== "active"
             ? "bg-ink text-on-ink"
             : "text-ink-soft bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)]",
         )}
       >
         <span>{factStatusFilterLabel(value)}</span>
-        <ChevronDown size={12} strokeWidth={1.8} className="opacity-70" />
+        <ChevronDown size={ICON.SM} strokeWidth={1.8} className="opacity-70" />
       </button>
       {open && (
         <div className="absolute top-full mt-1 right-0 z-10 w-[150px] py-1 rounded-[10px] border border-line-soft bg-surface shadow-[var(--shadow-pop)]">
@@ -619,7 +620,7 @@ function KindOption({
       type="button"
       onClick={onClick}
       className={clsx(
-        "w-full flex items-center px-2.5 py-1.5 text-left text-[13px] capitalize transition-colors",
+        "w-full flex items-center px-2.5 py-1.5 text-left text-sm capitalize transition-colors",
         active ? "text-ink font-medium" : "text-ink-soft hover:bg-surface-soft/60 hover:text-ink",
       )}
     >

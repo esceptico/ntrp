@@ -4,6 +4,7 @@ import { useStore } from "../store";
 import { Messages } from "./Messages";
 import { Composer } from "./Composer";
 import { ApprovalBanner } from "./ApprovalBanner";
+import { ICON } from "../lib/icons";
 
 function SidebarToggle() {
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
@@ -17,7 +18,7 @@ function SidebarToggle() {
       aria-label={sidebarHidden ? "Show sidebar" : "Hide sidebar"}
       className="sidebar-toggle grid place-items-center w-[22px] h-[22px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
     >
-      <Icon size={16} strokeWidth={1.5} />
+      <Icon size={ICON.XL} strokeWidth={1.5} />
     </button>
   );
 }
@@ -40,10 +41,10 @@ function ChatHeader() {
     >
       <SidebarToggle />
       <div className="flex-1 min-w-0 flex items-baseline gap-2.5">
-        <h1 className="m-0 min-w-0 text-[15px] font-semibold tracking-[-0.01em] text-ink truncate">
+        <h1 className="m-0 min-w-0 text-md font-semibold tracking-[-0.01em] text-ink truncate">
           {title}
         </h1>
-        <span className="shrink-0 text-[12.5px] text-faint font-mono tracking-[-0.01em]">
+        <span className="shrink-0 text-xs text-faint font-mono tracking-[-0.01em]">
           {meta}
         </span>
       </div>

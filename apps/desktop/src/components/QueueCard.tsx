@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
 import { cancelQueuedMessage } from "../actions";
 import { useStore, type QueuedMessage } from "../store";
+import { ICON } from "../lib/icons";
 
 const CARD_TRANSITION = { duration: 0.24, ease: [0.32, 0.72, 0, 1] as const };
 const ROW_TRANSITION = { duration: 0.18, ease: [0.32, 0.72, 0, 1] as const };
@@ -76,7 +77,7 @@ function QueueRow({ message }: { message: QueuedMessage }) {
       />
       <span
         className={clsx(
-          "min-w-0 flex-1 truncate text-[13.5px] tracking-[-0.005em] transition-colors",
+          "min-w-0 flex-1 truncate text-sm tracking-[-0.005em] transition-colors",
           cancelling ? "text-faint italic" : failed ? "text-bad" : "text-ink-soft",
         )}
         title={message.text}
@@ -84,7 +85,7 @@ function QueueRow({ message }: { message: QueuedMessage }) {
         {message.text || (message.images?.length ? `${message.images.length} image(s)` : "")}
       </span>
       {message.images && message.images.length > 0 && !cancelling && (
-        <span className="shrink-0 text-[11.5px] text-faint tabular-nums">
+        <span className="shrink-0 text-2xs text-faint tabular-nums">
           +{message.images.length} img
         </span>
       )}
@@ -96,7 +97,7 @@ function QueueRow({ message }: { message: QueuedMessage }) {
         aria-label="Cancel queued message"
         className="grid place-items-center w-5 h-5 shrink-0 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-faint"
       >
-        {cancelling ? <Loader2 size={12} strokeWidth={2} className="animate-spin" /> : <X size={12} strokeWidth={2} />}
+        {cancelling ? <Loader2 size={ICON.SM} strokeWidth={2} className="animate-spin" /> : <X size={ICON.SM} strokeWidth={2} />}
       </button>
     </div>
   );

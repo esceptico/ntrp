@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { useStore } from "../store";
 import { updateServerConfig, fetchServerConfig } from "../actions";
 import type { ModelGroup } from "../api";
+import { ICON } from "../lib/icons";
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
@@ -79,14 +80,14 @@ export function ModelReasoningPicker({
         disabled={disabled}
         title={efforts.length > 0 ? `${currentModel} · thinking ${currentEffort ?? "off"}` : currentModel}
         className={clsx(
-          "inline-flex items-center gap-1.5 h-7 pl-2.5 pr-2 rounded-full text-[12.5px] font-medium tracking-[-0.005em] transition-colors select-none max-w-[260px]",
+          "inline-flex items-center gap-1.5 h-7 pl-2.5 pr-2 rounded-full text-xs font-medium tracking-[-0.005em] transition-colors select-none max-w-[260px]",
           open
             ? "bg-surface-soft text-ink"
             : "text-muted hover:bg-surface-soft hover:text-ink",
           disabled && "opacity-60",
         )}
       >
-        <span className="truncate font-mono text-[12px] text-ink-soft">
+        <span className="truncate font-mono text-xs text-ink-soft">
           {buttonLabel ?? shortModelLabel(currentModel)}
         </span>
         {efforts.length > 0 && (
@@ -95,7 +96,7 @@ export function ModelReasoningPicker({
             <span className="text-faint">{currentEffort ?? "off"}</span>
           </>
         )}
-        <ChevronDown size={12} strokeWidth={1.8} className="shrink-0 opacity-70" />
+        <ChevronDown size={ICON.SM} strokeWidth={1.8} className="shrink-0 opacity-70" />
       </button>
 
       {open && (
@@ -109,7 +110,7 @@ export function ModelReasoningPicker({
         >
           {efforts.length > 0 && (
             <div className="grid gap-1 px-3 pt-2.5 pb-2 border-b border-line-soft">
-              <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+              <div className="text-2xs font-medium uppercase tracking-[0.08em] text-faint">
                 Reasoning effort
               </div>
               <div className="flex flex-wrap gap-1">
@@ -135,17 +136,17 @@ export function ModelReasoningPicker({
               placeholder="Search models…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="w-full h-8 px-3 border-0 border-b border-line-soft bg-transparent text-[13.5px] text-ink outline-none placeholder:text-whisper"
+              className="w-full h-8 px-3 border-0 border-b border-line-soft bg-transparent text-sm text-ink outline-none placeholder:text-whisper"
               autoFocus
             />
             <div className="max-h-[260px] overflow-y-auto scroll-thin py-1">
               {filteredGroups.length === 0 && (
-                <div className="px-3 py-2 text-[13px] text-faint italic">No matches.</div>
+                <div className="px-3 py-2 text-sm text-faint italic">No matches.</div>
               )}
               {filteredGroups.map((g) => (
                 <div key={g.provider}>
                   {groups.length > 1 && (
-                    <div className="px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-faint select-none">
+                    <div className="px-3 pt-2 pb-1 text-2xs font-medium uppercase tracking-[0.08em] text-faint select-none">
                       {PROVIDER_LABELS[g.provider] ?? g.provider}
                     </div>
                   )}
@@ -161,16 +162,16 @@ export function ModelReasoningPicker({
                           setQuery("");
                         }}
                         className={clsx(
-                          "w-full flex items-center gap-2 px-3 py-1.5 text-left text-[13px] font-mono transition-colors",
+                          "w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm font-mono transition-colors",
                           isCurrent ? "text-ink" : "text-ink-soft hover:bg-surface-soft/60",
                         )}
                       >
                         <span className="grid place-items-center w-3 h-3 shrink-0">
-                          {isCurrent && <Check size={12} strokeWidth={2.4} className="text-accent" />}
+                          {isCurrent && <Check size={ICON.SM} strokeWidth={2.4} className="text-accent" />}
                         </span>
                         <span className="min-w-0 flex-1 truncate">{m}</span>
                         {savedEffort && (
-                          <span className="shrink-0 text-[12px] font-sans text-faint">
+                          <span className="shrink-0 text-xs font-sans text-faint">
                             {savedEffort}
                           </span>
                         )}
@@ -248,7 +249,7 @@ function EffortPill({
       type="button"
       onClick={onClick}
       className={clsx(
-        "h-6 px-2 rounded-full text-[12px] font-medium tracking-[-0.005em] transition-colors select-none capitalize",
+        "h-6 px-2 rounded-full text-xs font-medium tracking-[-0.005em] transition-colors select-none capitalize",
         active
           ? "bg-accent-soft text-accent-strong"
           : "text-muted hover:bg-surface-soft hover:text-ink",

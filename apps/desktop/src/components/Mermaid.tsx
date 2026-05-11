@@ -5,6 +5,7 @@ import { Check, Copy, Maximize2, Minimize2, Minus, Plus, RotateCcw } from "lucid
 import clsx from "clsx";
 import { getMermaid, invalidateMermaidTheme } from "../lib/mermaidTheme";
 import { SPRING_SMOOTH } from "../lib/motion";
+import { ICON } from "../lib/icons";
 
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
@@ -247,25 +248,25 @@ function PanelInner({
       )}
     >
       <header className="flex items-center justify-between gap-2 py-1.5 pl-3 pr-2.5 border-b border-line-soft bg-surface">
-        <div className="text-[12px] font-medium uppercase tracking-[0.08em] text-faint">Diagram</div>
+        <div className="text-xs font-medium uppercase tracking-[0.08em] text-faint">Diagram</div>
         <div className="flex items-center gap-0.5">
           <ToolbarButton
             label="Zoom out"
             onClick={() => zoomBy(1 / ZOOM_STEP)}
             disabled={view.zoom <= MIN_ZOOM + 1e-3}
           >
-            <Minus size={14} strokeWidth={1.8} />
+            <Minus size={ICON.LG} strokeWidth={1.8} />
           </ToolbarButton>
-          <span className="w-11 text-center text-[12.5px] tabular-nums text-muted select-none">{Math.round(view.zoom * 100)}%</span>
+          <span className="w-11 text-center text-xs tabular-nums text-muted select-none">{Math.round(view.zoom * 100)}%</span>
           <ToolbarButton
             label="Zoom in"
             onClick={() => zoomBy(ZOOM_STEP)}
             disabled={view.zoom >= MAX_ZOOM - 1e-3}
           >
-            <Plus size={14} strokeWidth={1.8} />
+            <Plus size={ICON.LG} strokeWidth={1.8} />
           </ToolbarButton>
           <ToolbarButton label="Fit to view" onClick={fitToView}>
-            <RotateCcw size={13} strokeWidth={1.8} />
+            <RotateCcw size={ICON.MD} strokeWidth={1.8} />
           </ToolbarButton>
           <span className="w-px h-4 bg-line mx-1" />
           <ToolbarButton
@@ -273,9 +274,9 @@ function PanelInner({
             onClick={() => void onCopy()}
           >
             {copied ? (
-              <Check size={14} strokeWidth={2.4} className="text-ok" />
+              <Check size={ICON.LG} strokeWidth={2.4} className="text-ok" />
             ) : (
-              <Copy size={14} strokeWidth={1.8} />
+              <Copy size={ICON.LG} strokeWidth={1.8} />
             )}
           </ToolbarButton>
           <ToolbarButton
@@ -283,9 +284,9 @@ function PanelInner({
             onClick={onToggleFullscreen}
           >
             {fullscreen ? (
-              <Minimize2 size={14} strokeWidth={1.8} />
+              <Minimize2 size={ICON.LG} strokeWidth={1.8} />
             ) : (
-              <Maximize2 size={14} strokeWidth={1.8} />
+              <Maximize2 size={ICON.LG} strokeWidth={1.8} />
             )}
           </ToolbarButton>
         </div>
@@ -356,12 +357,12 @@ function MermaidErrorBlock({ source, message }: { source: string; message: strin
           title={copied ? "Copied" : "Copy source"}
           className="grid place-items-center w-[22px] h-[22px] rounded-md bg-transparent border border-[rgba(184,68,43,0.24)] text-bad cursor-pointer transition-[background-color,color] duration-150 ease-out hover:bg-[rgba(184,68,43,0.08)]"
         >
-          {copied ? <Check size={13} strokeWidth={2.4} /> : <Copy size={13} strokeWidth={1.8} />}
+          {copied ? <Check size={ICON.MD} strokeWidth={2.4} /> : <Copy size={ICON.MD} strokeWidth={1.8} />}
         </button>
       </div>
       <pre className="m-0 text-xs text-ink-soft whitespace-pre-wrap break-words">{source}</pre>
       {message && (
-        <div className="mt-1.5 text-[12px] text-bad font-mono opacity-80">{message}</div>
+        <div className="mt-1.5 text-xs text-bad font-mono opacity-80">{message}</div>
       )}
     </div>
   );

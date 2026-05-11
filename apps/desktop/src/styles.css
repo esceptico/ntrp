@@ -12,10 +12,26 @@
   --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
 
-  /* Override Tailwind's default text-xs (0.75rem / 12px) to fit the
-     overall +1px size bump. Line-height stays unset so it inherits
-     the default 1rem. */
+  /* ─── Type scale ──────────────────────────────────────────
+     One place for every font-size in the app. Components use
+     semantic utilities (`text-xs`, `text-base`, `text-lg`, …);
+     changing one value here scales everything that consumes it.
+     Tier purpose:
+       2xs — uppercase section labels (bucket headers, captions)
+       xs  — tiny chrome: timestamps, hints, fine print
+       sm  — secondary body, descriptions, context-menu items
+       base — primary body, row labels (nav, sessions, list items)
+       md  — emphasized body, chat messages
+       lg  — h1, modal titles
+       xl, 2xl — display headings */
+  --text-2xs: 11.5px;
   --text-xs: 13px;
+  --text-sm: 14px;
+  --text-base: 15px;
+  --text-md: 16px;
+  --text-lg: 17.5px;
+  --text-xl: 19.5px;
+  --text-2xl: 21.5px;
 
   --color-bg: #ebebeb;
   --color-bg-main: #ffffff;
@@ -140,7 +156,7 @@ body {
   background: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans);
-  font-size: 14.5px;
+  font-size: var(--text-base);
 }
 
 #app {
@@ -248,7 +264,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   border: 1px solid var(--color-line-soft);
   overflow-x: auto;
   max-width: 100%;
-  font-size: 13.5px;
+  font-size: var(--text-sm);
   line-height: 1.55;
 }
 
@@ -268,7 +284,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 .md .code-block-lang {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   font-weight: 500;
   color: var(--color-muted);
   text-transform: lowercase;
@@ -371,7 +387,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .md table {
   border-collapse: collapse;
   margin: 0.6em 0;
-  font-size: 13.5px;
+  font-size: var(--text-sm);
   display: block;
   overflow-x: auto;
   max-width: 100%;

@@ -11,6 +11,7 @@ import type { ArchivedSession } from "../api";
 import { PageModal } from "./PageModal";
 import { useMountedRef, useMutationState } from "../lib/hooks";
 import { formatRelativePast } from "../lib/format";
+import { ICON } from "../lib/icons";
 
 export function ArchiveModal() {
   const open = useStore((s) => s.archiveOpen);
@@ -38,11 +39,11 @@ export function ArchiveModal() {
     >
       <header className="flex items-center justify-between gap-3 px-6 pt-5 pb-4 border-b border-line-soft">
         <div className="flex items-center gap-3">
-          <h2 className="m-0 text-[19px] font-semibold tracking-[-0.014em] text-ink">
+          <h2 className="m-0 text-xl font-semibold tracking-[-0.014em] text-ink">
             Archive
           </h2>
           {archived && archived.length > 0 && (
-            <span className="text-[13px] text-faint tabular-nums">
+            <span className="text-sm text-faint tabular-nums">
               {archived.length} session{archived.length === 1 ? "" : "s"}
             </span>
           )}
@@ -55,7 +56,7 @@ export function ArchiveModal() {
             aria-label="Close"
             className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
           >
-            <X size={14} strokeWidth={1.7} />
+            <X size={ICON.LG} strokeWidth={1.7} />
           </button>
         </div>
       </header>
@@ -103,28 +104,28 @@ function ArchivedRow({ session }: { session: ArchivedSession }) {
   return (
     <li className="group flex items-center gap-3 px-3 py-2 rounded-[10px] hover:bg-surface-soft/50 transition-colors">
       <div className="min-w-0 flex-1">
-        <div className="text-[14px] font-medium text-ink tracking-[-0.005em] truncate">
+        <div className="text-base font-medium text-ink tracking-[-0.005em] truncate">
           {session.name || "untitled"}
         </div>
-        <div className="text-[12.5px] text-faint tabular-nums">
+        <div className="text-xs text-faint tabular-nums">
           archived {formatRelativePast(session.archived_at)} ago · {session.message_count} msg
           {session.message_count === 1 ? "" : "s"}
         </div>
         {error && (
-          <div className="mt-1 text-[12px] text-bad truncate" title={error}>
+          <div className="mt-1 text-xs text-bad truncate" title={error}>
             {error}
           </div>
         )}
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         <RowAction
-          icon={<ArchiveRestore size={13} strokeWidth={1.8} />}
+          icon={<ArchiveRestore size={ICON.MD} strokeWidth={1.8} />}
           label="Restore"
           onClick={onRestore}
           busy={busyOp === "restore"}
         />
         <RowAction
-          icon={<Trash2 size={13} strokeWidth={1.8} />}
+          icon={<Trash2 size={ICON.MD} strokeWidth={1.8} />}
           label="Delete"
           onClick={onDelete}
           busy={busyOp === "delete"}
@@ -154,7 +155,7 @@ function RowAction({
       onClick={onClick}
       disabled={busy}
       className={clsx(
-        "inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-[12.5px] font-medium tracking-[-0.005em] transition-colors",
+        "inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-xs font-medium tracking-[-0.005em] transition-colors",
         busy
           ? "text-faint cursor-wait"
           : danger
@@ -170,7 +171,7 @@ function RowAction({
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid place-items-center min-h-[200px] text-[14px] italic text-faint">
+    <div className="grid place-items-center min-h-[200px] text-base italic text-faint">
       {children}
     </div>
   );
@@ -186,7 +187,7 @@ function SearchInput({
   return (
     <div className="relative w-[200px]">
       <Search
-        size={12}
+        size={ICON.SM}
         strokeWidth={1.8}
         className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
       />
@@ -196,7 +197,7 @@ function SearchInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder="Filter…"
         spellCheck={false}
-        className="w-full h-7 pl-7 pr-2 rounded-md border border-line-soft bg-[rgba(0,0,0,0.025)] text-[13px] text-ink-soft placeholder:text-faint outline-none focus:bg-surface focus:border-line transition-[background-color,border-color]"
+        className="w-full h-7 pl-7 pr-2 rounded-md border border-line-soft bg-[rgba(0,0,0,0.025)] text-sm text-ink-soft placeholder:text-faint outline-none focus:bg-surface focus:border-line transition-[background-color,border-color]"
       />
     </div>
   );

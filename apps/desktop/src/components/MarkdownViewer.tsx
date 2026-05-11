@@ -5,6 +5,7 @@ import { ExternalLink, X } from "lucide-react";
 import { useStore } from "../store";
 import { Markdown } from "./Markdown";
 import { SPRING_SMOOTH } from "../lib/motion";
+import { ICON } from "../lib/icons";
 
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
@@ -54,11 +55,11 @@ export function MarkdownViewer() {
           >
             <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 border-b border-line-soft">
               <div className="min-w-0">
-                <div className="text-[17px] font-semibold tracking-[-0.012em] text-ink truncate">
+                <div className="text-lg font-semibold tracking-[-0.012em] text-ink truncate">
                   {view.title}
                 </div>
                 {view.subtitle && (
-                  <div className="mt-0.5 text-[12.5px] text-faint font-mono truncate">
+                  <div className="mt-0.5 text-xs text-faint font-mono truncate">
                     {view.subtitle}
                   </div>
                 )}
@@ -72,7 +73,7 @@ export function MarkdownViewer() {
                     title="Open in default app"
                     className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
                   >
-                    <ExternalLink size={14} strokeWidth={1.8} />
+                    <ExternalLink size={ICON.LG} strokeWidth={1.8} />
                   </button>
                 )}
                 <button
@@ -81,12 +82,12 @@ export function MarkdownViewer() {
                   aria-label="Close"
                   className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
                 >
-                  <X size={14} strokeWidth={1.8} />
+                  <X size={ICON.LG} strokeWidth={1.8} />
                 </button>
               </div>
             </header>
             <div className="overflow-y-auto scroll-thin px-5 py-4">
-              <Markdown content={view.content} className="text-[15px] leading-[1.6] text-ink" />
+              <Markdown content={view.content} className="text-md leading-[1.6] text-ink" />
             </div>
           </motion.div>
         </motion.div>

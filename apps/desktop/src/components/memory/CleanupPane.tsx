@@ -18,6 +18,7 @@ import {
   latestMemoryMaintenanceReview,
 } from "../../lib/memoryMaintenance";
 import { DetailPlaceholder, ErrorPill, GhostBtn, ListColumn, PaneShell, Pill, PrimaryBtn, SearchInput } from "./shared";
+import { ICON } from "../../lib/icons";
 
 type DuplicateCandidateKind = "fact" | "pattern";
 
@@ -219,11 +220,11 @@ function MaintenanceReviewNote({ review }: { review: MemoryMaintenanceReview | n
   const duplicateCount = review.duplicateFactCandidateCount + review.duplicateObservationCandidateCount;
   return (
     <div className="rounded-md border border-line-soft bg-surface px-2.5 py-2">
-      <div className="flex items-center justify-between gap-2 text-[12px] text-faint">
+      <div className="flex items-center justify-between gap-2 text-xs text-faint">
         <span>Maintenance</span>
         <span>{formatRelativePast(review.event.created_at)}</span>
       </div>
-      <div className="mt-1 text-[13px] text-ink-soft">
+      <div className="mt-1 text-sm text-ink-soft">
         {review.cleanupCandidateCount} cleanup candidates
         {duplicateCount > 0 ? ` · ${duplicateCount} duplicate candidates` : ""}
         {issueCount > 0 ? ` · ${issueCount} integrity issues` : ""}
@@ -250,8 +251,8 @@ function CleanupRow({
         selected ? "bg-surface-soft text-ink" : "text-ink-soft hover:bg-surface-soft/50",
       )}
     >
-      <div className="text-[13.5px] leading-snug line-clamp-2">{candidate.summary}</div>
-      <div className="mt-1 flex items-center gap-2 text-[12px] text-faint">
+      <div className="text-sm leading-snug line-clamp-2">{candidate.summary}</div>
+      <div className="mt-1 flex items-center gap-2 text-xs text-faint">
         <span>{candidate.evidence_count} sources</span>
         <span aria-hidden>·</span>
         <span>{candidate.chars.toLocaleString()} chars</span>
@@ -282,12 +283,12 @@ function DuplicateCandidateRow({
       )}
     >
       <div className="mb-1 flex items-center gap-1.5">
-        <GitCompareArrows size={12} strokeWidth={1.8} className="text-faint" />
-        <span className="text-[12px] uppercase tracking-[0.06em] text-faint">{label}</span>
-        <span className="text-[12px] tabular-nums text-faint">{Math.round(item.candidate.score * 100)}%</span>
+        <GitCompareArrows size={ICON.SM} strokeWidth={1.8} className="text-faint" />
+        <span className="text-xs uppercase tracking-[0.06em] text-faint">{label}</span>
+        <span className="text-xs tabular-nums text-faint">{Math.round(item.candidate.score * 100)}%</span>
       </div>
-      <div className="text-[13.5px] leading-snug line-clamp-2">{item.candidate.left}</div>
-      <div className="mt-1 text-[12.5px] leading-snug text-faint line-clamp-1">{item.candidate.right}</div>
+      <div className="text-sm leading-snug line-clamp-2">{item.candidate.left}</div>
+      <div className="mt-1 text-xs leading-snug text-faint line-clamp-1">{item.candidate.right}</div>
     </button>
   );
 }
@@ -312,10 +313,10 @@ function DuplicateCandidateDetail({
     <div className="flex h-full flex-col">
       <div className="px-7 pt-6 pb-3">
         <div className="mb-2 flex items-center gap-2">
-          <h3 className="m-0 text-[16px] font-semibold tracking-[-0.01em] text-ink">Review {label}</h3>
+          <h3 className="m-0 text-lg font-semibold tracking-[-0.01em] text-ink">Review {label}</h3>
           <Pill>review-only</Pill>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-faint">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-faint">
           <span className="tabular-nums">score {(item.candidate.score * 100).toFixed(1)}%</span>
           <span aria-hidden>·</span>
           <span>
@@ -346,7 +347,7 @@ function DuplicateCandidateDetail({
       <div className="flex items-center justify-end gap-2 px-7 py-3">
         {error && <ErrorPill message={error} />}
         <GhostBtn onClick={onRefresh}>
-          <RefreshCw size={13} strokeWidth={1.8} /> Refresh
+          <RefreshCw size={ICON.MD} strokeWidth={1.8} /> Refresh
         </GhostBtn>
       </div>
     </div>
@@ -367,20 +368,20 @@ function DuplicateSide({
   return (
     <section className="rounded-[8px] border border-line-soft bg-bg-main/50 px-4 py-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-[12px] uppercase tracking-[0.06em] text-faint">
+        <div className="text-xs uppercase tracking-[0.06em] text-faint">
           {label} <span className="tabular-nums">#{id}</span>
         </div>
         {onOpen && (
           <button
             type="button"
             onClick={onOpen}
-            className="text-[12.5px] font-medium text-muted transition-colors hover:text-ink"
+            className="text-xs font-medium text-muted transition-colors hover:text-ink"
           >
             Open
           </button>
         )}
       </div>
-      <p className="m-0 whitespace-pre-wrap text-[14px] leading-relaxed text-ink-soft">{text}</p>
+      <p className="m-0 whitespace-pre-wrap text-base leading-relaxed text-ink-soft">{text}</p>
     </section>
   );
 }
@@ -414,10 +415,10 @@ function CleanupDetail({
     <div className="flex h-full flex-col">
       <div className="px-7 pt-6 pb-3">
         <div className="mb-2 flex items-center gap-2">
-          <h3 className="m-0 text-[16px] font-semibold tracking-[-0.01em] text-ink">Review cleanup candidate</h3>
+          <h3 className="m-0 text-lg font-semibold tracking-[-0.01em] text-ink">Review cleanup candidate</h3>
           <Pill tone="warn">{candidate.reason}</Pill>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-faint">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-faint">
           <span>older than {dryRun.criteria.older_than_days}d</span>
           <span aria-hidden>·</span>
           <span>max {dryRun.criteria.max_sources} sources</span>
@@ -439,8 +440,8 @@ function CleanupDetail({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto scroll-thin px-7">
-        <p className="m-0 whitespace-pre-wrap text-[15px] leading-relaxed text-ink">{candidate.summary}</p>
-        <dl className="mt-6 grid grid-cols-[130px_minmax(0,1fr)] gap-y-2 text-[13px]">
+        <p className="m-0 whitespace-pre-wrap text-md leading-relaxed text-ink">{candidate.summary}</p>
+        <dl className="mt-6 grid grid-cols-[130px_minmax(0,1fr)] gap-y-2 text-sm">
           <dt className="text-faint">Created</dt>
           <dd className="text-ink-soft">{formatAbs(candidate.created_at)}</dd>
           <dt className="text-faint">Updated</dt>
@@ -457,13 +458,13 @@ function CleanupDetail({
       <div className="flex items-center justify-end gap-2 px-7 py-3">
         {error && <ErrorPill message={error} />}
         <GhostBtn onClick={onRefresh} disabled={busy}>
-          <RefreshCw size={13} strokeWidth={1.8} /> Refresh
+          <RefreshCw size={ICON.MD} strokeWidth={1.8} /> Refresh
         </GhostBtn>
         <GhostBtn onClick={onOpenPattern} disabled={busy}>
-          <ExternalLink size={13} strokeWidth={1.8} /> Open pattern
+          <ExternalLink size={ICON.MD} strokeWidth={1.8} /> Open pattern
         </GhostBtn>
         <GhostBtn onClick={onArchiveAll} disabled={busy || dryRun.summary.total === 0}>
-          <Archive size={13} strokeWidth={1.8} /> Archive all
+          <Archive size={ICON.MD} strokeWidth={1.8} /> Archive all
         </GhostBtn>
         <PrimaryBtn onClick={onArchiveSelected} disabled={busy}>
           {busy ? "Archiving…" : "Archive selected"}

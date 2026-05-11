@@ -26,6 +26,7 @@ import {
   observationEvidenceLabel,
   observationEvidenceTone,
 } from "../../lib/memoryTrust";
+import { ICON } from "../../lib/icons";
 import {
   DangerBtn,
   DetailMeta,
@@ -197,8 +198,8 @@ function ObservationRow({
         highlighted && "bg-accent-soft/50 shadow-[inset_0_0_0_1px_var(--color-accent-strong)]",
       )}
     >
-      <div className="text-[13.5px] leading-snug line-clamp-2">{obs.summary}</div>
-      <div className="mt-1 flex items-center gap-2 text-[12px] text-faint">
+      <div className="text-sm leading-snug line-clamp-2">{obs.summary}</div>
+      <div className="mt-1 flex items-center gap-2 text-xs text-faint">
         <Pill tone={observationEvidenceTone(obs.evidence_level)}>
           {observationEvidenceLabel(obs.evidence_level)}
         </Pill>
@@ -291,10 +292,10 @@ function ObservationView({
             }}
             spellCheck={false}
             autoFocus
-            className="w-full min-h-[160px] resize-none bg-transparent text-[15px] leading-relaxed text-ink outline-none"
+            className="w-full min-h-[160px] resize-none bg-transparent text-md leading-relaxed text-ink outline-none"
           />
         ) : (
-          <p className="text-[15px] leading-relaxed text-ink whitespace-pre-wrap m-0">
+          <p className="text-md leading-relaxed text-ink whitespace-pre-wrap m-0">
             {detail.observation.summary}
           </p>
         )
@@ -328,10 +329,10 @@ function ObservationView({
           ) : (
             <>
               <DangerBtn onClick={() => void remove()} disabled={busy}>
-                <Trash2 size={13} strokeWidth={1.8} /> Delete
+                <Trash2 size={ICON.MD} strokeWidth={1.8} /> Delete
               </DangerBtn>
               <GhostBtn onClick={() => setEditing(true)} disabled={busy}>
-                <Pencil size={13} strokeWidth={1.8} /> Edit
+                <Pencil size={ICON.MD} strokeWidth={1.8} /> Edit
               </GhostBtn>
             </>
           )}
@@ -355,7 +356,7 @@ export function SupportingFacts({
   if (facts.length === 0 && missing.length === 0) return null;
   return (
     <section>
-      <h3 className="m-0 mb-3 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-faint">
+      <h3 className="m-0 mb-3 text-2xs font-semibold uppercase tracking-[0.08em] text-faint">
         Supporting facts ({facts.length + missing.length})
       </h3>
       <ul className="flex flex-col gap-2">
@@ -363,14 +364,14 @@ export function SupportingFacts({
           const sourceFocus = factChatSourceFocus(f);
           return (
             <li key={f.id} className="flex items-start gap-3">
-              <span className="mt-[2px] text-[11px] uppercase tracking-[0.06em] text-faint shrink-0 w-[80px]">
+              <span className="mt-[2px] text-2xs uppercase tracking-[0.06em] text-faint shrink-0 w-[80px]">
                 {f.kind}
               </span>
               <div className="min-w-0 flex-1">
                 <button
                   type="button"
                   onClick={() => onOpenFact?.(f)}
-                  className="min-w-0 text-left text-[13.5px] leading-snug text-ink-soft hover:text-ink"
+                  className="min-w-0 text-left text-sm leading-snug text-ink-soft hover:text-ink"
                 >
                   {f.text}
                 </button>
@@ -380,15 +381,15 @@ export function SupportingFacts({
                     <button
                       type="button"
                       onClick={() => onOpenSource(sourceFocus)}
-                      className="inline-flex min-w-0 items-center gap-1 text-left text-[12px] text-faint hover:text-ink-soft"
+                      className="inline-flex min-w-0 items-center gap-1 text-left text-xs text-faint hover:text-ink-soft"
                       aria-label={`Open source for fact ${f.id}`}
                     >
-                      <ExternalLink size={12} strokeWidth={1.8} className="shrink-0" />
+                      <ExternalLink size={ICON.SM} strokeWidth={1.8} className="shrink-0" />
                       <span className="min-w-0 break-all">{factSourceSummary(f)}</span>
                       <span className="sr-only">Open source</span>
                     </button>
                   ) : (
-                    <span className="text-[12px] text-faint">{factSourceSummary(f)}</span>
+                    <span className="text-xs text-faint">{factSourceSummary(f)}</span>
                   )}
                 </div>
               </div>
@@ -397,10 +398,10 @@ export function SupportingFacts({
         })}
         {missing.map((id) => (
           <li key={`missing-${id}`} className="flex items-start gap-3 italic">
-            <span className="mt-[2px] text-[11px] uppercase tracking-[0.06em] text-faint shrink-0 w-[80px]">
+            <span className="mt-[2px] text-2xs uppercase tracking-[0.06em] text-faint shrink-0 w-[80px]">
               missing
             </span>
-            <span className="text-[13.5px] text-faint">fact #{id} no longer available</span>
+            <span className="text-sm text-faint">fact #{id} no longer available</span>
           </li>
         ))}
       </ul>

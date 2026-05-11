@@ -9,6 +9,7 @@ import { highlight } from "../highlight";
 import { extractTask, friendlyAgentLabel, isAgent } from "../lib/agent";
 import { Markdown } from "./Markdown";
 import { SPRING_SMOOTH } from "../lib/motion";
+import { ICON } from "../lib/icons";
 
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
@@ -136,15 +137,15 @@ export function ToolViewer() {
                     aria-hidden
                     className="grid place-items-center w-[22px] h-[22px] rounded-md bg-accent-soft text-accent-strong shrink-0"
                   >
-                    <Bot size={13} strokeWidth={2} />
+                    <Bot size={ICON.MD} strokeWidth={2} />
                   </span>
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="text-[17px] font-semibold tracking-[-0.012em] text-ink truncate">
+                  <div className="text-lg font-semibold tracking-[-0.012em] text-ink truncate">
                     {live && isAgent(live) ? friendlyAgentLabel(live.kind) : live?.kind}
                   </div>
                   {live && !isAgent(live) && live.target && live.target !== live.kind && (
-                    <div className="mt-0.5 text-[12.5px] text-faint font-mono truncate">
+                    <div className="mt-0.5 text-xs text-faint font-mono truncate">
                       {live.target}
                     </div>
                   )}
@@ -156,7 +157,7 @@ export function ToolViewer() {
                 aria-label="Close"
                 className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors shrink-0"
               >
-                <X size={14} strokeWidth={1.8} />
+                <X size={ICON.LG} strokeWidth={1.8} />
               </button>
             </header>
 
@@ -202,17 +203,17 @@ function AgentBody({
   return (
     <>
       <section className="grid gap-1.5">
-        <h3 className="m-0 text-[11.5px] font-medium uppercase tracking-[0.08em] text-faint">
+        <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
           Task
         </h3>
-        <p className="m-0 text-[14.5px] leading-relaxed text-ink whitespace-pre-wrap">
+        <p className="m-0 text-base leading-relaxed text-ink whitespace-pre-wrap">
           {task || "(no task provided)"}
         </p>
       </section>
 
       <section className="grid gap-1.5">
         <div className="flex items-center gap-2">
-          <h3 className="m-0 text-[11.5px] font-medium uppercase tracking-[0.08em] text-faint">
+          <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
             Result
           </h3>
           {item.result != null && item.result.length > 0 && (
@@ -220,11 +221,11 @@ function AgentBody({
           )}
         </div>
         {item.result == null ? (
-          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-[13.5px] text-faint italic">
+          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
             Working…
           </div>
         ) : item.result.trim().length === 0 ? (
-          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-[13.5px] text-faint italic">
+          <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
             Empty result.
           </div>
         ) : (
@@ -237,10 +238,10 @@ function AgentBody({
       {descendants.length > 0 && (
         <section className="grid gap-1.5 min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="m-0 text-[11.5px] font-medium uppercase tracking-[0.08em] text-faint">
+            <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
               Activity
             </h3>
-            <span className="text-[12px] text-faint tabular-nums">
+            <span className="text-xs text-faint tabular-nums">
               {stats.total} {stats.total === 1 ? "call" : "calls"}
               {stats.agents > 0 && ` · ${stats.agents} sub-agent${stats.agents === 1 ? "" : "s"}`}
             </span>
@@ -346,14 +347,14 @@ function ActivityTreeNode({
             aria-hidden
             className="grid place-items-center w-[16px] h-[16px] rounded-[4px] bg-accent-soft text-accent-strong shrink-0"
           >
-            <Bot size={9} strokeWidth={2} />
+            <Bot size={ICON.XS} strokeWidth={2} />
           </span>
         ) : (
-          <ArrowRight size={12} strokeWidth={1.8} className="text-whisper shrink-0" />
+          <ArrowRight size={ICON.SM} strokeWidth={1.8} className="text-whisper shrink-0" />
         )}
         <span
           className={clsx(
-            "text-[13px] shrink-0",
+            "text-sm shrink-0",
             agent ? "font-medium text-ink-soft" : "font-mono text-ink-soft",
           )}
         >
@@ -362,7 +363,7 @@ function ActivityTreeNode({
         {detail && (
           <span
             className={clsx(
-              "truncate min-w-0 flex-1 text-[12.5px]",
+              "truncate min-w-0 flex-1 text-xs",
               agent ? "text-faint" : "text-faint font-mono",
             )}
           >
@@ -370,7 +371,7 @@ function ActivityTreeNode({
           </span>
         )}
         {running && (
-          <span className="text-[11px] uppercase tracking-[0.08em] text-faint shrink-0">
+          <span className="text-2xs uppercase tracking-[0.08em] text-faint shrink-0">
             running
           </span>
         )}
@@ -408,11 +409,11 @@ function CopyButton({ getValue }: { getValue: () => string }) {
       onClick={() => void onCopy()}
       aria-label={copied ? "Copied" : "Copy"}
       className={clsx(
-        "ml-auto inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[12px] font-medium tracking-[-0.005em] transition-colors",
+        "ml-auto inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-xs font-medium tracking-[-0.005em] transition-colors",
         copied ? "text-accent-strong bg-accent-soft" : "text-muted hover:bg-surface-soft hover:text-ink",
       )}
     >
-      {copied ? <Check size={12} strokeWidth={2.4} /> : <Copy size={12} strokeWidth={1.8} />}
+      {copied ? <Check size={ICON.SM} strokeWidth={2.4} /> : <Copy size={ICON.SM} strokeWidth={1.8} />}
       {copied ? "Copied" : "Copy"}
     </button>
   );
@@ -422,7 +423,7 @@ function ChildRuns({ items }: { items: ActivityItem[] }) {
   const setViewing = useStore((s) => s.setViewingTool);
   return (
     <section className="grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0">
-      <h3 className="m-0 text-[11.5px] font-medium uppercase tracking-[0.08em] text-faint">
+      <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
         Child runs
       </h3>
       <ul className="grid gap-px m-0 p-0 list-none rounded-[10px] border border-line-soft bg-surface overflow-hidden">
@@ -433,9 +434,9 @@ function ChildRuns({ items }: { items: ActivityItem[] }) {
               onClick={() => setViewing(child)}
               className="flex items-baseline gap-2 w-full px-3 py-2 text-left bg-transparent border-0 hover:bg-surface-soft/60 transition-colors"
             >
-              <ArrowRight size={12} strokeWidth={1.8} className="self-center text-whisper shrink-0" />
-              <span className="text-[13px] font-medium text-ink-soft shrink-0">{child.kind}</span>
-              <span className="text-[12.5px] text-faint font-mono truncate min-w-0 flex-1">
+              <ArrowRight size={ICON.SM} strokeWidth={1.8} className="self-center text-whisper shrink-0" />
+              <span className="text-sm font-medium text-ink-soft shrink-0">{child.kind}</span>
+              <span className="text-xs text-faint font-mono truncate min-w-0 flex-1">
                 {child.target}
               </span>
             </button>
@@ -474,7 +475,7 @@ function Section({
   return (
     <section className="grid grid-cols-[minmax(0,1fr)] gap-1.5 min-w-0">
       <div className="flex items-center gap-2">
-        <h3 className="m-0 text-[11.5px] font-medium uppercase tracking-[0.08em] text-faint">
+        <h3 className="m-0 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
           {title}
         </h3>
         {hasBody && (
@@ -483,13 +484,13 @@ function Section({
             onClick={() => void onCopy()}
             aria-label={copied ? "Copied" : "Copy"}
             className={clsx(
-              "ml-auto inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[12px] font-medium tracking-[-0.005em] transition-colors",
+              "ml-auto inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-xs font-medium tracking-[-0.005em] transition-colors",
               copied
                 ? "text-accent-strong bg-accent-soft"
                 : "text-muted hover:bg-surface-soft hover:text-ink",
             )}
           >
-            {copied ? <Check size={12} strokeWidth={2.4} /> : <Copy size={12} strokeWidth={1.8} />}
+            {copied ? <Check size={ICON.SM} strokeWidth={2.4} /> : <Copy size={ICON.SM} strokeWidth={1.8} />}
             {copied ? "Copied" : "Copy"}
           </button>
         )}
@@ -506,7 +507,7 @@ function Section({
           </pre>
         )
       ) : (
-        <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-[13.5px] text-faint italic">
+        <div className="px-3 py-2.5 rounded-[10px] bg-surface-soft text-sm text-faint italic">
           {placeholder}
         </div>
       )}

@@ -10,6 +10,7 @@ import type {
   UpdateAutomationPayload,
 } from "../../api";
 import { SPRING_SMOOTH } from "../../lib/motion";
+import { ICON } from "../../lib/icons";
 
 const MODAL_BACKDROP_DURATION = 0.2;
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
@@ -259,7 +260,7 @@ export function AutomationEditor({
                 placeholder="Untitled automation"
                 spellCheck={false}
                 autoFocus={seed.kind === "create" && !seed.preset}
-                className="flex-1 min-w-0 h-7 bg-transparent border-0 text-[17px] font-semibold tracking-[-0.012em] text-ink outline-none placeholder:text-faint"
+                className="flex-1 min-w-0 h-7 bg-transparent border-0 text-lg font-semibold tracking-[-0.012em] text-ink outline-none placeholder:text-faint"
               />
               <div className="flex items-center gap-0.5 text-faint">
                 <button
@@ -269,7 +270,7 @@ export function AutomationEditor({
                   aria-label="Reset"
                   className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-soft hover:text-ink transition-colors"
                 >
-                  <RotateCcw size={14} strokeWidth={1.7} />
+                  <RotateCcw size={ICON.LG} strokeWidth={1.7} />
                 </button>
                 <button
                   type="button"
@@ -278,7 +279,7 @@ export function AutomationEditor({
                   aria-label="Close"
                   className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-soft hover:text-ink transition-colors"
                 >
-                  <X size={14} strokeWidth={1.7} />
+                  <X size={ICON.LG} strokeWidth={1.7} />
                 </button>
               </div>
             </header>
@@ -290,14 +291,14 @@ export function AutomationEditor({
                 placeholder="What should the agent do when this automation fires?"
                 spellCheck={false}
                 rows={6}
-                className="w-full h-full min-h-[180px] resize-none bg-transparent border-0 text-[15.5px] leading-[1.6] text-ink tracking-[-0.005em] outline-none placeholder:text-faint"
+                className="w-full h-full min-h-[180px] resize-none bg-transparent border-0 text-md leading-[1.6] text-ink tracking-[-0.005em] outline-none placeholder:text-faint"
               />
             </div>
 
             {error && (
               <div className="mx-5 mb-3 grid gap-0.5 px-3 py-2.5 rounded-[10px] bg-bad-soft border border-[rgba(184,68,43,0.16)]">
-                <strong className="text-bad text-[13px] font-semibold">Couldn't save</strong>
-                <span className="text-[13px] text-[#8a3220] leading-[1.4]">{error}</span>
+                <strong className="text-bad text-sm font-semibold">Couldn't save</strong>
+                <span className="text-sm text-[#8a3220] leading-[1.4]">{error}</span>
               </div>
             )}
 
@@ -314,14 +315,14 @@ export function AutomationEditor({
                     onChange={(e) => setForm((p) => ({ ...p, writable: e.target.checked }))}
                     className="size-3 accent-accent"
                   />
-                  <span className="text-[13px] text-muted">Writable</span>
+                  <span className="text-sm text-muted">Writable</span>
                 </label>
               </div>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="inline-flex items-center h-8 px-3 rounded-[9px] text-[13.5px] font-medium text-muted hover:text-ink transition-colors"
+                  className="inline-flex items-center h-8 px-3 rounded-[9px] text-sm font-medium text-muted hover:text-ink transition-colors"
                 >
                   Cancel
                 </button>
@@ -329,7 +330,7 @@ export function AutomationEditor({
                   type="button"
                   onClick={() => void submit()}
                   disabled={!valid || saving}
-                  className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-[13.5px] font-medium tracking-[-0.005em] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+                  className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
                 >
                   {saving ? "Saving…" : seed.kind === "edit" ? "Save" : "Create"}
                 </button>
@@ -368,11 +369,11 @@ function ScheduleChip({
     <div ref={wrapRef} className="relative">
       <Chip
         active={open}
-        icon={<Clock size={12} strokeWidth={1.8} />}
+        icon={<Clock size={ICON.SM} strokeWidth={1.8} />}
         onClick={() => setOpen((v) => !v)}
       >
         <span className="truncate max-w-[210px]">{scheduleLabel(schedule)}</span>
-        <ChevronDown size={12} strokeWidth={1.8} className="opacity-60 shrink-0" />
+        <ChevronDown size={ICON.SM} strokeWidth={1.8} className="opacity-60 shrink-0" />
       </Chip>
 
       <AnimatePresence>
@@ -482,8 +483,8 @@ function ScheduleChip({
               </div>
             )}
 
-            <div className="flex items-center gap-1 pt-1 text-[12px] text-faint">
-              <CalendarClock size={12} strokeWidth={1.7} />
+            <div className="flex items-center gap-1 pt-1 text-xs text-faint">
+              <CalendarClock size={ICON.SM} strokeWidth={1.7} />
               <span className="truncate">{scheduleLabel(schedule)}</span>
             </div>
           </motion.div>
@@ -496,12 +497,12 @@ function ScheduleChip({
 // ─── Atoms ──────────────────────────────────────────────────────────
 
 const schedFieldCls =
-  "w-full h-8 px-2 border border-line rounded-md bg-surface text-ink text-[13.5px] tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]";
+  "w-full h-8 px-2 border border-line rounded-md bg-surface text-ink text-sm tabular-nums outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]";
 
 function ScheduleField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="grid gap-1">
-      <span className="text-[11.5px] font-medium uppercase tracking-[0.06em] text-muted">{label}</span>
+      <span className="text-2xs font-medium uppercase tracking-[0.06em] text-muted">{label}</span>
       {children}
     </label>
   );
@@ -524,7 +525,7 @@ function SegmentedControl<T extends string>({
           type="button"
           onClick={() => onChange(opt.value)}
           className={clsx(
-            "flex-1 px-3 rounded-[5px] text-[13px] font-medium tracking-[-0.005em] transition-colors",
+            "flex-1 px-3 rounded-[5px] text-sm font-medium tracking-[-0.005em] transition-colors",
             value === opt.value
               ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
               : "text-muted hover:text-ink",
@@ -556,7 +557,7 @@ function Chip({
       onClick={onClick}
       title={title}
       className={clsx(
-        "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[8px] text-[13px] font-medium tracking-[-0.005em] transition-colors select-none",
+        "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[8px] text-sm font-medium tracking-[-0.005em] transition-colors select-none",
         active
           ? "bg-surface text-ink shadow-[var(--shadow-sm)] border border-line-soft"
           : "bg-transparent text-muted hover:bg-surface hover:text-ink border border-transparent",

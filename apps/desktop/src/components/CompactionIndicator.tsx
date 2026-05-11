@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Loader2, Sparkles } from "lucide-react";
 import { useStore } from "../store";
 import { MOTION, EASE_OUT } from "../lib/motion";
+import { ICON } from "../lib/icons";
 
 const TOAST_VISIBLE_MS = 4500;
 
@@ -30,11 +31,11 @@ export function CompactionIndicator() {
           className="flex items-center gap-2 my-1"
         >
           <Loader2
-            size={13}
+            size={ICON.MD}
             strokeWidth={2}
             className="text-muted animate-spin"
           />
-          <span className="text-[13px] font-medium text-muted">
+          <span className="text-sm font-medium text-muted">
             Compacting conversation…
           </span>
         </motion.div>
@@ -47,8 +48,8 @@ export function CompactionIndicator() {
           transition={{ duration: MOTION.palette, ease: EASE_OUT }}
           className="flex items-center gap-2 my-1"
         >
-          <Sparkles size={13} strokeWidth={1.8} className="text-faint" />
-          <span className="text-[13px] text-faint">
+          <Sparkles size={ICON.MD} strokeWidth={1.8} className="text-faint" />
+          <span className="text-sm text-faint">
             Conversation compacted ({lastCompaction.before} → {lastCompaction.after} messages)
           </span>
         </motion.div>

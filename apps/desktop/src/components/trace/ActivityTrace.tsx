@@ -6,6 +6,7 @@ import { useStore, type ActivityItem } from "../../store";
 import { extractTask, friendlyAgentLabel, isAgent } from "../../lib/agent";
 import { MOTION, EASE_EMPHASIZED, SPRING_SMOOTH } from "../../lib/motion";
 import { RollingToken } from "./RollingToken";
+import { ICON } from "../../lib/icons";
 
 export type { ActivityItem };
 
@@ -16,7 +17,7 @@ const MAX_NEST_DEPTH = 4; // visual cap; deeper nesting collapses to the same in
 
 export function ActivityTrace({ children }: { children: ReactNode }) {
   return (
-    <div className="font-sans text-[13.5px] leading-[1.4] text-muted">{children}</div>
+    <div className="font-sans text-sm leading-[1.4] text-muted">{children}</div>
   );
 }
 
@@ -40,11 +41,11 @@ export function ActivityHeader({
       onClick={onToggle}
       disabled={!interactive}
       className={clsx(
-        "flex h-[18px] items-center gap-2 m-0 p-0 bg-transparent border-0 text-left text-[13.5px] leading-[1.4] text-faint",
+        "flex h-[18px] items-center gap-2 m-0 p-0 bg-transparent border-0 text-left text-sm leading-[1.4] text-faint",
         interactive ? "cursor-pointer hover:text-muted select-none" : "cursor-default",
       )}
     >
-      <SquareTerminal size={14} strokeWidth={1.8} className="shrink-0" />
+      <SquareTerminal size={ICON.LG} strokeWidth={1.8} className="shrink-0" />
       {/* Three odometer slots so the label flip ("Running" → "Done"),
           the digit roll (5 → 6 as another tool starts), and the
           singular/plural switch ("tool" / "tools") each animate
@@ -59,7 +60,7 @@ export function ActivityHeader({
       </span>
       {interactive && (
         <ChevronDown
-          size={13}
+          size={ICON.MD}
           strokeWidth={2}
           className={clsx(
             "ml-1 self-center transition-transform duration-200 text-faint",
@@ -286,7 +287,7 @@ function AgentButton({
         aria-hidden
         className="grid place-items-center w-[18px] h-[18px] rounded-md bg-accent-soft text-accent-strong shrink-0 self-center"
       >
-        <Bot size={12} strokeWidth={2} />
+        <Bot size={ICON.SM} strokeWidth={2} />
       </span>
       <span className="font-medium text-ink-soft shrink-0 group-hover/agent:text-ink transition-colors">
         {label}
