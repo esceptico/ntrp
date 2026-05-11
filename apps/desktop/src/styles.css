@@ -13,9 +13,9 @@
     "Liberation Mono", "Courier New", monospace;
 
   /* Override Tailwind's default text-xs (0.75rem / 12px) to fit the
-     overall ~+0.5px size bump. Line-height stays unset so it inherits
+     overall +1px size bump. Line-height stays unset so it inherits
      the default 1rem. */
-  --text-xs: 12.5px;
+  --text-xs: 13px;
 
   --color-bg: #ebebeb;
   --color-bg-main: #ffffff;
@@ -140,7 +140,7 @@ body {
   background: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 14.5px;
 }
 
 #app {
@@ -248,7 +248,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   border: 1px solid var(--color-line-soft);
   overflow-x: auto;
   max-width: 100%;
-  font-size: 13px;
+  font-size: 13.5px;
   line-height: 1.55;
 }
 
@@ -268,7 +268,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 .md .code-block-lang {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--color-muted);
   text-transform: lowercase;
@@ -371,7 +371,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .md table {
   border-collapse: collapse;
   margin: 0.6em 0;
-  font-size: 13px;
+  font-size: 13.5px;
   display: block;
   overflow-x: auto;
   max-width: 100%;

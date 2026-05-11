@@ -19,7 +19,7 @@ export function ConnectionTab({
 }) {
   return (
     <form ref={formRef} onSubmit={onSubmit} className="grid gap-4">
-      <p className="text-[13px] text-muted leading-[1.45] max-w-[440px]">
+      <p className="text-[13.5px] text-muted leading-[1.45] max-w-[440px]">
         Server URL and API key. Stored locally; encrypted with safeStorage when available.
       </p>
 
@@ -46,7 +46,7 @@ export function ConnectionTab({
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-[13px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
+          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[9px] bg-ink text-on-ink text-[13.5px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
         >
           {saving ? "Checking…" : "Save & reconnect"}
         </button>

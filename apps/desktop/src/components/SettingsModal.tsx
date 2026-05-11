@@ -70,7 +70,7 @@ export function SettingsModal() {
       disableEscape={saving}
     >
         <aside className="border-r border-line-soft bg-surface-soft/40 flex flex-col min-h-0">
-          <div className="px-3 pt-4 pb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          <div className="px-3 pt-4 pb-2 text-[11.5px] font-medium uppercase tracking-[0.08em] text-faint">
             Settings
           </div>
           <nav className="flex flex-col gap-px px-2 pb-3 overflow-y-auto scroll-thin">
@@ -83,7 +83,7 @@ export function SettingsModal() {
                   type="button"
                   onClick={() => setActive(tab.id)}
                   className={clsx(
-                    "flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13.5px] font-medium tracking-[-0.005em] text-left transition-colors",
+                    "flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[14px] font-medium tracking-[-0.005em] text-left transition-colors",
                     isActive
                       ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
                       : "text-ink-soft hover:bg-surface/60",
@@ -95,12 +95,12 @@ export function SettingsModal() {
               );
             })}
           </nav>
-          <div className="mt-auto px-3 pb-3 text-[11px] text-faint shrink-0">
+          <div className="mt-auto px-3 pb-3 text-[11.5px] text-faint shrink-0">
             <button
               type="button"
               onClick={close}
               disabled={saving}
-              className="inline-flex items-center gap-1.5 text-[12.5px] text-muted hover:text-ink transition-colors"
+              className="inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-ink transition-colors"
             >
               Close
             </button>
@@ -109,7 +109,7 @@ export function SettingsModal() {
 
         <div className="grid grid-rows-[auto_minmax(0,1fr)] min-h-0 min-w-0">
           <header className="flex items-center justify-between gap-2 px-5 pt-4 pb-3 border-b border-line-soft">
-            <div className="text-[16.5px] font-semibold tracking-[-0.012em] text-ink">
+            <div className="text-[17px] font-semibold tracking-[-0.012em] text-ink">
               {TABS.find((t) => t.id === active)?.label}
             </div>
             <button

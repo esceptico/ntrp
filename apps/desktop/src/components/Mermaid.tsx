@@ -247,7 +247,7 @@ function PanelInner({
       )}
     >
       <header className="flex items-center justify-between gap-2 py-1.5 pl-3 pr-2.5 border-b border-line-soft bg-surface">
-        <div className="text-[11.5px] font-medium uppercase tracking-[0.08em] text-faint">Diagram</div>
+        <div className="text-[12px] font-medium uppercase tracking-[0.08em] text-faint">Diagram</div>
         <div className="flex items-center gap-0.5">
           <ToolbarButton
             label="Zoom out"
@@ -256,7 +256,7 @@ function PanelInner({
           >
             <Minus size={14} strokeWidth={1.8} />
           </ToolbarButton>
-          <span className="w-11 text-center text-[12px] tabular-nums text-muted select-none">{Math.round(view.zoom * 100)}%</span>
+          <span className="w-11 text-center text-[12.5px] tabular-nums text-muted select-none">{Math.round(view.zoom * 100)}%</span>
           <ToolbarButton
             label="Zoom in"
             onClick={() => zoomBy(ZOOM_STEP)}
@@ -361,7 +361,7 @@ function MermaidErrorBlock({ source, message }: { source: string; message: strin
       </div>
       <pre className="m-0 text-xs text-ink-soft whitespace-pre-wrap break-words">{source}</pre>
       {message && (
-        <div className="mt-1.5 text-[11.5px] text-bad font-mono opacity-80">{message}</div>
+        <div className="mt-1.5 text-[12px] text-bad font-mono opacity-80">{message}</div>
       )}
     </div>
   );

@@ -110,11 +110,11 @@ function SentRow({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-[13px] font-medium leading-snug">{sourceLabel(event.source)}</div>
-          <div className="mt-1 line-clamp-2 text-[12px] leading-snug text-faint">{event.query || "no query"}</div>
+          <div className="text-[13.5px] font-medium leading-snug">{sourceLabel(event.source)}</div>
+          <div className="mt-1 line-clamp-2 text-[12.5px] leading-snug text-faint">{event.query || "no query"}</div>
         </div>
       </div>
-      <div className="mt-1 flex items-center gap-2 text-[11.5px] text-faint">
+      <div className="mt-1 flex items-center gap-2 text-[12px] text-faint">
         <span>{injectedCount} injected</span>
         <span aria-hidden>·</span>
         <span>{event.formatted_chars.toLocaleString()} chars</span>
@@ -143,17 +143,17 @@ function SentDetail({
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="m-0 text-[15.5px] font-semibold tracking-[-0.01em] text-ink">{sourceLabel(event.source)}</h3>
+            <h3 className="m-0 text-[16px] font-semibold tracking-[-0.01em] text-ink">{sourceLabel(event.source)}</h3>
           </div>
-          <p className="m-0 mt-1 text-[12.5px] text-faint">{formatAbs(event.created_at)} · {event.policy_version}</p>
+          <p className="m-0 mt-1 text-[13px] text-faint">{formatAbs(event.created_at)} · {event.policy_version}</p>
         </div>
         <Pill>{event.formatted_chars.toLocaleString()} chars</Pill>
       </div>
 
       {event.query && (
         <section className="mb-5">
-          <h4 className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">Query</h4>
-          <p className="m-0 rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2 text-[13px] leading-relaxed text-ink-soft">
+          <h4 className="m-0 mb-2 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-faint">Query</h4>
+          <p className="m-0 rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2 text-[13.5px] leading-relaxed text-ink-soft">
             {event.query}
           </p>
         </section>
@@ -179,7 +179,7 @@ function SentDetail({
       />
 
       <section className="mt-5">
-        <h4 className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">Details</h4>
+        <h4 className="m-0 mb-2 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-faint">Details</h4>
         <JsonBlock value={event.details} />
       </section>
     </div>
@@ -200,10 +200,10 @@ function MemoryIdSection({
   if (ids.length === 0) return null;
   return (
     <section className="mt-5">
-      <h4 className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">{title} ({ids.length})</h4>
+      <h4 className="m-0 mb-2 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-faint">{title} ({ids.length})</h4>
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {ids.map((id) => (
-          <li key={id} className="rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2 text-[13px] leading-snug text-ink-soft">
+          <li key={id} className="rounded-[8px] border border-line-soft bg-bg-main/50 px-3 py-2 text-[13.5px] leading-snug text-ink-soft">
             {onOpen ? (
               <button type="button" onClick={() => onOpen(id)} className="text-left hover:text-ink">
                 {render(id)}

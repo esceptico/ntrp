@@ -180,19 +180,19 @@ function PaletteBody({
           }}
           placeholder="Search commands, sessions, memory..."
           spellCheck={false}
-          className="w-full h-8 pl-6 bg-transparent text-[14.5px] text-ink placeholder:text-faint outline-none"
+          className="w-full h-8 pl-6 bg-transparent text-[15px] text-ink placeholder:text-faint outline-none"
         />
       </div>
 
       <div ref={listRef} className="overflow-y-auto scroll-thin pb-2 border-t border-line-soft/60">
         {filtered.length === 0 ? (
-          <div className="grid place-items-center min-h-[120px] text-[13px] italic text-faint">
+          <div className="grid place-items-center min-h-[120px] text-[13.5px] italic text-faint">
             Nothing matches.
           </div>
         ) : (
           grouped.map(({ section, items }) => (
             <div key={section}>
-              <div className="px-4 pt-3 pb-1 text-[11px] font-medium uppercase tracking-[0.10em] text-faint">
+              <div className="px-4 pt-3 pb-1 text-[11.5px] font-medium uppercase tracking-[0.10em] text-faint">
                 {SECTION_LABEL[section]}
               </div>
               <ul className="m-0 px-1.5 list-none">
@@ -253,12 +253,12 @@ function Row({
         >
           <Icon size={14} strokeWidth={1.7} />
         </span>
-        <span className="text-[13.5px] text-ink truncate flex-1">{entry.label}</span>
+        <span className="text-[14px] text-ink truncate flex-1">{entry.label}</span>
         {entry.hint && (
-          <span className="text-[12px] text-faint tabular-nums shrink-0">{entry.hint}</span>
+          <span className="text-[12.5px] text-faint tabular-nums shrink-0">{entry.hint}</span>
         )}
         {entry.shortcut && (
-          <kbd className="text-[11px] text-faint font-mono shrink-0 ml-1">{entry.shortcut}</kbd>
+          <kbd className="text-[11.5px] text-faint font-mono shrink-0 ml-1">{entry.shortcut}</kbd>
         )}
       </button>
     </li>

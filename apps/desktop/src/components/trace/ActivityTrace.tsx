@@ -5,6 +5,7 @@ import clsx from "clsx";
 import { useStore, type ActivityItem } from "../../store";
 import { extractTask, friendlyAgentLabel, isAgent } from "../../lib/agent";
 import { MOTION, EASE_EMPHASIZED, SPRING_SMOOTH } from "../../lib/motion";
+import { RollingToken } from "./RollingToken";
 
 export type { ActivityItem };
 
@@ -15,7 +16,7 @@ const MAX_NEST_DEPTH = 4; // visual cap; deeper nesting collapses to the same in
 
 export function ActivityTrace({ children }: { children: ReactNode }) {
   return (
-    <div className="font-sans text-[13px] leading-[1.4] text-muted">{children}</div>
+    <div className="font-sans text-[13.5px] leading-[1.4] text-muted">{children}</div>
   );
 }
 
@@ -32,7 +33,6 @@ export function ActivityHeader({
 }) {
   const word = count === 1 ? "tool" : "tools";
   const interactive = !!onToggle;
-  const summary = `${label} ${count} ${word}`;
 
   return (
     <button
@@ -40,12 +40,23 @@ export function ActivityHeader({
       onClick={onToggle}
       disabled={!interactive}
       className={clsx(
-        "flex h-[18px] items-center gap-2 m-0 p-0 bg-transparent border-0 text-left text-[13px] leading-[1.4] text-faint",
+        "flex h-[18px] items-center gap-2 m-0 p-0 bg-transparent border-0 text-left text-[13.5px] leading-[1.4] text-faint",
         interactive ? "cursor-pointer hover:text-muted select-none" : "cursor-default",
       )}
     >
       <SquareTerminal size={14} strokeWidth={1.8} className="shrink-0" />
-      <span>{summary}</span>
+      {/* Three odometer slots so the label flip ("Running" → "Done"),
+          the digit roll (5 → 6 as another tool starts), and the
+          singular/plural switch ("tool" / "tools") each animate
+          independently instead of the whole string snapping. */}
+      <span className="mr-1.5">
+        <RollingToken value={label} />
+      </span>
+      <span>
+        <RollingToken value={String(count)} mono />
+        {" "}
+        <RollingToken value={word} />
+      </span>
       {interactive && (
         <ChevronDown
           size={13}

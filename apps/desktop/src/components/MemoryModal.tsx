@@ -70,7 +70,7 @@ export function MemoryModal() {
       grid="grid-rows-[auto_auto_minmax(0,1fr)]"
     >
       <header className="flex items-center justify-between gap-3 pl-6 pr-3 pt-5">
-        <h2 className="m-0 text-[18.5px] font-semibold tracking-[-0.014em] text-ink">Memory</h2>
+        <h2 className="m-0 text-[19px] font-semibold tracking-[-0.014em] text-ink">Memory</h2>
         <button
           type="button"
           onClick={close}
@@ -135,7 +135,7 @@ function AdvancedRow({ activeTab, onSelect }: { activeTab: MemoryTab; onSelect: 
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={visible}
         className={clsx(
-          "inline-flex h-5.5 items-center gap-1 rounded-full px-2 text-[13px] font-medium tracking-[-0.005em] transition-colors duration-150",
+          "inline-flex h-5.5 items-center gap-1 rounded-full px-2 text-[13.5px] font-medium tracking-[-0.005em] transition-colors duration-150",
           active ? "bg-surface text-ink" : "text-muted hover:bg-surface hover:text-ink",
         )}
       >
@@ -189,7 +189,7 @@ function PillTabButton({
       onClick={onClick}
       tabIndex={focusable ? undefined : -1}
       className={clsx(
-        "h-5.5 whitespace-nowrap rounded-full px-2 text-[12.5px] font-medium tracking-[-0.005em] transition-colors duration-150",
+        "h-5.5 whitespace-nowrap rounded-full px-2 text-[13px] font-medium tracking-[-0.005em] transition-colors duration-150",
         active ? "bg-surface text-ink shadow-[0_0_0_1px_var(--color-line-soft)]" : "text-muted hover:bg-surface hover:text-ink",
       )}
     >
@@ -212,7 +212,7 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={clsx(
-        "relative pb-2 -mb-px text-[13.5px] font-medium tracking-[-0.005em] transition-colors",
+        "relative pb-2 -mb-px text-[14px] font-medium tracking-[-0.005em] transition-colors",
         active ? "text-ink" : "text-muted hover:text-ink",
       )}
     >

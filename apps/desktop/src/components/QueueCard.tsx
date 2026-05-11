@@ -76,7 +76,7 @@ function QueueRow({ message }: { message: QueuedMessage }) {
       />
       <span
         className={clsx(
-          "min-w-0 flex-1 truncate text-[13px] tracking-[-0.005em] transition-colors",
+          "min-w-0 flex-1 truncate text-[13.5px] tracking-[-0.005em] transition-colors",
           cancelling ? "text-faint italic" : failed ? "text-bad" : "text-ink-soft",
         )}
         title={message.text}
@@ -84,7 +84,7 @@ function QueueRow({ message }: { message: QueuedMessage }) {
         {message.text || (message.images?.length ? `${message.images.length} image(s)` : "")}
       </span>
       {message.images && message.images.length > 0 && !cancelling && (
-        <span className="shrink-0 text-[11px] text-faint tabular-nums">
+        <span className="shrink-0 text-[11.5px] text-faint tabular-nums">
           +{message.images.length} img
         </span>
       )}

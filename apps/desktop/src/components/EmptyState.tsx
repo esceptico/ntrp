@@ -12,10 +12,10 @@ export function EmptyState() {
         <Sparkles size={20} strokeWidth={1.6} />
       </span>
       <div className="grid gap-1.5 max-w-[420px]">
-        <h2 className="m-0 text-[20.5px] font-semibold tracking-[-0.018em] text-ink">
+        <h2 className="m-0 text-[21px] font-semibold tracking-[-0.018em] text-ink">
           {connected ? "What's on your mind?" : "Connect to get started"}
         </h2>
-        <p className="m-0 text-[13.5px] text-muted leading-snug">
+        <p className="m-0 text-[14px] text-muted leading-snug">
           {connected
             ? "Send a message, or press ⌘K to search memory, agents, and tools."
             : "Open settings to point ntrp at your server."}

@@ -259,14 +259,14 @@ export function ProvidersTab() {
   return (
     <div className="grid gap-4">
       <div className="flex items-start justify-between gap-3">
-        <p className="m-0 text-[13px] text-muted leading-[1.45] max-w-[520px]">
+        <p className="m-0 text-[13.5px] text-muted leading-[1.45] max-w-[520px]">
           Connect model providers here. Server connection and tool integrations stay separate.
         </p>
         <button
           type="button"
           onClick={() => void refresh()}
           disabled={loading}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-[12.5px] text-ink-soft hover:border-line-strong transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-[13px] text-ink-soft hover:border-line-strong transition-colors disabled:opacity-50"
         >
           <RefreshCw size={13} strokeWidth={1.8} className={clsx(loading && "animate-spin")} />
           Refresh
@@ -282,7 +282,7 @@ export function ProvidersTab() {
 
       <div className="grid gap-3">
         {loading && providers.length === 0 ? (
-          <div className="text-[13px] text-faint">Loading providers…</div>
+          <div className="text-[13.5px] text-faint">Loading providers…</div>
         ) : !showContent ? (
           <SettingsConnectionHint />
         ) : (
@@ -315,15 +315,15 @@ function ProviderReadinessCard({ summary }: { summary: ProviderReadinessSummary 
       <div className="flex flex-wrap items-center gap-2">
         <span
           className={clsx(
-            "inline-flex items-center rounded-full px-2 py-0.5 text-[11.5px] font-medium",
+            "inline-flex items-center rounded-full px-2 py-0.5 text-[12px] font-medium",
             summary.ready ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn",
           )}
         >
           {summary.label}
         </span>
-        <div className="text-[13px] text-ink-soft">{summary.detail}</div>
+        <div className="text-[13.5px] text-ink-soft">{summary.detail}</div>
       </div>
-      <div className="mt-1.5 text-[12px] text-faint">
+      <div className="mt-1.5 text-[12.5px] text-faint">
         {summary.connectedProviderCount} connected · {summary.availableModelCount} available models
       </div>
     </section>
@@ -346,13 +346,13 @@ function ProviderSection({
   return (
     <section className="grid gap-2">
       <div className="flex items-center justify-between gap-2 px-0.5">
-        <div className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-faint">{title}</div>
-        <div className="text-[12px] text-faint">{detail}</div>
+        <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-faint">{title}</div>
+        <div className="text-[12.5px] text-faint">{detail}</div>
       </div>
       {childCount > 0 ? (
         <div className="grid gap-2">{children}</div>
       ) : (
-        <div className="rounded-[10px] border border-line-soft bg-surface px-3 py-2 text-[12.5px] text-faint">
+        <div className="rounded-[10px] border border-line-soft bg-surface px-3 py-2 text-[13px] text-faint">
           {empty}
         </div>
       )}
@@ -417,15 +417,15 @@ function ProviderRow({
         <div className="min-w-[150px] flex-1 grid gap-1">
           <div className="flex items-center gap-2 min-w-0">
             <ProviderIcon connected={provider.connected} />
-            <div className="text-[13.5px] font-medium text-ink truncate">{provider.name}</div>
+            <div className="text-[14px] font-medium text-ink truncate">{provider.name}</div>
           </div>
-          <div className="text-[12px] text-muted font-mono truncate">
+          <div className="text-[12.5px] text-muted font-mono truncate">
             {provider.connected
               ? `${providerModelCountLabel(provider)}${connectionPill ? ` · ${connectionPill}` : ""}`
               : providerDescription(provider.id)}
           </div>
           {!provider.connected && (
-            <div className="text-[12px] text-faint font-mono truncate">
+            <div className="text-[12.5px] text-faint font-mono truncate">
               {providerModelCountLabel(provider)}
             </div>
           )}
@@ -433,7 +433,7 @@ function ProviderRow({
 
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {readOnlyPrimary ? (
-            <span className="inline-flex items-center h-8 px-3 rounded-md border border-line-soft bg-surface-soft text-[12.5px] font-medium text-muted">
+            <span className="inline-flex items-center h-8 px-3 rounded-md border border-line-soft bg-surface-soft text-[13px] font-medium text-muted">
               {isCustom ? "Configured separately" : actionLabel}
             </span>
           ) : (
@@ -442,7 +442,7 @@ function ProviderRow({
               onClick={primaryAction}
               disabled={pending}
               className={clsx(
-                "h-8 px-3 rounded-md text-[12.5px] font-medium transition-colors disabled:opacity-50",
+                "h-8 px-3 rounded-md text-[13px] font-medium transition-colors disabled:opacity-50",
                 provider.connected
                   ? "border border-line bg-surface text-ink-soft hover:border-line-strong"
                   : "bg-ink text-on-ink hover:opacity-90",
@@ -462,20 +462,20 @@ function ProviderRow({
             onChange={(event) => onKeyChange(event.target.value)}
             placeholder="API key"
             autoFocus
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13.5px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[14px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
           />
           <button
             type="button"
             onClick={onConnect}
             disabled={!apiKey.trim() || pending}
-            className="h-9 px-3 rounded-[9px] bg-ink text-on-ink text-[12.5px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+            className="h-9 px-3 rounded-[9px] bg-ink text-on-ink text-[13px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
           >
             Connect
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[12.5px] text-muted hover:text-ink hover:border-line-strong transition-colors"
+            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13px] text-muted hover:text-ink hover:border-line-strong transition-colors"
           >
             Cancel
           </button>
@@ -483,7 +483,7 @@ function ProviderRow({
       )}
 
       {codexStatus?.status === "pending" && (
-        <div className="flex items-center gap-2 px-3.5 py-2.5 bg-surface-soft/35 text-[12.5px] text-muted">
+        <div className="flex items-center gap-2 px-3.5 py-2.5 bg-surface-soft/35 text-[13px] text-muted">
           <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />
           <span>Waiting for browser sign-in…</span>
           {codexStatus.url && (
@@ -500,7 +500,7 @@ function ProviderRow({
       )}
 
       {codexStatus?.error && (
-        <div className="px-3.5 py-2.5 bg-bad-soft text-[12.5px] text-bad">
+        <div className="px-3.5 py-2.5 bg-bad-soft text-[13px] text-bad">
           {codexStatus.error}
         </div>
       )}
@@ -532,7 +532,7 @@ function CustomModelsPanel({
     <div className="grid gap-3 px-3.5 py-3 bg-surface-soft/35">
       <div className="grid gap-1.5">
         {models.length === 0 ? (
-          <div className="text-[12.5px] text-faint">No custom models configured.</div>
+          <div className="text-[13px] text-faint">No custom models configured.</div>
         ) : (
           models.map((model) => {
             const deleting = pendingId === `custom:delete:${model.id}`;
@@ -542,8 +542,8 @@ function CustomModelsPanel({
                 className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-center rounded-[9px] border border-line-soft bg-surface px-2.5 py-2"
               >
                 <div className="min-w-0">
-                  <div className="text-[13px] font-medium text-ink-soft truncate">{model.id}</div>
-                  <div className="text-[11.5px] text-faint truncate">
+                  <div className="text-[13.5px] font-medium text-ink-soft truncate">{model.id}</div>
+                  <div className="text-[12px] text-faint truncate">
                     {model.base_url || "default base URL"} · {model.context_window.toLocaleString()} ctx
                   </div>
                 </div>
@@ -574,13 +574,13 @@ function CustomModelsPanel({
             value={draft.model_id}
             onChange={(event) => onDraftChange({ model_id: event.target.value })}
             placeholder="model id"
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13.5px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[14px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
           />
           <input
             value={draft.base_url}
             onChange={(event) => onDraftChange({ base_url: event.target.value })}
             placeholder="base URL"
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13.5px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[14px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
           />
         </div>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
@@ -590,7 +590,7 @@ function CustomModelsPanel({
             value={draft.context_window}
             onChange={(event) => onDraftChange({ context_window: Number(event.target.value) })}
             aria-label="Context window"
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13.5px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[14px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
           />
           <input
             type="number"
@@ -598,20 +598,20 @@ function CustomModelsPanel({
             value={draft.max_output_tokens}
             onChange={(event) => onDraftChange({ max_output_tokens: Number(event.target.value) })}
             aria-label="Max output tokens"
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13.5px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[14px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
           />
           <input
             type="password"
             value={draft.api_key}
             onChange={(event) => onDraftChange({ api_key: event.target.value })}
             placeholder="API key (optional)"
-            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[13.5px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
+            className="h-9 px-3 rounded-[9px] border border-line bg-surface text-[14px] text-ink outline-none hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-soft)] transition-[border-color,box-shadow]"
           />
           <button
             type="button"
             onClick={onCreate}
             disabled={!canSaveCustomModelDraft(draft) || creating}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-[12.5px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-[13px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
           >
             {creating ? <Loader2 size={14} strokeWidth={1.8} className="animate-spin" /> : <Plus size={14} strokeWidth={2} />}
             Add
