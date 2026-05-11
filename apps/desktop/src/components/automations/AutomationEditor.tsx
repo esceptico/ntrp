@@ -269,7 +269,7 @@ export function AutomationEditor({
                   aria-label="Reset"
                   className="grid place-items-center w-7 h-7 rounded-md hover:bg-surface-soft hover:text-ink transition-colors"
                 >
-                  <RotateCcw size={13} strokeWidth={1.7} />
+                  <RotateCcw size={14} strokeWidth={1.7} />
                 </button>
                 <button
                   type="button"
@@ -368,11 +368,11 @@ function ScheduleChip({
     <div ref={wrapRef} className="relative">
       <Chip
         active={open}
-        icon={<Clock size={11} strokeWidth={1.8} />}
+        icon={<Clock size={12} strokeWidth={1.8} />}
         onClick={() => setOpen((v) => !v)}
       >
         <span className="truncate max-w-[210px]">{scheduleLabel(schedule)}</span>
-        <ChevronDown size={11} strokeWidth={1.8} className="opacity-60 shrink-0" />
+        <ChevronDown size={12} strokeWidth={1.8} className="opacity-60 shrink-0" />
       </Chip>
 
       <AnimatePresence>
@@ -483,7 +483,7 @@ function ScheduleChip({
             )}
 
             <div className="flex items-center gap-1 pt-1 text-[11.5px] text-faint">
-              <CalendarClock size={11} strokeWidth={1.7} />
+              <CalendarClock size={12} strokeWidth={1.7} />
               <span className="truncate">{scheduleLabel(schedule)}</span>
             </div>
           </motion.div>

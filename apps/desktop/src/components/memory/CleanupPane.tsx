@@ -282,7 +282,7 @@ function DuplicateCandidateRow({
       )}
     >
       <div className="mb-1 flex items-center gap-1.5">
-        <GitCompareArrows size={11} strokeWidth={1.8} className="text-faint" />
+        <GitCompareArrows size={12} strokeWidth={1.8} className="text-faint" />
         <span className="text-[11.5px] uppercase tracking-[0.06em] text-faint">{label}</span>
         <span className="text-[11.5px] tabular-nums text-faint">{Math.round(item.candidate.score * 100)}%</span>
       </div>
@@ -346,7 +346,7 @@ function DuplicateCandidateDetail({
       <div className="flex items-center justify-end gap-2 px-7 py-3">
         {error && <ErrorPill message={error} />}
         <GhostBtn onClick={onRefresh}>
-          <RefreshCw size={12} strokeWidth={1.8} /> Refresh
+          <RefreshCw size={13} strokeWidth={1.8} /> Refresh
         </GhostBtn>
       </div>
     </div>
@@ -457,13 +457,13 @@ function CleanupDetail({
       <div className="flex items-center justify-end gap-2 px-7 py-3">
         {error && <ErrorPill message={error} />}
         <GhostBtn onClick={onRefresh} disabled={busy}>
-          <RefreshCw size={12} strokeWidth={1.8} /> Refresh
+          <RefreshCw size={13} strokeWidth={1.8} /> Refresh
         </GhostBtn>
         <GhostBtn onClick={onOpenPattern} disabled={busy}>
-          <ExternalLink size={12} strokeWidth={1.8} /> Open pattern
+          <ExternalLink size={13} strokeWidth={1.8} /> Open pattern
         </GhostBtn>
         <GhostBtn onClick={onArchiveAll} disabled={busy || dryRun.summary.total === 0}>
-          <Archive size={12} strokeWidth={1.8} /> Archive all
+          <Archive size={13} strokeWidth={1.8} /> Archive all
         </GhostBtn>
         <PrimaryBtn onClick={onArchiveSelected} disabled={busy}>
           {busy ? "Archiving…" : "Archive selected"}

@@ -96,7 +96,7 @@ function QueueRow({ message }: { message: QueuedMessage }) {
         aria-label="Cancel queued message"
         className="grid place-items-center w-5 h-5 shrink-0 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-faint"
       >
-        {cancelling ? <Loader2 size={11} strokeWidth={2} className="animate-spin" /> : <X size={11} strokeWidth={2} />}
+        {cancelling ? <Loader2 size={12} strokeWidth={2} className="animate-spin" /> : <X size={12} strokeWidth={2} />}
       </button>
     </div>
   );

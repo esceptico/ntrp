@@ -61,7 +61,7 @@ export function AppearanceTab() {
                         : "text-muted hover:text-ink",
                     )}
                   >
-                    <Icon size={12} strokeWidth={1.7} />
+                    <Icon size={13} strokeWidth={1.7} />
                     {t.label}
                   </button>
                 );
@@ -265,7 +265,7 @@ function PalettePicker({
       >
         <PaletteIcon swatch={triggerSwatch} />
         <span>{current.label}</span>
-        <ChevronDown size={12} strokeWidth={1.8} className="opacity-70" />
+        <ChevronDown size={13} strokeWidth={1.8} className="opacity-70" />
       </button>
       {open && pos &&
         createPortal(
@@ -316,7 +316,7 @@ function PaletteRow({
     >
       <PaletteIcon swatch={swatch} />
       <span className="text-[13px] text-ink flex-1">{palette.label}</span>
-      {active && <Check size={12} strokeWidth={2} className="text-accent-strong" />}
+      {active && <Check size={13} strokeWidth={2} className="text-accent-strong" />}
     </button>
   );
 }
@@ -401,7 +401,7 @@ function Preview({
         data-send="true"
         className="grid place-items-center w-6 h-6 rounded-full bg-ink text-on-ink shrink-0"
       >
-        <ArrowUp size={11} strokeWidth={2.4} />
+        <ArrowUp size={12} strokeWidth={2.4} />
       </span>
     </div>
   );

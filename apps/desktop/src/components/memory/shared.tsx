@@ -272,7 +272,7 @@ export function SearchInput({
   return (
     <div className="relative flex-1 min-w-0">
       <Search
-        size={11}
+        size={12}
         strokeWidth={1.8}
         className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
       />

@@ -169,7 +169,7 @@ function Section({
                   active ? "bg-surface text-ink-soft" : "text-faint",
                 )}
               >
-                <Icon size={12} strokeWidth={1.8} />
+                <Icon size={13} strokeWidth={1.8} />
               </span>
               <span className="font-mono text-[13px] font-medium text-ink shrink-0">
                 /{entry.name}

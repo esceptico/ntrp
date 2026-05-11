@@ -176,7 +176,7 @@ export function IntegrationsTab() {
           disabled={loading}
           className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-[12.5px] text-ink-soft hover:border-line-strong transition-colors disabled:opacity-50"
         >
-          <RefreshCw size={12} strokeWidth={1.8} className={clsx(loading && "animate-spin")} />
+          <RefreshCw size={13} strokeWidth={1.8} className={clsx(loading && "animate-spin")} />
           Refresh
         </button>
       </div>
@@ -362,9 +362,9 @@ function GoogleCard({
                 className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface hover:text-bad transition-colors disabled:opacity-50"
               >
                 {pendingId === `gmail:${account.token_file}` ? (
-                  <Loader2 size={13} strokeWidth={1.8} className="animate-spin" />
+                  <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />
                 ) : (
-                  <Trash2 size={13} strokeWidth={1.8} />
+                  <Trash2 size={14} strokeWidth={1.8} />
                 )}
               </button>
             </div>
@@ -568,7 +568,7 @@ function ServiceRow({
 function GoogleIcon({ enabled }: { enabled: boolean }) {
   return (
     <span className="relative grid place-items-center w-4 h-4 shrink-0">
-      <Mail size={13} strokeWidth={1.8} className={enabled ? "text-ok" : "text-muted"} />
+      <Mail size={14} strokeWidth={1.8} className={enabled ? "text-ok" : "text-muted"} />
       <CalendarDays
         size={9}
         strokeWidth={1.9}
@@ -580,7 +580,7 @@ function GoogleIcon({ enabled }: { enabled: boolean }) {
 
 function ProviderDot({ connected }: { connected: boolean }) {
   if (connected) {
-    return <CheckCircle2 size={13} strokeWidth={2} className="text-ok shrink-0" />;
+    return <CheckCircle2 size={14} strokeWidth={2} className="text-ok shrink-0" />;
   }
-  return <KeyRound size={13} strokeWidth={1.8} className="text-faint shrink-0" />;
+  return <KeyRound size={14} strokeWidth={1.8} className="text-faint shrink-0" />;
 }

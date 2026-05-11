@@ -268,7 +268,7 @@ export function ProvidersTab() {
           disabled={loading}
           className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-[12.5px] text-ink-soft hover:border-line-strong transition-colors disabled:opacity-50"
         >
-          <RefreshCw size={12} strokeWidth={1.8} className={clsx(loading && "animate-spin")} />
+          <RefreshCw size={13} strokeWidth={1.8} className={clsx(loading && "animate-spin")} />
           Refresh
         </button>
       </div>
@@ -484,7 +484,7 @@ function ProviderRow({
 
       {codexStatus?.status === "pending" && (
         <div className="flex items-center gap-2 px-3.5 py-2.5 bg-surface-soft/35 text-[12.5px] text-muted">
-          <Loader2 size={13} strokeWidth={1.8} className="animate-spin" />
+          <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />
           <span>Waiting for browser sign-in…</span>
           {codexStatus.url && (
             <a
@@ -493,7 +493,7 @@ function ProviderRow({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-info hover:underline underline-offset-2"
             >
-              Open URL <ExternalLink size={11} strokeWidth={1.8} />
+              Open URL <ExternalLink size={12} strokeWidth={1.8} />
             </a>
           )}
         </div>
@@ -556,9 +556,9 @@ function CustomModelsPanel({
                     className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-bad transition-colors disabled:opacity-50"
                   >
                     {deleting ? (
-                      <Loader2 size={13} strokeWidth={1.8} className="animate-spin" />
+                      <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />
                     ) : (
-                      <Trash2 size={13} strokeWidth={1.8} />
+                      <Trash2 size={14} strokeWidth={1.8} />
                     )}
                   </button>
                 </div>
@@ -613,7 +613,7 @@ function CustomModelsPanel({
             disabled={!canSaveCustomModelDraft(draft) || creating}
             className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-[12.5px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
           >
-            {creating ? <Loader2 size={13} strokeWidth={1.8} className="animate-spin" /> : <Plus size={13} strokeWidth={2} />}
+            {creating ? <Loader2 size={14} strokeWidth={1.8} className="animate-spin" /> : <Plus size={14} strokeWidth={2} />}
             Add
           </button>
         </div>

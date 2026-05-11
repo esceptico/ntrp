@@ -89,7 +89,7 @@ export function SettingsModal() {
                       : "text-ink-soft hover:bg-surface/60",
                   )}
                 >
-                  <Icon size={13} strokeWidth={1.7} className="shrink-0" />
+                  <Icon size={14} strokeWidth={1.7} className="shrink-0" />
                   {tab.label}
                 </button>
               );
@@ -119,7 +119,7 @@ export function SettingsModal() {
               aria-label="Close"
               className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
             >
-              <X size={13} strokeWidth={1.8} />
+              <X size={14} strokeWidth={1.8} />
             </button>
           </header>
 

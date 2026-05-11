@@ -110,7 +110,7 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
           copied ? "text-ok" : "text-faint hover:text-ink hover:bg-surface-soft",
         )}
       >
-        {copied ? <Check size={13} strokeWidth={2.4} /> : <Copy size={13} strokeWidth={2} />}
+        {copied ? <Check size={14} strokeWidth={2.4} /> : <Copy size={14} strokeWidth={2} />}
       </button>
       {role === "assistant" && (
         <button
@@ -120,7 +120,7 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
           title="Branch from this message"
           className="grid place-items-center w-6 h-6 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         >
-          <GitBranch size={13} strokeWidth={2} />
+          <GitBranch size={14} strokeWidth={2} />
         </button>
       )}
       {role === "user" && (
@@ -130,7 +130,7 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
           title="Edit and resend"
           className="grid place-items-center w-6 h-6 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors"
         >
-          <Pencil size={13} strokeWidth={2} />
+          <Pencil size={14} strokeWidth={2} />
         </button>
       )}
       {timeLabel && (
@@ -195,7 +195,7 @@ function SkillChip({ skill }: { skill: SkillDescriptor }) {
       title={skill.path ?? skill.name}
       className="inline-flex items-center gap-1.5 mt-1 px-2 py-1 rounded-md bg-surface-sunken/80 border border-line-soft text-[12px] font-medium text-ink-soft hover:bg-surface-soft hover:border-line transition-colors cursor-pointer"
     >
-      <Sparkles size={11} strokeWidth={2} className="text-accent" />
+      <Sparkles size={12} strokeWidth={2} className="text-accent" />
       <span className="capitalize">{skill.name.replace(/[_-]/g, " ")}</span>
     </button>
   );
@@ -297,10 +297,10 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
         className="reasoning-head self-start inline-flex items-center gap-1.5 text-xs leading-[1.45] font-medium text-muted hover:text-ink-soft transition-colors select-none"
         data-state={isStreaming ? "streaming" : "done"}
       >
-        <Brain size={12} strokeWidth={1.7} />
+        <Brain size={13} strokeWidth={1.7} />
         <span>{message.title || "Reasoning"}</span>
         <ChevronDown
-          size={12}
+          size={13}
           strokeWidth={2}
           className={clsx("transition-transform duration-200", expanded && "rotate-180")}
         />
@@ -342,7 +342,7 @@ const ToolMessage = memo(function ToolMessage({ id }: { id: string }) {
     >
       <div className="tool-line flex items-baseline gap-2 min-w-0" data-state={isRunning ? "running" : "done"}>
         <span className="text-faint shrink-0">↗</span>
-        <Terminal size={12} strokeWidth={1.8} className="text-muted shrink-0 self-center" />
+        <Terminal size={13} strokeWidth={1.8} className="text-muted shrink-0 self-center" />
         <span className="text-ink-soft font-medium shrink-0">{message.title || "tool"}</span>
         <span className="text-muted truncate min-w-0 flex-1">{message.subtitle || ""}</span>
       </div>

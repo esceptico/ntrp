@@ -44,11 +44,11 @@ export function ActivityHeader({
         interactive ? "cursor-pointer hover:text-muted select-none" : "cursor-default",
       )}
     >
-      <SquareTerminal size={13} strokeWidth={1.8} className="shrink-0" />
+      <SquareTerminal size={14} strokeWidth={1.8} className="shrink-0" />
       <span>{summary}</span>
       {interactive && (
         <ChevronDown
-          size={12}
+          size={13}
           strokeWidth={2}
           className={clsx(
             "ml-1 self-center transition-transform duration-200 text-faint",
@@ -275,7 +275,7 @@ function AgentButton({
         aria-hidden
         className="grid place-items-center w-[18px] h-[18px] rounded-md bg-accent-soft text-accent-strong shrink-0 self-center"
       >
-        <Bot size={11} strokeWidth={2} />
+        <Bot size={12} strokeWidth={2} />
       </span>
       <span className="font-medium text-ink-soft shrink-0 group-hover/agent:text-ink transition-colors">
         {label}

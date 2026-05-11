@@ -276,7 +276,7 @@ export function Composer() {
               title={selectedSkill.path ?? selectedSkill.name}
               className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-sunken/80 border border-line-soft text-[12px] font-medium text-ink-soft hover:bg-surface-soft hover:border-line transition-colors"
             >
-              <Sparkles size={11} strokeWidth={2} className="text-accent" />
+              <Sparkles size={12} strokeWidth={2} className="text-accent" />
               <span className="capitalize">{selectedSkill.name.replace(/[_-]/g, " ")}</span>
             </button>
             <button
@@ -286,7 +286,7 @@ export function Composer() {
               title="Detach skill"
               aria-label="Detach skill"
             >
-              <X size={11} strokeWidth={2} />
+              <X size={12} strokeWidth={2} />
             </button>
           </div>
         )}
@@ -299,7 +299,7 @@ export function Composer() {
               className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
               title="Cancel edit"
             >
-              <X size={11} strokeWidth={2} />
+              <X size={12} strokeWidth={2} />
               cancel
             </button>
           </div>
@@ -415,7 +415,7 @@ export function Composer() {
             aria-label="Attach image"
             className="inline-flex items-center justify-center h-7 w-7 rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-colors"
           >
-            <ImagePlus size={13} strokeWidth={1.8} />
+            <ImagePlus size={14} strokeWidth={1.8} />
           </button>
           <button
             type="button"
@@ -430,12 +430,12 @@ export function Composer() {
           >
             {skipApprovals ? (
               <>
-                <ShieldOff size={11} strokeWidth={2} />
+                <ShieldOff size={12} strokeWidth={2} />
                 YOLO
               </>
             ) : (
               <>
-                <ShieldCheck size={11} strokeWidth={2} />
+                <ShieldCheck size={12} strokeWidth={2} />
                 Approve
               </>
             )}
@@ -451,7 +451,7 @@ export function Composer() {
               title="Stop (Esc)"
               className="grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-[0_1px_2px_rgba(0,0,0,0.2)] hover:opacity-90 transition-opacity"
             >
-              <Square size={11} strokeWidth={0} fill="currentColor" />
+              <Square size={12} strokeWidth={0} fill="currentColor" />
             </button>
           ) : (
             <button
@@ -461,7 +461,7 @@ export function Composer() {
               aria-label="Send"
               className="grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-[0_1px_2px_rgba(0,0,0,0.2)] hover:opacity-90 disabled:opacity-40 disabled:shadow-none transition-opacity"
             >
-              <ArrowUp size={13} strokeWidth={2.4} />
+              <ArrowUp size={14} strokeWidth={2.4} />
             </button>
           )}
         </div>

@@ -254,7 +254,7 @@ function PanelInner({
             onClick={() => zoomBy(1 / ZOOM_STEP)}
             disabled={view.zoom <= MIN_ZOOM + 1e-3}
           >
-            <Minus size={13} strokeWidth={1.8} />
+            <Minus size={14} strokeWidth={1.8} />
           </ToolbarButton>
           <span className="w-11 text-center text-[12px] tabular-nums text-muted select-none">{Math.round(view.zoom * 100)}%</span>
           <ToolbarButton
@@ -262,10 +262,10 @@ function PanelInner({
             onClick={() => zoomBy(ZOOM_STEP)}
             disabled={view.zoom >= MAX_ZOOM - 1e-3}
           >
-            <Plus size={13} strokeWidth={1.8} />
+            <Plus size={14} strokeWidth={1.8} />
           </ToolbarButton>
           <ToolbarButton label="Fit to view" onClick={fitToView}>
-            <RotateCcw size={12} strokeWidth={1.8} />
+            <RotateCcw size={13} strokeWidth={1.8} />
           </ToolbarButton>
           <span className="w-px h-4 bg-line mx-1" />
           <ToolbarButton
@@ -273,9 +273,9 @@ function PanelInner({
             onClick={() => void onCopy()}
           >
             {copied ? (
-              <Check size={13} strokeWidth={2.4} className="text-ok" />
+              <Check size={14} strokeWidth={2.4} className="text-ok" />
             ) : (
-              <Copy size={13} strokeWidth={1.8} />
+              <Copy size={14} strokeWidth={1.8} />
             )}
           </ToolbarButton>
           <ToolbarButton
@@ -283,9 +283,9 @@ function PanelInner({
             onClick={onToggleFullscreen}
           >
             {fullscreen ? (
-              <Minimize2 size={13} strokeWidth={1.8} />
+              <Minimize2 size={14} strokeWidth={1.8} />
             ) : (
-              <Maximize2 size={13} strokeWidth={1.8} />
+              <Maximize2 size={14} strokeWidth={1.8} />
             )}
           </ToolbarButton>
         </div>
@@ -356,7 +356,7 @@ function MermaidErrorBlock({ source, message }: { source: string; message: strin
           title={copied ? "Copied" : "Copy source"}
           className="grid place-items-center w-[22px] h-[22px] rounded-md bg-transparent border border-[rgba(184,68,43,0.24)] text-bad cursor-pointer transition-[background-color,color] duration-150 ease-out hover:bg-[rgba(184,68,43,0.08)]"
         >
-          {copied ? <Check size={12} strokeWidth={2.4} /> : <Copy size={12} strokeWidth={1.8} />}
+          {copied ? <Check size={13} strokeWidth={2.4} /> : <Copy size={13} strokeWidth={1.8} />}
         </button>
       </div>
       <pre className="m-0 text-xs text-ink-soft whitespace-pre-wrap break-words">{source}</pre>

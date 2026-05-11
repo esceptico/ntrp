@@ -121,7 +121,7 @@ function ServerList({
               onClick={onAdd}
               className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-[12.5px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
             >
-              <Plus size={11} strokeWidth={2.2} /> Add server
+              <Plus size={12} strokeWidth={2.2} /> Add server
             </button>
           )}
         </div>
@@ -227,7 +227,7 @@ function ServerRow({
           aria-label="Configure"
           className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
         >
-          <SettingsIcon size={13} strokeWidth={1.7} />
+          <SettingsIcon size={14} strokeWidth={1.7} />
         </button>
         <Toggle checked={server.enabled} onChange={onToggle} disabled={busy} />
       </div>
@@ -323,7 +323,7 @@ function ServerForm({
           onClick={onClose}
           className="inline-flex items-center gap-1.5 h-7 px-1.5 rounded-md text-[12.5px] text-muted hover:text-ink transition-colors"
         >
-          <ArrowLeft size={12} strokeWidth={1.8} /> Back
+          <ArrowLeft size={13} strokeWidth={1.8} /> Back
         </button>
         {mode === "edit" && server && (
           <button
@@ -332,7 +332,7 @@ function ServerForm({
             disabled={busy}
             className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12.5px] font-medium text-bad bg-bad-soft hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            <Trash2 size={12} strokeWidth={1.8} /> Uninstall
+            <Trash2 size={13} strokeWidth={1.8} /> Uninstall
           </button>
         )}
       </div>
@@ -674,7 +674,7 @@ function AddBtn({ label, onClick }: { label: string; onClick: () => void }) {
       onClick={onClick}
       className="inline-flex items-center justify-center gap-1.5 h-8 rounded-md bg-surface-soft hover:bg-surface-soft/80 text-[12.5px] text-muted hover:text-ink transition-colors"
     >
-      <Plus size={11} strokeWidth={1.8} /> {label}
+      <Plus size={12} strokeWidth={1.8} /> {label}
     </button>
   );
 }
@@ -687,7 +687,7 @@ function RemoveBtn({ onClick }: { onClick: () => void }) {
       aria-label="Remove"
       className="grid place-items-center w-8 h-8 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors"
     >
-      <Trash2 size={12} strokeWidth={1.8} />
+      <Trash2 size={13} strokeWidth={1.8} />
     </button>
   );
 }

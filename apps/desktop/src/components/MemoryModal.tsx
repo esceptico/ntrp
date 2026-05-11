@@ -77,7 +77,7 @@ export function MemoryModal() {
           aria-label="Close"
           className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
         >
-          <X size={13} strokeWidth={1.7} />
+          <X size={14} strokeWidth={1.7} />
         </button>
       </header>
 
@@ -141,7 +141,7 @@ function AdvancedRow({ activeTab, onSelect }: { activeTab: MemoryTab; onSelect: 
       >
         Advanced
         <ChevronRight
-          size={12}
+          size={13}
           strokeWidth={1.8}
           className={clsx("transition-transform duration-200 ease-out", visible && "rotate-90")}
         />

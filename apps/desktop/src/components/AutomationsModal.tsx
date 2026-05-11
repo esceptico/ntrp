@@ -53,7 +53,7 @@ export function AutomationsModal() {
               onClick={() => setEditor({ kind: "create" })}
               className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-[12.5px] font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
             >
-              <Plus size={11} strokeWidth={2.2} />
+              <Plus size={12} strokeWidth={2.2} />
               New
             </button>
             <button
@@ -62,7 +62,7 @@ export function AutomationsModal() {
               aria-label="Close"
               className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
             >
-              <X size={13} strokeWidth={1.7} />
+              <X size={14} strokeWidth={1.7} />
             </button>
           </div>
         </header>
@@ -456,7 +456,7 @@ function CardAction({
         danger && "hover:!text-bad",
       )}
     >
-      <Icon size={11} strokeWidth={1.8} />
+      <Icon size={12} strokeWidth={1.8} />
     </button>
   );
 }

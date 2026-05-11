@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Archive, Brain, ChevronDown, MoreHorizontal, Pencil, Search, Settings as SettingsIcon, Sparkles, X, Zap } from "lucide-react";
+import { Archive, Brain, ChevronDown, Pencil, Search, Settings as SettingsIcon, Sparkles, X, Zap } from "lucide-react";
 import clsx from "clsx";
 import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
 import { useStore } from "../store";
@@ -207,12 +207,12 @@ function SessionRow({
         </span>
         <span className="absolute inset-0 flex items-center justify-end gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity duration-150">
           <RowAction
-            icon={<Pencil size={11} strokeWidth={1.8} />}
+            icon={<Pencil size={12} strokeWidth={1.8} />}
             label="Rename"
             onClick={onStartRename}
           />
           <RowAction
-            icon={<Archive size={11} strokeWidth={1.8} />}
+            icon={<Archive size={12} strokeWidth={1.8} />}
             label="Archive"
             onClick={onArchive}
           />
@@ -236,8 +236,8 @@ function SessionStateIcon({
 }) {
   if (streaming) {
     return (
-      <span className="grid place-items-center w-4 h-4 text-accent" aria-label="Running">
-        <MoreHorizontal size={14} strokeWidth={2.4} className="animate-pulse" />
+      <span className="thinking-dots grid grid-flow-col gap-[2px] place-items-center w-4 h-4 text-accent" aria-label="Running">
+        <span /><span /><span />
       </span>
     );
   }
@@ -332,12 +332,12 @@ function SessionList() {
         ) : (
           <>
             <HeaderIconBtn
-              icon={<Search size={13} strokeWidth={1.8} />}
+              icon={<Search size={14} strokeWidth={1.8} />}
               label="Filter sessions"
               onClick={() => setSearchOpen(true)}
             />
             <HeaderIconBtn
-              icon={<Archive size={13} strokeWidth={1.8} />}
+              icon={<Archive size={14} strokeWidth={1.8} />}
               label="View archived sessions"
               onClick={openArchive}
             />
@@ -493,7 +493,7 @@ function SessionSearch({
   return (
     <div className="relative flex-1 h-[24px]">
       <Search
-        size={11}
+        size={12}
         strokeWidth={1.8}
         className="absolute left-[7px] top-1/2 -translate-y-1/2 text-faint pointer-events-none"
       />
@@ -596,9 +596,9 @@ function SessionContextMenu({
       style={{ left: pos.left, top: pos.top, opacity: pos.ready ? 1 : 0 }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <ContextItem icon={<Pencil size={12} strokeWidth={1.8} />} label="Rename" onClick={onRename} />
-      <ContextItem icon={<Sparkles size={12} strokeWidth={1.8} />} label="Compact context" onClick={onCompact} />
-      <ContextItem icon={<Archive size={12} strokeWidth={1.8} />} label="Archive" onClick={onArchive} />
+      <ContextItem icon={<Pencil size={13} strokeWidth={1.8} />} label="Rename" onClick={onRename} />
+      <ContextItem icon={<Sparkles size={13} strokeWidth={1.8} />} label="Compact context" onClick={onCompact} />
+      <ContextItem icon={<Archive size={13} strokeWidth={1.8} />} label="Archive" onClick={onArchive} />
     </div>,
     root,
   );
@@ -635,24 +635,24 @@ export function Sidebar() {
       <div className="drag-spacer shrink-0 h-[38px]" />
       <nav className="flex flex-col gap-px px-2.5 pt-2">
         <NavRow
-          icon={<Pencil size={13} strokeWidth={1.7} />}
+          icon={<Pencil size={14} strokeWidth={1.7} />}
           label="New session"
           onClick={() => void createSession()}
         />
         <NavRow
-          icon={<Zap size={13} strokeWidth={1.7} />}
+          icon={<Zap size={14} strokeWidth={1.7} />}
           label="Automations"
           onClick={openAutomations}
         />
         <NavRow
-          icon={<Brain size={13} strokeWidth={1.7} />}
+          icon={<Brain size={14} strokeWidth={1.7} />}
           label="Memory"
           onClick={openMemory}
         />
       </nav>
       <SessionList />
       <nav className="flex flex-col gap-px px-2.5 pt-1.5 pb-3">
-        <NavRow icon={<SettingsIcon size={13} strokeWidth={1.7} />} label="Settings" onClick={openSettings} />
+        <NavRow icon={<SettingsIcon size={14} strokeWidth={1.7} />} label="Settings" onClick={openSettings} />
       </nav>
     </aside>
   );

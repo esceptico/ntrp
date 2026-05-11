@@ -328,10 +328,10 @@ function ObservationView({
           ) : (
             <>
               <DangerBtn onClick={() => void remove()} disabled={busy}>
-                <Trash2 size={12} strokeWidth={1.8} /> Delete
+                <Trash2 size={13} strokeWidth={1.8} /> Delete
               </DangerBtn>
               <GhostBtn onClick={() => setEditing(true)} disabled={busy}>
-                <Pencil size={12} strokeWidth={1.8} /> Edit
+                <Pencil size={13} strokeWidth={1.8} /> Edit
               </GhostBtn>
             </>
           )}
@@ -383,7 +383,7 @@ export function SupportingFacts({
                       className="inline-flex min-w-0 items-center gap-1 text-left text-[11.5px] text-faint hover:text-ink-soft"
                       aria-label={`Open source for fact ${f.id}`}
                     >
-                      <ExternalLink size={11} strokeWidth={1.8} className="shrink-0" />
+                      <ExternalLink size={12} strokeWidth={1.8} className="shrink-0" />
                       <span className="min-w-0 break-all">{factSourceSummary(f)}</span>
                       <span className="sr-only">Open source</span>
                     </button>

@@ -95,7 +95,7 @@ export function ModelReasoningPicker({
             <span className="text-faint">{currentEffort ?? "off"}</span>
           </>
         )}
-        <ChevronDown size={11} strokeWidth={1.8} className="shrink-0 opacity-70" />
+        <ChevronDown size={12} strokeWidth={1.8} className="shrink-0 opacity-70" />
       </button>
 
       {open && (
@@ -166,7 +166,7 @@ export function ModelReasoningPicker({
                         )}
                       >
                         <span className="grid place-items-center w-3 h-3 shrink-0">
-                          {isCurrent && <Check size={11} strokeWidth={2.4} className="text-accent" />}
+                          {isCurrent && <Check size={12} strokeWidth={2.4} className="text-accent" />}
                         </span>
                         <span className="min-w-0 flex-1 truncate">{m}</span>
                         {savedEffort && (
