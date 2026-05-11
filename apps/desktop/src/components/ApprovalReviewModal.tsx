@@ -79,7 +79,7 @@ export function ApprovalReviewModal() {
                 aria-label="Close"
                 className="ml-auto grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors shrink-0"
               >
-                <X size={ICON.LG} strokeWidth={1.8} />
+                <X size={ICON.SM} strokeWidth={1.8} />
               </button>
             </header>
 
@@ -112,7 +112,7 @@ export function ApprovalReviewModal() {
                 onClick={() => void respondToApproval(approval.toolId, false)}
                 className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-surface text-ink-soft border border-line text-sm font-medium hover:bg-surface-soft hover:border-line-strong transition-colors"
               >
-                <X size={ICON.MD} strokeWidth={2} />
+                <X size={ICON.XS} strokeWidth={2} />
                 Reject
               </button>
               <button
@@ -120,7 +120,7 @@ export function ApprovalReviewModal() {
                 onClick={() => void respondToApproval(approval.toolId, true)}
                 className="inline-flex items-center gap-1.5 h-8 px-4 rounded-md bg-ink text-on-ink text-sm font-medium hover:opacity-90 transition-opacity"
               >
-                <Check size={ICON.MD} strokeWidth={2.4} />
+                <Check size={ICON.XS} strokeWidth={2.4} />
                 Approve
               </button>
             </footer>

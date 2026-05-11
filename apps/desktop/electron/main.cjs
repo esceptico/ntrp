@@ -247,7 +247,7 @@ function createWindow() {
     icon: ICON_PATH,
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#100f0f" : "#ece9e0",
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 18 },
+    trafficLightPosition: { x: 18, y: 18 },
     vibrancy: "sidebar",
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),

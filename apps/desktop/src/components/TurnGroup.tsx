@@ -102,7 +102,7 @@ export function TurnGroup({
             >
               <span>{headerLabel}</span>
               <ChevronDown
-                size={ICON.MD}
+                size={ICON.XS}
                 strokeWidth={2}
                 className={clsx("transition-transform duration-200", expanded && "rotate-180")}
               />

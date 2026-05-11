@@ -73,7 +73,7 @@ export function MarkdownViewer() {
                     title="Open in default app"
                     className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
                   >
-                    <ExternalLink size={ICON.LG} strokeWidth={1.8} />
+                    <ExternalLink size={ICON.SM} strokeWidth={1.8} />
                   </button>
                 )}
                 <button
@@ -82,7 +82,7 @@ export function MarkdownViewer() {
                   aria-label="Close"
                   className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
                 >
-                  <X size={ICON.LG} strokeWidth={1.8} />
+                  <X size={ICON.SM} strokeWidth={1.8} />
                 </button>
               </div>
             </header>

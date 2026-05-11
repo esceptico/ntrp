@@ -54,7 +54,7 @@ export function AutomationsModal() {
               onClick={() => setEditor({ kind: "create" })}
               className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-ink text-on-ink text-sm font-medium tracking-[-0.005em] hover:opacity-90 transition-opacity"
             >
-              <Plus size={ICON.SM} strokeWidth={2.2} />
+              <Plus size={ICON.XS} strokeWidth={2.2} />
               New
             </button>
             <button
@@ -63,7 +63,7 @@ export function AutomationsModal() {
               aria-label="Close"
               className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
             >
-              <X size={ICON.LG} strokeWidth={1.7} />
+              <X size={ICON.SM} strokeWidth={1.7} />
             </button>
           </div>
         </header>
@@ -457,7 +457,7 @@ function CardAction({
         danger && "hover:!text-bad",
       )}
     >
-      <Icon size={ICON.SM} strokeWidth={1.8} />
+      <Icon size={ICON.XS} strokeWidth={1.8} />
     </button>
   );
 }
@@ -478,7 +478,7 @@ function TemplateCard({
       onClick={onPick}
       className="cursor-pointer grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5 rounded-[10px] border border-line-soft bg-surface text-left transition-colors duration-palette hover:border-line-strong hover:bg-surface-soft/30 focus-visible:outline-none focus-visible:border-line-strong focus-visible:shadow-[0_0_0_3px_var(--color-accent-soft)]"
     >
-      <Icon size={ICON.LG} strokeWidth={1.7} className="text-muted mt-[2px] shrink-0" />
+      <Icon size={ICON.SM} strokeWidth={1.7} className="text-muted mt-[2px] shrink-0" />
       <div className="min-w-0 grid gap-1">
         <h4 className="m-0 text-base font-medium tracking-[-0.005em] text-ink truncate">
           {template.name}

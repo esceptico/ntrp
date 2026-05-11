@@ -16,7 +16,7 @@ export function RollingToken({ value, mono = false }: { value: string; mono?: bo
       layout="size"
       transition={{ layout: { duration: MOTION.trace, ease: EASE } }}
       className={clsx(
-        "relative inline-block overflow-hidden align-baseline",
+        "relative inline-block overflow-hidden align-text-bottom",
         mono && "tabular-nums",
       )}
     >

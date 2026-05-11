@@ -18,7 +18,7 @@ function SidebarToggle() {
       aria-label={sidebarHidden ? "Show sidebar" : "Hide sidebar"}
       className="sidebar-toggle grid place-items-center w-[22px] h-[22px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
     >
-      <Icon size={ICON.XL} strokeWidth={1.5} />
+      <Icon size={ICON.MD} strokeWidth={1.5} />
     </button>
   );
 }

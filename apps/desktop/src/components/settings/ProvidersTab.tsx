@@ -269,7 +269,7 @@ export function ProvidersTab() {
           disabled={loading}
           className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-colors disabled:opacity-50"
         >
-          <RefreshCw size={ICON.MD} strokeWidth={1.8} className={clsx(loading && "animate-spin")} />
+          <RefreshCw size={ICON.SM} strokeWidth={1.8} className={clsx(loading && "animate-spin")} />
           Refresh
         </button>
       </div>
@@ -485,7 +485,7 @@ function ProviderRow({
 
       {codexStatus?.status === "pending" && (
         <div className="flex items-center gap-2 px-3.5 py-2.5 bg-surface-soft/35 text-sm text-muted">
-          <Loader2 size={ICON.LG} strokeWidth={1.8} className="animate-spin" />
+          <Loader2 size={ICON.MD} strokeWidth={1.8} className="animate-spin" />
           <span>Waiting for browser sign-in…</span>
           {codexStatus.url && (
             <a
@@ -494,7 +494,7 @@ function ProviderRow({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-info hover:underline underline-offset-2"
             >
-              Open URL <ExternalLink size={ICON.SM} strokeWidth={1.8} />
+              Open URL <ExternalLink size={ICON.XS} strokeWidth={1.8} />
             </a>
           )}
         </div>
@@ -557,9 +557,9 @@ function CustomModelsPanel({
                     className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-bad transition-colors disabled:opacity-50"
                   >
                     {deleting ? (
-                      <Loader2 size={ICON.LG} strokeWidth={1.8} className="animate-spin" />
+                      <Loader2 size={ICON.MD} strokeWidth={1.8} className="animate-spin" />
                     ) : (
-                      <Trash2 size={ICON.LG} strokeWidth={1.8} />
+                      <Trash2 size={ICON.MD} strokeWidth={1.8} />
                     )}
                   </button>
                 </div>
@@ -614,7 +614,7 @@ function CustomModelsPanel({
             disabled={!canSaveCustomModelDraft(draft) || creating}
             className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[9px] bg-ink text-on-ink text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
           >
-            {creating ? <Loader2 size={ICON.LG} strokeWidth={1.8} className="animate-spin" /> : <Plus size={ICON.LG} strokeWidth={2} />}
+            {creating ? <Loader2 size={ICON.MD} strokeWidth={1.8} className="animate-spin" /> : <Plus size={ICON.MD} strokeWidth={2} />}
             Add
           </button>
         </div>
@@ -625,8 +625,8 @@ function CustomModelsPanel({
 
 function ProviderIcon({ connected }: { connected: boolean }) {
   return connected ? (
-    <CheckCircle2 size={ICON.LG} strokeWidth={2} className="text-ok shrink-0" />
+    <CheckCircle2 size={ICON.MD} strokeWidth={2} className="text-ok shrink-0" />
   ) : (
-    <KeyRound size={ICON.LG} strokeWidth={1.8} className="text-faint shrink-0" />
+    <KeyRound size={ICON.MD} strokeWidth={1.8} className="text-faint shrink-0" />
   );
 }

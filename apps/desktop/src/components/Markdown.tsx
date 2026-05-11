@@ -144,7 +144,7 @@ function CopyButton({ text }: { text: string }) {
       aria-label={copied ? "Copied" : "Copy code"}
       className={clsx("code-block-copy", copied && "copied")}
     >
-      {copied ? <Check size={ICON.LG} strokeWidth={2.4} /> : <Copy size={ICON.LG} strokeWidth={2} />}
+      {copied ? <Check size={ICON.SM} strokeWidth={2.4} /> : <Copy size={ICON.SM} strokeWidth={2} />}
     </button>
   );
 }

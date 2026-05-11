@@ -49,7 +49,7 @@ export function RecallPane({
       <div className="border-b border-line-soft px-7 py-4">
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
-            <Search size={ICON.LG} strokeWidth={1.8} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
+            <Search size={ICON.MD} strokeWidth={1.8} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}

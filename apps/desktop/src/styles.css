@@ -935,3 +935,12 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   --color-accent-soft: rgba(137, 180, 250, 0.16);
   --color-accent-strong: #b4befe;
 }
+
+/* Keep animated rims/halos behind actual composer controls. Without this,
+   the comet pseudo-element can create odd stacking behavior in Chromium that
+   makes small chips appear visually offset when the composer/settings preview
+   is animating. */
+.composer-card[data-thinking="true"] > * {
+  position: relative;
+  z-index: 1;
+}

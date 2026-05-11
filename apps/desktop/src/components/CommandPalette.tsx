@@ -153,7 +153,7 @@ function PaletteBody({
     <>
       <div className="relative px-4 pt-3 pb-2.5">
         <Search
-          size={ICON.XL}
+          size={ICON.MD}
           strokeWidth={1.8}
           className="absolute left-4 top-[22px] text-faint pointer-events-none"
         />
@@ -252,7 +252,7 @@ function Row({
             active ? "bg-accent-soft text-accent-strong" : "text-muted",
           )}
         >
-          <Icon size={ICON.LG} strokeWidth={1.7} />
+          <Icon size={ICON.SM} strokeWidth={1.7} />
         </span>
         <span className="text-base text-ink truncate flex-1">{entry.label}</span>
         {entry.hint && (

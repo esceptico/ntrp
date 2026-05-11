@@ -194,9 +194,9 @@ function SessionRow({
       <span className="min-w-0 truncate text-base font-medium tracking-[-0.005em]">
         {name || "untitled"}
       </span>
-      <span className="relative shrink-0 h-[20px] w-[48px]">
+      <span className="relative shrink-0 h-[22px] w-[48px]">
         {/* Default state: timestamp. Hover swaps to row actions. */}
-        <span className="absolute inset-0 flex items-center justify-end transition-opacity duration-150 group-hover/row:opacity-0 pointer-events-none">
+        <span className="absolute inset-0 flex items-center justify-end pr-[5px] transition-opacity duration-150 group-hover/row:opacity-0 pointer-events-none">
           <span
             className={clsx(
               "text-xs tabular-nums",
@@ -285,6 +285,7 @@ function SessionList() {
   const activeRunSessionIds = useStore((s) => s.activeRunSessionIds);
   const unreadDoneSessionIds = useStore((s) => s.unreadDoneSessionIds);
   const connected = useStore((s) => s.connected);
+  const openArchive = useStore((s) => s.openArchive);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -356,28 +357,53 @@ function SessionList() {
         ) : filtered.length === 0 ? (
           <div className="px-3 py-3 text-sm italic text-faint">No matches.</div>
         ) : (
-          bucketByTime(filtered).map((bucket) => {
+          bucketByTime(filtered).map((bucket, idx) => {
             const isCollapsed = collapsedBuckets.has(bucket.label);
+            const isFirst = idx === 0 && !searchActive;
             return (
               <div key={bucket.label}>
-                <button
-                  type="button"
-                  onClick={() => toggleBucket(bucket.label)}
-                  aria-expanded={!isCollapsed}
-                  className={clsx(
-                    "sticky top-0 z-10 w-full flex items-center gap-1 px-[18px] pt-1.5 pb-1 text-2xs font-medium uppercase tracking-[0.08em] text-faint hover:text-muted bg-bg-main transition-colors cursor-pointer select-none",
-                  )}
-                >
-                  <ChevronDown
-                    size={ICON.XS}
-                    strokeWidth={2.2}
+                <div className="sticky top-0 z-10 flex items-center gap-1 pr-[18px] bg-bg-main">
+                  <button
+                    type="button"
+                    onClick={() => toggleBucket(bucket.label)}
+                    aria-expanded={!isCollapsed}
                     className={clsx(
-                      "transition-transform duration-150",
-                      isCollapsed && "-rotate-90",
+                      "flex-1 flex items-center gap-1 pl-[18px] pt-1.5 pb-1 text-2xs font-medium uppercase tracking-[0.08em] text-faint hover:text-muted transition-colors cursor-pointer select-none",
                     )}
-                  />
-                  <span>{bucket.label}</span>
-                </button>
+                  >
+                    <ChevronDown
+                      size={ICON.XS}
+                      strokeWidth={2.2}
+                      className={clsx(
+                        "transition-transform duration-150",
+                        isCollapsed && "-rotate-90",
+                      )}
+                    />
+                    <span>{bucket.label}</span>
+                  </button>
+                  {isFirst && (
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setSearchOpen(true)}
+                        aria-label="Filter sessions"
+                        title="Filter sessions (⌘F)"
+                        className="grid place-items-center w-[22px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
+                      >
+                        <Search size={ICON.SM} strokeWidth={1.8} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={openArchive}
+                        aria-label="View archived sessions"
+                        title="View archived sessions"
+                        className="grid place-items-center w-[22px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
+                      >
+                        <Archive size={ICON.SM} strokeWidth={1.8} />
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <AnimatePresence initial={false}>
                   {!isCollapsed && (
                     <motion.div
@@ -607,7 +633,6 @@ export function Sidebar() {
   const openSettings = useStore((s) => s.openSettings);
   const openAutomations = useStore((s) => s.openAutomations);
   const openMemory = useStore((s) => s.openMemory);
-  const openArchive = useStore((s) => s.openArchive);
 
   return (
     <aside className="sidebar flex flex-col h-full">
@@ -631,11 +656,6 @@ export function Sidebar() {
       </nav>
       <SessionList />
       <nav className="flex flex-col gap-px px-2.5 pt-1.5 pb-3">
-        <NavRow
-          icon={<Archive size={ICON.LG} strokeWidth={1.7} />}
-          label="Archived sessions"
-          onClick={openArchive}
-        />
         <NavRow
           icon={<SettingsIcon size={ICON.LG} strokeWidth={1.7} />}
           label="Settings"

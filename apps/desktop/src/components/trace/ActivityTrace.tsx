@@ -45,7 +45,7 @@ export function ActivityHeader({
         interactive ? "cursor-pointer hover:text-muted select-none" : "cursor-default",
       )}
     >
-      <SquareTerminal size={ICON.LG} strokeWidth={1.8} className="shrink-0" />
+      <SquareTerminal size={ICON.MD} strokeWidth={1.8} className="shrink-0" />
       {/* Three odometer slots so the label flip ("Running" → "Done"),
           the digit roll (5 → 6 as another tool starts), and the
           singular/plural switch ("tool" / "tools") each animate
@@ -60,7 +60,7 @@ export function ActivityHeader({
       </span>
       {interactive && (
         <ChevronDown
-          size={ICON.MD}
+          size={ICON.SM}
           strokeWidth={2}
           className={clsx(
             "ml-1 self-center transition-transform duration-200 text-faint",
@@ -287,7 +287,7 @@ function AgentButton({
         aria-hidden
         className="grid place-items-center w-[18px] h-[18px] rounded-md bg-accent-soft text-accent-strong shrink-0 self-center"
       >
-        <Bot size={ICON.SM} strokeWidth={2} />
+        <Bot size={ICON.XS} strokeWidth={2} />
       </span>
       <span className="font-medium text-ink-soft shrink-0 group-hover/agent:text-ink transition-colors">
         {label}

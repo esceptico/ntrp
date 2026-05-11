@@ -183,7 +183,7 @@ function SegmentedControl<T extends string>({
             type="button"
             onClick={() => onChange(opt.id)}
             className={clsx(
-              "inline-flex items-center justify-center h-7 px-3 rounded-[7px] text-sm font-medium tracking-[-0.005em] transition-colors",
+              "inline-flex items-center justify-center h-7 px-3 rounded-[7px] text-sm leading-none font-medium tracking-[-0.005em] transition-colors",
               active
                 ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
                 : "text-muted hover:text-ink",
