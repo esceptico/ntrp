@@ -4,13 +4,12 @@ import { Bot, ChevronDown, SquareTerminal } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ActivityItem } from "../../store";
 import { extractTask, friendlyAgentLabel, isAgent } from "../../lib/agent";
-import { MOTION, EASE_EMPHASIZED, SPRING_SMOOTH } from "../../lib/motion";
+import { SPRING_SMOOTH } from "../../lib/motion";
 import { RollingToken } from "./RollingToken";
 import { ICON } from "../../lib/icons";
 
 export type { ActivityItem };
 
-const EASE = EASE_EMPHASIZED;
 const ROW_HEIGHT_EM = 1.4;
 const NEST_PX = 16;
 const MAX_NEST_DEPTH = 4; // visual cap; deeper nesting collapses to the same indent
@@ -85,9 +84,6 @@ export function ActivityTail({
   //   - "rolling" (max set): used live during a run. Each level (top, plus
   //     each *running* parent's children) keeps its last `max` rows; deeper
   //     descendants of a finished parent are hidden so the tail stays short.
-  //     We render the result as a flat ordered list — parents come before
-  //     their children, depth handles indent — so motion has only one layout
-  //     surface to manage rather than nested motion.divs.
   //   - "static"  (max unset): post-run, expanded list. Flat top-level only —
   //     children are reachable via the inspector.
   const rolling = max != null;
@@ -98,12 +94,43 @@ export function ActivityTail({
     [items, max, rolling],
   );
 
-  // Compute explicit height instead of leaving it to a `layout` prop on the
-  // outer container. Mixing `layout` and an explicit `animate.height` causes
-  // the two systems to fight (motion docs warn against this), which produced
-  // the visible "jumping" / "wait then batch move" the user reported.
-  const targetHeight = `${visible.length * ROW_HEIGHT_EM}em`;
+  // Rolling (live) mode: do NOT animate the container's height. The chat's
+  // scroll container above us uses `useStickToBottom` whose own resize-spring
+  // would chase a height-spring's intermediate values over many frames —
+  // visible as the "odd animation above the chat". Instead let the container
+  // resize instantly as rows mount/unmount (one reflow per tool, not 30) and
+  // animate only per-row enter/exit + sibling reflow via FLIP transforms.
+  //
+  // `position: relative` is critical: `mode="popLayout"` sets exiting items
+  // to `position: absolute`. Without a positioned ancestor they snap to the
+  // scroll viewport at (0, 0) and pile up as ghosts at the top of the chat.
+  // `overflow: hidden` clips the exit slide so it doesn't leak above the row.
+  if (rolling) {
+    return (
+      <div className="relative overflow-hidden pl-3 mt-0.5">
+        <AnimatePresence mode="popLayout" initial={false}>
+          {visible.map((item) => (
+            <motion.div
+              key={item.id}
+              layout="position"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ type: "spring", stiffness: 350, damping: 40, mass: 0.8 }}
+              style={{ height: `${ROW_HEIGHT_EM}em` }}
+              className="flex items-baseline min-w-0"
+            >
+              <ItemButton item={item} onOpen={setViewingTool} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+    );
+  }
 
+  // Static (post-run) mode: the user-driven collapse toggle is a one-shot
+  // event, not a per-frame stream, so animating height here is fine.
+  const targetHeight = `${visible.length * ROW_HEIGHT_EM}em`;
   return (
     <motion.div
       initial={false}
@@ -115,34 +142,15 @@ export function ActivityTail({
       style={{ overflow: "hidden" }}
       className="pl-3 mt-0.5"
     >
-      {rolling ? (
-        <AnimatePresence mode="popLayout" initial={false}>
-          {visible.map((item) => (
-            <motion.div
-              key={item.id}
-              layout
-              initial={{ y: 8, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: -8, opacity: 0 }}
-              transition={{ duration: MOTION.panel, ease: EASE }}
-              style={{ height: `${ROW_HEIGHT_EM}em` }}
-              className="flex items-baseline min-w-0"
-            >
-              <ItemButton item={item} onOpen={setViewingTool} />
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      ) : (
-        visible.map((item) => (
-          <div
-            key={item.id}
-            style={{ height: `${ROW_HEIGHT_EM}em` }}
-            className="flex items-baseline min-w-0"
-          >
-            <ItemButton item={item} onOpen={setViewingTool} />
-          </div>
-        ))
-      )}
+      {visible.map((item) => (
+        <div
+          key={item.id}
+          style={{ height: `${ROW_HEIGHT_EM}em` }}
+          className="flex items-baseline min-w-0"
+        >
+          <ItemButton item={item} onOpen={setViewingTool} />
+        </div>
+      ))}
     </motion.div>
   );
 }
