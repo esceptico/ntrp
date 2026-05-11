@@ -1,11 +1,11 @@
 ---
 name: propose-automation
-description: Use this skill when the user wants to turn the current conversation into a scheduled automation. Analyzes the session and emits a structured automation proposal the UI can render as a card.
+description: Use this skill when the user wants to turn the current conversation into a scheduled automation. Analyze the session and call create_automation to propose one — the user reviews the full prompt + schedule in the approval card before it's saved.
 ---
 
 # Propose Automation
 
-The user wants to capture the work in this conversation as a reusable scheduled automation. Your job: produce ONE proposal as a fenced JSON block the UI will render as an interactive card.
+The user wants to capture the work in this conversation as a reusable scheduled automation. Your job: analyze the session, then call `create_automation` once with the proposed parameters. The user will see your proposal in the approval card and accept or reject.
 
 ## What to look at
 
@@ -14,30 +14,37 @@ The user wants to capture the work in this conversation as a reusable scheduled 
 - Any recurring or time-based intent ("every morning", "weekly", "after deploys")
 - The single most reusable shape of the task — not a literal replay
 
-## Output format
+## What to call
 
-Respond with a **short** preamble (1-2 sentences max) then a single fenced code block tagged `ntrp-proposal` containing ONLY valid JSON with these fields:
+Call `create_automation` exactly once with:
 
-````
-```ntrp-proposal
-{
-  "kind": "automation",
-  "name": "<short imperative phrase, max 60 chars>",
-  "prompt": "<the prompt the agent should run on each tick — full, self-contained, no references to 'this conversation'>",
-  "schedule": "<one of: 'once' | 'every N minutes/hours/days' | 'every weekday HH:MM' | 'daily HH:MM' | 'weekly DAY HH:MM' — be specific>",
-  "rationale": "<2-3 lines citing specific evidence from THIS session: which tools, what output, what pattern made you suggest this. Be concrete, not generic.>"
-}
-```
-````
+- **`name`**: a short imperative phrase, max 60 chars. Example: `"Morning standup digest"`.
+- **`description`**: the full prompt the automation should run on each tick. Stand-alone — the future agent has no memory of this conversation. Be explicit about what to do, which sources to check, what output to produce.
+- **`trigger_type`**: usually `"time"`. Use `"event"` only if there's a clear event hook (e.g. calendar approaching).
+- **For schedule-style time triggers** (specific clock time):
+  - `at`: `"HH:MM"` (24h)
+  - `days`: `"daily"`, `"weekdays"`, or comma-separated like `"mon,wed,fri"`
+- **For interval-style time triggers** (every N units):
+  - `every`: combinations of `d`/`h`/`m`, e.g. `"30m"`, `"2h"`, `"1d"`, `"2d12h"`, `"1h30m"`
+  - optional `days` to limit which weekdays it runs on
+  - optional `start` / `end` (`"HH:MM"`) to restrict to a daily window
+- **`writable`** (default false): set true ONLY if the automation needs to write to memory or connected services.
+
+## Before calling — say what and why
+
+Before the tool call, write 2-3 sentences in plain prose explaining:
+1. **What** automation you're proposing (the gist, not the full prompt — that's in the args).
+2. **Why** — cite specific evidence from THIS session: which tools you ran, which files, what pattern made you suggest this. Be concrete, not generic.
+
+The user reads your prose first, then sees the structured args in the approval card.
 
 ## Rules
 
 - **One proposal only.** Pick the highest-value one if there are multiple candidates.
-- **Grounded.** `rationale` must reference what actually happened in this session — specific tool calls, file paths, results. No generic "users often want to…" boilerplate.
-- **Schedule must be specific.** If the user mentioned a time, use it. If they didn't but the task feels recurring, infer a sensible cadence. If it's clearly one-off, use `"once"`.
-- **`prompt` is what runs without you.** It must stand alone. The future agent has no memory of this conversation. Be explicit about what to do, which sources to check, what to output.
-- **No code outside the JSON block.** No markdown formatting inside JSON values. Escape newlines as `\n`.
+- **Grounded.** Your prose rationale MUST reference what actually happened in this session — specific tool calls, results, decisions. No generic "users often want to…" boilerplate.
+- **`description` is what runs without you.** It must stand alone. Be explicit.
+- **Schedule must be specific.** Don't propose `"every hour"` if the work is clearly daily; don't propose `"daily"` if it's clearly a one-off.
 
 ## If there's nothing reusable
 
-If the conversation isn't a good automation candidate (one-off Q&A, exploratory chat with no shape), say so plainly in 1-2 sentences and skip the JSON block. Don't manufacture a proposal.
+If the conversation isn't a good automation candidate (one-off Q&A, exploratory chat with no shape), say so plainly in 1-2 sentences and DO NOT call `create_automation`. Don't manufacture a proposal.

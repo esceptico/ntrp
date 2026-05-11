@@ -163,15 +163,26 @@ async def approve_create_automation(execution: ToolExecution, args: CreateAutoma
     except ValueError:
         return None
 
-    preview = f"Trigger: {_triggers_label([trigger])}"
+    # Multi-line preview the frontend can render as a structured card.
+    # Order is intentional: name first, then schedule (what people scan
+    # for), then writable warning, then the full prompt body so reviewers
+    # can read what'll actually run without expanding anything.
+    lines: list[str] = [f"Name: {args.name}", f"Schedule: {_triggers_label([trigger])}"]
     if next_run:
-        preview += f"\nNext run: {next_run.strftime('%Y-%m-%d %H:%M')}"
+        lines.append(f"Next run: {next_run.strftime('%Y-%m-%d %H:%M')}")
     if args.model:
-        preview += f"\nModel: {args.model}"
+        lines.append(f"Model: {args.model}")
     if args.writable:
-        preview += "\nWritable: yes"
+        lines.append("Writable: yes (can write to memory + services)")
+    lines.append("")
+    lines.append("Prompt:")
+    lines.append(args.description)
 
-    return ApprovalInfo(description=args.description, preview=preview, diff=None)
+    return ApprovalInfo(
+        description=f"Create automation: {args.name}",
+        preview="\n".join(lines),
+        diff=None,
+    )
 
 
 async def create_automation(execution: ToolExecution, args: CreateAutomationInput) -> ToolResult:

@@ -11,7 +11,6 @@ import json from "highlight.js/lib/languages/json";
 import python from "highlight.js/lib/languages/python";
 import typescript from "highlight.js/lib/languages/typescript";
 import { Mermaid } from "./Mermaid";
-import { ProposalCard, parseProposal } from "./ProposalCard";
 import { ICON } from "../lib/icons";
 
 const HL_LANGUAGES = {
@@ -99,16 +98,6 @@ function PreBlock({ children }: { children?: ReactNode }) {
 
   if (lang === "mermaid" && rawText.trim()) {
     return <Mermaid code={rawText} />;
-  }
-
-  // Structured proposal blocks emitted by the propose-automation /
-  // propose-skill skills. The fence content is JSON; we parse it and
-  // render an interactive card. If parsing fails (malformed JSON from
-  // the model) we fall through to the standard code-block rendering so
-  // the user still sees the raw output rather than silent disappearance.
-  if (lang === "ntrp-proposal" && rawText.trim()) {
-    const proposal = parseProposal(rawText);
-    if (proposal) return <ProposalCard proposal={proposal} />;
   }
 
   return (

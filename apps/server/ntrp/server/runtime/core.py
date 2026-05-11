@@ -127,6 +127,8 @@ class Runtime:
             services["session"] = self.session_service
         if self.skill_registry:
             services["skill_registry"] = self.skill_registry
+        if self.skill_service:
+            services["skill_service"] = self.skill_service
         if self.mcp_manager and self.mcp_manager.tools:
             services["mcp"] = self.mcp_manager
         if self.notifier_service and self.notifier_service.notifiers:

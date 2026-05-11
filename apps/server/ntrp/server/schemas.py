@@ -406,12 +406,3 @@ class AddCustomModelRequest(BaseModel):
 
 class InstallRequest(BaseModel):
     source: str = Field(..., min_length=5, description="GitHub path: owner/repo/path/to/skill")
-
-
-class CreateSkillRequest(BaseModel):
-    """Inline skill creation — used by the propose-skill flow after the user
-    accepts a card. Writes a single SKILL.md under ~/.ntrp/skills/<name>/.
-    """
-    name: str = Field(..., min_length=1, max_length=48)
-    description: str = Field(..., min_length=1, max_length=1024)
-    body: str = Field(..., min_length=1, max_length=100_000)

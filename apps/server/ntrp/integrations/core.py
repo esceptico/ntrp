@@ -6,7 +6,7 @@ belong to an Integration, including the ones ntrp ships out of the box.
 """
 
 from ntrp.integrations.base import Integration
-from ntrp.skills.tool import use_skill_tool
+from ntrp.skills.tool import create_skill_tool, use_skill_tool
 from ntrp.tools.automation import (
     create_automation_tool,
     delete_automation_tool,
@@ -100,7 +100,10 @@ DIRECTIVES = Integration(
 SKILLS = Integration(
     id="_skills",
     label="Skills",
-    tools={"use_skill": use_skill_tool},
+    tools={
+        "use_skill": use_skill_tool,
+        "create_skill": create_skill_tool,
+    },
 )
 
 SESSIONS = Integration(

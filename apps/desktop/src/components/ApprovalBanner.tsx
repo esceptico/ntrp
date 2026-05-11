@@ -26,10 +26,56 @@ function snippet(text: string, max = 160): string {
   return "";
 }
 
+/** Legacy single-line fallback used when the preview isn't structured
+ *  (i.e. no `Key: value` rows). Keeps the old compact rendering for tools
+ *  like bash that just pass a one-liner. */
 function approvalSnippet(approval: ApprovalState): string {
   if (approval.preview) return snippet(approval.preview);
   if (approval.diff) return snippet(approval.diff);
   return "";
+}
+
+/** Detect a "structured preview" the backend wrote as `Key: value` rows
+ *  optionally followed by a free-text body (separated by a blank line).
+ *  Used by create_automation / create_skill so the approval card can
+ *  render headers + a prominent body section rather than a single
+ *  truncated line. */
+interface StructuredPreview {
+  fields: { key: string; value: string }[];
+  body: { label: string; text: string } | null;
+}
+
+function parseStructuredPreview(text: string): StructuredPreview | null {
+  if (!text) return null;
+  const lines = text.split("\n");
+  const fields: { key: string; value: string }[] = [];
+  let cursor = 0;
+  // Accumulate leading `Key: value` lines. Stop on a blank line, which
+  // separates the field block from any body that follows.
+  while (cursor < lines.length) {
+    const line = lines[cursor];
+    if (!line.trim()) break;
+    const m = line.match(/^([A-Z][A-Za-z _-]{0,30}):\s*(.*)$/);
+    if (!m) break;
+    fields.push({ key: m[1].trim(), value: m[2].trim() });
+    cursor++;
+  }
+  if (fields.length === 0) return null;
+  // Skip the blank separator(s) and look for an optional body — a
+  // single label line ("Prompt:" / "Body:" / ...) followed by the
+  // remaining content as one block.
+  while (cursor < lines.length && !lines[cursor].trim()) cursor++;
+  let body: StructuredPreview["body"] = null;
+  if (cursor < lines.length) {
+    const labelMatch = lines[cursor].match(/^([A-Z][A-Za-z _-]{0,30}):\s*$/);
+    if (labelMatch && cursor + 1 < lines.length) {
+      body = { label: labelMatch[1], text: lines.slice(cursor + 1).join("\n").trim() };
+    } else {
+      // No label — treat everything that's left as a generic body.
+      body = { label: "Detail", text: lines.slice(cursor).join("\n").trim() };
+    }
+  }
+  return { fields, body };
 }
 
 /** Card-deck stack of approvals. Front card is full-size + interactive,
@@ -60,6 +106,12 @@ export function ApprovalBanner() {
   }, [approvals, reviewingId]);
 
   if (approvals.length === 0) return null;
+  // Hide the banner deck entirely while the Review modal is open. The
+  // modal carries the same toolName + full preview/diff, so showing the
+  // banner stack behind it just creates a confusing double-surface (and
+  // historically clashed with the modal's z-index, since each banner
+  // card uses inline z-index up to 100 while the modal sits at z-50).
+  if (reviewingId) return null;
 
   return (
     <div className="px-7 pt-2 pb-3">
@@ -108,6 +160,18 @@ export function ApprovalBanner() {
   );
 }
 
+/** One row inside the rich approval card. The value is monospace because
+ *  almost every field that lands here is a path, an interval, a name, a
+ *  schedule label — all things where character alignment helps reading. */
+function FieldRow({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <dt className="text-faint">{label}</dt>
+      <dd className="m-0 font-mono text-ink-soft break-words">{value}</dd>
+    </>
+  );
+}
+
 function ApprovalCard({
   approval,
   interactive,
@@ -121,8 +185,13 @@ function ApprovalCard({
 }) {
   const setReviewing = useStore((s) => s.setReviewingApproval);
   const { toolId, toolName, path, diff, preview } = approval;
-  const hasReviewable = !!(diff || preview);
-  const previewLine = approvalSnippet(approval);
+  const structured = preview ? parseStructuredPreview(preview) : null;
+  const previewLine = !structured ? approvalSnippet(approval) : "";
+  // Diff opens the modal. So does a structured preview with a long body
+  // — keeps the card compact while still letting the user see the full
+  // content via Review.
+  const longBody = structured?.body && structured.body.text.length > 480;
+  const hasReviewable = !!(diff || longBody);
   const showBulk = isFront && totalPending > 1;
 
   return (
@@ -132,7 +201,9 @@ function ApprovalCard({
     >
       <header className="px-4 pt-3 pb-2 flex items-baseline gap-2">
         <h3 className="m-0 text-md font-medium text-ink tracking-[-0.005em]">
-          Approve <span className="font-mono">{toolName}</span>?
+          {structured
+            ? "Approve action"
+            : <>Approve <span className="font-mono">{toolName}</span>?</>}
         </h3>
         {showBulk && (
           <span className="ml-auto shrink-0 text-xs text-faint tabular-nums">
@@ -141,21 +212,48 @@ function ApprovalCard({
         )}
       </header>
 
-      {(path || previewLine) && (
-        <dl className="px-4 pb-3 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-1 text-sm">
-          {path && (
-            <>
-              <dt className="text-faint">Target</dt>
-              <dd className="m-0 font-mono text-ink-soft truncate">{path}</dd>
-            </>
+      {structured ? (
+        // Rich path: render Key/Value fields as a definition list, plus
+        // an optional body section (the automation prompt or skill
+        // body) below. Body is clamped to ~6 lines on the card; Review
+        // opens the full content.
+        <div className="px-4 pb-3 grid gap-2.5">
+          <div className="text-xs font-mono text-faint">{toolName}</div>
+          <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-5 gap-y-1 text-sm">
+            {structured.fields.map((f) => (
+              <FieldRow key={f.key} label={f.key} value={f.value} />
+            ))}
+          </dl>
+          {structured.body && structured.body.text && (
+            <div className="grid gap-1">
+              <div className="text-xs font-medium uppercase tracking-[0.06em] text-faint">
+                {structured.body.label}
+              </div>
+              <pre
+                className="m-0 font-mono text-xs text-ink-soft whitespace-pre-wrap break-words rounded-md border border-line-soft bg-bg-main/30 p-2 max-h-[8.4em] overflow-hidden"
+              >
+                {structured.body.text}
+              </pre>
+            </div>
           )}
-          {previewLine && (
-            <>
-              <dt className="text-faint">Content</dt>
-              <dd className="m-0 font-mono text-ink-soft truncate">{previewLine}</dd>
-            </>
-          )}
-        </dl>
+        </div>
+      ) : (
+        (path || previewLine) && (
+          <dl className="px-4 pb-3 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-1 text-sm">
+            {path && (
+              <>
+                <dt className="text-faint">Target</dt>
+                <dd className="m-0 font-mono text-ink-soft truncate">{path}</dd>
+              </>
+            )}
+            {previewLine && (
+              <>
+                <dt className="text-faint">Content</dt>
+                <dd className="m-0 font-mono text-ink-soft truncate">{previewLine}</dd>
+              </>
+            )}
+          </dl>
+        )
       )}
 
       <footer className="flex flex-wrap items-center gap-2 px-3 py-2 bg-surface-soft/35">

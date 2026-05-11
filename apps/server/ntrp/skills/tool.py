@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 
 from ntrp.tools.core import ToolResult, tool
 from ntrp.tools.core.context import ToolExecution
+from ntrp.tools.core.types import ApprovalInfo
 
 
 class UseSkillInput(BaseModel):
@@ -43,4 +44,76 @@ use_skill_tool = tool(
     input_model=UseSkillInput,
     requires={"skill_registry"},
     execute=use_skill,
+)
+
+
+# --- Create skill ---
+
+CREATE_SKILL_DESCRIPTION = (
+    "Create a new global skill at ~/.ntrp/skills/<name>/SKILL.md from inline "
+    "content. The skill becomes immediately available via /<name> in chat "
+    "and shows up in the slash picker. Use after the propose-skill flow "
+    "when the user wants to capture this conversation as a reusable "
+    "procedure. Requires approval — the user sees the full body before save."
+)
+
+
+class CreateSkillInput(BaseModel):
+    name: str = Field(
+        min_length=1,
+        max_length=48,
+        description="Lowercase hyphenated name, e.g. 'refactor-component'. Must start with a letter; letters/digits/hyphens only.",
+    )
+    description: str = Field(
+        min_length=1,
+        max_length=1024,
+        description="One-line description: what the skill does AND when to use it. This is what the agent reads to decide whether to activate the skill.",
+    )
+    body: str = Field(
+        min_length=1,
+        max_length=100_000,
+        description="The SKILL.md body, after the frontmatter (the system adds frontmatter from name + description). Markdown. Start with a # heading.",
+    )
+
+
+async def approve_create_skill(
+    execution: ToolExecution, args: CreateSkillInput
+) -> ApprovalInfo | None:
+    # The approval card surfaces the name, description, and a body excerpt
+    # so the user can decide without opening anything else.
+    preview = f"Name: {args.name}\nDescription: {args.description}\nBody:\n{args.body}"
+    return ApprovalInfo(
+        description=f"Create skill: {args.name}",
+        preview=preview,
+        diff=None,
+    )
+
+
+async def create_skill(execution: ToolExecution, args: CreateSkillInput) -> ToolResult:
+    svc = execution.ctx.services.get("skill_service")
+    if svc is None:
+        return ToolResult(
+            content="Skill service unavailable.", preview="Unavailable", is_error=True
+        )
+    try:
+        meta = svc.create(args.name, args.description, args.body)
+    except ValueError as e:
+        return ToolResult(content=f"Error: {e}", preview="Failed", is_error=True)
+    except FileExistsError as e:
+        return ToolResult(content=f"Conflict: {e}", preview="Already exists", is_error=True)
+
+    return ToolResult(
+        content=f"Created skill '{meta.name}' at {meta.path}/SKILL.md. Available as /{meta.name}.",
+        preview=f"Created /{meta.name}",
+    )
+
+
+create_skill_tool = tool(
+    display_name="CreateSkill",
+    description=CREATE_SKILL_DESCRIPTION,
+    input_model=CreateSkillInput,
+    mutates=True,
+    requires={"skill_service"},
+    approval=approve_create_skill,
+    execute=create_skill,
 )
