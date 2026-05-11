@@ -16,6 +16,7 @@ import { Demo as TraceDemo } from "./trace/Demo";
 import { useStore } from "../store";
 import { useEvents } from "../hooks/useEvents";
 import { useActiveRuns } from "../hooks/useActiveRuns";
+import { useAutomationEvents } from "../hooks/useAutomationEvents";
 import { useThemeEffect } from "../lib/theme";
 import { bootstrap, createSession } from "../actions";
 
@@ -103,6 +104,7 @@ export function App() {
 
   useEvents(hash === "#trace-demo" ? null : currentSessionId);
   useActiveRuns();
+  useAutomationEvents();
 
   if (hash === "#trace-demo") {
     return <TraceDemo />;

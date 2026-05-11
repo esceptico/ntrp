@@ -262,6 +262,9 @@ interface State {
   serverModels: ModelsResponse | null;
   automations: Automation[] | null;
   automationsOpen: boolean;
+  /** Live "current step" string per running automation, fed by the
+   *  `/automations/events` SSE stream. Cleared on automation_finished. */
+  automationStatuses: Record<string, string>;
   archiveOpen: boolean;
   archivedSessions: ArchivedSession[] | null;
   compacting: boolean;
@@ -347,6 +350,8 @@ interface Actions {
   setAutomations: (automations: Automation[] | null) => void;
   openAutomations: () => void;
   closeAutomations: () => void;
+  setAutomationStatus: (taskId: string, status: string) => void;
+  clearAutomationStatus: (taskId: string) => void;
   setArchivedSessions: (sessions: ArchivedSession[] | null) => void;
   openArchive: () => void;
   closeArchive: () => void;
@@ -448,6 +453,7 @@ export const useStore = create<State & Actions>((set) => ({
   serverModels: null,
   automations: null,
   automationsOpen: false,
+  automationStatuses: {},
   archiveOpen: false,
   archivedSessions: null,
   compacting: false,
@@ -798,6 +804,15 @@ export const useStore = create<State & Actions>((set) => ({
   setAutomations: (automations) => set({ automations }),
   openAutomations: () => set({ automationsOpen: true }),
   closeAutomations: () => set({ automationsOpen: false }),
+  setAutomationStatus: (taskId, status) =>
+    set((s) => ({ automationStatuses: { ...s.automationStatuses, [taskId]: status } })),
+  clearAutomationStatus: (taskId) =>
+    set((s) => {
+      if (!(taskId in s.automationStatuses)) return s;
+      const next = { ...s.automationStatuses };
+      delete next[taskId];
+      return { automationStatuses: next };
+    }),
   setArchivedSessions: (archivedSessions) => set({ archivedSessions }),
   openArchive: () => set({ archiveOpen: true }),
   closeArchive: () => set({ archiveOpen: false }),

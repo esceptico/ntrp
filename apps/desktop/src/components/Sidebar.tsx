@@ -6,7 +6,8 @@ import clsx from "clsx";
 import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
 import { useStore } from "../store";
 import { apiWithConfig } from "../api";
-import { archiveSession, createSession, renameSession, switchSession } from "../actions";
+import { archiveSession, createSession, fetchAutomations, renameSession, switchSession } from "../actions";
+import { isInternalAutomation } from "../lib/automationFilters";
 import { ICON } from "../lib/icons";
 
 function formatAge(value: string): string {
@@ -629,10 +630,163 @@ function ContextItem({
   );
 }
 
+/** Background poll for automations so the sidebar card stays fresh.
+ *  There's no SSE for automation start/stop today, so we ask every 20s.
+ *  Cheap GET, only when the app is foregrounded — pause when the tab is
+ *  hidden so a background instance isn't hitting the backend on a timer. */
+function useAutomationsPoll(): void {
+  useEffect(() => {
+    let cancelled = false;
+    const tick = () => { if (!cancelled) void fetchAutomations(); };
+    tick();
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") tick();
+    }, 20_000);
+    const onVis = () => { if (document.visibilityState === "visible") tick(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+}
+
+function formatElapsed(since: string): string {
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const remSec = seconds % 60;
+  if (mins < 60) return remSec === 0 ? `${mins}m` : `${mins}m ${remSec}s`;
+  const hrs = Math.floor(mins / 60);
+  return `${hrs}h ${mins % 60}m`;
+}
+
+/** Card pinned above the bottom Settings nav. Shows currently running
+ *  user automations (internal/builtin ones are background plumbing and
+ *  would just be noise here). Whole card opens the Automations modal so
+ *  the user can stop/inspect from there.
+ *
+ *  Per-row live status comes from the `/automations/events` SSE stream
+ *  (see `useAutomationEvents`) — the backend pushes a short string per
+ *  tool call (e.g. "read_file: tasks.md", "bash_exec...") so the user
+ *  can see what an automation is currently doing without opening it. */
+function OngoingAutomations() {
+  const openAutomations = useStore((s) => s.openAutomations);
+  const automations = useStore((s) => s.automations);
+  const automationStatuses = useStore((s) => s.automationStatuses);
+
+  const running = useMemo(
+    () =>
+      (automations ?? []).filter(
+        (a) => a.running_since != null && !isInternalAutomation(a),
+      ),
+    [automations],
+  );
+
+  // Re-render every second while a run is active so the elapsed time
+  // display ticks forward. Stops when nothing is running to avoid
+  // burning the main thread on idle.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (running.length === 0) return;
+    const id = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [running.length]);
+
+  return (
+    <AnimatePresence initial={false}>
+      {running.length > 0 && (
+        <motion.div
+          key="ongoing"
+          initial={{ opacity: 0, y: 8, height: 0 }}
+          animate={{ opacity: 1, y: 0, height: "auto" }}
+          exit={{ opacity: 0, y: 8, height: 0 }}
+          transition={{ type: "spring", stiffness: 350, damping: 40, mass: 0.8 }}
+          style={{ overflow: "hidden" }}
+          className="px-2.5"
+        >
+          <button
+            type="button"
+            onClick={openAutomations}
+            aria-label={`${running.length} automation${running.length === 1 ? "" : "s"} running — open Automations`}
+            className="w-full grid gap-1.5 rounded-lg border border-line-soft bg-surface-soft/40 hover:bg-surface-soft/70 px-2.5 py-2 text-left transition-colors"
+          >
+            <div className="flex items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
+              <span
+                className="thinking-dots grid grid-flow-col gap-[2px] place-items-center text-accent"
+                aria-hidden
+              >
+                <span /><span /><span />
+              </span>
+              <span>
+                {running.length} running
+              </span>
+            </div>
+            <div className="grid gap-1">
+              {running.slice(0, 2).map((a) => (
+                <OngoingAutomationRow
+                  key={a.task_id}
+                  name={a.name}
+                  runningSince={a.running_since!}
+                  status={automationStatuses[a.task_id]}
+                />
+              ))}
+              {running.length > 2 && (
+                <div className="text-2xs text-faint">+{running.length - 2} more</div>
+              )}
+            </div>
+          </button>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/** A single row inside the card. The status string is fed from the SSE
+ *  stream and updates as the agent moves from one tool call to the next.
+ *  Wrapped in a `motion.div layout` so when the status text appears/
+ *  changes the row height adjusts smoothly. */
+function OngoingAutomationRow({
+  name,
+  runningSince,
+  status,
+}: {
+  name: string;
+  runningSince: string;
+  status: string | undefined;
+}) {
+  return (
+    <motion.div layout="position" className="grid gap-0.5">
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="truncate text-ink-soft">{name}</span>
+        <span className="shrink-0 tabular-nums text-faint">
+          {formatElapsed(runningSince)}
+        </span>
+      </div>
+      <AnimatePresence mode="popLayout" initial={false}>
+        {status && (
+          <motion.div
+            key={status}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.18, ease: EASE_EMPHASIZED }}
+            className="font-mono text-2xs text-faint truncate"
+          >
+            {status}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 export function Sidebar() {
   const openSettings = useStore((s) => s.openSettings);
   const openAutomations = useStore((s) => s.openAutomations);
   const openMemory = useStore((s) => s.openMemory);
+  useAutomationsPoll();
 
   return (
     <aside className="sidebar flex flex-col h-full">
@@ -655,6 +809,7 @@ export function Sidebar() {
         />
       </nav>
       <SessionList />
+      <OngoingAutomations />
       <nav className="flex flex-col gap-px px-2.5 pt-1.5 pb-3">
         <NavRow
           icon={<SettingsIcon size={ICON.LG} strokeWidth={1.7} />}

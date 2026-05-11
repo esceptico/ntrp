@@ -421,7 +421,7 @@ export function Composer() {
           <button
             type="button"
             onClick={() => setSkipApprovals(!skipApprovals)}
-            title={skipApprovals ? "Auto-approving every tool call. Click to require approval." : "Approvals required for sensitive tools. Click to enable YOLO."}
+            title={skipApprovals ? "Auto-approving every tool call. Click to require approval." : "Approvals required for sensitive tools. Click to enable Auto mode."}
             className={clsx(
               "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs font-medium tracking-[-0.005em] transition-colors select-none",
               skipApprovals
@@ -432,7 +432,7 @@ export function Composer() {
             {skipApprovals ? (
               <>
                 <ShieldOff size={ICON.SM} strokeWidth={2} />
-                YOLO
+                Auto
               </>
             ) : (
               <>
