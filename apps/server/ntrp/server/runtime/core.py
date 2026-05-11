@@ -119,6 +119,12 @@ class Runtime:
         services.update(self.knowledge.tool_services())
         if self.automation_service:
             services["automation"] = self.automation_service
+        if self.session_service:
+            # Exposed so tools (read-only `list_recent_sessions` / `read_session`)
+            # can query session history. Used by the propose-* skills when
+            # running inside a scheduled automation that needs cross-session
+            # pattern detection.
+            services["session"] = self.session_service
         if self.skill_registry:
             services["skill_registry"] = self.skill_registry
         if self.mcp_manager and self.mcp_manager.tools:

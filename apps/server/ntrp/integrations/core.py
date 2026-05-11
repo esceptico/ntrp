@@ -35,6 +35,7 @@ from ntrp.tools.files import (
 from ntrp.tools.memory import forget_tool, recall_tool, remember_tool
 from ntrp.tools.notify import notify_tool
 from ntrp.tools.research import research_tool
+from ntrp.tools.sessions import list_recent_sessions_tool, read_session_tool
 from ntrp.tools.time import current_time_tool
 
 SYSTEM = Integration(
@@ -102,4 +103,13 @@ SKILLS = Integration(
     tools={"use_skill": use_skill_tool},
 )
 
-CORE_INTEGRATIONS = [SYSTEM, MEMORY_TOOLS, AUTOMATION, BACKGROUND, NOTIFICATIONS, DIRECTIVES, SKILLS]
+SESSIONS = Integration(
+    id="_sessions",
+    label="Sessions",
+    tools={
+        "list_recent_sessions": list_recent_sessions_tool,
+        "read_session": read_session_tool,
+    },
+)
+
+CORE_INTEGRATIONS = [SYSTEM, MEMORY_TOOLS, AUTOMATION, BACKGROUND, NOTIFICATIONS, DIRECTIVES, SKILLS, SESSIONS]
