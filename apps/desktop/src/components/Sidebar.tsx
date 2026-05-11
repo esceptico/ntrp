@@ -322,7 +322,7 @@ function SessionList() {
       {/* Header bar: "Recents" label on the left + search/archive icon
           buttons on the right. Search input takes over the whole bar
           when active. */}
-      <div className="flex items-center gap-1 px-[18px] pt-3 pb-1 h-[28px]">
+      <div className="flex items-center gap-1 px-[18px] pt-2 pb-1 h-[26px]">
         {searchActive ? (
           <SessionSearch
             value={query}
@@ -359,7 +359,7 @@ function SessionList() {
         ) : filtered.length === 0 ? (
           <div className="px-3 py-3 text-[13.5px] italic text-faint">No matches.</div>
         ) : (
-          bucketByTime(filtered).map((bucket, bucketIdx) => {
+          bucketByTime(filtered).map((bucket) => {
             const isCollapsed = collapsedBuckets.has(bucket.label);
             return (
               <div key={bucket.label}>
@@ -368,10 +368,7 @@ function SessionList() {
                   onClick={() => toggleBucket(bucket.label)}
                   aria-expanded={!isCollapsed}
                   className={clsx(
-                    "sticky top-0 z-10 w-full flex items-center gap-1 px-[18px] pb-1 text-[11.5px] font-medium uppercase tracking-[0.08em] text-faint hover:text-muted bg-bg-main transition-colors cursor-pointer select-none",
-                    // First bucket flush under the action bar; later
-                    // buckets get a real gap so groups read as distinct.
-                    bucketIdx === 0 ? "pt-1" : "pt-4",
+                    "sticky top-0 z-10 w-full flex items-center gap-1 px-[18px] pt-1.5 pb-1 text-[11.5px] font-medium uppercase tracking-[0.08em] text-faint hover:text-muted bg-bg-main transition-colors cursor-pointer select-none",
                   )}
                 >
                   <ChevronDown
