@@ -24,3 +24,7 @@ evals/
 node_modules/
 experiments/
 .DS_Store
+
+# Electron build output
+apps/desktop/release/
+apps/desktop/dist/
