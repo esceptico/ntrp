@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* KaTeX styles for math rendering. Loaded once at app start; the
+   bundled minified CSS is ~25KB gzip and ships its own font subsets. */
+@import "katex/dist/katex.min.css";
 
 /* The `dark:` variant matches our `:root.dark` toggle (set in lib/theme.ts).
    Lets components write `dark:bg-surface` / `dark:text-ink` inline without
@@ -33,23 +36,28 @@
   --text-xl: 19.5px;
   --text-2xl: 21.5px;
 
-  --color-bg: #ebebeb;
+  /* Light-mode neutrals. Sidebar and chat share the same white
+     surface — no tonal step — and rely on a hairline divider for the
+     seam (.sidebar gets `border-right` below). Slight gray tints
+     remain for hover states (surface-soft), code blocks, and other
+     elevated surfaces so hierarchy still reads. */
+  --color-bg: #ffffff;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-soft: #f3f3f3;
-  --color-surface-sunken: #ececec;
-  --color-code-bg: #f4f4f4;
+  --color-surface-soft: #f3f3f2;
+  --color-surface-sunken: #ebebea;
+  --color-code-bg: #f5f5f4;
 
-  --color-line: #e3e3e3;
-  --color-line-soft: #ededed;
-  --color-line-strong: #d4d4d4;
+  --color-line: #e8e8e7;
+  --color-line-soft: #f0f0ef;
+  --color-line-strong: #d6d6d4;
 
   --color-ink: #1a1a1a;
   --color-ink-soft: #3a3a3a;
   --color-on-ink: #f5f5f5;
-  --color-muted: #7a7a7a;
-  --color-faint: #a6a6a6;
-  --color-whisper: #c5c5c5;
+  --color-muted: #6e6e6e;
+  --color-faint: #9d9d9d;
+  --color-whisper: #c0c0c0;
 
   --color-accent: #b85c1f;
   --color-accent-soft: rgba(184, 92, 31, 0.1);
@@ -159,6 +167,45 @@ body {
   font-size: var(--text-base);
 }
 
+/* Quick-capture window: hosted in a frameless transparent BrowserWindow.
+   Clear the main-window chrome so the floating composer card is the
+   only visible surface, and make the margin around the card draggable
+   so the user can reposition by grabbing it. */
+body.quick-capture-mode {
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+  -webkit-app-region: drag;
+}
+body.quick-capture-mode input,
+body.quick-capture-mode textarea,
+body.quick-capture-mode button,
+body.quick-capture-mode .quick-capture-card {
+  -webkit-app-region: no-drag;
+}
+
+/* The visible "card" — solid surface, the only thing the user sees.
+   No outer frame: the BrowserWindow itself is fully transparent (no
+   vibrancy), and this card is what floats over the desktop. The shadow
+   below gives it the lifted-card feel; the hairline ring sharpens its
+   edge against busy wallpapers. */
+.quick-capture-card {
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 0.5px color-mix(in oklab, var(--color-ink) 10%, transparent),
+    0 14px 38px -10px rgba(0, 0, 0, 0.32),
+    0 2px 8px -2px rgba(0, 0, 0, 0.18);
+  transition: box-shadow 180ms ease;
+}
+.quick-capture-card:focus-within {
+  /* Subtle accent ring on focus — signals "ready, type here" without
+     screaming for attention. */
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--color-accent) 30%, transparent),
+    0 14px 38px -10px rgba(0, 0, 0, 0.36),
+    0 2px 8px -2px rgba(0, 0, 0, 0.2);
+}
+
 #app {
   position: relative;
   width: 100vw;
@@ -203,15 +250,17 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 
 /* ─── Drag regions ─────────────────────────────────────────── */
-.sidebar { -webkit-app-region: drag; }
+.sidebar {
+  -webkit-app-region: drag;
+  /* Hairline seam between the sidebar and chat. Both surfaces are the
+     same white in light mode (Claude Code / ChatGPT pattern), so a
+     visible divider is what carries the layout split. */
+  border-right: 1px solid var(--color-line-soft);
+}
 .sidebar > *:not(.drag-spacer) { -webkit-app-region: no-drag; }
 
 .chat-header { -webkit-app-region: drag; }
 .chat-header > * { -webkit-app-region: no-drag; }
-
-/* The seam between sidebar and chat is now the tonal step between
-   --color-bg-main (sidebar) and --color-bg (chat). No hairline needed —
-   adding one on top of a tonal step reads as visual noise. */
 
 /* Anything portaled above the main layout (modals, viewers) must
    explicitly opt out of the drag region — the sidebar / chat-header
@@ -681,21 +730,21 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    mint accent reserved for live agent state. Light variant uses a
    deeper teal so the accent meets AA contrast on white surfaces. */
 :root.palette-graphite {
-  --color-bg: #f3f4f6;
+  --color-bg: #ffffff;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-soft: #ebecee;
-  --color-surface-sunken: #dee0e3;
-  --color-code-bg: #f0f1f3;
-  --color-line: #e2e3e6;
-  --color-line-soft: #ecedef;
-  --color-line-strong: #c8cacf;
+  --color-surface-soft: #f1f2f4;
+  --color-surface-sunken: #e6e8eb;
+  --color-code-bg: #f4f5f7;
+  --color-line: #e6e8ec;
+  --color-line-soft: #f0f1f4;
+  --color-line-strong: #cdcfd4;
   --color-ink: #101112;
   --color-ink-soft: #2a2c2f;
   --color-on-ink: #ffffff;
-  --color-muted: #6b6e74;
-  --color-faint: #93969c;
-  --color-whisper: #b8babf;
+  --color-muted: #5f6268;
+  --color-faint: #8b8e93;
+  --color-whisper: #b6b8bd;
   --color-accent: #0f8d76;
   --color-accent-soft: rgba(15, 141, 118, 0.10);
   --color-accent-strong: #0a6b59;
@@ -723,10 +772,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 /* Vercel — Geist tokens */
 :root.palette-vercel {
-  --color-bg: #fafafa;
+  --color-bg: #ffffff;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-soft: #f5f5f5;
+  --color-surface-soft: #f4f4f4;
   --color-surface-sunken: #ebebeb;
   --color-line: #ebebeb;
   --color-line-soft: #f2f2f2;
@@ -761,19 +810,19 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 /* Raycast — only the wordmark red is canonical; neutrals approximated. */
 :root.palette-raycast {
-  --color-bg: #f4f4f4;
+  --color-bg: #ffffff;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-soft: #f4f4f4;
+  --color-surface-soft: #f3f3f3;
   --color-surface-sunken: #ebebeb;
-  --color-line: #e5e5e5;
-  --color-line-soft: #efefef;
+  --color-line: #e8e8e8;
+  --color-line-soft: #f1f1f1;
   --color-line-strong: #d4d4d4;
   --color-ink: #1a1a1a;
   --color-ink-soft: #333333;
   --color-on-ink: #ffffff;
-  --color-muted: #6b6b6b;
-  --color-faint: #9b9b9b;
+  --color-muted: #5f5f5f;
+  --color-faint: #8e8e8e;
   --color-accent: #ff6363;
   --color-accent-soft: rgba(255, 99, 99, 0.12);
   --color-accent-strong: #e54848;
@@ -801,10 +850,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    (#f6f8fa) while the main chat pane stays pure white, matching how
    GitHub itself splits the navigation rail from the content. */
 :root.palette-github {
-  --color-bg: #f6f8fa;
+  --color-bg: #ffffff;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-soft: #eaeef2;
+  --color-surface-soft: #f0f3f6;
   --color-surface-sunken: #d0d7de;
   --color-line: #d1d9e0;
   --color-line-soft: #e3e6ea;
@@ -839,19 +888,19 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 /* Linear — Mercury White / Nordic Gray / Brand Indigo */
 :root.palette-linear {
-  --color-bg: #f4f5f8;
+  --color-bg: #ffffff;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-soft: #ebecf0;
-  --color-surface-sunken: #dfe1e6;
-  --color-line: #e6e6e8;
-  --color-line-soft: #eeeef0;
+  --color-surface-soft: #f1f2f5;
+  --color-surface-sunken: #e6e8eb;
+  --color-line: #e8e8eb;
+  --color-line-soft: #f0f0f3;
   --color-line-strong: #d4d4d8;
   --color-ink: #0f1011;
   --color-ink-soft: #2a2b2e;
   --color-on-ink: #ffffff;
-  --color-muted: #6b6f76;
-  --color-faint: #93969d;
+  --color-muted: #5f636a;
+  --color-faint: #8a8d94;
   --color-accent: #5e6ad2;
   --color-accent-soft: rgba(94, 106, 210, 0.12);
   --color-accent-strong: #4752b8;
@@ -877,10 +926,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 /* Notion — only black/white are canonical brand; neutrals approximated. */
 :root.palette-notion {
-  --color-bg: #f7f6f3;
+  --color-bg: #ffffff;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-soft: #f7f6f3;
+  --color-surface-soft: #f4f3f0;
   --color-surface-sunken: #ebeae6;
   --color-line: #e9e9e7;
   --color-line-soft: #f1f1ef;
@@ -915,11 +964,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 /* Catppuccin */
 :root.palette-catppuccin {
-  --color-bg: #e6e9ef;
-  --color-bg-main: #eff1f5;
-  --color-surface: #eff1f5;
-  --color-surface-soft: #dce0e8;
-  --color-surface-sunken: #ccd0da;
+  --color-bg: #ffffff;
+  --color-bg-main: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-soft: #eff1f5;
+  --color-surface-sunken: #e6e9ef;
   --color-line: #ccd0da;
   --color-line-soft: #dce0e8;
   --color-line-strong: #acb0be;

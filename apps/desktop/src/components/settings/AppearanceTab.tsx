@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
-import { ArrowUp, Check, ChevronDown, Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, Keyboard, Monitor, Moon, RotateCcw, Sun, type LucideIcon } from "lucide-react";
 import {
+  DEFAULT_QUICK_CAPTURE_SHORTCUT,
   useStore,
   type PaletteId,
   type ThemeChoice,
@@ -10,6 +11,7 @@ import {
   type ThinkingIntensity,
 } from "../../store";
 import { PALETTES, PALETTE_BY_ID, type PaletteMeta, type PaletteSwatch } from "../../lib/palettes";
+import { eventToAccelerator, formatAccelerator } from "../../lib/accelerator";
 import { ICON } from "../../lib/icons";
 
 const VARIANTS: { id: ThinkingAnimation; label: string; hint: string }[] = [
@@ -89,6 +91,14 @@ export function AppearanceTab() {
 
       <section className="rounded-[12px] border border-line-soft bg-bg-main/30 overflow-hidden divide-y divide-line-soft/50">
         <SettingRow
+          title="Quick capture shortcut"
+          hint="Global hotkey to summon the floating composer from anywhere. Enter creates a new session and sends the message."
+          control={<ShortcutRecorder />}
+        />
+      </section>
+
+      <section className="rounded-[12px] border border-line-soft bg-bg-main/30 overflow-hidden divide-y divide-line-soft/50">
+        <SettingRow
           title="Thinking indicator"
           hint="Shown on the composer while the agent is running but has not yet streamed its first token."
           control={
@@ -111,6 +121,114 @@ export function AppearanceTab() {
           ))}
         </div>
       </section>
+    </div>
+  );
+}
+
+/** Click-to-record input for the global quick-capture shortcut.
+ *
+ *  Crucial detail: globally-registered chords are intercepted by the OS
+ *  *before* the renderer gets a keydown event. If we left the current
+ *  chord bound while recording, the user couldn't press it (or any
+ *  other already-bound chord) — the keystroke would summon the quick
+ *  window instead of reaching our handler. So we explicitly unregister
+ *  during the recording window, then re-register either the new chord
+ *  (on success) or the previous one (on cancel / failure). */
+function ShortcutRecorder() {
+  const value = useStore((s) => s.prefs.quickCaptureShortcut);
+  const setPref = useStore((s) => s.setPref);
+  const [recording, setRecording] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const ref = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!recording) return;
+
+    // Snapshot the chord at record-start so cancel/cleanup can always
+    // restore it even if the user changes the store mid-recording
+    // (shouldn't happen, but defensive).
+    const previous = value;
+    let bound = false;
+
+    // Unregister so the OS-level handler doesn't eat the chord we're
+    // trying to record.
+    void window.ntrpDesktop?.quickCapture?.setShortcut?.("");
+
+    const handler = async (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      // Escape cancels without binding anything.
+      if (event.key === "Escape") {
+        setRecording(false);
+        return;
+      }
+      const accelerator = eventToAccelerator(event);
+      if (!accelerator) return; // modifier-only or unsupported key — wait
+      const ok = await window.ntrpDesktop?.quickCapture?.setShortcut?.(accelerator);
+      if (ok) {
+        bound = true;
+        setPref("quickCaptureShortcut", accelerator);
+        setError(null);
+      } else {
+        setError(`'${formatAccelerator(accelerator)}' is already in use by another app.`);
+      }
+      setRecording(false);
+    };
+    window.addEventListener("keydown", handler, true);
+
+    return () => {
+      window.removeEventListener("keydown", handler, true);
+      // If we didn't successfully bind a new chord, put the previous
+      // one back so the user isn't left with no shortcut at all.
+      if (!bound) void window.ntrpDesktop?.quickCapture?.setShortcut?.(previous);
+    };
+    // value is captured via `previous`; intentionally only re-running
+    // when recording flips so we don't re-snapshot mid-recording.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording]);
+
+  const reset = async () => {
+    const ok = await window.ntrpDesktop?.quickCapture?.setShortcut?.(DEFAULT_QUICK_CAPTURE_SHORTCUT);
+    if (ok) {
+      setPref("quickCaptureShortcut", DEFAULT_QUICK_CAPTURE_SHORTCUT);
+      setError(null);
+    } else {
+      setError(`'${formatAccelerator(DEFAULT_QUICK_CAPTURE_SHORTCUT)}' is already in use.`);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="inline-flex items-center gap-1.5">
+        <button
+          ref={ref}
+          type="button"
+          onClick={() => setRecording((r) => !r)}
+          className={clsx(
+            "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[8px] border text-sm font-medium tracking-[-0.005em] tabular-nums transition-colors min-w-[140px] justify-center",
+            recording
+              ? "border-accent bg-accent-soft text-accent-strong"
+              : "border-line-soft bg-surface text-ink-soft hover:bg-surface-soft/60",
+          )}
+        >
+          <Keyboard size={ICON.SM} strokeWidth={1.8} className="opacity-70" />
+          {recording ? "Press chord…" : (value ? formatAccelerator(value) : "Disabled")}
+        </button>
+        {value !== DEFAULT_QUICK_CAPTURE_SHORTCUT && (
+          <button
+            type="button"
+            onClick={() => void reset()}
+            aria-label="Reset to default"
+            title="Reset to default"
+            className="grid place-items-center w-8 h-8 rounded-[8px] text-faint hover:text-ink hover:bg-surface-soft transition-colors"
+          >
+            <RotateCcw size={ICON.SM} strokeWidth={1.8} />
+          </button>
+        )}
+      </div>
+      {error && (
+        <span className="text-xs text-bad text-right max-w-[260px]">{error}</span>
+      )}
     </div>
   );
 }

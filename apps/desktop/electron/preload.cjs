@@ -24,4 +24,14 @@ contextBridge.exposeInMainWorld("ntrpDesktop", {
   clipboard: {
     writeText: text => ipcRenderer.invoke("clipboard:write", text),
   },
+  quickCapture: {
+    submit: message => ipcRenderer.invoke("quick:submit", message),
+    close: () => ipcRenderer.invoke("quick:close"),
+    setShortcut: accelerator => ipcRenderer.invoke("quick:setShortcut", accelerator),
+    onMessage: callback => {
+      const listener = (_event, message) => callback(message);
+      ipcRenderer.on("quick:message", listener);
+      return () => ipcRenderer.off("quick:message", listener);
+    },
+  },
 });

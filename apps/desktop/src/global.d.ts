@@ -44,5 +44,20 @@ interface Window {
       /** Writes text to the system clipboard via Electron's main process. */
       writeText: (text: string) => Promise<boolean>;
     };
+    quickCapture: {
+      /** Submit a message from the quick-capture window. Main process
+       *  forwards it to the main window which calls its existing
+       *  createSession + sendMessage. Resolves true on success. */
+      submit: (message: string) => Promise<boolean>;
+      /** Hide the quick-capture window without submitting. */
+      close: () => Promise<void>;
+      /** Register a new global shortcut for summoning the quick-capture
+       *  window. Pass an empty string to disable. Resolves true on
+       *  success, false if the OS refused (another app owns the chord). */
+      setShortcut: (accelerator: string) => Promise<boolean>;
+      /** Subscribe to forwarded quick-capture messages on the MAIN window.
+       *  Returns an unsubscribe function. */
+      onMessage: (callback: (message: string) => void) => () => void;
+    };
   };
 }

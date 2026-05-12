@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, ipcMain, nativeTheme, safeStorage, session, shell } = require("electron");
+const { app, BrowserWindow, clipboard, globalShortcut, ipcMain, nativeTheme, safeStorage, screen, session, shell } = require("electron");
 const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -237,8 +237,60 @@ async function streamEvents(connectionId, webContents, configInput, sessionId, a
   }
 }
 
+let mainWindow = null;
+let quickWindow = null;
+/** Currently registered accelerator string, or null if none. Tracked so
+ *  we can unregister cleanly before re-registering a new chord, and so
+ *  duplicate-set calls become no-ops. */
+let registeredShortcut = null;
+/** Whether the quick-capture window was summoned with ntrp already in
+ *  the foreground (i.e. the main window had focus). Drives the
+ *  "dismiss" path: if we came in from another app, on Esc/blur we
+ *  deactivate ntrp so focus returns to that app rather than popping
+ *  the main window forward. */
+let quickSummonedFromForeground = false;
+
+const DEFAULT_QUICK_SHORTCUT = "CommandOrControl+Shift+Space";
+
+/** Register the quick-capture global shortcut, replacing whatever was
+ *  previously bound. Pass an empty string / nullish value to clear.
+ *  Returns true on success (or successful clear), false if the OS
+ *  refused the registration (another app owns the chord). */
+function setQuickShortcut(accelerator) {
+  const target = accelerator || "";
+  // Idempotent: if the renderer pushes the same chord we already hold,
+  // skip the unregister/register dance entirely. Avoids a momentary
+  // window where the chord isn't bound at all.
+  if (registeredShortcut === (target || null)) return true;
+  if (registeredShortcut) {
+    globalShortcut.unregister(registeredShortcut);
+    registeredShortcut = null;
+  }
+  if (!target) {
+    // eslint-disable-next-line no-console
+    console.log("[ntrp] quick-capture shortcut: disabled");
+    return true;
+  }
+  try {
+    const ok = globalShortcut.register(target, showQuickWindow);
+    if (ok) {
+      registeredShortcut = target;
+      // eslint-disable-next-line no-console
+      console.log(`[ntrp] quick-capture shortcut: bound ${target}`);
+      return true;
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn(`[ntrp] quick-capture shortcut: bind threw for ${target}:`, error);
+    return false;
+  }
+  // eslint-disable-next-line no-console
+  console.warn(`[ntrp] quick-capture shortcut: OS refused ${target} (another app already owns it?)`);
+  return false;
+}
+
 function createWindow() {
-  const window = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1320,
     height: 880,
     minWidth: 980,
@@ -257,21 +309,144 @@ function createWindow() {
     },
   });
 
-  window.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("https://") || url.startsWith("http://")) {
       void shell.openExternal(url);
     }
     return { action: "deny" };
   });
 
-  window.webContents.on("will-navigate", (event, url) => {
+  mainWindow.webContents.on("will-navigate", (event, url) => {
     if (!isTrustedRendererUrl(url)) event.preventDefault();
   });
 
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+
   if (isDev) {
-    window.loadURL(process.env.NTRP_DESKTOP_DEV_SERVER_URL);
+    mainWindow.loadURL(process.env.NTRP_DESKTOP_DEV_SERVER_URL);
   } else {
-    window.loadFile(rendererIndexPath());
+    mainWindow.loadFile(rendererIndexPath());
+  }
+}
+
+/** Quick-capture window: a frameless, always-on-top floating composer
+ *  summoned by the global shortcut. Loads the same renderer bundle but
+ *  with the `#quick-capture` hash so main.tsx mounts QuickCapture
+ *  instead of the full App. Hidden (not destroyed) on blur/submit so
+ *  re-summoning is instant. */
+function createQuickWindow() {
+  if (quickWindow && !quickWindow.isDestroyed()) return quickWindow;
+
+  quickWindow = new BrowserWindow({
+    width: 620,
+    height: 68,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: true,
+    skipTaskbar: true,
+    show: false,
+    alwaysOnTop: true,
+    fullscreenable: false,
+    // No vibrancy here — combining it with `transparent: true` produced
+    // a visible dark frame around the card on macOS (the vibrancy layer
+    // showed through wherever the renderer was transparent). We want
+    // the card itself to be the entire visible surface.
+    hasShadow: false,
+    backgroundColor: "#00000000",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+    },
+  });
+
+  // Floats across all spaces / above fullscreen apps on macOS. Without
+  // this the window is invisible if the user is in a fullscreen Chrome
+  // tab when they hit the shortcut.
+  quickWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+  quickWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("https://") || url.startsWith("http://")) {
+      void shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
+
+  // Auto-hide on blur — Spotlight feel. User can re-summon with the
+  // shortcut without paying the load cost since the window persists.
+  // Routes through dismissQuickWindow so focus yields back to the
+  // user's previous app instead of popping the main window forward.
+  quickWindow.on("blur", () => {
+    dismissQuickWindow();
+  });
+
+  quickWindow.on("closed", () => {
+    quickWindow = null;
+  });
+
+  if (isDev) {
+    const devUrl = process.env.NTRP_DESKTOP_DEV_SERVER_URL;
+    quickWindow.loadURL(`${devUrl}#quick-capture`);
+  } else {
+    quickWindow.loadFile(rendererIndexPath(), { hash: "quick-capture" });
+  }
+
+  return quickWindow;
+}
+
+function showQuickWindow() {
+  const win = createQuickWindow();
+  if (win.isVisible()) {
+    dismissQuickWindow();
+    return;
+  }
+  // Snapshot the foreground state BEFORE we show our window — once we
+  // call win.show() ntrp becomes the focused app and we lose that
+  // signal. We compare focus identity rather than just BrowserWindow
+  // presence: the main window might be open but unfocused (user was
+  // in another app), which is the case where we want Esc to NOT pop
+  // the main window forward.
+  const focused = BrowserWindow.getFocusedWindow();
+  quickSummonedFromForeground = focused === mainWindow && focused !== null;
+
+  // Horizontally centered on the display that currently owns the
+  // cursor; vertically biased toward the bottom of the work area so
+  // the composer sits near where the user's reading attention is
+  // (and out of the way of any top-of-screen menus / browser tabs).
+  // ~78% from the top leaves enough margin below for the window's
+  // shadow without crowding the dock.
+  const cursorPoint = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(cursorPoint);
+  const { x: dx, y: dy, width: dw, height: dh } = display.workArea;
+  const [ww, wh] = win.getSize();
+  const x = Math.round(dx + (dw - ww) / 2);
+  const y = Math.round(dy + dh * 0.78 - wh);
+  win.setPosition(x, y);
+  win.show();
+  win.focus();
+}
+
+/** Hide the quick window WITHOUT bringing the main window forward.
+ *  Used for Esc/blur cancels — the user explicitly decided not to
+ *  send anything, so we don't want ntrp to suddenly become the
+ *  foreground app. On macOS, `app.hide()` yields focus to whatever
+ *  the previous app was. We only invoke it when the quick window was
+ *  summoned from outside ntrp; if the user was already in the main
+ *  window, hiding the whole app would be jarring. */
+function dismissQuickWindow() {
+  if (!quickWindow || quickWindow.isDestroyed() || !quickWindow.isVisible()) return;
+  quickWindow.hide();
+  if (process.platform === "darwin" && !quickSummonedFromForeground) {
+    // app.hide is the cleanest "give focus back" on macOS — there's no
+    // way to deactivate without hiding ntrp's other windows. If the
+    // main window was already hidden / minimized, this is a no-op for
+    // it. If it happened to be visible in another space, it'll be
+    // hidden too — that's the trade-off for proper focus restoration.
+    app.hide();
   }
 }
 
@@ -324,11 +499,71 @@ app.whenReady().then(() => {
     return true;
   });
 
+  // Hide the floating composer (called from QuickCapture on Escape or
+  // any explicit dismiss). Hiding rather than destroying keeps the next
+  // summon snappy. Routed through dismissQuickWindow so focus yields
+  // back to the user's previous app instead of popping ntrp forward.
+  ipcMain.handle("quick:close", event => {
+    assertTrustedSender(event);
+    dismissQuickWindow();
+  });
+
+  // Submit a message from the quick-capture window. We forward it to the
+  // main window over IPC so the renderer can call its existing
+  // createSession + sendMessage actions (with the store, the SSE
+  // subscription, etc. already wired). Side-effect: bring main window
+  // forward so the user immediately sees the session that starts.
+  ipcMain.handle("quick:submit", (event, message) => {
+    assertTrustedSender(event);
+    if (typeof message !== "string" || !message.trim()) return false;
+    if (quickWindow && !quickWindow.isDestroyed()) quickWindow.hide();
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      createWindow();
+      // Defer the dispatch until the renderer has mounted and registered
+      // its listener, otherwise the message gets sent into the void.
+      mainWindow.webContents.once("did-finish-load", () => {
+        mainWindow.webContents.send("quick:message", message);
+      });
+    } else {
+      mainWindow.webContents.send("quick:message", message);
+    }
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    return true;
+  });
+
   createWindow();
+
+  // Allow the renderer to bind/unbind the global quick-capture chord.
+  // Returns true on success so the Settings UI can surface "already in
+  // use" errors without polling. The renderer is the source of truth
+  // for the user's chosen accelerator (it lives in localStorage prefs);
+  // we just hold the OS registration here.
+  ipcMain.handle("quick:setShortcut", (event, accelerator) => {
+    assertTrustedSender(event);
+    if (accelerator != null && typeof accelerator !== "string") return false;
+    return setQuickShortcut(accelerator);
+  });
+
+  // Start with the default chord so the shortcut works even before the
+  // renderer mounts and pushes the user's preference. Renderer will
+  // overwrite this on boot if they've customized it.
+  if (!setQuickShortcut(DEFAULT_QUICK_SHORTCUT)) {
+    // eslint-disable-next-line no-console
+    console.warn(`[ntrp] failed to register default global shortcut ${DEFAULT_QUICK_SHORTCUT} — already in use?`);
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on("will-quit", () => {
+  // Release the global shortcut so other apps can claim it after we exit.
+  globalShortcut.unregisterAll();
 });
 
 app.on("window-all-closed", () => {

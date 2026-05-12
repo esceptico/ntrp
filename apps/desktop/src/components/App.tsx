@@ -18,7 +18,7 @@ import { useEvents } from "../hooks/useEvents";
 import { useActiveRuns } from "../hooks/useActiveRuns";
 import { useAutomationEvents } from "../hooks/useAutomationEvents";
 import { useThemeEffect } from "../lib/theme";
-import { bootstrap, createSession } from "../actions";
+import { bootstrap, createSession, sendMessage } from "../actions";
 
 function useHash(): string {
   const [hash, setHash] = useState(() => window.location.hash);
@@ -105,6 +105,31 @@ export function App() {
   useEvents(hash === "#trace-demo" ? null : currentSessionId);
   useActiveRuns();
   useAutomationEvents();
+
+  // Receive messages submitted from the quick-capture floating window.
+  // The Electron main process forwards each one via `quick:message`;
+  // we spin up a new session and immediately send the text. The user's
+  // first interaction with the main window is the streaming response.
+  useEffect(() => {
+    const unsubscribe = window.ntrpDesktop?.quickCapture?.onMessage?.(async (message) => {
+      try {
+        await createSession();
+        await sendMessage(message);
+      } catch {
+        /* surfaced via the store's error toast */
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  // Push the user's chosen global shortcut to the main process every
+  // time it changes. Main registers a default chord at startup but
+  // doesn't know which key the user picked until the renderer pushes
+  // it — prefs live in localStorage which the main process can't read.
+  const quickCaptureShortcut = useStore((s) => s.prefs.quickCaptureShortcut);
+  useEffect(() => {
+    void window.ntrpDesktop?.quickCapture?.setShortcut?.(quickCaptureShortcut);
+  }, [quickCaptureShortcut]);
 
   if (hash === "#trace-demo") {
     return <TraceDemo />;

@@ -1,7 +1,9 @@
 import { Children, isValidElement, useMemo, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
+import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { Check, Copy } from "lucide-react";
 import clsx from "clsx";
@@ -29,15 +31,40 @@ const HL_LANGUAGES = {
   zsh: bash,
 };
 
-// rehype-highlight runs first (adds <span class="hljs-…">), then rehype-sanitize.
-// We extend the default schema so the highlight spans + classes survive.
+// rehype-highlight and rehype-katex both inject elements with classes;
+// rehype-sanitize runs last to strip anything we don't whitelist. The
+// schema below preserves:
+//   - <span class="hljs-…"> from rehype-highlight
+//   - <span class="katex…">, <math>, <mrow>, <mi>, etc. from rehype-katex
+//   - inline `style` on KaTeX spans (used for character spacing / sizing)
+//   - the standard math attributes MathML output needs
+const MATH_TAGS = [
+  "math", "annotation", "semantics",
+  "mrow", "mi", "mo", "mn", "ms", "mtext", "mspace",
+  "msup", "msub", "msubsup", "mfrac", "mroot", "msqrt",
+  "mtable", "mtr", "mtd", "munder", "mover", "munderover",
+  "menclose", "mphantom", "mpadded", "mfenced",
+] as const;
+
 const sanitizeSchema = {
   ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), ...MATH_TAGS],
   attributes: {
     ...defaultSchema.attributes,
     code: [...(defaultSchema.attributes?.code ?? []), ["className"]],
-    span: [...(defaultSchema.attributes?.span ?? []), ["className"]],
-    div: [...(defaultSchema.attributes?.div ?? []), ["className"]],
+    span: [...(defaultSchema.attributes?.span ?? []), ["className"], "style"],
+    div: [...(defaultSchema.attributes?.div ?? []), ["className"], "style"],
+    // KaTeX uses MathML annotations and explicit display modes.
+    math: [["xmlns"], "display"],
+    annotation: [["encoding"]],
+    // Most MathML presentation elements carry a `mathvariant` and/or
+    // `displaystyle` — keep the common set so semantic rendering works.
+    mi: [["mathvariant"]],
+    mo: [["fence"], "lspace", "rspace", "stretchy"],
+    mn: [],
+    mfrac: [["linethickness"]],
+    mtable: [["columnalign"], "rowspacing", "columnspacing"],
+    mtd: [["columnalign"]],
   },
 };
 
@@ -53,12 +80,26 @@ export function Markdown({
   return (
     <div className={clsx("md", className)}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        // remark-math parses $...$ (inline) and $$...$$ (display) into
+        // math nodes; rehype-katex converts those into the spans/MathML
+        // KaTeX needs for rendering. The order matters — katex MUST run
+        // before sanitize so its output exists when sanitize walks the
+        // tree, but the sanitize schema is extended above to keep the
+        // tags/classes/attributes katex emits.
+        remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={
           streaming
-            ? [[rehypeSanitize, sanitizeSchema]]
+            ? [
+                // During streaming we skip rehype-highlight (it's CPU-heavy
+                // on partial content), but math still renders fine — katex
+                // tolerates incomplete `$$` blocks by leaving them as text
+                // until both delimiters are present.
+                [rehypeKatex, { strict: false, throwOnError: false }],
+                [rehypeSanitize, sanitizeSchema],
+              ]
             : [
                 [rehypeHighlight, { languages: HL_LANGUAGES, detect: false, ignoreMissing: true }],
+                [rehypeKatex, { strict: false, throwOnError: false }],
                 [rehypeSanitize, sanitizeSchema],
               ]
         }
