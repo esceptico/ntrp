@@ -6,10 +6,13 @@ from importlib.metadata import version
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from ntrp.automation.models import Automation
 from ntrp.server.bus import BusRegistry
 from ntrp.server.middleware import AuthMiddleware
 from ntrp.server.routers.automation import router as automation_router
 from ntrp.server.routers.chat import router as chat_router
+from ntrp.server.routers.loops import router as loops_router
+from ntrp.services.chat import submit_chat_message
 from ntrp.server.routers.context import router as context_router
 from ntrp.server.routers.data import router as data_router
 from ntrp.server.routers.gmail import router as gmail_router
@@ -49,6 +52,25 @@ async def lifespan(app: FastAPI):
     runtime.start_indexing()
     bus_registry = BusRegistry()
     runtime.scheduler.set_bus_registry(bus_registry)
+
+    async def _dispatch_loop(automation: Automation) -> str | None:
+        # Loops are autonomous: the user already approved the loop at
+        # creation (via the create_loop approval card), so subsequent
+        # iterations should skip per-tool approvals. Matches the same
+        # writable→skip_approvals convention the regular automation path
+        # uses in scheduler._run_agent.
+        result = await submit_chat_message(
+            runtime.run_registry,
+            lambda: runtime.build_chat_deps(),
+            bus_registry,
+            message=automation.loop_prompt or "",
+            session_id=automation.target_session_id or "",
+            skip_approvals=automation.writable,
+            client_id=f"loop:{automation.task_id}:{automation.iteration_count + 1}",
+        )
+        return result.get("run_id") if isinstance(result, dict) else None
+
+    runtime.scheduler.set_loop_dispatcher(_dispatch_loop)
     await runtime.start_scheduler()
     runtime.start_monitor()
     app.state.runtime = runtime
@@ -93,3 +115,4 @@ app.include_router(session_router)
 app.include_router(settings_router)
 app.include_router(skills_router)
 app.include_router(mcp_router)
+app.include_router(loops_router)

@@ -26,6 +26,9 @@ AUTOMATION_BUS_KEY = "automation:events"
 _logger = get_logger(__name__)
 
 
+LoopDispatcher = Callable[[Automation], Awaitable[str | None]]
+
+
 class Scheduler:
     def __init__(
         self,
@@ -38,6 +41,7 @@ class Scheduler:
         self._task: asyncio.Task | None = None
         self._running: set[asyncio.Task] = set()
         self._handlers: dict[str, Callable[[dict | None], Awaitable[str | None]]] = {}
+        self._loop_dispatcher: LoopDispatcher | None = None
         self._last_activity_at: datetime = datetime.now(UTC)
         self._started_at: datetime | None = None
         self._last_tick_at: datetime | None = None
@@ -46,6 +50,9 @@ class Scheduler:
 
     def set_bus_registry(self, registry: BusRegistry) -> None:
         self._bus_registry = registry
+
+    def set_loop_dispatcher(self, dispatcher: LoopDispatcher) -> None:
+        self._loop_dispatcher = dispatcher
 
     def register_handler(self, name: str, handler: Callable[[dict | None], Awaitable[str | None]]) -> None:
         self._handlers[name] = handler
@@ -224,7 +231,9 @@ class Scheduler:
         success = False
         error_message = ""
         try:
-            if automation.handler:
+            if automation.kind == "loop":
+                result = await self._run_loop(automation)
+            elif automation.handler:
                 result = await self._run_handler(automation, context)
             else:
                 result = await self._run_agent(automation, context)
@@ -237,7 +246,11 @@ class Scheduler:
                 AutomationFinishedEvent(task_id=automation.task_id, result=result),
             )
             now = datetime.now(UTC)
-            next_run = self._advance_to_future(automation, now)
+            # If _run_loop disabled this automation (aged_out / max_iterations),
+            # the snapshot's enabled was mutated to False — don't write a
+            # future next_run_at for a disabled loop or the UI shows a
+            # countdown for something that will never fire.
+            next_run = self._advance_to_future(automation, now) if automation.enabled else None
             await self.store.update_last_run(automation.task_id, now, next_run, result=result)
             if any(t.one_shot for t in automation.triggers):
                 await self.store.set_enabled(automation.task_id, False)
@@ -286,6 +299,35 @@ class Scheduler:
             result = await run_agent(self._build_deps(), request)
 
         return result.output
+
+    async def _run_loop(self, automation: Automation) -> str | None:
+        if self._loop_dispatcher is None:
+            raise RuntimeError("Loop dispatcher not wired")
+        if not automation.target_session_id or not automation.loop_prompt:
+            raise RuntimeError(f"Loop {automation.task_id} missing target_session_id or loop_prompt")
+        if automation.aged_out(datetime.now(UTC)):
+            await self.store.set_enabled(automation.task_id, False)
+            # Mutate the snapshot so _run_and_finalize's finally block sees
+            # the disabled state and skips writing a future next_run_at.
+            automation.enabled = False
+            _logger.info("Loop %s aged out (max_age_days=%d), disabling", automation.task_id, automation.max_age_days)
+            return f"Loop aged out after {automation.max_age_days} days"
+        await self.store.increment_iteration(automation.task_id)
+        _logger.info(
+            "Firing loop %s (iter %d) into session %s",
+            automation.task_id,
+            automation.iteration_count + 1,
+            automation.target_session_id,
+        )
+        result = await self._loop_dispatcher(automation)
+        # Disable after max_iterations is hit. iteration_count was already
+        # incremented in the store; compare against the in-memory value + 1
+        # since `automation` is a snapshot taken before the increment.
+        if automation.max_iterations is not None and (automation.iteration_count + 1) >= automation.max_iterations:
+            await self.store.set_enabled(automation.task_id, False)
+            automation.enabled = False
+            _logger.info("Loop %s reached max_iterations=%d, disabling", automation.task_id, automation.max_iterations)
+        return result
 
     async def fire_event(self, event: TriggerEvent) -> None:
         now = datetime.now(UTC)

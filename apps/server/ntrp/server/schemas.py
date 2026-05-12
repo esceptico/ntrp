@@ -233,6 +233,10 @@ class BranchRequest(BaseModel):
     from_end_index: int | None = None
 
 
+class SetSessionAutoRequest(BaseModel):
+    value: bool
+
+
 class RenameSessionRequest(BaseModel):
     name: str
 
@@ -368,6 +372,24 @@ class UpdateAutomationRequest(BaseModel):
     enabled: bool | None = None
     triggers: list[dict] | None = None
     cooldown_minutes: int | None = None
+
+
+class CreateLoopRequest(BaseModel):
+    session_id: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
+    every: str = Field(min_length=1)
+    max_iterations: int | None = None
+    stop_when: str | None = None
+    max_age_days: int | None = None
+
+
+class UpdateLoopRequest(BaseModel):
+    prompt: str | None = None
+    every: str | None = None
+    enabled: bool | None = None
+    max_iterations: int | None = None
+    stop_when: str | None = None
+    max_age_days: int | None = None
 
 
 class CreateNotifierRequest(BaseModel):

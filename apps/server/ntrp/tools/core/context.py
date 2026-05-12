@@ -47,6 +47,7 @@ class RunContext:
     deferred_tools_enabled: bool = False
     loaded_tools: set[str] = field(default_factory=set)
     allowed_tool_names: set[str] | None = None
+    loop_task_id: str | None = None
 
 
 @dataclass

@@ -2,11 +2,15 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from coolname import generate_slug
 
 from ntrp.agent import Usage
 from ntrp.tools.core.context import BackgroundTaskRegistry
+
+if TYPE_CHECKING:
+    from ntrp.context.models import SessionState
 
 
 class RunStatus(StrEnum):
@@ -39,6 +43,15 @@ class RunState:
     cancel_terminal_emitted: bool = False
     backgrounded: bool = False
     drain_task: asyncio.Task | None = None
+    # When the run was triggered by a loop, this is the loop's automation
+    # task_id. Tools (schedule_wakeup, loop_done) read it to mutate the
+    # right loop. None for ordinary user-initiated runs.
+    loop_task_id: str | None = None
+    # Reference to the live SessionState driving this run. Set during
+    # prepare_chat so endpoints (e.g. POST /sessions/{id}/auto) can mutate
+    # session-level state (like skip_approvals) without going through a
+    # new chat turn. Same object reference shared with the ToolContext.
+    session_state: "SessionState | None" = None
 
     @property
     def pending_injection_count(self) -> int:

@@ -33,6 +33,23 @@ export interface QueuedMessage {
   enqueuedAt: number;
 }
 
+export interface ServerLoop {
+  task_id: string;
+  session_id: string;
+  prompt: string;
+  every: string;
+  enabled: boolean;
+  iteration_count: number;
+  max_iterations: number | null;
+  stop_when: string | null;
+  max_age_days: number | null;
+  created_at: string;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_result: string | null;
+  running_since: string | null;
+}
+
 export type ThinkingIntensity = "subtle" | "normal" | "strong";
 
 export type ThemeChoice = "light" | "dark" | "system";
@@ -58,6 +75,11 @@ export interface Prefs {
    *  resize handler. Default matches the historic fixed width. */
   sidebarWidth: number;
   showReasoningInChat: boolean;
+  /** Electron accelerator string for the global quick-capture window
+   *  shortcut, e.g. "CommandOrControl+Shift+Space". Pushed to the main
+   *  process via IPC; main re-registers on change. Empty string disables
+   *  the shortcut entirely. */
+  quickCaptureShortcut: string;
 }
 
 export const SIDEBAR_MIN_WIDTH = 200;
@@ -67,6 +89,7 @@ export const SIDEBAR_SNAP_THRESHOLD_PX = 12;
 
 const PREFS_KEY = "ntrp.desktop.prefs";
 const PREFS_VERSION = 2;
+export const DEFAULT_QUICK_CAPTURE_SHORTCUT = "CommandOrControl+Shift+Space";
 const DEFAULT_PREFS: Prefs = {
   thinkingAnimation: "comet",
   thinkingIntensity: "normal",
@@ -75,6 +98,7 @@ const DEFAULT_PREFS: Prefs = {
   sidebarHidden: false,
   sidebarWidth: 244,
   showReasoningInChat: true,
+  quickCaptureShortcut: DEFAULT_QUICK_CAPTURE_SHORTCUT,
 };
 
 function loadPrefs(): Prefs {
@@ -100,6 +124,29 @@ function persistPrefs(prefs: Prefs): void {
       PREFS_KEY,
       JSON.stringify({ ...prefs, prefsVersion: PREFS_VERSION }),
     );
+  } catch {
+    /* localStorage unavailable — non-fatal */
+  }
+}
+
+// Auto mode (skip approvals) is conceptually session state, not a Prefs
+// field — but we persist it to localStorage so closing the app and
+// reopening doesn't silently flip the user back into approval-required
+// mode without warning. Stored separately from `prefs` so the migration
+// surface stays narrow.
+const SKIP_APPROVALS_KEY = "ntrp.desktop.skipApprovals";
+
+function loadSkipApprovals(): boolean {
+  try {
+    return localStorage.getItem(SKIP_APPROVALS_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function persistSkipApprovals(value: boolean): void {
+  try {
+    localStorage.setItem(SKIP_APPROVALS_KEY, value ? "true" : "false");
   } catch {
     /* localStorage unavailable — non-fatal */
   }
@@ -284,6 +331,7 @@ interface State {
    *  composer can show them as a stack of pending bubbles above the
    *  input until `message_ingested` arrives. */
   queuedMessages: QueuedMessage[];
+  loops: ServerLoop[];
   prefs: Prefs;
 }
 
@@ -336,6 +384,7 @@ interface Actions {
   removeQueuedMessage: (clientId: string) => void;
   clearQueuedMessages: () => void;
   resetCancellingQueuedMessages: () => void;
+  setLoops: (loops: ServerLoop[]) => void;
   setSkills: (skills: SkillDescriptor[]) => void;
   setCommandPickerOpen: (open: boolean) => void;
   setCommandPickerIndex: (index: number) => void;
@@ -441,7 +490,7 @@ export const useStore = create<State & Actions>((set) => ({
   editingId: null,
   activeActivityId: null,
   currentRunId: null,
-  skipApprovals: false,
+  skipApprovals: loadSkipApprovals(),
   skills: [],
   commandPickerOpen: false,
   commandPickerIndex: 0,
@@ -464,6 +513,7 @@ export const useStore = create<State & Actions>((set) => ({
   pendingApprovals: [],
   reviewingApprovalToolId: null,
   queuedMessages: [],
+  loops: [],
   prefs: loadPrefs(),
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
@@ -738,7 +788,10 @@ export const useStore = create<State & Actions>((set) => ({
     }),
 
   setCurrentRunId: (currentRunId) => set({ currentRunId }),
-  setSkipApprovals: (skipApprovals) => set({ skipApprovals }),
+  setSkipApprovals: (skipApprovals) => {
+    persistSkipApprovals(skipApprovals);
+    set({ skipApprovals });
+  },
 
   setApprovalStatus: (id, status) =>
     set((s) => {
@@ -785,6 +838,7 @@ export const useStore = create<State & Actions>((set) => ({
         q.status === "cancelling" ? { ...q, status: "pending" } : q,
       ),
     })),
+  setLoops: (loops) => set({ loops }),
 
   setSkills: (skills) => set({ skills }),
   setCommandPickerOpen: (commandPickerOpen) => set({ commandPickerOpen, commandPickerIndex: 0 }),

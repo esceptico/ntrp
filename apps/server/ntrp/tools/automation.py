@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -416,4 +417,199 @@ run_automation_tool = tool(
     requires={"automation"},
     approval=approve_run_automation,
     execute=run_automation,
+)
+
+
+# --- Self-paced loop tools ---
+
+SCHEDULE_WAKEUP_DESCRIPTION = (
+    "Self-paced loop control: schedule the next iteration of THIS loop. "
+    "Only usable when the current run was triggered by a loop. "
+    "Pass delay_seconds (minimum 60). Use this to back off when the watched condition "
+    "isn't ready yet (e.g. 'check again in 5 minutes') or to poll more aggressively "
+    "near a transition. If you call this multiple times in one iteration the last "
+    "call wins."
+)
+
+LOOP_DONE_DESCRIPTION = (
+    "Self-paced loop control: mark THIS loop as done and stop further iterations. "
+    "Only usable when the current run was triggered by a loop. "
+    "Call this when the loop's goal has been reached (e.g. CI turned green, deploy "
+    "succeeded, condition met). Pass a short reason so the user understands why "
+    "the loop stopped."
+)
+
+
+class ScheduleWakeupInput(BaseModel):
+    delay_seconds: int = Field(
+        description="Seconds until the next iteration. Minimum 60.",
+        ge=60,
+    )
+
+
+class LoopDoneInput(BaseModel):
+    reason: str = Field(description="Why the loop is stopping. Shown to the user.")
+
+
+def _loop_task_id_or_error(execution: ToolExecution) -> tuple[str | None, ToolResult | None]:
+    task_id = execution.ctx.run.loop_task_id
+    if not task_id:
+        return None, ToolResult(
+            content="This tool is only available inside a loop iteration.",
+            preview="Not a loop",
+            is_error=True,
+        )
+    return task_id, None
+
+
+async def schedule_wakeup(execution: ToolExecution, args: ScheduleWakeupInput) -> ToolResult:
+    task_id, err = _loop_task_id_or_error(execution)
+    if err:
+        return err
+    svc = execution.ctx.services.get("automation")
+    if svc is None:
+        return ToolResult(content="Automation service unavailable.", preview="Unavailable", is_error=True)
+    next_run = datetime.now(UTC) + timedelta(seconds=args.delay_seconds)
+    await svc.store.set_next_run(task_id, next_run)
+    return ToolResult(
+        content=f"Next iteration scheduled in {args.delay_seconds}s ({next_run.isoformat()}).",
+        preview=f"Wake in {args.delay_seconds}s",
+    )
+
+
+async def loop_done(execution: ToolExecution, args: LoopDoneInput) -> ToolResult:
+    task_id, err = _loop_task_id_or_error(execution)
+    if err:
+        return err
+    svc = execution.ctx.services.get("automation")
+    if svc is None:
+        return ToolResult(content="Automation service unavailable.", preview="Unavailable", is_error=True)
+    await svc.store.set_enabled(task_id, False)
+    return ToolResult(
+        content=f"Loop stopped: {args.reason}",
+        preview="Loop done",
+    )
+
+
+schedule_wakeup_tool = tool(
+    display_name="ScheduleWakeup",
+    description=SCHEDULE_WAKEUP_DESCRIPTION,
+    input_model=ScheduleWakeupInput,
+    mutates=True,
+    requires={"automation"},
+    execute=schedule_wakeup,
+)
+
+loop_done_tool = tool(
+    display_name="LoopDone",
+    description=LOOP_DONE_DESCRIPTION,
+    input_model=LoopDoneInput,
+    mutates=True,
+    requires={"automation"},
+    execute=loop_done,
+)
+
+
+# --- create_loop ---
+
+CREATE_LOOP_DESCRIPTION = (
+    "Create a loop — a repeating prompt scoped to the CURRENT chat session. "
+    "Each iteration posts the prompt as a new user turn in this chat. "
+    "Use this when the user wants to monitor or babysit something on a cadence: "
+    "'watch CI', 'check the deploy every 5 minutes', 'keep an eye on X'. "
+    "Two modes: "
+    "(a) fixed interval: pass 'every' (e.g. '5m', '1h', '2h30m'). "
+    "(b) self-paced: pass 'every' as the initial cadence; inside each iteration, "
+    "the agent calls schedule_wakeup to adjust the next interval, or loop_done "
+    "to terminate when the goal is reached. "
+    "Optional max_iterations caps the loop. "
+    "Optional stop_when is a natural-language predicate the agent checks each iteration."
+)
+
+
+class CreateLoopInput(BaseModel):
+    prompt: str = Field(
+        description="What the loop should do on each iteration. Posted as a user message into this chat. Stand-alone.",
+        min_length=1,
+    )
+    every: str = Field(
+        description="Initial interval between iterations: '5m', '30m', '1h', '2h30m', '1d'. Minimum 1 minute.",
+        min_length=1,
+    )
+    max_iterations: int | None = Field(
+        default=None,
+        description="Optional hard cap on how many times the loop runs.",
+        ge=1,
+    )
+    stop_when: str | None = Field(
+        default=None,
+        description="Optional natural-language predicate. Each iteration checks if this is met; if so, call loop_done.",
+    )
+    max_age_days: int | None = Field(
+        default=None,
+        description="Optional hard cap in days from creation. After this many days, the loop disables itself on the next fire even if max_iterations hasn't been hit.",
+        ge=1,
+    )
+
+
+async def approve_create_loop(execution: ToolExecution, args: CreateLoopInput) -> ApprovalInfo | None:
+    lines = [f"Every: {args.every}", ""]
+    if args.max_iterations:
+        lines.insert(1, f"Max iterations: {args.max_iterations}")
+    if args.max_age_days:
+        lines.insert(-1, f"Auto-expires: after {args.max_age_days} day(s)")
+    if args.stop_when:
+        lines.insert(-1, f"Stop when: {args.stop_when}")
+    lines.append("Prompt:")
+    lines.append(args.prompt)
+    return ApprovalInfo(
+        description="Create loop in this chat",
+        preview="\n".join(lines),
+        diff=None,
+    )
+
+
+async def create_loop(execution: ToolExecution, args: CreateLoopInput) -> ToolResult:
+    session_id = execution.ctx.session_id
+    if not session_id:
+        return ToolResult(content="No active session.", preview="No session", is_error=True)
+    svc = execution.ctx.services.get("automation")
+    if svc is None:
+        return ToolResult(content="Automation service unavailable.", preview="Unavailable", is_error=True)
+    try:
+        loop = await svc.create_loop(
+            session_id=session_id,
+            prompt=args.prompt,
+            every=args.every,
+            max_iterations=args.max_iterations,
+            stop_when=args.stop_when,
+            max_age_days=args.max_age_days,
+        )
+    except ValueError as e:
+        return ToolResult(content=f"Error: {e}", preview="Failed", is_error=True)
+
+    lines = [
+        f"Created loop {loop.task_id}",
+        f"Every: {args.every}",
+        f"Prompt: {loop.loop_prompt}",
+    ]
+    if loop.max_iterations:
+        lines.append(f"Max iterations: {loop.max_iterations}")
+    if loop.max_age_days:
+        lines.append(f"Auto-expires: after {loop.max_age_days} day(s)")
+    if loop.stop_when:
+        lines.append(f"Stop when: {loop.stop_when}")
+    if loop.next_run_at:
+        lines.append(f"First run: {loop.next_run_at.strftime('%Y-%m-%d %H:%M')}")
+    return ToolResult(content="\n".join(lines), preview=f"Loop · every {args.every}")
+
+
+create_loop_tool = tool(
+    display_name="CreateLoop",
+    description=CREATE_LOOP_DESCRIPTION,
+    input_model=CreateLoopInput,
+    mutates=True,
+    requires={"automation"},
+    approval=approve_create_loop,
+    execute=create_loop,
 )

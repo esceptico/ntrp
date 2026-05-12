@@ -123,6 +123,15 @@ export function Messages() {
       if (role === "user") {
         if (current) out.push(current);
         current = { userId: id, childIds: [] };
+      } else if (role === "status" || role === "error") {
+        // System notices (from builtin slash commands like /loop, /clear)
+        // are not children of any turn — surface them between turns so
+        // they don't get buried inside the previous turn's "Worked" collapse.
+        if (current) {
+          out.push(current);
+          current = null;
+        }
+        out.push({ userId: null, childIds: [id] });
       } else {
         if (!current) current = { userId: null, childIds: [] };
         current.childIds.push(id);

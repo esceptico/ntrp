@@ -4,7 +4,7 @@ from ntrp.agent import Role
 from ntrp.constants import HISTORY_MESSAGE_LIMIT
 from ntrp.core.compactor import is_handoff_message
 from ntrp.core.content import blocks_to_text
-from ntrp.server.deps import require_session_service
+from ntrp.server.deps import require_run_registry, require_session_service
 from ntrp.server.runtime import Runtime, get_runtime
 from ntrp.server.schemas import (
     BranchRequest,
@@ -13,7 +13,9 @@ from ntrp.server.schemas import (
     RenameSessionRequest,
     RevertRequest,
     SessionResponse,
+    SetSessionAutoRequest,
 )
+from ntrp.server.state import RunRegistry
 from ntrp.services.session import SessionService
 
 router = APIRouter(tags=["session"])
@@ -250,6 +252,37 @@ async def rename_session(
     if not updated:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"session_id": session_id, "name": req.name}
+
+
+@router.post("/sessions/{session_id}/auto")
+async def set_session_auto(
+    session_id: str,
+    req: SetSessionAutoRequest,
+    run_registry: RunRegistry = Depends(require_run_registry),
+):
+    """Apply an Auto-mode toggle to the live session.
+
+    When `value=True`: future tool calls in the active run skip approval, and
+    any approval Futures currently awaiting user input resolve as approved.
+    When `value=False`: just flips the flag; pending approvals stay pending.
+    """
+    active = run_registry.get_accepting_run(session_id)
+    resolved = 0
+    if active is not None:
+        if active.session_state is not None:
+            active.session_state.skip_approvals = req.value
+        if req.value:
+            for tool_id, future in list(active.pending_approvals.items()):
+                if future.done():
+                    continue
+                future.set_result({
+                    "type": "tool_response",
+                    "tool_id": tool_id,
+                    "result": "",
+                    "approved": True,
+                })
+                resolved += 1
+    return {"status": "ok", "skip_approvals": req.value, "auto_resolved": resolved}
 
 
 @router.delete("/sessions/{session_id}")

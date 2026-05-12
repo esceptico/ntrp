@@ -209,7 +209,7 @@ async def _prepare_messages(
 async def prepare_chat(
     deps: ChatDeps,
     message: str,
-    skip_approvals: bool = False,
+    skip_approvals: bool | None = False,
     session_id: str | None = None,
     images: list[dict] | None = None,
     context: list[dict] | None = None,
@@ -224,7 +224,10 @@ async def prepare_chat(
     else:
         session_data = await _resolve_session(deps)
     session_state = session_data.state
-    session_state.skip_approvals = skip_approvals
+    # None = inherit current session state (used by the loop dispatcher so
+    # it doesn't stomp the user's Auto toggle). Explicit bool = set/override.
+    if skip_approvals is not None:
+        session_state.skip_approvals = skip_approvals
     messages = session_data.messages
 
     user_message = message
@@ -252,6 +255,7 @@ async def prepare_chat(
 
     run = registry.create_run(session_state.session_id)
     run.messages = messages
+    run.session_state = session_state
 
     return ChatContext(
         run=run,
@@ -268,6 +272,20 @@ async def prepare_chat(
     )
 
 
+def _loop_task_id_from_client_id(client_id: str | None) -> str | None:
+    # Loop dispatcher stamps client_id="loop:<task_id>:<iteration>". The
+    # ":" lives inside the task_id (e.g. "loop-shy-otter") so split with
+    # maxsplit and rebuild — we want everything between "loop:" and the
+    # trailing ":<iteration>" suffix.
+    if not client_id or not client_id.startswith("loop:"):
+        return None
+    rest = client_id[len("loop:") :]
+    last_colon = rest.rfind(":")
+    if last_colon <= 0:
+        return None
+    return rest[:last_colon]
+
+
 async def submit_chat_message(
     run_registry: RunRegistry,
     build_deps: Callable[[], ChatDeps],
@@ -275,11 +293,13 @@ async def submit_chat_message(
     *,
     message: str,
     session_id: str,
-    skip_approvals: bool = False,
+    skip_approvals: bool | None = False,
     images: list[dict] | None = None,
     context: list[dict] | None = None,
     client_id: str | None = None,
 ) -> dict[str, str]:
+    loop_task_id = _loop_task_id_from_client_id(client_id)
+
     # Idempotent retry: a POST with a client_id we already accepted within
     # the dedup window returns the same run_id instead of starting a
     # second run or re-queueing the message.
@@ -297,6 +317,8 @@ async def submit_chat_message(
         if client_id:
             entry["client_id"] = client_id
         active_run.queue_injection(entry)
+        if loop_task_id and not active_run.loop_task_id:
+            active_run.loop_task_id = loop_task_id
         if client_id:
             run_registry.register_otid(session_id, client_id, active_run.run_id)
         return {"run_id": active_run.run_id, "session_id": session_id}
@@ -311,6 +333,8 @@ async def submit_chat_message(
         context=context,
         client_id=client_id,
     )
+    if loop_task_id:
+        ctx.run.loop_task_id = loop_task_id
     # Persist the user message before the agent starts streaming. Without
     # this the message exists only in `run.messages` (in memory) until the
     # first `on_step_finish` save fires — and a client that switches away
@@ -478,6 +502,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             extra_auto_approve=INIT_AUTO_APPROVE if ctx.is_init else None,
             background_tasks=bg_registry,
             loaded_tools=run.loaded_tools,
+            loop_task_id=run.loop_task_id,
         )
         agent.hooks.on_response = tracker.track
 

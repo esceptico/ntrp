@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef } from "react";
-import { ArrowUp, ImagePlus, ShieldOff, ShieldCheck, Sparkles, Square, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowUp, ImagePlus, Repeat2, ShieldOff, ShieldCheck, Sparkles, Square, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ImageBlock } from "../store";
-import { enqueueMessage, isBuiltin, respondToAllApprovals, runBuiltinCommand, sendMessage, stopRun, viewSkill } from "../actions";
+import { enqueueMessage, isBuiltin, refreshLoops, respondToAllApprovals, runBuiltinCommand, sendMessage, stopLoop, stopRun, toggleAuto, viewSkill } from "../actions";
 import { QueueCard } from "./QueueCard";
 import {
   CommandPicker,
@@ -12,6 +12,7 @@ import {
 } from "./CommandPicker";
 import { ModelReasoningChip } from "./ComposerSelectors";
 import { ICON } from "../lib/icons";
+import { formatLoopCountdown } from "../lib/loops";
 
 /** Read a single File and return its bytes as base64 + media type. */
 function fileToImageBlock(file: File): Promise<ImageBlock> {
@@ -78,6 +79,90 @@ function resize(input: HTMLTextAreaElement) {
   input.style.height = `${Math.min(input.scrollHeight, 220)}px`;
 }
 
+function LoopStatusBar() {
+  const sessionId = useStore((s) => s.currentSessionId);
+  const allLoops = useStore((s) => s.loops);
+  const loops = useMemo(
+    () =>
+      allLoops
+        .filter((loop) => loop.session_id === sessionId && loop.enabled)
+        .sort((a, b) => {
+          const aT = a.next_run_at ? Date.parse(a.next_run_at) : Infinity;
+          const bT = b.next_run_at ? Date.parse(b.next_run_at) : Infinity;
+          return aT - bT;
+        }),
+    [allLoops, sessionId],
+  );
+  const [now, setNow] = useState(Date.now());
+
+  // Initial fetch + poll. The poll is the source of truth — the server
+  // owns the schedule, we just render. 3s is a balance between feeling
+  // live and not hammering the API.
+  useEffect(() => {
+    if (!sessionId) return;
+    void refreshLoops(sessionId);
+    const id = window.setInterval(() => {
+      setNow(Date.now());
+      void refreshLoops(sessionId);
+    }, 3_000);
+    return () => window.clearInterval(id);
+  }, [sessionId]);
+
+  if (loops.length === 0) return null;
+
+  const next = loops[0];
+  const nextRunMs = next.next_run_at ? Date.parse(next.next_run_at) : Number.POSITIVE_INFINITY;
+  const label =
+    loops.length === 1
+      ? `Loop · ${formatLoopCountdown(nextRunMs, now)}`
+      : `Loops · ${loops.length} · next ${formatLoopCountdown(nextRunMs, now)}`;
+
+  return (
+    <div className="group relative flex items-center">
+      <button
+        type="button"
+        className="inline-flex h-7 items-center gap-1.5 rounded-full px-2 text-xs font-medium text-muted hover:bg-surface-soft hover:text-ink transition-colors"
+        aria-label="Active loops"
+      >
+        <Repeat2 size={ICON.SM} strokeWidth={1.8} />
+        {label}
+      </button>
+      <div className="pointer-events-none absolute bottom-full left-0 mb-2 w-[360px] rounded-[14px] border border-line bg-surface p-3 opacity-0 shadow-[var(--shadow-pop)] transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+        <div className="mb-2 px-1 text-xs font-medium text-muted">Active loops</div>
+        <div className="space-y-1">
+          {loops.map((loop) => {
+            const runAt = loop.next_run_at ? Date.parse(loop.next_run_at) : Number.POSITIVE_INFINITY;
+            return (
+              <div key={loop.task_id} className="flex items-start gap-2 rounded-lg px-1.5 py-1.5">
+                <button
+                  type="button"
+                  onClick={() => void stopLoop(loop.task_id)}
+                  title="Stop loop"
+                  aria-label="Stop loop"
+                  className="mt-[2px] grid h-5 w-5 shrink-0 place-items-center rounded-md text-faint hover:bg-surface-soft hover:text-ink transition-colors"
+                >
+                  <X size={ICON.SM} strokeWidth={2} />
+                </button>
+                <div className="min-w-0">
+                  <div className="truncate text-sm text-ink-soft">{loop.prompt}</div>
+                  <div className="mt-0.5 text-xs text-faint">
+                    Every {loop.every} · next in {formatLoopCountdown(runAt, now)}
+                    {loop.max_iterations
+                      ? ` · ${loop.iteration_count}/${loop.max_iterations}`
+                      : loop.iteration_count > 0
+                        ? ` · iter ${loop.iteration_count}`
+                        : ""}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Composer() {
   const draft = useStore((s) => s.draft);
   const setDraft = useStore((s) => s.setDraft);
@@ -87,7 +172,6 @@ export function Composer() {
   const editingId = useStore((s) => s.editingId);
   const setEditingId = useStore((s) => s.setEditingId);
   const skipApprovals = useStore((s) => s.skipApprovals);
-  const setSkipApprovals = useStore((s) => s.setSkipApprovals);
   const pickerOpen = useStore((s) => s.commandPickerOpen);
   const pickerIndex = useStore((s) => s.commandPickerIndex);
   const setPickerOpen = useStore((s) => s.setCommandPickerOpen);
@@ -406,7 +490,7 @@ export function Composer() {
           }}
           rows={1}
           placeholder="Message ntrp…"
-          className="w-full min-h-[44px] max-h-[220px] resize-none border-0 bg-transparent px-4 pt-[13px] pb-1 text-md leading-[1.5] text-ink outline-none tracking-[-0.005em] placeholder:text-whisper"
+          className="w-full min-h-[64px] max-h-[220px] resize-none border-0 bg-transparent px-4 pt-[13px] pb-1 text-md leading-[1.5] text-ink outline-none tracking-[-0.005em] placeholder:text-whisper"
         />
         <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-2">
           <button
@@ -420,7 +504,7 @@ export function Composer() {
           </button>
           <button
             type="button"
-            onClick={() => setSkipApprovals(!skipApprovals)}
+            onClick={() => void toggleAuto(!skipApprovals)}
             title={skipApprovals ? "Auto-approving every tool call. Click to require approval." : "Approvals required for sensitive tools. Click to enable Auto mode."}
             className={clsx(
               "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs font-medium tracking-[-0.005em] transition-colors select-none",
@@ -431,16 +515,17 @@ export function Composer() {
           >
             {skipApprovals ? (
               <>
-                <ShieldOff size={ICON.SM} strokeWidth={2} />
+                <ShieldOff size={ICON.LG} strokeWidth={2} />
                 Auto
               </>
             ) : (
               <>
-                <ShieldCheck size={ICON.SM} strokeWidth={2} />
+                <ShieldCheck size={ICON.LG} strokeWidth={2} />
                 Approve
               </>
             )}
           </button>
+          <LoopStatusBar />
           <UsageDisplay />
           <span className="flex-1" />
           <ModelReasoningChip />

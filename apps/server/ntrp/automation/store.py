@@ -31,6 +31,13 @@ def _row_to_automation(row: dict) -> Automation:
         handler=row["handler"],
         builtin=bool(row["builtin"]),
         cooldown_minutes=int(row["cooldown_minutes"]) if row["cooldown_minutes"] is not None else None,
+        kind=row["kind"] or "automation",
+        target_session_id=row["target_session_id"],
+        loop_prompt=row["loop_prompt"],
+        max_iterations=int(row["max_iterations"]) if row["max_iterations"] is not None else None,
+        iteration_count=int(row["iteration_count"] or 0),
+        stop_when=row["stop_when"],
+        max_age_days=int(row["max_age_days"]) if row["max_age_days"] is not None else None,
     )
 
 
@@ -55,11 +62,20 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
     writable INTEGER NOT NULL DEFAULT 0,
     handler TEXT,
     builtin INTEGER NOT NULL DEFAULT 0,
-    cooldown_minutes INTEGER
+    cooldown_minutes INTEGER,
+    kind TEXT NOT NULL DEFAULT 'automation',
+    target_session_id TEXT,
+    loop_prompt TEXT,
+    max_iterations INTEGER,
+    iteration_count INTEGER NOT NULL DEFAULT 0,
+    stop_when TEXT,
+    max_age_days INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at);
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_kind_session
+ON scheduled_tasks(kind, target_session_id);
 
 CREATE TABLE IF NOT EXISTS automation_event_dedupe (
     task_id TEXT NOT NULL,
@@ -118,12 +134,13 @@ CREATE TABLE IF NOT EXISTS automation_meta (
 _COLUMNS = (
     "task_id, name, description, model, triggers, enabled, "
     "created_at, last_run_at, next_run_at, last_result, running_since, "
-    "writable, handler, builtin, cooldown_minutes"
+    "writable, handler, builtin, cooldown_minutes, "
+    "kind, target_session_id, loop_prompt, max_iterations, iteration_count, stop_when, max_age_days"
 )
 
 _SQL_SAVE = f"""
 INSERT OR REPLACE INTO scheduled_tasks ({_COLUMNS})
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SQL_GET_BY_ID = f"SELECT {_COLUMNS} FROM scheduled_tasks WHERE task_id = ?"
@@ -186,7 +203,21 @@ _SQL_UPDATE_METADATA = """
 UPDATE scheduled_tasks
 SET name = ?, description = ?, model = ?, triggers = ?,
     enabled = ?, next_run_at = ?, writable = ?,
-    cooldown_minutes = ?
+    cooldown_minutes = ?,
+    loop_prompt = ?, max_iterations = ?, stop_when = ?,
+    max_age_days = ?
+WHERE task_id = ?
+"""
+
+_SQL_LIST_LOOPS_BY_SESSION = f"""
+SELECT {_COLUMNS} FROM scheduled_tasks
+WHERE kind = 'loop' AND target_session_id = ?
+ORDER BY created_at
+"""
+
+_SQL_INCREMENT_ITERATION = """
+UPDATE scheduled_tasks
+SET iteration_count = iteration_count + 1
 WHERE task_id = ?
 """
 
@@ -413,7 +444,17 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
 """
 
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 4
+
+_LOOP_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("kind", "TEXT NOT NULL DEFAULT 'automation'"),
+    ("target_session_id", "TEXT"),
+    ("loop_prompt", "TEXT"),
+    ("max_iterations", "INTEGER"),
+    ("iteration_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("stop_when", "TEXT"),
+    ("max_age_days", "INTEGER"),
+)
 
 _DAY_INT_TO_NAME = {0: "mon", 1: "tue", 2: "wed", 3: "thu", 4: "fri", 5: "sat", 6: "sun"}
 
@@ -548,6 +589,19 @@ async def _migrate(conn: aiosqlite.Connection) -> None:
         except Exception:
             pass
 
+    if version < 4:
+        try:
+            rows = await conn.execute_fetchall("PRAGMA table_info(scheduled_tasks)")
+            existing = {row["name"] for row in rows}
+            for col, definition in _LOOP_COLUMNS:
+                if col not in existing:
+                    await conn.execute(f"ALTER TABLE scheduled_tasks ADD COLUMN {col} {definition}")
+            await _set_schema_version(conn, 4)
+            await conn.commit()
+            _logger.info("Migrated automation store to v4 (loop fields incl. max_age_days)")
+        except Exception:
+            _logger.exception("v4 migration failed")
+
 
 class AutomationStore:
     def __init__(self, conn: aiosqlite.Connection):
@@ -578,6 +632,13 @@ class AutomationStore:
                 automation.handler,
                 int(automation.builtin),
                 automation.cooldown_minutes,
+                automation.kind,
+                automation.target_session_id,
+                automation.loop_prompt,
+                automation.max_iterations,
+                int(automation.iteration_count),
+                automation.stop_when,
+                automation.max_age_days,
             ),
         )
         await self.conn.commit()
@@ -650,9 +711,21 @@ class AutomationStore:
                 automation.next_run_at.isoformat() if automation.next_run_at else None,
                 int(automation.writable),
                 automation.cooldown_minutes,
+                automation.loop_prompt,
+                automation.max_iterations,
+                automation.stop_when,
+                automation.max_age_days,
                 automation.task_id,
             ),
         )
+        await self.conn.commit()
+
+    async def list_loops_by_session(self, session_id: str) -> list[Automation]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_LOOPS_BY_SESSION, (session_id,))
+        return [_row_to_automation(row) for row in rows]
+
+    async def increment_iteration(self, task_id: str) -> None:
+        await self.conn.execute(_SQL_INCREMENT_ITERATION, (task_id,))
         await self.conn.commit()
 
     async def clear_all_running(self) -> int:

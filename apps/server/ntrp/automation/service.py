@@ -93,6 +93,10 @@ class AutomationService:
         enabled: bool | None,
         model: str | None,
         cooldown_minutes: int | None = None,
+        loop_prompt: str | None = None,
+        max_iterations: int | None = None,
+        stop_when: str | None = None,
+        max_age_days: int | None = None,
     ) -> dict[str, Any]:
         changes: dict[str, Any] = {}
         if name is not None:
@@ -107,6 +111,14 @@ class AutomationService:
             changes["model"] = _normalize_and_validate_model(model)
         if cooldown_minutes is not None:
             changes["cooldown_minutes"] = cooldown_minutes
+        if loop_prompt is not None:
+            changes["loop_prompt"] = loop_prompt
+        if max_iterations is not None:
+            changes["max_iterations"] = max_iterations
+        if stop_when is not None:
+            changes["stop_when"] = stop_when
+        if max_age_days is not None:
+            changes["max_age_days"] = max_age_days
         return changes
 
     @staticmethod
@@ -152,6 +164,10 @@ class AutomationService:
         model: str | None = None,
         triggers: list[dict] | None = None,
         cooldown_minutes: int | None = None,
+        loop_prompt: str | None = None,
+        max_iterations: int | None = None,
+        stop_when: str | None = None,
+        max_age_days: int | None = None,
     ) -> Automation:
         task = await self.get(task_id)
         changes = self._build_metadata_changes(
@@ -161,6 +177,10 @@ class AutomationService:
             enabled=enabled,
             model=model,
             cooldown_minutes=cooldown_minutes,
+            loop_prompt=loop_prompt,
+            max_iterations=max_iterations,
+            stop_when=stop_when,
+            max_age_days=max_age_days,
         )
 
         trigger_patch = TriggerPatch(
@@ -260,3 +280,48 @@ class AutomationService:
         deleted = await self.store.delete(task_id)
         if not deleted:
             raise KeyError(f"Automation {task_id} not found")
+
+    async def list_loops_by_session(self, session_id: str) -> list[Automation]:
+        return await self.store.list_loops_by_session(session_id)
+
+    async def create_loop(
+        self,
+        *,
+        session_id: str,
+        prompt: str,
+        every: str,
+        max_iterations: int | None = None,
+        stop_when: str | None = None,
+        max_age_days: int | None = None,
+    ) -> Automation:
+        prompt = prompt.strip()
+        if not prompt:
+            raise ValueError("prompt required")
+        if not session_id:
+            raise ValueError("session_id required")
+
+        trigger, next_run = build_trigger("time", every=every)
+        now = datetime.now(UTC)
+        automation = Automation(
+            task_id=f"loop-{generate_slug(2)}",
+            name=f"Loop: {prompt[:40]}",
+            description=prompt,
+            model=None,
+            triggers=[trigger],
+            enabled=True,
+            created_at=now,
+            next_run_at=next_run,
+            last_run_at=None,
+            last_result=None,
+            running_since=None,
+            writable=True,
+            kind="loop",
+            target_session_id=session_id,
+            loop_prompt=prompt,
+            max_iterations=max_iterations,
+            iteration_count=0,
+            stop_when=stop_when,
+            max_age_days=max_age_days,
+        )
+        await self.store.save(automation)
+        return automation

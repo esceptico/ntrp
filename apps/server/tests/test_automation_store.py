@@ -174,6 +174,107 @@ async def test_seed_builtins_updates_legacy_memory_maintenance_to_review_pass(au
     assert "without applying changes" in automation.description
 
 
+@pytest.mark.asyncio
+async def test_loop_fields_roundtrip(automation_store: AutomationStore):
+    now = datetime.now(UTC)
+    loop = Automation(
+        task_id="loop-foo",
+        name="Loop: check CI",
+        description="check CI",
+        model=None,
+        triggers=[TimeTrigger(every="5m")],
+        enabled=True,
+        created_at=now,
+        next_run_at=now + timedelta(minutes=5),
+        last_run_at=None,
+        last_result=None,
+        running_since=None,
+        writable=True,
+        kind="loop",
+        target_session_id="sess-1",
+        loop_prompt="check CI",
+        max_iterations=3,
+        iteration_count=0,
+        stop_when="when green",
+    )
+    await automation_store.save(loop)
+
+    loaded = await automation_store.get("loop-foo")
+    assert loaded is not None
+    assert loaded.kind == "loop"
+    assert loaded.target_session_id == "sess-1"
+    assert loaded.loop_prompt == "check CI"
+    assert loaded.max_iterations == 3
+    assert loaded.iteration_count == 0
+    assert loaded.stop_when == "when green"
+
+
+@pytest.mark.asyncio
+async def test_list_loops_by_session_filters_correctly(automation_store: AutomationStore):
+    now = datetime.now(UTC)
+
+    def _loop(task_id: str, session_id: str) -> Automation:
+        return Automation(
+            task_id=task_id,
+            name=task_id,
+            description="x",
+            model=None,
+            triggers=[TimeTrigger(every="5m")],
+            enabled=True,
+            created_at=now,
+            next_run_at=now,
+            last_run_at=None,
+            last_result=None,
+            running_since=None,
+            writable=True,
+            kind="loop",
+            target_session_id=session_id,
+            loop_prompt="x",
+        )
+
+    await automation_store.save(_loop("loop-a", "sess-1"))
+    await automation_store.save(_loop("loop-b", "sess-1"))
+    await automation_store.save(_loop("loop-c", "sess-2"))
+    # Non-loop in same session should not appear.
+    await automation_store.save(_automation("not-a-loop"))
+
+    by_one = await automation_store.list_loops_by_session("sess-1")
+    assert sorted(a.task_id for a in by_one) == ["loop-a", "loop-b"]
+
+    by_two = await automation_store.list_loops_by_session("sess-2")
+    assert [a.task_id for a in by_two] == ["loop-c"]
+
+
+@pytest.mark.asyncio
+async def test_increment_iteration_advances_count(automation_store: AutomationStore):
+    now = datetime.now(UTC)
+    loop = Automation(
+        task_id="loop-iter",
+        name="x",
+        description="x",
+        model=None,
+        triggers=[TimeTrigger(every="5m")],
+        enabled=True,
+        created_at=now,
+        next_run_at=now,
+        last_run_at=None,
+        last_result=None,
+        running_since=None,
+        writable=True,
+        kind="loop",
+        target_session_id="sess",
+        loop_prompt="x",
+    )
+    await automation_store.save(loop)
+
+    await automation_store.increment_iteration("loop-iter")
+    await automation_store.increment_iteration("loop-iter")
+
+    loaded = await automation_store.get("loop-iter")
+    assert loaded is not None
+    assert loaded.iteration_count == 2
+
+
 def test_scheduler_constructor_has_no_learning_recorder(automation_store: AutomationStore):
     async def record_learning_event(**event):
         raise AssertionError("scheduler should not write continual-learning events")

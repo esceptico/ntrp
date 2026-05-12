@@ -54,6 +54,7 @@ def create_agent(
     extra_auto_approve: set[str] | None = None,
     background_tasks: BackgroundTaskRegistry | None = None,
     loaded_tools: set[str] | None = None,
+    loop_task_id: str | None = None,
 ) -> Agent:
     run_ctx = RunContext(
         run_id=run_id,
@@ -63,6 +64,7 @@ def create_agent(
         deferred_tools_enabled=config.deferred_tools,
         loaded_tools=loaded_tools if loaded_tools is not None else set(),
         allowed_tool_names=tool_schema_names(tools),
+        loop_task_id=loop_task_id,
     )
 
     bg_tasks = background_tasks or BackgroundTaskRegistry(session_id=session_state.session_id)

@@ -9,10 +9,13 @@ from ntrp.integrations.base import Integration
 from ntrp.skills.tool import create_skill_tool, use_skill_tool
 from ntrp.tools.automation import (
     create_automation_tool,
+    create_loop_tool,
     delete_automation_tool,
     get_automation_result_tool,
     list_automations_tool,
+    loop_done_tool,
     run_automation_tool,
+    schedule_wakeup_tool,
     update_automation_tool,
 )
 from ntrp.tools.background import (
@@ -71,6 +74,9 @@ AUTOMATION = Integration(
         "delete_automation": delete_automation_tool,
         "get_automation_result": get_automation_result_tool,
         "run_automation": run_automation_tool,
+        "create_loop": create_loop_tool,
+        "schedule_wakeup": schedule_wakeup_tool,
+        "loop_done": loop_done_tool,
     },
 )
 
