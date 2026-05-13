@@ -37,6 +37,11 @@ import { SEMANTIC_KIND_AGENT } from "./lib/agent";
 import { messagesScroll } from "./lib/messagesScroll";
 import { clearReplayGapBlockForSession, forgetEventSeqForSession } from "./hooks/useEvents";
 
+export function truncatePrompt(prompt: string, max = 80): string {
+  const single = prompt.replace(/\s+/g, " ").trim();
+  return single.length > max ? single.slice(0, max - 1) + "…" : single;
+}
+
 function formatCall(name: string, argsJson: string): string {
   try {
     const parsed = JSON.parse(argsJson || "{}");
@@ -794,12 +799,28 @@ export async function runBuiltinCommand(name: string, args: string): Promise<voi
 export async function stopLoop(taskId: string): Promise<void> {
   const s = getState();
   const loop = s.loops.find((item) => item.task_id === taskId);
-  try {
-    await apiWithConfig(s.config, `/loops/${taskId}`, { method: "DELETE" });
-    if (s.currentSessionId) await refreshLoops(s.currentSessionId);
-    if (loop) appendStatus(`Loop stopped · ${loop.prompt}`);
-  } catch (error) {
-    appendError(error instanceof Error ? error.message : String(error));
+
+  // No active session — fall back to the direct DELETE so clicking X from
+  // a stale view doesn't dispatch a message to whatever session is
+  // currently focused.
+  if (!s.currentSessionId) {
+    try {
+      await apiWithConfig(s.config, `/loops/${taskId}`, { method: "DELETE" });
+      if (loop) appendStatus(`Loop stopped · ${truncatePrompt(loop.prompt)}`);
+    } catch (error) {
+      appendError(error instanceof Error ? error.message : String(error));
+    }
+    return;
+  }
+
+  // Agentic path: drop a user message into the chat asking the agent to
+  // call delete_automation. The action stays visible in the transcript,
+  // and the next refreshLoops poll removes the chip.
+  const text = `Cancel the recurring loop with task_id "${taskId}" by calling delete_automation, then confirm in one short sentence.`;
+  if (s.running) {
+    await enqueueMessage(text);
+  } else {
+    await sendMessage(text);
   }
 }
 
