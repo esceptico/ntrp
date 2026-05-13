@@ -59,6 +59,9 @@ class Scheduler:
         self._build_deps = build_deps
         self._bus_registry: BusRegistry | None = None
         self._task: asyncio.Task | None = None
+        self._wake_task: asyncio.Task | None = None
+        self._wake_deadline: datetime | None = None
+        self._wake_event = asyncio.Event()
         self._running: set[asyncio.Task] = set()
         self._handlers: dict[str, Callable[[dict | None], Awaitable[str | None]]] = {}
         self._iteration_dispatcher: IterationDispatcher | None = None
@@ -111,6 +114,15 @@ class Scheduler:
             except asyncio.CancelledError:
                 pass
             self._task = None
+
+        if self._wake_task:
+            self._wake_task.cancel()
+            try:
+                await self._wake_task
+            except asyncio.CancelledError:
+                pass
+            self._wake_task = None
+            self._wake_deadline = None
 
         if self._running:
             for task in self._running:
@@ -179,7 +191,34 @@ class Scheduler:
                 self._last_tick_at = datetime.now(UTC)
                 self._last_tick_error = f"{type(exc).__name__}: {exc}"
                 _logger.exception("Scheduler tick failed")
-            await asyncio.sleep(SCHEDULER_POLL_INTERVAL)
+            await self._wait_for_wake_or_poll()
+
+    async def _wait_for_wake_or_poll(self) -> None:
+        try:
+            await asyncio.wait_for(self._wake_event.wait(), timeout=SCHEDULER_POLL_INTERVAL)
+        except TimeoutError:
+            pass
+        finally:
+            self._wake_event.clear()
+
+    def _schedule_wake(self, deadline: datetime) -> None:
+        if self._wake_deadline is not None and self._wake_deadline <= deadline:
+            return
+        if self._wake_task is not None:
+            self._wake_task.cancel()
+        self._wake_deadline = deadline
+        self._wake_task = asyncio.create_task(self._wake_at(deadline))
+
+    async def _wake_at(self, deadline: datetime) -> None:
+        try:
+            delay = max(0.0, (deadline - datetime.now(UTC)).total_seconds())
+            await asyncio.sleep(delay)
+            if self._wake_deadline == deadline:
+                self._wake_event.set()
+        finally:
+            if asyncio.current_task() is self._wake_task:
+                self._wake_task = None
+                self._wake_deadline = None
 
     async def _tick(self) -> None:
         now = datetime.now(UTC)
@@ -272,6 +311,24 @@ class Scheduler:
         if not claimed:
             _logger.debug("Automation %s already claimed or disabled", automation.task_id)
             return
+        # Reschedule next_run_at *now*, before the task body executes, so
+        # the UI countdown ticks from full interval during task execution
+        # instead of pinning at 0s until the task finishes. Matches Claude
+        # Code's cronScheduler pattern (reschedule on fire, not on finish).
+        #
+        # Crucially we do NOT mutate `automation.next_run_at` on the local
+        # snapshot — the finally block in `_run_and_finalize` re-runs
+        # `_advance_to_future` anchored to the *original* next_run_at and
+        # writes the same value (or correctly catches up if the task
+        # outran the interval). Mutating the snapshot here would cause the
+        # finally block to advance *again*, shifting the schedule forward
+        # by one extra interval every fire.
+        if automation.enabled:
+            now = datetime.now(UTC)
+            next_run = self._advance_to_future(automation, now)
+            if next_run is not None:
+                await self.store.set_next_run(automation.task_id, next_run)
+                self._schedule_wake(next_run)
         execution = asyncio.create_task(self._run_and_finalize(automation, context))
         self._track(execution)
 

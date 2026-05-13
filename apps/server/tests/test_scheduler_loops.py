@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -107,6 +108,25 @@ async def test_scheduler_dispatches_due_loop(store: AutomationStore):
     assert reloaded.iteration_count == 1
     assert reloaded.enabled is True
     assert reloaded.next_run_at is not None and reloaded.next_run_at > datetime.now(UTC)
+
+
+@pytest.mark.asyncio
+async def test_scheduler_wakes_at_rescheduled_loop_time(store: AutomationStore):
+    await store.save(_loop(every="1m"))
+    sched, _ = _make_scheduler(store)
+
+    await sched._tick()
+
+    reloaded = await store.get("loop-1")
+    assert reloaded.next_run_at is not None
+    assert sched._wake_deadline == reloaded.next_run_at
+    assert sched._wake_task is not None
+
+    sched._wake_task.cancel()
+    try:
+        await sched._wake_task
+    except asyncio.CancelledError:
+        pass
 
 
 @pytest.mark.asyncio

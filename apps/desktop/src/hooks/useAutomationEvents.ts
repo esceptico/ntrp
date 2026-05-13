@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useStore } from "../store";
-import { fetchAutomations } from "../actions";
+import { fetchAutomations, refreshLoops } from "../actions";
 import { type AppConfig } from "../api";
 
 /** SSE events emitted on `/automations/events`. The backend multiplexes
@@ -67,6 +67,15 @@ export function useAutomationEvents(): void {
                 const event = JSON.parse(line.slice(6)) as AutomationEvent;
                 if (event.type === "automation_progress") {
                   setStatus(event.task_id, event.status);
+                  // The "starting..." status is the scheduler's fire signal —
+                  // server has just bumped next_run_at to the next slot.
+                  // Pull loops for the current session so the countdown chip
+                  // resets immediately instead of pinning at 0s until the
+                  // next 3s poll.
+                  if (event.status === "starting...") {
+                    const sid = useStore.getState().currentSessionId;
+                    if (sid) void refreshLoops(sid);
+                  }
                 } else if (event.type === "automation_finished") {
                   clearStatus(event.task_id);
                   // Refresh the automations list so the row leaves the

@@ -154,7 +154,11 @@ OBSERVATION_DUPLICATE_SIMILARITY_THRESHOLD = 0.90
 
 FRIDAY_WEEKDAY = 4
 DAYS_IN_WEEK = 7
-SCHEDULER_POLL_INTERVAL = 60
+SCHEDULER_POLL_INTERVAL = 60  # seconds; safety-net poll. Real fire timing is
+# event-driven: `handle_run_completed` fires session-bound loops the moment the
+# target session goes idle, and `_start_run` advances `next_run_at` before the
+# task body so the UI countdown ticks during long runs. This poll is the
+# fallback for non-session-bound automations and post-crash reconciliation.
 SCHEDULER_STOP_TIMEOUT = 5
 SCHEDULER_DEDUP_TTL = 86400  # 24 hours
 SCHEDULER_EVENT_MAX_RETRIES = 5

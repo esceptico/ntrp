@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
 import { ArrowUp, ImagePlus, Repeat2, ShieldOff, ShieldCheck, Sparkles, Square, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ImageBlock, type ServerLoop } from "../store";
@@ -15,6 +16,25 @@ import { ModelReasoningChip } from "./ComposerSelectors";
 import { ICON } from "../lib/icons";
 import { formatLoopCountdown } from "../lib/loops";
 import { Markdown } from "./Markdown";
+import { RollingToken } from "./trace/RollingToken";
+
+/** Per-character odometer aligned to the RIGHT so the unit suffix
+ *  ("s"/"m"/"h"/"d") sits at a stable slot and only digits that
+ *  actually differ between renders roll. Slot keys are right-anchored
+ *  ("r0", "r1", …) so "12s" → "9s" drops slot "r2" (the leading "1")
+ *  without disturbing "r0"=s / "r1"=2→9. AnimatePresence at the row
+ *  gives the dropped slot a clean exit instead of a hard unmount. */
+function RollingDigits({ value }: { value: string }) {
+  const chars = Array.from(value);
+  const slots = chars.map((ch, i) => ({ key: `r${chars.length - 1 - i}`, ch }));
+  return (
+    <span className="inline-flex items-baseline tabular-nums whitespace-nowrap">
+      {slots.map(({ key, ch }) => (
+        <RollingToken key={key} value={ch} mono />
+      ))}
+    </span>
+  );
+}
 
 /** Read a single File and return its bytes as base64 + media type. */
 function fileToImageBlock(file: File): Promise<ImageBlock> {
@@ -123,10 +143,7 @@ function LoopStatusBar() {
 
   const next = loops[0];
   const nextRunMs = next.next_run_at ? Date.parse(next.next_run_at) : Number.POSITIVE_INFINITY;
-  const label =
-    loops.length === 1
-      ? `Loop · ${formatLoopCountdown(nextRunMs, now)}`
-      : `Loops · ${loops.length} · next ${formatLoopCountdown(nextRunMs, now)}`;
+  const countdown = formatLoopCountdown(nextRunMs, now);
 
   return (
     <div className="group relative flex items-center">
@@ -136,7 +153,11 @@ function LoopStatusBar() {
         aria-label="Active loops"
       >
         <Repeat2 size={ICON.SM} strokeWidth={1.8} />
-        {label}
+        {loops.length === 1 ? (
+          <>Loop · <RollingDigits value={countdown} /></>
+        ) : (
+          <>Loops · {loops.length} · next <RollingDigits value={countdown} /></>
+        )}
       </button>
       <div className="pointer-events-none absolute bottom-full left-0 mb-2 w-[360px] rounded-[14px] border border-line bg-surface p-3 opacity-0 shadow-[var(--shadow-pop)] transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
         <div className="mb-2 px-1 text-xs font-medium text-muted">Active loops</div>
@@ -162,7 +183,7 @@ function LoopStatusBar() {
                 >
                   <div className="truncate text-sm text-ink-soft">{loop.prompt}</div>
                   <div className="mt-0.5 text-xs text-faint">
-                    Every {loop.every} · next in {formatLoopCountdown(runAt, now)}
+                    Every {loop.every} · next in <RollingDigits value={formatLoopCountdown(runAt, now)} />
                     {loop.max_iterations
                       ? ` · ${loop.iteration_count}/${loop.max_iterations}`
                       : loop.iteration_count > 0
@@ -331,6 +352,32 @@ export function Composer() {
     window.setTimeout(() => setSendPressing(false), 140);
   }, []);
 
+  // Vanish-input on send: per-word dissolve overlay rendered over the
+  // textarea. Pattern from Rauno's "Vanish Input" prototype
+  // (https://rauno.me/craft/vanish-input). Textarea clears instantly;
+  // the captured text floats up and fades. Long messages skip the
+  // animation. Inline initial/animate (no variants pattern, no
+  // `filter: blur` — those triggered a renderer crash in motion v12.38
+  // when paired with form-submit + AnimatePresence).
+  const [vanishingText, setVanishingText] = useState<string | null>(null);
+  const vanishTimeoutRef = useRef<number | null>(null);
+  const startVanish = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (trimmed.length > 600) return;
+    setVanishingText(text);
+    const words = (text.match(/\S+/g) ?? []).length;
+    const totalMs = Math.min(700, words * 14 + 360);
+    if (vanishTimeoutRef.current) window.clearTimeout(vanishTimeoutRef.current);
+    vanishTimeoutRef.current = window.setTimeout(() => {
+      setVanishingText(null);
+      vanishTimeoutRef.current = null;
+    }, totalMs);
+  }, []);
+  useEffect(() => () => {
+    if (vanishTimeoutRef.current) window.clearTimeout(vanishTimeoutRef.current);
+  }, []);
+
   useEffect(() => {
     if (inputRef.current) resize(inputRef.current);
   }, [draft]);
@@ -376,6 +423,10 @@ export function Composer() {
     const images = pendingImages;
     if (!text.trim() && !skill && images.length === 0) return;
 
+    // Capture text for the vanish overlay BEFORE clearing draft. The
+    // overlay renders the captured text and animates it out while the
+    // textarea is already empty for the next keystroke.
+    startVanish(text);
     setDraft("");
     setSelectedSkill(null);
     clearPendingImages();
@@ -518,6 +569,20 @@ export function Composer() {
             e.target.value = ""; // allow picking the same file again later
           }}
         />
+        <AnimatePresence>
+          {vanishingText && (
+            <motion.div
+              key="vanish"
+              aria-hidden
+              className="pointer-events-none absolute left-4 right-4 top-[13px] z-[1] text-md leading-[1.5] text-ink tracking-[-0.005em] whitespace-pre-wrap break-words"
+              initial={{ opacity: 1 }}
+              animate={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.36, ease: [0.4, 0, 0.2, 1] }}
+            >
+              {vanishingText}
+            </motion.div>
+          )}
+        </AnimatePresence>
         <textarea
           ref={inputRef}
           id="message-input"
