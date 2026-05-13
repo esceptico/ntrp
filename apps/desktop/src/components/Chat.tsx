@@ -50,7 +50,6 @@ function ChatHeader() {
         sidebarHidden ? "pl-[128px]" : "pl-[18px]",
       )}
     >
-      <SidebarToggle />
       <div className="flex-1 min-w-0 flex items-baseline gap-2.5">
         <h1 className="m-0 min-w-0 text-md font-semibold tracking-[-0.01em] text-ink truncate">
           {title}
@@ -123,9 +122,17 @@ export function Chat() {
     >
       <Messages key={sessionId ?? "none"} />
       <ChatHeader />
+      {/* SidebarToggle is rendered OUTSIDE .chat-header on purpose.
+          `backdrop-filter` on .chat-header creates a containing block
+          for `position: fixed` descendants, so a fixed-positioned toggle
+          inside the header would move with the header instead of staying
+          at viewport-fixed left:84px. Rendering it as a sibling keeps it
+          anchored to the macOS traffic-lights area regardless of sidebar
+          state. */}
+      <SidebarToggle />
       <div
         ref={bottomStackRef}
-        className="chat-bottom-glass absolute bottom-0 left-0 right-0 z-10"
+        className="chat-bottom-glass absolute bottom-0 left-0 right-0 z-10 pt-4"
       >
         <ApprovalBanner />
         <Composer />
