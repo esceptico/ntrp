@@ -300,13 +300,27 @@ class AutomationService:
             await self.store.save(automation)
         return automation
 
-    async def delete(self, task_id: str) -> None:
+    async def delete(self, task_id: str) -> int:
         task = await self.get(task_id)
         if task.builtin:
             raise ValueError(f"Cannot delete builtin automation '{task.name}'")
+        # Disable (don't delete) children first — preserves forensic data,
+        # matches the idempotency-claim "ledger" pattern. Orphans can be
+        # cleaned up manually if desired.
+        disabled = await self.cancel_children(task_id)
         deleted = await self.store.delete(task_id)
         if not deleted:
             raise KeyError(f"Automation {task_id} not found")
+        return disabled
+
+    async def list_children(self, parent_id: str) -> list[Automation]:
+        return await self.store.list_by_parent(parent_id)
+
+    async def cancel_children(self, parent_id: str) -> int:
+        children = await self.store.list_by_parent(parent_id)
+        for child in children:
+            await self.store.set_enabled(child.task_id, False)
+        return len(children)
 
     async def list_loops_by_session(self, session_id: str) -> list[Automation]:
         return await self.store.list_loops_by_session(session_id)

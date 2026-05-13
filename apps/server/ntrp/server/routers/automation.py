@@ -195,12 +195,12 @@ async def list_notifiers(runtime: Runtime = Depends(get_runtime)):
 @router.delete("/automations/{task_id}")
 async def delete_automation(task_id: str, svc: AutomationService = Depends(require_automation_service)):
     try:
-        await svc.delete(task_id)
+        disabled_children = await svc.delete(task_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Automation not found")
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    return {"status": "deleted"}
+    return {"status": "deleted", "disabled_children": disabled_children}
 
 
 # --- Notifier config CRUD ---

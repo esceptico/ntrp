@@ -107,7 +107,7 @@ async def delete_loop(
     if loop.kind != "loop":
         raise HTTPException(status_code=400, detail=f"{task_id} is not a loop")
     try:
-        await svc.delete(task_id)
+        disabled_children = await svc.delete(task_id)
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    return {"status": "deleted"}
+    return {"status": "deleted", "disabled_children": disabled_children}

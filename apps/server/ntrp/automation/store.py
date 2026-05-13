@@ -312,6 +312,12 @@ WHERE kind = 'loop' AND target_session_id = ?
 ORDER BY created_at
 """
 
+_SQL_LIST_BY_PARENT = f"""
+SELECT {_COLUMNS} FROM scheduled_tasks
+WHERE parent_automation_id = ?
+ORDER BY created_at, task_id
+"""
+
 _SQL_INCREMENT_ITERATION = """
 UPDATE scheduled_tasks
 SET iteration_count = iteration_count + 1
@@ -918,6 +924,10 @@ class AutomationStore:
 
     async def list_loops_by_session(self, session_id: str) -> list[Automation]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_LOOPS_BY_SESSION, (session_id,))
+        return [_row_to_automation(row) for row in rows]
+
+    async def list_by_parent(self, parent_automation_id: str) -> list[Automation]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_BY_PARENT, (parent_automation_id,))
         return [_row_to_automation(row) for row in rows]
 
     async def increment_iteration(self, task_id: str) -> None:
