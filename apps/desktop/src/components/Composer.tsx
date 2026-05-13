@@ -14,6 +14,7 @@ import {
 import { ModelReasoningChip } from "./ComposerSelectors";
 import { ICON } from "../lib/icons";
 import { formatLoopCountdown } from "../lib/loops";
+import { Markdown } from "./Markdown";
 
 /** Read a single File and return its bytes as base64 + media type. */
 function fileToImageBlock(file: File): Promise<ImageBlock> {
@@ -220,8 +221,8 @@ function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: 
             <X size={ICON.SM} strokeWidth={2} />
           </button>
         </div>
-        <div className="overflow-y-auto px-4 py-3 whitespace-pre-wrap break-words text-sm text-ink-soft">
-          {loop.prompt}
+        <div className="overflow-y-auto px-4 py-3">
+          <Markdown content={loop.prompt} className="text-sm text-ink-soft" />
         </div>
         <div className="px-4 py-2 border-t border-line text-xs text-faint flex flex-wrap gap-x-3 gap-y-1">
           {loop.max_iterations ? <span>iter {loop.iteration_count}/{loop.max_iterations}</span> : loop.iteration_count > 0 ? <span>iter {loop.iteration_count}</span> : null}
