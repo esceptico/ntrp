@@ -579,8 +579,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             # `messages` here is the same list object as run.messages — for
             # iteration-mode loops it's the trimmed view, so prepend the
             # stashed prefix to keep disk history complete.
-            persistable = [*run.history_prefix, *messages] if run.history_prefix else messages
-            await ctx.session_service.save_progress(session_state, persistable)
+            await ctx.session_service.save_progress(session_state, _persistable_messages(run))
             bus.mark_checkpoint()
 
         agent.hooks.on_step_finish = _checkpoint

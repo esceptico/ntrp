@@ -16,7 +16,12 @@ from ntrp.constants import LOOP_ITERATION_HISTORY_WINDOW
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.factory import AgentConfig
 from ntrp.server.state import RunRegistry
-from ntrp.services.chat import ChatDeps, _loop_task_id_from_client_id, prepare_chat
+from ntrp.services.chat import (
+    ChatDeps,
+    _loop_task_id_from_client_id,
+    _persistable_messages,
+    prepare_chat,
+)
 
 
 def _make_history(n: int, *, with_system: bool = True) -> list[dict]:
@@ -202,6 +207,53 @@ async def test_loop_iteration_stashes_prefix_for_persistence():
     assert len(prefix) == 10
     assert prefix[0]["content"] == "msg-0"
     assert prefix[-1]["content"] == "msg-9"
+
+
+@pytest.mark.asyncio
+async def test_loop_iteration_save_progress_persists_full_history():
+    # End-to-end: when a save path fires after a trim, the bytes that land
+    # in session storage must be history_prefix + agent_view, i.e. the
+    # full pre-trim history plus the fresh user message. Otherwise we'd
+    # silently truncate disk history on every loop tick.
+    history = _make_history(60)
+    svc = _StubSessionService(history)
+    deps = _make_deps(svc)
+
+    client_id = "loop:loop-persist:1"
+    ctx = await prepare_chat(
+        deps,
+        message="iter",
+        skip_approvals=None,
+        session_id="sess-1",
+        client_id=client_id,
+        loop_task_id=_loop_task_id_from_client_id(client_id),
+    )
+
+    # Sanity: the agent view was actually trimmed.
+    assert len(ctx.run.history_prefix) == 10
+    assert len(ctx.run.messages) < len(history) + 1
+
+    # Simulate any save path firing (start_chat's pre-stream save,
+    # _checkpoint, _save_snapshot, or the final save in `finally`).
+    await deps.session_service.save_progress(
+        ctx.session_state, _persistable_messages(ctx.run)
+    )
+
+    assert svc.save_progress_calls, "save_progress should have been called"
+    persisted = svc.save_progress_calls[-1]
+    # 1 system + 60 prior + 1 fresh user msg = 62.
+    assert len(persisted) == len(history) + 1
+    assert persisted == [*ctx.run.history_prefix, *ctx.run.messages]
+    # Every original prior message survives — none of msg-0..msg-59 went
+    # missing from disk just because the agent view was trimmed.
+    persisted_contents = {
+        m.get("content") for m in persisted if isinstance(m.get("content"), str)
+    }
+    for i in range(60):
+        assert f"msg-{i}" in persisted_contents, f"msg-{i} dropped from disk"
+    # Tail is the fresh loop-dispatched user message.
+    assert persisted[-1]["role"] == "user"
+    assert persisted[-1].get("is_meta") is True
 
 
 @pytest.mark.asyncio
