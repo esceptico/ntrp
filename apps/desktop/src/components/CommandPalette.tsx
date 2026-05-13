@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Archive,
+  Bot,
   Brain,
+  ChevronRight,
   GitBranch,
+  Layers,
   MessageSquare,
   PanelLeft,
   Pencil,
@@ -16,25 +19,50 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
-import { archiveSession, branchAtMessage, createSession, switchSession } from "../actions";
+import {
+  archiveSession,
+  branchAtMessage,
+  createSession,
+  switchSession,
+  updateServerConfig,
+} from "../actions";
 import { apiWithConfig } from "../api";
 import { formatRelativePast } from "../lib/format";
 import { ICON } from "../lib/icons";
+import { EASE_EMPHASIZED, EASE_OUT, MOTION } from "../lib/motion";
 
 const BACKDROP_DURATION = 0.16;
 const PANEL_DURATION = 0.18;
-const EASE = [0.2, 0.8, 0.2, 1] as const;
+const EASE = EASE_OUT;
 
+/** A palette entry. Either an executable leaf (`run`) or a folder
+ *  (`children`) that opens a sub-view via breadcrumb drill-down. */
 interface CommandEntry {
   id: string;
-  section: "suggested" | "open" | "session";
+  section: "suggested" | "open" | "session" | "provider" | "model";
   label: string;
   hint?: string;
   shortcut?: string;
   icon: LucideIcon;
-  run: () => void | Promise<void>;
+  /** Leaf action. Mutually exclusive with `children`. */
+  run?: () => void | Promise<void>;
+  /** Folder. Returning a view defers entries until drilled into. */
+  children?: () => CommandView;
   /** Lower-cased haystack used for fuzzy matching. */
   search: string;
+}
+
+/** One level of the drill-down tree. `placeholder` swaps the input
+ *  placeholder so the user knows what to type for. The crumb chip
+ *  itself reuses the parent entry's label — no separate copy. */
+interface CommandView {
+  placeholder: string;
+  entries: CommandEntry[];
+}
+
+interface Crumb {
+  id: string;
+  label: string;
 }
 
 export function CommandPalette() {
@@ -43,6 +71,7 @@ export function CommandPalette() {
   const togglePalette = useStore((s) => s.togglePalette);
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
+  const [crumbs, setCrumbs] = useState<Crumb[]>([]);
 
   // Global Cmd/Ctrl+K toggle + Esc close.
   useEffect(() => {
@@ -66,6 +95,7 @@ export function CommandPalette() {
     if (open) {
       setQuery("");
       setIndex(0);
+      setCrumbs([]);
     }
   }, [open]);
 
@@ -97,6 +127,8 @@ export function CommandPalette() {
               setQuery={setQuery}
               index={index}
               setIndex={setIndex}
+              crumbs={crumbs}
+              setCrumbs={setCrumbs}
               onClose={close}
             />
           </motion.div>
@@ -112,30 +144,89 @@ function PaletteBody({
   setQuery,
   index,
   setIndex,
+  crumbs,
+  setCrumbs,
   onClose,
 }: {
   query: string;
   setQuery: (q: string) => void;
   index: number;
   setIndex: (n: number) => void;
+  crumbs: Crumb[];
+  setCrumbs: React.Dispatch<React.SetStateAction<Crumb[]>>;
   onClose: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const activeRowRef = useRef<HTMLButtonElement>(null);
-  const entries = useEntries();
-  const filtered = useMemo(() => filterEntries(entries, query), [entries, query]);
+  const rootEntries = useEntries();
+
+  // Resolve the active view by following the crumb path from root.
+  // If any segment goes stale (e.g. server data refreshed and an entry
+  // disappeared), we collapse back to root rather than show a dead view.
+  const { view, staleCrumbs } = useMemo(() => {
+    let entries = rootEntries;
+    let placeholder = "Search commands, sessions, memory...";
+    for (let i = 0; i < crumbs.length; i++) {
+      const crumb = crumbs[i];
+      const folder = entries.find((e) => e.id === crumb.id && e.children);
+      if (!folder || !folder.children) {
+        return {
+          view: { placeholder, entries: rootEntries },
+          staleCrumbs: true,
+        };
+      }
+      const next = folder.children();
+      entries = next.entries;
+      placeholder = next.placeholder;
+    }
+    return {
+      view: { placeholder, entries },
+      staleCrumbs: false,
+    };
+  }, [rootEntries, crumbs]);
+
+  // Drop stale path silently — caller never sees the inconsistency.
+  useEffect(() => {
+    if (staleCrumbs) setCrumbs([]);
+  }, [staleCrumbs, setCrumbs]);
+
+  const filtered = useMemo(() => filterEntries(view.entries, query), [view.entries, query]);
   const safe = Math.min(index, Math.max(0, filtered.length - 1));
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  // Reset index when filter changes.
+  // Reset index when filter or path changes.
   useEffect(() => {
     setIndex(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+  }, [query, crumbs.length]);
+
+  // Clear stale query when descending into a sub-view — otherwise the
+  // user's "switch model" query immediately filters the provider list
+  // to nothing.
+  const pushCrumb = useCallback(
+    (entry: CommandEntry) => {
+      setCrumbs((prev) => [...prev, { id: entry.id, label: entry.label }]);
+      setQuery("");
+    },
+    [setCrumbs, setQuery],
+  );
+
+  const popCrumb = useCallback(() => {
+    setCrumbs((prev) => (prev.length === 0 ? prev : prev.slice(0, -1)));
+    setQuery("");
+  }, [setCrumbs, setQuery]);
+
+  const popTo = useCallback(
+    (depth: number) => {
+      setCrumbs((prev) => (prev.length <= depth ? prev : prev.slice(0, depth)));
+      setQuery("");
+    },
+    [setCrumbs, setQuery],
+  );
 
   // Keep the highlighted row in view while arrow-navigating.
   useEffect(() => {
@@ -144,9 +235,15 @@ function PaletteBody({
 
   const grouped = useMemo(() => groupBySection(filtered), [filtered]);
 
-  function execute(entry: CommandEntry) {
-    onClose();
-    void entry.run();
+  function activate(entry: CommandEntry) {
+    if (entry.children) {
+      pushCrumb(entry);
+      return;
+    }
+    if (entry.run) {
+      onClose();
+      void entry.run();
+    }
   }
 
   return (
@@ -157,32 +254,40 @@ function PaletteBody({
           strokeWidth={1.8}
           className="absolute left-4 top-[22px] text-faint pointer-events-none"
         />
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (filtered.length === 0) return;
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              setIndex((safe + 1) % filtered.length);
-              return;
-            }
-            if (e.key === "ArrowUp") {
-              e.preventDefault();
-              setIndex((safe - 1 + filtered.length) % filtered.length);
-              return;
-            }
-            if (e.key === "Enter") {
-              e.preventDefault();
-              execute(filtered[safe]);
-            }
-          }}
-          placeholder="Search commands, sessions, memory..."
-          spellCheck={false}
-          className="w-full h-8 pl-6 bg-transparent text-md text-ink placeholder:text-faint outline-none"
-        />
+        <div className="flex items-center gap-1.5 pl-6">
+          <Breadcrumbs crumbs={crumbs} onJump={popTo} />
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Backspace" && query.length === 0 && crumbs.length > 0) {
+                e.preventDefault();
+                popCrumb();
+                return;
+              }
+              if (filtered.length === 0) return;
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setIndex((safe + 1) % filtered.length);
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setIndex((safe - 1 + filtered.length) % filtered.length);
+                return;
+              }
+              if (e.key === "Enter") {
+                e.preventDefault();
+                activate(filtered[safe]);
+              }
+            }}
+            placeholder={view.placeholder}
+            spellCheck={false}
+            className="flex-1 min-w-0 h-8 bg-transparent text-md text-ink placeholder:text-faint outline-none"
+          />
+        </div>
       </div>
 
       <div ref={listRef} className="overflow-y-auto scroll-thin pb-2 border-t border-line-soft/60">
@@ -206,7 +311,7 @@ function PaletteBody({
                       active={isActive}
                       activeRef={isActive ? activeRowRef : undefined}
                       onHover={() => setIndex(filtered.indexOf(entry))}
-                      onClick={() => execute(entry)}
+                      onClick={() => activate(entry)}
                     />
                   );
                 })}
@@ -216,6 +321,55 @@ function PaletteBody({
         )}
       </div>
     </>
+  );
+}
+
+/** Breadcrumb trail rendered inline with the input. Each chip pops the
+ *  stack back to that depth. Animates in with a tiny stagger and slides
+ *  from -4px; popping reverses via AnimatePresence. */
+function Breadcrumbs({
+  crumbs,
+  onJump,
+}: {
+  crumbs: Crumb[];
+  onJump: (depth: number) => void;
+}) {
+  if (crumbs.length === 0) return null;
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      <AnimatePresence initial={false} mode="popLayout">
+        {crumbs.map((crumb, i) => (
+          <motion.div
+            key={`${i}:${crumb.id}`}
+            layout
+            initial={{ opacity: 0, x: -4 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -4 }}
+            transition={{
+              duration: MOTION.check,
+              ease: EASE_EMPHASIZED,
+              delay: i * 0.02,
+            }}
+            className="flex items-center gap-1"
+          >
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onJump(i)}
+              className="h-6 px-2 rounded-[6px] bg-surface-soft text-xs text-ink-soft hover:text-ink hover:bg-surface-sunken transition-colors whitespace-nowrap"
+            >
+              {crumb.label}
+            </button>
+            <ChevronRight
+              size={ICON.XS}
+              strokeWidth={1.8}
+              className="text-faint shrink-0"
+              aria-hidden
+            />
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -261,6 +415,14 @@ function Row({
         {entry.shortcut && (
           <kbd className="text-2xs text-faint font-mono shrink-0 ml-1">{entry.shortcut}</kbd>
         )}
+        {entry.children && (
+          <ChevronRight
+            size={ICON.XS}
+            strokeWidth={1.8}
+            className="text-faint shrink-0 ml-1"
+            aria-hidden
+          />
+        )}
       </button>
     </li>
   );
@@ -270,9 +432,17 @@ const SECTION_LABEL: Record<CommandEntry["section"], string> = {
   suggested: "Suggested",
   open: "Navigation",
   session: "Sessions",
+  provider: "Providers",
+  model: "Models",
 };
 
-const SECTION_ORDER: CommandEntry["section"][] = ["suggested", "open", "session"];
+const SECTION_ORDER: CommandEntry["section"][] = [
+  "suggested",
+  "open",
+  "provider",
+  "model",
+  "session",
+];
 
 // ─── Entry sources ───────────────────────────────────────────────────
 
@@ -287,6 +457,9 @@ function useEntries(): CommandEntry[] {
   const toggleSidebar = useStore((s) => s.toggleSidebar);
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
   const order = useStore((s) => s.order);
+  const serverModels = useStore((s) => s.serverModels);
+  const serverConfig = useStore((s) => s.serverConfig);
+  const currentChatModel = serverConfig?.chat_model;
 
   return useMemo(() => {
     const entries: CommandEntry[] = [];
@@ -393,6 +566,20 @@ function useEntries(): CommandEntry[] {
       search: "settings preferences config mcp models",
     });
 
+    // Switch model — drill-down. Hidden when /models hasn't returned
+    // anything yet so the chevron doesn't lie about navigable content.
+    if (serverModels && serverModels.groups.length > 0) {
+      entries.push({
+        id: "open:switch-model",
+        section: "open",
+        label: "Switch model",
+        hint: currentChatModel,
+        icon: Bot,
+        children: () => buildProviderView(serverModels.groups, currentChatModel),
+        search: "switch model chat provider anthropic openai",
+      });
+    }
+
     // Sessions — recent first, skip the active one.
     for (const s of sessions) {
       if (s.session_id === currentSessionId) continue;
@@ -420,7 +607,66 @@ function useEntries(): CommandEntry[] {
     toggleSidebar,
     sidebarHidden,
     order,
+    serverModels,
+    currentChatModel,
   ]);
+}
+
+/** Provider-level view: one row per provider, drills into model list. */
+function buildProviderView(
+  groups: { provider: string; models: string[] }[],
+  currentModel: string | undefined,
+): CommandView {
+  return {
+    placeholder: "Filter providers...",
+    entries: groups.map((g) => ({
+      id: `provider:${g.provider}`,
+      section: "provider" as const,
+      label: prettyProvider(g.provider),
+      hint: `${g.models.length} model${g.models.length === 1 ? "" : "s"}`,
+      icon: Layers,
+      children: () => buildModelView(g.provider, g.models, currentModel),
+      search: `${g.provider.toLowerCase()} provider`,
+    })),
+  };
+}
+
+/** Model-level view: leaf rows that apply chat_model on Enter. */
+function buildModelView(
+  provider: string,
+  models: string[],
+  currentModel: string | undefined,
+): CommandView {
+  return {
+    placeholder: `Filter ${prettyProvider(provider)} models...`,
+    entries: models.map((model) => ({
+      id: `model:${model}`,
+      section: "model" as const,
+      label: stripProviderPrefix(model, provider),
+      hint: model === currentModel ? "current" : undefined,
+      icon: Bot,
+      run: async () => {
+        if (model === currentModel) return;
+        try {
+          await updateServerConfig({ chat_model: model });
+        } catch {
+          /* surfaced via the global error path */
+        }
+      },
+      search: `${model.toLowerCase()} model`,
+    })),
+  };
+}
+
+function prettyProvider(provider: string): string {
+  if (!provider) return "Unknown";
+  if (provider === "openai") return "OpenAI";
+  return provider.charAt(0).toUpperCase() + provider.slice(1);
+}
+
+function stripProviderPrefix(model: string, provider: string): string {
+  const prefix = `${provider}/`;
+  return model.startsWith(prefix) ? model.slice(prefix.length) : model;
 }
 
 function lastAssistantId(
