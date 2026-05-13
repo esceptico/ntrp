@@ -381,6 +381,8 @@ class AutomationService:
             writable=True,
             kind="loop",
             target_session_id=session_id,
+            thread_id=session_id,
+            read_history=True,
             loop_prompt=prompt,
             max_iterations=max_iterations,
             iteration_count=0,

@@ -809,3 +809,80 @@ async def test_handle_run_completed_fires_kind_automation_with_thread_id(
 
     assert len(dispatched) == 1
     assert dispatched[0].task_id == "channel-auto"
+
+
+# ---------------------------------------------------------------------------
+# Fix coverage: iteration loops created via `svc.create(thread_id=X,
+# read_history=True)` (no legacy target_session_id) must fire through the
+# iteration dispatcher. Pre-fix, the iteration validation rejected them
+# and the dispatcher target resolution returned an empty string.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_iteration_loop_with_only_thread_id_fires(store: AutomationStore):
+    """`svc.create(thread_id=X, read_history=True)` produces a row with
+    thread_id but no target_session_id. The scheduler must accept it as
+    a valid iteration-mode loop and route it through the iteration
+    dispatcher."""
+    sched, dispatched = _make_scheduler(store)
+    svc = AutomationService(store=store, scheduler=sched)
+
+    auto = await svc.create(
+        name="iter-thread-only",
+        description="iterate me",
+        trigger_type="time",
+        every="5m",
+        thread_id="sess-new",
+        read_history=True,
+    )
+    assert auto is not None
+    assert auto.thread_id == "sess-new"
+    assert auto.target_session_id is None
+    assert auto.read_history is True
+
+    await store.set_next_run(auto.task_id, datetime.now(UTC) - timedelta(seconds=1))
+
+    await sched._tick()
+    for t in list(sched._running):
+        await t
+
+    assert len(dispatched) == 1
+    assert dispatched[0].task_id == auto.task_id
+    assert dispatched[0].thread_id == "sess-new"
+
+
+@pytest.mark.asyncio
+async def test_create_loop_sets_thread_id_and_read_history(store: AutomationStore):
+    """`svc.create_loop` must align new rows with the canonical model:
+    thread_id is the new home; target_session_id is legacy backfill.
+    read_history must be True so the row routes through the iteration
+    dispatcher (loops re-enter the session with full history)."""
+    sched, _ = _make_scheduler(store)
+    svc = AutomationService(store=store, scheduler=sched)
+
+    loop = await svc.create_loop(
+        session_id="sess-canon",
+        prompt="watch CI",
+        every="5m",
+    )
+
+    assert loop is not None
+    assert loop.thread_id == "sess-canon"
+    assert loop.target_session_id == "sess-canon"
+    assert loop.read_history is True
+
+
+@pytest.mark.asyncio
+async def test_list_session_bound_excludes_disabled(store: AutomationStore):
+    """`list_session_bound_by_session` is consumed by the run-completed
+    fast path. Disabled rows shouldn't be hydrated — they'll never fire."""
+    enabled_row = _loop(task_id="loop-enabled", session_id="sess-shared")
+    disabled_row = _loop(task_id="loop-disabled", session_id="sess-shared")
+    await store.save(enabled_row)
+    await store.save(disabled_row)
+    await store.set_enabled("loop-disabled", False)
+
+    rows = await store.list_session_bound_by_session("sess-shared")
+    task_ids = {r.task_id for r in rows}
+    assert task_ids == {"loop-enabled"}

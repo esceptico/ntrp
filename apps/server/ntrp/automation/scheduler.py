@@ -391,9 +391,13 @@ class Scheduler:
         if automation.read_history:
             dispatcher = self._iteration_dispatcher
             mode = "iteration"
-            if not automation.target_session_id:
+            # Iteration mode re-enters via `thread_id` (new) or
+            # `target_session_id` (legacy). Channel-aware rows created via
+            # `service.create(thread_id=X, read_history=True)` only carry
+            # thread_id — accept either.
+            if not (automation.thread_id or automation.target_session_id):
                 raise RuntimeError(
-                    f"Iteration loop {automation.task_id} missing target_session_id"
+                    f"Iteration loop {automation.task_id} missing thread_id"
                 )
         else:
             dispatcher = self._post_dispatcher

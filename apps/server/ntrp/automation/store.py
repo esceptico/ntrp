@@ -324,7 +324,7 @@ ORDER BY created_at
 # kind="automation" and still need to fire through the post dispatcher.
 _SQL_LIST_SESSION_BOUND_BY_SESSION = f"""
 SELECT {_COLUMNS} FROM scheduled_tasks
-WHERE thread_id = ? OR target_session_id = ?
+WHERE (thread_id = ? OR target_session_id = ?) AND enabled = 1
 ORDER BY created_at
 """
 

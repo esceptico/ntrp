@@ -94,7 +94,7 @@ async def lifespan(app: FastAPI):
             lambda: runtime.build_chat_deps(),
             bus_registry,
             message=automation.loop_prompt or "",
-            session_id=automation.target_session_id or "",
+            session_id=_loop_target_id(automation) or "",
             skip_approvals=automation.writable,
             client_id=f"loop:{automation.task_id}:{automation.iteration_count + 1}",
         )
