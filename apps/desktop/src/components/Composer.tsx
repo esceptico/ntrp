@@ -95,17 +95,20 @@ function LoopStatusBar() {
   );
   const [now, setNow] = useState(Date.now());
 
-  // Initial fetch + poll. The poll is the source of truth — the server
-  // owns the schedule, we just render. 3s is a balance between feeling
-  // live and not hammering the API.
+  // Two intervals: refresh server state every 3s, tick the local clock
+  // every 1s so countdowns under a minute display live seconds without
+  // pounding the API.
   useEffect(() => {
     if (!sessionId) return;
     void refreshLoops(sessionId);
-    const id = window.setInterval(() => {
-      setNow(Date.now());
+    const tickId = window.setInterval(() => setNow(Date.now()), 1_000);
+    const refreshId = window.setInterval(() => {
       void refreshLoops(sessionId);
     }, 3_000);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(tickId);
+      window.clearInterval(refreshId);
+    };
   }, [sessionId]);
 
   if (loops.length === 0) return null;
@@ -144,7 +147,7 @@ function LoopStatusBar() {
                   <X size={ICON.SM} strokeWidth={2} />
                 </button>
                 <div className="min-w-0">
-                  <div className="truncate text-sm text-ink-soft">{loop.prompt}</div>
+                  <div className="whitespace-pre-wrap break-words text-sm text-ink-soft">{loop.prompt}</div>
                   <div className="mt-0.5 text-xs text-faint">
                     Every {loop.every} · next in {formatLoopCountdown(runAt, now)}
                     {loop.max_iterations

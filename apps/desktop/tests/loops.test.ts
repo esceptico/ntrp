@@ -4,7 +4,10 @@ import { truncatePrompt } from "../src/actions.js";
 
 test("formats loop countdown", () => {
   expect(formatLoopCountdown(1_060_000, 1_000_000)).toBe("1m");
-  expect(formatLoopCountdown(1_001_000, 1_000_000)).toBe("<1m");
+  // Under a minute renders as live seconds so the user can watch the tick.
+  expect(formatLoopCountdown(1_045_000, 1_000_000)).toBe("45s");
+  expect(formatLoopCountdown(1_001_000, 1_000_000)).toBe("1s");
+  expect(formatLoopCountdown(1_000_000, 1_000_000)).toBe("1s");
   expect(formatLoopCountdown(1_000_000 + 90 * 60_000, 1_000_000)).toBe("1h 30m");
   expect(formatLoopCountdown(1_000_000 + 25 * 60 * 60_000, 1_000_000)).toBe("1d");
 });
