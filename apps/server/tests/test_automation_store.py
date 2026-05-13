@@ -326,6 +326,24 @@ async def test_v5_fields_default_to_none_or_false(automation_store: AutomationSt
 
 
 @pytest.mark.asyncio
+async def test_update_metadata_persists_v5_identity_fields(automation_store: AutomationStore):
+    """update_metadata() must persist parent_automation_id / idempotency_key / idempotency_scope."""
+    automation = _automation("identity-fields")
+    await automation_store.save(automation)
+
+    automation.parent_automation_id = "watcher-7"
+    automation.idempotency_key = "offer-99"
+    automation.idempotency_scope = "thread"
+    await automation_store.update_metadata(automation)
+
+    loaded = await automation_store.get("identity-fields")
+    assert loaded is not None
+    assert loaded.parent_automation_id == "watcher-7"
+    assert loaded.idempotency_key == "offer-99"
+    assert loaded.idempotency_scope == "thread"
+
+
+@pytest.mark.asyncio
 async def test_v5_migration_backfills_loop_rows(tmp_path: Path):
     """v4 → v5: loop rows get thread_id = target_session_id, read_history = True."""
     db_path = tmp_path / "v4.db"

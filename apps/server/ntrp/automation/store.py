@@ -86,13 +86,11 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_kind_session
 ON scheduled_tasks(kind, target_session_id);
-CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_parent
-ON scheduled_tasks(parent_automation_id);
-CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_thread_kind
-ON scheduled_tasks(thread_id, kind);
-CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_idempotency
-ON scheduled_tasks(idempotency_scope, idempotency_key)
-WHERE idempotency_key IS NOT NULL;
+-- v5 indexes (thread_id, parent_automation_id, idempotency_*) are created
+-- inside the v5 migration block instead of here, since they reference
+-- columns that don't exist on pre-v5 databases. Putting them in _SCHEMA
+-- would fail on the upgrade path (CREATE INDEX runs before ALTER TABLE
+-- adds the columns).
 
 CREATE TABLE IF NOT EXISTS automation_event_dedupe (
     task_id TEXT NOT NULL,
@@ -224,7 +222,8 @@ SET name = ?, description = ?, model = ?, triggers = ?,
     cooldown_minutes = ?,
     loop_prompt = ?, max_iterations = ?, stop_when = ?,
     max_age_days = ?,
-    thread_id = ?, read_history = ?
+    thread_id = ?, read_history = ?,
+    parent_automation_id = ?, idempotency_key = ?, idempotency_scope = ?
 WHERE task_id = ?
 """
 
@@ -617,42 +616,49 @@ async def _migrate(conn: aiosqlite.Connection) -> None:
             pass
 
     if version < 4:
-        try:
-            rows = await conn.execute_fetchall("PRAGMA table_info(scheduled_tasks)")
-            existing = {row["name"] for row in rows}
-            for col, definition in _LOOP_COLUMNS:
-                if col not in existing:
-                    await conn.execute(f"ALTER TABLE scheduled_tasks ADD COLUMN {col} {definition}")
-            await _set_schema_version(conn, 4)
-            await conn.commit()
-            _logger.info("Migrated automation store to v4 (loop fields incl. max_age_days)")
-        except Exception:
-            _logger.exception("v4 migration failed")
+        rows = await conn.execute_fetchall("PRAGMA table_info(scheduled_tasks)")
+        existing = {row["name"] for row in rows}
+        for col, definition in _LOOP_COLUMNS:
+            if col not in existing:
+                await conn.execute(f"ALTER TABLE scheduled_tasks ADD COLUMN {col} {definition}")
+        await _set_schema_version(conn, 4)
+        await conn.commit()
+        _logger.info("Migrated automation store to v4 (loop fields incl. max_age_days)")
 
     if version < 5:
-        try:
-            rows = await conn.execute_fetchall("PRAGMA table_info(scheduled_tasks)")
-            existing = {row["name"] for row in rows}
-            for col, definition in _V5_AUTOMATION_COLUMNS:
-                if col not in existing:
-                    await conn.execute(f"ALTER TABLE scheduled_tasks ADD COLUMN {col} {definition}")
-            # Backfill loop rows: thread_id mirrors target_session_id, read_history=1.
-            # Guarded by thread_id IS NULL so reruns don't clobber later edits.
-            await conn.execute(
-                """
-                UPDATE scheduled_tasks
-                SET thread_id = target_session_id,
-                    read_history = 1
-                WHERE kind = 'loop'
-                  AND thread_id IS NULL
-                  AND target_session_id IS NOT NULL
-                """
-            )
-            await _set_schema_version(conn, 5)
-            await conn.commit()
-            _logger.info("Migrated automation store to v5 (channel-aware automation fields)")
-        except Exception:
-            _logger.exception("v5 migration failed")
+        rows = await conn.execute_fetchall("PRAGMA table_info(scheduled_tasks)")
+        existing = {row["name"] for row in rows}
+        for col, definition in _V5_AUTOMATION_COLUMNS:
+            if col not in existing:
+                await conn.execute(f"ALTER TABLE scheduled_tasks ADD COLUMN {col} {definition}")
+        # v5 indexes — created here (not in _SCHEMA) so they only run after
+        # the referenced columns exist. Idempotent via IF NOT EXISTS.
+        await conn.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_parent
+            ON scheduled_tasks(parent_automation_id);
+            CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_thread_kind
+            ON scheduled_tasks(thread_id, kind);
+            CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_idempotency
+            ON scheduled_tasks(idempotency_scope, idempotency_key)
+            WHERE idempotency_key IS NOT NULL;
+            """
+        )
+        # Backfill loop rows: thread_id mirrors target_session_id, read_history=1.
+        # Guarded by thread_id IS NULL so reruns don't clobber later edits.
+        await conn.execute(
+            """
+            UPDATE scheduled_tasks
+            SET thread_id = target_session_id,
+                read_history = 1
+            WHERE kind = 'loop'
+              AND thread_id IS NULL
+              AND target_session_id IS NOT NULL
+            """
+        )
+        await _set_schema_version(conn, 5)
+        await conn.commit()
+        _logger.info("Migrated automation store to v5 (channel-aware automation fields)")
 
 
 class AutomationStore:
@@ -660,8 +666,14 @@ class AutomationStore:
         self.conn = conn
 
     async def init_schema(self) -> None:
-        await _migrate(self.conn)
+        # _SCHEMA must run first: it CREATEs tables (idempotent for both
+        # fresh and existing DBs) so the migration's ALTER TABLE blocks
+        # can target a guaranteed-existing scheduled_tasks. With the
+        # previous order, fresh DBs hit "no such table" inside _migrate
+        # because the table wasn't created yet. Now that v4/v5 migrations
+        # no longer swallow exceptions, the ordering bug is loud.
         await self.conn.executescript(_SCHEMA)
+        await _migrate(self.conn)
         await _set_schema_version(self.conn, CURRENT_SCHEMA_VERSION)
         await self.conn.commit()
 
@@ -774,6 +786,9 @@ class AutomationStore:
                 automation.max_age_days,
                 automation.thread_id,
                 int(automation.read_history),
+                automation.parent_automation_id,
+                automation.idempotency_key,
+                automation.idempotency_scope,
                 automation.task_id,
             ),
         )
