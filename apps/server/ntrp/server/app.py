@@ -29,6 +29,27 @@ from ntrp.server.routers.skills import router as skills_router
 from ntrp.server.runtime import Runtime
 
 
+def _loop_target_id(automation: Automation) -> str | None:
+    """Resolve the session id a loop targets for writes/gating.
+
+    `thread_id` (new field) wins; `target_session_id` is the legacy
+    fallback. Used by both `_dispatch_post` and `_loop_can_fire` so the
+    fire gate always checks the same session the post writer will write
+    into.
+    """
+    return automation.thread_id or automation.target_session_id
+
+
+def _get_or_create_session_lock(
+    locks: dict[str, asyncio.Lock], session_id: str
+) -> asyncio.Lock:
+    lock = locks.get(session_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        locks[session_id] = lock
+    return lock
+
+
 def _install_shutdown_handlers(runtime: Runtime, bus_registry: BusRegistry) -> None:
     """Intercept SIGINT/SIGTERM to close SSE streams before uvicorn's timeout.
 
@@ -57,6 +78,11 @@ async def lifespan(app: FastAPI):
     bus_registry = BusRegistry()
     runtime.scheduler.set_bus_registry(bus_registry)
 
+    # Per-session write locks. The post dispatcher holds one for its full
+    # lifetime so two concurrent post-mode dispatches against the same
+    # target session can't trample each other's tail-end load→save window.
+    session_write_locks: dict[str, asyncio.Lock] = {}
+
     async def _dispatch_iteration(automation: Automation) -> str | None:
         # Iteration loops are autonomous: the user already approved the
         # loop at creation (via the create_loop approval card), so
@@ -81,40 +107,50 @@ async def lifespan(app: FastAPI):
         # the agent's final text into the target session as an assistant
         # message. The chat UI picks it up on the next history fetch —
         # no live SSE for now (can be wired later if needed).
+        #
+        # The whole body runs under a per-session write lock so concurrent
+        # post-mode dispatches against the same target session serialize
+        # their load→save windows. The fire gate already blocks new user
+        # runs while a post-mode loop is firing; the lock closes the
+        # post-vs-post race.
+        # TODO: extend lock acquisition into `submit_chat_message` to
+        # fully serialize all session-message writes (covers the residual
+        # post-vs-chat race during the agent run).
         if not runtime.session_service:
             return None
-        target_id = automation.thread_id or automation.target_session_id
+        target_id = _loop_target_id(automation)
         if not target_id:
             return None
 
-        prompt = AUTOMATION_PROMPT.render(description=automation.loop_prompt or "", context=None)
-        request = RunRequest(
-            prompt=prompt,
-            prompt_suffix=AUTOMATION_SUFFIX,
-            writable=automation.writable,
-            source_id=automation.task_id,
-            model=automation.model,
-            skip_approvals=automation.writable,
-            automation_id=automation.task_id,
-        )
+        async with _get_or_create_session_lock(session_write_locks, target_id):
+            prompt = AUTOMATION_PROMPT.render(description=automation.loop_prompt or "", context=None)
+            request = RunRequest(
+                prompt=prompt,
+                prompt_suffix=AUTOMATION_SUFFIX,
+                writable=automation.writable,
+                source_id=automation.task_id,
+                model=automation.model,
+                skip_approvals=automation.writable,
+                automation_id=automation.task_id,
+            )
 
-        deps = runtime.build_operator_deps()
-        if bus_registry:
-            bus = bus_registry.get_or_create(AUTOMATION_BUS_KEY)
-            run_result = await run_agent_streaming(deps, request, bus, automation.task_id)
-        else:
-            run_result = await run_agent(deps, request)
-        text = run_result.output
-        if not text:
-            return None
+            deps = runtime.build_operator_deps()
+            if bus_registry:
+                bus = bus_registry.get_or_create(AUTOMATION_BUS_KEY)
+                run_result = await run_agent_streaming(deps, request, bus, automation.task_id)
+            else:
+                run_result = await run_agent(deps, request)
+            text = run_result.output
+            if not text:
+                return None
 
-        # Append as an assistant message into the target session.
-        data = await runtime.session_service.load(target_id)
-        if data is None:
+            # Append as an assistant message into the target session.
+            data = await runtime.session_service.load(target_id)
+            if data is None:
+                return text
+            data.messages.append({"role": Role.ASSISTANT, "content": text})
+            await runtime.session_service.save_progress(data.state, data.messages)
             return text
-        data.messages.append({"role": Role.ASSISTANT, "content": text})
-        await runtime.session_service.save_progress(data.state, data.messages)
-        return text
 
     runtime.scheduler.set_post_dispatcher(_dispatch_post)
 
@@ -127,7 +163,11 @@ async def lifespan(app: FastAPI):
         #  • Post would race the in-flight run on session_service writes.
         # handle_run_completed fires deferred loops the moment the
         # session goes idle.
-        target_id = automation.target_session_id or automation.thread_id
+        # Target priority must match _dispatch_post (via _loop_target_id):
+        # thread_id (new field) wins over target_session_id (legacy
+        # fallback). Otherwise a migrated row with mismatched fields would
+        # be gated on one session while the post writes into another.
+        target_id = _loop_target_id(automation)
         if not target_id:
             return True
         active = runtime.run_registry.get_accepting_run(target_id)

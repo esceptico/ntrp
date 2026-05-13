@@ -591,3 +591,132 @@ async def test_post_mode_persists_assistant_message_to_target_session(
     assert assistant_msgs[0]["content"] == "hello from loop-1"
 
     await session_conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Code-review fixes: per-session write lock + fire-gate / dispatcher priority
+# alignment for `thread_id` over the legacy `target_session_id`.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_concurrent_post_dispatches_serialize_under_session_lock():
+    """Two concurrent post-mode dispatches against the same target session
+    must serialize: their critical sections (load → agent → save) must not
+    overlap. Replicates the lock pattern wired in app.py's `_dispatch_post`."""
+    import asyncio
+
+    from ntrp.server.app import _get_or_create_session_lock
+
+    locks: dict[str, asyncio.Lock] = {}
+    timeline: list[tuple[str, str]] = []  # (event, dispatch_id)
+
+    async def post_dispatch(dispatch_id: str, target_id: str) -> None:
+        async with _get_or_create_session_lock(locks, target_id):
+            timeline.append(("enter", dispatch_id))
+            # Simulate agent run + load + save_progress under the lock.
+            await asyncio.sleep(0.05)
+            timeline.append(("exit", dispatch_id))
+
+    # Two concurrent dispatches against the same session.
+    await asyncio.gather(
+        post_dispatch("A", "sess-shared"),
+        post_dispatch("B", "sess-shared"),
+    )
+
+    # Must be enter/exit/enter/exit (serialized), never enter/enter/exit/exit.
+    assert len(timeline) == 4
+    assert timeline[0][0] == "enter"
+    assert timeline[1] == ("exit", timeline[0][1])
+    assert timeline[2][0] == "enter"
+    assert timeline[2][1] != timeline[0][1]
+    assert timeline[3] == ("exit", timeline[2][1])
+
+
+@pytest.mark.asyncio
+async def test_session_lock_is_per_session_not_global():
+    """Two dispatches against DIFFERENT sessions must NOT serialize — the
+    lock map is per-session, so they should run in parallel."""
+    import asyncio
+
+    from ntrp.server.app import _get_or_create_session_lock
+
+    locks: dict[str, asyncio.Lock] = {}
+    overlap = {"yes": False}
+    active = {"count": 0}
+
+    async def post_dispatch(target_id: str) -> None:
+        async with _get_or_create_session_lock(locks, target_id):
+            active["count"] += 1
+            if active["count"] > 1:
+                overlap["yes"] = True
+            await asyncio.sleep(0.05)
+            active["count"] -= 1
+
+    await asyncio.gather(
+        post_dispatch("sess-A"),
+        post_dispatch("sess-B"),
+    )
+
+    assert overlap["yes"] is True
+
+
+def test_loop_target_id_prefers_thread_id_over_legacy_session_id():
+    """The fire gate and post dispatcher must agree on the target session.
+    `thread_id` (new) wins; `target_session_id` (legacy) is the fallback."""
+    from ntrp.server.app import _loop_target_id
+
+    auto = _loop(session_id="legacy-B", thread_id="new-A")
+    assert auto.thread_id == "new-A"
+    assert auto.target_session_id == "legacy-B"
+    # The write target IS thread_id, so the gate must check thread_id too.
+    assert _loop_target_id(auto) == "new-A"
+
+
+def test_loop_target_id_falls_back_to_target_session_id():
+    from ntrp.server.app import _loop_target_id
+
+    # No thread_id (legacy row) → fall back to target_session_id.
+    auto = Automation(
+        task_id="t",
+        name="x",
+        description="x",
+        model=None,
+        triggers=[TimeTrigger(every="5m")],
+        enabled=True,
+        created_at=datetime.now(UTC),
+        next_run_at=None,
+        last_run_at=None,
+        last_result=None,
+        running_since=None,
+        writable=True,
+        kind="loop",
+        target_session_id="legacy-only",
+        loop_prompt="x",
+        thread_id=None,
+    )
+    assert _loop_target_id(auto) == "legacy-only"
+
+
+def test_loop_target_id_returns_none_when_both_unset():
+    from ntrp.server.app import _loop_target_id
+
+    auto = Automation(
+        task_id="t",
+        name="x",
+        description="x",
+        model=None,
+        triggers=[TimeTrigger(every="5m")],
+        enabled=True,
+        created_at=datetime.now(UTC),
+        next_run_at=None,
+        last_run_at=None,
+        last_result=None,
+        running_since=None,
+        writable=True,
+        kind="loop",
+        target_session_id=None,
+        loop_prompt="x",
+        thread_id=None,
+    )
+    assert _loop_target_id(auto) is None
