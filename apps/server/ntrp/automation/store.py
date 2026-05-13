@@ -292,6 +292,11 @@ _SQL_DELETE = "DELETE FROM scheduled_tasks WHERE task_id = ?"
 
 _SQL_SET_ENABLED = "UPDATE scheduled_tasks SET enabled = ? WHERE task_id = ?"
 
+_SQL_DISABLE_BY_PARENT = """
+UPDATE scheduled_tasks SET enabled = 0
+WHERE parent_automation_id = ? AND enabled = 1
+"""
+
 _SQL_SET_WRITABLE = "UPDATE scheduled_tasks SET writable = ? WHERE task_id = ?"
 
 _SQL_UPDATE_METADATA = """
@@ -891,6 +896,11 @@ class AutomationStore:
     async def set_enabled(self, task_id: str, enabled: bool) -> None:
         await self.conn.execute(_SQL_SET_ENABLED, (int(enabled), task_id))
         await self.conn.commit()
+
+    async def disable_by_parent(self, parent_id: str) -> int:
+        cursor = await self.conn.execute(_SQL_DISABLE_BY_PARENT, (parent_id,))
+        await self.conn.commit()
+        return cursor.rowcount
 
     async def set_writable(self, task_id: str, writable: bool) -> None:
         await self.conn.execute(_SQL_SET_WRITABLE, (int(writable), task_id))

@@ -317,10 +317,7 @@ class AutomationService:
         return await self.store.list_by_parent(parent_id)
 
     async def cancel_children(self, parent_id: str) -> int:
-        children = await self.store.list_by_parent(parent_id)
-        for child in children:
-            await self.store.set_enabled(child.task_id, False)
-        return len(children)
+        return await self.store.disable_by_parent(parent_id)
 
     async def list_loops_by_session(self, session_id: str) -> list[Automation]:
         return await self.store.list_loops_by_session(session_id)

@@ -146,6 +146,27 @@ async def test_cancel_children_only_touches_matching_parent(
     assert b1.enabled is True
 
 
+@pytest.mark.asyncio
+async def test_disable_by_parent_only_disables_currently_enabled(
+    store: AutomationStore, service: AutomationService
+):
+    # Pre-disable one child; cancel_children should only report the rows it
+    # actually flipped (rowcount under `AND enabled = 1`), not the total
+    # number of children attached to the parent.
+    await store.save(_automation("parent"))
+    await store.save(_automation("c1", parent_automation_id="parent", enabled=False))
+    await store.save(_automation("c2", parent_automation_id="parent"))
+    await store.save(_automation("c3", parent_automation_id="parent"))
+
+    count = await service.cancel_children("parent")
+    assert count == 2
+
+    for tid in ("c1", "c2", "c3"):
+        child = await store.get(tid)
+        assert child is not None
+        assert child.enabled is False
+
+
 # --- Service: delete cascades (disables children, preserves them) ---
 
 
