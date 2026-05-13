@@ -720,3 +720,92 @@ def test_loop_target_id_returns_none_when_both_unset():
         thread_id=None,
     )
     assert _loop_target_id(auto) is None
+
+
+# ---------------------------------------------------------------------------
+# Channel-aware automations: a row created via `svc.create(thread_id=...,
+# read_history=False)` has kind="automation" (not "loop") but is still
+# session-bound. The scheduler must route it through the post dispatcher,
+# not the standalone agent path.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_with_thread_id_routes_through_post_dispatcher(store: AutomationStore):
+    """A `kind="automation"` row with thread_id + read_history=False MUST flow
+    through the post dispatcher — not _run_agent. This is the bug surfaced by
+    the Task 9 e2e test: `service.create(thread_id=X, read_history=False)`
+    silently routed to _run_agent because the scheduler discriminator was
+    `kind == "loop"`."""
+    sched, dispatched, _results = _make_post_scheduler(store)
+    svc = AutomationService(store=store, scheduler=sched)
+
+    auto = await svc.create(
+        name="channel-watcher",
+        description="post into channel",
+        trigger_type="time",
+        every="5m",
+        thread_id="sess-channel",
+        read_history=False,
+    )
+    assert auto is not None
+    assert auto.kind == "automation"  # NOT "loop"
+    assert auto.thread_id == "sess-channel"
+    # svc.create populates loop_prompt from description for session-bound
+    # automations so they can flow through the post dispatcher.
+    assert auto.loop_prompt == "post into channel"
+
+    # Force next_run_at into the past so _tick picks it up immediately.
+    await store.set_next_run(auto.task_id, datetime.now(UTC) - timedelta(seconds=1))
+
+    await sched._tick()
+    for t in list(sched._running):
+        await t
+
+    assert len(dispatched) == 1, (
+        "channel automation must route to post dispatcher"
+    )
+    assert dispatched[0].task_id == auto.task_id
+    assert dispatched[0].thread_id == "sess-channel"
+
+
+@pytest.mark.asyncio
+async def test_handle_run_completed_fires_kind_automation_with_thread_id(
+    store: AutomationStore,
+):
+    """The run-completed fast-path must catch session-bound automations
+    regardless of `kind` — they're identified by thread_id/target_session_id."""
+    from ntrp.events.internal import RunCompleted
+
+    now = datetime.now(UTC)
+    auto = Automation(
+        task_id="channel-auto",
+        name="x",
+        description="x",
+        model=None,
+        triggers=[TimeTrigger(every="5m")],
+        enabled=True,
+        created_at=now,
+        next_run_at=now - timedelta(seconds=1),
+        last_run_at=None,
+        last_result=None,
+        running_since=None,
+        writable=True,
+        kind="automation",
+        target_session_id=None,
+        loop_prompt="post status",
+        thread_id="sess-channel",
+        read_history=False,
+    )
+    await store.save(auto)
+
+    sched, dispatched, _results = _make_post_scheduler(store)
+
+    await sched.handle_run_completed(
+        RunCompleted(run_id="run-x", session_id="sess-channel", messages=(), usage=Usage(), result=None),
+    )
+    for t in list(sched._running):
+        await t
+
+    assert len(dispatched) == 1
+    assert dispatched[0].task_id == "channel-auto"

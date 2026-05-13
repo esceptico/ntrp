@@ -317,6 +317,17 @@ WHERE kind = 'loop' AND target_session_id = ?
 ORDER BY created_at
 """
 
+# Kind-agnostic counterpart used by the scheduler's run-completed fast path.
+# A session-bound automation is any row that targets a session via
+# thread_id (new field) or target_session_id (legacy), regardless of kind.
+# Channel automations created via `service.create(thread_id=...)` have
+# kind="automation" and still need to fire through the post dispatcher.
+_SQL_LIST_SESSION_BOUND_BY_SESSION = f"""
+SELECT {_COLUMNS} FROM scheduled_tasks
+WHERE thread_id = ? OR target_session_id = ?
+ORDER BY created_at
+"""
+
 _SQL_LIST_BY_PARENT = f"""
 SELECT {_COLUMNS} FROM scheduled_tasks
 WHERE parent_automation_id = ?
@@ -934,6 +945,16 @@ class AutomationStore:
 
     async def list_loops_by_session(self, session_id: str) -> list[Automation]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_LOOPS_BY_SESSION, (session_id,))
+        return [_row_to_automation(row) for row in rows]
+
+    async def list_session_bound_by_session(self, session_id: str) -> list[Automation]:
+        """Kind-agnostic: any automation that targets `session_id` via
+        thread_id (new) or target_session_id (legacy). Used by the
+        scheduler's run-completed fast path to fire deferred session-bound
+        work the moment the session goes idle."""
+        rows = await self.conn.execute_fetchall(
+            _SQL_LIST_SESSION_BOUND_BY_SESSION, (session_id, session_id)
+        )
         return [_row_to_automation(row) for row in rows]
 
     async def list_by_parent(self, parent_automation_id: str) -> list[Automation]:

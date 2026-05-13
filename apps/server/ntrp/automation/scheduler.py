@@ -185,15 +185,25 @@ class Scheduler:
         now = datetime.now(UTC)
         due = await self.store.list_due(now)
         for automation in due:
-            if automation.kind == "loop" and not self._loop_can_fire(automation):
-                # Loop is due but the target session has an active run.
-                # Skip without claiming — next_run_at stays past, so the
-                # task is re-evaluated on the next tick (or sooner via the
-                # run-completed fast path in handle_run_completed).
+            if self._is_session_bound(automation) and not self._loop_can_fire(automation):
+                # Session-bound automation is due but the target session has
+                # an active run. Skip without claiming — next_run_at stays
+                # past, so the task is re-evaluated on the next tick (or
+                # sooner via the run-completed fast path in
+                # handle_run_completed).
                 continue
             await self._start_run(automation)
         await self._drain_event_backlog()
         await self._evaluate_idle_triggers(now)
+
+    @staticmethod
+    def _is_session_bound(automation: Automation) -> bool:
+        """A session-bound automation targets a specific session, so its
+        firing must coordinate with that session's run lifecycle. Identified
+        by thread_id (new) or target_session_id (legacy) — kind-agnostic
+        because channel automations (kind='automation') created via
+        `service.create(thread_id=...)` are also session-bound."""
+        return automation.thread_id is not None or automation.target_session_id is not None
 
     def _loop_can_fire(self, automation: Automation) -> bool:
         if self._loop_fire_gate is None:
@@ -227,14 +237,15 @@ class Scheduler:
         self.update_activity()
         now = datetime.now(UTC)
 
-        # Fast-path for loops bound to this session: the session just went
-        # idle, so any loop that was deferred by the fire gate (or whose
-        # next_run_at has already passed) can fire now as a fresh turn
-        # without waiting for the next 60s poll tick.
-        for loop in await self.store.list_loops_by_session(event.session_id):
-            if not loop.enabled or loop.next_run_at is None or loop.next_run_at > now:
+        # Fast-path for session-bound automations targeting this session
+        # (loops AND channel automations created via service.create with
+        # thread_id): the session just went idle, so anything deferred by
+        # the fire gate (or whose next_run_at has already passed) can fire
+        # now as a fresh turn without waiting for the next 60s poll tick.
+        for auto in await self.store.list_session_bound_by_session(event.session_id):
+            if not auto.enabled or auto.next_run_at is None or auto.next_run_at > now:
                 continue
-            await self._start_run(loop)
+            await self._start_run(auto)
 
         for auto in await self.store.list_by_trigger_type("count"):
             if auto.in_cooldown(now):
@@ -286,7 +297,7 @@ class Scheduler:
         success = False
         error_message = ""
         try:
-            if automation.kind == "loop":
+            if self._is_session_bound(automation):
                 result = await self._run_session_bound(automation)
             elif automation.handler:
                 result = await self._run_handler(automation, context)

@@ -267,6 +267,12 @@ class AutomationService:
         if idempotency_key is not None and idempotency_scope is None:
             raise ValueError("idempotency_scope required when idempotency_key is set")
 
+        # Session-bound automations (thread_id set) flow through the
+        # scheduler's post/iteration dispatcher, which requires loop_prompt.
+        # Use description as the prompt: it's the work-spec the agent runs
+        # on each fire.
+        loop_prompt = description if thread_id is not None else None
+
         automation = Automation(
             task_id=task_id,
             name=name,
@@ -281,6 +287,7 @@ class AutomationService:
             running_since=None,
             writable=writable,
             cooldown_minutes=cooldown_minutes,
+            loop_prompt=loop_prompt,
             thread_id=thread_id,
             read_history=read_history,
             parent_automation_id=parent_automation_id,

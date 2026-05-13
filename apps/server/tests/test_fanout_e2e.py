@@ -79,9 +79,10 @@ async def test_watcher_fanout_dedup_cascade(
     # The watcher's first fire timestamp scopes the idempotency claims:
     # any re-fire under the same parent_fire_at is deduped; a future fire
     # of the same watcher could re-spawn children for the same items.
-    # Children are created via `create_loop` (kind="loop") since that's
-    # the route that flows through the scheduler's post dispatcher.
-    # `read_history` defaults to False on Automation → post mode.
+    # Children are created via `svc.create(thread_id=..., read_history=False)`
+    # — this is the agent-tool path. The scheduler routes session-bound
+    # automations (any row with thread_id set) through the post dispatcher
+    # regardless of `kind`, so kind="automation" works just like a loop.
     fire_at = datetime(2026, 5, 13, 10, 0, tzinfo=UTC).isoformat()
     items = ["offer-A", "offer-B", "offer-C"]
     children_by_item: dict[str, Automation] = {}
@@ -93,19 +94,24 @@ async def test_watcher_fanout_dedup_cascade(
         )
         await session_service.save(channel_state, [])
 
-        child = await svc.create_loop(
-            session_id=channel_state.session_id,
-            prompt=f"check {item} every 4h",
+        child = await svc.create(
+            name=f"check {item}",
+            description=f"check {item} every 4h",
+            trigger_type="time",
             every="4h",
+            thread_id=channel_state.session_id,
+            read_history=False,
             parent_automation_id=watcher.task_id,
             idempotency_key=item,
             idempotency_scope="run",
             parent_fire_at=fire_at,
         )
         assert child is not None, f"first create for {item} should succeed"
-        assert child.target_session_id == channel_state.session_id
+        assert child.thread_id == channel_state.session_id
+        assert child.kind == "automation"  # NOT "loop" — agent-tool path
         assert child.parent_automation_id == watcher.task_id
-        assert child.read_history is False  # post mode is the default
+        assert child.read_history is False  # post mode
+        assert child.loop_prompt == f"check {item} every 4h"
         children_by_item[item] = child
 
     # ---- Step 3: verify 3 children + 3 channel sessions exist -----------
@@ -125,10 +131,13 @@ async def test_watcher_fanout_dedup_cascade(
     # ---- Step 4: re-fire watcher with same items → idempotency blocks --
     # Same parent_fire_at → same claim namespace → all 3 items deduped.
     for item in items:
-        dup = await svc.create_loop(
-            session_id="ignored",
-            prompt=f"check {item} (re-fire)",
+        dup = await svc.create(
+            name=f"check {item} (re-fire)",
+            description=f"check {item} (re-fire)",
+            trigger_type="time",
             every="4h",
+            thread_id="ignored",
+            read_history=False,
             parent_automation_id=watcher.task_id,
             idempotency_key=item,
             idempotency_scope="run",
@@ -140,20 +149,18 @@ async def test_watcher_fanout_dedup_cascade(
     assert len(children_after_refire) == 3
 
     # ---- Step 5: fire one channel automation → post lands in session --
-    # All 3 children have next_run_at=now (create_loop default), so to
-    # exercise only one through the scheduler we make the others wait.
+    # All 3 children have next_run_at on a 4h schedule. Force the chosen
+    # one into the past so the scheduler picks only it up; leave the
+    # others on their future next_run_at.
     chosen = children_by_item["offer-A"]
-    future = datetime.now(UTC) + timedelta(hours=1)
-    for item, child in children_by_item.items():
-        if item != "offer-A":
-            await store.set_next_run(child.task_id, future)
+    await store.set_next_run(chosen.task_id, datetime.now(UTC) - timedelta(seconds=1))
 
     await scheduler._tick()
     for t in list(scheduler._running):
         await t
 
     # The post should have landed as an assistant message in the channel.
-    target_id = chosen.target_session_id
+    target_id = chosen.thread_id
     channel_data = await session_service.load(target_id)
     assert channel_data is not None
     assistant_msgs = [m for m in channel_data.messages if m.get("role") == "assistant"]
