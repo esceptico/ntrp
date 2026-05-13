@@ -35,6 +35,7 @@ test("keeps user automations separate from internal automations", () => {
   expect(splitAutomationsForTabs([internal, user])).toEqual({
     user: [user],
     internal: [internal],
+    channels: [],
   });
 });
 
@@ -48,5 +49,36 @@ test("treats known memory handlers as internal even before builtin metadata is s
   expect(splitAutomationsForTabs([maintenance])).toEqual({
     user: [],
     internal: [maintenance],
+    channels: [],
+  });
+});
+
+test("routes post-mode loop to channels bucket", () => {
+  const channel = automation({
+    task_id: "channel",
+    name: "News feed",
+    kind: "loop",
+    read_history: false,
+  });
+
+  expect(splitAutomationsForTabs([channel])).toEqual({
+    user: [],
+    internal: [],
+    channels: [channel],
+  });
+});
+
+test("drops iteration loops from all buckets", () => {
+  const iteration = automation({
+    task_id: "iteration",
+    name: "Self-paced loop",
+    kind: "loop",
+    read_history: true,
+  });
+
+  expect(splitAutomationsForTabs([iteration])).toEqual({
+    user: [],
+    internal: [],
+    channels: [],
   });
 });
