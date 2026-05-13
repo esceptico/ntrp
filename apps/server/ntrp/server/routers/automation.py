@@ -37,6 +37,8 @@ def _automation_to_dict(a: Automation) -> dict:
         "handler": a.handler,
         "builtin": a.builtin,
         "cooldown_minutes": a.cooldown_minutes,
+        "kind": a.kind,
+        "read_history": a.read_history,
     }
 
 

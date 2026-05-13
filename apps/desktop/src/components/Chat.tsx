@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Radio } from "lucide-react";
 import { useStore } from "../store";
 import { Messages } from "./Messages";
 import { Composer } from "./Composer";
@@ -26,11 +26,21 @@ function SidebarToggle() {
 function ChatHeader() {
   const sessionId = useStore((s) => s.currentSessionId);
   const sessions = useStore((s) => s.sessions);
+  const automations = useStore((s) => s.automations);
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
   const session = sessions.find((s) => s.session_id === sessionId);
 
   const title = session?.name || (sessionId ? "untitled" : "no session");
   const meta = sessionId ? sessionId.slice(0, 8) : "—";
+  const isChannel = session?.session_type === "channel";
+  const originId = session?.origin_automation_id ?? null;
+  const originAutomation = originId
+    ? (automations ?? []).find((a) => a.task_id === originId)
+    : null;
+  // Fall back to a shortened ID when the parent automation isn't in the
+  // current automations list (e.g. it was deleted, or the cache hasn't
+  // loaded yet). The user still sees something concrete to point at.
+  const originLabel = originAutomation?.name || (originId ? originId.slice(0, 8) : null);
 
   return (
     <div
@@ -44,6 +54,20 @@ function ChatHeader() {
         <h1 className="m-0 min-w-0 text-md font-semibold tracking-[-0.01em] text-ink truncate">
           {title}
         </h1>
+        {isChannel && (
+          <span
+            className="inline-flex items-center gap-1 shrink-0 px-1.5 h-[18px] rounded-full bg-surface-soft text-2xs font-medium uppercase tracking-[0.06em] text-muted self-center"
+            title="Channel session — an agent-spawned feed"
+          >
+            <Radio size={ICON.XS} strokeWidth={2} />
+            channel
+          </span>
+        )}
+        {isChannel && originLabel && (
+          <span className="shrink-0 text-xs text-faint truncate" title={originId ?? undefined}>
+            from {originLabel}
+          </span>
+        )}
         <span className="shrink-0 text-xs text-faint font-mono tracking-[-0.01em]">
           {meta}
         </span>

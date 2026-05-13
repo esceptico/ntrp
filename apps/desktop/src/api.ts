@@ -3,12 +3,19 @@ export interface AppConfig {
   apiKey: string;
 }
 
+export type SessionType = "chat" | "channel";
+
 export interface SessionListItem {
   session_id: string;
   started_at: string;
   last_activity: string;
   name: string | null;
   message_count: number;
+  /** "chat" for normal user conversations; "channel" for agent-spawned
+   *  feed sessions (post-mode loop output, push-style updates). */
+  session_type?: SessionType;
+  /** When set, the channel session was spawned by this automation. */
+  origin_automation_id?: string | null;
 }
 
 export interface HistoryToolCall {
@@ -337,6 +344,8 @@ export interface ArchivedSession {
   name: string | null;
   archived_at: string;
   message_count: number;
+  session_type?: SessionType;
+  origin_automation_id?: string | null;
 }
 
 export async function listArchivedSessionsApi(config: AppConfig): Promise<ArchivedSession[]> {
@@ -1158,6 +1167,8 @@ export interface AutomationTrigger {
   scope?: string;
 }
 
+export type AutomationKind = "automation" | "loop";
+
 export interface Automation {
   task_id: string;
   name: string;
@@ -1176,6 +1187,13 @@ export interface Automation {
   handler: string | null;
   builtin: boolean;
   cooldown_minutes: number | null;
+  /** "automation" for standard scheduled tasks; "loop" for self-paced /loop
+   *  and post-mode tasks. The composer already surfaces loops in a chip, so
+   *  the desktop hides kind=loop from the main automation list. */
+  kind?: AutomationKind;
+  /** Loops with read_history=false are "channels" (post-mode feeds) — their
+   *  spawned sessions are channel-type rather than chat-type. */
+  read_history?: boolean;
 }
 
 export interface CreateAutomationPayload {

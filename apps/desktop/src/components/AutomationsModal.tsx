@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { Circle, FileText, Play, Plus, Trash2, X, type LucideIcon } from "lucide-react";
+import { Circle, FileText, Play, Plus, Radio, Trash2, X, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
 import { deleteAutomation, fetchAutomations, runAutomation, toggleAutomation } from "../actions";
 import type { Automation, AutomationTrigger } from "../api";
-import { splitAutomationsForTabs } from "../lib/automationFilters";
+import { isChannelAutomation, splitAutomationsForTabs } from "../lib/automationFilters";
 import { automationTrustLabel, automationTrustTone } from "../lib/automationTrust";
 import { AutomationEditor, type EditorSeed } from "./automations/AutomationEditor";
 import { templatesByCategory, type AutomationTemplate } from "./automations/templates";
 import { PageModal } from "./PageModal";
 import { ICON } from "../lib/icons";
 
-type Tab = "active" | "internal" | "templates";
+type Tab = "active" | "channels" | "internal" | "templates";
 
 export function AutomationsModal() {
   const open = useStore((s) => s.automationsOpen);
@@ -35,6 +35,7 @@ export function AutomationsModal() {
   const automationGroups = useMemo(() => (automations ? splitAutomationsForTabs(automations) : null), [automations]);
   const activeCount = automationGroups?.user.length ?? 0;
   const internalCount = automationGroups?.internal.length ?? 0;
+  const channelCount = automationGroups?.channels.length ?? 0;
 
   return (
     <>
@@ -71,6 +72,12 @@ export function AutomationsModal() {
         <nav className="flex items-center gap-5 px-6 border-b border-line-soft">
           <TabButton label="Active" count={activeCount} active={tab === "active"} onClick={() => setTab("active")} />
           <TabButton
+            label="Channels"
+            count={channelCount}
+            active={tab === "channels"}
+            onClick={() => setTab("channels")}
+          />
+          <TabButton
             label="Internal"
             count={internalCount}
             active={tab === "internal"}
@@ -87,6 +94,8 @@ export function AutomationsModal() {
               onPickTemplate={() => setTab("templates")}
               onCreate={() => setEditor({ kind: "create" })}
             />
+          ) : tab === "channels" ? (
+            <ChannelList automations={automationGroups?.channels ?? null} />
           ) : tab === "internal" ? (
             <InternalList automations={automationGroups?.internal ?? null} />
           ) : (
@@ -188,6 +197,35 @@ function ActiveList({
           key={automation.task_id}
           automation={automation}
           onEdit={() => onEdit(automation)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ChannelList({ automations }: { automations: Automation[] | null }) {
+  if (automations === null) {
+    return <div className="text-sm text-faint">Loading…</div>;
+  }
+  if (automations.length === 0) {
+    return (
+      <div className="grid gap-2 max-w-[420px] py-10">
+        <div className="text-md font-medium text-ink">No channels yet.</div>
+        <div className="text-sm text-muted leading-[1.5]">
+          Channels are post-mode loops that emit to a dedicated session each
+          tick. Ask the agent to set one up — e.g. "every morning post a brief
+          to a new session".
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-2.5">
+      {automations.map((automation) => (
+        <AutomationCard
+          key={automation.task_id}
+          automation={automation}
+          onEdit={() => undefined}
         />
       ))}
     </div>
@@ -327,12 +365,18 @@ function AutomationCard({
             <h4 className="m-0 text-base font-medium tracking-[-0.005em] text-ink truncate">
               {automation.name || "Untitled"}
             </h4>
-            {(running || automation.builtin || trustLabel) && (
+            {(running || automation.builtin || trustLabel || isChannelAutomation(automation)) && (
               <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                 {running && (
                   <Tag tone="accent">
                     <Circle size={5} strokeWidth={3} fill="currentColor" />
                     running
+                  </Tag>
+                )}
+                {isChannelAutomation(automation) && (
+                  <Tag tone="neutral">
+                    <Radio size={9} strokeWidth={2.2} />
+                    channel
                   </Tag>
                 )}
                 {automation.builtin && <Tag tone="neutral">builtin</Tag>}

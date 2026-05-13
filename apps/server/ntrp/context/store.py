@@ -85,6 +85,7 @@ ORDER BY last_activity DESC LIMIT 1
 
 SQL_LIST_SESSIONS = """
 SELECT session_id, started_at, last_activity, name,
+       session_type, origin_automation_id,
        json_array_length(COALESCE(messages, '[]')) AS message_count
 FROM sessions
 WHERE archived_at IS NULL
@@ -94,6 +95,7 @@ LIMIT ?
 
 SQL_LIST_ARCHIVED = """
 SELECT session_id, started_at, last_activity, name, archived_at,
+       session_type, origin_automation_id,
        json_array_length(COALESCE(messages, '[]')) AS message_count
 FROM sessions
 WHERE archived_at IS NOT NULL
@@ -412,6 +414,8 @@ class SessionStore:
                 "last_activity": row["last_activity"],
                 "name": row["name"],
                 "message_count": row["message_count"],
+                "session_type": row["session_type"] or "chat",
+                "origin_automation_id": row["origin_automation_id"],
             }
             for row in rows
         ]
@@ -435,6 +439,8 @@ class SessionStore:
                 "name": row["name"],
                 "message_count": row["message_count"],
                 "archived_at": row["archived_at"],
+                "session_type": row["session_type"] or "chat",
+                "origin_automation_id": row["origin_automation_id"],
             }
             for row in rows
         ]

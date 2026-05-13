@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Archive, Brain, ChevronDown, Pencil, Search, Settings as SettingsIcon, Sparkles, X, Zap } from "lucide-react";
+import { Archive, Brain, ChevronDown, Pencil, Radio, Search, Settings as SettingsIcon, Sparkles, X, Zap } from "lucide-react";
 import clsx from "clsx";
 import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
 import { useStore } from "../store";
 import { apiWithConfig } from "../api";
 import { archiveSession, createSession, fetchAutomations, renameSession, switchSession } from "../actions";
-import { isInternalAutomation } from "../lib/automationFilters";
+import { isInternalAutomation, isIterationLoop } from "../lib/automationFilters";
 import { ICON } from "../lib/icons";
 
 function formatAge(value: string): string {
@@ -104,6 +104,7 @@ function SessionRow({
   active,
   streaming,
   unread,
+  isChannel,
   renaming,
   onStartRename,
   onCancelRename,
@@ -116,6 +117,7 @@ function SessionRow({
   active: boolean;
   streaming: boolean;
   unread: boolean;
+  isChannel: boolean;
   renaming: boolean;
   onStartRename: () => void;
   onCancelRename: () => void;
@@ -191,7 +193,7 @@ function SessionRow({
           : "text-ink-soft hover:bg-surface-soft/60",
       )}
     >
-      <SessionStateIcon streaming={streaming} unread={unread} />
+      <SessionStateIcon streaming={streaming} unread={unread} isChannel={isChannel} />
       <span className="min-w-0 truncate text-base font-medium tracking-[-0.005em]">
         {name || "untitled"}
       </span>
@@ -232,9 +234,11 @@ function SessionRow({
 function SessionStateIcon({
   streaming,
   unread,
+  isChannel,
 }: {
   streaming: boolean;
   unread: boolean;
+  isChannel: boolean;
 }) {
   if (streaming) {
     return (
@@ -247,6 +251,13 @@ function SessionStateIcon({
     return (
       <span className="grid place-items-center w-4 h-4" aria-label="Unread">
         <span className="block w-[7px] h-[7px] rounded-full bg-accent-strong shadow-[0_0_6px_1px_color-mix(in_oklab,var(--color-accent)_45%,transparent)]" />
+      </span>
+    );
+  }
+  if (isChannel) {
+    return (
+      <span className="grid place-items-center w-4 h-4 text-faint" aria-label="Channel">
+        <Radio size={ICON.SM} strokeWidth={1.8} />
       </span>
     );
   }
@@ -425,6 +436,7 @@ function SessionList() {
                             active={session.session_id === currentSessionId}
                             streaming={activeRunSessionIds.has(session.session_id)}
                             unread={unreadDoneSessionIds.has(session.session_id)}
+                            isChannel={session.session_type === "channel"}
                             renaming={renamingId === session.session_id}
                             onStartRename={() => setRenamingId(session.session_id)}
                             onCancelRename={() => setRenamingId(null)}
@@ -679,7 +691,10 @@ function OngoingAutomations() {
   const running = useMemo(
     () =>
       (automations ?? []).filter(
-        (a) => a.running_since != null && !isInternalAutomation(a),
+        (a) =>
+          a.running_since != null &&
+          !isInternalAutomation(a) &&
+          !isIterationLoop(a),
       ),
     [automations],
   );
