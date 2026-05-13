@@ -1,0 +1,182 @@
+"""End-to-end integration test for the channel-aware automation fan-out.
+
+The canonical user story: an hourly watcher discovers items, spawns a
+per-item monitor (each with its own channel session + idempotency key),
+and the monitors post status updates into their channel sessions.
+
+This test exercises the real building blocks together (store + service +
+scheduler + session service), stubbing only the LLM agent in the post
+dispatcher.
+"""
+
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+import pytest
+import pytest_asyncio
+
+import ntrp.database as database
+from ntrp.automation.models import Automation
+from ntrp.automation.scheduler import Scheduler
+from ntrp.automation.service import AutomationService
+from ntrp.automation.store import AutomationStore
+from ntrp.context.store import SessionStore
+from ntrp.services.session import SessionService
+
+
+@pytest_asyncio.fixture
+async def store(tmp_path: Path):
+    conn = await database.connect(tmp_path / "automation.db")
+    s = AutomationStore(conn)
+    await s.init_schema()
+    yield s
+    await conn.close()
+
+
+@pytest_asyncio.fixture
+async def session_service(tmp_path: Path):
+    conn = await database.connect(tmp_path / "sessions.db")
+    store = SessionStore(conn)
+    await store.init_schema()
+    yield SessionService(store)
+    await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_watcher_fanout_dedup_cascade(
+    store: AutomationStore, session_service: SessionService
+):
+    # Real scheduler with a stub post dispatcher that mimics what
+    # app.py wires: run "agent", append assistant message into the
+    # target session.
+    posted: list[tuple[str, str]] = []
+
+    async def stub_post(automation: Automation) -> str | None:
+        target_id = automation.thread_id or automation.target_session_id
+        assert target_id is not None
+        text = f"status for {automation.task_id}"
+        data = await session_service.load(target_id)
+        assert data is not None
+        data.messages.append({"role": "assistant", "content": text})
+        await session_service.save_progress(data.state, data.messages)
+        posted.append((target_id, text))
+        return text
+
+    scheduler = Scheduler(store=store, build_deps=lambda: None)
+    scheduler.set_post_dispatcher(stub_post)
+    svc = AutomationService(store=store, scheduler=scheduler)
+
+    # ---- Step 1: create the watcher (parent) ----------------------------
+    watcher = await svc.create(
+        name="watcher",
+        description="scan offers",
+        trigger_type="time",
+        every="1h",
+    )
+    assert watcher is not None
+
+    # ---- Step 2: watcher "fires" → spawn 3 channel sessions + children --
+    # The watcher's first fire timestamp scopes the idempotency claims:
+    # any re-fire under the same parent_fire_at is deduped; a future fire
+    # of the same watcher could re-spawn children for the same items.
+    # Children are created via `create_loop` (kind="loop") since that's
+    # the route that flows through the scheduler's post dispatcher.
+    # `read_history` defaults to False on Automation → post mode.
+    fire_at = datetime(2026, 5, 13, 10, 0, tzinfo=UTC).isoformat()
+    items = ["offer-A", "offer-B", "offer-C"]
+    children_by_item: dict[str, Automation] = {}
+    for item in items:
+        channel_state = session_service.create(
+            name=f"Watching {item}",
+            session_type="channel",
+            origin_automation_id=watcher.task_id,
+        )
+        await session_service.save(channel_state, [])
+
+        child = await svc.create_loop(
+            session_id=channel_state.session_id,
+            prompt=f"check {item} every 4h",
+            every="4h",
+            parent_automation_id=watcher.task_id,
+            idempotency_key=item,
+            idempotency_scope="run",
+            parent_fire_at=fire_at,
+        )
+        assert child is not None, f"first create for {item} should succeed"
+        assert child.target_session_id == channel_state.session_id
+        assert child.parent_automation_id == watcher.task_id
+        assert child.read_history is False  # post mode is the default
+        children_by_item[item] = child
+
+    # ---- Step 3: verify 3 children + 3 channel sessions exist -----------
+    children = await svc.list_children(watcher.task_id)
+    assert len(children) == 3
+    assert {c.idempotency_key for c in children} == set(items)
+
+    # Each child's target session should be a real channel owned by this
+    # watcher.
+    for child in children:
+        target_id = child.thread_id or child.target_session_id
+        data = await session_service.load(target_id)
+        assert data is not None
+        assert data.state.session_type == "channel"
+        assert data.state.origin_automation_id == watcher.task_id
+
+    # ---- Step 4: re-fire watcher with same items → idempotency blocks --
+    # Same parent_fire_at → same claim namespace → all 3 items deduped.
+    for item in items:
+        dup = await svc.create_loop(
+            session_id="ignored",
+            prompt=f"check {item} (re-fire)",
+            every="4h",
+            parent_automation_id=watcher.task_id,
+            idempotency_key=item,
+            idempotency_scope="run",
+            parent_fire_at=fire_at,
+        )
+        assert dup is None, f"re-fire for {item} must be deduped"
+
+    children_after_refire = await svc.list_children(watcher.task_id)
+    assert len(children_after_refire) == 3
+
+    # ---- Step 5: fire one channel automation → post lands in session --
+    # All 3 children have next_run_at=now (create_loop default), so to
+    # exercise only one through the scheduler we make the others wait.
+    chosen = children_by_item["offer-A"]
+    future = datetime.now(UTC) + timedelta(hours=1)
+    for item, child in children_by_item.items():
+        if item != "offer-A":
+            await store.set_next_run(child.task_id, future)
+
+    await scheduler._tick()
+    for t in list(scheduler._running):
+        await t
+
+    # The post should have landed as an assistant message in the channel.
+    target_id = chosen.target_session_id
+    channel_data = await session_service.load(target_id)
+    assert channel_data is not None
+    assistant_msgs = [m for m in channel_data.messages if m.get("role") == "assistant"]
+    assert len(assistant_msgs) == 1
+    assert assistant_msgs[0]["content"] == f"status for {chosen.task_id}"
+    assert posted == [(target_id, f"status for {chosen.task_id}")]
+
+    # Iteration count was bumped on the fired child only.
+    reloaded_chosen = await store.get(chosen.task_id)
+    assert reloaded_chosen.iteration_count == 1
+    for item, child in children_by_item.items():
+        if item == "offer-A":
+            continue
+        other = await store.get(child.task_id)
+        assert other.iteration_count == 0
+
+    # ---- Step 6: delete watcher → all 3 children disabled --------------
+    disabled = await svc.delete(watcher.task_id)
+    assert disabled == 3
+
+    final_children = await svc.list_children(watcher.task_id)
+    assert len(final_children) == 3
+    assert all(not c.enabled for c in final_children)
+
+    with pytest.raises(KeyError):
+        await svc.get(watcher.task_id)
