@@ -319,12 +319,39 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 /* Wrapped code block with language label + copy button. */
 .md .code-block {
+  position: relative;
   margin: 0.6em 0;
   border-radius: 10px;
   background: var(--color-code-bg);
   border: 1px solid var(--color-line-soft);
   overflow: hidden;
 }
+/* Print-style corner registration marks — thin 1px crosshair legs at the
+   top-left and top-right of every fenced code block. Drawn with a pair of
+   linear-gradients inside a small absolutely-positioned span so they never
+   participate in layout or affect interactive children. */
+.md .code-block-tick {
+  position: absolute;
+  top: 4px;
+  width: 7px;
+  height: 7px;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)),
+    linear-gradient(var(--color-line-strong), var(--color-line-strong));
+  background-repeat: no-repeat;
+  background-size: 7px 1px, 1px 7px;
+  opacity: 0.7;
+}
+.md .code-block-tick--tl {
+  left: 4px;
+  background-position: 0 0, 0 0;
+}
+.md .code-block-tick--tr {
+  right: 4px;
+  background-position: 100% 0, 100% 0;
+}
+:root.dark .md .code-block-tick { opacity: 0.55; }
 .md .code-block-header {
   display: flex;
   align-items: center;
@@ -343,21 +370,36 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   margin-left: auto;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+  /* Fitts: 28×24 hit area while the visual chip stays 22×22 via background-clip
+     content-box (padding adds the invisible target ring). */
+  width: 28px;
+  height: 24px;
+  padding: 1px 3px;
+  border-radius: 7px;
+  background-clip: content-box;
   color: var(--color-faint);
-  background: transparent;
+  opacity: 0.6;
+  background-color: transparent;
   border: 0;
   cursor: pointer;
-  transition: color 100ms ease, background 100ms ease;
+  transition: color 140ms ease, opacity 140ms ease, background-color 140ms ease, transform 180ms ease;
 }
-.md .code-block-copy:hover {
+.md .code-block-copy:hover,
+.md .code-block-copy:focus-visible {
   color: var(--color-ink);
-  background: rgba(0, 0, 0, 0.06);
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.06);
 }
 .md .code-block-copy.copied {
-  color: var(--color-ok);
+  color: var(--color-accent);
+  opacity: 1;
+  background-color: var(--color-accent-soft);
+  animation: codeCopyFlash 180ms ease-out;
+}
+@keyframes codeCopyFlash {
+  0%   { transform: scale(0.92); }
+  60%  { transform: scale(1.04); }
+  100% { transform: scale(1); }
 }
 /* The pre inside the wrapper takes the bottom rounded corners visually
    via the wrapper's overflow: hidden, so we strip its own chrome. */
@@ -427,10 +469,35 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .md h3 { font-size: 1.05em; }
 .md h4 { font-size: 1em; }
 .md blockquote {
+  position: relative;
   margin: 0.5em 0;
   padding: 0 0 0 12px;
   border-left: 2px solid var(--color-line-strong);
   color: var(--color-muted);
+  /* Hang the opening quotation mark into the gutter — only the punctuation
+     uses Georgia, body text keeps the system sans-serif. */
+  text-indent: -0.4em;
+  quotes: "\201C" "\201D" "\2018" "\2019";
+}
+.md blockquote::before {
+  content: open-quote;
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: 1.15em;
+  line-height: 0;
+  vertical-align: -0.18em;
+  margin-right: 0.05em;
+  color: var(--color-line-strong);
+}
+.md blockquote > *:last-child::after {
+  content: close-quote;
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: 1.15em;
+  line-height: 0;
+  vertical-align: -0.18em;
+  margin-left: 0.05em;
+  color: var(--color-line-strong);
 }
 .md hr { border: 0; border-top: 1px solid var(--color-line); margin: 1em 0; }
 .md table {
@@ -718,7 +785,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 :root.dark .modal-error span { color: #e58075 !important; }
 
-:root.dark .md .code-block-copy:hover { background: rgba(255, 255, 255, 0.06); }
+:root.dark .md .code-block-copy:hover,
+:root.dark .md .code-block-copy:focus-visible { background-color: rgba(255, 255, 255, 0.06); }
+:root.dark .md .code-block-tick { opacity: 0.55; }
 
 /* ─── Palettes ──────────────────────────────────────────────
    Each preset overrides the most distinctive surface / line /
@@ -1106,5 +1175,20 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
       transparent 70%
     );
   }
+}
+
+/* ─── Serif smart quotes (hanging punctuation) ─────────────────
+   Rauno-style typographic detail: only the curly quote glyphs
+   switch to Georgia inside rendered markdown. The unicode-range
+   limits this @font-face to “ ” ‘ ’ so body text keeps the
+   system sans-serif. */
+@font-face {
+  font-family: "MdQuoteSerif";
+  src: local("Georgia"), local("Times New Roman");
+  unicode-range: U+201C-201D, U+2018-2019;
+  font-display: swap;
+}
+.md {
+  font-family: "MdQuoteSerif", var(--font-sans);
 }
 

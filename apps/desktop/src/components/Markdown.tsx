@@ -143,6 +143,8 @@ function PreBlock({ children }: { children?: ReactNode }) {
 
   return (
     <div className="code-block">
+      <span className="code-block-tick code-block-tick--tl" aria-hidden="true" />
+      <span className="code-block-tick code-block-tick--tr" aria-hidden="true" />
       <div className="code-block-header">
         <span className="code-block-lang">{lang}</span>
         <CopyButton text={rawText} />
