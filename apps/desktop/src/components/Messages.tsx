@@ -199,11 +199,11 @@ export function Messages() {
   }, [roleById, metaById, visibleOrder]);
 
   return (
-    <div className="relative min-h-0">
+    <div className="absolute inset-0">
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-messages px-0 pt-7 pb-9"
+        className="absolute inset-0 overflow-y-auto overflow-x-hidden scroll-messages px-0"
       >
         <div ref={contentRef} className="messages-inner mx-auto max-w-[760px] min-w-0 px-7 flex flex-col gap-3">
           {!sessionReady
@@ -233,10 +233,11 @@ export function Messages() {
             // to the round chevron — minimal chrome when there's nothing
             // to communicate. `layout` lets motion FLIP between widths.
             layout
+            style={{ bottom: "calc(var(--chat-bottom-h, 96px) + 12px)" }}
             className={
               unreadCount > 0
-                ? "absolute left-1/2 -translate-x-1/2 bottom-3 inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full bg-ink text-on-ink border border-transparent shadow-[0_1px_2px_rgba(0,0,0,0.08),0_6px_18px_rgba(0,0,0,0.12)] text-sm font-medium hover:opacity-90 transition-opacity"
-                : "absolute left-1/2 -translate-x-1/2 bottom-3 grid place-items-center w-8 h-8 rounded-full bg-surface text-muted border border-black/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.06)] transition-[background-color,color,transform] duration-fast hover:text-ink hover:bg-surface-soft dark:border-white/[0.08] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4),0_4px_14px_rgba(0,0,0,0.35)]"
+                ? "absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full bg-ink text-on-ink border border-transparent shadow-[0_1px_2px_rgba(0,0,0,0.08),0_6px_18px_rgba(0,0,0,0.12)] text-sm font-medium hover:opacity-90 transition-opacity"
+                : "absolute left-1/2 -translate-x-1/2 z-20 grid place-items-center w-8 h-8 rounded-full bg-surface text-muted border border-black/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.06)] transition-[background-color,color,transform] duration-fast hover:text-ink hover:bg-surface-soft dark:border-white/[0.08] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4),0_4px_14px_rgba(0,0,0,0.35)]"
             }
           >
             <ChevronDown size={ICON.MD} strokeWidth={1.8} />

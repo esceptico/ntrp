@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import clsx from "clsx";
 import { PanelLeftClose, PanelLeftOpen, Radio } from "lucide-react";
 import { useStore } from "../store";
@@ -45,7 +46,7 @@ function ChatHeader() {
   return (
     <div
       className={clsx(
-        "chat-header flex items-center gap-3 h-[52px] pr-[18px] transition-[padding-left] duration-route ease-emphasized",
+        "chat-header absolute top-0 left-0 right-0 z-10 flex items-center gap-3 h-[52px] pr-[18px] transition-[padding-left] duration-route ease-emphasized",
         sidebarHidden ? "pl-[128px]" : "pl-[18px]",
       )}
     >
@@ -80,16 +81,55 @@ export function Chat() {
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
   const sessionId = useStore((s) => s.currentSessionId);
   const hasApproval = useStore((s) => s.pendingApprovals.length > 0);
+
+  // Glass composer + header overlay the message scroll area. Messages
+  // pass behind them via backdrop-filter (Rauno's Depth essay:
+  // "Shoot through a surface" / "Out-of-focus foreground obscures
+  // cleanly"). The scroll area needs padding-bottom equal to the bottom
+  // chrome's actual height so the last message clears the composer when
+  // scrolled to the end. Composer height is dynamic (textarea
+  // auto-resize, approval banner appears/disappears), so we observe it
+  // and write to a CSS var consumed by `.scroll-messages` padding +
+  // the scroll-to-bottom pill offset.
+  const bottomStackRef = useRef<HTMLDivElement>(null);
+  // useLayoutEffect (not useEffect) so the measured height is written
+  // BEFORE first paint — otherwise the scroll-padding briefly uses the
+  // CSS fallback (96px) and the pill uses its inline fallback (96px),
+  // causing a one-frame jump when the real composer is taller. Per
+  // Codex review.
+  useLayoutEffect(() => {
+    const el = bottomStackRef.current;
+    if (!el) return;
+    const apply = (height: number) => {
+      document.documentElement.style.setProperty("--chat-bottom-h", `${height}px`);
+    };
+    apply(el.getBoundingClientRect().height);
+    const ro = new ResizeObserver((entries) => {
+      const h = entries[0]?.contentRect.height ?? 0;
+      apply(h);
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty("--chat-bottom-h");
+    };
+  }, []);
+
   return (
     <main
       data-sidebar-hidden={sidebarHidden ? "true" : "false"}
       data-has-approval={hasApproval ? "true" : "false"}
-      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,244px)] data-[sidebar-hidden=true]:left-0 transition-[left] duration-route ease-emphasized grid grid-rows-[auto_minmax(0,1fr)_auto_auto] bg-bg overflow-hidden"
+      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,244px)] data-[sidebar-hidden=true]:left-0 transition-[left] duration-route ease-emphasized bg-bg overflow-hidden"
     >
-      <ChatHeader />
       <Messages key={sessionId ?? "none"} />
-      <ApprovalBanner />
-      <Composer />
+      <ChatHeader />
+      <div
+        ref={bottomStackRef}
+        className="chat-bottom-glass absolute bottom-0 left-0 right-0 z-10"
+      >
+        <ApprovalBanner />
+        <Composer />
+      </div>
     </main>
   );
 }
