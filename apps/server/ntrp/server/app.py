@@ -71,6 +71,20 @@ async def lifespan(app: FastAPI):
         return result.get("run_id") if isinstance(result, dict) else None
 
     runtime.scheduler.set_loop_dispatcher(_dispatch_loop)
+
+    def _loop_can_fire(automation: Automation) -> bool:
+        # Skip the tick if the loop's target session has an active user
+        # run. Otherwise submit_chat_message would queue the loop prompt
+        # into the active run's inject_queue, and the iteration renders
+        # as content inside the user's "Worked" collapse instead of as a
+        # fresh chat turn. handle_run_completed fires deferred loops the
+        # moment the session goes idle.
+        if not automation.target_session_id:
+            return True
+        active = runtime.run_registry.get_accepting_run(automation.target_session_id)
+        return active is None
+
+    runtime.scheduler.set_loop_fire_gate(_loop_can_fire)
     await runtime.start_scheduler()
     runtime.start_monitor()
     app.state.runtime = runtime

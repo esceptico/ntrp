@@ -223,6 +223,10 @@ export interface UiMessage {
   approval?: ApprovalState;
   turn?: TurnMeta;
   images?: ImageBlock[];
+  /** True for system-generated user messages that should be hidden from
+   *  the transcript UI but kept in conversation history for the model
+   *  (e.g. loop tick prompts). Mirrors Claude Code's isMeta convention. */
+  isMeta?: boolean;
 }
 
 export interface SessionUsage {

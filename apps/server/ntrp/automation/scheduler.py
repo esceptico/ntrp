@@ -27,6 +27,11 @@ _logger = get_logger(__name__)
 
 
 LoopDispatcher = Callable[[Automation], Awaitable[str | None]]
+# True ⇒ ok to fire this loop right now; False ⇒ defer to next tick. Used
+# to keep loop iterations from being injected mid-turn into a user's
+# active conversation — they should render as fresh turns once the
+# session goes idle.
+LoopFireGate = Callable[[Automation], bool]
 
 
 class Scheduler:
@@ -42,6 +47,7 @@ class Scheduler:
         self._running: set[asyncio.Task] = set()
         self._handlers: dict[str, Callable[[dict | None], Awaitable[str | None]]] = {}
         self._loop_dispatcher: LoopDispatcher | None = None
+        self._loop_fire_gate: LoopFireGate | None = None
         self._last_activity_at: datetime = datetime.now(UTC)
         self._started_at: datetime | None = None
         self._last_tick_at: datetime | None = None
@@ -53,6 +59,9 @@ class Scheduler:
 
     def set_loop_dispatcher(self, dispatcher: LoopDispatcher) -> None:
         self._loop_dispatcher = dispatcher
+
+    def set_loop_fire_gate(self, gate: LoopFireGate) -> None:
+        self._loop_fire_gate = gate
 
     def register_handler(self, name: str, handler: Callable[[dict | None], Awaitable[str | None]]) -> None:
         self._handlers[name] = handler
@@ -154,9 +163,24 @@ class Scheduler:
         now = datetime.now(UTC)
         due = await self.store.list_due(now)
         for automation in due:
+            if automation.kind == "loop" and not self._loop_can_fire(automation):
+                # Loop is due but the target session has an active run.
+                # Skip without claiming — next_run_at stays past, so the
+                # task is re-evaluated on the next tick (or sooner via the
+                # run-completed fast path in handle_run_completed).
+                continue
             await self._start_run(automation)
         await self._drain_event_backlog()
         await self._evaluate_idle_triggers(now)
+
+    def _loop_can_fire(self, automation: Automation) -> bool:
+        if self._loop_fire_gate is None:
+            return True
+        try:
+            return self._loop_fire_gate(automation)
+        except Exception:
+            _logger.exception("Loop fire gate raised; defaulting to allow")
+            return True
 
     async def _evaluate_idle_triggers(self, now: datetime) -> None:
         idle_seconds = (now - self._last_activity_at).total_seconds()
@@ -180,6 +204,15 @@ class Scheduler:
     async def handle_run_completed(self, event: RunCompleted) -> None:
         self.update_activity()
         now = datetime.now(UTC)
+
+        # Fast-path for loops bound to this session: the session just went
+        # idle, so any loop that was deferred by the fire gate (or whose
+        # next_run_at has already passed) can fire now as a fresh turn
+        # without waiting for the next 60s poll tick.
+        for loop in await self.store.list_loops_by_session(event.session_id):
+            if not loop.enabled or loop.next_run_at is None or loop.next_run_at > now:
+                continue
+            await self._start_run(loop)
 
         for auto in await self.store.list_by_trigger_type("count"):
             if auto.in_cooldown(now):

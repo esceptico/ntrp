@@ -41,13 +41,11 @@ Call `create_loop` once with:
 - `max_age_days` (optional): if the user implied a deadline ("for the next week", "today only").
 - `stop_when` (optional): natural-language predicate when there's a clear stop condition.
 
-## After create_loop succeeds — fire once now
+## After create_loop succeeds — confirm and stop
 
-The first scheduler fire won't happen for `every` from now. Don't make the user wait. **Immediately after `create_loop` returns successfully, execute the parsed prompt inline yourself** — exactly as if a loop iteration just fired. This gives the user instant feedback that the loop is working.
+The scheduler will fire the first iteration as soon as this turn ends — it renders as a fresh chat turn so the user can see the agent's work clearly instead of buried inside this turn's tool-activity collapse.
 
-Do this even for self-paced loops: run the first iteration, and if your inline run would call `schedule_wakeup` or `loop_done`, do that too — those tools mutate the loop record persistently.
-
-If parsing yielded an empty prompt or the user clearly wants a confirmation step first, skip the inline fire and ask.
+**Do not execute the prompt inline.** Confirm briefly in one line ("Loop set · every X · first fire in a few seconds.") and stop. The user will see the iteration appear as a new turn momentarily.
 
 ## Rules
 
@@ -55,7 +53,7 @@ If parsing yielded an empty prompt or the user clearly wants a confirmation step
 - **Prompt is standalone.** Future iterations have no memory of this chat.
 - **Default to self-paced** when there's any "until X" framing. Use fixed-interval only for clear `every N forever` tasks.
 - **Don't second-guess the cadence the user gave.** If they said `5m`, use `5m`. Suggest a different cadence only when their interval is clearly broken (e.g. `1s` for a CI check that takes minutes).
-- **One-line confirmation after firing.** Once you've called `create_loop` AND executed the first iteration, end with one short line: "Loop set · every X · next fire ~Y. Stop with the X in the loop chip." Don't restate the prompt — they wrote it.
+- **One-line confirmation.** After `create_loop` succeeds, end with one short line like "Loop set · every X · first fire in a few seconds." Don't restate the prompt — they wrote it.
 
 ## When loop is the wrong tool
 

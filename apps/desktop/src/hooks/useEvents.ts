@@ -224,6 +224,21 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
       endActivity(s);
       activeAssistantMessageId = null;
       setState({ running: true, error: null, currentRunId: event.run_id });
+      // Loop-driven runs have a hidden synthetic user message server-side
+      // (see chat._prepare_messages, is_meta=True). The live event stream
+      // has no equivalent — without a marker here, the loop's assistant
+      // messages would attach to the previous user's segment and get
+      // buried inside its "Worked" collapse. Insert a hidden user message
+      // as a segment boundary; Messages.tsx skips it from rendering but
+      // closes the previous turn so the iteration renders cleanly.
+      if (event.is_meta_run) {
+        s.appendMessage({
+          id: `meta-user-${event.run_id}`,
+          role: "user",
+          content: "",
+          isMeta: true,
+        });
+      }
       return;
     case "RUN_FINISHED":
       if (s.currentRunId && s.currentRunId !== event.run_id) return;

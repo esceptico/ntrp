@@ -120,6 +120,7 @@ export function historyMessagesToUi(messages: HistoryMessage[], activeRunId: str
         content: msg.content,
         turn: { startedAt: stampedAt, endedAt: stampedAt, durationMs: null },
         images: msg.images,
+        isMeta: msg.is_meta,
       });
       return;
     }

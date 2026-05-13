@@ -101,6 +101,9 @@ export function Messages() {
   const roles = useStore(
     useShallow((s) => order.map((id) => s.messages.get(id)?.role ?? null)),
   );
+  const metaFlags = useStore(
+    useShallow((s) => order.map((id) => Boolean(s.messages.get(id)?.isMeta))),
+  );
   const showReasoning = useStore((s) => s.prefs.showReasoningInChat);
 
   const visibleOrder = useMemo(
@@ -114,6 +117,12 @@ export function Messages() {
     return out;
   }, [order, roles]);
 
+  const metaById = useMemo(() => {
+    const out = new Map<string, boolean>();
+    for (let i = 0; i < order.length; i++) out.set(order[i], metaFlags[i]);
+    return out;
+  }, [order, metaFlags]);
+
   const segments = useMemo(() => {
     type Segment = { userId: string | null; childIds: string[] };
     const out: Segment[] = [];
@@ -121,6 +130,15 @@ export function Messages() {
     for (const id of visibleOrder) {
       const role = roleById.get(id);
       if (role === "user") {
+        // Meta user messages (loop ticks) are hidden from the transcript
+        // but still segment-anchor: close the current segment and start
+        // a fresh null-userId one so the agent's response renders cleanly
+        // without being grouped under the previous user's "Worked" block.
+        if (metaById.get(id)) {
+          if (current) out.push(current);
+          current = { userId: null, childIds: [] };
+          continue;
+        }
         if (current) out.push(current);
         current = { userId: id, childIds: [] };
       } else if (role === "status" || role === "error") {
@@ -139,7 +157,7 @@ export function Messages() {
     }
     if (current) out.push(current);
     return out;
-  }, [roleById, visibleOrder]);
+  }, [roleById, metaById, visibleOrder]);
 
   return (
     <div className="relative min-h-0">

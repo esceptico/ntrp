@@ -201,6 +201,12 @@ async def _prepare_messages(
         # Stamp the desktop client's UI id so /session/revert can later
         # match the saved row when the user edits this message.
         user_msg["client_id"] = client_id
+        # Loop-dispatched messages aren't user input — they're scheduler
+        # ticks. Tag is_meta so the model still sees the prompt (in API
+        # history) but the desktop transcript hides the bubble. Mirrors
+        # Claude Code's isMeta convention.
+        if client_id.startswith("loop:"):
+            user_msg["is_meta"] = True
     messages.append(user_msg)
 
     return messages
@@ -316,6 +322,8 @@ async def submit_chat_message(
         }
         if client_id:
             entry["client_id"] = client_id
+            if client_id.startswith("loop:"):
+                entry["is_meta"] = True
         active_run.queue_injection(entry)
         if loop_task_id and not active_run.loop_task_id:
             active_run.loop_task_id = loop_task_id
@@ -485,6 +493,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 integration_errors=ctx.integration_errors,
                 skip_approvals=session_state.skip_approvals,
                 session_name=session_state.name or "",
+                is_meta_run=bool(run.loop_task_id),
             )
         )
 

@@ -300,8 +300,13 @@ class AutomationService:
         if not session_id:
             raise ValueError("session_id required")
 
-        trigger, next_run = build_trigger("time", every=every)
+        trigger, _ = build_trigger("time", every=every)
         now = datetime.now(UTC)
+        # First fire is "as soon as the session goes idle" — set next_run_at
+        # to now so the scheduler picks it up immediately. The fire gate
+        # (apps/server/ntrp/server/app.py) defers the actual fire until the
+        # /loop creation turn ends, so the iteration renders as a fresh
+        # chat turn instead of getting injected into the creator's turn.
         automation = Automation(
             task_id=f"loop-{generate_slug(2)}",
             name=f"Loop: {prompt[:40]}",
@@ -310,7 +315,7 @@ class AutomationService:
             triggers=[trigger],
             enabled=True,
             created_at=now,
-            next_run_at=next_run,
+            next_run_at=now,
             last_run_at=None,
             last_result=None,
             running_since=None,

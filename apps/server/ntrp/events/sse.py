@@ -100,6 +100,11 @@ class RunStartedEvent(SSEEvent):
     integration_errors: dict[str, str] = field(default_factory=dict)
     skip_approvals: bool = False
     session_name: str = ""
+    # True when the triggering user-turn was system-generated (e.g. a loop
+    # tick). The desktop uses this to insert a hidden segment boundary so
+    # the agent's response renders as a fresh turn instead of being
+    # grouped under the user's previous "Worked" block.
+    is_meta_run: bool = False
 
 
 @dataclass(frozen=True)

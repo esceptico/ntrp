@@ -120,6 +120,11 @@ async def get_session_history(
         if created_at := msg.get("created_at"):
             entry["created_at"] = created_at
 
+        # Loop-fired user messages are visible to the model (kept in history
+        # so the agent can act on them) but hidden from the transcript UI.
+        if msg.get("is_meta"):
+            entry["is_meta"] = True
+
         history.append(entry)
 
     return {

@@ -42,6 +42,10 @@ export interface HistoryMessage {
   seq?: number;
   /** ISO-8601 UTC timestamp stamped at first save. */
   created_at?: string;
+  /** True for system-generated user messages that should stay in the
+   *  model's conversation history but be hidden from the transcript UI
+   *  (e.g. loop tick prompts). */
+  is_meta?: boolean;
 }
 
 export interface HistoryPage {
@@ -71,7 +75,7 @@ type CommonServerEventFields = { timestamp?: number; seq?: number; session_id?: 
 
 export type ServerEvent = CommonServerEventFields & (
   // ─── Run lifecycle ──────────────────────────────────────────────────
-  | { type: "RUN_STARTED"; run_id: string; session_id: string; session_name?: string | null; skip_approvals?: boolean }
+  | { type: "RUN_STARTED"; run_id: string; session_id: string; session_name?: string | null; skip_approvals?: boolean; is_meta_run?: boolean }
   | { type: "RUN_FINISHED"; run_id: string; usage?: { prompt: number; completion: number; cache_read: number; cost: number } }
   | { type: "run_cancelled"; run_id: string }
   | { type: "RUN_ERROR"; run_id: string; message: string }

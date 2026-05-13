@@ -5,6 +5,7 @@ import pytest
 import pytest_asyncio
 
 import ntrp.database as database
+from ntrp.agent import Usage
 from ntrp.automation.models import Automation
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
@@ -146,6 +147,107 @@ async def test_create_loop_rejects_empty_prompt(store: AutomationStore):
 
     with pytest.raises(ValueError, match="prompt"):
         await svc.create_loop(session_id="s", prompt="   ", every="5m")
+
+
+@pytest.mark.asyncio
+async def test_create_loop_sets_next_run_at_to_now(store: AutomationStore):
+    # First fire happens "as soon as session is idle" — next_run_at = now
+    # so the scheduler picks it up immediately (or the run-completed
+    # fast-path fires it the moment the /loop turn ends).
+    sched, _ = _make_scheduler(store)
+    svc = AutomationService(store=store, scheduler=sched)
+    before = datetime.now(UTC)
+
+    loop = await svc.create_loop(session_id="sess-1", prompt="watch CI", every="5m")
+
+    assert loop.next_run_at is not None
+    # within a second of creation
+    assert abs((loop.next_run_at - before).total_seconds()) < 1
+
+
+@pytest.mark.asyncio
+async def test_loop_fire_gate_defers_while_session_busy(store: AutomationStore):
+    # Loop is due; the fire gate says "no, session has an active run" →
+    # scheduler skips it. iteration_count stays at 0; next_run_at stays
+    # in the past so the next tick re-evaluates.
+    await store.save(_loop())
+    sched, dispatched = _make_scheduler(store)
+    sched.set_loop_fire_gate(lambda _auto: False)
+
+    await sched._tick()
+    for t in list(sched._running):
+        await t
+
+    assert dispatched == []
+    reloaded = await store.get("loop-1")
+    assert reloaded.iteration_count == 0
+    assert reloaded.next_run_at is not None
+    assert reloaded.next_run_at <= datetime.now(UTC)
+
+
+@pytest.mark.asyncio
+async def test_loop_fire_gate_allows_when_session_idle(store: AutomationStore):
+    await store.save(_loop())
+    sched, dispatched = _make_scheduler(store)
+    sched.set_loop_fire_gate(lambda _auto: True)
+
+    await sched._tick()
+    for t in list(sched._running):
+        await t
+
+    assert len(dispatched) == 1
+    reloaded = await store.get("loop-1")
+    assert reloaded.iteration_count == 1
+
+
+@pytest.mark.asyncio
+async def test_handle_run_completed_fires_due_loops_for_session(store: AutomationStore):
+    from ntrp.events.internal import RunCompleted
+
+    await store.save(_loop(session_id="sess-1"))
+    sched, dispatched = _make_scheduler(store)
+
+    await sched.handle_run_completed(
+        RunCompleted(run_id="run-x", session_id="sess-1", messages=(), usage=Usage(), result=None)
+    )
+    for t in list(sched._running):
+        await t
+
+    assert len(dispatched) == 1
+    assert dispatched[0].target_session_id == "sess-1"
+
+
+@pytest.mark.asyncio
+async def test_handle_run_completed_ignores_other_sessions(store: AutomationStore):
+    from ntrp.events.internal import RunCompleted
+
+    await store.save(_loop(session_id="sess-1"))
+    sched, dispatched = _make_scheduler(store)
+
+    await sched.handle_run_completed(
+        RunCompleted(run_id="run-x", session_id="sess-other", messages=(), usage=Usage(), result=None)
+    )
+    for t in list(sched._running):
+        await t
+
+    assert dispatched == []
+
+
+@pytest.mark.asyncio
+async def test_handle_run_completed_skips_loop_not_yet_due(store: AutomationStore):
+    from ntrp.events.internal import RunCompleted
+
+    future_loop = _loop(next_run_at=datetime.now(UTC) + timedelta(minutes=5))
+    await store.save(future_loop)
+    sched, dispatched = _make_scheduler(store)
+
+    await sched.handle_run_completed(
+        RunCompleted(run_id="run-x", session_id="sess-1", messages=(), usage=Usage(), result=None)
+    )
+    for t in list(sched._running):
+        await t
+
+    assert dispatched == []
 
 
 @pytest.mark.asyncio
