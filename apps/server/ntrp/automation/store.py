@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 
 import aiosqlite
 
@@ -12,6 +12,49 @@ _logger = get_logger(__name__)
 
 def _parse_dt(raw: str | None) -> datetime | None:
     return datetime.fromisoformat(raw) if raw else None
+
+
+def _validate_idempotency_claim(
+    *,
+    scope: str,
+    parent_automation_id: str | None,
+    parent_fire_at: str | None,
+    attempt_n: int | None,
+) -> None:
+    if scope == "global":
+        if parent_automation_id is not None or parent_fire_at is not None or attempt_n is not None:
+            raise ValueError("scope='global' must not set parent_automation_id, parent_fire_at, or attempt_n")
+    elif scope == "run":
+        if parent_automation_id is None or parent_fire_at is None:
+            raise ValueError("scope='run' requires parent_automation_id and parent_fire_at")
+        if attempt_n is not None:
+            raise ValueError("scope='run' must not set attempt_n")
+    elif scope == "attempt":
+        if parent_automation_id is None or parent_fire_at is None or attempt_n is None:
+            raise ValueError("scope='attempt' requires parent_automation_id, parent_fire_at, and attempt_n")
+    else:
+        raise ValueError(f"Unknown idempotency scope: {scope!r}")
+
+
+def _build_claim_id(
+    *,
+    scope: str,
+    key: str,
+    parent_automation_id: str | None,
+    parent_fire_at: str | None,
+    attempt_n: int | None,
+) -> str:
+    # Deterministic PK string. \x1f (unit separator) won't appear in keys/ids,
+    # and the sentinel \x00 marks "this field is NULL" so we don't collide
+    # with literal strings.
+    parts = [
+        scope,
+        key,
+        parent_automation_id if parent_automation_id is not None else "\x00",
+        parent_fire_at if parent_fire_at is not None else "\x00",
+        str(attempt_n) if attempt_n is not None else "\x00",
+    ]
+    return "\x1f".join(parts)
 
 
 def _row_to_automation(row: dict) -> Automation:
@@ -144,6 +187,20 @@ CREATE TABLE IF NOT EXISTS automation_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS automation_idempotency_claims (
+    claim_id TEXT PRIMARY KEY,
+    scope TEXT NOT NULL,
+    key TEXT NOT NULL,
+    parent_automation_id TEXT,
+    parent_fire_at TEXT,
+    attempt_n INTEGER,
+    claimed_at TEXT NOT NULL,
+    automation_task_id TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_idempotency_claims_parent
+ON automation_idempotency_claims(parent_automation_id);
 """
 
 _COLUMNS = (
@@ -248,6 +305,22 @@ _SQL_UPDATE_DESCRIPTION = "UPDATE scheduled_tasks SET description = ? WHERE task
 _SQL_CLAIM_EVENT = """
 INSERT OR IGNORE INTO automation_event_dedupe (task_id, event_key, seen_at)
 VALUES (?, ?, ?)
+"""
+
+_SQL_TRY_CLAIM_IDEMPOTENCY = """
+INSERT OR IGNORE INTO automation_idempotency_claims (
+    claim_id, scope, key, parent_automation_id, parent_fire_at,
+    attempt_n, claimed_at, automation_task_id
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
+_SQL_LIST_CLAIMS_FOR_PARENT = """
+SELECT scope, key, parent_automation_id, parent_fire_at, attempt_n,
+       claimed_at, automation_task_id
+FROM automation_idempotency_claims
+WHERE parent_automation_id = ?
+ORDER BY claimed_at
 """
 
 _SQL_EVICT_EVENT_CLAIMS = "DELETE FROM automation_event_dedupe WHERE seen_at < ?"
@@ -462,7 +535,7 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
 """
 
-CURRENT_SCHEMA_VERSION = 5
+CURRENT_SCHEMA_VERSION = 6
 
 _LOOP_COLUMNS: tuple[tuple[str, str], ...] = (
     ("kind", "TEXT NOT NULL DEFAULT 'automation'"),
@@ -660,6 +733,33 @@ async def _migrate(conn: aiosqlite.Connection) -> None:
         await conn.commit()
         _logger.info("Migrated automation store to v5 (channel-aware automation fields)")
 
+    if version < 6:
+        # Idempotency claim table for channel-aware automations.
+        # SQLite treats NULL != NULL in UNIQUE constraints, so we synthesize
+        # a deterministic primary key from the (scope, key, parent_automation_id,
+        # parent_fire_at, attempt_n) tuple. The PK string is built at insert
+        # time via try_claim_idempotency() in the store layer.
+        await conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS automation_idempotency_claims (
+                claim_id TEXT PRIMARY KEY,
+                scope TEXT NOT NULL,
+                key TEXT NOT NULL,
+                parent_automation_id TEXT,
+                parent_fire_at TEXT,
+                attempt_n INTEGER,
+                claimed_at TEXT NOT NULL,
+                automation_task_id TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_automation_idempotency_claims_parent
+            ON automation_idempotency_claims(parent_automation_id);
+            """
+        )
+        await _set_schema_version(conn, 6)
+        await conn.commit()
+        _logger.info("Migrated automation store to v6 (idempotency claim table)")
+
 
 class AutomationStore:
     def __init__(self, conn: aiosqlite.Connection):
@@ -823,6 +923,61 @@ class AutomationStore:
         cursor = await self.conn.execute(_SQL_CLAIM_EVENT, (task_id, event_key, seen_at.isoformat()))
         await self.conn.commit()
         return cursor.rowcount > 0
+
+    async def try_claim_idempotency(
+        self,
+        *,
+        scope: str,
+        key: str,
+        automation_task_id: str | None = None,
+        parent_automation_id: str | None = None,
+        parent_fire_at: str | None = None,
+        attempt_n: int | None = None,
+        claimed_at: datetime | None = None,
+    ) -> bool:
+        _validate_idempotency_claim(
+            scope=scope,
+            parent_automation_id=parent_automation_id,
+            parent_fire_at=parent_fire_at,
+            attempt_n=attempt_n,
+        )
+        claim_id = _build_claim_id(
+            scope=scope,
+            key=key,
+            parent_automation_id=parent_automation_id,
+            parent_fire_at=parent_fire_at,
+            attempt_n=attempt_n,
+        )
+        cursor = await self.conn.execute(
+            _SQL_TRY_CLAIM_IDEMPOTENCY,
+            (
+                claim_id,
+                scope,
+                key,
+                parent_automation_id,
+                parent_fire_at,
+                attempt_n,
+                (claimed_at or datetime.now(UTC)).isoformat(),
+                automation_task_id,
+            ),
+        )
+        await self.conn.commit()
+        return cursor.rowcount > 0
+
+    async def list_claims_for_parent(self, parent_automation_id: str) -> list[dict]:
+        rows = await self.conn.execute_fetchall(_SQL_LIST_CLAIMS_FOR_PARENT, (parent_automation_id,))
+        return [
+            {
+                "scope": row["scope"],
+                "key": row["key"],
+                "parent_automation_id": row["parent_automation_id"],
+                "parent_fire_at": row["parent_fire_at"],
+                "attempt_n": row["attempt_n"],
+                "claimed_at": row["claimed_at"],
+                "automation_task_id": row["automation_task_id"],
+            }
+            for row in rows
+        ]
 
     async def evict_event_claims_older_than(self, cutoff: datetime) -> None:
         await self.conn.execute(_SQL_EVICT_EVENT_CLAIMS, (cutoff.isoformat(),))

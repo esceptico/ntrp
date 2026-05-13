@@ -234,7 +234,12 @@ class AutomationService:
         model: str | None = None,
         triggers: list[dict] | None = None,
         cooldown_minutes: int | None = None,
-    ) -> Automation:
+        idempotency_key: str | None = None,
+        idempotency_scope: str | None = None,
+        parent_automation_id: str | None = None,
+        parent_fire_at: str | None = None,
+        attempt_n: int | None = None,
+    ) -> Automation | None:
         if triggers:
             parsed_triggers = [parse_one(t) for t in triggers]
             time_triggers = [t for t in parsed_triggers if isinstance(t, TimeTrigger)]
@@ -255,8 +260,25 @@ class AutomationService:
             raise ValueError("Either 'triggers' list or 'trigger_type' is required")
 
         now = datetime.now(UTC)
+        task_id = generate_slug(2)
+
+        if idempotency_key is not None:
+            if idempotency_scope is None:
+                raise ValueError("idempotency_scope required when idempotency_key is set")
+            claimed = await self.store.try_claim_idempotency(
+                scope=idempotency_scope,
+                key=idempotency_key,
+                automation_task_id=task_id,
+                parent_automation_id=parent_automation_id,
+                parent_fire_at=parent_fire_at,
+                attempt_n=attempt_n,
+                claimed_at=now,
+            )
+            if not claimed:
+                return None
+
         automation = Automation(
-            task_id=generate_slug(2),
+            task_id=task_id,
             name=name,
             description=description,
             model=_normalize_and_validate_model(model),
@@ -269,6 +291,9 @@ class AutomationService:
             running_since=None,
             writable=writable,
             cooldown_minutes=cooldown_minutes,
+            parent_automation_id=parent_automation_id,
+            idempotency_key=idempotency_key,
+            idempotency_scope=idempotency_scope,
         )
         await self.store.save(automation)
         return automation
@@ -293,7 +318,12 @@ class AutomationService:
         max_iterations: int | None = None,
         stop_when: str | None = None,
         max_age_days: int | None = None,
-    ) -> Automation:
+        idempotency_key: str | None = None,
+        idempotency_scope: str | None = None,
+        parent_automation_id: str | None = None,
+        parent_fire_at: str | None = None,
+        attempt_n: int | None = None,
+    ) -> Automation | None:
         prompt = prompt.strip()
         if not prompt:
             raise ValueError("prompt required")
@@ -302,13 +332,30 @@ class AutomationService:
 
         trigger, _ = build_trigger("time", every=every)
         now = datetime.now(UTC)
+        task_id = f"loop-{generate_slug(2)}"
+
+        if idempotency_key is not None:
+            if idempotency_scope is None:
+                raise ValueError("idempotency_scope required when idempotency_key is set")
+            claimed = await self.store.try_claim_idempotency(
+                scope=idempotency_scope,
+                key=idempotency_key,
+                automation_task_id=task_id,
+                parent_automation_id=parent_automation_id,
+                parent_fire_at=parent_fire_at,
+                attempt_n=attempt_n,
+                claimed_at=now,
+            )
+            if not claimed:
+                return None
+
         # First fire is "as soon as the session goes idle" — set next_run_at
         # to now so the scheduler picks it up immediately. The fire gate
         # (apps/server/ntrp/server/app.py) defers the actual fire until the
         # /loop creation turn ends, so the iteration renders as a fresh
         # chat turn instead of getting injected into the creator's turn.
         automation = Automation(
-            task_id=f"loop-{generate_slug(2)}",
+            task_id=task_id,
             name=f"Loop: {prompt[:40]}",
             description=prompt,
             model=None,
@@ -327,6 +374,9 @@ class AutomationService:
             iteration_count=0,
             stop_when=stop_when,
             max_age_days=max_age_days,
+            parent_automation_id=parent_automation_id,
+            idempotency_key=idempotency_key,
+            idempotency_scope=idempotency_scope,
         )
         await self.store.save(automation)
         return automation
