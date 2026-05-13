@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from ntrp.agent import Agent, Role
-from ntrp.constants import CONVERSATION_GAP_THRESHOLD
+from ntrp.constants import CONVERSATION_GAP_THRESHOLD, LOOP_ITERATION_HISTORY_WINDOW
 from ntrp.context.models import SessionData, SessionState
 from ntrp.core.content import ContextContent, ImageContent, TextContent
 from ntrp.core.factory import AgentConfig, create_agent
@@ -212,6 +212,25 @@ async def _prepare_messages(
     return messages
 
 
+def _trim_for_loop_iteration(messages: list[dict]) -> list[dict]:
+    """Cap prior history for an iteration-mode loop fire.
+
+    Keeps the system row at index 0 (if present) plus the tail of the most
+    recent LOOP_ITERATION_HISTORY_WINDOW user/assistant/tool messages. The
+    persisted history on disk is untouched — this only shapes what the
+    agent sees on this iteration.
+    """
+    if len(messages) <= LOOP_ITERATION_HISTORY_WINDOW:
+        return messages
+    head: list[dict] = []
+    rest = messages
+    if messages and isinstance(messages[0], dict) and messages[0].get("role") == "system":
+        head = [messages[0]]
+        rest = messages[1:]
+    tail = rest[-LOOP_ITERATION_HISTORY_WINDOW:]
+    return head + tail
+
+
 async def prepare_chat(
     deps: ChatDeps,
     message: str,
@@ -220,6 +239,7 @@ async def prepare_chat(
     images: list[dict] | None = None,
     context: list[dict] | None = None,
     client_id: str | None = None,
+    loop_task_id: str | None = None,
 ) -> ChatContext:
     registry = deps.run_registry
 
@@ -235,6 +255,11 @@ async def prepare_chat(
     if skip_approvals is not None:
         session_state.skip_approvals = skip_approvals
     messages = session_data.messages
+    if loop_task_id:
+        # Iteration-mode loops would otherwise re-feed the whole prior
+        # transcript on every fire. Cap to the last N messages so the
+        # prompt context stays bounded for long-running monitors.
+        messages = _trim_for_loop_iteration(messages)
 
     user_message = message
     is_init = user_message.strip().lower() == "/init"
@@ -340,6 +365,7 @@ async def submit_chat_message(
         images=images,
         context=context,
         client_id=client_id,
+        loop_task_id=loop_task_id,
     )
     if loop_task_id:
         ctx.run.loop_task_id = loop_task_id

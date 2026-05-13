@@ -52,6 +52,11 @@ OUTBOX_PRUNE_INTERVAL_SECONDS = 3600
 HISTORY_MESSAGE_LIMIT = 50  # max user/assistant messages returned for UI history
 CONSOLIDATION_INTERVAL = 1800.0  # seconds between consolidation batches (30 min)
 
+# Iteration-mode loops re-enter the target session and would otherwise see
+# the entire prior history. Cap to the last N messages (system row at
+# index 0 is preserved). Runtime-only; disk history is untouched.
+LOOP_ITERATION_HISTORY_WINDOW = 50
+
 
 # --- Context Compaction ---
 
