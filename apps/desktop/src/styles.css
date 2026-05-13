@@ -731,37 +731,23 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    getting masked into the gradient — they're chrome, not text. */
 .reasoning-head[data-state="streaming"] svg { color: var(--color-muted); }
 
-/* ─── Work-block recessed plane ────────────────────────────
-   Tools / reasoning / activity sit on a faint sub-surface to
-   read as "scaffolding, not speech." Soft tint + inset edge +
-   tiny sunken shadow at the top create an actual z-axis layer
-   below the conversation prose — not just dimmed text.
-   Grounded in Rauno's Depth essay:
-     "Stacked offset surfaces = abundance"
-     "Background blur lowers Z" (using contrast tint instead of
-      a literal backdrop-filter to avoid per-row GPU cost on
-      long chats)
-   Live state ([data-live="true"]) swaps the neutral tint for a
-   warm accent-soft tint, signalling "present-tense work surface"
-   while the turn is running. Once the run ends, the plane
-   settles into the neutral recessed tint and stays as
-   scaffolding for the conversation that followed. */
-.messages-inner .work-block {
-  padding: 6px 12px;
-  border-radius: 10px;
-  background-color: color-mix(in oklab, var(--color-surface-soft) 55%, transparent);
-  box-shadow:
-    inset 0 0 0 0.5px color-mix(in oklab, var(--color-line-soft) 80%, transparent),
-    inset 0 1px 1px color-mix(in oklab, #000 4%, transparent);
-  transition:
-    background-color var(--duration-panel) ease,
-    box-shadow var(--duration-panel) ease;
+/* ─── Depth recession on intermediate work ─────────────────
+   Tool lines and reasoning heads are scaffolding, not the
+   answer. Soft them down by 22% so user/assistant prose reads
+   as the foreground layer (Rauno: "blur signals non-interactive"
+   — we use opacity, same Z-axis effect at lower cost). Live
+   state (running/streaming) pulls them back to full attention,
+   and hover lifts them back so the user can read details. */
+.messages-inner .tool-line,
+.messages-inner .reasoning-head {
+  opacity: 0.78;
+  transition: opacity var(--duration-row) ease;
 }
-.messages-inner .work-block[data-live="true"] {
-  background-color: color-mix(in oklab, var(--color-accent-soft) 60%, transparent);
-  box-shadow:
-    inset 0 0 0 0.5px color-mix(in oklab, var(--color-accent) 18%, transparent),
-    inset 0 1px 1px color-mix(in oklab, #000 3%, transparent);
+.messages-inner .tool-line[data-state="running"],
+.messages-inner .reasoning-head[data-state="streaming"],
+.messages-inner .tool-line:hover,
+.messages-inner .reasoning-head:hover {
+  opacity: 1;
 }
 
 /* ─── Approval-pending recession ───────────────────────────

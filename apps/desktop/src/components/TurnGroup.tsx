@@ -114,10 +114,7 @@ export function TurnGroup({
     </motion.div>
   );
   const workBlock = hasWork ? (
-    <div
-      className="work-block flex flex-col"
-      data-live={!isDone ? "true" : undefined}
-    >
+    <div className="flex flex-col">
       <AnimatePresence initial={false}>
         {isDone && (
           <motion.div
