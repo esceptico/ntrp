@@ -212,23 +212,37 @@ async def _prepare_messages(
     return messages
 
 
-def _trim_for_loop_iteration(messages: list[dict]) -> list[dict]:
+def _persistable_messages(run: RunState) -> list[dict]:
+    """The agent view (run.messages) plus any prefix we trimmed off for an
+    iteration-mode loop. Disk history must remain complete — the agent
+    only sees the tail to keep prompt context bounded."""
+    if not run.history_prefix:
+        return run.messages
+    return [*run.history_prefix, *run.messages]
+
+
+def _trim_for_loop_iteration(messages: list[dict]) -> tuple[list[dict], list[dict]]:
     """Cap prior history for an iteration-mode loop fire.
 
-    Keeps the system row at index 0 (if present) plus the tail of the most
-    recent LOOP_ITERATION_HISTORY_WINDOW user/assistant/tool messages. The
-    persisted history on disk is untouched — this only shapes what the
-    agent sees on this iteration.
+    Returns (prefix_to_persist, view_for_agent). The view keeps the system
+    row at index 0 (if present) plus the most recent
+    LOOP_ITERATION_HISTORY_WINDOW user/assistant/tool messages; the prefix
+    is the middle slice that was dropped from the agent's view but must
+    be re-prepended at save time so disk history stays complete.
     """
     if len(messages) <= LOOP_ITERATION_HISTORY_WINDOW:
-        return messages
+        return [], messages
     head: list[dict] = []
     rest = messages
     if messages and isinstance(messages[0], dict) and messages[0].get("role") == "system":
         head = [messages[0]]
         rest = messages[1:]
-    tail = rest[-LOOP_ITERATION_HISTORY_WINDOW:]
-    return head + tail
+    if len(rest) <= LOOP_ITERATION_HISTORY_WINDOW:
+        return [], messages
+    cut = len(rest) - LOOP_ITERATION_HISTORY_WINDOW
+    prefix = rest[:cut]
+    tail = rest[cut:]
+    return prefix, head + tail
 
 
 async def prepare_chat(
@@ -255,11 +269,15 @@ async def prepare_chat(
     if skip_approvals is not None:
         session_state.skip_approvals = skip_approvals
     messages = session_data.messages
+    history_prefix: list[dict] = []
     if loop_task_id:
         # Iteration-mode loops would otherwise re-feed the whole prior
         # transcript on every fire. Cap to the last N messages so the
-        # prompt context stays bounded for long-running monitors.
-        messages = _trim_for_loop_iteration(messages)
+        # prompt context stays bounded for long-running monitors. The
+        # dropped head is stashed on the run so save paths can re-prepend
+        # it — disk history stays complete even though the agent only
+        # sees the tail.
+        history_prefix, messages = _trim_for_loop_iteration(messages)
 
     user_message = message
     is_init = user_message.strip().lower() == "/init"
@@ -287,6 +305,7 @@ async def prepare_chat(
     run = registry.create_run(session_state.session_id)
     run.messages = messages
     run.session_state = session_state
+    run.history_prefix = history_prefix
 
     return ChatContext(
         run=run,
@@ -375,7 +394,7 @@ async def submit_chat_message(
     # and back in that window would lose the message: loadHistory returns
     # the pre-submit history and the SSE replay carries agent events, not
     # the user message itself.
-    await deps.session_service.save_progress(ctx.session_state, ctx.run.messages)
+    await deps.session_service.save_progress(ctx.session_state, _persistable_messages(ctx.run))
     bus = buses.get_or_create(session_id)
     task = asyncio.create_task(run_chat(ctx, bus))
     ctx.run.task = task
@@ -441,7 +460,11 @@ async def _drain_backgrounded(
         latest = await ctx.session_service.load(ctx.session_state.session_id)
         current_messages = list(latest.messages) if latest else []
         state = latest.state if latest else ctx.session_state
-        await ctx.session_service.save(state, _merge_background_messages(current_messages, messages))
+        # For iteration-mode loops the agent view is trimmed; prepend the
+        # stashed prefix so prefix-matching against disk lines up and the
+        # full history is preserved.
+        full_view = _persistable_messages(ctx.run)
+        await ctx.session_service.save(state, _merge_background_messages(current_messages, full_view))
 
     async def _save_directly(injected: list[dict]) -> None:
         async with save_lock:
@@ -552,7 +575,12 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             # RECENT_BUFFER_MAX); a reconnecting client with a cursor at
             # or above this watermark gets a clean buffered replay, while
             # a cursor below it triggers a stream_reset → history reload.
-            await ctx.session_service.save_progress(session_state, messages)
+            #
+            # `messages` here is the same list object as run.messages — for
+            # iteration-mode loops it's the trimmed view, so prepend the
+            # stashed prefix to keep disk history complete.
+            persistable = [*run.history_prefix, *messages] if run.history_prefix else messages
+            await ctx.session_service.save_progress(session_state, persistable)
             bus.mark_checkpoint()
 
         agent.hooks.on_step_finish = _checkpoint
@@ -627,7 +655,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             else:
                 input_tokens = None
             metadata = {"last_input_tokens": input_tokens} if input_tokens is not None else None
-            await ctx.session_service.save(session_state, run.messages, metadata=metadata)
+            await ctx.session_service.save(session_state, _persistable_messages(run), metadata=metadata)
             # Disk now holds the canonical end-of-run state; advance the
             # checkpoint watermark so any cursor below it gets a
             # stream_reset → history reload on reconnect.

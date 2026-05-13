@@ -47,6 +47,11 @@ class RunState:
     # task_id. Tools (schedule_wakeup, loop_done) read it to mutate the
     # right loop. None for ordinary user-initiated runs.
     loop_task_id: str | None = None
+    # Iteration-mode loops trim prior history to keep the agent's prompt
+    # context bounded. The dropped head sits here so saves can re-prepend
+    # it — disk history stays complete even though the agent only sees
+    # the tail. Empty for non-loop runs and for loop runs under the cap.
+    history_prefix: list[dict] = field(default_factory=list)
     # Reference to the live SessionState driving this run. Set during
     # prepare_chat so endpoints (e.g. POST /sessions/{id}/auto) can mutate
     # session-level state (like skip_approvals) without going through a

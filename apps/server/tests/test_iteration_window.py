@@ -179,6 +179,49 @@ async def test_non_loop_chat_does_not_trim_history():
 
 
 @pytest.mark.asyncio
+async def test_loop_iteration_stashes_prefix_for_persistence():
+    # Trimming must not destroy disk history — the dropped head sits on
+    # the run as `history_prefix` so save paths can re-prepend it.
+    history = _make_history(60)
+    svc = _StubSessionService(history)
+    deps = _make_deps(svc)
+
+    client_id = "loop:loop-c:1"
+    ctx = await prepare_chat(
+        deps,
+        message="iter",
+        skip_approvals=None,
+        session_id="sess-1",
+        client_id=client_id,
+        loop_task_id=_loop_task_id_from_client_id(client_id),
+    )
+
+    prefix = ctx.run.history_prefix
+    # 60 prior + 1 system. system is preserved separately, then 50 of the
+    # 60 non-system msgs go to the agent view → 10 stashed in the prefix.
+    assert len(prefix) == 10
+    assert prefix[0]["content"] == "msg-0"
+    assert prefix[-1]["content"] == "msg-9"
+
+
+@pytest.mark.asyncio
+async def test_non_loop_chat_leaves_history_prefix_empty():
+    history = _make_history(60)
+    svc = _StubSessionService(history)
+    deps = _make_deps(svc)
+
+    ctx = await prepare_chat(
+        deps,
+        message="hi",
+        skip_approvals=False,
+        session_id="sess-1",
+        client_id="user-cid",
+    )
+
+    assert ctx.run.history_prefix == []
+
+
+@pytest.mark.asyncio
 async def test_loop_iteration_preserves_system_after_trim():
     # System message must survive even when the tail is trimmed aggressively.
     history = _make_history(60)
