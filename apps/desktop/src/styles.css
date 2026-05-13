@@ -274,6 +274,26 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .scroll-thin::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
 .scroll-thin:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.08); }
 
+/* Messages list — soft top/bottom edge fade so content scrolls into the
+   chrome instead of meeting a hard cut. Per Rauno's Depth essay
+   ("fade-out edges = infinite boundary"). Mask applies to the scroll
+   viewport so the visible top/bottom always fades regardless of scroll
+   position. The scrollbar fades with it; that's intentional — at rest
+   you barely notice the rail, when you grab it the thumb is firmly in
+   the unmasked center. */
+.scroll-messages {
+  mask-image: linear-gradient(to bottom,
+    transparent 0,
+    black 28px,
+    black calc(100% - 36px),
+    transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom,
+    transparent 0,
+    black 28px,
+    black calc(100% - 36px),
+    transparent 100%);
+}
+
 /* Messages list scrollbar — always visible, draggable, slim. */
 .scroll-messages::-webkit-scrollbar { width: 8px; }
 .scroll-messages::-webkit-scrollbar-track { background: transparent; }
@@ -711,6 +731,68 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    getting masked into the gradient — they're chrome, not text. */
 .reasoning-head[data-state="streaming"] svg { color: var(--color-muted); }
 
+/* ─── Depth recession on intermediate work ─────────────────
+   Tool lines and reasoning heads are scaffolding, not the
+   answer. Soft them down by 22% so user/assistant prose reads
+   as the foreground layer (Rauno: "blur signals non-interactive"
+   — we use opacity, same Z-axis effect at lower cost). Live
+   state (running/streaming) pulls them back to full attention,
+   and hover lifts them back so the user can read details. */
+.messages-inner .tool-line,
+.messages-inner .reasoning-head {
+  opacity: 0.78;
+  transition: opacity var(--duration-row) ease;
+}
+.messages-inner .tool-line[data-state="running"],
+.messages-inner .reasoning-head[data-state="streaming"],
+.messages-inner .tool-line:hover,
+.messages-inner .reasoning-head:hover {
+  opacity: 1;
+}
+
+/* ─── Streaming "alive" caret ──────────────────────────────
+   Pulsing inline block at the end of the last paragraph or
+   list item while assistant is streaming. Reads as "still
+   working" even when the server pauses between token bursts —
+   without it, a pause looks identical to "done." Reduced
+   motion: the global media query pauses the pulse, but the
+   caret stays visible (per Rauno's Vercel essay: "reduced
+   motion = pause, not strip"). */
+@keyframes streamCaretPulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1; }
+}
+.assistant-message[data-streaming="true"] .md > p:last-child::after,
+.assistant-message[data-streaming="true"] .md > li:last-child::after,
+.assistant-message[data-streaming="true"] .md > h1:last-child::after,
+.assistant-message[data-streaming="true"] .md > h2:last-child::after,
+.assistant-message[data-streaming="true"] .md > h3:last-child::after,
+.assistant-message[data-streaming="true"] .md > h4:last-child::after {
+  content: "▍";
+  display: inline-block;
+  margin-left: 2px;
+  vertical-align: baseline;
+  color: var(--color-accent);
+  font-weight: 400;
+  animation: streamCaretPulse 1.2s ease-in-out infinite;
+  transform: translateY(-0.05em);
+}
+
+/* ─── Approval-pending recession ───────────────────────────
+   When approval(s) are pending, slightly blur + desaturate the
+   message stream so the approval card reads as the only sharp
+   affordance (Rauno's Depth: blur signals non-interactive).
+   Tuned subtle — 0.6px keeps text readable; the recession is
+   felt more than seen. Composer is intentionally not blurred:
+   the user may still want to type a rejection reason. */
+main[data-has-approval="true"] .scroll-messages {
+  filter: blur(0.6px) saturate(0.96);
+  transition: filter var(--duration-panel) ease;
+}
+main[data-has-approval="false"] .scroll-messages {
+  transition: filter var(--duration-panel) ease;
+}
+
 /* ─── Reduce motion ────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   * {
@@ -1076,105 +1158,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .composer-card[data-thinking="true"] > * {
   position: relative;
   z-index: 1;
-}
-
-/* ─── Empty state — registration grid ─────────────────────────
-   A faint dot grid sits behind a centered crosshair + copy. A
-   cursor-tracked radial spotlight brightens the grid locally,
-   driven by --mx / --my written from the React layer. No JS
-   animation loop. Light/dark parity is handled by tokens. */
-.empty-state {
-  --empty-state-size: clamp(280px, 32vw, 460px);
-  --empty-state-spot: 220px;
-  --empty-state-dot: var(--color-whisper);
-  width: var(--empty-state-size);
-  height: var(--empty-state-size);
-  isolation: isolate;
-}
-
-.empty-state-grid {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: 2px;
-  background-image: radial-gradient(
-    circle at 1px 1px,
-    var(--empty-state-dot) 0.85px,
-    transparent 1.6px
-  );
-  background-size: 14px 14px;
-  background-position: center;
-  /* Fade the grid into a soft disc so it doesn't fight the rest
-     of the layout — feels like an instrument panel, not a tile. */
-  -webkit-mask-image: radial-gradient(
-    circle at center,
-    #000 0%,
-    #000 42%,
-    transparent 78%
-  );
-  mask-image: radial-gradient(
-    circle at center,
-    #000 0%,
-    #000 42%,
-    transparent 78%
-  );
-  opacity: 0.85;
-  pointer-events: none;
-}
-
-.empty-state-spotlight {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  border-radius: 2px;
-  background: radial-gradient(
-    var(--empty-state-spot) var(--empty-state-spot) at var(--mx, -200px) var(--my, -200px),
-    var(--color-accent-soft) 0%,
-    transparent 70%
-  );
-  /* Confine the spotlight to the dot grid: reuses the same fade
-     mask so the glow can never reach the edges. */
-  -webkit-mask-image: radial-gradient(
-    circle at center,
-    #000 0%,
-    #000 42%,
-    transparent 78%
-  );
-  mask-image: radial-gradient(
-    circle at center,
-    #000 0%,
-    #000 42%,
-    transparent 78%
-  );
-  pointer-events: none;
-  transition: opacity var(--duration-trace) var(--ease-out-soft);
-}
-
-.empty-state-crosshair {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-}
-.empty-state-crosshair svg {
-  stroke: var(--color-faint);
-  stroke-width: 1;
-  stroke-linecap: round;
-  overflow: visible;
-}
-.empty-state-crosshair svg circle {
-  stroke: var(--color-line-strong);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  /* Static spotlight — pinned to center, no cursor reactivity. */
-  .empty-state-spotlight {
-    background: radial-gradient(
-      var(--empty-state-spot) var(--empty-state-spot) at 50% 50%,
-      var(--color-accent-soft) 0%,
-      transparent 70%
-    );
-  }
 }
 
 /* ─── Serif smart quotes (hanging punctuation) ─────────────────

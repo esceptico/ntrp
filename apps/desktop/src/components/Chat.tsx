@@ -79,9 +79,11 @@ function ChatHeader() {
 export function Chat() {
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
   const sessionId = useStore((s) => s.currentSessionId);
+  const hasApproval = useStore((s) => s.pendingApprovals.length > 0);
   return (
     <main
       data-sidebar-hidden={sidebarHidden ? "true" : "false"}
+      data-has-approval={hasApproval ? "true" : "false"}
       className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,244px)] data-[sidebar-hidden=true]:left-0 transition-[left] duration-route ease-emphasized grid grid-rows-[auto_minmax(0,1fr)_auto_auto] bg-bg overflow-hidden"
     >
       <ChatHeader />
