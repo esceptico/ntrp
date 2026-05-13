@@ -56,7 +56,12 @@ async def _resolve_parent_context(
 ) -> tuple[str | None, str | None]:
     """Default parent_automation_id to the calling loop's task_id; pull
     parent_fire_at from that parent's last_run_at when run/attempt scopes
-    need it but the caller didn't supply one."""
+    need it but the caller didn't supply one.
+
+    Raises ValueError when run/attempt scope is requested but the parent
+    cannot be resolved — silently collapsing to global scope would break
+    the agent's idempotency intent without any signal.
+    """
     parent_id = explicit_parent or execution.ctx.run.loop_task_id
     if parent_id is None or idempotency_scope not in {"run", "attempt"}:
         return parent_id, None
@@ -65,8 +70,11 @@ async def _resolve_parent_context(
         return parent_id, None
     try:
         parent = await svc.get(parent_id)
-    except KeyError:
-        return parent_id, None
+    except KeyError as exc:
+        raise ValueError(
+            f"idempotency_scope={idempotency_scope!r} requires parent_automation_id "
+            f"({parent_id!r}) to exist; not found"
+        ) from exc
     fire_at = parent.last_run_at.isoformat() if parent.last_run_at else None
     return parent_id, fire_at
 
@@ -238,9 +246,20 @@ async def approve_create_automation(execution: ToolExecution, args: CreateAutoma
     if args.thread_id:
         mode = "iteration" if args.read_history else "post"
         lines.append(f"Target session: {args.thread_id} ({mode} mode)")
-    inferred_parent = args.parent_automation_id or execution.ctx.run.loop_task_id
+    try:
+        inferred_parent, _ = await _resolve_parent_context(
+            execution, args.parent_automation_id, args.idempotency_scope
+        )
+        parent_conflict: str | None = None
+    except ValueError as exc:
+        # Resolver failure means run/attempt scope with a missing parent. Still
+        # show the would-be parent on the card so the reviewer can fix it.
+        inferred_parent = args.parent_automation_id or execution.ctx.run.loop_task_id
+        parent_conflict = str(exc)
     if inferred_parent:
         lines.append(f"Parent: {inferred_parent}")
+    if parent_conflict:
+        lines.append(f"Parent {inferred_parent!r} missing — will fail on execute")
     if args.idempotency_scope:
         key = args.idempotency_key or "(unset)"
         lines.append(f"Idempotency: {args.idempotency_scope} · key={key}")
@@ -257,9 +276,12 @@ async def approve_create_automation(execution: ToolExecution, args: CreateAutoma
 
 async def create_automation(execution: ToolExecution, args: CreateAutomationInput) -> ToolResult:
     svc = execution.ctx.services["automation"]
-    parent_automation_id, parent_fire_at = await _resolve_parent_context(
-        execution, args.parent_automation_id, args.idempotency_scope
-    )
+    try:
+        parent_automation_id, parent_fire_at = await _resolve_parent_context(
+            execution, args.parent_automation_id, args.idempotency_scope
+        )
+    except ValueError as e:
+        return ToolResult(content=f"Error: {e}", preview="Failed", is_error=True)
     try:
         automation = await svc.create(
             name=args.name,
@@ -667,9 +689,18 @@ async def approve_create_loop(execution: ToolExecution, args: CreateLoopInput) -
         lines.insert(-1, f"Auto-expires: after {args.max_age_days} day(s)")
     if args.stop_when:
         lines.insert(-1, f"Stop when: {args.stop_when}")
-    inferred_parent = args.parent_automation_id or execution.ctx.run.loop_task_id
+    try:
+        inferred_parent, _ = await _resolve_parent_context(
+            execution, args.parent_automation_id, args.idempotency_scope
+        )
+        parent_conflict: str | None = None
+    except ValueError as exc:
+        inferred_parent = args.parent_automation_id or execution.ctx.run.loop_task_id
+        parent_conflict = str(exc)
     if inferred_parent:
         lines.insert(-1, f"Parent: {inferred_parent}")
+    if parent_conflict:
+        lines.insert(-1, f"Parent {inferred_parent!r} missing — will fail on execute")
     if args.idempotency_scope:
         key = args.idempotency_key or "(unset)"
         lines.insert(-1, f"Idempotency: {args.idempotency_scope} · key={key}")
@@ -690,9 +721,12 @@ async def create_loop(execution: ToolExecution, args: CreateLoopInput) -> ToolRe
     if svc is None:
         return ToolResult(content="Automation service unavailable.", preview="Unavailable", is_error=True)
 
-    parent_automation_id, parent_fire_at = await _resolve_parent_context(
-        execution, args.parent_automation_id, args.idempotency_scope
-    )
+    try:
+        parent_automation_id, parent_fire_at = await _resolve_parent_context(
+            execution, args.parent_automation_id, args.idempotency_scope
+        )
+    except ValueError as e:
+        return ToolResult(content=f"Error: {e}", preview="Failed", is_error=True)
     try:
         loop = await svc.create_loop(
             session_id=session_id,

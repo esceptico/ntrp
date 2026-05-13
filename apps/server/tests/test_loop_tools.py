@@ -17,6 +17,8 @@ from ntrp.tools.automation import (
     CreateLoopInput,
     LoopDoneInput,
     ScheduleWakeupInput,
+    approve_create_automation,
+    approve_create_loop,
     create_automation,
     create_loop,
     loop_done,
@@ -246,3 +248,88 @@ async def test_create_loop_explicit_parent_overrides_ctx(store_and_svc):
     rows = await store.list_all()
     child = next(a for a in rows if a.loop_prompt == "watch CI yet again")
     assert child.parent_automation_id == "explicit-parent"
+
+
+@pytest.mark.asyncio
+async def test_create_automation_run_scope_missing_parent_errors(store_and_svc):
+    """idempotency_scope='run' with a non-existent parent must fail loudly,
+    not silently collapse to global scope."""
+    _, svc = store_and_svc
+    execution = _execution(svc, loop_task_id=None)
+
+    args = CreateAutomationInput(
+        name="orphan",
+        description="should fail",
+        trigger_type="time",
+        at="09:00",
+        parent_automation_id="ghost",
+        idempotency_key="k1",
+        idempotency_scope="run",
+    )
+    result = await create_automation(execution, args)
+    assert result.is_error
+    assert "ghost" in result.content
+    assert "run" in result.content
+
+
+@pytest.mark.asyncio
+async def test_create_loop_attempt_scope_missing_parent_errors(store_and_svc):
+    """Same protection on create_loop."""
+    _, svc = store_and_svc
+    execution = _execution(svc, loop_task_id=None)
+
+    result = await create_loop(
+        execution,
+        CreateLoopInput(
+            prompt="x",
+            every="5m",
+            parent_automation_id="ghost",
+            idempotency_key="k1",
+            idempotency_scope="attempt",
+            attempt_n=0,
+        ),
+    )
+    assert result.is_error
+    assert "ghost" in result.content
+    assert "attempt" in result.content
+
+
+@pytest.mark.asyncio
+async def test_approve_create_automation_flags_missing_parent(store_and_svc):
+    """Approval preview should surface the same missing-parent conflict
+    that execute will hit."""
+    _, svc = store_and_svc
+    execution = _execution(svc, loop_task_id=None)
+
+    args = CreateAutomationInput(
+        name="orphan",
+        description="should warn",
+        trigger_type="time",
+        at="09:00",
+        parent_automation_id="ghost",
+        idempotency_key="k1",
+        idempotency_scope="run",
+    )
+    info = await approve_create_automation(execution, args)
+    assert info is not None
+    assert "ghost" in info.preview
+    assert "missing" in info.preview.lower() or "will fail" in info.preview.lower()
+
+
+@pytest.mark.asyncio
+async def test_approve_create_loop_flags_missing_parent(store_and_svc):
+    """Same preview-vs-execute alignment for create_loop."""
+    _, svc = store_and_svc
+    execution = _execution(svc, loop_task_id=None)
+
+    args = CreateLoopInput(
+        prompt="watch",
+        every="5m",
+        parent_automation_id="ghost",
+        idempotency_key="k1",
+        idempotency_scope="run",
+    )
+    info = await approve_create_loop(execution, args)
+    assert info is not None
+    assert "ghost" in info.preview
+    assert "missing" in info.preview.lower() or "will fail" in info.preview.lower()
