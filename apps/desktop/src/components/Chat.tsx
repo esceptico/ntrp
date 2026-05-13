@@ -50,7 +50,6 @@ function ChatHeader() {
         sidebarHidden ? "pl-[128px]" : "pl-[18px]",
       )}
     >
-      <SidebarToggle />
       <div className="flex-1 min-w-0 flex items-baseline gap-2.5">
         <h1 className="m-0 min-w-0 text-md font-semibold tracking-[-0.01em] text-ink truncate">
           {title}
@@ -118,11 +117,48 @@ export function Chat() {
     <main
       data-sidebar-hidden={sidebarHidden ? "true" : "false"}
       data-has-approval={hasApproval ? "true" : "false"}
-      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,244px)] data-[sidebar-hidden=true]:left-0 transition-[left] duration-route ease-emphasized grid grid-rows-[auto_minmax(0,1fr)] bg-bg overflow-hidden"
+      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,244px)] data-[sidebar-hidden=true]:left-0 transition-[left] duration-route ease-emphasized bg-bg overflow-hidden"
     >
-      <ChatHeader />
-      <div className="relative min-h-0">
+      <div className="relative w-full h-full">
         <Messages key={sessionId ?? "none"} />
+        {/* Bottom fade — a gradient sitting between Messages and the
+            composer overlay. Text fades into bg before reaching the gap
+            below the floating composer card. Composer is z-10 (above
+            this z-5 layer), so its backdrop-filter blurs the gradient
+            and reads as glass landing on a clean bg edge. */}
+        <div
+          aria-hidden
+          className="chat-bottom-fade absolute left-0 right-0 bottom-0 pointer-events-none z-[5]"
+          style={{ height: "calc(var(--chat-bottom-h, 96px) + 24px)" }}
+        />
+        {/* Top fade — bg-color gradient. Messages dissolve into bg as
+            they scroll up under the header instead of crisply sliding
+            under glass. */}
+        <div
+          aria-hidden
+          className="chat-top-fade absolute left-0 right-0 top-0 pointer-events-none z-[5]"
+          style={{ height: "88px" }}
+        />
+        {/* Progressive blur stack — five layered backdrop-filters with
+            feathered masks. Approximates a gradient blur from strong
+            at the very top to none at the bottom edge, so the chrome→
+            content transition doesn't read as a hard seam. */}
+        <div
+          aria-hidden
+          className="progressive-blur-top absolute left-0 right-0 top-0 pointer-events-none z-[6]"
+          style={{ height: "88px" }}
+        >
+          <div /><div /><div /><div /><div />
+        </div>
+        <div className="absolute top-0 left-0 right-0 z-10">
+          <ChatHeader />
+        </div>
+        {/* SidebarToggle lives outside the glassy header — backdrop-filter
+            creates a containing block for `position: fixed` descendants,
+            which would tether the toggle to the header instead of the
+            viewport. Keeping it at the main level preserves its fixed-
+            to-viewport anchor near the macOS traffic lights. */}
+        <SidebarToggle />
         <div
           ref={bottomStackRef}
           className="absolute bottom-0 left-0 right-0 z-10"

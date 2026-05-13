@@ -262,6 +262,71 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .chat-header { -webkit-app-region: drag; }
 .chat-header > * { -webkit-app-region: no-drag; }
 
+/* Header is a glass overlay sitting on top of the scrolling message
+   list — content blurs through as it scrolls under. Same recipe as
+   `.composer-card` for visual consistency: the two pieces of chrome
+   are the only two surfaces wearing glass. Per Rauno's Depth essay
+   "Shoot through a surface". */
+.chat-header {
+  background-color: transparent;
+}
+
+/* Progressive blur stack for the top chrome — strongest blur at the
+   very top, tapering to none where the messages take over. Five
+   stacked layers each with a soft mask reveal in its band; their
+   backdrop-filters sum to an approximately smooth blur gradient.
+   Pattern popularized by Rauno (rauno.me/craft/depth) and used in
+   visionOS chrome — beats a single uniform blur, which always reads
+   as a hard horizontal seam where the blur ends.
+   Heights track the wrapper element (88px in `Chat.tsx`). */
+.progressive-blur-top > div {
+  position: absolute;
+  inset: 0;
+}
+.progressive-blur-top > div:nth-child(1) {
+  backdrop-filter: blur(10px) saturate(180%);
+  -webkit-backdrop-filter: blur(10px) saturate(180%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 20%, transparent 30%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 20%, transparent 30%);
+}
+.progressive-blur-top > div:nth-child(2) {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  mask-image: linear-gradient(to bottom, transparent 10%, #000 20%, #000 40%, transparent 50%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 10%, #000 20%, #000 40%, transparent 50%);
+}
+.progressive-blur-top > div:nth-child(3) {
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  mask-image: linear-gradient(to bottom, transparent 30%, #000 40%, #000 60%, transparent 70%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 30%, #000 40%, #000 60%, transparent 70%);
+}
+.progressive-blur-top > div:nth-child(4) {
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+  mask-image: linear-gradient(to bottom, transparent 50%, #000 60%, #000 80%, transparent 90%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 50%, #000 60%, #000 80%, transparent 90%);
+}
+.progressive-blur-top > div:nth-child(5) {
+  backdrop-filter: blur(0.5px);
+  -webkit-backdrop-filter: blur(0.5px);
+  mask-image: linear-gradient(to bottom, transparent 70%, #000 80%, #000 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 70%, #000 80%, #000 100%);
+}
+
+/* Mirror of `.chat-bottom-fade` — soft fade-from-bg behind the header
+   so messages dissolve into bg as they scroll up toward the chrome
+   instead of sliding under it as crisp text. Header sits above at
+   z-10 with its own blur. */
+.chat-top-fade {
+  background: linear-gradient(
+    to bottom,
+    var(--color-bg) 35%,
+    color-mix(in oklab, var(--color-bg) 60%, transparent) 70%,
+    transparent 100%
+  );
+}
+
 /* Anything portaled above the main layout (modals, viewers) must
    explicitly opt out of the drag region — the sidebar / chat-header
    "drag" regions otherwise bleed through, and the OS swallows clicks
@@ -274,14 +339,33 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .scroll-thin::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
 .scroll-thin:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.08); }
 
-/* Messages list — header sits above in its own grid row, so the top
-   just needs a visual gap. Bottom clears the absolute-positioned
-   composer overlay; height is dynamic (textarea auto-resize, approval
-   banner appears/disappears) and written to `--chat-bottom-h` by a
-   ResizeObserver in `Chat.tsx`. */
+/* Messages list — both the header (top) and composer (bottom) are
+   absolute glass overlays that messages scroll under. Padding clears
+   them so content lands cleanly at scroll=0; mask-image fades the
+   thin gap below the floating composer card so text doesn't peek
+   in the lift between card and viewport edge. Header is flush to
+   the top so no top fade needed — content blurs through naturally.
+   Per Rauno's Depth essay: "Shoot through a surface" + "Out-of-focus
+   foreground obscures cleanly". */
 .scroll-messages {
-  padding-top: 1.75rem;
+  padding-top: 64px;
   padding-bottom: calc(var(--chat-bottom-h, 96px) + 1rem);
+}
+
+/* Soft fade-to-bg sitting between Messages and the composer overlay.
+   Text physically dissolves into the bg as it scrolls toward the
+   bottom — no peeking through the gap below the floating card. The
+   composer sits above (higher z), so its backdrop-filter reads the
+   gradient as part of its blur source: the bottom of the card naturally
+   feels like glass landing on a solid bg edge.
+   Height tracks `--chat-bottom-h` so the fade scales with the composer. */
+.chat-bottom-fade {
+  background: linear-gradient(
+    to top,
+    var(--color-bg) 35%,
+    color-mix(in oklab, var(--color-bg) 60%, transparent) 70%,
+    transparent 100%
+  );
 }
 
 /* Messages list scrollbar — always visible, draggable, slim. */
@@ -547,9 +631,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    through as they scroll under the bottom of the column. No surrounding
    glass strip / chrome — the card itself is the only glass surface. */
 .composer-card {
-  background-color: color-mix(in oklab, var(--color-surface) 70%, transparent);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background-color: color-mix(in oklab, var(--color-surface) 25%, transparent);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
   box-shadow: var(--shadow-md);
 }
 
