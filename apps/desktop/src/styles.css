@@ -731,6 +731,15 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    getting masked into the gradient — they're chrome, not text. */
 .reasoning-head[data-state="streaming"] svg { color: var(--color-muted); }
 
+/* When motion-staggered children carry their own opacity+y entry, the
+   article's CSS `animate-roll-in` would compound (~10px combined offset
+   + multiplied opacity). Suppress the CSS animation inside this scope so
+   motion fully owns the entrance. */
+.stagger-row-parent .animate-roll-in,
+.stagger-row-parent .animate-fade-in {
+  animation: none;
+}
+
 /* ─── Depth recession on intermediate work ─────────────────
    Tool lines and reasoning heads are scaffolding, not the
    answer. Soft them down by 22% so user/assistant prose reads

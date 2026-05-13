@@ -44,6 +44,12 @@ export const SPRING_POPOVER = { type: "spring", stiffness: 350, damping: 26, mas
 /** Tap release — snappy spring so an interrupted release re-targets cleanly. */
 export const SPRING_TAP_RELEASE = { type: "spring", stiffness: 400, damping: 22, mass: 0.8 } as const;
 
+/** Row settles — Control Center–style spring for sibling-row entrances.
+ *  Used by `TurnGroup`'s work-block stagger (Rauno's Depth essay:
+ *  "Spring rows = organic feedback — Control Center–style spring per row").
+ *  Snappier than SPRING_SMOOTH; not as elastic as SPRING_BOUNCY. */
+export const SPRING_ROW_ENTRY = { type: "spring", stiffness: 360, damping: 28, mass: 0.8 } as const;
+
 /** Returns the viewport-space center of an element. Used as the spatial
  *  origin for modal open animations — the modal then grows from this
  *  point, so users can see WHERE it came from. */

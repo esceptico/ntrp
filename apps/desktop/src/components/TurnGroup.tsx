@@ -6,7 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
 import { Message } from "./Message";
 import { turnLayout } from "../lib/turnLayout";
-import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
+import { MOTION, EASE_EMPHASIZED, SPRING_ROW_ENTRY } from "../lib/motion";
 import { ICON } from "../lib/icons";
 
 const EASE = EASE_EMPHASIZED;
@@ -73,12 +73,39 @@ export function TurnGroup({
     : "Worked";
 
   const showInterim = !isDone || expanded;
+  // Stagger sibling reveals so the eye perceives quantity ("many things
+  // happened") instead of one synchronous flash. Per Rauno's Depth
+  // essay: "Stagger sibling fades — Synchronous fade hides quantity."
+  // 45ms inter-item delay sits inside his 30–60ms range. Applies on the
+  // burst-arrival path (multiple workIds in the same paint, e.g. history
+  // load, or several tool/reasoning rows resolving same-frame); streaming
+  // arrivals are naturally paced by the network and don't need this.
   const interimList = (
-    <div className={clsx("flex flex-col gap-3.5", isDone && "pt-1.5")}>
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      variants={{
+        hidden: {},
+        visible: { transition: { staggerChildren: 0.045 } },
+      }}
+      // `stagger-row-parent` class disables the inner article's CSS
+      // `animate-roll-in` keyframe so the motion-driven entry isn't
+      // doubled (motion provides the opacity+y; the CSS would compound it).
+      className={clsx("stagger-row-parent flex flex-col gap-3.5", isDone && "pt-1.5")}
+    >
       {layout.workIds.map((id) => (
-        <Message key={id} id={id} isFinal={false} />
+        <motion.div
+          key={id}
+          variants={{
+            hidden: { opacity: 0, y: 4 },
+            visible: { opacity: 1, y: 0 },
+          }}
+          transition={SPRING_ROW_ENTRY}
+        >
+          <Message id={id} isFinal={false} />
+        </motion.div>
       ))}
-    </div>
+    </motion.div>
   );
   const workBlock = hasWork ? (
     <div className="flex flex-col">
