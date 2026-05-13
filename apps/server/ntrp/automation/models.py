@@ -46,3 +46,15 @@ class Automation:
         if not self.max_age_days:
             return False
         return (now - self.created_at) >= timedelta(days=self.max_age_days)
+
+
+@dataclass(frozen=True)
+class IdempotencyClaim:
+    claim_id: str
+    scope: str
+    key: str
+    parent_automation_id: str | None
+    parent_fire_at: str | None
+    attempt_n: int | None
+    claimed_at: datetime
+    automation_task_id: str | None

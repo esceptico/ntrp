@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import aiosqlite
 
-from ntrp.automation.models import Automation
+from ntrp.automation.models import Automation, IdempotencyClaim
 from ntrp.automation.triggers import parse_triggers
 from ntrp.logging import get_logger
 
@@ -14,12 +14,26 @@ def _parse_dt(raw: str | None) -> datetime | None:
     return datetime.fromisoformat(raw) if raw else None
 
 
+_CONTROL_BYTES = ("\x1f", "\x00")
+
+
+def _reject_control_bytes(name: str, value: str | None) -> None:
+    if value is None:
+        return
+    if any(b in value for b in _CONTROL_BYTES):
+        raise ValueError(
+            "idempotency claim fields must not contain control bytes \\x1f or \\x00"
+        )
+
+
 def _validate_idempotency_claim(
     *,
     scope: str,
+    key: str,
     parent_automation_id: str | None,
     parent_fire_at: str | None,
     attempt_n: int | None,
+    automation_task_id: str | None = None,
 ) -> None:
     if scope == "global":
         if parent_automation_id is not None or parent_fire_at is not None or attempt_n is not None:
@@ -34,6 +48,14 @@ def _validate_idempotency_claim(
             raise ValueError("scope='attempt' requires parent_automation_id, parent_fire_at, and attempt_n")
     else:
         raise ValueError(f"Unknown idempotency scope: {scope!r}")
+
+    # PK is built by joining these fields with \x1f and using \x00 as NULL
+    # sentinel. Any of those bytes in user input would let two distinct tuples
+    # collide on the same PK, so we reject them outright.
+    _reject_control_bytes("key", key)
+    _reject_control_bytes("parent_automation_id", parent_automation_id)
+    _reject_control_bytes("parent_fire_at", parent_fire_at)
+    _reject_control_bytes("automation_task_id", automation_task_id)
 
 
 def _build_claim_id(
@@ -316,7 +338,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SQL_LIST_CLAIMS_FOR_PARENT = """
-SELECT scope, key, parent_automation_id, parent_fire_at, attempt_n,
+SELECT claim_id, scope, key, parent_automation_id, parent_fire_at, attempt_n,
        claimed_at, automation_task_id
 FROM automation_idempotency_claims
 WHERE parent_automation_id = ?
@@ -937,9 +959,11 @@ class AutomationStore:
     ) -> bool:
         _validate_idempotency_claim(
             scope=scope,
+            key=key,
             parent_automation_id=parent_automation_id,
             parent_fire_at=parent_fire_at,
             attempt_n=attempt_n,
+            automation_task_id=automation_task_id,
         )
         claim_id = _build_claim_id(
             scope=scope,
@@ -964,18 +988,110 @@ class AutomationStore:
         await self.conn.commit()
         return cursor.rowcount > 0
 
-    async def list_claims_for_parent(self, parent_automation_id: str) -> list[dict]:
+    async def save_with_claim(
+        self,
+        automation: Automation,
+        *,
+        scope: str,
+        key: str,
+        parent_automation_id: str | None = None,
+        parent_fire_at: str | None = None,
+        attempt_n: int | None = None,
+        claimed_at: datetime | None = None,
+    ) -> bool:
+        """Atomically claim idempotency and save the automation row.
+
+        Returns True iff both rows were written. Returns False if the claim
+        was already taken (no automation row inserted). Any exception during
+        save rolls back the claim so a retry under the same key can succeed.
+        """
+        _validate_idempotency_claim(
+            scope=scope,
+            key=key,
+            parent_automation_id=parent_automation_id,
+            parent_fire_at=parent_fire_at,
+            attempt_n=attempt_n,
+            automation_task_id=automation.task_id,
+        )
+        claim_id = _build_claim_id(
+            scope=scope,
+            key=key,
+            parent_automation_id=parent_automation_id,
+            parent_fire_at=parent_fire_at,
+            attempt_n=attempt_n,
+        )
+        # aiosqlite defaults to autocommit-ish behavior via implicit transactions
+        # on DML. We open one explicit transaction so the claim and the row
+        # share atomicity.
+        await self.conn.execute("BEGIN")
+        try:
+            cursor = await self.conn.execute(
+                _SQL_TRY_CLAIM_IDEMPOTENCY,
+                (
+                    claim_id,
+                    scope,
+                    key,
+                    parent_automation_id,
+                    parent_fire_at,
+                    attempt_n,
+                    (claimed_at or datetime.now(UTC)).isoformat(),
+                    automation.task_id,
+                ),
+            )
+            if cursor.rowcount == 0:
+                await self.conn.rollback()
+                return False
+            await self.conn.execute(
+                _SQL_SAVE,
+                (
+                    automation.task_id,
+                    automation.name,
+                    automation.description,
+                    automation.model,
+                    _serialize_triggers(automation.triggers),
+                    int(automation.enabled),
+                    automation.created_at.isoformat(),
+                    automation.last_run_at.isoformat() if automation.last_run_at else None,
+                    automation.next_run_at.isoformat() if automation.next_run_at else None,
+                    automation.last_result,
+                    automation.running_since.isoformat() if automation.running_since else None,
+                    int(automation.writable),
+                    automation.handler,
+                    int(automation.builtin),
+                    automation.cooldown_minutes,
+                    automation.kind,
+                    automation.target_session_id,
+                    automation.loop_prompt,
+                    automation.max_iterations,
+                    int(automation.iteration_count),
+                    automation.stop_when,
+                    automation.max_age_days,
+                    automation.thread_id,
+                    int(automation.read_history),
+                    automation.parent_automation_id,
+                    automation.idempotency_key,
+                    automation.idempotency_scope,
+                ),
+            )
+            await self.conn.commit()
+            return True
+        except BaseException:
+            await self.conn.rollback()
+            raise
+
+    async def list_claims_for_parent(self, parent_automation_id: str) -> list[IdempotencyClaim]:
         rows = await self.conn.execute_fetchall(_SQL_LIST_CLAIMS_FOR_PARENT, (parent_automation_id,))
         return [
-            {
-                "scope": row["scope"],
-                "key": row["key"],
-                "parent_automation_id": row["parent_automation_id"],
-                "parent_fire_at": row["parent_fire_at"],
-                "attempt_n": row["attempt_n"],
-                "claimed_at": row["claimed_at"],
-                "automation_task_id": row["automation_task_id"],
-            }
+            IdempotencyClaim(
+                claim_id=row["claim_id"],
+                scope=row["scope"],
+                key=row["key"],
+                parent_automation_id=row["parent_automation_id"],
+                parent_fire_at=row["parent_fire_at"],
+                attempt_n=int(row["attempt_n"]) if row["attempt_n"] is not None else None,
+                claimed_at=datetime.fromisoformat(row["claimed_at"]),
+                automation_task_id=row["automation_task_id"],
+            )
             for row in rows
         ]
 

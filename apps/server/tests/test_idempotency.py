@@ -5,6 +5,7 @@ import pytest
 import pytest_asyncio
 
 import ntrp.database as database
+from ntrp.automation.models import IdempotencyClaim
 from ntrp.automation.scheduler import Scheduler
 from ntrp.automation.service import AutomationService
 from ntrp.automation.store import AutomationStore
@@ -254,8 +255,13 @@ async def test_list_claims_for_parent(store: AutomationStore):
     )
 
     claims = await store.list_claims_for_parent("watcher")
-    keys = {c["key"] for c in claims}
+    assert all(isinstance(c, IdempotencyClaim) for c in claims)
+    keys = {c.key for c in claims}
     assert keys == {"item-1", "item-2"}
+    for c in claims:
+        assert c.parent_automation_id == "watcher"
+        assert c.scope == "run"
+        assert isinstance(c.claimed_at, datetime)
 
 
 # ---------------- service integration ----------------
@@ -344,3 +350,137 @@ async def test_create_loop_with_idempotency(service: AutomationService):
         idempotency_scope="global",
     )
     assert second is None
+
+
+# ---------------- sentinel byte validation ----------------
+
+
+@pytest.mark.asyncio
+async def test_claim_rejects_unit_separator_in_key(store: AutomationStore):
+    with pytest.raises(ValueError, match="control bytes"):
+        await store.try_claim_idempotency(
+            scope="global",
+            key="foo\x1fbar",
+            automation_task_id="c",
+        )
+
+
+@pytest.mark.asyncio
+async def test_claim_rejects_null_in_key(store: AutomationStore):
+    with pytest.raises(ValueError, match="control bytes"):
+        await store.try_claim_idempotency(
+            scope="global",
+            key="foo\x00bar",
+            automation_task_id="c",
+        )
+
+
+@pytest.mark.asyncio
+async def test_claim_rejects_unit_separator_in_parent_id(store: AutomationStore):
+    with pytest.raises(ValueError, match="control bytes"):
+        await store.try_claim_idempotency(
+            scope="run",
+            key="k",
+            parent_automation_id="watcher\x1fhack",
+            parent_fire_at="2026-05-13T10:00:00+00:00",
+            automation_task_id="c",
+        )
+
+
+@pytest.mark.asyncio
+async def test_claim_rejects_unit_separator_in_parent_fire_at(store: AutomationStore):
+    with pytest.raises(ValueError, match="control bytes"):
+        await store.try_claim_idempotency(
+            scope="run",
+            key="k",
+            parent_automation_id="watcher",
+            parent_fire_at="2026-05-13T10:00:00+00:00\x1fhack",
+            automation_task_id="c",
+        )
+
+
+@pytest.mark.asyncio
+async def test_claim_rejects_null_in_automation_task_id(store: AutomationStore):
+    with pytest.raises(ValueError, match="control bytes"):
+        await store.try_claim_idempotency(
+            scope="global",
+            key="k",
+            automation_task_id="child\x00id",
+        )
+
+
+# ---------------- atomic save_with_claim ----------------
+
+
+@pytest.mark.asyncio
+async def test_create_rolls_back_claim_on_save_failure(
+    service: AutomationService, store: AutomationStore, monkeypatch
+):
+    """If the automation row write fails inside save_with_claim, the claim
+    must also rollback so a retry under the same key can succeed."""
+    # Simulate the INSERT INTO scheduled_tasks step failing by patching the
+    # connection's execute to raise on _SQL_SAVE only.
+    real_execute = store.conn.execute
+
+    async def flaky_execute(sql, *args, **kwargs):
+        if "INSERT OR REPLACE INTO scheduled_tasks" in sql:
+            raise RuntimeError("simulated disk error")
+        return await real_execute(sql, *args, **kwargs)
+
+    monkeypatch.setattr(store.conn, "execute", flaky_execute)
+
+    with pytest.raises(RuntimeError, match="simulated disk error"):
+        await service.create(
+            name="first-try",
+            description="x",
+            trigger_type="time",
+            at="09:00",
+            idempotency_key="item-99",
+            idempotency_scope="global",
+        )
+
+    # Restore and retry — claim should have rolled back so this must succeed.
+    monkeypatch.setattr(store.conn, "execute", real_execute)
+    retry = await service.create(
+        name="second-try",
+        description="x",
+        trigger_type="time",
+        at="09:00",
+        idempotency_key="item-99",
+        idempotency_scope="global",
+    )
+    assert retry is not None
+    assert retry.idempotency_key == "item-99"
+
+
+@pytest.mark.asyncio
+async def test_create_loop_rolls_back_claim_on_save_failure(
+    service: AutomationService, store: AutomationStore, monkeypatch
+):
+    real_execute = store.conn.execute
+
+    async def flaky_execute(sql, *args, **kwargs):
+        if "INSERT OR REPLACE INTO scheduled_tasks" in sql:
+            raise RuntimeError("simulated disk error")
+        return await real_execute(sql, *args, **kwargs)
+
+    monkeypatch.setattr(store.conn, "execute", flaky_execute)
+
+    with pytest.raises(RuntimeError, match="simulated disk error"):
+        await service.create_loop(
+            session_id="sess-x",
+            prompt="watch x",
+            every="5m",
+            idempotency_key="loop-x",
+            idempotency_scope="global",
+        )
+
+    monkeypatch.setattr(store.conn, "execute", real_execute)
+    retry = await service.create_loop(
+        session_id="sess-x",
+        prompt="watch x",
+        every="5m",
+        idempotency_key="loop-x",
+        idempotency_scope="global",
+    )
+    assert retry is not None

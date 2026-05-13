@@ -262,20 +262,8 @@ class AutomationService:
         now = datetime.now(UTC)
         task_id = generate_slug(2)
 
-        if idempotency_key is not None:
-            if idempotency_scope is None:
-                raise ValueError("idempotency_scope required when idempotency_key is set")
-            claimed = await self.store.try_claim_idempotency(
-                scope=idempotency_scope,
-                key=idempotency_key,
-                automation_task_id=task_id,
-                parent_automation_id=parent_automation_id,
-                parent_fire_at=parent_fire_at,
-                attempt_n=attempt_n,
-                claimed_at=now,
-            )
-            if not claimed:
-                return None
+        if idempotency_key is not None and idempotency_scope is None:
+            raise ValueError("idempotency_scope required when idempotency_key is set")
 
         automation = Automation(
             task_id=task_id,
@@ -295,7 +283,21 @@ class AutomationService:
             idempotency_key=idempotency_key,
             idempotency_scope=idempotency_scope,
         )
-        await self.store.save(automation)
+
+        if idempotency_key is not None:
+            claimed = await self.store.save_with_claim(
+                automation,
+                scope=idempotency_scope,
+                key=idempotency_key,
+                parent_automation_id=parent_automation_id,
+                parent_fire_at=parent_fire_at,
+                attempt_n=attempt_n,
+                claimed_at=now,
+            )
+            if not claimed:
+                return None
+        else:
+            await self.store.save(automation)
         return automation
 
     async def delete(self, task_id: str) -> None:
@@ -334,20 +336,8 @@ class AutomationService:
         now = datetime.now(UTC)
         task_id = f"loop-{generate_slug(2)}"
 
-        if idempotency_key is not None:
-            if idempotency_scope is None:
-                raise ValueError("idempotency_scope required when idempotency_key is set")
-            claimed = await self.store.try_claim_idempotency(
-                scope=idempotency_scope,
-                key=idempotency_key,
-                automation_task_id=task_id,
-                parent_automation_id=parent_automation_id,
-                parent_fire_at=parent_fire_at,
-                attempt_n=attempt_n,
-                claimed_at=now,
-            )
-            if not claimed:
-                return None
+        if idempotency_key is not None and idempotency_scope is None:
+            raise ValueError("idempotency_scope required when idempotency_key is set")
 
         # First fire is "as soon as the session goes idle" — set next_run_at
         # to now so the scheduler picks it up immediately. The fire gate
@@ -378,5 +368,19 @@ class AutomationService:
             idempotency_key=idempotency_key,
             idempotency_scope=idempotency_scope,
         )
-        await self.store.save(automation)
+
+        if idempotency_key is not None:
+            claimed = await self.store.save_with_claim(
+                automation,
+                scope=idempotency_scope,
+                key=idempotency_key,
+                parent_automation_id=parent_automation_id,
+                parent_fire_at=parent_fire_at,
+                attempt_n=attempt_n,
+                claimed_at=now,
+            )
+            if not claimed:
+                return None
+        else:
+            await self.store.save(automation)
         return automation
