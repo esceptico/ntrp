@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Literal
 
 from ntrp.context.models import SessionData, SessionState
 from ntrp.context.store import SessionStore
@@ -12,12 +13,19 @@ class SessionService:
     def __init__(self, store: SessionStore):
         self.store = store
 
-    def create(self, name: str | None = None) -> SessionState:
+    def create(
+        self,
+        name: str | None = None,
+        session_type: Literal["chat", "channel"] = "chat",
+        origin_automation_id: str | None = None,
+    ) -> SessionState:
         now = datetime.now(UTC)
         return SessionState(
             session_id=f"{now.strftime('%Y%m%d_%H%M%S')}_{now.microsecond // 1000:03d}",
             started_at=now,
             name=name,
+            session_type=session_type,
+            origin_automation_id=origin_automation_id,
         )
 
     async def load(self, session_id: str | None = None) -> SessionData | None:

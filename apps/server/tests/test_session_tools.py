@@ -15,8 +15,10 @@ from ntrp.tools.core.context import (
 )
 from ntrp.tools.core.registry import ToolRegistry
 from ntrp.tools.sessions import (
+    CreateSessionInput,
     ListRecentSessionsInput,
     ReadSessionInput,
+    create_session,
     list_recent_sessions,
     read_session,
 )
@@ -170,6 +172,102 @@ async def test_read_session_role_filter():
     assert "[user]" in result.content
     assert "[assistant]" not in result.content
     assert "[tool" not in result.content
+
+
+# --- create_session tool ---
+
+
+class _CapturingSessionService:
+    """Captures session.create() + save() calls for assertion."""
+
+    def __init__(self):
+        self.created: list[SessionState] = []
+
+    def create(self, name=None, session_type="chat", origin_automation_id=None):
+        state = SessionState(
+            session_id=f"sess-{len(self.created) + 1:03d}",
+            started_at=datetime.now(UTC),
+            name=name,
+            session_type=session_type,
+            origin_automation_id=origin_automation_id,
+        )
+        self.created.append(state)
+        return state
+
+    async def save(self, state, messages, metadata=None):
+        return None
+
+
+def _execution_with_loop(services: dict, loop_task_id: str | None = None) -> ToolExecution:
+    ctx = ToolContext(
+        session_state=SessionState(session_id="cur", started_at=datetime.now(UTC)),
+        registry=ToolRegistry(),
+        run=RunContext(run_id="run-1", loop_task_id=loop_task_id),
+        io=IOBridge(),
+        background_tasks=BackgroundTaskRegistry(session_id="cur"),
+        services=services,
+    )
+    return ToolExecution(tool_id="t1", tool_name="create_session", ctx=ctx)
+
+
+@pytest.mark.asyncio
+async def test_create_session_defaults_to_channel():
+    svc = _CapturingSessionService()
+    execution = _execution_with_loop({"session": svc})
+
+    result = await create_session(execution, CreateSessionInput(name="ops alerts"))
+
+    assert not result.is_error
+    assert len(svc.created) == 1
+    state = svc.created[0]
+    assert state.session_type == "channel"
+    assert state.name == "ops alerts"
+    assert state.origin_automation_id is None
+    assert state.session_id in result.content
+
+
+@pytest.mark.asyncio
+async def test_create_session_chat_type_when_requested():
+    svc = _CapturingSessionService()
+    execution = _execution_with_loop({"session": svc})
+
+    result = await create_session(
+        execution, CreateSessionInput(name="adhoc", session_type="chat")
+    )
+
+    assert not result.is_error
+    assert svc.created[0].session_type == "chat"
+
+
+@pytest.mark.asyncio
+async def test_create_session_stamps_origin_when_in_loop():
+    svc = _CapturingSessionService()
+    execution = _execution_with_loop({"session": svc}, loop_task_id="loop-shy-otter")
+
+    result = await create_session(execution, CreateSessionInput(name="from loop"))
+
+    assert not result.is_error
+    assert svc.created[0].origin_automation_id == "loop-shy-otter"
+
+
+@pytest.mark.asyncio
+async def test_create_session_no_origin_when_not_in_loop():
+    svc = _CapturingSessionService()
+    execution = _execution_with_loop({"session": svc}, loop_task_id=None)
+
+    await create_session(execution, CreateSessionInput(name="standalone"))
+
+    assert svc.created[0].origin_automation_id is None
+
+
+@pytest.mark.asyncio
+async def test_create_session_missing_service_is_error():
+    execution = _execution_with_loop({})  # no session service
+
+    result = await create_session(execution, CreateSessionInput(name="x"))
+
+    assert result.is_error
+    assert "unavailable" in result.content.lower()
 
 
 @pytest.mark.asyncio

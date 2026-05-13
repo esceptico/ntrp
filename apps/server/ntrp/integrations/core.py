@@ -38,7 +38,7 @@ from ntrp.tools.files import (
 from ntrp.tools.memory import forget_tool, recall_tool, remember_tool
 from ntrp.tools.notify import notify_tool
 from ntrp.tools.research import research_tool
-from ntrp.tools.sessions import list_recent_sessions_tool, read_session_tool
+from ntrp.tools.sessions import create_session_tool, list_recent_sessions_tool, read_session_tool
 from ntrp.tools.time import current_time_tool
 
 SYSTEM = Integration(
@@ -118,6 +118,7 @@ SESSIONS = Integration(
     tools={
         "list_recent_sessions": list_recent_sessions_tool,
         "read_session": read_session_tool,
+        "create_session": create_session_tool,
     },
 )
 

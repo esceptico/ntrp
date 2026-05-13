@@ -49,6 +49,28 @@ def _triggers_label(triggers: list) -> str:
     return " | ".join(t.label for t in triggers)
 
 
+async def _resolve_parent_context(
+    execution: "ToolExecution",
+    explicit_parent: str | None,
+    idempotency_scope: str | None,
+) -> tuple[str | None, str | None]:
+    """Default parent_automation_id to the calling loop's task_id; pull
+    parent_fire_at from that parent's last_run_at when run/attempt scopes
+    need it but the caller didn't supply one."""
+    parent_id = explicit_parent or execution.ctx.run.loop_task_id
+    if parent_id is None or idempotency_scope not in {"run", "attempt"}:
+        return parent_id, None
+    svc = execution.ctx.services.get("automation")
+    if svc is None:
+        return parent_id, None
+    try:
+        parent = await svc.get(parent_id)
+    except KeyError:
+        return parent_id, None
+    fire_at = parent.last_run_at.isoformat() if parent.last_run_at else None
+    return parent_id, fire_at
+
+
 def _format_automation_list(automations: list[Automation]) -> str:
     lines = []
     for a in automations:
@@ -105,6 +127,44 @@ class CreateAutomationInput(BaseModel):
         description="For event_approaching only: trigger when event is this many minutes away (default 60).",
     )
     writable: bool = Field(default=False, description="Allow automation to write to memory and connected services")
+    thread_id: str | None = Field(
+        default=None,
+        description=(
+            "Target session/channel the automation posts into when it fires. "
+            "Use a channel session_id (see create_session). When omitted, the run "
+            "is unattached (no chat surface)."
+        ),
+    )
+    read_history: bool = Field(
+        default=False,
+        description=(
+            "Only meaningful with thread_id. When true the automation reads the "
+            "target session's history as iteration context; false means it just "
+            "posts a fresh run."
+        ),
+    )
+    parent_automation_id: str | None = Field(
+        default=None,
+        description=(
+            "Explicit parent lineage. Defaults to the current loop's task_id when "
+            "this tool is called from inside a loop iteration."
+        ),
+    )
+    idempotency_key: str | None = Field(
+        default=None,
+        description=(
+            "Deduplication key. Combined with idempotency_scope, prevents "
+            "creating duplicate automations on retries / repeated tool calls."
+        ),
+    )
+    idempotency_scope: Literal["run", "attempt", "global"] | None = Field(
+        default=None,
+        description=(
+            "Scope for the idempotency claim. Required when idempotency_key is "
+            "set. 'global' = no parent; 'run' / 'attempt' = scoped to the "
+            "calling automation's fire."
+        ),
+    )
 
 
 class UpdateAutomationInput(BaseModel):
@@ -175,6 +235,15 @@ async def approve_create_automation(execution: ToolExecution, args: CreateAutoma
         lines.append(f"Model: {args.model}")
     if args.writable:
         lines.append("Writable: yes (can write to memory + services)")
+    if args.thread_id:
+        mode = "iteration" if args.read_history else "post"
+        lines.append(f"Target session: {args.thread_id} ({mode} mode)")
+    inferred_parent = args.parent_automation_id or execution.ctx.run.loop_task_id
+    if inferred_parent:
+        lines.append(f"Parent: {inferred_parent}")
+    if args.idempotency_scope:
+        key = args.idempotency_key or "(unset)"
+        lines.append(f"Idempotency: {args.idempotency_scope} · key={key}")
     lines.append("")
     lines.append("Prompt:")
     lines.append(args.description)
@@ -187,8 +256,12 @@ async def approve_create_automation(execution: ToolExecution, args: CreateAutoma
 
 
 async def create_automation(execution: ToolExecution, args: CreateAutomationInput) -> ToolResult:
+    svc = execution.ctx.services["automation"]
+    parent_automation_id, parent_fire_at = await _resolve_parent_context(
+        execution, args.parent_automation_id, args.idempotency_scope
+    )
     try:
-        automation = await execution.ctx.services["automation"].create(
+        automation = await svc.create(
             name=args.name,
             description=args.description,
             trigger_type=args.trigger_type,
@@ -201,9 +274,21 @@ async def create_automation(execution: ToolExecution, args: CreateAutomationInpu
             start=args.start,
             end=args.end,
             model=args.model,
+            thread_id=args.thread_id,
+            read_history=args.read_history,
+            parent_automation_id=parent_automation_id,
+            idempotency_key=args.idempotency_key,
+            idempotency_scope=args.idempotency_scope,
+            parent_fire_at=parent_fire_at,
         )
     except ValueError as e:
         return ToolResult(content=f"Error: {e}", preview="Failed", is_error=True)
+
+    if automation is None:
+        return ToolResult(
+            content=f"Skipped (idempotency claim conflict): key={args.idempotency_key}",
+            preview="Skipped (idempotent)",
+        )
 
     lines = [
         f"Created automation: {automation.description}",
@@ -212,6 +297,11 @@ async def create_automation(execution: ToolExecution, args: CreateAutomationInpu
     ]
     if automation.model:
         lines.append(f"Model: {automation.model}")
+    if automation.thread_id:
+        mode = "iteration" if automation.read_history else "post"
+        lines.append(f"Target session: {automation.thread_id} ({mode} mode)")
+    if automation.parent_automation_id:
+        lines.append(f"Parent: {automation.parent_automation_id}")
     if automation.next_run_at:
         lines.append(f"Next run: {automation.next_run_at.strftime('%Y-%m-%d %H:%M')}")
 
@@ -550,6 +640,23 @@ class CreateLoopInput(BaseModel):
         description="Optional hard cap in days from creation. After this many days, the loop disables itself on the next fire even if max_iterations hasn't been hit.",
         ge=1,
     )
+    parent_automation_id: str | None = Field(
+        default=None,
+        description="Explicit parent lineage. Defaults to the calling loop's task_id if invoked inside a loop iteration.",
+    )
+    idempotency_key: str | None = Field(
+        default=None,
+        description="Optional dedupe key. Pair with idempotency_scope.",
+    )
+    idempotency_scope: Literal["run", "attempt", "global"] | None = Field(
+        default=None,
+        description="Scope for idempotency_key: 'global', 'run', or 'attempt'.",
+    )
+    attempt_n: int | None = Field(
+        default=None,
+        description="For idempotency_scope='attempt': retry attempt number.",
+        ge=0,
+    )
 
 
 async def approve_create_loop(execution: ToolExecution, args: CreateLoopInput) -> ApprovalInfo | None:
@@ -560,6 +667,12 @@ async def approve_create_loop(execution: ToolExecution, args: CreateLoopInput) -
         lines.insert(-1, f"Auto-expires: after {args.max_age_days} day(s)")
     if args.stop_when:
         lines.insert(-1, f"Stop when: {args.stop_when}")
+    inferred_parent = args.parent_automation_id or execution.ctx.run.loop_task_id
+    if inferred_parent:
+        lines.insert(-1, f"Parent: {inferred_parent}")
+    if args.idempotency_scope:
+        key = args.idempotency_key or "(unset)"
+        lines.insert(-1, f"Idempotency: {args.idempotency_scope} · key={key}")
     lines.append("Prompt:")
     lines.append(args.prompt)
     return ApprovalInfo(
@@ -576,6 +689,10 @@ async def create_loop(execution: ToolExecution, args: CreateLoopInput) -> ToolRe
     svc = execution.ctx.services.get("automation")
     if svc is None:
         return ToolResult(content="Automation service unavailable.", preview="Unavailable", is_error=True)
+
+    parent_automation_id, parent_fire_at = await _resolve_parent_context(
+        execution, args.parent_automation_id, args.idempotency_scope
+    )
     try:
         loop = await svc.create_loop(
             session_id=session_id,
@@ -584,9 +701,20 @@ async def create_loop(execution: ToolExecution, args: CreateLoopInput) -> ToolRe
             max_iterations=args.max_iterations,
             stop_when=args.stop_when,
             max_age_days=args.max_age_days,
+            parent_automation_id=parent_automation_id,
+            idempotency_key=args.idempotency_key,
+            idempotency_scope=args.idempotency_scope,
+            parent_fire_at=parent_fire_at,
+            attempt_n=args.attempt_n,
         )
     except ValueError as e:
         return ToolResult(content=f"Error: {e}", preview="Failed", is_error=True)
+
+    if loop is None:
+        return ToolResult(
+            content=f"Skipped (idempotency claim conflict): key={args.idempotency_key}",
+            preview="Skipped (idempotent)",
+        )
 
     lines = [
         f"Created loop {loop.task_id}",
@@ -599,6 +727,8 @@ async def create_loop(execution: ToolExecution, args: CreateLoopInput) -> ToolRe
         lines.append(f"Auto-expires: after {loop.max_age_days} day(s)")
     if loop.stop_when:
         lines.append(f"Stop when: {loop.stop_when}")
+    if loop.parent_automation_id:
+        lines.append(f"Parent: {loop.parent_automation_id}")
     if loop.next_run_at:
         lines.append(f"First run: {loop.next_run_at.strftime('%Y-%m-%d %H:%M')}")
     return ToolResult(content="\n".join(lines), preview=f"Loop · every {args.every}")

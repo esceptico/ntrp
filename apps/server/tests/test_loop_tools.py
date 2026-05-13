@@ -13,8 +13,12 @@ from ntrp.automation.triggers import TimeTrigger
 from ntrp.context.models import SessionState
 from ntrp.services.chat import _loop_task_id_from_client_id
 from ntrp.tools.automation import (
+    CreateAutomationInput,
+    CreateLoopInput,
     LoopDoneInput,
     ScheduleWakeupInput,
+    create_automation,
+    create_loop,
     loop_done,
     schedule_wakeup,
 )
@@ -134,3 +138,111 @@ def test_schedule_wakeup_input_enforces_min_delay():
 
     with pytest.raises(pydantic.ValidationError):
         ScheduleWakeupInput(delay_seconds=59)
+
+
+# --- create_automation / create_loop tool wiring for channel-aware fields ---
+
+
+@pytest.mark.asyncio
+async def test_create_automation_idempotency_claim_dedupes(store_and_svc):
+    _, svc = store_and_svc
+    execution = _execution(svc, loop_task_id=None)
+
+    args = CreateAutomationInput(
+        name="daily brief",
+        description="post the morning brief",
+        trigger_type="time",
+        at="09:00",
+    )
+
+    first = await create_automation(
+        execution,
+        args.model_copy(update={"idempotency_key": "daily-brief-1", "idempotency_scope": "global"}),
+    )
+    assert not first.is_error
+    assert "Created" in first.content or "created" in first.content.lower()
+
+    second = await create_automation(
+        execution,
+        args.model_copy(update={"idempotency_key": "daily-brief-1", "idempotency_scope": "global"}),
+    )
+    assert not second.is_error
+    assert "Skipped" in second.content
+
+
+@pytest.mark.asyncio
+async def test_create_automation_passes_thread_id_and_read_history(store_and_svc):
+    store, svc = store_and_svc
+    execution = _execution(svc, loop_task_id=None)
+
+    args = CreateAutomationInput(
+        name="thread automation",
+        description="post into a specific thread",
+        trigger_type="time",
+        every="1h",
+    )
+    result = await create_automation(
+        execution,
+        args.model_copy(update={"thread_id": "sess-target", "read_history": True}),
+    )
+    assert not result.is_error
+
+    rows = await store.list_all()
+    created = next(a for a in rows if a.name == "thread automation")
+    assert created.thread_id == "sess-target"
+    assert created.read_history is True
+
+
+@pytest.mark.asyncio
+async def test_create_automation_defaults_parent_from_loop_ctx(store_and_svc):
+    store, svc = store_and_svc
+    execution = _execution(svc, loop_task_id="loop-1")
+
+    args = CreateAutomationInput(
+        name="child auto",
+        description="from loop",
+        trigger_type="time",
+        every="2h",
+    )
+    result = await create_automation(execution, args)
+    assert not result.is_error
+
+    rows = await store.list_all()
+    child = next(a for a in rows if a.name == "child auto")
+    assert child.parent_automation_id == "loop-1"
+
+
+@pytest.mark.asyncio
+async def test_create_loop_infers_parent_from_loop_ctx(store_and_svc):
+    store, svc = store_and_svc
+    execution = _execution(svc, loop_task_id="loop-1")
+
+    result = await create_loop(
+        execution,
+        CreateLoopInput(prompt="watch CI again", every="5m"),
+    )
+    assert not result.is_error
+
+    rows = await store.list_all()
+    child = next(a for a in rows if a.loop_prompt == "watch CI again")
+    assert child.parent_automation_id == "loop-1"
+
+
+@pytest.mark.asyncio
+async def test_create_loop_explicit_parent_overrides_ctx(store_and_svc):
+    store, svc = store_and_svc
+    execution = _execution(svc, loop_task_id="loop-1")
+
+    result = await create_loop(
+        execution,
+        CreateLoopInput(
+            prompt="watch CI yet again",
+            every="5m",
+            parent_automation_id="explicit-parent",
+        ),
+    )
+    assert not result.is_error
+
+    rows = await store.list_all()
+    child = next(a for a in rows if a.loop_prompt == "watch CI yet again")
+    assert child.parent_automation_id == "explicit-parent"

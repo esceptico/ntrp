@@ -5,13 +5,16 @@ runs weekly, scans recent sessions, and proposes automations/skills based
 on what the user actually repeats. The agent gets enough to identify
 patterns without dumping every byte of history into context.
 
-Two tools:
+Three tools:
 - `list_recent_sessions` — index of sessions: id, name, when, message count.
 - `read_session` — messages for one session, with content trimmed by default
   so a single huge session can't blow the context window.
+- `create_session` — spawn a new session (defaults to a channel) the agent
+  can post into for channel-aware automations.
 """
 
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -44,6 +47,17 @@ class ListRecentSessionsInput(BaseModel):
         description=(
             "Only return sessions with activity in the last N days. Omit to "
             "use limit alone. Useful for periodic audits ('last 7 days')."
+        ),
+    )
+
+
+class CreateSessionInput(BaseModel):
+    name: str = Field(description="Short human-readable label for the new session (e.g. 'ops-alerts').")
+    session_type: Literal["chat", "channel"] = Field(
+        default="channel",
+        description=(
+            "Session kind. 'channel' (default) = topic stream the agent posts into "
+            "from automations; 'chat' = ad-hoc conversation."
         ),
     )
 
@@ -173,6 +187,24 @@ async def list_recent_sessions(
     )
 
 
+async def create_session(execution: ToolExecution, args: CreateSessionInput) -> ToolResult:
+    svc = execution.ctx.services.get("session")
+    if svc is None:
+        return ToolResult(content="Session service unavailable.", preview="Unavailable", is_error=True)
+
+    origin = execution.ctx.run.loop_task_id
+    state = svc.create(name=args.name, session_type=args.session_type, origin_automation_id=origin)
+    await svc.save(state, [])
+
+    lines = [
+        f"Created {args.session_type}: {state.name}",
+        f"ID: {state.session_id}",
+    ]
+    if origin:
+        lines.append(f"Origin automation: {origin}")
+    return ToolResult(content="\n".join(lines), preview=f"Created ({state.session_id})")
+
+
 async def read_session(execution: ToolExecution, args: ReadSessionInput) -> ToolResult:
     svc = execution.ctx.services.get("session")
     if svc is None:
@@ -245,6 +277,15 @@ READ_SESSION_DESCRIPTION = (
 )
 
 
+CREATE_SESSION_DESCRIPTION = (
+    "Spawn a new session the agent can target. Defaults to session_type='channel' "
+    "— a topic stream automations can post into (e.g. 'ops-alerts', 'morning-brief'). "
+    "Use 'chat' for ad-hoc conversations. When invoked from inside a loop iteration, "
+    "the new session is stamped with origin_automation_id so the source is auditable. "
+    "Cheap; no approval needed (sessions are easily archived/deleted)."
+)
+
+
 list_recent_sessions_tool = tool(
     display_name="ListRecentSessions",
     description=LIST_RECENT_SESSIONS_DESCRIPTION,
@@ -259,4 +300,13 @@ read_session_tool = tool(
     input_model=ReadSessionInput,
     requires={"session"},
     execute=read_session,
+)
+
+create_session_tool = tool(
+    display_name="CreateSession",
+    description=CREATE_SESSION_DESCRIPTION,
+    input_model=CreateSessionInput,
+    mutates=True,
+    requires={"session"},
+    execute=create_session,
 )
