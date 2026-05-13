@@ -1008,3 +1008,103 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   position: relative;
   z-index: 1;
 }
+
+/* ─── Empty state — registration grid ─────────────────────────
+   A faint dot grid sits behind a centered crosshair + copy. A
+   cursor-tracked radial spotlight brightens the grid locally,
+   driven by --mx / --my written from the React layer. No JS
+   animation loop. Light/dark parity is handled by tokens. */
+.empty-state {
+  --empty-state-size: clamp(280px, 32vw, 460px);
+  --empty-state-spot: 220px;
+  --empty-state-dot: var(--color-whisper);
+  width: var(--empty-state-size);
+  height: var(--empty-state-size);
+  isolation: isolate;
+}
+
+.empty-state-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 2px;
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    var(--empty-state-dot) 0.85px,
+    transparent 1.6px
+  );
+  background-size: 14px 14px;
+  background-position: center;
+  /* Fade the grid into a soft disc so it doesn't fight the rest
+     of the layout — feels like an instrument panel, not a tile. */
+  -webkit-mask-image: radial-gradient(
+    circle at center,
+    #000 0%,
+    #000 42%,
+    transparent 78%
+  );
+  mask-image: radial-gradient(
+    circle at center,
+    #000 0%,
+    #000 42%,
+    transparent 78%
+  );
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.empty-state-spotlight {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 2px;
+  background: radial-gradient(
+    var(--empty-state-spot) var(--empty-state-spot) at var(--mx, -200px) var(--my, -200px),
+    var(--color-accent-soft) 0%,
+    transparent 70%
+  );
+  /* Confine the spotlight to the dot grid: reuses the same fade
+     mask so the glow can never reach the edges. */
+  -webkit-mask-image: radial-gradient(
+    circle at center,
+    #000 0%,
+    #000 42%,
+    transparent 78%
+  );
+  mask-image: radial-gradient(
+    circle at center,
+    #000 0%,
+    #000 42%,
+    transparent 78%
+  );
+  pointer-events: none;
+  transition: opacity var(--duration-trace) var(--ease-out-soft);
+}
+
+.empty-state-crosshair {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+}
+.empty-state-crosshair svg {
+  stroke: var(--color-faint);
+  stroke-width: 1;
+  stroke-linecap: round;
+  overflow: visible;
+}
+.empty-state-crosshair svg circle {
+  stroke: var(--color-line-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Static spotlight — pinned to center, no cursor reactivity. */
+  .empty-state-spotlight {
+    background: radial-gradient(
+      var(--empty-state-spot) var(--empty-state-spot) at 50% 50%,
+      var(--color-accent-soft) 0%,
+      transparent 70%
+    );
+  }
+}
+
