@@ -274,39 +274,14 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .scroll-thin::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
 .scroll-thin:hover::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.08); }
 
-/* Messages list — scroll content needs padding equal to the chrome
-   heights so first/last messages clear the glass header and composer
-   when scrolled to either extreme. `--chat-bottom-h` is written by a
-   ResizeObserver on the bottom stack (Composer + ApprovalBanner) in
-   `Chat.tsx`; chat-header height is fixed at 52px so it's a literal
-   in the calc, plus a small visual gap. */
+/* Messages list — header sits above in its own grid row, so the top
+   just needs a visual gap. Bottom clears the absolute-positioned
+   composer overlay; height is dynamic (textarea auto-resize, approval
+   banner appears/disappears) and written to `--chat-bottom-h` by a
+   ResizeObserver in `Chat.tsx`. */
 .scroll-messages {
-  padding-top: calc(52px + 1.25rem);
+  padding-top: 1.75rem;
   padding-bottom: calc(var(--chat-bottom-h, 96px) + 1rem);
-}
-
-/* ─── Chat chrome glass surfaces ───────────────────────────
-   Per Rauno's Depth essay: "Shoot through a surface" + "Out-of-focus
-   foreground obscures cleanly". Header and bottom-stack (Composer +
-   ApprovalBanner) sit absolute over the message scroll area; messages
-   pass behind them visibly via backdrop-filter blur. bg-color is held
-   intentionally low (42%) so the blurred messages tint clearly through
-   the glass — at higher fill the surface reads as an opaque bar with
-   the blur hidden under it. Stronger blur radius (20px) so the effect
-   is visible even when content behind has low color variance. Hairlines
-   on the inner edges define the layer boundary where white-over-white
-   contrast is too subtle. */
-.chat-header,
-.chat-bottom-glass {
-  background-color: color-mix(in oklab, var(--color-bg) 42%, transparent);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-}
-.chat-header {
-  box-shadow: inset 0 -0.5px 0 color-mix(in oklab, var(--color-ink) 10%, transparent);
-}
-.chat-bottom-glass {
-  box-shadow: inset 0 0.5px 0 color-mix(in oklab, var(--color-ink) 10%, transparent);
 }
 
 /* Messages list scrollbar — always visible, draggable, slim. */
@@ -566,7 +541,15 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 :root.dark .auto-editor textarea:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); }
 
+/* Composer is a glass card floating over the message scroll area —
+   per Rauno's Depth essay "Shoot through a surface". Semi-transparent
+   surface fill + backdrop-filter blur let the last messages tint
+   through as they scroll under the bottom of the column. No surrounding
+   glass strip / chrome — the card itself is the only glass surface. */
 .composer-card {
+  background-color: color-mix(in oklab, var(--color-surface) 70%, transparent);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
   box-shadow: var(--shadow-md);
 }
 

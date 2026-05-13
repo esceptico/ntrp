@@ -46,10 +46,11 @@ function ChatHeader() {
   return (
     <div
       className={clsx(
-        "chat-header absolute top-0 left-0 right-0 z-10 flex items-center gap-3 h-[52px] pr-[18px] transition-[padding-left] duration-route ease-emphasized",
+        "chat-header flex items-center gap-3 h-[52px] pr-[18px] transition-[padding-left] duration-route ease-emphasized",
         sidebarHidden ? "pl-[128px]" : "pl-[18px]",
       )}
     >
+      <SidebarToggle />
       <div className="flex-1 min-w-0 flex items-baseline gap-2.5">
         <h1 className="m-0 min-w-0 text-md font-semibold tracking-[-0.01em] text-ink truncate">
           {title}
@@ -81,15 +82,14 @@ export function Chat() {
   const sessionId = useStore((s) => s.currentSessionId);
   const hasApproval = useStore((s) => s.pendingApprovals.length > 0);
 
-  // Glass composer + header overlay the message scroll area. Messages
-  // pass behind them via backdrop-filter (Rauno's Depth essay:
-  // "Shoot through a surface" / "Out-of-focus foreground obscures
-  // cleanly"). The scroll area needs padding-bottom equal to the bottom
-  // chrome's actual height so the last message clears the composer when
-  // scrolled to the end. Composer height is dynamic (textarea
-  // auto-resize, approval banner appears/disappears), so we observe it
-  // and write to a CSS var consumed by `.scroll-messages` padding +
-  // the scroll-to-bottom pill offset.
+  // Composer overlays the bottom of the message scroll area so messages
+  // pass behind its glass via backdrop-filter (Rauno's Depth essay:
+  // "Shoot through a surface"). The scroll area needs padding-bottom
+  // equal to the bottom stack's actual height so the last message
+  // clears the composer when scrolled to the end. Height is dynamic
+  // (textarea auto-resize, approval banner appears/disappears), so we
+  // observe it and write to `--chat-bottom-h` consumed by
+  // `.scroll-messages` padding-bottom + the jump-to-bottom pill offset.
   const bottomStackRef = useRef<HTMLDivElement>(null);
   // useLayoutEffect (not useEffect) so the measured height is written
   // BEFORE first paint — otherwise the scroll-padding briefly uses the
@@ -118,24 +118,18 @@ export function Chat() {
     <main
       data-sidebar-hidden={sidebarHidden ? "true" : "false"}
       data-has-approval={hasApproval ? "true" : "false"}
-      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,244px)] data-[sidebar-hidden=true]:left-0 transition-[left] duration-route ease-emphasized bg-bg overflow-hidden"
+      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,244px)] data-[sidebar-hidden=true]:left-0 transition-[left] duration-route ease-emphasized grid grid-rows-[auto_minmax(0,1fr)] bg-bg overflow-hidden"
     >
-      <Messages key={sessionId ?? "none"} />
       <ChatHeader />
-      {/* SidebarToggle is rendered OUTSIDE .chat-header on purpose.
-          `backdrop-filter` on .chat-header creates a containing block
-          for `position: fixed` descendants, so a fixed-positioned toggle
-          inside the header would move with the header instead of staying
-          at viewport-fixed left:84px. Rendering it as a sibling keeps it
-          anchored to the macOS traffic-lights area regardless of sidebar
-          state. */}
-      <SidebarToggle />
-      <div
-        ref={bottomStackRef}
-        className="chat-bottom-glass absolute bottom-0 left-0 right-0 z-10 pt-4"
-      >
-        <ApprovalBanner />
-        <Composer />
+      <div className="relative min-h-0">
+        <Messages key={sessionId ?? "none"} />
+        <div
+          ref={bottomStackRef}
+          className="absolute bottom-0 left-0 right-0 z-10"
+        >
+          <ApprovalBanner />
+          <Composer />
+        </div>
       </div>
     </main>
   );

@@ -465,7 +465,7 @@ export function Composer() {
         data-thinking={showThinking ? "true" : undefined}
         data-thinking-style={thinkingStyle}
         data-thinking-intensity={thinkingIntensity}
-        className="composer-card relative max-w-[760px] mx-auto flex flex-col border border-line rounded-[14px] bg-surface focus-within:border-line-strong transition-colors"
+        className="composer-card relative max-w-[760px] mx-auto flex flex-col border border-line rounded-[14px] focus-within:border-line-strong transition-colors"
       >
         {pickerOpen && query !== null && (
           <CommandPicker query={query} onSelect={applyPickerSelection} />
