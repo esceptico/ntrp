@@ -314,6 +314,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   -webkit-mask-image: linear-gradient(to bottom, transparent 70%, #000 80%, #000 100%);
 }
 
+
 /* Mirror of `.chat-bottom-fade` — soft fade-from-bg behind the header
    so messages dissolve into bg as they scroll up toward the chrome
    instead of sliding under it as crisp text. Header sits above at
