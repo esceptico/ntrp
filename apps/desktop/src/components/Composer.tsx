@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUp, ImagePlus, Repeat2, ShieldOff, ShieldCheck, Sparkles, Square, X } from "lucide-react";
 import clsx from "clsx";
@@ -305,8 +305,31 @@ export function Composer() {
     order.length > 0 ? s.messages.get(order[order.length - 1])?.role ?? null : null,
   );
   const awaitingFirstToken = running && lastRole !== "assistant";
+  // 350ms threshold — fast replies (cached, small models, short tool
+  // chains) shouldn't briefly flash the indicator. If the agent starts
+  // emitting within the threshold, awaitingFirstToken flips false before
+  // the timer fires and the indicator never appears. This is the
+  // "spinner only when actually slow" pattern from ChatGPT/Cursor.
+  const [showThinking, setShowThinking] = useState(false);
+  useEffect(() => {
+    if (!awaitingFirstToken) {
+      setShowThinking(false);
+      return;
+    }
+    const id = window.setTimeout(() => setShowThinking(true), 350);
+    return () => window.clearTimeout(id);
+  }, [awaitingFirstToken]);
   const thinkingStyle = useStore((s) => s.prefs.thinkingAnimation);
   const thinkingIntensity = useStore((s) => s.prefs.thinkingIntensity);
+  // Brief programmatic "press" on the send button. The button's :active
+  // pseudo doesn't fire when Enter submits the form (no actual click).
+  // This gives keyboard submits the same tactile feedback as a mouse
+  // click — the button shrinks for ~140ms each time submit() runs.
+  const [sendPressing, setSendPressing] = useState(false);
+  const flashSendPress = useCallback(() => {
+    setSendPressing(true);
+    window.setTimeout(() => setSendPressing(false), 140);
+  }, []);
 
   useEffect(() => {
     if (inputRef.current) resize(inputRef.current);
@@ -416,9 +439,10 @@ export function Composer() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          flashSendPress();
           submit();
         }}
-        data-thinking={awaitingFirstToken ? "true" : undefined}
+        data-thinking={showThinking ? "true" : undefined}
         data-thinking-style={thinkingStyle}
         data-thinking-intensity={thinkingIntensity}
         className="composer-card relative max-w-[760px] mx-auto flex flex-col border border-line rounded-[14px] bg-surface focus-within:border-line-strong transition-colors"
@@ -618,7 +642,13 @@ export function Composer() {
               disabled={disabled}
               data-send="true"
               aria-label="Send"
-              className="grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-[0_1px_2px_rgba(0,0,0,0.2)] hover:opacity-90 disabled:opacity-40 disabled:shadow-none transition-opacity"
+              // active:scale handles mouse press; the sendPressing state
+              // covers keyboard Enter (form-submit doesn't fire :active).
+              // Both paths look identical to the user.
+              className={clsx(
+                "grid place-items-center w-7 h-7 rounded-full bg-ink text-on-ink shadow-[0_1px_2px_rgba(0,0,0,0.2)] hover:opacity-90 disabled:opacity-40 disabled:shadow-none transition-[opacity,transform] duration-100 ease-out active:scale-[0.92]",
+                sendPressing && "scale-[0.92]",
+              )}
             >
               <ArrowUp size={ICON.LG} strokeWidth={2.4} />
             </button>
