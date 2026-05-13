@@ -73,25 +73,31 @@ export function TurnGroup({
     : "Worked";
 
   const showInterim = !isDone || expanded;
-  // Stagger sibling reveals so the eye perceives quantity ("many things
-  // happened") instead of one synchronous flash. Per Rauno's Depth
-  // essay: "Stagger sibling fades — Synchronous fade hides quantity."
-  // 45ms inter-item delay sits inside his 30–60ms range. Applies on the
-  // burst-arrival path (multiple workIds in the same paint, e.g. history
-  // load, or several tool/reasoning rows resolving same-frame); streaming
-  // arrivals are naturally paced by the network and don't need this.
+  // Stagger sibling reveals per Rauno's Depth essay ("Stagger sibling
+  // fades — Synchronous fade hides quantity; stagger by ~30–60ms").
+  //
+  // Variant `animate` is gated on `showInterim` so the stagger plays
+  // when the parent's collapse opens (Path A: user clicks "Worked for
+  // Xs" on a finished turn), not silently under a height:0 mask on
+  // initial mount. For live turns `showInterim` is true from the start,
+  // so the initial paint also plays the stagger if multiple workIds
+  // mount in the same render.
+  //
+  // Streaming arrivals (workIds added one-by-one over time) don't get
+  // motion stagger — parent is already at "visible" so new children
+  // inherit the steady state directly. Their existing per-article CSS
+  // `animate-roll-in` keyframe still fires, so they keep their entry
+  // animation as before. We intentionally do NOT suppress that CSS,
+  // because it's the only entry animation for streaming arrivals.
   const interimList = (
     <motion.div
       initial="hidden"
-      animate="visible"
+      animate={showInterim ? "visible" : "hidden"}
       variants={{
         hidden: {},
         visible: { transition: { staggerChildren: 0.045 } },
       }}
-      // `stagger-row-parent` class disables the inner article's CSS
-      // `animate-roll-in` keyframe so the motion-driven entry isn't
-      // doubled (motion provides the opacity+y; the CSS would compound it).
-      className={clsx("stagger-row-parent flex flex-col gap-3.5", isDone && "pt-1.5")}
+      className={clsx("flex flex-col gap-3.5", isDone && "pt-1.5")}
     >
       {layout.workIds.map((id) => (
         <motion.div
