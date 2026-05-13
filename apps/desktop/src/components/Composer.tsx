@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "motion/react";
 import { ArrowUp, ImagePlus, Repeat2, ShieldOff, ShieldCheck, Sparkles, Square, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ImageBlock, type ServerLoop } from "../store";
@@ -352,32 +351,6 @@ export function Composer() {
     window.setTimeout(() => setSendPressing(false), 140);
   }, []);
 
-  // Vanish-input on send: per-word dissolve overlay rendered over the
-  // textarea. Pattern from Rauno's "Vanish Input" prototype
-  // (https://rauno.me/craft/vanish-input). Textarea clears instantly;
-  // the captured text floats up and fades. Long messages skip the
-  // animation. Inline initial/animate (no variants pattern, no
-  // `filter: blur` — those triggered a renderer crash in motion v12.38
-  // when paired with form-submit + AnimatePresence).
-  const [vanishingText, setVanishingText] = useState<string | null>(null);
-  const vanishTimeoutRef = useRef<number | null>(null);
-  const startVanish = useCallback((text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    if (trimmed.length > 600) return;
-    setVanishingText(text);
-    const words = (text.match(/\S+/g) ?? []).length;
-    const totalMs = Math.min(700, words * 14 + 360);
-    if (vanishTimeoutRef.current) window.clearTimeout(vanishTimeoutRef.current);
-    vanishTimeoutRef.current = window.setTimeout(() => {
-      setVanishingText(null);
-      vanishTimeoutRef.current = null;
-    }, totalMs);
-  }, []);
-  useEffect(() => () => {
-    if (vanishTimeoutRef.current) window.clearTimeout(vanishTimeoutRef.current);
-  }, []);
-
   useEffect(() => {
     if (inputRef.current) resize(inputRef.current);
   }, [draft]);
@@ -423,10 +396,6 @@ export function Composer() {
     const images = pendingImages;
     if (!text.trim() && !skill && images.length === 0) return;
 
-    // Capture text for the vanish overlay BEFORE clearing draft. The
-    // overlay renders the captured text and animates it out while the
-    // textarea is already empty for the next keystroke.
-    startVanish(text);
     setDraft("");
     setSelectedSkill(null);
     clearPendingImages();
@@ -569,20 +538,6 @@ export function Composer() {
             e.target.value = ""; // allow picking the same file again later
           }}
         />
-        <AnimatePresence>
-          {vanishingText && (
-            <motion.div
-              key="vanish"
-              aria-hidden
-              className="pointer-events-none absolute left-4 right-4 top-[13px] z-[1] text-md leading-[1.5] text-ink tracking-[-0.005em] whitespace-pre-wrap break-words"
-              initial={{ opacity: 1 }}
-              animate={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.36, ease: [0.4, 0, 0.2, 1] }}
-            >
-              {vanishingText}
-            </motion.div>
-          )}
-        </AnimatePresence>
         <textarea
           ref={inputRef}
           id="message-input"

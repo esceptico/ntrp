@@ -759,34 +759,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   opacity: 1;
 }
 
-/* ─── Streaming "alive" caret ──────────────────────────────
-   Pulsing inline block at the end of the last paragraph or
-   list item while assistant is streaming. Reads as "still
-   working" even when the server pauses between token bursts —
-   without it, a pause looks identical to "done." Reduced
-   motion: the global media query pauses the pulse, but the
-   caret stays visible (per Rauno's Vercel essay: "reduced
-   motion = pause, not strip"). */
-@keyframes streamCaretPulse {
-  0%, 100% { opacity: 0.35; }
-  50%      { opacity: 1; }
-}
-.assistant-message[data-streaming="true"] .md > p:last-child::after,
-.assistant-message[data-streaming="true"] .md > li:last-child::after,
-.assistant-message[data-streaming="true"] .md > h1:last-child::after,
-.assistant-message[data-streaming="true"] .md > h2:last-child::after,
-.assistant-message[data-streaming="true"] .md > h3:last-child::after,
-.assistant-message[data-streaming="true"] .md > h4:last-child::after {
-  content: "▍";
-  display: inline-block;
-  margin-left: 2px;
-  vertical-align: baseline;
-  color: var(--color-accent);
-  font-weight: 400;
-  animation: streamCaretPulse 1.2s ease-in-out infinite;
-  transform: translateY(-0.05em);
-}
-
 /* ─── Approval-pending recession ───────────────────────────
    When approval(s) are pending, slightly blur + desaturate the
    message stream so the approval card reads as the only sharp
