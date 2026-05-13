@@ -6,7 +6,11 @@ from importlib.metadata import version
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from ntrp.agent import Role
 from ntrp.automation.models import Automation
+from ntrp.automation.prompts import AUTOMATION_PROMPT, AUTOMATION_SUFFIX
+from ntrp.automation.scheduler import AUTOMATION_BUS_KEY
+from ntrp.operator.runner import RunRequest, run_agent, run_agent_streaming
 from ntrp.server.bus import BusRegistry
 from ntrp.server.middleware import AuthMiddleware
 from ntrp.server.routers.automation import router as automation_router
@@ -53,12 +57,12 @@ async def lifespan(app: FastAPI):
     bus_registry = BusRegistry()
     runtime.scheduler.set_bus_registry(bus_registry)
 
-    async def _dispatch_loop(automation: Automation) -> str | None:
-        # Loops are autonomous: the user already approved the loop at
-        # creation (via the create_loop approval card), so subsequent
-        # iterations should skip per-tool approvals. Matches the same
-        # writable→skip_approvals convention the regular automation path
-        # uses in scheduler._run_agent.
+    async def _dispatch_iteration(automation: Automation) -> str | None:
+        # Iteration loops are autonomous: the user already approved the
+        # loop at creation (via the create_loop approval card), so
+        # subsequent iterations should skip per-tool approvals. Matches
+        # the same writable→skip_approvals convention the regular
+        # automation path uses in scheduler._run_agent.
         result = await submit_chat_message(
             runtime.run_registry,
             lambda: runtime.build_chat_deps(),
@@ -70,18 +74,63 @@ async def lifespan(app: FastAPI):
         )
         return result.get("run_id") if isinstance(result, dict) else None
 
-    runtime.scheduler.set_loop_dispatcher(_dispatch_loop)
+    runtime.scheduler.set_iteration_dispatcher(_dispatch_iteration)
+
+    async def _dispatch_post(automation: Automation) -> str | None:
+        # Post mode: run the agent fresh (no session history), then write
+        # the agent's final text into the target session as an assistant
+        # message. The chat UI picks it up on the next history fetch —
+        # no live SSE for now (can be wired later if needed).
+        if not runtime.session_service:
+            return None
+        target_id = automation.thread_id or automation.target_session_id
+        if not target_id:
+            return None
+
+        prompt = AUTOMATION_PROMPT.render(description=automation.loop_prompt or "", context=None)
+        request = RunRequest(
+            prompt=prompt,
+            prompt_suffix=AUTOMATION_SUFFIX,
+            writable=automation.writable,
+            source_id=automation.task_id,
+            model=automation.model,
+            skip_approvals=automation.writable,
+            automation_id=automation.task_id,
+        )
+
+        deps = runtime.build_operator_deps()
+        if bus_registry:
+            bus = bus_registry.get_or_create(AUTOMATION_BUS_KEY)
+            run_result = await run_agent_streaming(deps, request, bus, automation.task_id)
+        else:
+            run_result = await run_agent(deps, request)
+        text = run_result.output
+        if not text:
+            return None
+
+        # Append as an assistant message into the target session.
+        data = await runtime.session_service.load(target_id)
+        if data is None:
+            return text
+        data.messages.append({"role": Role.ASSISTANT, "content": text})
+        await runtime.session_service.save_progress(data.state, data.messages)
+        return text
+
+    runtime.scheduler.set_post_dispatcher(_dispatch_post)
 
     def _loop_can_fire(automation: Automation) -> bool:
         # Skip the tick if the loop's target session has an active user
-        # run. Otherwise submit_chat_message would queue the loop prompt
-        # into the active run's inject_queue, and the iteration renders
-        # as content inside the user's "Worked" collapse instead of as a
-        # fresh chat turn. handle_run_completed fires deferred loops the
-        # moment the session goes idle.
-        if not automation.target_session_id:
+        # run. Applies to both modes:
+        #  • Iteration would queue the loop prompt into the active run's
+        #    inject_queue, rendering inside the user's "Worked" collapse
+        #    instead of as a fresh chat turn.
+        #  • Post would race the in-flight run on session_service writes.
+        # handle_run_completed fires deferred loops the moment the
+        # session goes idle.
+        target_id = automation.target_session_id or automation.thread_id
+        if not target_id:
             return True
-        active = runtime.run_registry.get_accepting_run(automation.target_session_id)
+        active = runtime.run_registry.get_accepting_run(target_id)
         return active is None
 
     runtime.scheduler.set_loop_fire_gate(_loop_can_fire)

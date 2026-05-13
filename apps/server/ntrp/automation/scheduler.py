@@ -26,11 +26,26 @@ AUTOMATION_BUS_KEY = "automation:events"
 _logger = get_logger(__name__)
 
 
-LoopDispatcher = Callable[[Automation], Awaitable[str | None]]
+IterationDispatcher = Callable[[Automation], Awaitable[str | None]]
+"""Fire a session-bound automation in iteration mode (read_history=True):
+re-enter the target session with the loop prompt; the agent sees the full
+session history."""
+
+PostDispatcher = Callable[[Automation], Awaitable[str | None]]
+"""Fire a session-bound automation in post mode (read_history=False): run
+the agent fresh (no session history), then post the result back into the
+target session as an assistant message."""
+
+# Back-compat alias — older code (and external callers) may still import
+# `LoopDispatcher`. New code should reach for `IterationDispatcher`.
+LoopDispatcher = IterationDispatcher
+
 # True ⇒ ok to fire this loop right now; False ⇒ defer to next tick. Used
 # to keep loop iterations from being injected mid-turn into a user's
 # active conversation — they should render as fresh turns once the
-# session goes idle.
+# session goes idle. Applies to both iteration and post modes: iteration
+# would re-enter mid-conversation, post would race the in-flight run on
+# session_service writes.
 LoopFireGate = Callable[[Automation], bool]
 
 
@@ -46,7 +61,8 @@ class Scheduler:
         self._task: asyncio.Task | None = None
         self._running: set[asyncio.Task] = set()
         self._handlers: dict[str, Callable[[dict | None], Awaitable[str | None]]] = {}
-        self._loop_dispatcher: LoopDispatcher | None = None
+        self._iteration_dispatcher: IterationDispatcher | None = None
+        self._post_dispatcher: PostDispatcher | None = None
         self._loop_fire_gate: LoopFireGate | None = None
         self._last_activity_at: datetime = datetime.now(UTC)
         self._started_at: datetime | None = None
@@ -57,8 +73,14 @@ class Scheduler:
     def set_bus_registry(self, registry: BusRegistry) -> None:
         self._bus_registry = registry
 
-    def set_loop_dispatcher(self, dispatcher: LoopDispatcher) -> None:
-        self._loop_dispatcher = dispatcher
+    def set_iteration_dispatcher(self, dispatcher: IterationDispatcher) -> None:
+        self._iteration_dispatcher = dispatcher
+
+    # Back-compat alias for callers that still use the old name.
+    set_loop_dispatcher = set_iteration_dispatcher
+
+    def set_post_dispatcher(self, dispatcher: PostDispatcher) -> None:
+        self._post_dispatcher = dispatcher
 
     def set_loop_fire_gate(self, gate: LoopFireGate) -> None:
         self._loop_fire_gate = gate
@@ -265,7 +287,7 @@ class Scheduler:
         error_message = ""
         try:
             if automation.kind == "loop":
-                result = await self._run_loop(automation)
+                result = await self._run_session_bound(automation)
             elif automation.handler:
                 result = await self._run_handler(automation, context)
             else:
@@ -279,7 +301,7 @@ class Scheduler:
                 AutomationFinishedEvent(task_id=automation.task_id, result=result),
             )
             now = datetime.now(UTC)
-            # If _run_loop disabled this automation (aged_out / max_iterations),
+            # If _run_session_bound disabled this automation (aged_out / max_iterations),
             # the snapshot's enabled was mutated to False — don't write a
             # future next_run_at for a disabled loop or the UI shows a
             # countdown for something that will never fire.
@@ -333,11 +355,21 @@ class Scheduler:
 
         return result.output
 
-    async def _run_loop(self, automation: Automation) -> str | None:
-        if self._loop_dispatcher is None:
-            raise RuntimeError("Loop dispatcher not wired")
-        if not automation.target_session_id or not automation.loop_prompt:
-            raise RuntimeError(f"Loop {automation.task_id} missing target_session_id or loop_prompt")
+    async def _run_session_bound(self, automation: Automation) -> str | None:
+        """Fire a session-bound automation.
+
+        Two modes, picked by `automation.read_history`:
+          • True  → iteration mode: re-enter the target session via the
+            iteration dispatcher; the agent sees full history.
+          • False → post mode: run the agent fresh and post its result
+            back into the target session as an assistant message.
+
+        Both modes honor aged_out / max_iterations / iteration_count.
+        """
+        if not automation.loop_prompt:
+            raise RuntimeError(f"Loop {automation.task_id} missing loop_prompt")
+        # Aged-out check is mode-agnostic — disable before reaching for
+        # a dispatcher.
         if automation.aged_out(datetime.now(UTC)):
             await self.store.set_enabled(automation.task_id, False)
             # Mutate the snapshot so _run_and_finalize's finally block sees
@@ -345,14 +377,34 @@ class Scheduler:
             automation.enabled = False
             _logger.info("Loop %s aged out (max_age_days=%d), disabling", automation.task_id, automation.max_age_days)
             return f"Loop aged out after {automation.max_age_days} days"
+        if automation.read_history:
+            dispatcher = self._iteration_dispatcher
+            mode = "iteration"
+            if not automation.target_session_id:
+                raise RuntimeError(
+                    f"Iteration loop {automation.task_id} missing target_session_id"
+                )
+        else:
+            dispatcher = self._post_dispatcher
+            mode = "post"
+            # Post mode writes into `thread_id`. Iteration loops migrated
+            # from v4 have thread_id = target_session_id, so either field
+            # works as a target; we just need *something*.
+            if not (automation.thread_id or automation.target_session_id):
+                raise RuntimeError(
+                    f"Post loop {automation.task_id} missing thread_id"
+                )
+        if dispatcher is None:
+            raise RuntimeError(f"{mode} dispatcher not wired")
         await self.store.increment_iteration(automation.task_id)
         _logger.info(
-            "Firing loop %s (iter %d) into session %s",
+            "Firing %s loop %s (iter %d) into session %s",
+            mode,
             automation.task_id,
             automation.iteration_count + 1,
-            automation.target_session_id,
+            automation.target_session_id or automation.thread_id,
         )
-        result = await self._loop_dispatcher(automation)
+        result = await dispatcher(automation)
         # Disable after max_iterations is hit. iteration_count was already
         # incremented in the store; compare against the in-memory value + 1
         # since `automation` is a snapshot taken before the increment.

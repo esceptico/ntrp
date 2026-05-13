@@ -31,6 +31,8 @@ def _loop(
     max_iterations: int | None = None,
     iteration_count: int = 0,
     next_run_at: datetime | None = None,
+    read_history: bool = True,
+    thread_id: str | None = None,
 ) -> Automation:
     now = datetime.now(UTC)
     return Automation(
@@ -51,6 +53,8 @@ def _loop(
         loop_prompt=prompt,
         max_iterations=max_iterations,
         iteration_count=iteration_count,
+        read_history=read_history,
+        thread_id=thread_id if thread_id is not None else session_id,
     )
 
 
@@ -62,8 +66,26 @@ def _make_scheduler(store: AutomationStore) -> tuple[Scheduler, list[Automation]
         return "fake-run-id"
 
     sched = Scheduler(store=store, build_deps=lambda: None)
-    sched.set_loop_dispatcher(dispatcher)
+    sched.set_iteration_dispatcher(dispatcher)
     return sched, dispatched
+
+
+def _make_post_scheduler(
+    store: AutomationStore,
+) -> tuple[Scheduler, list[Automation], list[str]]:
+    """Scheduler wired with only a post dispatcher (returns the agent's text result)."""
+    dispatched: list[Automation] = []
+    results: list[str] = []
+
+    async def post_dispatcher(auto: Automation) -> str | None:
+        dispatched.append(auto)
+        result = f"agent result for {auto.task_id}"
+        results.append(result)
+        return result
+
+    sched = Scheduler(store=store, build_deps=lambda: None)
+    sched.set_post_dispatcher(post_dispatcher)
+    return sched, dispatched, results
 
 
 @pytest.mark.asyncio
@@ -334,3 +356,238 @@ async def test_aged_out_loop_disables_without_firing(store: AutomationStore):
     reloaded = await store.get("loop-old")
     assert reloaded.enabled is False
     assert reloaded.iteration_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Post mode (channel monitor): read_history=False, agent runs fresh, result
+# is appended into the target session as an assistant message.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_post_mode_dispatches_when_due(store: AutomationStore):
+    await store.save(_loop(session_id="sess-post", read_history=False, thread_id="sess-post"))
+    sched, dispatched, _results = _make_post_scheduler(store)
+
+    await sched._tick()
+    for t in list(sched._running):
+        await t
+
+    assert len(dispatched) == 1
+    assert dispatched[0].task_id == "loop-1"
+    assert dispatched[0].read_history is False
+
+    reloaded = await store.get("loop-1")
+    assert reloaded.iteration_count == 1
+    assert reloaded.enabled is True
+
+
+@pytest.mark.asyncio
+async def test_post_mode_routes_to_post_not_iteration_dispatcher(store: AutomationStore):
+    """A post-mode loop must NOT call the iteration dispatcher."""
+    await store.save(_loop(read_history=False))
+    iteration_calls: list[Automation] = []
+    post_calls: list[Automation] = []
+
+    async def iteration(auto: Automation) -> str | None:
+        iteration_calls.append(auto)
+        return "iter-id"
+
+    async def post(auto: Automation) -> str | None:
+        post_calls.append(auto)
+        return "posted text"
+
+    sched = Scheduler(store=store, build_deps=lambda: None)
+    sched.set_iteration_dispatcher(iteration)
+    sched.set_post_dispatcher(post)
+
+    await sched._tick()
+    for t in list(sched._running):
+        await t
+
+    assert iteration_calls == []
+    assert len(post_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_iteration_mode_routes_to_iteration_not_post_dispatcher(store: AutomationStore):
+    """An iteration-mode loop (read_history=True) must NOT call the post dispatcher."""
+    await store.save(_loop(read_history=True))
+    iteration_calls: list[Automation] = []
+    post_calls: list[Automation] = []
+
+    async def iteration(auto: Automation) -> str | None:
+        iteration_calls.append(auto)
+        return "iter-id"
+
+    async def post(auto: Automation) -> str | None:
+        post_calls.append(auto)
+        return "posted text"
+
+    sched = Scheduler(store=store, build_deps=lambda: None)
+    sched.set_iteration_dispatcher(iteration)
+    sched.set_post_dispatcher(post)
+
+    await sched._tick()
+    for t in list(sched._running):
+        await t
+
+    assert post_calls == []
+    assert len(iteration_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_post_mode_without_dispatcher_does_not_increment(store: AutomationStore):
+    await store.save(_loop(read_history=False))
+    sched = Scheduler(store=store, build_deps=lambda: None)  # no dispatcher of either kind
+
+    await sched._tick()
+    for t in list(sched._running):
+        await t
+
+    reloaded = await store.get("loop-1")
+    assert reloaded.iteration_count == 0
+
+
+@pytest.mark.asyncio
+async def test_post_mode_max_iterations_disables(store: AutomationStore):
+    await store.save(
+        _loop(read_history=False, max_iterations=2, iteration_count=1),
+    )
+    sched, dispatched, _results = _make_post_scheduler(store)
+
+    await sched._tick()
+    for t in list(sched._running):
+        await t
+
+    assert len(dispatched) == 1
+    reloaded = await store.get("loop-1")
+    assert reloaded.iteration_count == 2
+    assert reloaded.enabled is False
+
+
+@pytest.mark.asyncio
+async def test_post_mode_fire_gate_defers_while_session_busy(store: AutomationStore):
+    await store.save(_loop(read_history=False))
+    sched, dispatched, _results = _make_post_scheduler(store)
+    sched.set_loop_fire_gate(lambda _auto: False)
+
+    await sched._tick()
+    for t in list(sched._running):
+        await t
+
+    assert dispatched == []
+    reloaded = await store.get("loop-1")
+    assert reloaded.iteration_count == 0
+
+
+@pytest.mark.asyncio
+async def test_post_mode_handle_run_completed_fires_due_loop(store: AutomationStore):
+    from ntrp.events.internal import RunCompleted
+
+    await store.save(_loop(read_history=False, session_id="sess-post"))
+    sched, dispatched, _results = _make_post_scheduler(store)
+
+    await sched.handle_run_completed(
+        RunCompleted(run_id="run-x", session_id="sess-post", messages=(), usage=Usage(), result=None),
+    )
+    for t in list(sched._running):
+        await t
+
+    assert len(dispatched) == 1
+
+
+@pytest.mark.asyncio
+async def test_post_mode_aged_out_disables_without_firing(store: AutomationStore):
+    old = datetime.now(UTC) - timedelta(days=8)
+    loop = Automation(
+        task_id="loop-old-post",
+        name="x",
+        description="x",
+        model=None,
+        triggers=[TimeTrigger(every="5m")],
+        enabled=True,
+        created_at=old,
+        next_run_at=datetime.now(UTC) - timedelta(seconds=1),
+        last_run_at=None,
+        last_result=None,
+        running_since=None,
+        writable=True,
+        kind="loop",
+        target_session_id="sess",
+        loop_prompt="check x",
+        max_age_days=7,
+        read_history=False,
+        thread_id="sess",
+    )
+    await store.save(loop)
+    sched, dispatched, _results = _make_post_scheduler(store)
+
+    await sched._tick()
+    for t in list(sched._running):
+        await t
+
+    assert dispatched == []
+    reloaded = await store.get("loop-old-post")
+    assert reloaded.enabled is False
+
+
+# ---------------------------------------------------------------------------
+# Integration: full post mode flow with a real SessionService — the agent's
+# result must land in the target session as an assistant message.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_post_mode_persists_assistant_message_to_target_session(
+    store: AutomationStore, tmp_path: Path
+):
+    """End-to-end: the post dispatcher's return value must be saved as a
+    role='assistant' message in the target session's history."""
+    from ntrp.context.models import SessionData
+    from ntrp.context.store import SessionStore
+    from ntrp.services.session import SessionService
+
+    # Tmp session DB.
+    session_conn = await database.connect(tmp_path / "sessions.db")
+    session_store = SessionStore(session_conn)
+    await session_store.init_schema()
+    session_service = SessionService(session_store)
+
+    # Seed an empty session for the post-mode automation to write into.
+    state = session_service.create()
+    state.session_id = "sess-post-target"
+    await session_service.save(state, [])
+
+    await store.save(
+        _loop(
+            session_id="sess-post-target",
+            thread_id="sess-post-target",
+            read_history=False,
+        ),
+    )
+
+    # Post dispatcher: emulate what app.py wires — run agent, append assistant
+    # message into target session, return text.
+    async def post_dispatcher(auto: Automation) -> str | None:
+        result_text = f"hello from {auto.task_id}"
+        loaded = await session_service.load(auto.thread_id)
+        assert loaded is not None
+        loaded.messages.append({"role": "assistant", "content": result_text})
+        await session_service.save_progress(loaded.state, loaded.messages)
+        return result_text
+
+    sched = Scheduler(store=store, build_deps=lambda: None)
+    sched.set_post_dispatcher(post_dispatcher)
+
+    await sched._tick()
+    for t in list(sched._running):
+        await t
+
+    final: SessionData | None = await session_service.load("sess-post-target")
+    assert final is not None
+    assistant_msgs = [m for m in final.messages if m.get("role") == "assistant"]
+    assert len(assistant_msgs) == 1
+    assert assistant_msgs[0]["content"] == "hello from loop-1"
+
+    await session_conn.close()
