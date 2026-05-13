@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ArrowUp, ImagePlus, Repeat2, ShieldOff, ShieldCheck, Sparkles, Square, X } from "lucide-react";
 import clsx from "clsx";
-import { useStore, type ImageBlock } from "../store";
+import { useStore, type ImageBlock, type ServerLoop } from "../store";
 import { enqueueMessage, isBuiltin, refreshLoops, respondToAllApprovals, runBuiltinCommand, sendMessage, stopLoop, stopRun, toggleAuto, viewSkill } from "../actions";
 import { QueueCard } from "./QueueCard";
 import {
@@ -94,6 +95,12 @@ function LoopStatusBar() {
     [allLoops, sessionId],
   );
   const [now, setNow] = useState(Date.now());
+  // Click on a loop entry opens a detail modal with the full prompt.
+  // null = no modal open. Stored by task_id so the panel auto-closes
+  // when the loop is stopped or completes.
+  const [openLoopId, setOpenLoopId] = useState<string | null>(null);
+  const openLoop = openLoopId ? loops.find((l) => l.task_id === openLoopId) ?? null : null;
+  const setOpenLoop = (loop: ServerLoop) => setOpenLoopId(loop.task_id);
 
   // Two intervals: refresh server state every 3s, tick the local clock
   // every 1s so countdowns under a minute display live seconds without
@@ -146,8 +153,13 @@ function LoopStatusBar() {
                 >
                   <X size={ICON.SM} strokeWidth={2} />
                 </button>
-                <div className="min-w-0">
-                  <div className="whitespace-pre-wrap break-words text-sm text-ink-soft">{loop.prompt}</div>
+                <button
+                  type="button"
+                  onClick={() => setOpenLoop(loop)}
+                  className="min-w-0 text-left -my-1.5 -mr-1.5 py-1.5 pr-1.5 rounded-md hover:bg-surface-soft transition-colors"
+                  title="Show full prompt"
+                >
+                  <div className="truncate text-sm text-ink-soft">{loop.prompt}</div>
                   <div className="mt-0.5 text-xs text-faint">
                     Every {loop.every} · next in {formatLoopCountdown(runAt, now)}
                     {loop.max_iterations
@@ -156,14 +168,71 @@ function LoopStatusBar() {
                         ? ` · iter ${loop.iteration_count}`
                         : ""}
                   </div>
-                </div>
+                </button>
               </div>
             );
           })}
         </div>
       </div>
+      <LoopDetailModal loop={openLoop} onClose={() => setOpenLoopId(null)} />
     </div>
   );
+}
+
+function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: () => void }) {
+  useEffect(() => {
+    if (!loop) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [loop, onClose]);
+
+  if (!loop) return null;
+  const nextRunMs = loop.next_run_at ? Date.parse(loop.next_run_at) : Number.POSITIVE_INFINITY;
+  const root = document.querySelector("#app");
+  if (!root) return null;
+
+  const detail = (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/30 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-label="Loop detail"
+        className="w-[min(560px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-32px))] grid grid-rows-[auto_minmax(0,1fr)_auto] rounded-[14px] bg-surface shadow-[var(--shadow-pop)] border border-line"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
+          <Repeat2 size={ICON.SM} strokeWidth={1.8} className="text-muted" />
+          <div className="text-sm font-medium text-ink">Loop</div>
+          <div className="ml-auto text-xs text-faint">
+            Every {loop.every} · next in {formatLoopCountdown(nextRunMs)}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="grid h-6 w-6 place-items-center rounded-md text-faint hover:bg-surface-soft hover:text-ink transition-colors"
+          >
+            <X size={ICON.SM} strokeWidth={2} />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-4 py-3 whitespace-pre-wrap break-words text-sm text-ink-soft">
+          {loop.prompt}
+        </div>
+        <div className="px-4 py-2 border-t border-line text-xs text-faint flex flex-wrap gap-x-3 gap-y-1">
+          {loop.max_iterations ? <span>iter {loop.iteration_count}/{loop.max_iterations}</span> : loop.iteration_count > 0 ? <span>iter {loop.iteration_count}</span> : null}
+          {loop.max_age_days ? <span>expires after {loop.max_age_days}d</span> : null}
+          {loop.stop_when ? <span>stops when: {loop.stop_when}</span> : null}
+          <span className="ml-auto font-mono text-[11px]">{loop.task_id}</span>
+        </div>
+      </div>
+    </div>
+  );
+  return createPortal(detail, root);
 }
 
 export function Composer() {
