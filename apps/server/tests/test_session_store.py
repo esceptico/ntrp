@@ -290,6 +290,36 @@ async def test_session_episodes_group_durable_transcript_by_user_turn(store: Ses
 
 
 @pytest.mark.asyncio
+async def test_channel_session_type_and_origin_roundtrip(store: SessionStore):
+    """v5: SessionState carries session_type and origin_automation_id."""
+    state = SessionState(
+        session_id="chan-1",
+        started_at=datetime.now(UTC),
+        name="offer-42 channel",
+        session_type="channel",
+        origin_automation_id="watcher-1",
+    )
+    await store.save_session(state, [{"role": "assistant", "content": "first post"}])
+
+    loaded = await store.load_session("chan-1")
+    assert loaded is not None
+    assert loaded.state.session_type == "channel"
+    assert loaded.state.origin_automation_id == "watcher-1"
+
+
+@pytest.mark.asyncio
+async def test_legacy_chat_session_defaults_when_unset(store: SessionStore):
+    """Sessions created without the new fields default to session_type='chat'."""
+    state = _make_state()
+    await store.save_session(state, [{"role": "user", "content": "hi"}])
+
+    loaded = await store.load_session("test-session")
+    assert loaded is not None
+    assert loaded.state.session_type == "chat"
+    assert loaded.state.origin_automation_id is None
+
+
+@pytest.mark.asyncio
 async def test_session_episodes_survive_compaction_without_handoff_rows(store: SessionStore):
     state = _make_state()
     original = [

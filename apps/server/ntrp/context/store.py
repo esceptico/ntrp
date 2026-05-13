@@ -18,7 +18,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     messages TEXT,
     metadata TEXT,
     name TEXT,
-    archived_at TEXT
+    archived_at TEXT,
+    session_type TEXT NOT NULL DEFAULT 'chat',
+    origin_automation_id TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity);
@@ -61,13 +63,18 @@ CREATE INDEX IF NOT EXISTS idx_session_episodes_session_turn
 """
 
 SQL_SAVE_SESSION = """
-INSERT INTO sessions (session_id, started_at, last_activity, messages, metadata, name)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO sessions (
+    session_id, started_at, last_activity, messages, metadata, name,
+    session_type, origin_automation_id
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
     last_activity = excluded.last_activity,
     messages = excluded.messages,
     metadata = excluded.metadata,
-    name = excluded.name
+    name = excluded.name,
+    session_type = excluded.session_type,
+    origin_automation_id = excluded.origin_automation_id
 """
 
 SQL_GET_LATEST = """
@@ -99,8 +106,11 @@ SQL_LOAD_SESSION = "SELECT * FROM sessions WHERE session_id = ?"
 # and an UPDATE-only would silently no-op (lost user message until the
 # final end-of-run save).
 SQL_UPSERT_PROGRESS = """
-INSERT INTO sessions (session_id, started_at, last_activity, messages, metadata, name)
-VALUES (?, ?, ?, ?, '{}', ?)
+INSERT INTO sessions (
+    session_id, started_at, last_activity, messages, metadata, name,
+    session_type, origin_automation_id
+)
+VALUES (?, ?, ?, ?, '{}', ?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
     messages = excluded.messages,
     last_activity = excluded.last_activity
@@ -126,7 +136,12 @@ class SessionStore:
 
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
-        for col in ("name TEXT", "archived_at TEXT"):
+        for col in (
+            "name TEXT",
+            "archived_at TEXT",
+            "session_type TEXT NOT NULL DEFAULT 'chat'",
+            "origin_automation_id TEXT",
+        ):
             try:
                 await self.conn.execute(f"ALTER TABLE sessions ADD COLUMN {col}")
                 await self.conn.commit()
@@ -308,6 +323,8 @@ class SessionStore:
                 now,
                 messages_json,
                 state.name,
+                state.session_type,
+                state.origin_automation_id,
             ),
         )
         await self._mirror_session_messages(state.session_id, serializable)
@@ -335,6 +352,8 @@ class SessionStore:
                 messages_json,
                 metadata_json,
                 state.name,
+                state.session_type,
+                state.origin_automation_id,
             ),
         )
         await self._mirror_session_messages(state.session_id, serializable_messages)
@@ -361,6 +380,8 @@ class SessionStore:
             started_at=started_at,
             last_activity=last_activity,
             name=name,
+            session_type=row["session_type"] or "chat",
+            origin_automation_id=row["origin_automation_id"],
         )
 
         raw_messages, raw_metadata = row["messages"], row["metadata"]

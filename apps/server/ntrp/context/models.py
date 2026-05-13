@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Literal
 
 
 @dataclass
@@ -10,6 +11,8 @@ class SessionState:
     name: str | None = None
     auto_approve: set[str] = field(default_factory=set)
     skip_approvals: bool = False
+    session_type: Literal["chat", "channel"] = "chat"
+    origin_automation_id: str | None = None
 
 
 @dataclass

@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import aiosqlite
 import pytest
 import pytest_asyncio
 
@@ -273,6 +274,211 @@ async def test_increment_iteration_advances_count(automation_store: AutomationSt
     loaded = await automation_store.get("loop-iter")
     assert loaded is not None
     assert loaded.iteration_count == 2
+
+
+@pytest.mark.asyncio
+async def test_v5_fields_roundtrip(automation_store: AutomationStore):
+    """All new v5 fields must serialize/deserialize through save/get."""
+    now = datetime.now(UTC)
+    automation = Automation(
+        task_id="post-mode-foo",
+        name="Post offer update",
+        description="Posts to a channel",
+        model=None,
+        triggers=[TimeTrigger(every="4h")],
+        enabled=True,
+        created_at=now,
+        next_run_at=now + timedelta(hours=4),
+        last_run_at=None,
+        last_result=None,
+        running_since=None,
+        writable=True,
+        thread_id="channel-sess-1",
+        read_history=False,
+        parent_automation_id="watcher-1",
+        idempotency_key="offer-42",
+        idempotency_scope="global",
+    )
+    await automation_store.save(automation)
+
+    loaded = await automation_store.get("post-mode-foo")
+    assert loaded is not None
+    assert loaded.thread_id == "channel-sess-1"
+    assert loaded.read_history is False
+    assert loaded.parent_automation_id == "watcher-1"
+    assert loaded.idempotency_key == "offer-42"
+    assert loaded.idempotency_scope == "global"
+
+
+@pytest.mark.asyncio
+async def test_v5_fields_default_to_none_or_false(automation_store: AutomationStore):
+    """Existing call sites that don't set v5 fields still roundtrip cleanly."""
+    automation = _automation("plain")
+    await automation_store.save(automation)
+
+    loaded = await automation_store.get("plain")
+    assert loaded is not None
+    assert loaded.thread_id is None
+    assert loaded.read_history is False
+    assert loaded.parent_automation_id is None
+    assert loaded.idempotency_key is None
+    assert loaded.idempotency_scope is None
+
+
+@pytest.mark.asyncio
+async def test_v5_migration_backfills_loop_rows(tmp_path: Path):
+    """v4 → v5: loop rows get thread_id = target_session_id, read_history = True."""
+    db_path = tmp_path / "v4.db"
+    conn = await database.connect(db_path)
+
+    # Manually build a v4 schema: scheduled_tasks with loop columns, no v5 columns.
+    await conn.executescript(
+        """
+        CREATE TABLE automation_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE scheduled_tasks (
+            task_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL,
+            model TEXT,
+            triggers TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            last_run_at TEXT,
+            next_run_at TEXT,
+            notifiers TEXT,
+            last_result TEXT,
+            running_since TEXT,
+            writable INTEGER NOT NULL DEFAULT 0,
+            handler TEXT,
+            builtin INTEGER NOT NULL DEFAULT 0,
+            cooldown_minutes INTEGER,
+            kind TEXT NOT NULL DEFAULT 'automation',
+            target_session_id TEXT,
+            loop_prompt TEXT,
+            max_iterations INTEGER,
+            iteration_count INTEGER NOT NULL DEFAULT 0,
+            stop_when TEXT,
+            max_age_days INTEGER
+        );
+        INSERT INTO automation_meta (key, value) VALUES ('schema_version', '4');
+        """
+    )
+    now = datetime.now(UTC).isoformat()
+    await conn.execute(
+        """
+        INSERT INTO scheduled_tasks (
+            task_id, name, description, model, triggers, enabled, created_at,
+            kind, target_session_id, loop_prompt
+        ) VALUES (?, '', 'loop a', NULL, '[]', 1, ?, 'loop', 'sess-A', 'prompt a')
+        """,
+        ("loop-row", now),
+    )
+    await conn.execute(
+        """
+        INSERT INTO scheduled_tasks (
+            task_id, name, description, model, triggers, enabled, created_at,
+            kind, target_session_id, loop_prompt
+        ) VALUES (?, '', 'plain', NULL, '[]', 1, ?, 'automation', NULL, NULL)
+        """,
+        ("plain-row", now),
+    )
+    await conn.commit()
+
+    # Run migration via init_schema.
+    store = AutomationStore(conn)
+    await store.init_schema()
+
+    loaded_loop = await store.get("loop-row")
+    assert loaded_loop is not None
+    assert loaded_loop.thread_id == "sess-A"
+    assert loaded_loop.read_history is True
+
+    loaded_plain = await store.get("plain-row")
+    assert loaded_plain is not None
+    assert loaded_plain.thread_id is None
+    assert loaded_plain.read_history is False
+
+    await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_v5_migration_is_idempotent(tmp_path: Path):
+    """Running migration twice doesn't double-write or fail."""
+    db_path = tmp_path / "v4.db"
+    conn = await database.connect(db_path)
+    await conn.executescript(
+        """
+        CREATE TABLE automation_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE scheduled_tasks (
+            task_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL,
+            model TEXT,
+            triggers TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            last_run_at TEXT,
+            next_run_at TEXT,
+            notifiers TEXT,
+            last_result TEXT,
+            running_since TEXT,
+            writable INTEGER NOT NULL DEFAULT 0,
+            handler TEXT,
+            builtin INTEGER NOT NULL DEFAULT 0,
+            cooldown_minutes INTEGER,
+            kind TEXT NOT NULL DEFAULT 'automation',
+            target_session_id TEXT,
+            loop_prompt TEXT,
+            max_iterations INTEGER,
+            iteration_count INTEGER NOT NULL DEFAULT 0,
+            stop_when TEXT,
+            max_age_days INTEGER
+        );
+        INSERT INTO automation_meta (key, value) VALUES ('schema_version', '4');
+        """
+    )
+    now = datetime.now(UTC).isoformat()
+    await conn.execute(
+        """
+        INSERT INTO scheduled_tasks (
+            task_id, name, description, model, triggers, enabled, created_at,
+            kind, target_session_id, loop_prompt
+        ) VALUES (?, '', 'loop a', NULL, '[]', 1, ?, 'loop', 'sess-A', 'prompt a')
+        """,
+        ("loop-row", now),
+    )
+    await conn.commit()
+
+    store = AutomationStore(conn)
+    await store.init_schema()
+    # After v5, this row has thread_id='sess-A', read_history=True.
+    # Now hand-modify thread_id to simulate a write that should NOT be clobbered
+    # by a second migration pass.
+    await conn.execute(
+        "UPDATE scheduled_tasks SET thread_id = ? WHERE task_id = ?",
+        ("user-edited-thread", "loop-row"),
+    )
+    await conn.commit()
+
+    # Re-run init_schema; should be a no-op for the backfill since version is now 5.
+    await store.init_schema()
+    loaded = await store.get("loop-row")
+    assert loaded is not None
+    assert loaded.thread_id == "user-edited-thread"
+
+    await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_v5_indexes_created(automation_store: AutomationStore):
+    """The three new v5 indexes must exist after init_schema."""
+    rows = await automation_store.conn.execute_fetchall(
+        "SELECT name FROM sqlite_master WHERE type = 'index'"
+    )
+    names = {row["name"] for row in rows}
+    assert "idx_scheduled_tasks_parent" in names
+    assert "idx_scheduled_tasks_thread_kind" in names
+    assert "idx_scheduled_tasks_idempotency" in names
 
 
 def test_scheduler_constructor_has_no_learning_recorder(automation_store: AutomationStore):

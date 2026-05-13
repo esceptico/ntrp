@@ -31,6 +31,11 @@ class Automation:
     iteration_count: int = 0
     stop_when: str | None = None
     max_age_days: int | None = None
+    thread_id: str | None = None
+    read_history: bool = False
+    parent_automation_id: str | None = None
+    idempotency_key: str | None = None
+    idempotency_scope: str | None = None
 
     def in_cooldown(self, now: datetime) -> bool:
         if not self.cooldown_minutes or not self.last_run_at:
