@@ -335,6 +335,13 @@ interface State {
    *  composer can show them as a stack of pending bubbles above the
    *  input until `message_ingested` arrives. */
   queuedMessages: QueuedMessage[];
+  /** Center point of the element that triggered the currently-open
+   *  modal (Settings, Automations, Archive, Memory, Approval review).
+   *  Used as the spatial origin for the modal's open/close animation so
+   *  the surface visibly grows from where it was summoned. Null when the
+   *  modal opens via keyboard / palette / non-positional path — in that
+   *  case the modal falls back to a neutral center fade. */
+  modalOrigin: { x: number; y: number } | null;
   loops: ServerLoop[];
   prefs: Prefs;
 }
@@ -368,7 +375,7 @@ interface Actions {
   setEditingId: (id: string | null) => void;
   resetUsage: () => void;
   accumulateUsage: (usage: { prompt: number; completion: number; cost: number }) => void;
-  openSettings: () => void;
+  openSettings: (origin?: { x: number; y: number } | null) => void;
   closeSettings: () => void;
   setConnectionDraft: (patch: Partial<AppConfig>) => void;
   setConnectionError: (error: string | null) => void;
@@ -382,7 +389,7 @@ interface Actions {
   setApprovalStatus: (id: string, status: ApprovalStatus) => void;
   addPendingApproval: (approval: ApprovalState) => void;
   resolvePendingApproval: (toolId: string) => void;
-  setReviewingApproval: (toolId: string | null) => void;
+  setReviewingApproval: (toolId: string | null, origin?: { x: number; y: number } | null) => void;
   addQueuedMessage: (message: QueuedMessage) => void;
   setQueuedMessageStatus: (clientId: string, status: QueuedMessageStatus) => void;
   removeQueuedMessage: (clientId: string) => void;
@@ -401,16 +408,16 @@ interface Actions {
   setServerConfig: (cfg: ServerConfig | null) => void;
   setServerModels: (models: ModelsResponse | null) => void;
   setAutomations: (automations: Automation[] | null) => void;
-  openAutomations: () => void;
+  openAutomations: (origin?: { x: number; y: number } | null) => void;
   closeAutomations: () => void;
   setAutomationStatus: (taskId: string, status: string) => void;
   clearAutomationStatus: (taskId: string) => void;
   setArchivedSessions: (sessions: ArchivedSession[] | null) => void;
-  openArchive: () => void;
+  openArchive: (origin?: { x: number; y: number } | null) => void;
   closeArchive: () => void;
   setCompacting: (compacting: boolean) => void;
   setLastCompaction: (info: State["lastCompaction"]) => void;
-  openMemory: () => void;
+  openMemory: (origin?: { x: number; y: number } | null) => void;
   closeMemory: () => void;
   setSourceFocus: (focus: MessageSourceFocus | null) => void;
   openPalette: () => void;
@@ -517,6 +524,7 @@ export const useStore = create<State & Actions>((set) => ({
   pendingApprovals: [],
   reviewingApprovalToolId: null,
   queuedMessages: [],
+  modalOrigin: null,
   loops: [],
   prefs: loadPrefs(),
 
@@ -727,11 +735,12 @@ export const useStore = create<State & Actions>((set) => ({
       },
     })),
 
-  openSettings: () =>
+  openSettings: (origin) =>
     set((s) => ({
       settingsOpen: true,
       connectionDraft: { ...s.config },
       connectionError: null,
+      modalOrigin: origin ?? null,
     })),
   closeSettings: () =>
     set((s) => {
@@ -818,7 +827,8 @@ export const useStore = create<State & Actions>((set) => ({
       reviewingApprovalToolId:
         s.reviewingApprovalToolId === toolId ? null : s.reviewingApprovalToolId,
     })),
-  setReviewingApproval: (toolId) => set({ reviewingApprovalToolId: toolId }),
+  setReviewingApproval: (toolId, origin) =>
+    set({ reviewingApprovalToolId: toolId, modalOrigin: toolId ? origin ?? null : null }),
 
   addQueuedMessage: (message) =>
     set((s) => ({ queuedMessages: [...s.queuedMessages, message] })),
@@ -860,7 +870,7 @@ export const useStore = create<State & Actions>((set) => ({
   setServerConfig: (serverConfig) => set({ serverConfig }),
   setServerModels: (serverModels) => set({ serverModels }),
   setAutomations: (automations) => set({ automations }),
-  openAutomations: () => set({ automationsOpen: true }),
+  openAutomations: (origin) => set({ automationsOpen: true, modalOrigin: origin ?? null }),
   closeAutomations: () => set({ automationsOpen: false }),
   setAutomationStatus: (taskId, status) =>
     set((s) => ({ automationStatuses: { ...s.automationStatuses, [taskId]: status } })),
@@ -872,11 +882,11 @@ export const useStore = create<State & Actions>((set) => ({
       return { automationStatuses: next };
     }),
   setArchivedSessions: (archivedSessions) => set({ archivedSessions }),
-  openArchive: () => set({ archiveOpen: true }),
+  openArchive: (origin) => set({ archiveOpen: true, modalOrigin: origin ?? null }),
   closeArchive: () => set({ archiveOpen: false }),
   setCompacting: (compacting) => set({ compacting }),
   setLastCompaction: (lastCompaction) => set({ lastCompaction }),
-  openMemory: () => set({ memoryOpen: true }),
+  openMemory: (origin) => set({ memoryOpen: true, modalOrigin: origin ?? null }),
   closeMemory: () => set({ memoryOpen: false }),
   setSourceFocus: (sourceFocus) => set({ sourceFocus }),
   openPalette: () => set({ paletteOpen: true }),

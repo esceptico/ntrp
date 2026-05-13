@@ -1,10 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, X } from "lucide-react";
 import { useStore } from "../store";
 import { respondToApproval } from "../actions";
-import { SPRING_SMOOTH } from "../lib/motion";
+import { SPRING_SMOOTH, modalOriginTransform } from "../lib/motion";
 import { ICON } from "../lib/icons";
 
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
@@ -32,6 +32,19 @@ export function ApprovalReviewModal() {
     reviewing ? s.pendingApprovals.find((a) => a.toolId === reviewing) ?? null : null,
   );
   const close = useStore((s) => s.setReviewingApproval);
+  const liveOrigin = useStore((s) => s.modalOrigin);
+
+  // Same snapshot pattern as PageModal — exit needs the origin that was
+  // present at open time, even after the store has cleared it.
+  const open = !!approval;
+  const snapshotRef = useRef<{ x: number; y: number } | null>(null);
+  if (open && snapshotRef.current === null && liveOrigin) {
+    snapshotRef.current = liveOrigin;
+  }
+  if (!open && snapshotRef.current !== null) {
+    snapshotRef.current = null;
+  }
+  const originDelta = modalOriginTransform(snapshotRef.current);
 
   useEffect(() => {
     if (!approval) return;
@@ -44,7 +57,6 @@ export function ApprovalReviewModal() {
 
   const root = document.querySelector("#app");
   if (!root) return null;
-  const open = !!approval;
 
   return createPortal(
     <AnimatePresence>
@@ -60,9 +72,17 @@ export function ApprovalReviewModal() {
         >
           <motion.div
             className="w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)_auto] rounded-2xl bg-surface shadow-[var(--shadow-pop)] overflow-hidden border border-line-soft"
-            initial={{ opacity: 0, scale: 0.96, y: 6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 6 }}
+            initial={
+              originDelta
+                ? { opacity: 0, scale: 0.94, x: originDelta.x, y: originDelta.y }
+                : { opacity: 0, scale: 0.96, y: 6 }
+            }
+            animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
+            exit={
+              originDelta
+                ? { opacity: 0, scale: 0.94, x: originDelta.x * 0.6, y: originDelta.y * 0.6 }
+                : { opacity: 0, scale: 0.96, y: 6 }
+            }
             transition={SPRING_SMOOTH}
             onClick={(e) => e.stopPropagation()}
           >

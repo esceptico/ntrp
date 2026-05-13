@@ -1,7 +1,8 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { SPRING_SMOOTH } from "../lib/motion";
+import { SPRING_SMOOTH, modalOriginTransform } from "../lib/motion";
+import { useStore } from "../store";
 
 const BACKDROP_DURATION = 0.2;
 const EASE = [0.2, 0.8, 0.2, 1] as const;
@@ -44,6 +45,20 @@ export function PageModal({
   rounded = DEFAULT_ROUNDED,
   disableEscape,
 }: PageModalProps) {
+  // Snapshot the modal origin on the open transition so the same value
+  // is used for both initial AND exit transforms — the live store value
+  // may have been overwritten/cleared by the time exit runs. `null` is
+  // a valid snapshot meaning "no positional trigger; use neutral fade."
+  const liveOrigin = useStore((s) => s.modalOrigin);
+  const snapshotRef = useRef<{ x: number; y: number } | null>(null);
+  if (open && snapshotRef.current === null && liveOrigin) {
+    snapshotRef.current = liveOrigin;
+  }
+  if (!open && snapshotRef.current !== null) {
+    snapshotRef.current = null;
+  }
+  const originDelta = modalOriginTransform(snapshotRef.current);
+
   useEffect(() => {
     if (!open || disableEscape) return;
     const onKey = (e: KeyboardEvent) => {
@@ -70,9 +85,17 @@ export function PageModal({
         >
           <motion.div
             className={`${size} grid ${grid} ${rounded} bg-surface shadow-[var(--shadow-pop)] overflow-hidden border border-line-soft`}
-            initial={{ opacity: 0, scale: 0.96, y: 6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 6 }}
+            initial={
+              originDelta
+                ? { opacity: 0, scale: 0.94, x: originDelta.x, y: originDelta.y }
+                : { opacity: 0, scale: 0.96, y: 6 }
+            }
+            animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
+            exit={
+              originDelta
+                ? { opacity: 0, scale: 0.94, x: originDelta.x * 0.6, y: originDelta.y * 0.6 }
+                : { opacity: 0, scale: 0.96, y: 6 }
+            }
             transition={SPRING_SMOOTH}
             onClick={(e) => e.stopPropagation()}
           >

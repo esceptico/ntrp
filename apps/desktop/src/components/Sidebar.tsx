@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Archive, Brain, ChevronDown, Pencil, Radio, Search, Settings as SettingsIcon, Sparkles, X, Zap } from "lucide-react";
 import clsx from "clsx";
-import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
+import { MOTION, EASE_EMPHASIZED, originFromEvent } from "../lib/motion";
 import { useStore } from "../store";
 import { apiWithConfig } from "../api";
 import { archiveSession, createSession, fetchAutomations, renameSession, switchSession } from "../actions";
@@ -75,7 +75,9 @@ function NavRow({
 }: {
   icon: React.ReactNode;
   label: string;
-  onClick: () => void;
+  // Receives the click event so callers can capture the trigger position
+  // for modal spatial-origin animations.
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
     <button
@@ -197,7 +199,7 @@ function SessionRow({
       <span className="min-w-0 truncate text-base font-medium tracking-[-0.005em]">
         {name || "untitled"}
       </span>
-      <span className="relative shrink-0 h-[22px] w-[48px]">
+      <span className="relative shrink-0 h-[22px] w-[56px]">
         {/* Default state: timestamp. Hover swaps to row actions. */}
         <span className="absolute inset-0 flex items-center justify-end pr-[5px] transition-opacity duration-150 group-hover/row:opacity-0 pointer-events-none">
           <span
@@ -283,7 +285,10 @@ function RowAction({
         onClick();
       }}
       onMouseDown={(e) => e.stopPropagation()}
-      className="grid place-items-center w-[22px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
+      // Wider than the icon (Fitts's law) — vertical space in the row is
+      // tight (22px row) so we widen horizontally to expand the hit area
+      // without affecting line-height. Icon stays centered.
+      className="grid place-items-center w-[26px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
     >
       {icon}
     </button>
@@ -400,16 +405,16 @@ function SessionList() {
                         onClick={() => setSearchOpen(true)}
                         aria-label="Filter sessions"
                         title="Filter sessions (⌘F)"
-                        className="grid place-items-center w-[22px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
+                        className="grid place-items-center w-[26px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
                       >
                         <Search size={ICON.SM} strokeWidth={1.8} />
                       </button>
                       <button
                         type="button"
-                        onClick={openArchive}
+                        onClick={(e) => openArchive(originFromEvent(e.currentTarget))}
                         aria-label="View archived sessions"
                         title="View archived sessions"
-                        className="grid place-items-center w-[22px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
+                        className="grid place-items-center w-[26px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
                       >
                         <Archive size={ICON.SM} strokeWidth={1.8} />
                       </button>
@@ -723,7 +728,7 @@ function OngoingAutomations() {
         >
           <button
             type="button"
-            onClick={openAutomations}
+            onClick={(e) => openAutomations(originFromEvent(e.currentTarget))}
             aria-label={`${running.length} automation${running.length === 1 ? "" : "s"} running — open Automations`}
             className="w-full grid gap-1.5 rounded-lg border border-line-soft bg-surface-soft/40 hover:bg-surface-soft/70 px-2.5 py-2 text-left transition-colors"
           >
@@ -819,12 +824,12 @@ export function Sidebar() {
         <NavRow
           icon={<Zap size={ICON.LG} strokeWidth={1.7} />}
           label="Automations"
-          onClick={openAutomations}
+          onClick={(e) => openAutomations(originFromEvent(e.currentTarget))}
         />
         <NavRow
           icon={<Brain size={ICON.LG} strokeWidth={1.7} />}
           label="Memory"
-          onClick={openMemory}
+          onClick={(e) => openMemory(originFromEvent(e.currentTarget))}
         />
       </nav>
       <SessionList />
@@ -833,7 +838,7 @@ export function Sidebar() {
         <NavRow
           icon={<SettingsIcon size={ICON.LG} strokeWidth={1.7} />}
           label="Settings"
-          onClick={openSettings}
+          onClick={(e) => openSettings(originFromEvent(e.currentTarget))}
         />
       </nav>
     </aside>

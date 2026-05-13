@@ -1,9 +1,10 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CornerDownLeft } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useStore, type ApprovalState } from "../store";
 import { respondToAllApprovals, respondToApproval } from "../actions";
 import { ICON } from "../lib/icons";
+import { originFromEvent } from "../lib/motion";
 
 // Spring physics — tuned to feel like iOS 17 / Linear / Raycast: the
 // card moves with mass + damping, not a tween. Stiffness ~340 gives a
@@ -14,6 +15,40 @@ const SPRING = { type: "spring", stiffness: 340, damping: 32, mass: 0.9 } as con
 const STACK_OPACITY = [1, 0.55, 0.3];
 const STACK_Y = [0, -6, -12];
 const STACK_SCALE_STEP = 0.035;
+
+/** Encodes which way the front card should leave on dismiss. The store
+ *  removes the approval synchronously (optimistic), so AnimatePresence
+ *  picks up the exit animation immediately — we just need to tell it
+ *  WHICH direction encodes the user's intent. Right = approve (forward,
+ *  shipped), left = reject (back, rolled away). Null = passive removal
+ *  (e.g. the server canceled the approval) → neutral fade. */
+type ExitReason = "approve" | "reject" | null;
+
+interface CardCustom {
+  index: number;
+  visible: boolean;
+  reason: ExitReason;
+}
+
+/** Variants form is required because we need per-card custom data to flow
+ *  into the exit transition (motion's inline `exit` prop is statically
+ *  typed and doesn't accept function-form animations). `show` reads
+ *  `{ index, visible }` for stack-position; `exit` reads `{ index, reason }`
+ *  for direction-encoded dismissal of the front card. */
+const stackVariants = {
+  initial: { opacity: 0, scale: 0.97, y: 8 },
+  show: ({ index, visible }: CardCustom) => ({
+    opacity: visible ? STACK_OPACITY[index] : 0,
+    scale: 1 - index * STACK_SCALE_STEP,
+    y: visible ? STACK_Y[index] : STACK_Y[STACK_OPACITY.length - 1],
+  }),
+  exit: ({ index, reason }: CardCustom) => {
+    if (index !== 0) return { opacity: 0, scale: 0.96, y: 4 };
+    if (reason === "approve") return { opacity: 0, scale: 1.01, x: 32, y: -4 };
+    if (reason === "reject") return { opacity: 0, scale: 0.94, x: -32, y: 4 };
+    return { opacity: 0, scale: 0.96, y: 4 };
+  },
+};
 
 /** First non-empty, non-diff-noise line of `text`, truncated to ~max chars. */
 function snippet(text: string, max = 160): string {
@@ -84,6 +119,26 @@ function parseStructuredPreview(text: string): StructuredPreview | null {
 export function ApprovalBanner() {
   const approvals = useStore((s) => s.pendingApprovals);
   const reviewingId = useStore((s) => s.reviewingApprovalToolId);
+  // Direction encoder for the next exit. AnimatePresence's `custom` prop
+  // propagates this to each child's exit function so they animate the
+  // matching way. Cleared in onExitComplete (or overwritten by the next
+  // action, whichever comes first).
+  const [exitReason, setExitReason] = useState<ExitReason>(null);
+
+  const dismissWith = useCallback(
+    (reason: ExitReason, run: () => void | Promise<void>) => {
+      setExitReason(reason);
+      // Defer the store update to the next frame so React commits the
+      // exitReason render first — that updates each card's `custom` prop,
+      // which is what AnimatePresence reads when the card unmounts. A
+      // microtask isn't enough because React's render is scheduled, not
+      // synchronous; rAF guarantees we're past the commit phase.
+      requestAnimationFrame(() => {
+        void run();
+      });
+    },
+    [],
+  );
 
   // Cmd/Ctrl+Enter approves the front card from anywhere — including
   // when the composer is focused. Plain Enter in the composer is
@@ -99,11 +154,12 @@ export function ApprovalBanner() {
       if (reviewingId) return;
       e.preventDefault();
       e.stopPropagation();
-      void respondToApproval(approvals[0].toolId, true);
+      const toolId = approvals[0].toolId;
+      dismissWith("approve", () => respondToApproval(toolId, true));
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [approvals, reviewingId]);
+  }, [approvals, reviewingId, dismissWith]);
 
   if (approvals.length === 0) return null;
   // Hide the banner deck entirely while the Review modal is open. The
@@ -124,9 +180,14 @@ export function ApprovalBanner() {
           className="grid"
           style={{ gridTemplateAreas: '"stack"', paddingTop: approvals.length > 1 ? 14 : 0 }}
         >
-          <AnimatePresence initial={false}>
+          <AnimatePresence
+            initial={false}
+            custom={exitReason}
+            onExitComplete={() => setExitReason(null)}
+          >
             {approvals.map((approval, index) => {
               const visible = index < STACK_OPACITY.length;
+              const cardCustom: CardCustom = { index, visible, reason: exitReason };
               return (
                 <motion.div
                   key={approval.toolId}
@@ -135,20 +196,19 @@ export function ApprovalBanner() {
                     zIndex: 100 - index,
                     pointerEvents: index === 0 ? "auto" : "none",
                   }}
-                  initial={{ opacity: 0, scale: 0.97, y: 8 }}
-                  animate={{
-                    opacity: visible ? STACK_OPACITY[index] : 0,
-                    scale: 1 - index * STACK_SCALE_STEP,
-                    y: visible ? STACK_Y[index] : STACK_Y[STACK_OPACITY.length - 1],
-                  }}
-                  exit={{ opacity: 0, scale: 0.96, y: 4 }}
-                  transition={SPRING}
+                  variants={stackVariants}
+                  custom={cardCustom}
+                  initial="initial"
+                  animate="show"
+                  exit="exit"
+                  transition={{ ...SPRING, opacity: { duration: 0.16, ease: "easeOut" } }}
                 >
                   <ApprovalCard
                     approval={approval}
                     interactive={index === 0}
                     totalPending={approvals.length}
                     isFront={index === 0}
+                    onDismissWith={dismissWith}
                   />
                 </motion.div>
               );
@@ -177,11 +237,13 @@ function ApprovalCard({
   interactive,
   isFront,
   totalPending,
+  onDismissWith,
 }: {
   approval: ApprovalState;
   interactive: boolean;
   isFront: boolean;
   totalPending: number;
+  onDismissWith: (reason: ExitReason, run: () => void | Promise<void>) => void;
 }) {
   const setReviewing = useStore((s) => s.setReviewingApproval);
   const { toolId, toolName, path, diff, preview } = approval;
@@ -261,7 +323,7 @@ function ApprovalCard({
           <button
             type="button"
             tabIndex={interactive ? 0 : -1}
-            onClick={() => setReviewing(toolId)}
+            onClick={(e) => setReviewing(toolId, originFromEvent(e.currentTarget))}
             className="inline-flex items-center h-7 px-2.5 rounded-md text-sm text-muted hover:bg-surface hover:text-ink transition-colors"
           >
             Review
@@ -273,16 +335,16 @@ function ApprovalCard({
             <button
               type="button"
               tabIndex={interactive ? 0 : -1}
-              onClick={() => void respondToAllApprovals(false)}
-              className="inline-flex items-center h-7 px-2.5 rounded-md text-sm text-muted hover:bg-surface hover:text-ink transition-colors"
+              onClick={() => onDismissWith("reject", () => respondToAllApprovals(false))}
+              className="inline-flex items-center h-7 px-2.5 rounded-md text-sm text-muted hover:bg-surface hover:text-ink transition-all active:scale-[0.97]"
             >
               Reject all
             </button>
             <button
               type="button"
               tabIndex={interactive ? 0 : -1}
-              onClick={() => void respondToAllApprovals(true)}
-              className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-colors"
+              onClick={() => onDismissWith("approve", () => respondToAllApprovals(true))}
+              className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-all active:scale-[0.97]"
             >
               Approve all
             </button>
@@ -292,17 +354,17 @@ function ApprovalCard({
         <button
           type="button"
           tabIndex={interactive ? 0 : -1}
-          onClick={() => void respondToApproval(toolId, false)}
-          className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-colors"
+          onClick={() => onDismissWith("reject", () => respondToApproval(toolId, false))}
+          className="inline-flex items-center h-7 px-3 rounded-md border border-line bg-surface text-sm text-ink-soft hover:bg-surface-soft hover:border-line-strong transition-all active:scale-[0.97]"
         >
           Reject
         </button>
         <button
           type="button"
           tabIndex={interactive ? 0 : -1}
-          onClick={() => void respondToApproval(toolId, true)}
+          onClick={() => onDismissWith("approve", () => respondToApproval(toolId, true))}
           title="Approve (⌘↩)"
-          className="inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-md bg-ink text-on-ink text-sm font-medium hover:opacity-90 transition-opacity"
+          className="inline-flex items-center gap-1.5 h-7 pl-3 pr-2 rounded-md bg-ink text-on-ink text-sm font-medium hover:opacity-90 transition-all active:scale-[0.97]"
         >
           Approve
           <span className="inline-flex items-center gap-0.5 opacity-70 text-2xs font-mono leading-none">
