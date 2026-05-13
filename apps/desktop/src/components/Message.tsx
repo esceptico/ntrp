@@ -10,6 +10,7 @@ import { branchAtMessage, viewSkill } from "../actions";
 import { Markdown } from "./Markdown";
 import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
 import { ICON } from "../lib/icons";
+import { useSmoothStreamedContent } from "../lib/useSmoothStream";
 
 const EASE = EASE_EMPHASIZED;
 // Background tint only — the previous inset 1px ring stacked
@@ -255,6 +256,8 @@ const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: 
   const sourceFocused = useSourceFocused(id);
   const running = useStore((s) => s.running);
   const isStreaming = Boolean(message && running && message.turn?.endedAt === null);
+  // Hook order rule: call before any conditional return below.
+  const smoothContent = useSmoothStreamedContent(message?.content ?? "", isStreaming);
   if (!message) return null;
   // Drop intermediate assistant messages that finished empty — the model
   // opens TEXT_MESSAGE_START before deciding to tool-call instead, leaving
@@ -270,7 +273,7 @@ const AssistantMessage = memo(function AssistantMessage({ id, isFinal = true }: 
       data-source-index={message.sourceIndex}
     >
       <Markdown
-        content={message.content}
+        content={smoothContent}
         streaming={isStreaming}
         className="text-base leading-[1.45] text-ink break-words [&_p]:m-0"
       />
@@ -285,8 +288,10 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
   const running = useStore((s) => s.running);
   const sourceFocused = useSourceFocused(id);
   const [expanded, setExpanded] = useState(false);
-  if (!message) return null;
   const isStreaming = isLast && running;
+  // Only run the rAF loop when the user can actually see it (expanded).
+  const smoothContent = useSmoothStreamedContent(message?.content ?? "", isStreaming && expanded);
+  if (!message) return null;
 
   return (
     <article
@@ -321,7 +326,7 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
             style={{ overflow: "hidden" }}
           >
             <Markdown
-              content={message.content}
+              content={smoothContent}
               className="mt-2 pl-3.5 border-l-2 border-line text-xs leading-[1.45] text-muted italic break-words [&_p]:m-0"
             />
           </motion.div>

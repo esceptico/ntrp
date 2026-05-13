@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown } from "lucide-react";
 import { useStickToBottom } from "use-stick-to-bottom";
@@ -98,6 +98,45 @@ export function Messages() {
     return () => cancelAnimationFrame(frame);
   }, [currentSessionId, firstSourceFocusId, scrollRef, sourceFocus]);
 
+  // Intent-aware "new messages while detached" counter. While the user
+  // is near-bottom, advance `seenLastIdRef` to the tail — that's the
+  // marker for "everything up to here has been seen." When they scroll
+  // up, the marker freezes; the count is the number of ids appended
+  // after it. History paging prepends to `order`, so counting by tail
+  // index (not raw length) is critical — older-history loads grow the
+  // array but don't add unread material.
+  const seenLastIdRef = useRef<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  useEffect(() => {
+    const lastId = order[order.length - 1] ?? null;
+    if (isNearBottom) {
+      seenLastIdRef.current = lastId;
+      if (unreadCount !== 0) setUnreadCount(0);
+      return;
+    }
+    // Detached. Anchor the marker on first transition into this state
+    // so we count only what arrives going forward.
+    if (!seenLastIdRef.current) {
+      seenLastIdRef.current = lastId;
+      return;
+    }
+    const seenIdx = order.indexOf(seenLastIdRef.current);
+    if (seenIdx === -1) {
+      // Marker fell out of `order` (history replay / session reload).
+      // Re-anchor and stop counting from now.
+      seenLastIdRef.current = lastId;
+      if (unreadCount !== 0) setUnreadCount(0);
+      return;
+    }
+    const tail = order.length - 1 - seenIdx;
+    if (tail !== unreadCount) setUnreadCount(tail);
+  }, [order, isNearBottom, unreadCount]);
+
+  const onPillClick = useCallback(() => {
+    setUnreadCount(0);
+    scrollToBottom({ animation: "smooth" });
+  }, [scrollToBottom]);
+
   const roles = useStore(
     useShallow((s) => order.map((id) => s.messages.get(id)?.role ?? null)),
   );
@@ -183,15 +222,35 @@ export function Messages() {
         {!isNearBottom && order.length > 0 && (
           <motion.button
             type="button"
-            onClick={() => scrollToBottom({ animation: "smooth" })}
+            onClick={onPillClick}
             initial={{ opacity: 0, y: 6, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.95 }}
             transition={{ duration: MOTION.row, ease: EASE_EMPHASIZED }}
-            aria-label="Scroll to bottom"
-            className="absolute left-1/2 -translate-x-1/2 bottom-3 grid place-items-center w-8 h-8 rounded-full bg-surface text-muted border border-black/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.06)] transition-[background-color,color,transform] duration-fast hover:text-ink hover:bg-surface-soft dark:border-white/[0.08] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4),0_4px_14px_rgba(0,0,0,0.35)]"
+            aria-label={unreadCount > 0 ? `${unreadCount} new message${unreadCount === 1 ? "" : "s"} — jump to latest` : "Scroll to bottom"}
+            // Pill grows to fit a count badge when messages land while
+            // the user is scrolled up. With zero unread we collapse back
+            // to the round chevron — minimal chrome when there's nothing
+            // to communicate. `layout` lets motion FLIP between widths.
+            layout
+            className={
+              unreadCount > 0
+                ? "absolute left-1/2 -translate-x-1/2 bottom-3 inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full bg-ink text-on-ink border border-transparent shadow-[0_1px_2px_rgba(0,0,0,0.08),0_6px_18px_rgba(0,0,0,0.12)] text-sm font-medium hover:opacity-90 transition-opacity"
+                : "absolute left-1/2 -translate-x-1/2 bottom-3 grid place-items-center w-8 h-8 rounded-full bg-surface text-muted border border-black/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.06)] transition-[background-color,color,transform] duration-fast hover:text-ink hover:bg-surface-soft dark:border-white/[0.08] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4),0_4px_14px_rgba(0,0,0,0.35)]"
+            }
           >
             <ChevronDown size={ICON.MD} strokeWidth={1.8} />
+            {unreadCount > 0 && (
+              <motion.span
+                key={unreadCount}
+                initial={{ opacity: 0, y: -3 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.14, ease: EASE_EMPHASIZED }}
+                className="tabular-nums"
+              >
+                {unreadCount} new
+              </motion.span>
+            )}
           </motion.button>
         )}
       </AnimatePresence>
