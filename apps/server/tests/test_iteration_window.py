@@ -20,6 +20,7 @@ from ntrp.services.chat import (
     ChatDeps,
     _loop_task_id_from_client_id,
     _persistable_messages,
+    _trim_for_loop_iteration,
     prepare_chat,
 )
 
@@ -302,3 +303,73 @@ async def test_loop_iteration_preserves_system_after_trim():
     # And the prior-history portion is exactly the cap.
     _, prior, _ = _split_history(ctx.run.messages)
     assert len(prior) == LOOP_ITERATION_HISTORY_WINDOW
+
+
+def test_trim_expands_when_cut_lands_inside_tool_sequence(monkeypatch):
+    # Naive cut at the WINDOW boundary would orphan a tool_result whose
+    # parent assistant (with tool_calls) sits one slot earlier. The trim
+    # must walk the boundary backward to a clean split so OpenAI doesn't
+    # reject the request with "No tool call found for function call output".
+    monkeypatch.setattr("ntrp.services.chat.LOOP_ITERATION_HISTORY_WINDOW", 2)
+    history = [
+        {"role": "user", "content": "kick it off"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{"id": "call_A", "type": "function", "function": {"name": "f", "arguments": "{}"}}],
+        },
+        {"role": "tool", "tool_call_id": "call_A", "content": "result-A"},
+        {"role": "tool", "tool_call_id": "call_A", "content": "result-A2"},
+        {"role": "user", "content": "next"},
+    ]
+
+    prefix, view = _trim_for_loop_iteration(history)
+
+    # Naive WINDOW=2 would have given view=[tool_result_B, user2] with an
+    # orphan tool_result at the head. After expansion the view must keep
+    # the entire tool sequence intact, starting at a clean boundary (the
+    # user message that opened the turn).
+    assert view[0]["role"] == "user"
+    assert view[0]["content"] == "kick it off"
+    assert view == history
+    assert prefix == []
+
+
+def test_trim_no_expansion_when_cut_lands_on_clean_assistant(monkeypatch):
+    # Cut lands on an assistant with no tool_calls — already a clean
+    # boundary, no expansion needed. Tail is exactly WINDOW messages.
+    monkeypatch.setattr("ntrp.services.chat.LOOP_ITERATION_HISTORY_WINDOW", 2)
+    history = [
+        {"role": "user", "content": "user1"},
+        {"role": "assistant", "content": "asst1"},
+        {"role": "user", "content": "user2"},
+        {"role": "assistant", "content": "asst2"},
+        {"role": "user", "content": "user3"},
+        {"role": "assistant", "content": "asst3"},
+    ]
+
+    prefix, view = _trim_for_loop_iteration(history)
+
+    assert view == [
+        {"role": "user", "content": "user3"},
+        {"role": "assistant", "content": "asst3"},
+    ]
+    assert prefix == history[:-2]
+
+
+def test_trim_no_expansion_when_cut_lands_on_user(monkeypatch):
+    # Cut lands on a user message — clean boundary, no expansion.
+    monkeypatch.setattr("ntrp.services.chat.LOOP_ITERATION_HISTORY_WINDOW", 2)
+    history = [
+        {"role": "assistant", "content": "asst1"},
+        {"role": "user", "content": "user2"},
+        {"role": "assistant", "content": "asst2"},
+    ]
+
+    prefix, view = _trim_for_loop_iteration(history)
+
+    assert view == [
+        {"role": "user", "content": "user2"},
+        {"role": "assistant", "content": "asst2"},
+    ]
+    assert prefix == [{"role": "assistant", "content": "asst1"}]

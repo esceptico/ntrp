@@ -229,6 +229,14 @@ def _trim_for_loop_iteration(messages: list[dict]) -> tuple[list[dict], list[dic
     LOOP_ITERATION_HISTORY_WINDOW user/assistant/tool messages; the prefix
     is the middle slice that was dropped from the agent's view but must
     be re-prepended at save time so disk history stays complete.
+
+    The cut respects tool-call boundaries: if the naive WINDOW cut would
+    orphan a tool_result (its parent assistant with tool_calls fell into
+    the prefix), the cut walks backward until it lands on a clean
+    boundary — a user message, or an assistant with no tool_calls.
+    Otherwise OpenAI rejects with "No tool call found for function call
+    output". The window is therefore a soft target — the tail may grow
+    beyond N to keep tool sequences intact.
     """
     if len(messages) <= LOOP_ITERATION_HISTORY_WINDOW:
         return [], messages
@@ -240,9 +248,26 @@ def _trim_for_loop_iteration(messages: list[dict]) -> tuple[list[dict], list[dic
     if len(rest) <= LOOP_ITERATION_HISTORY_WINDOW:
         return [], messages
     cut = len(rest) - LOOP_ITERATION_HISTORY_WINDOW
+    while cut > 0 and not _is_clean_cut_boundary(rest[cut]):
+        cut -= 1
     prefix = rest[:cut]
     tail = rest[cut:]
     return prefix, head + tail
+
+
+def _is_clean_cut_boundary(msg: dict) -> bool:
+    """True iff the message can safely be the first kept entry in the
+    trimmed tail. Tool results need their parent assistant in scope, and
+    an assistant with tool_calls needs its tool results in scope — both
+    are unsafe boundaries. A user message or a tool-call-free assistant
+    is a clean start.
+    """
+    role = msg.get("role")
+    if role == "user":
+        return True
+    if role == "assistant" and not msg.get("tool_calls"):
+        return True
+    return False
 
 
 async def prepare_chat(
