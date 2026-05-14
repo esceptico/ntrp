@@ -232,7 +232,7 @@ export function AgentRightSidebar() {
 
   const agents = useMemo(
     () =>
-      Object.values(backgroundAgents)
+      Object.values(backgroundAgents ?? {})
         .filter((agent) => !currentSessionId || agent.sessionId === currentSessionId)
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, 8),

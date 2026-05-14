@@ -50,6 +50,18 @@ export interface ServerLoop {
   running_since: string | null;
 }
 
+export type BackgroundAgentStatus = "running" | "completed" | "failed" | "cancelled";
+
+export interface BackgroundAgent {
+  taskId: string;
+  sessionId: string;
+  command: string;
+  status: BackgroundAgentStatus;
+  detail?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type ThinkingIntensity = "subtle" | "normal" | "strong";
 
 export type ThemeChoice = "light" | "dark" | "system";
@@ -343,6 +355,7 @@ interface State {
    *  case the modal falls back to a neutral center fade. */
   modalOrigin: { x: number; y: number } | null;
   loops: ServerLoop[];
+  backgroundAgents: Record<string, BackgroundAgent>;
   prefs: Prefs;
 }
 
@@ -396,6 +409,13 @@ interface Actions {
   clearQueuedMessages: () => void;
   resetCancellingQueuedMessages: () => void;
   setLoops: (loops: ServerLoop[]) => void;
+  setBackgroundAgentsForSession: (
+    sessionId: string,
+    agents: { taskId: string; command: string }[],
+  ) => void;
+  upsertBackgroundAgent: (
+    agent: Omit<BackgroundAgent, "createdAt"> & { createdAt?: number },
+  ) => void;
   setSkills: (skills: SkillDescriptor[]) => void;
   setCommandPickerOpen: (open: boolean) => void;
   setCommandPickerIndex: (index: number) => void;
@@ -526,6 +546,7 @@ export const useStore = create<State & Actions>((set) => ({
   queuedMessages: [],
   modalOrigin: null,
   loops: [],
+  backgroundAgents: {},
   prefs: loadPrefs(),
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
@@ -621,12 +642,14 @@ export const useStore = create<State & Actions>((set) => ({
         map.set(m.id, m);
         order.push(m.id);
       }
+      const persistedIds = new Set(order);
       return {
         messages: map,
         order,
         historyLoadedFor: s.currentSessionId,
         historyHasMoreBefore: page?.has_more_before ?? false,
         historyHasMoreAfter: page?.has_more_after ?? false,
+        queuedMessages: s.queuedMessages.filter((q) => !persistedIds.has(q.clientId)),
       };
     }),
 
@@ -853,6 +876,49 @@ export const useStore = create<State & Actions>((set) => ({
       ),
     })),
   setLoops: (loops) => set({ loops }),
+  setBackgroundAgentsForSession: (sessionId, agents) =>
+    set((s) => {
+      const now = Date.now();
+      const next = { ...(s.backgroundAgents ?? {}) };
+      const seen = new Set<string>();
+      for (const agent of agents) {
+        const key = `${sessionId}:${agent.taskId}`;
+        seen.add(key);
+        const prev = next[key];
+        next[key] = {
+          taskId: agent.taskId,
+          sessionId,
+          command: agent.command,
+          status: prev?.status ?? "running",
+          detail: prev?.detail,
+          createdAt: prev?.createdAt ?? now,
+          updatedAt: now,
+        };
+      }
+      for (const [key, agent] of Object.entries(next)) {
+        if (agent.sessionId === sessionId && !seen.has(key) && agent.status === "running") {
+          next[key] = { ...agent, status: "completed", updatedAt: now };
+        }
+      }
+      return { backgroundAgents: next };
+    }),
+  upsertBackgroundAgent: (agent) =>
+    set((s) => {
+      const now = Date.now();
+      const key = `${agent.sessionId}:${agent.taskId}`;
+      const prev = (s.backgroundAgents ?? {})[key];
+      return {
+        backgroundAgents: {
+          ...(s.backgroundAgents ?? {}),
+          [key]: {
+            ...prev,
+            ...agent,
+            createdAt: agent.createdAt ?? prev?.createdAt ?? now,
+            updatedAt: agent.updatedAt ?? now,
+          },
+        },
+      };
+    }),
 
   setSkills: (skills) => set({ skills }),
   setCommandPickerOpen: (commandPickerOpen) => set({ commandPickerOpen, commandPickerIndex: 0 }),
