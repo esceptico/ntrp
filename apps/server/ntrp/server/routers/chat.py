@@ -3,7 +3,7 @@ import time
 from collections.abc import AsyncGenerator
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ntrp.events.sse import StreamResetEvent, TextDeltaEvent
 from ntrp.server.bus import BusRegistry, StreamRecord, stream_record_to_sse_string
@@ -42,7 +42,17 @@ async def _event_stream(
     run_registry: RunRegistry,
     stream: bool = False,
     after_seq: int | None = None,
+    event_store=None,
 ) -> AsyncGenerator[str]:
+    persisted_snapshot = []
+    if event_store is not None and after_seq is not None:
+        latest_seq = await event_store.get_latest_session_event_seq(session_id)
+        if latest_seq:
+            bus_registry.remember_session_cursor(session_id, next_seq=latest_seq + 1)
+            persisted_snapshot = await event_store.list_session_events(session_id, after_seq=after_seq)
+            if persisted_snapshot:
+                after_seq = persisted_snapshot[-1].seq
+
     bus = bus_registry.get_or_create(session_id)
     subscription = bus.subscribe_with_replay(after_seq=after_seq)
     snapshot, queue = subscription
@@ -52,6 +62,15 @@ async def _event_stream(
         return stream or not isinstance(event, TextDeltaEvent)
 
     try:
+        for record in persisted_snapshot:
+            event = record.event
+            if not should_emit(event):
+                last_event_at = time.monotonic()
+                continue
+            yield stream_record_to_sse_string(session_id, record, replay=True)
+            last_event_at = time.monotonic()
+            await asyncio.sleep(0)
+
         if subscription.replay_gap and after_seq is not None:
             reset_record = StreamRecord(
                 seq=after_seq + 1,
@@ -67,7 +86,7 @@ async def _event_stream(
             if not should_emit(event):
                 last_event_at = time.monotonic()
                 continue
-            yield stream_record_to_sse_string(session_id, record)
+            yield stream_record_to_sse_string(session_id, record, replay=True)
             await asyncio.sleep(0)
 
         while True:
@@ -101,13 +120,17 @@ async def _event_stream(
 @router.get("/chat/events/{session_id}")
 async def chat_events(
     session_id: str,
+    request: Request,
     stream: bool = False,
     after_seq: Annotated[int | None, Query(ge=0)] = None,
     buses: BusRegistry = Depends(get_bus_registry),
     run_registry: RunRegistry = Depends(require_run_registry),
 ):
+    runtime = getattr(request.app.state, "runtime", None)
+    session_service = getattr(runtime, "session_service", None)
+    event_store = session_service.store if session_service else None
     return SSEStreamingResponse(
-        _event_stream(session_id, buses, run_registry, stream=stream, after_seq=after_seq),
+        _event_stream(session_id, buses, run_registry, stream=stream, after_seq=after_seq, event_store=event_store),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -146,6 +169,7 @@ async def chat_message(
             images=images,
             context=context,
             client_id=request.client_id,
+            session_service=getattr(runtime, "session_service", None),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -156,12 +180,17 @@ async def cancel_inject(
     client_id: str,
     session_id: str,
     run_registry: RunRegistry = Depends(require_run_registry),
+    runtime: Runtime = Depends(get_runtime),
 ):
     active_run = run_registry.get_active_run(session_id)
     if active_run is None:
         raise HTTPException(status_code=404, detail="No active run")
 
     if active_run.cancel_injection(client_id):
+        session_service = getattr(runtime, "session_service", None)
+        mark_cancelled = getattr(session_service, "mark_chat_queued_message_cancelled", None)
+        if mark_cancelled:
+            await mark_cancelled(client_id)
         return {"status": "cancelled", "client_id": client_id}
 
     raise HTTPException(status_code=409, detail="Already ingested")

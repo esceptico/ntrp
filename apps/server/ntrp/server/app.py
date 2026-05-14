@@ -75,7 +75,9 @@ async def lifespan(app: FastAPI):
     runtime = Runtime()
     await runtime.connect()
     runtime.start_indexing()
-    bus_registry = BusRegistry()
+    bus_registry = BusRegistry(
+        record_event=runtime.session_service.store.record_session_event if runtime.session_service else None,
+    )
     runtime.scheduler.set_bus_registry(bus_registry)
 
     # Per-session write locks. The post dispatcher holds one for its full
@@ -97,6 +99,7 @@ async def lifespan(app: FastAPI):
             session_id=_loop_target_id(automation) or "",
             skip_approvals=automation.writable,
             client_id=f"loop:{automation.task_id}:{automation.iteration_count + 1}",
+            session_service=runtime.session_service,
         )
         return result.get("run_id") if isinstance(result, dict) else None
 

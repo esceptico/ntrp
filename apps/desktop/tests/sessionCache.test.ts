@@ -109,6 +109,21 @@ test("queued messages persist across switches", () => {
   expect(getState().queuedMessages[0].clientId).toBe("cid-1");
 });
 
+test("history reload clears queued messages that are already persisted", () => {
+  const s = getState();
+  s.setCurrentSession("A");
+  s.addQueuedMessage({
+    clientId: "cid-1",
+    text: "follow-up",
+    status: "pending",
+    enqueuedAt: 0,
+  });
+
+  s.setHistory([userMessage("cid-1", "follow-up")]);
+
+  expect(getState().queuedMessages).toEqual([]);
+});
+
 test("resetCancellingQueuedMessages flips cancelling back to pending", () => {
   const s = getState();
   s.setCurrentSession("A");

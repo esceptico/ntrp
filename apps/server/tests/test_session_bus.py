@@ -72,6 +72,23 @@ async def test_subscribe_with_replay_returns_buffered_records_to_new_subscribers
 
 
 @pytest.mark.asyncio
+async def test_bus_registry_records_emitted_events():
+    recorded = []
+
+    async def record_event(record):
+        recorded.append(record)
+
+    registry = BusRegistry(record_event=record_event)
+    bus = registry.get_or_create("sess-1")
+    await bus.emit(ThinkingEvent(status="saved"))
+
+    assert len(recorded) == 1
+    assert recorded[0].seq == 1
+    assert recorded[0].session_id == "sess-1"
+    assert recorded[0].event.status == "saved"
+
+
+@pytest.mark.asyncio
 async def test_bus_registry_preserves_sequence_when_session_bus_is_recreated():
     registry = BusRegistry()
     first_bus = registry.get_or_create("sess-1")

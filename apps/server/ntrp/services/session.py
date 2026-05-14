@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -12,6 +13,14 @@ _logger = get_logger(__name__)
 class SessionService:
     def __init__(self, store: SessionStore):
         self.store = store
+        self._locks: dict[str, asyncio.Lock] = {}
+
+    def _lock_for(self, session_id: str) -> asyncio.Lock:
+        lock = self._locks.get(session_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._locks[session_id] = lock
+        return lock
 
     def create(
         self,
@@ -46,7 +55,8 @@ class SessionService:
     ) -> None:
         try:
             session_state.last_activity = datetime.now(UTC)
-            await self.store.save_session(session_state, messages, metadata=metadata)
+            async with self._lock_for(session_state.session_id):
+                await self.store.save_session(session_state, messages, metadata=metadata)
         except Exception as e:
             _logger.warning("Failed to save session: %s", e)
 
@@ -54,9 +64,86 @@ class SessionService:
         """Mid-run checkpoint — upserts messages, leaves metadata alone."""
         try:
             session_state.last_activity = datetime.now(UTC)
-            await self.store.update_progress(session_state, messages)
+            async with self._lock_for(session_state.session_id):
+                await self.store.update_progress(session_state, messages)
         except Exception as e:
             _logger.warning("Failed to save mid-run progress: %s", e)
+
+    async def record_chat_run_started(self, run_id: str, session_id: str, metadata: dict | None = None) -> None:
+        try:
+            await self.store.record_chat_run_started(run_id, session_id, metadata=metadata)
+        except Exception as e:
+            _logger.warning("Failed to record chat run start: %s", e)
+
+    async def record_chat_run_status(
+        self,
+        run_id: str,
+        status: str,
+        *,
+        stop_reason: str | None = None,
+        last_seq: int | None = None,
+    ) -> None:
+        try:
+            await self.store.record_chat_run_status(
+                run_id,
+                status,
+                stop_reason=stop_reason,
+                last_seq=last_seq,
+            )
+        except Exception as e:
+            _logger.warning("Failed to record chat run status: %s", e)
+
+    async def record_chat_queued_message(
+        self,
+        *,
+        client_id: str,
+        session_id: str,
+        run_id: str,
+        message: dict,
+        enqueued_seq: int | None = None,
+    ) -> None:
+        try:
+            await self.store.record_chat_queued_message(
+                client_id=client_id,
+                session_id=session_id,
+                run_id=run_id,
+                message=message,
+                enqueued_seq=enqueued_seq,
+            )
+        except Exception as e:
+            _logger.warning("Failed to record queued chat message: %s", e)
+
+    async def mark_chat_queued_message_ingested(self, client_id: str, ingested_seq: int | None = None) -> None:
+        try:
+            await self.store.mark_chat_queued_message_ingested(client_id, ingested_seq=ingested_seq)
+        except Exception as e:
+            _logger.warning("Failed to mark queued chat message ingested: %s", e)
+
+    async def mark_chat_queued_message_cancelled(self, client_id: str) -> None:
+        try:
+            await self.store.mark_chat_queued_message_cancelled(client_id)
+        except Exception as e:
+            _logger.warning("Failed to mark queued chat message cancelled: %s", e)
+
+    async def record_chat_compaction(
+        self,
+        *,
+        compaction_id: str,
+        session_id: str,
+        boundary_seq: int,
+        messages_before: int,
+        messages_after: int,
+    ) -> None:
+        try:
+            await self.store.record_chat_compaction(
+                compaction_id=compaction_id,
+                session_id=session_id,
+                boundary_seq=boundary_seq,
+                messages_before=messages_before,
+                messages_after=messages_after,
+            )
+        except Exception as e:
+            _logger.warning("Failed to record chat compaction: %s", e)
 
     async def list_sessions(self, limit: int = 20) -> list[dict]:
         return await self.store.list_sessions(limit=limit)

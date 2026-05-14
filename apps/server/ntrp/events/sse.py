@@ -378,6 +378,49 @@ class CompactionFinishedEvent(SSEEvent):
     messages_after: int = 0
 
 
+_EVENT_CLASSES = {
+    EventType.RUN_STARTED.value: RunStartedEvent,
+    EventType.RUN_FINISHED.value: RunFinishedEvent,
+    EventType.RUN_ERROR.value: RunErrorEvent,
+    EventType.TEXT_MESSAGE_START.value: TextMessageStartEvent,
+    EventType.TEXT_MESSAGE_CONTENT.value: TextMessageContentEvent,
+    EventType.TEXT_MESSAGE_END.value: TextMessageEndEvent,
+    EventType.TOOL_CALL_START.value: ToolCallStartEvent,
+    EventType.TOOL_CALL_ARGS.value: ToolCallArgsEvent,
+    EventType.TOOL_CALL_END.value: ToolCallEndEvent,
+    EventType.TOOL_CALL_RESULT.value: ToolCallResultEvent,
+    EventType.REASONING_START.value: ReasoningStartEvent,
+    EventType.REASONING_MESSAGE_START.value: ReasoningMessageStartEvent,
+    EventType.REASONING_MESSAGE_CONTENT.value: ReasoningMessageContentEvent,
+    EventType.REASONING_MESSAGE_END.value: ReasoningMessageEndEvent,
+    EventType.REASONING_END.value: ReasoningEndEvent,
+    EventType.THINKING.value: ThinkingEvent,
+    EventType.APPROVAL_NEEDED.value: ApprovalNeededEvent,
+    EventType.QUESTION.value: QuestionEvent,
+    EventType.BACKGROUND_TASK.value: BackgroundTaskEvent,
+    EventType.TASK_STARTED.value: TaskStartedEvent,
+    EventType.TASK_PROGRESS.value: TaskProgressEvent,
+    EventType.TASK_FINISHED.value: TaskFinishedEvent,
+    EventType.RUN_CANCELLED.value: RunCancelledEvent,
+    EventType.RUN_BACKGROUNDED.value: RunBackgroundedEvent,
+    EventType.MESSAGE_INGESTED.value: MessageIngestedEvent,
+    EventType.STREAM_RESET.value: StreamResetEvent,
+    EventType.AUTOMATION_PROGRESS.value: AutomationProgressEvent,
+    EventType.AUTOMATION_FINISHED.value: AutomationFinishedEvent,
+    EventType.COMPACTION_STARTED.value: CompactionStartedEvent,
+    EventType.COMPACTION_FINISHED.value: CompactionFinishedEvent,
+}
+
+
+def event_from_payload(payload: dict) -> SSEEvent:
+    event_type = payload.get("type")
+    cls = _EVENT_CLASSES.get(event_type)
+    if cls is None:
+        raise ValueError(f"Unknown SSE event type: {event_type}")
+    kwargs = {key: value for key, value in payload.items() if key not in {"type", "seq", "session_id"}}
+    return cls(**kwargs)
+
+
 # ─── Aliases (back-compat for existing imports) ───────────────────────
 
 # Older code may import ToolCallEvent / ToolResultEvent / TextEvent /

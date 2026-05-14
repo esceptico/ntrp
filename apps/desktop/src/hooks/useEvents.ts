@@ -48,7 +48,22 @@ function bufferActivityPatch(itemId: string, patch: Partial<ActivityItem>) {
   });
 }
 
-function enqueueActivityItem(aid: string, item: ActivityItem) {
+type EventApplicationMode = "live" | "replay";
+
+function enqueueActivityItem(aid: string, item: ActivityItem, mode: EventApplicationMode = "live") {
+  if (mode === "replay") {
+    const state = getState();
+    if (!state.messages.get(aid)?.activity) return;
+    const pendingPatch = pendingResultPatches.get(item.id);
+    if (pendingPatch) {
+      pendingResultPatches.delete(item.id);
+      state.appendActivityItem(aid, { ...item, ...pendingPatch });
+    } else {
+      state.appendActivityItem(aid, item);
+    }
+    return;
+  }
+
   const now = Date.now();
   const queued = nextItemRenderAt + ITEM_STAGGER_MS;
   const ceiling = now + MAX_STAGGER_LAG_MS;
@@ -150,13 +165,26 @@ function appendAssistantDelta(id: string, delta: string, startedAt: number): voi
 }
 
 function activityInsertAnchor(): string | null {
-  if (!activeAssistantMessageId) return null;
   const state = getState();
-  const message = state.messages.get(activeAssistantMessageId);
+  let assistantId = activeAssistantMessageId;
+  if (!assistantId || state.messages.get(assistantId)?.role !== "assistant") {
+    assistantId = null;
+    for (let i = state.order.length - 1; i >= 0; i--) {
+      const id = state.order[i];
+      const message = state.messages.get(id);
+      if (message?.role !== "assistant") continue;
+      assistantId = id;
+      break;
+    }
+  }
+  if (!assistantId) return null;
+  const message = state.messages.get(assistantId);
   if (message?.role !== "assistant") return null;
   // Keep a bare TEXT_MESSAGE_START placeholder behind tool activity, but
   // preserve the actual stream order once assistant text has appeared.
-  return message.content.trim().length === 0 ? activeAssistantMessageId : null;
+  if (message.content.trim().length !== 0) return null;
+  activeAssistantMessageId = assistantId;
+  return assistantId;
 }
 
 async function defaultReplayGapHistoryReload(sessionId: string): Promise<void> {
@@ -207,14 +235,22 @@ export function handleIncomingServerEvent(
     return null;
   }
 
-  const effect = handleServerEvent(event);
+  const effect = event.replay ? handleReplayServerEvent(event) : handleServerEvent(event);
   if (effect?.type !== "replay_gap") return null;
   return reloadHistoryAfterReplayGap(effect.sessionId, reload);
 }
 
 export function handleServerEvent(event: ServerEvent): ServerEventEffect | undefined {
   if (shouldDropServerEvent(event)) return;
+  return applyServerEvent(event, "live");
+}
 
+export function handleReplayServerEvent(event: ServerEvent): ServerEventEffect | undefined {
+  if (shouldDropServerEvent(event)) return;
+  return applyServerEvent(event, "replay");
+}
+
+function applyServerEvent(event: ServerEvent, mode: EventApplicationMode): ServerEventEffect | undefined {
   const s = getState();
   const ts = event.timestamp ?? Date.now();
 
@@ -411,7 +447,7 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
         s.setActiveActivityId(newId);
         nextItemRenderAt = Date.now();
       } else {
-        enqueueActivityItem(aid, item);
+        enqueueActivityItem(aid, item, mode);
       }
       return;
     }
@@ -469,11 +505,16 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
       });
       return;
     case "background_task":
-      s.appendMessage({
-        id: crypto.randomUUID(),
-        role: "status",
-        title: event.command,
-        content: event.detail ? `${event.status}: ${event.detail}` : event.status,
+      s.upsertBackgroundAgent({
+        taskId: event.task_id,
+        sessionId: event.session_id ?? s.currentSessionId ?? "",
+        command: event.command,
+        status:
+          event.status === "completed" || event.status === "failed" || event.status === "cancelled"
+            ? event.status
+            : "running",
+        detail: event.detail,
+        updatedAt: ts,
       });
       return;
     case "compaction_started":

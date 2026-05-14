@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ntrp.context.models import SessionData, SessionState
+from ntrp.context.store import SessionStore
 from ntrp.core.factory import AgentConfig
 from ntrp.events.sse import (
     MessageIngestedEvent,
@@ -15,7 +16,7 @@ from ntrp.events.sse import (
     ThinkingEvent,
 )
 from ntrp.server.app import app
-from ntrp.server.bus import BusRegistry, SessionBus
+from ntrp.server.bus import BusRegistry, SessionBus, StreamRecord
 from ntrp.server.deps import get_bus_registry, require_run_registry
 from ntrp.server.routers.chat import _event_stream
 from ntrp.server.runtime import get_runtime
@@ -101,6 +102,34 @@ async def test_event_stream_replay_honors_after_seq_without_old_duplicates():
     assert [seq for seq, _event_name, _payload in parsed] == [2, 3]
     assert [payload["session_id"] for _seq, _event_name, payload in parsed] == ["sess-1", "sess-1"]
     assert [payload["status"] for _seq, _event_name, payload in parsed] == ["new-1", "new-2"]
+
+
+@pytest.mark.asyncio
+async def test_event_stream_replays_persisted_events_after_bus_recreation(tmp_path):
+    import ntrp.database as database
+
+    conn = await database.connect(tmp_path / "sessions.db")
+    read_conn = await database.connect(tmp_path / "sessions.db", readonly=True)
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    await store.record_session_event(
+        StreamRecord(seq=1, session_id="sess-1", event=ThinkingEvent(status="persisted")),
+    )
+    buses = BusRegistry()
+
+    stream = _event_stream("sess-1", buses, RunRegistry(), stream=True, after_seq=0, event_store=store)
+    try:
+        chunk = await anext(stream)
+    finally:
+        await stream.aclose()
+        await read_conn.close()
+        await conn.close()
+
+    seq, _event_name, payload = _parse_sse_chunk(chunk)
+    assert seq == 1
+    assert payload["status"] == "persisted"
+    assert payload["replay"] is True
+    assert buses.get_or_create("sess-1").next_seq == 2
 
 
 @pytest.mark.asyncio
@@ -387,6 +416,43 @@ async def test_submit_message_after_cancel_starts_new_run(monkeypatch):
     assert new_run.messages[-1]["client_id"] == "cid-follow-up"
     if new_run.task:
         await asyncio.wait_for(new_run.task, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_active_run_records_queued_message_in_ledger():
+    from ntrp.services import chat as chat_service
+
+    class FakeSessionService:
+        def __init__(self):
+            self.queued = []
+
+        async def record_chat_queued_message(self, **kwargs):
+            self.queued.append(kwargs)
+
+    registry = RunRegistry()
+    run = registry.create_run("sess-1")
+    run.status = RunStatus.RUNNING
+    session_service = FakeSessionService()
+
+    result = await chat_service.submit_chat_message(
+        registry,
+        lambda: None,
+        BusRegistry(),
+        message="follow-up",
+        session_id="sess-1",
+        client_id="cid-ledger",
+        session_service=session_service,
+    )
+
+    assert result["run_id"] == run.run_id
+    assert session_service.queued == [
+        {
+            "client_id": "cid-ledger",
+            "session_id": "sess-1",
+            "run_id": run.run_id,
+            "message": {"role": "user", "content": "follow-up", "client_id": "cid-ledger"},
+        }
+    ]
 
 
 @pytest.mark.asyncio

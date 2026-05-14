@@ -44,6 +44,7 @@ class Stores:
 
         session_store = SessionStore(conn, read_conn)
         await session_store.init_schema()
+        await session_store.mark_interrupted_chat_runs()
 
         automations = AutomationStore(conn)
         await automations.init_schema()

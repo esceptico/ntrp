@@ -1,6 +1,7 @@
 import asyncio
 import json
 from collections import deque
+from collections.abc import Awaitable, Callable
 from dataclasses import InitVar, dataclass, field
 
 from ntrp.events.sse import SSEEvent
@@ -33,11 +34,13 @@ class ReplaySubscription:
         yield self.queue
 
 
-def stream_record_to_sse_string(session_id: str, record: StreamRecord) -> str:
+def stream_record_to_sse_string(session_id: str, record: StreamRecord, *, replay: bool = False) -> str:
     sse = record.event.to_sse()
     payload = json.loads(sse["data"])
     payload["seq"] = record.seq
     payload["session_id"] = record.session_id
+    if replay:
+        payload["replay"] = True
     return f"id: {record.seq}\nevent: {sse['event']}\ndata: {json.dumps(payload)}\n\n"
 
 
@@ -47,6 +50,7 @@ class SessionBus:
     subscriber_queue_size: int = SSE_QUEUE_MAXSIZE
     initial_next_seq: InitVar[int] = 1
     initial_checkpoint_seq: InitVar[int] = 0
+    record_event: Callable[[StreamRecord], Awaitable[None]] | None = None
     _subscribers: list[asyncio.Queue[StreamRecord | None]] = field(default_factory=list)
     _next_seq: int = field(default=1, init=False)
     # Highest seq that has been persisted to disk via session_service.save().
@@ -78,6 +82,8 @@ class SessionBus:
         record = StreamRecord(seq=self._next_seq, session_id=self.session_id, event=event)
         self._next_seq += 1
         self._recent.append(record)
+        if self.record_event:
+            await self.record_event(record)
         for queue in tuple(self._subscribers):
             try:
                 queue.put_nowait(record)
@@ -156,10 +162,15 @@ class SessionBus:
 
 
 class BusRegistry:
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        record_event: Callable[[StreamRecord], Awaitable[None]] | None = None,
+    ):
         self._buses: dict[str, SessionBus] = {}
         self._next_seq_by_session: dict[str, int] = {}
         self._checkpoint_seq_by_session: dict[str, int] = {}
+        self._record_event = record_event
 
     def get_or_create(self, session_id: str) -> SessionBus:
         if session_id not in self._buses:
@@ -167,8 +178,25 @@ class BusRegistry:
                 session_id=session_id,
                 initial_next_seq=self._next_seq_by_session.get(session_id, 1),
                 initial_checkpoint_seq=self._checkpoint_seq_by_session.get(session_id, 0),
+                record_event=self._record_event,
             )
         return self._buses[session_id]
+
+    def remember_session_cursor(
+        self,
+        session_id: str,
+        *,
+        next_seq: int,
+        checkpoint_seq: int | None = None,
+    ) -> None:
+        if session_id in self._buses:
+            return
+        self._next_seq_by_session[session_id] = max(next_seq, self._next_seq_by_session.get(session_id, 1))
+        if checkpoint_seq is not None:
+            self._checkpoint_seq_by_session[session_id] = max(
+                checkpoint_seq,
+                self._checkpoint_seq_by_session.get(session_id, 0),
+            )
 
     def get(self, session_id: str) -> SessionBus | None:
         return self._buses.get(session_id)

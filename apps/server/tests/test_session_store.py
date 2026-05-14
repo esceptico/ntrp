@@ -9,6 +9,8 @@ import pytest_asyncio
 import ntrp.database as database
 from ntrp.context.models import SessionState
 from ntrp.context.store import SessionStore
+from ntrp.events.sse import ThinkingEvent
+from ntrp.server.bus import StreamRecord
 
 
 @pytest_asyncio.fixture
@@ -48,6 +50,85 @@ async def test_save_and_load_round_trip(store: SessionStore):
     assert len(loaded.messages) == 3
     assert loaded.messages[1]["content"] == "Hello"
     assert loaded.messages[2]["content"] == "Hi there!"
+
+
+@pytest.mark.asyncio
+async def test_chat_run_and_queued_message_ledger(store: SessionStore):
+    await store.record_chat_run_started("run-1", "sess-1")
+    await store.record_chat_queued_message(
+        client_id="cid-1",
+        session_id="sess-1",
+        run_id="run-1",
+        message={"role": "user", "content": "follow-up", "client_id": "cid-1"},
+    )
+
+    queued = await store.list_chat_queued_messages("sess-1")
+    assert [row["client_id"] for row in queued] == ["cid-1"]
+    assert queued[0]["status"] == "queued"
+    assert queued[0]["message"]["content"] == "follow-up"
+
+    await store.mark_chat_queued_message_ingested("cid-1", ingested_seq=42)
+    await store.record_chat_run_status("run-1", "completed", last_seq=99)
+
+    completed = await store.get_chat_run("run-1")
+    assert completed is not None
+    assert completed["status"] == "completed"
+    assert completed["last_seq"] == 99
+    assert completed["ended_at"] is not None
+
+    queued = await store.list_chat_queued_messages("sess-1")
+    assert queued[0]["status"] == "ingested"
+    assert queued[0]["ingested_seq"] == 42
+    assert queued[0]["ingested_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_marks_interrupted_chat_runs_on_startup(store: SessionStore):
+    await store.record_chat_run_started("run-1", "sess-1")
+    await store.record_chat_run_status("run-1", "running")
+
+    changed = await store.mark_interrupted_chat_runs()
+    run = await store.get_chat_run("run-1")
+
+    assert changed == 1
+    assert run is not None
+    assert run["status"] == "interrupted"
+    assert run["stop_reason"] == "server_restart"
+    assert run["ended_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_session_events_round_trip_with_sequence(store: SessionStore):
+    await store.record_session_event(
+        StreamRecord(seq=7, session_id="sess-1", event=ThinkingEvent(status="processing")),
+    )
+
+    events = await store.list_session_events("sess-1", after_seq=6)
+
+    assert [record.seq for record in events] == [7]
+    assert events[0].session_id == "sess-1"
+    assert isinstance(events[0].event, ThinkingEvent)
+    assert events[0].event.status == "processing"
+    assert await store.get_latest_session_event_seq("sess-1") == 7
+
+
+@pytest.mark.asyncio
+async def test_compaction_boundary_round_trip(store: SessionStore):
+    await store.record_chat_compaction(
+        compaction_id="compact-1",
+        session_id="sess-1",
+        boundary_seq=12,
+        messages_before=20,
+        messages_after=5,
+    )
+
+    compactions = await store.list_chat_compactions("sess-1")
+
+    assert len(compactions) == 1
+    assert compactions[0]["compaction_id"] == "compact-1"
+    assert compactions[0]["boundary_seq"] == 12
+    assert compactions[0]["messages_before"] == 20
+    assert compactions[0]["messages_after"] == 5
 
 
 @pytest.mark.asyncio

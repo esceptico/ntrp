@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from ntrp.events.sse import CompactionFinishedEvent, CompactionStartedEvent
@@ -70,6 +72,11 @@ async def compact_context(
 
     data = await runtime.session_service.load(session_id)
     resolved_session_id = data.state.session_id if data else session_id
+    if resolved_session_id and runtime.run_registry.get_active_run(resolved_session_id):
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot compact while a chat run is active",
+        )
     bus = buses.get_or_create(resolved_session_id) if resolved_session_id else None
 
     if bus:
@@ -97,6 +104,14 @@ async def compact_context(
         await bus.emit(
             CompactionFinishedEvent(run_id="", messages_before=before, messages_after=after)
         )
+        if result.get("status") == "compacted" and resolved_session_id:
+            await runtime.session_service.record_chat_compaction(
+                compaction_id=f"compact-{uuid4().hex[:16]}",
+                session_id=resolved_session_id,
+                boundary_seq=bus.next_seq - 1,
+                messages_before=before,
+                messages_after=after,
+            )
     return result
 
 

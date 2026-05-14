@@ -9,6 +9,8 @@ from pydantic import BaseModel
 
 from ntrp.constants import SESSION_HANDOFF_MARKER
 from ntrp.context.models import SessionData, SessionState
+from ntrp.events.sse import event_from_payload
+from ntrp.server.bus import StreamRecord
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -60,7 +62,67 @@ CREATE TABLE IF NOT EXISTS session_episodes (
 
 CREATE INDEX IF NOT EXISTS idx_session_episodes_session_turn
     ON session_episodes(session_id, turn_index);
-"""
+
+CREATE TABLE IF NOT EXISTS chat_runs (
+    run_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    stop_reason TEXT,
+    started_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    ended_at TEXT,
+    last_seq INTEGER,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_runs_session_status
+    ON chat_runs(session_id, status);
+
+CREATE TABLE IF NOT EXISTS chat_queued_messages (
+    client_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    message_json TEXT NOT NULL,
+    enqueued_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    ingested_at TEXT,
+    enqueued_seq INTEGER,
+    ingested_seq INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_queued_messages_session_status
+    ON chat_queued_messages(session_id, status);
+CREATE INDEX IF NOT EXISTS idx_chat_queued_messages_run_status
+    ON chat_queued_messages(run_id, status);
+
+CREATE TABLE IF NOT EXISTS session_events (
+    session_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    event_type TEXT NOT NULL,
+    event_json TEXT NOT NULL,
+    run_id TEXT,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, seq)
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_events_session_seq
+    ON session_events(session_id, seq);
+CREATE INDEX IF NOT EXISTS idx_session_events_run
+    ON session_events(run_id);
+
+CREATE TABLE IF NOT EXISTS chat_compactions (
+    compaction_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    boundary_seq INTEGER NOT NULL,
+    messages_before INTEGER NOT NULL,
+    messages_after INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_compactions_session_boundary
+    ON chat_compactions(session_id, boundary_seq);
+	"""
 
 SQL_SAVE_SESSION = """
 INSERT INTO sessions (
@@ -135,6 +197,33 @@ class SessionStore:
         cursor = await self.conn.execute(sql, params)
         await self.conn.commit()
         return cursor.rowcount > 0
+
+    def _chat_run_payload(self, row: aiosqlite.Row) -> dict:
+        return {
+            "run_id": row["run_id"],
+            "session_id": row["session_id"],
+            "status": row["status"],
+            "stop_reason": row["stop_reason"],
+            "started_at": row["started_at"],
+            "updated_at": row["updated_at"],
+            "ended_at": row["ended_at"],
+            "last_seq": row["last_seq"],
+            "metadata": json.loads(row["metadata_json"] or "{}"),
+        }
+
+    def _chat_queued_message_payload(self, row: aiosqlite.Row) -> dict:
+        return {
+            "client_id": row["client_id"],
+            "session_id": row["session_id"],
+            "run_id": row["run_id"],
+            "status": row["status"],
+            "message": json.loads(row["message_json"]),
+            "enqueued_at": row["enqueued_at"],
+            "updated_at": row["updated_at"],
+            "ingested_at": row["ingested_at"],
+            "enqueued_seq": row["enqueued_seq"],
+            "ingested_seq": row["ingested_seq"],
+        }
 
     async def init_schema(self) -> None:
         await self.conn.executescript(SCHEMA)
@@ -331,6 +420,264 @@ class SessionStore:
         )
         await self._mirror_session_messages(state.session_id, serializable)
         await self.conn.commit()
+
+    async def record_chat_run_started(
+        self,
+        run_id: str,
+        session_id: str,
+        *,
+        metadata: dict | None = None,
+    ) -> None:
+        now = datetime.now(UTC).isoformat()
+        metadata_json = await asyncio.to_thread(lambda: json.dumps(metadata or {}))
+        await self.conn.execute(
+            """
+            INSERT INTO chat_runs (
+                run_id, session_id, status, started_at, updated_at, metadata_json
+            )
+            VALUES (?, ?, 'pending', ?, ?, ?)
+            ON CONFLICT(run_id) DO UPDATE SET
+                session_id = excluded.session_id,
+                status = excluded.status,
+                updated_at = excluded.updated_at,
+                ended_at = NULL,
+                stop_reason = NULL,
+                metadata_json = excluded.metadata_json
+            """,
+            (run_id, session_id, now, now, metadata_json),
+        )
+        await self.conn.commit()
+
+    async def record_chat_run_status(
+        self,
+        run_id: str,
+        status: str,
+        *,
+        stop_reason: str | None = None,
+        last_seq: int | None = None,
+    ) -> None:
+        now = datetime.now(UTC).isoformat()
+        ended_at = now if status in {"completed", "cancelled", "error"} else None
+        await self.conn.execute(
+            """
+            UPDATE chat_runs
+            SET status = ?, stop_reason = ?, updated_at = ?, ended_at = COALESCE(?, ended_at), last_seq = COALESCE(?, last_seq)
+            WHERE run_id = ?
+            """,
+            (status, stop_reason, now, ended_at, last_seq, run_id),
+        )
+        await self.conn.commit()
+
+    async def get_chat_run(self, run_id: str) -> dict | None:
+        rows = await self.read_conn.execute_fetchall("SELECT * FROM chat_runs WHERE run_id = ?", (run_id,))
+        if not rows:
+            return None
+        return self._chat_run_payload(rows[0])
+
+    async def mark_interrupted_chat_runs(self) -> int:
+        now = datetime.now(UTC).isoformat()
+        cursor = await self.conn.execute(
+            """
+            UPDATE chat_runs
+            SET status = 'interrupted',
+                stop_reason = 'server_restart',
+                updated_at = ?,
+                ended_at = ?
+            WHERE status IN ('pending', 'running', 'backgrounded')
+            """,
+            (now, now),
+        )
+        await self.conn.commit()
+        return cursor.rowcount
+
+    async def record_chat_queued_message(
+        self,
+        *,
+        client_id: str,
+        session_id: str,
+        run_id: str,
+        message: dict,
+        enqueued_seq: int | None = None,
+    ) -> None:
+        now = datetime.now(UTC).isoformat()
+        message_json = await asyncio.to_thread(lambda: json.dumps(message, default=str))
+        await self.conn.execute(
+            """
+            INSERT INTO chat_queued_messages (
+                client_id, session_id, run_id, status, message_json, enqueued_at, updated_at, enqueued_seq
+            )
+            VALUES (?, ?, ?, 'queued', ?, ?, ?, ?)
+            ON CONFLICT(client_id) DO UPDATE SET
+                session_id = excluded.session_id,
+                run_id = excluded.run_id,
+                status = excluded.status,
+                message_json = excluded.message_json,
+                updated_at = excluded.updated_at,
+                enqueued_seq = excluded.enqueued_seq,
+                ingested_at = NULL,
+                ingested_seq = NULL
+            """,
+            (client_id, session_id, run_id, message_json, now, now, enqueued_seq),
+        )
+        await self.conn.commit()
+
+    async def mark_chat_queued_message_ingested(self, client_id: str, *, ingested_seq: int | None = None) -> None:
+        now = datetime.now(UTC).isoformat()
+        await self.conn.execute(
+            """
+            UPDATE chat_queued_messages
+            SET status = 'ingested', updated_at = ?, ingested_at = ?, ingested_seq = COALESCE(?, ingested_seq)
+            WHERE client_id = ?
+            """,
+            (now, now, ingested_seq, client_id),
+        )
+        await self.conn.commit()
+
+    async def mark_chat_queued_message_cancelled(self, client_id: str) -> None:
+        now = datetime.now(UTC).isoformat()
+        await self.conn.execute(
+            """
+            UPDATE chat_queued_messages
+            SET status = 'cancelled', updated_at = ?
+            WHERE client_id = ? AND status = 'queued'
+            """,
+            (now, client_id),
+        )
+        await self.conn.commit()
+
+    async def list_chat_queued_messages(self, session_id: str, *, status: str | None = None) -> list[dict]:
+        if status:
+            rows = await self.read_conn.execute_fetchall(
+                """
+                SELECT * FROM chat_queued_messages
+                WHERE session_id = ? AND status = ?
+                ORDER BY enqueued_at ASC
+                """,
+                (session_id, status),
+            )
+        else:
+            rows = await self.read_conn.execute_fetchall(
+                """
+                SELECT * FROM chat_queued_messages
+                WHERE session_id = ?
+                ORDER BY enqueued_at ASC
+                """,
+                (session_id,),
+            )
+        return [self._chat_queued_message_payload(row) for row in rows]
+
+    async def record_session_event(self, record: StreamRecord) -> None:
+        sse = record.event.to_sse()
+        payload = json.loads(sse["data"])
+        event_json = await asyncio.to_thread(lambda: json.dumps(payload, default=str))
+        run_id = payload.get("run_id") if isinstance(payload.get("run_id"), str) else None
+        await self.conn.execute(
+            """
+            INSERT OR IGNORE INTO session_events (
+                session_id, seq, event_type, event_json, run_id, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record.session_id,
+                record.seq,
+                str(payload.get("type") or sse["event"]),
+                event_json,
+                run_id,
+                datetime.now(UTC).isoformat(),
+            ),
+        )
+        await self.conn.commit()
+
+    async def list_session_events(
+        self,
+        session_id: str,
+        *,
+        after_seq: int = 0,
+        limit: int = 10000,
+    ) -> list[StreamRecord]:
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT seq, event_json
+            FROM session_events
+            WHERE session_id = ? AND seq > ?
+            ORDER BY seq ASC
+            LIMIT ?
+            """,
+            (session_id, after_seq, limit),
+        )
+        records: list[StreamRecord] = []
+        for row in rows:
+            payload = json.loads(row["event_json"])
+            records.append(
+                StreamRecord(
+                    seq=row["seq"],
+                    session_id=session_id,
+                    event=event_from_payload(payload),
+                )
+            )
+        return records
+
+    async def get_latest_session_event_seq(self, session_id: str) -> int:
+        rows = await self.read_conn.execute_fetchall(
+            "SELECT COALESCE(MAX(seq), 0) AS latest_seq FROM session_events WHERE session_id = ?",
+            (session_id,),
+        )
+        return int(rows[0]["latest_seq"] or 0)
+
+    async def record_chat_compaction(
+        self,
+        *,
+        compaction_id: str,
+        session_id: str,
+        boundary_seq: int,
+        messages_before: int,
+        messages_after: int,
+    ) -> None:
+        await self.conn.execute(
+            """
+            INSERT INTO chat_compactions (
+                compaction_id, session_id, boundary_seq, messages_before, messages_after, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(compaction_id) DO UPDATE SET
+                session_id = excluded.session_id,
+                boundary_seq = excluded.boundary_seq,
+                messages_before = excluded.messages_before,
+                messages_after = excluded.messages_after
+            """,
+            (
+                compaction_id,
+                session_id,
+                boundary_seq,
+                messages_before,
+                messages_after,
+                datetime.now(UTC).isoformat(),
+            ),
+        )
+        await self.conn.commit()
+
+    async def list_chat_compactions(self, session_id: str) -> list[dict]:
+        rows = await self.read_conn.execute_fetchall(
+            """
+            SELECT *
+            FROM chat_compactions
+            WHERE session_id = ?
+            ORDER BY boundary_seq ASC
+            """,
+            (session_id,),
+        )
+        return [
+            {
+                "compaction_id": row["compaction_id"],
+                "session_id": row["session_id"],
+                "boundary_seq": row["boundary_seq"],
+                "messages_before": row["messages_before"],
+                "messages_after": row["messages_after"],
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
 
     async def save_session(self, state: SessionState, messages: list[dict | Any], metadata: dict | None = None) -> None:
         serializable_messages = self._to_serializable_messages(messages)

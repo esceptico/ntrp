@@ -3,6 +3,7 @@ import {
   eventStreamUrl,
   forgetEventSeqForSession,
   handleIncomingServerEvent,
+  handleReplayServerEvent,
   handleServerEvent,
   lastEventSeqForSession,
   resetEventSeqStateForTest,
@@ -24,6 +25,7 @@ beforeEach(() => {
     currentRunId: null,
     currentSessionId: null,
     error: null,
+    backgroundAgents: {},
   });
 });
 
@@ -574,6 +576,19 @@ test("merges duplicate buffered tool result patches before delayed render", asyn
   expect(item?.durationMs).toBe(25);
 });
 
+test("replay mode applies tool burst activity synchronously", () => {
+  handleReplayServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", timestamp: 1 });
+  handleReplayServerEvent({ type: "TOOL_CALL_START", tool_call_id: "tool-1", tool_call_name: "ReadFile", timestamp: 2 });
+  handleReplayServerEvent({ type: "TOOL_CALL_END", tool_call_id: "tool-1", timestamp: 3 });
+  handleReplayServerEvent({ type: "TOOL_CALL_START", tool_call_id: "tool-2", tool_call_name: "ListFiles", timestamp: 4 });
+  handleReplayServerEvent({ type: "TOOL_CALL_END", tool_call_id: "tool-2", timestamp: 5 });
+
+  const state = getState();
+  const activityId = state.order.find((id) => state.messages.get(id)?.role === "activity");
+  const items = state.messages.get(activityId!)?.activity?.items ?? [];
+  expect(items.map((item) => item.id)).toEqual(["tool-1", "tool-2"]);
+});
+
 test("updates an agent activity item from task lifecycle events", () => {
   handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", timestamp: 1 });
   handleServerEvent({
@@ -611,4 +626,28 @@ test("updates an agent activity item from task lifecycle events", () => {
   const item = state.messages.get(activityId!)?.activity?.items.find((it) => it.id === "call-research");
   expect(item?.taskStatus).toBe("completed");
   expect(item?.progress).toBe("done");
+});
+
+test("background task event updates background agents without transcript noise", () => {
+  setState({ currentSessionId: "session-1" });
+
+  handleServerEvent({
+    type: "background_task",
+    session_id: "session-1",
+    task_id: "bg-1",
+    command: "research event systems",
+    status: "completed",
+    detail: "done",
+    timestamp: 10,
+  });
+
+  const state = getState();
+  expect(state.order).toEqual([]);
+  expect(state.backgroundAgents["session-1:bg-1"]).toMatchObject({
+    taskId: "bg-1",
+    sessionId: "session-1",
+    command: "research event systems",
+    status: "completed",
+    detail: "done",
+  });
 });

@@ -70,6 +70,44 @@ class ChatContext:
     enqueue_run_completed: Callable[[RunCompleted], Awaitable[bool]] | None = None
 
 
+async def _record_run_started(service: object, run_id: str, session_id: str) -> None:
+    fn = getattr(service, "record_chat_run_started", None)
+    if fn:
+        await fn(run_id, session_id)
+
+
+async def _record_run_status(
+    service: object,
+    run_id: str,
+    status: str,
+    *,
+    stop_reason: str | None = None,
+    last_seq: int | None = None,
+) -> None:
+    fn = getattr(service, "record_chat_run_status", None)
+    if fn:
+        await fn(run_id, status, stop_reason=stop_reason, last_seq=last_seq)
+
+
+async def _record_queued_message(
+    service: object | None,
+    *,
+    client_id: str,
+    session_id: str,
+    run_id: str,
+    message: dict,
+) -> None:
+    fn = getattr(service, "record_chat_queued_message", None)
+    if fn:
+        await fn(client_id=client_id, session_id=session_id, run_id=run_id, message=message)
+
+
+async def _mark_queued_message_ingested(service: object | None, client_id: str, *, ingested_seq: int | None) -> None:
+    fn = getattr(service, "mark_chat_queued_message_ingested", None)
+    if fn:
+        await fn(client_id, ingested_seq=ingested_seq)
+
+
 def expand_skill_command(message: str, registry: SkillRegistry) -> tuple[str, bool]:
     stripped = message.strip()
     if not stripped.startswith("/"):
@@ -372,6 +410,7 @@ async def submit_chat_message(
     images: list[dict] | None = None,
     context: list[dict] | None = None,
     client_id: str | None = None,
+    session_service: SessionService | None = None,
 ) -> dict[str, str]:
     loop_task_id = _loop_task_id_from_client_id(client_id)
 
@@ -394,6 +433,14 @@ async def submit_chat_message(
             if client_id.startswith("loop:"):
                 entry["is_meta"] = True
         active_run.queue_injection(entry)
+        if client_id:
+            await _record_queued_message(
+                session_service,
+                client_id=client_id,
+                session_id=session_id,
+                run_id=active_run.run_id,
+                message=entry,
+            )
         if loop_task_id and not active_run.loop_task_id:
             active_run.loop_task_id = loop_task_id
         if client_id:
@@ -411,6 +458,7 @@ async def submit_chat_message(
         client_id=client_id,
         loop_task_id=loop_task_id,
     )
+    await _record_run_started(deps.session_service, ctx.run.run_id, ctx.session_state.session_id)
     if loop_task_id:
         ctx.run.loop_task_id = loop_task_id
     # Persist the user message before the agent starts streaming. Without
@@ -507,11 +555,22 @@ async def _drain_backgrounded(
     try:
         async with save_lock:
             await _save_snapshot()
+            await _record_run_status(
+                ctx.session_service,
+                ctx.run.run_id,
+                RunStatus.COMPLETED.value,
+                last_seq=None,
+            )
     except Exception:
         _logger.exception("Backgrounded final save failed (run_id=%s)", ctx.run.run_id)
 
 
-async def _emit_ingested_for_client_entries(batch: list[dict], bus: SessionBus, run: RunState) -> None:
+async def _emit_ingested_for_client_entries(
+    batch: list[dict],
+    bus: SessionBus,
+    run: RunState,
+    session_service: SessionService | None = None,
+) -> None:
     # Read but do NOT pop — the saved message keeps its client_id so the
     # desktop can later reference it via /session/revert (edit flow) or
     # /sessions/{id}/branch.
@@ -519,6 +578,7 @@ async def _emit_ingested_for_client_entries(batch: list[dict], bus: SessionBus, 
         client_id = entry.get("client_id")
         if client_id:
             await bus.emit(MessageIngestedEvent(client_id=client_id, run_id=run.run_id))
+            await _mark_queued_message_ingested(session_service, client_id, ingested_seq=bus.next_seq - 1)
 
 
 def _merge_background_messages(current: list[dict], background: list[dict]) -> list[dict]:
@@ -530,14 +590,14 @@ def _merge_background_messages(current: list[dict], background: list[dict]) -> l
     return [*current, *background[prefix_len:]]
 
 
-def _build_get_pending(bus: SessionBus, run: RunState):
+def _build_get_pending(bus: SessionBus, run: RunState, session_service: SessionService | None = None):
     """Closure that drains pending injects and emits message_ingested per client entry."""
 
     async def _get_pending() -> list[dict]:
         batch = run.drain_injections()
         if not batch:
             return []
-        await _emit_ingested_for_client_entries(batch, bus, run)
+        await _emit_ingested_for_client_entries(batch, bus, run, session_service)
         return batch
 
     return _get_pending
@@ -610,8 +670,9 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         agent.hooks.on_step_finish = _checkpoint
 
         run.status = RunStatus.RUNNING
+        await _record_run_status(ctx.session_service, run.run_id, RunStatus.RUNNING.value)
 
-        agent.hooks.get_pending_messages = _build_get_pending(bus, run)
+        agent.hooks.get_pending_messages = _build_get_pending(bus, run, ctx.session_service)
 
         async def _on_bg_result(messages: list[dict]) -> None:
             if not run_finished and not run.cancelled:
@@ -624,6 +685,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
         if bg_gen is not None:
             io.emit = None
             await bus.emit(RunBackgroundedEvent(run_id=run.run_id))
+            await _record_run_status(ctx.session_service, run.run_id, "backgrounded", last_seq=bus.next_seq - 1)
             ctx.run_registry.complete_run(run.run_id)
             run.drain_task = asyncio.create_task(_drain_backgrounded(bg_gen, agent, ctx, bg_registry, tracker))
             return
@@ -647,12 +709,26 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
     except asyncio.CancelledError:
         run.cancelled = True
         await _emit_cancelled_terminal()
+        await _record_run_status(
+            ctx.session_service,
+            run.run_id,
+            RunStatus.CANCELLED.value,
+            stop_reason="cancelled",
+            last_seq=bus.next_seq - 1,
+        )
         return
 
     except Exception as e:
         _logger.exception("Chat failed (run_id=%s, session_id=%s)", run.run_id, session_state.session_id)
         await bus.emit(RunErrorEvent(run_id=run.run_id, message=str(e), recoverable=False))
         ctx.run_registry.error_run(run.run_id)
+        await _record_run_status(
+            ctx.session_service,
+            run.run_id,
+            RunStatus.ERROR.value,
+            stop_reason=str(e),
+            last_seq=bus.next_seq - 1,
+        )
 
     finally:
         if not run.backgrounded:
@@ -660,36 +736,42 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
                 run.drain_injections()
                 run.usage = tracker.usage
                 run_finished = True
-                return
-            pending_messages = run.drain_injections()
-            if pending_messages:
-                # Emit ingestion events for any client-stamped entries so the
-                # frontend queue UI clears, then absorb them into history.
-                try:
-                    await _emit_ingested_for_client_entries(pending_messages, bus, run)
-                except Exception:
-                    _logger.exception("Failed to emit message_ingested in finally")
-                run.messages.extend(pending_messages)
-            run.usage = tracker.usage
-            run_finished = True
-            last_tokens = getattr(agent, "_last_response", None)
-            if last_tokens and last_tokens.usage:
-                u = last_tokens.usage
-                input_tokens = u.prompt_tokens + u.cache_read_tokens + u.cache_write_tokens
             else:
-                input_tokens = None
-            metadata = {"last_input_tokens": input_tokens} if input_tokens is not None else None
-            await ctx.session_service.save(session_state, _persistable_messages(run), metadata=metadata)
-            # Disk now holds the canonical end-of-run state; advance the
-            # checkpoint watermark so any cursor below it gets a
-            # stream_reset → history reload on reconnect.
-            bus.mark_checkpoint()
-            event = RunCompleted(
-                run_id=run.run_id,
-                session_id=session_state.session_id,
-                messages=tuple(run.messages),
-                usage=run.usage,
-                result=result,
-            )
-            if ctx.enqueue_run_completed:
-                await ctx.enqueue_run_completed(event)
+                pending_messages = run.drain_injections()
+                if pending_messages:
+                    # Emit ingestion events for any client-stamped entries so the
+                    # frontend queue UI clears, then absorb them into history.
+                    try:
+                        await _emit_ingested_for_client_entries(pending_messages, bus, run, ctx.session_service)
+                    except Exception:
+                        _logger.exception("Failed to emit message_ingested in finally")
+                    run.messages.extend(pending_messages)
+                run.usage = tracker.usage
+                run_finished = True
+                last_tokens = getattr(agent, "_last_response", None)
+                if last_tokens and last_tokens.usage:
+                    u = last_tokens.usage
+                    input_tokens = u.prompt_tokens + u.cache_read_tokens + u.cache_write_tokens
+                else:
+                    input_tokens = None
+                metadata = {"last_input_tokens": input_tokens} if input_tokens is not None else None
+                await ctx.session_service.save(session_state, _persistable_messages(run), metadata=metadata)
+                # Disk now holds the canonical end-of-run state; advance the
+                # checkpoint watermark so any cursor below it gets a
+                # stream_reset → history reload on reconnect.
+                bus.mark_checkpoint()
+                await _record_run_status(
+                    ctx.session_service,
+                    run.run_id,
+                    RunStatus.COMPLETED.value,
+                    last_seq=bus.next_seq - 1,
+                )
+                event = RunCompleted(
+                    run_id=run.run_id,
+                    session_id=session_state.session_id,
+                    messages=tuple(run.messages),
+                    usage=run.usage,
+                    result=result,
+                )
+                if ctx.enqueue_run_completed:
+                    await ctx.enqueue_run_completed(event)

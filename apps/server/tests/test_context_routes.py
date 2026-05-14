@@ -4,7 +4,8 @@ from fastapi.testclient import TestClient
 
 from ntrp.context.models import SessionData, SessionState
 from ntrp.server.app import app
-from ntrp.server.deps import require_session_service
+from ntrp.server.bus import BusRegistry
+from ntrp.server.deps import get_bus_registry, require_session_service
 from ntrp.server.runtime import get_runtime
 from ntrp.server.state import RunRegistry, RunStatus
 from ntrp.tools.executor import ToolExecutor
@@ -30,9 +31,14 @@ class _Runtime:
 
 
 class _SessionService:
+    saved = False
+
     async def load(self, session_id: str | None = None):
         state = SessionState(session_id=session_id or "sess-1", started_at=datetime.now(UTC))
         return SessionData(state=state, messages=[{"role": "user", "content": "hi"}], last_input_tokens=123)
+
+    async def save(self, *args, **kwargs):
+        self.saved = True
 
     async def list_episodes(self, session_id: str, limit: int = 100):
         return [
@@ -72,6 +78,28 @@ def test_context_usage_reports_loaded_deferred_tool_counts():
     assert data["loaded_tool_count"] == 1
     assert data["deferred_tool_count"] >= 1
     assert data["visible_tool_count"] < data["tool_count"]
+
+
+def test_compact_rejects_active_run_to_avoid_overwriting_stream_state():
+    runtime = _Runtime()
+    session_service = _SessionService()
+    runtime.session_service = session_service
+    run = runtime.run_registry.create_run("sess-1")
+    run.status = RunStatus.RUNNING
+    buses = BusRegistry()
+
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    app.dependency_overrides[require_session_service] = lambda: session_service
+    app.dependency_overrides[get_bus_registry] = lambda: buses
+    try:
+        response = TestClient(app).post("/compact", json={"session_id": "sess-1"})
+    finally:
+        app.dependency_overrides.pop(get_runtime, None)
+        app.dependency_overrides.pop(require_session_service, None)
+        app.dependency_overrides.pop(get_bus_registry, None)
+
+    assert response.status_code == 409
+    assert session_service.saved is False
 
 
 def test_session_episodes_route_returns_durable_turn_ranges():

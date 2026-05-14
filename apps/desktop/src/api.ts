@@ -78,7 +78,7 @@ export interface ApiBridgeResponse {
 }
 
 /** AG-UI-shaped event protocol. Every event carries a `timestamp` (Unix ms). */
-type CommonServerEventFields = { timestamp?: number; seq?: number; session_id?: string };
+type CommonServerEventFields = { timestamp?: number; seq?: number; session_id?: string; replay?: boolean };
 
 export type ServerEvent = CommonServerEventFields & (
   // ─── Run lifecycle ──────────────────────────────────────────────────
@@ -107,7 +107,7 @@ export type ServerEvent = CommonServerEventFields & (
 
   // ─── ntrp-specific (non-AG-UI canonical) ───────────────────────────
   | { type: "approval_needed"; tool_id: string; name: string; path?: string | null; diff?: string | null; content_preview?: string | null }
-  | { type: "background_task"; command: string; status: string; detail?: string }
+  | { type: "background_task"; task_id: string; command: string; status: "started" | "completed" | "failed" | "cancelled" | string; detail?: string }
   | { type: "stream_reset"; reason: "replay_gap" | string }
   | { type: "task_started"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; name?: string; summary?: string; depth?: number }
   | { type: "task_progress"; run_id: string; task_id: string; parent_task_id?: string | null; parent_tool_call_id?: string | null; status?: string; summary?: string; depth?: number }
@@ -1258,4 +1258,32 @@ export async function runAutomationApi(config: AppConfig, taskId: string): Promi
 
 export async function deleteAutomationApi(config: AppConfig, taskId: string): Promise<void> {
   await apiWithConfig(config, `/automations/${encodeURIComponent(taskId)}`, { method: "DELETE" });
+}
+
+export interface BackgroundTaskSummary {
+  task_id: string;
+  command: string;
+}
+
+export async function listBackgroundTasksApi(
+  config: AppConfig,
+  sessionId: string,
+): Promise<BackgroundTaskSummary[]> {
+  const r = await apiWithConfig<{ tasks: BackgroundTaskSummary[] }>(
+    config,
+    `/chat/background-tasks?session_id=${encodeURIComponent(sessionId)}`,
+  );
+  return r.tasks;
+}
+
+export async function cancelBackgroundTaskApi(
+  config: AppConfig,
+  sessionId: string,
+  taskId: string,
+): Promise<void> {
+  await apiWithConfig(
+    config,
+    `/chat/background-tasks/${encodeURIComponent(taskId)}/cancel?session_id=${encodeURIComponent(sessionId)}`,
+    { method: "POST" },
+  );
 }

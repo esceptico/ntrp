@@ -86,6 +86,39 @@ test("anchors a new activity group before an empty assistant placeholder", () =>
   expect(state.messages.get(state.order[1])?.role).toBe("assistant");
 });
 
+test("reconstructs empty assistant anchor after reconnect", () => {
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-1",
+    session_id: "session-1",
+    timestamp: 1,
+  });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_START",
+    message_id: "assistant-1",
+    timestamp: 2,
+  });
+
+  resetStreamStateForTest();
+
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-1",
+    tool_call_name: "ReadFile",
+    timestamp: 3,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-1",
+    timestamp: 4,
+  });
+
+  const state = getState();
+  expect(state.order).toHaveLength(2);
+  expect(state.messages.get(state.order[0])?.role).toBe("activity");
+  expect(state.messages.get(state.order[1])?.role).toBe("assistant");
+});
+
 test("does not mutate a finalized activity group after a tool burst", async () => {
   handleServerEvent({
     type: "RUN_STARTED",
