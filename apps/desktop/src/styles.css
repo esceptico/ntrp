@@ -689,19 +689,25 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   backdrop-filter: blur(14px) saturate(160%);
   -webkit-backdrop-filter: blur(14px) saturate(160%);
   border-color: transparent;
+  /* Stacked-glass shadow stack (dark mode):
+       1. Drop shadow — deeper than --shadow-sm so the halo reads on
+          dark bg. Makes each pane visibly float above what's below.
+       2. Base inset ring — symmetric edge definition.
+       3. Top-edge specular — brighter highlight catching "light"
+          from above; the strongest "this is a glass pane" cue. */
   box-shadow:
-    var(--shadow-sm),
+    0 6px 18px -4px rgba(0, 0, 0, 0.45),
     inset 0 0 0 1px color-mix(in oklab, white 3%, transparent),
-    inset 0 1px 0 0 color-mix(in oklab, white 6%, transparent);
+    inset 0 1px 0 0 color-mix(in oklab, white 10%, transparent);
 }
 
 /* Composer-specific: lit-edge brightens on focus. Higher specificity
    than `.glass-pane` so the focus state overrides. */
 :root.dark .composer-card.glass-pane:focus-within {
   box-shadow:
-    var(--shadow-sm),
+    0 6px 18px -4px rgba(0, 0, 0, 0.45),
     inset 0 0 0 1px color-mix(in oklab, white 5%, transparent),
-    inset 0 1px 0 0 color-mix(in oklab, white 10%, transparent);
+    inset 0 1px 0 0 color-mix(in oklab, white 16%, transparent);
 }
 
 /* ─── Glass pane (thick) — focused-attention popovers ────────
@@ -734,10 +740,14 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   backdrop-filter: blur(28px) saturate(180%);
   -webkit-backdrop-filter: blur(28px) saturate(180%);
   border-color: transparent;
+  /* Stacked-glass shadow stack — thick tier sits higher than thin
+     (larger blur radius, deeper alpha) so popovers + modals visibly
+     hover above ambient chrome. Brighter top specular than thin
+     reinforces the tier hierarchy. */
   box-shadow:
-    var(--shadow-md),
+    0 14px 40px -8px rgba(0, 0, 0, 0.55),
     inset 0 0 0 1px color-mix(in oklab, white 4%, transparent),
-    inset 0 1px 0 0 color-mix(in oklab, white 8%, transparent);
+    inset 0 1px 0 0 color-mix(in oklab, white 14%, transparent);
 }
 
 /* ─── Composer "thinking" indicators ────────────────────────
