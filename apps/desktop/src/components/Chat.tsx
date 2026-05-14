@@ -113,7 +113,7 @@ export function Chat() {
     <main
       data-sidebar-hidden={sidebarHidden ? "true" : "false"}
       data-has-approval={hasApproval ? "true" : "false"}
-      className="absolute top-0 right-[var(--right-sidebar-w,0px)] bottom-0 left-[var(--sidebar-width,272px)] data-[sidebar-hidden=true]:left-0 transition-[left,right] duration-route ease-emphasized bg-bg overflow-hidden"
+      className="absolute top-0 right-0 bottom-0 left-[var(--sidebar-width,272px)] data-[sidebar-hidden=true]:left-0 transition-[left] duration-route ease-emphasized bg-bg overflow-hidden"
     >
       <div className="relative w-full h-full">
         <Messages key={sessionId ?? "none"} />

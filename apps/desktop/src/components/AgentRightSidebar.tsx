@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { PanelRightClose, PanelRightOpen, X } from "lucide-react";
 import clsx from "clsx";
@@ -257,28 +257,6 @@ export function AgentRightSidebar() {
 
   const totalCount = agents.length + runningAutomations.length;
 
-  // Reserve space on the right edge for the expanded panel so the chat
-  // doesn't extend behind it. Mirror of the left sidebar's column.
-  // - Hidden (no rows): 0 → chat fills to the right edge
-  // - Collapsed (small pill): 0 → pill floats over chat corner, fine
-  // - Expanded: var(--sidebar-width) → chat shrinks to leave room
-  // Written to `--right-sidebar-w` on :root and consumed by `Chat.tsx`
-  // via `right-[var(--right-sidebar-w,0px)]`.
-  useLayoutEffect(() => {
-    const root = document.documentElement;
-    if (!collapsed) {
-      root.style.setProperty(
-        "--right-sidebar-w",
-        "var(--sidebar-width, 272px)",
-      );
-    } else {
-      root.style.setProperty("--right-sidebar-w", "0px");
-    }
-    return () => {
-      root.style.removeProperty("--right-sidebar-w");
-    };
-  }, [collapsed]);
-
   // Width of the panel including its 16px margin (right-2 + width
    // calc), so animating `x: panelTranslateWidth` slides it fully off
    // screen. Mirror of App.tsx's `x: ±sidebarWidth` for the left.
@@ -315,7 +293,7 @@ export function AgentRightSidebar() {
         initial={false}
         animate={{ x: collapsed ? panelTranslateWidth : 0 }}
         transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
-        className="absolute top-2 right-2 z-30 flex w-[calc(var(--sidebar-width,272px)-16px)] max-h-[calc(100vh-var(--chat-bottom-h,96px)-24px)] flex-col overflow-hidden rounded-xl border border-line bg-bg-main shadow-sm will-change-transform"
+        className="right-sidebar-glass absolute top-2 right-2 z-30 flex w-[calc(var(--sidebar-width,272px)-16px)] max-h-[calc(100vh-var(--chat-bottom-h,96px)-24px)] flex-col overflow-hidden rounded-xl will-change-transform"
       >
         {/* Drag region height tuned so the "Active" label's vertical
             center sits at viewport y=25 — same eye-line as the toggle

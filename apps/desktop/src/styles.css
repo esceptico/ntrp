@@ -315,7 +315,12 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    foreground obscures cleanly". */
 .scroll-messages {
   padding-top: 100px;
-  padding-bottom: calc(var(--chat-bottom-h, 96px) + 1rem);
+  /* Padding must clear the composer (`--chat-bottom-h`) AND the
+     bg-color fade above it (24px overshoot) AND leave a visible
+     breathing gap, so the last message reads crisply at max scroll
+     instead of dissolving into the fade as the user reaches the
+     bottom. composer-height + 40px = 24px fade + 16px gap. */
+  padding-bottom: calc(var(--chat-bottom-h, 96px) + 2.5rem);
 }
 
 /* Soft fade-to-bg sitting between Messages and the composer overlay.
@@ -632,25 +637,58 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
     linear-gradient(
       to bottom,
-      color-mix(in oklab, white 10%, transparent),
-      color-mix(in oklab, white 4%, transparent)
+      color-mix(in oklab, white 6%, transparent),
+      color-mix(in oklab, white 2%, transparent)
     );
   background-size: 240px 240px, auto;
   background-repeat: repeat, no-repeat;
-  backdrop-filter: blur(20px) saturate(200%);
-  -webkit-backdrop-filter: blur(20px) saturate(200%);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
   border-color: transparent;
   box-shadow:
-    var(--shadow-md),
-    inset 0 0 0 1px color-mix(in oklab, white 4%, transparent),
-    inset 0 1px 0 0 color-mix(in oklab, white 9%, transparent);
+    var(--shadow-sm),
+    inset 0 0 0 1px color-mix(in oklab, white 3%, transparent),
+    inset 0 1px 0 0 color-mix(in oklab, white 6%, transparent);
 }
 :root.dark .composer-card:focus-within {
   border-color: transparent;
   box-shadow:
-    var(--shadow-md),
-    inset 0 0 0 1px color-mix(in oklab, white 7%, transparent),
-    inset 0 1px 0 0 color-mix(in oklab, white 14%, transparent);
+    var(--shadow-sm),
+    inset 0 0 0 1px color-mix(in oklab, white 5%, transparent),
+    inset 0 1px 0 0 color-mix(in oklab, white 10%, transparent);
+}
+
+/* Right-sidebar (Active panel) glass — Phase 4, first overlay target.
+   Same recipe as the composer; the panel now floats *over* the chat
+   instead of reserving horizontal space, so messages keep their full
+   width and the composer's center axis stays fixed. Content beneath
+   reads as blurred-not-hidden, which fits the "agent's workspace
+   hovering over yours" framing. */
+.right-sidebar-glass {
+  /* Light recipe — placeholder solid surface until Phase 3 tunes a
+     real light spec. */
+  background-color: var(--color-bg-main);
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 1px var(--color-line);
+}
+:root.dark .right-sidebar-glass {
+  background-color: transparent;
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, white 6%, transparent),
+      color-mix(in oklab, white 2%, transparent)
+    );
+  background-size: 240px 240px, auto;
+  background-repeat: repeat, no-repeat;
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 1px color-mix(in oklab, white 3%, transparent),
+    inset 0 1px 0 0 color-mix(in oklab, white 6%, transparent);
 }
 
 /* ─── Composer "thinking" indicators ────────────────────────
