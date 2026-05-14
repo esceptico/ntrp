@@ -49,14 +49,14 @@ export function StatusDot({
       {pulse && status === "running" && (
         <span
           className={clsx(
-            "absolute inset-0 rounded-[1px] opacity-60 animate-ping",
+            "absolute inset-0 rounded-full opacity-60 animate-ping",
             statusDotClass(status),
           )}
         />
       )}
       <span
         className={clsx(
-          "relative inline-block w-1.5 h-1.5 rounded-[1px]",
+          "relative inline-block w-1.5 h-1.5 rounded-full",
           statusDotClass(status),
         )}
       />
