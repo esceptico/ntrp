@@ -260,58 +260,13 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 /* ─── Drag regions ─────────────────────────────────────────── */
 .sidebar {
   -webkit-app-region: drag;
-  position: relative;
-  /* Surface texture — grain + faint top-down thickness tint, layered
-     over the sidebar's solid bg. Carries the same material vocabulary
-     as the glass panes (grain, lit-top fall-off) without making the
-     sidebar transparent — it's a window-edge column, not a floating
-     card, so no backdrop-filter. */
-  background-image:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
-    linear-gradient(
-      to bottom,
-      color-mix(in oklab, var(--color-ink) 2%, transparent),
-      transparent
-    );
-  background-size: 240px 240px, auto;
-  background-repeat: repeat, no-repeat;
-}
-/* Right-edge rim — a vertical specular gradient: brightest at the top
-   then quickly settling to the base-ring value. Same physics as the
-   glass top-specular (light catches the upper edge first) but oriented
-   along the sidebar's only visible seam. Pseudo-element instead of
-   border so we can apply a gradient along the edge. */
-.sidebar::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 1px;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    color-mix(in oklab, var(--color-ink) 18%, transparent),
-    color-mix(in oklab, var(--color-ink) 8%, transparent) 30%,
-    color-mix(in oklab, var(--color-ink) 8%, transparent)
-  );
+  /* Right-edge seam — same rim language as .glass-pane's base ring
+     so the sidebar reads as part of the chrome family. Dark mode
+     uses a white-translucent line; light mode uses ink-translucent. */
+  border-right: 1px solid color-mix(in oklab, var(--color-ink) 10%, transparent);
 }
 :root.dark .sidebar {
-  background-image:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
-    linear-gradient(
-      to bottom,
-      color-mix(in oklab, white 2%, transparent),
-      transparent
-    );
-}
-:root.dark .sidebar::after {
-  background: linear-gradient(
-    to bottom,
-    color-mix(in oklab, white 12%, transparent),
-    color-mix(in oklab, white 4%, transparent) 30%,
-    color-mix(in oklab, white 4%, transparent)
-  );
+  border-right-color: color-mix(in oklab, white 5%, transparent);
 }
 .sidebar > *:not(.drag-spacer) { -webkit-app-region: no-drag; }
 
