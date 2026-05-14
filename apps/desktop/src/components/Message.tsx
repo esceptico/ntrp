@@ -241,7 +241,7 @@ const UserMessage = memo(function UserMessage({ id }: { id: string }) {
         </div>
       )}
       {showBubble && (
-        <div className="max-w-[75%] px-3.5 py-2 rounded-[18px] bg-surface-sunken text-ink text-base leading-[1.45] whitespace-pre-wrap break-words text-left">
+        <div className="glass-pane max-w-[75%] px-3.5 py-2 rounded-[18px] text-ink text-base leading-[1.45] whitespace-pre-wrap break-words text-left">
           {visibleText}
         </div>
       )}
