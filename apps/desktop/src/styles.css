@@ -260,10 +260,16 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 /* ─── Drag regions ─────────────────────────────────────────── */
 .sidebar {
   -webkit-app-region: drag;
-  /* Hairline seam between the sidebar and chat. Both surfaces are the
-     same white in light mode (Claude Code / ChatGPT pattern), so a
-     visible divider is what carries the layout split. */
-  border-right: 1px solid var(--color-line-soft);
+  /* Right-edge seam — same rim language as .glass-pane's base ring
+     so the sidebar reads as part of the chrome family. Dark mode
+     uses a white-translucent line (matches the glass white-3% ring
+     at a slightly brighter 5% since the seam sits between two
+     same-color surfaces without blur to define it). Light mode
+     uses ink-translucent (matches the glass light-mode ring). */
+  border-right: 1px solid color-mix(in oklab, var(--color-ink) 10%, transparent);
+}
+:root.dark .sidebar {
+  border-right-color: color-mix(in oklab, white 5%, transparent);
 }
 .sidebar > *:not(.drag-spacer) { -webkit-app-region: no-drag; }
 
