@@ -84,7 +84,7 @@ export function PageModal({
           onClick={onClose}
         >
           <motion.div
-            className={`${size} grid ${grid} ${rounded} bg-surface shadow-[var(--shadow-pop)] overflow-hidden border border-line-soft`}
+            className={`glass-pane-thick ${size} grid ${grid} ${rounded} overflow-hidden`}
             initial={
               originDelta
                 ? { opacity: 0, scale: 0.94, x: originDelta.x, y: originDelta.y }
