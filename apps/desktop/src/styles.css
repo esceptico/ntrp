@@ -596,25 +596,24 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 :root.dark .auto-editor textarea:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); }
 
-/* Composer is a glass card floating over the message scroll area —
-   per Rauno's Depth essay "Shoot through a surface". Semi-transparent
-   surface fill + backdrop-filter blur let the last messages tint
-   through as they scroll under the bottom of the column. No surrounding
-   glass strip / chrome — the card itself is the only glass surface. */
-.composer-card {
-  background-color: color-mix(in oklab, var(--color-surface) 25%, transparent);
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-  box-shadow: var(--shadow-md);
-}
+/* The composer is a glass card floating over the message scroll area —
+   per Rauno's Depth essay "Shoot through a surface". Surface treatment
+   lives on `.glass-pane` (shared with the right sidebar, command
+   picker, etc.); `.composer-card` is the structural hook used by
+   the data-thinking variants below. */
 
-/* ─── Dark frosted-glass material ────────────────────────────
+/* ─── Glass pane — shared material ──────────────────────────
+   The canonical glass surface used by the composer, the Active
+   right sidebar, the CommandPicker, and any other "agent chrome"
+   overlay. Single source of truth for the recipe so tuning the
+   material updates every surface together.
+
    Phase 1 of the glass-as-physical-material direction. Four
    ingredients per the conception:
-     1. blur 20px + saturate 200% — saturation pump compensates
-        for dark-bg color loss; 20px is the macOS Sonoma dark
-        vibrancy default.
-     2. Thickness gradient — vertical tint fall-off (10% → 4%)
+     1. blur 14px + saturate 160% — thin pane: less diffusion so
+        content reads clearer; saturation pump compensates for
+        dark-bg color loss without over-pumping.
+     2. Thickness gradient — vertical tint fall-off (6% → 2%)
         simulates light traveling through material; the top
         catches more light than the bottom.
      3. Asymmetric inner ring — `inset 0 1px 0` brighter top edge
@@ -623,15 +622,24 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
         like a filter" lever.
      4. SVG turbulence grain — baked into background-image as a
         data URI. Gives the surface permanent texture so it
-        doesn't vanish over empty dark space (the failure mode
-        that bit the liquid-glass attempt). ~0.3KB, scales,
+        doesn't vanish over empty dark space. ~0.3KB, scales,
         zero extra requests. baseFrequency 0.9 = fine grain,
         alpha 0.04 = subliminal.
    Border is suppressed because the inner ring IS the edge —
-   doubling them creates a chunky outline.
-   The thinking-rim ::before still renders on top; this is
-   purely a bg/border/shadow swap. */
-:root.dark .composer-card {
+   doubling them creates a chunky outline. Consumers that have
+   `border border-line` from Tailwind utilities will see it
+   suppressed in dark mode via `border-color: transparent` here. */
+.glass-pane {
+  /* Light recipe — placeholder until Phase 3 tunes a real light
+     spec. Solid-ish surface, hairline ring. */
+  background-color: color-mix(in oklab, var(--color-surface) 25%, transparent);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 1px var(--color-line);
+}
+:root.dark .glass-pane {
   background-color: transparent;
   background-image:
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
@@ -650,45 +658,50 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     inset 0 0 0 1px color-mix(in oklab, white 3%, transparent),
     inset 0 1px 0 0 color-mix(in oklab, white 6%, transparent);
 }
-:root.dark .composer-card:focus-within {
-  border-color: transparent;
+
+/* Composer-specific: lit-edge brightens on focus. Higher specificity
+   than `.glass-pane` so the focus state overrides. */
+:root.dark .composer-card.glass-pane:focus-within {
   box-shadow:
     var(--shadow-sm),
     inset 0 0 0 1px color-mix(in oklab, white 5%, transparent),
     inset 0 1px 0 0 color-mix(in oklab, white 10%, transparent);
 }
 
-/* Right-sidebar (Active panel) glass — Phase 4, first overlay target.
-   Same recipe as the composer; the panel now floats *over* the chat
-   instead of reserving horizontal space, so messages keep their full
-   width and the composer's center axis stays fixed. Content beneath
-   reads as blurred-not-hidden, which fits the "agent's workspace
-   hovering over yours" framing. */
-.right-sidebar-glass {
-  /* Light recipe — placeholder solid surface until Phase 3 tunes a
-     real light spec. */
-  background-color: var(--color-bg-main);
+/* ─── Glass pane (thick) — focused-attention popovers ────────
+   Same material family as `.glass-pane` but tuned for surfaces
+   that demand the user's attention (command pickers, modals,
+   detail dialogs) where show-through hurts legibility. Heavier
+   tint and stronger blur so what's behind reads as "context,
+   diffused" not "content, faintly readable". Lifted elevation
+   (shadow-md vs shadow-sm) reinforces the popover hierarchy.
+   This is Apple's "Thick" / "Regular" material vs `.glass-pane`'s
+   "Thin" — same surface, different role. */
+.glass-pane-thick {
+  /* Light: keep fully solid for picker legibility. */
+  background-color: var(--color-surface);
   box-shadow:
-    var(--shadow-sm),
+    var(--shadow-md),
     inset 0 0 0 1px var(--color-line);
 }
-:root.dark .right-sidebar-glass {
+:root.dark .glass-pane-thick {
   background-color: transparent;
   background-image:
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
     linear-gradient(
       to bottom,
-      color-mix(in oklab, white 6%, transparent),
-      color-mix(in oklab, white 2%, transparent)
+      color-mix(in oklab, var(--color-bg) 70%, transparent),
+      color-mix(in oklab, var(--color-bg) 60%, transparent)
     );
   background-size: 240px 240px, auto;
   background-repeat: repeat, no-repeat;
-  backdrop-filter: blur(14px) saturate(160%);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border-color: transparent;
   box-shadow:
-    var(--shadow-sm),
-    inset 0 0 0 1px color-mix(in oklab, white 3%, transparent),
-    inset 0 1px 0 0 color-mix(in oklab, white 6%, transparent);
+    var(--shadow-md),
+    inset 0 0 0 1px color-mix(in oklab, white 4%, transparent),
+    inset 0 1px 0 0 color-mix(in oklab, white 8%, transparent);
 }
 
 /* ─── Composer "thinking" indicators ────────────────────────

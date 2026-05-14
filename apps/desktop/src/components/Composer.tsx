@@ -456,6 +456,17 @@ export function Composer() {
       <div className="max-w-[760px] mx-auto">
         <QueueCard />
       </div>
+      {/* Wrapper exists so the CommandPicker can sit as a sibling of
+          the form rather than a child. The form has backdrop-filter
+          (`.glass-pane`), which establishes a backdrop-sampling
+          containing block — child backdrop-filters would sample the
+          already-filtered form bg instead of the chat content beneath,
+          producing a flat/invisible blur. Lifting the picker out lets
+          its own glass material sample from the page directly. */}
+      <div className="relative max-w-[760px] mx-auto">
+        {pickerOpen && query !== null && (
+          <CommandPicker query={query} onSelect={applyPickerSelection} />
+        )}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -465,11 +476,8 @@ export function Composer() {
         data-thinking={showThinking ? "true" : undefined}
         data-thinking-style={thinkingStyle}
         data-thinking-intensity={thinkingIntensity}
-        className="composer-card relative max-w-[760px] mx-auto flex flex-col border border-line rounded-[14px] focus-within:border-line-strong transition-colors"
+        className="composer-card glass-pane relative flex flex-col border border-line rounded-[14px] focus-within:border-line-strong transition-colors"
       >
-        {pickerOpen && query !== null && (
-          <CommandPicker query={query} onSelect={applyPickerSelection} />
-        )}
         {selectedSkill && (
           <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">
             <button
@@ -675,6 +683,7 @@ export function Composer() {
           )}
         </div>
       </form>
+      </div>
     </div>
   );
 }
