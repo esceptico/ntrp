@@ -102,7 +102,7 @@ export function ModelReasoningPicker({
       {open && (
         <div
           className={clsx(
-            "absolute z-30 w-[300px] rounded-[12px] border border-line-soft bg-surface shadow-[var(--shadow-pop)] overflow-hidden",
+            "glass-pane-static absolute z-30 w-[300px] rounded-[12px] overflow-hidden",
             placement === "above-right"
               ? "bottom-[calc(100%+6px)] right-0"
               : "top-[calc(100%+6px)] left-0",

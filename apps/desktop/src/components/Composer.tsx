@@ -158,7 +158,7 @@ function LoopStatusBar() {
           <>Loops · {loops.length} · next <RollingDigits value={countdown} /></>
         )}
       </button>
-      <div className="pointer-events-none absolute bottom-full left-0 mb-2 w-[360px] rounded-[14px] border border-line bg-surface p-3 opacity-0 shadow-[var(--shadow-pop)] transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+      <div className="glass-pane-static pointer-events-none absolute bottom-full left-0 mb-2 w-[360px] rounded-[14px] p-3 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
         <div className="mb-2 px-1 text-xs font-medium text-muted">Active loops</div>
         <div className="space-y-1">
           {loops.map((loop) => {

@@ -137,8 +137,8 @@ function Section({
 }) {
   return (
     <>
-      {withTopDivider && <div className="h-px bg-line-soft" />}
-      <div className="py-1.5">
+      {withTopDivider && <div className="h-px bg-line-soft mx-1.5" />}
+      <div className="py-1.5 px-1.5">
         <div className="px-3 pb-1 pt-0.5 text-2xs font-medium uppercase tracking-[0.08em] text-faint select-none">
           {title}
         </div>
@@ -157,7 +157,7 @@ function Section({
               }}
               onMouseEnter={() => setIndex(idx)}
               data-active={active ? "true" : undefined}
-              className="app-row group/cmd w-full flex items-center gap-2.5 pl-3 pr-3 py-1.5 text-ink-soft text-left"
+              className="app-row group/cmd w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-ink-soft text-left"
             >
               <span
                 className={clsx(

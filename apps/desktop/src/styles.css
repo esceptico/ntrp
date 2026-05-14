@@ -746,6 +746,39 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     inset 0 1px 0 0 color-mix(in oklab, white 14%, transparent);
 }
 
+/* ─── Glass pane (static) — for popovers stuck inside another
+   glass surface ───────────────────────────────────────────────
+   Same visual recipe as `.glass-pane-thick` (grain, edge ring,
+   top specular, drop shadow) but with a SOLID background instead
+   of `backdrop-filter`. Used for popovers whose DOM parent has
+   its own backdrop-filter — the model-picker dropdown and the
+   loop hover tooltip both live inside the `.composer-card`
+   form, and Chromium's containing-block rule would neutralize
+   their own `backdrop-filter`. Solid bg sidesteps that entirely;
+   visually indistinguishable when the content behind is mostly
+   uniform (which it is — composer + chat behind).
+
+   See `feedback_backdrop_filter_containing_block.md` in memory. */
+.glass-pane-static {
+  background-color: var(--color-surface);
+  border-color: transparent;
+  box-shadow:
+    var(--shadow-md),
+    inset 0 0 0 1px var(--color-line);
+}
+:root.dark .glass-pane-static {
+  background-color: var(--color-bg-main);
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-size: 240px 240px;
+  background-repeat: repeat;
+  border-color: transparent;
+  box-shadow:
+    0 10px 30px -8px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px color-mix(in oklab, white 4%, transparent),
+    inset 0 1px 0 0 color-mix(in oklab, white 14%, transparent);
+}
+
 /* ─── Composer "thinking" indicators ────────────────────────
    Active while the agent is running but has not yet streamed
    its first token. Variants are picked via [data-thinking-style]
