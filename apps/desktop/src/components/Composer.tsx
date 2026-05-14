@@ -403,6 +403,17 @@ export function Composer() {
     setSendPressing(true);
     window.setTimeout(() => setSendPressing(false), 140);
   }, []);
+  // Composer-level send acknowledgement — the inner ring pulses
+  // brighter for a single beat (280ms) on submit. Uses the existing
+  // glass edge specular as its vocabulary, so the material itself
+  // responds to the action rather than a new animation layer being
+  // grafted on top. Composes alongside the thinking-rim ::before
+  // since this lives on a separate ::after pseudo-element in CSS.
+  const [justSent, setJustSent] = useState(false);
+  const flashJustSent = useCallback(() => {
+    setJustSent(true);
+    window.setTimeout(() => setJustSent(false), 280);
+  }, []);
 
   useEffect(() => {
     if (inputRef.current) resize(inputRef.current);
@@ -524,11 +535,13 @@ export function Composer() {
         onSubmit={(e) => {
           e.preventDefault();
           flashSendPress();
+          flashJustSent();
           submit();
         }}
         data-thinking={showThinking ? "true" : undefined}
         data-thinking-style={thinkingStyle}
         data-thinking-intensity={thinkingIntensity}
+        data-just-sent={justSent ? "true" : undefined}
         className="composer-card glass-pane relative flex flex-col border border-line rounded-[14px] focus-within:border-line-strong transition-colors"
       >
         {selectedSkill && (
