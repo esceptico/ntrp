@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
@@ -62,7 +63,55 @@ export function ModelReasoningPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const wrapRef = useRef<HTMLDivElement>(null);
-  useOutsideClick(wrapRef, open, () => setOpen(false));
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  // Anchor the portaled popover off the trigger's bounding rect.
+  // `above-right` floats the popover above the chip with its right edge
+  // aligned to the chip's right edge (default for the composer
+  // toolbar). `below-left` is a future-proofing escape hatch.
+  const [coords, setCoords] = useState<{
+    bottom?: number;
+    top?: number;
+    left?: number;
+    right?: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const update = () => {
+      const r = triggerRef.current!.getBoundingClientRect();
+      if (placement === "above-right") {
+        setCoords({
+          bottom: window.innerHeight - r.top + 6,
+          right: window.innerWidth - r.right,
+        });
+      } else {
+        setCoords({ top: r.bottom + 6, left: r.left });
+      }
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open, placement]);
+
+  // Outside-click closes the picker. The portaled popover lives outside
+  // `wrapRef` so we have to check both the trigger and the popover refs;
+  // clicks anywhere else dismiss.
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
 
   const filteredGroups = useMemo(() => {
     if (!query.trim()) return groups;
@@ -75,6 +124,7 @@ export function ModelReasoningPicker({
   return (
     <div ref={wrapRef} className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={disabled}
@@ -99,14 +149,11 @@ export function ModelReasoningPicker({
         <ChevronDown size={ICON.SM} strokeWidth={2} className="shrink-0 opacity-70" />
       </button>
 
-      {open && (
+      {open && coords && createPortal(
         <div
-          className={clsx(
-            "glass-pane-static absolute z-30 w-[300px] rounded-[12px] overflow-hidden",
-            placement === "above-right"
-              ? "bottom-[calc(100%+6px)] right-0"
-              : "top-[calc(100%+6px)] left-0",
-          )}
+          ref={popoverRef}
+          style={{ position: "fixed", ...coords, zIndex: 60 }}
+          className="glass-pane-thick w-[300px] rounded-[12px] overflow-hidden"
         >
           {efforts.length > 0 && (
             <div className="grid gap-1 px-3 pt-2.5 pb-2 border-b border-line-soft">
@@ -180,7 +227,8 @@ export function ModelReasoningPicker({
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUp, ImagePlus, Repeat2, ShieldOff, ShieldCheck, Sparkles, Square, X } from "lucide-react";
 import clsx from "clsx";
@@ -138,6 +138,45 @@ function LoopStatusBar() {
     };
   }, [sessionId]);
 
+  // Hover popover is portaled to document.body so it can use a real
+  // `backdrop-filter` — otherwise the composer form's own glass
+  // backdrop-filter would neutralize the child's blur (see
+  // `feedback_backdrop_filter_containing_block.md`). Open state is
+  // hover-bridged: button hover shows; popover hover keeps it open;
+  // either leaving hides after a brief delay so the user can move the
+  // cursor across the gap.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ bottom: number; left: number } | null>(null);
+  const hideTimerRef = useRef<number | null>(null);
+  const show = useCallback(() => {
+    if (hideTimerRef.current) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+    setOpen(true);
+  }, []);
+  const scheduleHide = useCallback(() => {
+    if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = window.setTimeout(() => setOpen(false), 80);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const update = () => {
+      const r = triggerRef.current!.getBoundingClientRect();
+      setCoords({ bottom: window.innerHeight - r.top + 8, left: r.left });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
+
   if (loops.length === 0) return null;
 
   const next = loops[0];
@@ -145,9 +184,14 @@ function LoopStatusBar() {
   const countdown = formatLoopCountdown(nextRunMs, now);
 
   return (
-    <div className="group relative flex items-center">
+    <div className="relative flex items-center">
       <button
+        ref={triggerRef}
         type="button"
+        onMouseEnter={show}
+        onMouseLeave={scheduleHide}
+        onFocus={show}
+        onBlur={scheduleHide}
         className="inline-flex h-7 items-center gap-1.5 rounded-full px-2 text-xs font-medium text-muted hover:bg-surface-soft hover:text-ink transition-colors"
         aria-label="Active loops"
       >
@@ -158,43 +202,52 @@ function LoopStatusBar() {
           <>Loops · {loops.length} · next <RollingDigits value={countdown} /></>
         )}
       </button>
-      <div className="glass-pane-static pointer-events-none absolute bottom-full left-0 mb-2 w-[360px] rounded-[14px] p-3 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-        <div className="mb-2 px-1 text-xs font-medium text-muted">Active loops</div>
-        <div className="space-y-1">
-          {loops.map((loop) => {
-            const runAt = loop.next_run_at ? Date.parse(loop.next_run_at) : Number.POSITIVE_INFINITY;
-            return (
-              <div key={loop.task_id} className="flex items-start gap-2 rounded-lg px-1.5 py-1.5">
-                <button
-                  type="button"
-                  onClick={() => void stopLoop(loop.task_id)}
-                  title="Stop loop"
-                  aria-label="Stop loop"
-                  className="mt-[2px] grid h-5 w-5 shrink-0 place-items-center rounded-md text-faint hover:bg-surface-soft hover:text-ink transition-colors"
-                >
-                  <X size={ICON.SM} strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOpenLoop(loop)}
-                  className="min-w-0 text-left -my-1.5 -mr-1.5 py-1.5 pr-1.5 rounded-md hover:bg-surface-soft transition-colors"
-                  title="Show full prompt"
-                >
-                  <div className="truncate text-sm text-ink-soft">{loop.prompt}</div>
-                  <div className="mt-0.5 text-xs text-faint">
-                    Every {loop.every} · next in <RollingDigits value={formatLoopCountdown(runAt, now)} />
-                    {loop.max_iterations
-                      ? ` · ${loop.iteration_count}/${loop.max_iterations}`
-                      : loop.iteration_count > 0
-                        ? ` · iter ${loop.iteration_count}`
-                        : ""}
-                  </div>
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      {open && coords && createPortal(
+        <div
+          ref={popoverRef}
+          onMouseEnter={show}
+          onMouseLeave={scheduleHide}
+          style={{ position: "fixed", bottom: coords.bottom, left: coords.left, zIndex: 60 }}
+          className="glass-pane-thick w-[360px] rounded-[14px] p-3"
+        >
+          <div className="mb-2 px-1 text-xs font-medium text-muted">Active loops</div>
+          <div className="space-y-1">
+            {loops.map((loop) => {
+              const runAt = loop.next_run_at ? Date.parse(loop.next_run_at) : Number.POSITIVE_INFINITY;
+              return (
+                <div key={loop.task_id} className="flex items-start gap-2 rounded-lg px-1.5 py-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void stopLoop(loop.task_id)}
+                    title="Stop loop"
+                    aria-label="Stop loop"
+                    className="mt-[2px] grid h-5 w-5 shrink-0 place-items-center rounded-md text-faint hover:bg-surface-soft hover:text-ink transition-colors"
+                  >
+                    <X size={ICON.SM} strokeWidth={2} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOpenLoop(loop)}
+                    className="min-w-0 text-left -my-1.5 -mr-1.5 py-1.5 pr-1.5 rounded-md hover:bg-surface-soft transition-colors"
+                    title="Show full prompt"
+                  >
+                    <div className="truncate text-sm text-ink-soft">{loop.prompt}</div>
+                    <div className="mt-0.5 text-xs text-faint">
+                      Every {loop.every} · next in <RollingDigits value={formatLoopCountdown(runAt, now)} />
+                      {loop.max_iterations
+                        ? ` · ${loop.iteration_count}/${loop.max_iterations}`
+                        : loop.iteration_count > 0
+                          ? ` · iter ${loop.iteration_count}`
+                          : ""}
+                    </div>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
       <LoopDetailModal loop={openLoop} onClose={() => setOpenLoopId(null)} />
     </div>
   );
