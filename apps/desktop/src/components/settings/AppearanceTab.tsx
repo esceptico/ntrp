@@ -428,10 +428,8 @@ function PaletteRow({
     <button
       type="button"
       onClick={onClick}
-      className={clsx(
-        "w-full flex items-center gap-2.5 px-2.5 py-1.5 text-left transition-colors",
-        active ? "bg-surface-soft" : "hover:bg-surface-soft/60",
-      )}
+      data-active={active ? "true" : undefined}
+      className="app-row w-full flex items-center gap-2.5 px-2.5 py-1.5 text-ink-soft text-left"
     >
       <PaletteIcon swatch={swatch} />
       <span className="text-sm text-ink flex-1">{palette.label}</span>

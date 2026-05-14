@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Boxes, Brain, Cable, Database, KeyRound, Palette, Plug, Sparkles, X, type LucideIcon } from "lucide-react";
-import clsx from "clsx";
 import { useStore } from "../store";
 import { saveAndReconnect, fetchServerConfig } from "../actions";
 import { ConnectionTab } from "./settings/ConnectionTab";
@@ -83,12 +82,8 @@ export function SettingsModal() {
                   key={tab.id}
                   type="button"
                   onClick={() => setActive(tab.id)}
-                  className={clsx(
-                    "flex items-center gap-2 px-2.5 py-1.5 rounded-md text-base font-medium tracking-[-0.005em] text-left transition-colors",
-                    isActive
-                      ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
-                      : "text-ink-soft hover:bg-surface/60",
-                  )}
+                  data-active={isActive ? "true" : undefined}
+                  className="app-row flex items-center gap-2 px-2.5 py-1.5 rounded-md text-base font-medium tracking-[-0.005em] text-ink-soft text-left"
                 >
                   <Icon size={ICON.SM} strokeWidth={2} className="shrink-0" />
                   {tab.label}
