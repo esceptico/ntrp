@@ -1011,7 +1011,7 @@ main[data-has-approval="false"] .scroll-messages {
     --color-surface-sunken: #343331;
     --color-code-bg: #282726;
 
-    --color-line: #343331;
+    --color-line: #3d3a37;
     --color-line-soft: #2c2b2a;
     --color-line-strong: #4a4945;
 
@@ -1137,7 +1137,7 @@ main[data-has-approval="false"] .scroll-messages {
   --color-accent-strong: #0058b8;
 }
 :root.dark.palette-vercel {
-  --color-bg: #000000;
+  --color-bg: #0f0f0f;
   --color-bg-main: #0a0a0a;
   --color-surface: #0a0a0a;
   --color-surface-soft: #141414;
@@ -1255,8 +1255,8 @@ main[data-has-approval="false"] .scroll-messages {
 :root.dark.palette-linear {
   --color-bg: #050505;
   --color-bg-main: #08090a;
-  --color-surface: #1c1c1f;
-  --color-surface-soft: #232427;
+  --color-surface: #202024;
+  --color-surface-soft: #2a2a30;
   --color-surface-sunken: #2a2b2f;
   --color-line: #26272b;
   --color-line-soft: #1d1e21;
