@@ -10,7 +10,7 @@ export function EmptyState() {
         aria-hidden
         className="grid place-items-center w-12 h-12 rounded-2xl bg-accent-soft text-accent-strong"
       >
-        <Sparkles size={ICON.HERO} strokeWidth={1.6} />
+        <Sparkles size={ICON.HERO} strokeWidth={2} />
       </span>
       <div className="grid gap-1.5 max-w-[420px]">
         <h2 className="m-0 text-2xl font-semibold tracking-[-0.018em] text-ink">

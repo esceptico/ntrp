@@ -96,7 +96,7 @@ export function ModelReasoningPicker({
             <span className="text-faint">{currentEffort ?? "off"}</span>
           </>
         )}
-        <ChevronDown size={ICON.SM} strokeWidth={1.8} className="shrink-0 opacity-70" />
+        <ChevronDown size={ICON.SM} strokeWidth={2} className="shrink-0 opacity-70" />
       </button>
 
       {open && (

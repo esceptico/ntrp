@@ -64,7 +64,7 @@ export function AppearanceTab() {
                         : "text-muted hover:text-ink",
                     )}
                   >
-                    <Icon size={ICON.MD} strokeWidth={1.7} />
+                    <Icon size={ICON.MD} strokeWidth={2} />
                     {t.label}
                   </button>
                 );
@@ -211,7 +211,7 @@ function ShortcutRecorder() {
               : "border-line-soft bg-surface text-ink-soft hover:bg-surface-soft/60",
           )}
         >
-          <Keyboard size={ICON.SM} strokeWidth={1.8} className="opacity-70" />
+          <Keyboard size={ICON.SM} strokeWidth={2} className="opacity-70" />
           {recording ? "Press chord…" : (value ? formatAccelerator(value) : "Disabled")}
         </button>
         {value !== DEFAULT_QUICK_CAPTURE_SHORTCUT && (
@@ -222,7 +222,7 @@ function ShortcutRecorder() {
             title="Reset to default"
             className="grid place-items-center w-8 h-8 rounded-[8px] text-faint hover:text-ink hover:bg-surface-soft transition-colors"
           >
-            <RotateCcw size={ICON.SM} strokeWidth={1.8} />
+            <RotateCcw size={ICON.SM} strokeWidth={2} />
           </button>
         )}
       </div>
@@ -384,7 +384,7 @@ function PalettePicker({
       >
         <PaletteIcon swatch={triggerSwatch} />
         <span>{current.label}</span>
-        <ChevronDown size={ICON.MD} strokeWidth={1.8} className="opacity-70" />
+        <ChevronDown size={ICON.MD} strokeWidth={2} className="opacity-70" />
       </button>
       {open && pos &&
         createPortal(

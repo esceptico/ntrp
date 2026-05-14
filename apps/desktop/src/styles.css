@@ -94,7 +94,7 @@
   --duration-palette: 180ms;
   --duration-trace: 200ms;
   --duration-panel: 220ms;
-  --duration-route: 280ms;
+  --duration-route: 360ms;
 
   --ease-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -217,14 +217,22 @@ body.quick-capture-mode .quick-capture-card {
    lights. Lives inside the chat-header so it inherits its no-drag
    region, but is fixed-positioned so it stays pinned regardless of
    how the chat-header reflows. */
-.sidebar-toggle {
+/* Sidebar toggles — fixed-position elements that stay in viewport coords
+   regardless of panel state (panels slide behind them via `x` transform).
+   Aligned with the macOS traffic-light center: lights configured at
+   `trafficLightPosition: { x: 18, y: 18 }`, light diameter = 14px, so
+   light center y = 25. Button h=22, icon centered → button top = 14. */
+.sidebar-toggle,
+.right-sidebar-toggle {
   position: fixed;
   top: 14px;
-  left: 84px;
   z-index: 60;
   -webkit-app-region: no-drag;
 }
-.sidebar-toggle * { -webkit-app-region: no-drag; }
+.sidebar-toggle      { left: 84px; }
+.right-sidebar-toggle { right: 14px; }
+.sidebar-toggle *,
+.right-sidebar-toggle * { -webkit-app-region: no-drag; }
 
 ::selection { background: rgba(184, 92, 31, 0.18); }
 
@@ -349,7 +357,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    Per Rauno's Depth essay: "Shoot through a surface" + "Out-of-focus
    foreground obscures cleanly". */
 .scroll-messages {
-  padding-top: 64px;
+  padding-top: 100px;
   padding-bottom: calc(var(--chat-bottom-h, 96px) + 1rem);
 }
 

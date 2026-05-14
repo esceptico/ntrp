@@ -56,7 +56,7 @@ export function ArchiveModal() {
             aria-label="Close"
             className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
           >
-            <X size={ICON.SM} strokeWidth={1.7} />
+            <X size={ICON.SM} strokeWidth={2} />
           </button>
         </div>
       </header>
@@ -119,13 +119,13 @@ function ArchivedRow({ session }: { session: ArchivedSession }) {
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         <RowAction
-          icon={<ArchiveRestore size={ICON.XS} strokeWidth={1.8} />}
+          icon={<ArchiveRestore size={ICON.XS} strokeWidth={2} />}
           label="Restore"
           onClick={onRestore}
           busy={busyOp === "restore"}
         />
         <RowAction
-          icon={<Trash2 size={ICON.XS} strokeWidth={1.8} />}
+          icon={<Trash2 size={ICON.XS} strokeWidth={2} />}
           label="Delete"
           onClick={onDelete}
           busy={busyOp === "delete"}
@@ -188,7 +188,7 @@ function SearchInput({
     <div className="relative w-[200px]">
       <Search
         size={ICON.XS}
-        strokeWidth={1.8}
+        strokeWidth={2}
         className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
       />
       <input

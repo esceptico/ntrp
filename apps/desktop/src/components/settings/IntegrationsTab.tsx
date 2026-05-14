@@ -177,7 +177,7 @@ export function IntegrationsTab() {
           disabled={loading}
           className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-line bg-surface text-sm text-ink-soft hover:border-line-strong transition-colors disabled:opacity-50"
         >
-          <RefreshCw size={ICON.SM} strokeWidth={1.8} className={clsx(loading && "animate-spin")} />
+          <RefreshCw size={ICON.SM} strokeWidth={2} className={clsx(loading && "animate-spin")} />
           Refresh
         </button>
       </div>
@@ -363,9 +363,9 @@ function GoogleCard({
                 className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface hover:text-bad transition-colors disabled:opacity-50"
               >
                 {pendingId === `gmail:${account.token_file}` ? (
-                  <Loader2 size={ICON.MD} strokeWidth={1.8} className="animate-spin" />
+                  <Loader2 size={ICON.MD} strokeWidth={2} className="animate-spin" />
                 ) : (
-                  <Trash2 size={ICON.MD} strokeWidth={1.8} />
+                  <Trash2 size={ICON.MD} strokeWidth={2} />
                 )}
               </button>
             </div>
@@ -403,7 +403,7 @@ function ServiceCard({
     <section className="rounded-[12px] border border-line-soft bg-surface overflow-hidden">
       <div className="px-3.5 py-3 border-b border-line-soft">
         <div className="flex items-center gap-2">
-          <MessageCircle size={ICON.MD} strokeWidth={1.8} className="text-muted" />
+          <MessageCircle size={ICON.MD} strokeWidth={2} className="text-muted" />
           <div className="text-base font-medium text-ink">Slack</div>
         </div>
         <div className="mt-1 text-xs text-faint leading-[1.4]">
@@ -569,7 +569,7 @@ function ServiceRow({
 function GoogleIcon({ enabled }: { enabled: boolean }) {
   return (
     <span className="relative grid place-items-center w-4 h-4 shrink-0">
-      <Mail size={ICON.MD} strokeWidth={1.8} className={enabled ? "text-ok" : "text-muted"} />
+      <Mail size={ICON.MD} strokeWidth={2} className={enabled ? "text-ok" : "text-muted"} />
       <CalendarDays
         size={ICON.XS}
         strokeWidth={1.9}
@@ -583,5 +583,5 @@ function ProviderDot({ connected }: { connected: boolean }) {
   if (connected) {
     return <CheckCircle2 size={ICON.MD} strokeWidth={2} className="text-ok shrink-0" />;
   }
-  return <KeyRound size={ICON.MD} strokeWidth={1.8} className="text-faint shrink-0" />;
+  return <KeyRound size={ICON.MD} strokeWidth={2} className="text-faint shrink-0" />;
 }

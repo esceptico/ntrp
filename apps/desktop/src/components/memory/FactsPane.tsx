@@ -246,7 +246,7 @@ function FactRow({
     >
       <div className="flex items-start gap-2">
         {fact.pinned_at && (
-          <Pin size={ICON.XS} strokeWidth={1.8} className="mt-[3px] shrink-0 text-accent-strong" />
+          <Pin size={ICON.XS} strokeWidth={2} className="mt-[3px] shrink-0 text-accent-strong" />
         )}
         <div className="min-w-0 flex-1">
           <div className="text-sm leading-snug line-clamp-2">{fact.text}</div>
@@ -424,23 +424,23 @@ function FactDetail({
             <>
               {sourceFocus && (
                 <GhostBtn onClick={() => onOpenSource?.(sourceFocus)} disabled={busy}>
-                  <ExternalLink size={ICON.SM} strokeWidth={1.8} /> Open source
+                  <ExternalLink size={ICON.SM} strokeWidth={2} /> Open source
                 </GhostBtn>
               )}
               {fact.status === "archived" ? (
                 <GhostBtn onClick={() => void setArchived(false)} disabled={busy}>
-                  <ArchiveRestore size={ICON.SM} strokeWidth={1.8} /> Restore
+                  <ArchiveRestore size={ICON.SM} strokeWidth={2} /> Restore
                 </GhostBtn>
               ) : (
                 <GhostBtn onClick={() => void setArchived(true)} disabled={busy}>
-                  <Archive size={ICON.SM} strokeWidth={1.8} /> Archive
+                  <Archive size={ICON.SM} strokeWidth={2} /> Archive
                 </GhostBtn>
               )}
               <GhostBtn onClick={() => setMode("correct")} disabled={busy || fact.status === "superseded"}>
-                <GitCompareArrows size={ICON.SM} strokeWidth={1.8} /> Replace claim
+                <GitCompareArrows size={ICON.SM} strokeWidth={2} /> Replace claim
               </GhostBtn>
               <GhostBtn onClick={() => setMode("edit")} disabled={busy}>
-                <Pencil size={ICON.SM} strokeWidth={1.8} /> Fix typo
+                <Pencil size={ICON.SM} strokeWidth={2} /> Fix typo
               </GhostBtn>
             </>
           )}
@@ -516,7 +516,7 @@ function KindFilter({
         )}
       >
         <span className="capitalize">{value ?? "All kinds"}</span>
-        <ChevronDown size={ICON.XS} strokeWidth={1.8} className="opacity-70" />
+        <ChevronDown size={ICON.XS} strokeWidth={2} className="opacity-70" />
       </button>
       {open && (
         <div className="absolute top-full mt-1 right-0 z-10 w-[160px] py-1 rounded-[10px] border border-line-soft bg-surface shadow-[var(--shadow-pop)]">
@@ -585,7 +585,7 @@ function StatusFilter({
         )}
       >
         <span>{factStatusFilterLabel(value)}</span>
-        <ChevronDown size={ICON.XS} strokeWidth={1.8} className="opacity-70" />
+        <ChevronDown size={ICON.XS} strokeWidth={2} className="opacity-70" />
       </button>
       {open && (
         <div className="absolute top-full mt-1 right-0 z-10 w-[150px] py-1 rounded-[10px] border border-line-soft bg-surface shadow-[var(--shadow-pop)]">

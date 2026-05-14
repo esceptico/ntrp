@@ -19,7 +19,7 @@ function SidebarToggle() {
       aria-label={sidebarHidden ? "Show sidebar" : "Hide sidebar"}
       className="sidebar-toggle grid place-items-center w-[22px] h-[22px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
     >
-      <Icon size={ICON.MD} strokeWidth={1.5} />
+      <Icon size={ICON.MD} strokeWidth={2} />
     </button>
   );
 }
@@ -117,7 +117,7 @@ export function Chat() {
     <main
       data-sidebar-hidden={sidebarHidden ? "true" : "false"}
       data-has-approval={hasApproval ? "true" : "false"}
-      className="absolute top-0 right-[var(--right-sidebar-w,0px)] bottom-0 left-[var(--sidebar-width,244px)] data-[sidebar-hidden=true]:left-0 transition-[left,right] duration-route ease-emphasized bg-bg overflow-hidden"
+      className="absolute top-0 right-[var(--right-sidebar-w,0px)] bottom-0 left-[var(--sidebar-width,272px)] data-[sidebar-hidden=true]:left-0 transition-[left,right] duration-route ease-emphasized bg-bg overflow-hidden"
     >
       <div className="relative w-full h-full">
         <Messages key={sessionId ?? "none"} />

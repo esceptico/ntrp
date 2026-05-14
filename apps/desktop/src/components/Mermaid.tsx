@@ -255,7 +255,7 @@ function PanelInner({
             onClick={() => zoomBy(1 / ZOOM_STEP)}
             disabled={view.zoom <= MIN_ZOOM + 1e-3}
           >
-            <Minus size={ICON.SM} strokeWidth={1.8} />
+            <Minus size={ICON.SM} strokeWidth={2} />
           </ToolbarButton>
           <span className="w-11 text-center text-xs tabular-nums text-muted select-none">{Math.round(view.zoom * 100)}%</span>
           <ToolbarButton
@@ -263,10 +263,10 @@ function PanelInner({
             onClick={() => zoomBy(ZOOM_STEP)}
             disabled={view.zoom >= MAX_ZOOM - 1e-3}
           >
-            <Plus size={ICON.SM} strokeWidth={1.8} />
+            <Plus size={ICON.SM} strokeWidth={2} />
           </ToolbarButton>
           <ToolbarButton label="Fit to view" onClick={fitToView}>
-            <RotateCcw size={ICON.XS} strokeWidth={1.8} />
+            <RotateCcw size={ICON.XS} strokeWidth={2} />
           </ToolbarButton>
           <span className="w-px h-4 bg-line mx-1" />
           <ToolbarButton
@@ -276,7 +276,7 @@ function PanelInner({
             {copied ? (
               <Check size={ICON.SM} strokeWidth={2.4} className="text-ok" />
             ) : (
-              <Copy size={ICON.SM} strokeWidth={1.8} />
+              <Copy size={ICON.SM} strokeWidth={2} />
             )}
           </ToolbarButton>
           <ToolbarButton
@@ -284,9 +284,9 @@ function PanelInner({
             onClick={onToggleFullscreen}
           >
             {fullscreen ? (
-              <Minimize2 size={ICON.SM} strokeWidth={1.8} />
+              <Minimize2 size={ICON.SM} strokeWidth={2} />
             ) : (
-              <Maximize2 size={ICON.SM} strokeWidth={1.8} />
+              <Maximize2 size={ICON.SM} strokeWidth={2} />
             )}
           </ToolbarButton>
         </div>
@@ -357,7 +357,7 @@ function MermaidErrorBlock({ source, message }: { source: string; message: strin
           title={copied ? "Copied" : "Copy source"}
           className="grid place-items-center w-[22px] h-[22px] rounded-md bg-transparent border border-[rgba(184,68,43,0.24)] text-bad cursor-pointer transition-[background-color,color] duration-150 ease-out hover:bg-[rgba(184,68,43,0.08)]"
         >
-          {copied ? <Check size={ICON.XS} strokeWidth={2.4} /> : <Copy size={ICON.XS} strokeWidth={1.8} />}
+          {copied ? <Check size={ICON.XS} strokeWidth={2.4} /> : <Copy size={ICON.XS} strokeWidth={2} />}
         </button>
       </div>
       <pre className="m-0 text-xs text-ink-soft whitespace-pre-wrap break-words">{source}</pre>

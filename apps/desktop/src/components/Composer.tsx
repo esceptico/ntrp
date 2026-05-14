@@ -151,7 +151,7 @@ function LoopStatusBar() {
         className="inline-flex h-7 items-center gap-1.5 rounded-full px-2 text-xs font-medium text-muted hover:bg-surface-soft hover:text-ink transition-colors"
         aria-label="Active loops"
       >
-        <Repeat2 size={ICON.SM} strokeWidth={1.8} />
+        <Repeat2 size={ICON.SM} strokeWidth={2} />
         {loops.length === 1 ? (
           <>Loop · <RollingDigits value={countdown} /></>
         ) : (
@@ -227,7 +227,7 @@ function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: 
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
-          <Repeat2 size={ICON.SM} strokeWidth={1.8} className="text-muted" />
+          <Repeat2 size={ICON.SM} strokeWidth={2} className="text-muted" />
           <div className="text-sm font-medium text-ink">Loop</div>
           <div className="ml-auto text-xs text-faint">
             Every {loop.every} · next in {formatLoopCountdown(nextRunMs)}
@@ -617,7 +617,7 @@ export function Composer() {
             aria-label="Attach image"
             className="inline-flex items-center justify-center h-7 w-7 rounded-full text-muted hover:bg-surface-soft hover:text-ink transition-colors"
           >
-            <ImagePlus size={ICON.LG} strokeWidth={1.8} />
+            <ImagePlus size={ICON.LG} strokeWidth={2} />
           </button>
           <button
             type="button"

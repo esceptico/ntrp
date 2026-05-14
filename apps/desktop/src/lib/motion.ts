@@ -14,7 +14,7 @@ export const MOTION = {
   palette: 0.18,
   trace: 0.2,
   panel: 0.22,
-  route: 0.28,
+  route: 0.36,
 } as const;
 
 /** Emphasized ease for layout slides (sidebar, inspector, route). */

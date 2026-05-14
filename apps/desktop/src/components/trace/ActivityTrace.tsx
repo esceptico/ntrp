@@ -44,7 +44,7 @@ export function ActivityHeader({
         interactive ? "cursor-pointer hover:text-muted select-none" : "cursor-default",
       )}
     >
-      <SquareTerminal size={ICON.MD} strokeWidth={1.8} className="shrink-0" />
+      <SquareTerminal size={ICON.MD} strokeWidth={2} className="shrink-0" />
       {/* Three odometer slots so the label flip ("Running" → "Done"),
           the digit roll (5 → 6 as another tool starts), and the
           singular/plural switch ("tool" / "tools") each animate

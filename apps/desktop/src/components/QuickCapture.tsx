@@ -136,7 +136,7 @@ export function QuickCapture() {
               aria-hidden
               className="grid place-items-center w-5 h-5 text-accent shrink-0"
             >
-              <Sparkles size={ICON.MD} strokeWidth={1.8} />
+              <Sparkles size={ICON.MD} strokeWidth={2} />
             </span>
             <input
               ref={inputRef}

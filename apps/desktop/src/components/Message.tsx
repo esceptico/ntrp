@@ -306,7 +306,7 @@ const ReasoningMessage = memo(function ReasoningMessage({ id }: { id: string }) 
         className="reasoning-head self-start inline-flex items-center gap-1.5 text-xs leading-[1.45] font-medium text-muted hover:text-ink-soft transition-colors select-none"
         data-state={isStreaming ? "streaming" : "done"}
       >
-        <Brain size={ICON.XS} strokeWidth={1.7} />
+        <Brain size={ICON.XS} strokeWidth={2} />
         <span>{message.title || "Reasoning"}</span>
         <ChevronDown
           size={ICON.XS}
@@ -351,7 +351,7 @@ const ToolMessage = memo(function ToolMessage({ id }: { id: string }) {
     >
       <div className="tool-line flex items-baseline gap-2 min-w-0" data-state={isRunning ? "running" : "done"}>
         <span className="text-faint shrink-0">↗</span>
-        <Terminal size={ICON.XS} strokeWidth={1.8} className="text-muted shrink-0 self-center" />
+        <Terminal size={ICON.XS} strokeWidth={2} className="text-muted shrink-0 self-center" />
         <span className="text-ink-soft font-medium shrink-0">{message.title || "tool"}</span>
         <span className="text-muted truncate min-w-0 flex-1">{message.subtitle || ""}</span>
       </div>

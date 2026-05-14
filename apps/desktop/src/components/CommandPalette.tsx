@@ -251,7 +251,7 @@ function PaletteBody({
       <div className="relative px-4 pt-3 pb-2.5">
         <Search
           size={ICON.MD}
-          strokeWidth={1.8}
+          strokeWidth={2}
           className="absolute left-4 top-[22px] text-faint pointer-events-none"
         />
         <div className="flex items-center gap-1.5 pl-6">
@@ -362,7 +362,7 @@ function Breadcrumbs({
             </button>
             <ChevronRight
               size={ICON.XS}
-              strokeWidth={1.8}
+              strokeWidth={2}
               className="text-faint shrink-0"
               aria-hidden
             />
@@ -406,7 +406,7 @@ function Row({
             active ? "bg-accent-soft text-accent-strong" : "text-muted",
           )}
         >
-          <Icon size={ICON.SM} strokeWidth={1.7} />
+          <Icon size={ICON.SM} strokeWidth={2} />
         </span>
         <span className="text-base text-ink truncate flex-1">{entry.label}</span>
         {entry.hint && (
@@ -418,7 +418,7 @@ function Row({
         {entry.children && (
           <ChevronRight
             size={ICON.XS}
-            strokeWidth={1.8}
+            strokeWidth={2}
             className="text-faint shrink-0 ml-1"
             aria-hidden
           />

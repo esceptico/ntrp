@@ -48,7 +48,7 @@ export function CompactionIndicator() {
           transition={{ duration: MOTION.palette, ease: EASE_OUT }}
           className="flex items-center gap-2 my-1"
         >
-          <Sparkles size={ICON.XS} strokeWidth={1.8} className="text-faint" />
+          <Sparkles size={ICON.XS} strokeWidth={2} className="text-faint" />
           <span className="text-sm text-faint">
             Conversation compacted ({lastCompaction.before} → {lastCompaction.after} messages)
           </span>

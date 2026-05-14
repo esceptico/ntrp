@@ -99,7 +99,7 @@ export function ApprovalReviewModal() {
                 aria-label="Close"
                 className="ml-auto grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors shrink-0"
               >
-                <X size={ICON.SM} strokeWidth={1.8} />
+                <X size={ICON.SM} strokeWidth={2} />
               </button>
             </header>
 

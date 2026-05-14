@@ -157,7 +157,7 @@ export function ToolViewer() {
                 aria-label="Close"
                 className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors shrink-0"
               >
-                <X size={ICON.SM} strokeWidth={1.8} />
+                <X size={ICON.SM} strokeWidth={2} />
               </button>
             </header>
 
@@ -350,7 +350,7 @@ function ActivityTreeNode({
             <Bot size={ICON.XS} strokeWidth={2} />
           </span>
         ) : (
-          <ArrowRight size={ICON.XS} strokeWidth={1.8} className="text-whisper shrink-0" />
+          <ArrowRight size={ICON.XS} strokeWidth={2} className="text-whisper shrink-0" />
         )}
         <span
           className={clsx(
@@ -413,7 +413,7 @@ function CopyButton({ getValue }: { getValue: () => string }) {
         copied ? "text-accent-strong bg-accent-soft" : "text-muted hover:bg-surface-soft hover:text-ink",
       )}
     >
-      {copied ? <Check size={ICON.XS} strokeWidth={2.4} /> : <Copy size={ICON.XS} strokeWidth={1.8} />}
+      {copied ? <Check size={ICON.XS} strokeWidth={2.4} /> : <Copy size={ICON.XS} strokeWidth={2} />}
       {copied ? "Copied" : "Copy"}
     </button>
   );
@@ -434,7 +434,7 @@ function ChildRuns({ items }: { items: ActivityItem[] }) {
               onClick={() => setViewing(child)}
               className="flex items-baseline gap-2 w-full px-3 py-2 text-left bg-transparent border-0 hover:bg-surface-soft/60 transition-colors"
             >
-              <ArrowRight size={ICON.XS} strokeWidth={1.8} className="self-center text-whisper shrink-0" />
+              <ArrowRight size={ICON.XS} strokeWidth={2} className="self-center text-whisper shrink-0" />
               <span className="text-sm font-medium text-ink-soft shrink-0">{child.kind}</span>
               <span className="text-xs text-faint font-mono truncate min-w-0 flex-1">
                 {child.target}
@@ -490,7 +490,7 @@ function Section({
                 : "text-muted hover:bg-surface-soft hover:text-ink",
             )}
           >
-            {copied ? <Check size={ICON.XS} strokeWidth={2.4} /> : <Copy size={ICON.XS} strokeWidth={1.8} />}
+            {copied ? <Check size={ICON.XS} strokeWidth={2.4} /> : <Copy size={ICON.XS} strokeWidth={2} />}
             {copied ? "Copied" : "Copy"}
           </button>
         )}

@@ -12,6 +12,7 @@ import { MarkdownViewer } from "./MarkdownViewer";
 import { ToolViewer } from "./ToolViewer";
 import { ApprovalReviewModal } from "./ApprovalReviewModal";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
+import { AgentRightSidebar } from "./AgentRightSidebar";
 import { Demo as TraceDemo } from "./trace/Demo";
 import { useStore } from "../store";
 import { useEvents } from "../hooks/useEvents";
@@ -39,7 +40,7 @@ export function App() {
   const openSettings = useStore((s) => s.openSettings);
 
   // Publish the sidebar width as a CSS var so the chat shell's
-  // `left-[var(--sidebar-width,244px)]` can stay flush with the
+  // `left-[var(--sidebar-width,272px)]` can stay flush with the
   // sidebar's right edge as it resizes (without React having to
   // re-render Chat on every drag tick).
   useEffect(() => {
@@ -143,7 +144,7 @@ export function App() {
        AnimatePresence). */
     <MotionConfig reducedMotion="user">
       <motion.div
-        className="absolute top-2 left-2 bottom-2 z-30 w-[calc(var(--sidebar-width,244px)-16px)] bg-bg-main border border-line rounded-xl shadow-sm overflow-hidden will-change-transform"
+        className="absolute top-2 left-2 bottom-2 z-30 w-[calc(var(--sidebar-width,272px)-16px)] bg-bg-main border border-line rounded-xl shadow-sm overflow-hidden will-change-transform"
         initial={false}
         animate={{ x: sidebarHidden ? -sidebarWidth : 0 }}
         transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
@@ -152,6 +153,7 @@ export function App() {
         <SidebarResizeHandle />
       </motion.div>
       <Chat />
+      <AgentRightSidebar />
       <SettingsModal />
       <AutomationsModal />
       <ArchiveModal />

@@ -228,7 +228,7 @@ function ServerRow({
           aria-label="Configure"
           className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
         >
-          <SettingsIcon size={ICON.MD} strokeWidth={1.7} />
+          <SettingsIcon size={ICON.MD} strokeWidth={2} />
         </button>
         <Toggle checked={server.enabled} onChange={onToggle} disabled={busy} />
       </div>
@@ -324,7 +324,7 @@ function ServerForm({
           onClick={onClose}
           className="inline-flex items-center gap-1.5 h-7 px-1.5 rounded-md text-sm text-muted hover:text-ink transition-colors"
         >
-          <ArrowLeft size={ICON.SM} strokeWidth={1.8} /> Back
+          <ArrowLeft size={ICON.SM} strokeWidth={2} /> Back
         </button>
         {mode === "edit" && server && (
           <button
@@ -333,7 +333,7 @@ function ServerForm({
             disabled={busy}
             className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-sm font-medium text-bad bg-bad-soft hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            <Trash2 size={ICON.SM} strokeWidth={1.8} /> Uninstall
+            <Trash2 size={ICON.SM} strokeWidth={2} /> Uninstall
           </button>
         )}
       </div>
@@ -675,7 +675,7 @@ function AddBtn({ label, onClick }: { label: string; onClick: () => void }) {
       onClick={onClick}
       className="inline-flex items-center justify-center gap-1.5 h-8 rounded-md bg-surface-soft hover:bg-surface-soft/80 text-sm text-muted hover:text-ink transition-colors"
     >
-      <Plus size={ICON.XS} strokeWidth={1.8} /> {label}
+      <Plus size={ICON.XS} strokeWidth={2} /> {label}
     </button>
   );
 }
@@ -688,7 +688,7 @@ function RemoveBtn({ onClick }: { onClick: () => void }) {
       aria-label="Remove"
       className="grid place-items-center w-8 h-8 rounded-md text-faint hover:text-ink hover:bg-surface-soft transition-colors"
     >
-      <Trash2 size={ICON.SM} strokeWidth={1.8} />
+      <Trash2 size={ICON.SM} strokeWidth={2} />
     </button>
   );
 }

@@ -240,7 +240,7 @@ export function Messages() {
                 : "absolute left-1/2 -translate-x-1/2 z-20 grid place-items-center w-8 h-8 rounded-full bg-surface text-muted border border-black/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.06)] transition-[background-color,color,transform] duration-fast hover:text-ink hover:bg-surface-soft dark:border-white/[0.08] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4),0_4px_14px_rgba(0,0,0,0.35)]"
             }
           >
-            <ChevronDown size={ICON.MD} strokeWidth={1.8} />
+            <ChevronDown size={ICON.MD} strokeWidth={2} />
             {unreadCount > 0 && (
               <motion.span
                 key={unreadCount}

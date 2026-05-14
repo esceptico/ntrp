@@ -7,7 +7,6 @@ import { MOTION, EASE_EMPHASIZED, originFromEvent } from "../lib/motion";
 import { useStore } from "../store";
 import { apiWithConfig } from "../api";
 import { archiveSession, createSession, fetchAutomations, renameSession, switchSession } from "../actions";
-import { isInternalAutomation, isIterationLoop } from "../lib/automationFilters";
 import { ICON } from "../lib/icons";
 
 function formatAge(value: string): string {
@@ -213,12 +212,12 @@ function SessionRow({
         </span>
         <span className="absolute inset-0 flex items-center justify-end gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity duration-150">
           <RowAction
-            icon={<Pencil size={ICON.SM} strokeWidth={1.8} />}
+            icon={<Pencil size={ICON.SM} strokeWidth={2} />}
             label="Rename"
             onClick={onStartRename}
           />
           <RowAction
-            icon={<Archive size={ICON.SM} strokeWidth={1.8} />}
+            icon={<Archive size={ICON.SM} strokeWidth={2} />}
             label="Archive"
             onClick={onArchive}
           />
@@ -259,7 +258,7 @@ function SessionStateIcon({
   if (isChannel) {
     return (
       <span className="grid place-items-center w-4 h-4 text-faint" aria-label="Channel">
-        <Radio size={ICON.SM} strokeWidth={1.8} />
+        <Radio size={ICON.SM} strokeWidth={2} />
       </span>
     );
   }
@@ -407,7 +406,7 @@ function SessionList() {
                         title="Filter sessions (⌘F)"
                         className="grid place-items-center w-[26px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
                       >
-                        <Search size={ICON.SM} strokeWidth={1.8} />
+                        <Search size={ICON.SM} strokeWidth={2} />
                       </button>
                       <button
                         type="button"
@@ -416,7 +415,7 @@ function SessionList() {
                         title="View archived sessions"
                         className="grid place-items-center w-[26px] h-[22px] rounded-[5px] text-faint hover:text-ink hover:bg-surface-soft/70 transition-colors"
                       >
-                        <Archive size={ICON.SM} strokeWidth={1.8} />
+                        <Archive size={ICON.SM} strokeWidth={2} />
                       </button>
                     </div>
                   )}
@@ -516,7 +515,7 @@ function SessionSearch({
     <div className="relative flex-1 h-[24px]">
       <Search
         size={ICON.SM}
-        strokeWidth={1.8}
+        strokeWidth={2}
         className="absolute left-[7px] top-1/2 -translate-y-1/2 text-faint pointer-events-none"
       />
       <input
@@ -618,9 +617,9 @@ function SessionContextMenu({
       style={{ left: pos.left, top: pos.top, opacity: pos.ready ? 1 : 0 }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <ContextItem icon={<Pencil size={ICON.MD} strokeWidth={1.8} />} label="Rename" onClick={onRename} />
-      <ContextItem icon={<Sparkles size={ICON.MD} strokeWidth={1.8} />} label="Compact context" onClick={onCompact} />
-      <ContextItem icon={<Archive size={ICON.MD} strokeWidth={1.8} />} label="Archive" onClick={onArchive} />
+      <ContextItem icon={<Pencil size={ICON.MD} strokeWidth={2} />} label="Rename" onClick={onRename} />
+      <ContextItem icon={<Sparkles size={ICON.MD} strokeWidth={2} />} label="Compact context" onClick={onCompact} />
+      <ContextItem icon={<Archive size={ICON.MD} strokeWidth={2} />} label="Archive" onClick={onArchive} />
     </div>,
     root,
   );
@@ -669,143 +668,6 @@ function useAutomationsPoll(): void {
   }, []);
 }
 
-function formatElapsed(since: string): string {
-  const seconds = Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const mins = Math.floor(seconds / 60);
-  const remSec = seconds % 60;
-  if (mins < 60) return remSec === 0 ? `${mins}m` : `${mins}m ${remSec}s`;
-  const hrs = Math.floor(mins / 60);
-  return `${hrs}h ${mins % 60}m`;
-}
-
-/** Card pinned above the bottom Settings nav. Shows currently running
- *  user automations (internal/builtin ones are background plumbing and
- *  would just be noise here). Whole card opens the Automations modal so
- *  the user can stop/inspect from there.
- *
- *  Per-row live status comes from the `/automations/events` SSE stream
- *  (see `useAutomationEvents`) — the backend pushes a short string per
- *  tool call (e.g. "read_file: tasks.md", "bash_exec...") so the user
- *  can see what an automation is currently doing without opening it. */
-function OngoingAutomations() {
-  const openAutomations = useStore((s) => s.openAutomations);
-  const automations = useStore((s) => s.automations);
-  const automationStatuses = useStore((s) => s.automationStatuses);
-
-  const running = useMemo(
-    () =>
-      (automations ?? []).filter(
-        (a) =>
-          a.running_since != null &&
-          !isInternalAutomation(a) &&
-          !isIterationLoop(a),
-      ),
-    [automations],
-  );
-
-  // Re-render every second while a run is active so the elapsed time
-  // display ticks forward. Stops when nothing is running to avoid
-  // burning the main thread on idle.
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    if (running.length === 0) return;
-    const id = window.setInterval(() => setTick((n) => n + 1), 1000);
-    return () => window.clearInterval(id);
-  }, [running.length]);
-
-  return (
-    <AnimatePresence initial={false}>
-      {running.length > 0 && (
-        <motion.div
-          key="ongoing"
-          initial={{ opacity: 0, y: 8, height: 0 }}
-          animate={{ opacity: 1, y: 0, height: "auto" }}
-          exit={{ opacity: 0, y: 8, height: 0 }}
-          transition={{ type: "spring", stiffness: 350, damping: 40, mass: 0.8 }}
-          style={{ overflow: "hidden" }}
-          className="px-2.5"
-        >
-          <button
-            type="button"
-            onClick={(e) => openAutomations(originFromEvent(e.currentTarget))}
-            aria-label={`${running.length} automation${running.length === 1 ? "" : "s"} running — open Automations`}
-            className="w-full grid gap-1.5 rounded-lg border border-line-soft bg-surface-soft/40 hover:bg-surface-soft/70 px-2.5 py-2 text-left transition-colors"
-          >
-            <div className="flex items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.08em] text-faint">
-              <span
-                className="thinking-dots grid grid-flow-col gap-[2px] place-items-center text-accent"
-                aria-hidden
-              >
-                <span /><span /><span />
-              </span>
-              <span>
-                {running.length} running
-              </span>
-            </div>
-            <div className="grid gap-1 min-w-0">
-              {running.slice(0, 2).map((a) => (
-                <OngoingAutomationRow
-                  key={a.task_id}
-                  name={a.name}
-                  runningSince={a.running_since!}
-                  status={automationStatuses[a.task_id]}
-                />
-              ))}
-              {running.length > 2 && (
-                <div className="text-2xs text-faint">+{running.length - 2} more</div>
-              )}
-            </div>
-          </button>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
-
-/** A single row inside the card. The status string is fed from the SSE
- *  stream and updates as the agent moves from one tool call to the next.
- *  Wrapped in a `motion.div layout` so when the status text appears/
- *  changes the row height adjusts smoothly. */
-function OngoingAutomationRow({
-  name,
-  runningSince,
-  status,
-}: {
-  name: string;
-  runningSince: string;
-  status: string | undefined;
-}) {
-  return (
-    // `min-w-0` propagates the parent grid's column constraint down so the
-    // child `truncate`s actually have a width to clip against. Without it
-    // the name pushes the elapsed-time chip off-card and overflows the
-    // sidebar edge.
-    <motion.div layout="position" className="grid gap-0.5 min-w-0">
-      <div className="flex items-baseline justify-between gap-2 text-xs min-w-0">
-        <span className="truncate text-ink-soft min-w-0 flex-1">{name}</span>
-        <span className="shrink-0 tabular-nums text-faint">
-          {formatElapsed(runningSince)}
-        </span>
-      </div>
-      <AnimatePresence mode="popLayout" initial={false}>
-        {status && (
-          <motion.div
-            key={status}
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.18, ease: EASE_EMPHASIZED }}
-            className="font-mono text-2xs text-faint truncate min-w-0"
-          >
-            {status}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
-  );
-}
-
 export function Sidebar() {
   const openSettings = useStore((s) => s.openSettings);
   const openAutomations = useStore((s) => s.openAutomations);
@@ -814,29 +676,30 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar flex flex-col h-full">
-      <div className="drag-spacer shrink-0 h-[38px]" />
+      {/* Drag region. Height tuned so nav rows start just below the
+          macOS traffic-lights zone, not below a 38px chrome ribbon. */}
+      <div className="drag-spacer shrink-0 h-[22px]" />
       <nav className="flex flex-col gap-px px-2.5 pt-2">
         <NavRow
-          icon={<Pencil size={ICON.LG} strokeWidth={1.7} />}
+          icon={<Pencil size={ICON.LG} strokeWidth={2} />}
           label="New session"
           onClick={() => void createSession()}
         />
         <NavRow
-          icon={<Zap size={ICON.LG} strokeWidth={1.7} />}
+          icon={<Zap size={ICON.LG} strokeWidth={2} />}
           label="Automations"
           onClick={(e) => openAutomations(originFromEvent(e.currentTarget))}
         />
         <NavRow
-          icon={<Brain size={ICON.LG} strokeWidth={1.7} />}
+          icon={<Brain size={ICON.LG} strokeWidth={2} />}
           label="Memory"
           onClick={(e) => openMemory(originFromEvent(e.currentTarget))}
         />
       </nav>
       <SessionList />
-      <OngoingAutomations />
       <nav className="flex flex-col gap-px px-2.5 pt-1.5 pb-3">
         <NavRow
-          icon={<SettingsIcon size={ICON.LG} strokeWidth={1.7} />}
+          icon={<SettingsIcon size={ICON.LG} strokeWidth={2} />}
           label="Settings"
           onClick={(e) => openSettings(originFromEvent(e.currentTarget))}
         />

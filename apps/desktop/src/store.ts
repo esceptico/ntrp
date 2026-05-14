@@ -96,7 +96,7 @@ const DEFAULT_PREFS: Prefs = {
   theme: "system",
   palette: "graphite",
   sidebarHidden: false,
-  sidebarWidth: 244,
+  sidebarWidth: 272,
   showReasoningInChat: true,
   quickCaptureShortcut: DEFAULT_QUICK_CAPTURE_SHORTCUT,
 };

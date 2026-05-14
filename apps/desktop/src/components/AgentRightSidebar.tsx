@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import { PanelRightClose, PanelRightOpen, X } from "lucide-react";
 import clsx from "clsx";
 import { cancelBackgroundTaskApi, listBackgroundTasksApi } from "../api";
@@ -269,7 +269,7 @@ export function AgentRightSidebar() {
     if (!collapsed) {
       root.style.setProperty(
         "--right-sidebar-w",
-        "var(--sidebar-width, 244px)",
+        "var(--sidebar-width, 272px)",
       );
     } else {
       root.style.setProperty("--right-sidebar-w", "0px");
@@ -279,114 +279,109 @@ export function AgentRightSidebar() {
     };
   }, [collapsed]);
 
+  // Width of the panel including its 16px margin (right-2 + width
+   // calc), so animating `x: panelTranslateWidth` slides it fully off
+   // screen. Mirror of App.tsx's `x: ±sidebarWidth` for the left.
+  const panelTranslateWidth = useStore((s) => s.prefs.sidebarWidth);
+
   return (
-    <AnimatePresence initial={false}>
-      {collapsed ? (
-          <motion.button
-            key="agent-right-sidebar-collapsed"
-            type="button"
-            initial={{ opacity: 0, x: 8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 8 }}
-            transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
-            onClick={() => setCollapsed(false)}
-            title="Show active"
-            aria-label={`Show active (${totalCount})`}
-            // Slim horizontal pill: dot + count + chevron. Reads as
-            // "N active" at a glance without a detached badge — accent
-            // splash lives only on the dot, everything else is muted.
-            className="absolute top-[13px] right-[19px] z-30 inline-flex items-center gap-1.5 h-7 px-1.5 rounded-md text-muted hover:text-ink hover:bg-surface-soft transition-colors"
-          >
-            {totalCount > 0 && <StatusDot status="running" pulse />}
-            {totalCount > 0 && (
-              <span className="text-xs tabular-nums text-ink-soft">{totalCount}</span>
-            )}
-            <PanelRightOpen size={ICON.MD} strokeWidth={1.7} />
-          </motion.button>
-        ) : (
-          <motion.aside
-            key="agent-right-sidebar"
-            initial={{ opacity: 0, x: 18 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 18 }}
-            transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
-            className="absolute top-2 right-2 z-30 flex max-h-[calc(100vh-var(--chat-bottom-h,96px)-24px)] w-[calc(var(--sidebar-width,244px)-16px)] flex-col overflow-hidden rounded-xl border border-line bg-bg-main shadow-sm will-change-transform"
-          >
-            {/* Header strip — also serves as the top drag region. Label
-                and collapse button sit on the same row so the 38px slot
-                isn't just empty space above another row. Matches the
-                left sidebar's top height for chrome alignment. */}
-            <div className="drag-spacer flex items-center justify-between gap-2 px-3 h-[38px] shrink-0">
-              <span className="text-2xs font-medium uppercase tracking-[0.08em] text-faint">
-                Active{totalCount > 0 ? ` · ${totalCount}` : ""}
-              </span>
-              <button
-                type="button"
-                onClick={() => setCollapsed(true)}
-                title="Collapse"
-                aria-label="Collapse"
-                className="grid place-items-center w-[22px] h-[22px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
-              >
-                <PanelRightClose size={ICON.MD} strokeWidth={1.7} />
-              </button>
-            </div>
-            <div className="flex min-h-0 flex-col">
-              <div className="min-h-0 overflow-y-auto px-3 pb-3 pt-1">
-                {hasAgents && (
-                  <section>
-                    {both && <SectionHeader label="Agents" count={agents.length} />}
-                    <div>
-                      {agents.map((agent) => (
-                        <BackgroundAgentRow
-                          key={`${agent.sessionId}:${agent.taskId}`}
-                          agent={agent}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {hasAutomations && (
-                  <section className={both ? "mt-3" : undefined}>
-                    {both ? (
-                      <button
-                        type="button"
-                        onClick={(e) => openAutomations(originFromEvent(e.currentTarget))}
-                        className="block w-full text-left hover:text-ink transition-colors"
-                        title="Open automations"
-                      >
-                        <SectionHeader
-                          label="Automations"
-                          count={runningAutomations.length}
-                        />
-                      </button>
-                    ) : null}
-                    <div>
-                      {runningAutomations.map((automation) => (
-                        <AutomationRow
-                          key={automation.task_id}
-                          name={automation.name || automation.task_id}
-                          runningSince={automation.running_since!}
-                          status={automationStatuses[automation.task_id]}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {!visible && (
-                  <div className="grid place-items-center min-h-[120px] px-3 text-center">
-                    <p className="text-xs text-faint leading-relaxed">
-                      No active agents or automations.
-                      <br />
-                      Background tasks will appear here.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.aside>
+    <>
+      {/* Fixed-position toggle button — mirror of `.sidebar-toggle` for
+          the left panel. Stays in viewport-fixed coords regardless of
+          panel state; icon flips between Open/Close. Aligned vertically
+          with the macOS traffic lights (light center y = 25). */}
+      <button
+        type="button"
+        onClick={() => setCollapsed((v) => !v)}
+        title={collapsed ? "Show active" : "Hide active"}
+        aria-label={collapsed ? `Show active${totalCount > 0 ? ` (${totalCount})` : ""}` : "Hide active"}
+        className="right-sidebar-toggle inline-flex items-center gap-1.5 h-[22px] px-1 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
+      >
+        {collapsed && totalCount > 0 && <StatusDot status="running" pulse />}
+        {collapsed && totalCount > 0 && (
+          <span className="text-xs tabular-nums text-ink-soft">{totalCount}</span>
         )}
-    </AnimatePresence>
+        {collapsed ? (
+          <PanelRightOpen size={ICON.MD} strokeWidth={2} />
+        ) : (
+          <PanelRightClose size={ICON.MD} strokeWidth={2} />
+        )}
+      </button>
+
+      {/* Panel — always rendered, slides via `x` transform (GPU-
+          composited, preserves internal state). Same animation shape as
+          App.tsx's left sidebar so the two feel like one system. */}
+      <motion.aside
+        initial={false}
+        animate={{ x: collapsed ? panelTranslateWidth : 0 }}
+        transition={{ duration: MOTION.route, ease: EASE_EMPHASIZED }}
+        className="absolute top-2 right-2 z-30 flex w-[calc(var(--sidebar-width,272px)-16px)] max-h-[calc(100vh-var(--chat-bottom-h,96px)-24px)] flex-col overflow-hidden rounded-xl border border-line bg-bg-main shadow-sm will-change-transform"
+      >
+        {/* Drag region height tuned so the "Active" label's vertical
+            center sits at viewport y=25 — same eye-line as the toggle
+            icon and the macOS traffic-light center. (panel top-2 = 8px,
+            label centered in h-[34px] → 8 + 17 = 25.) */}
+        <div className="drag-spacer flex items-center justify-between gap-2 px-3 h-[34px] shrink-0">
+          <span className="text-2xs font-medium uppercase tracking-[0.08em] text-faint">
+            Active{totalCount > 0 ? ` · ${totalCount}` : ""}
+          </span>
+        </div>
+        <div className="flex min-h-0 flex-col">
+          <div className="min-h-0 overflow-y-auto px-3 pb-3 pt-1">
+            {hasAgents && (
+              <section>
+                {both && <SectionHeader label="Agents" count={agents.length} />}
+                <div>
+                  {agents.map((agent) => (
+                    <BackgroundAgentRow
+                      key={`${agent.sessionId}:${agent.taskId}`}
+                      agent={agent}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {hasAutomations && (
+              <section className={both ? "mt-3" : undefined}>
+                {both ? (
+                  <button
+                    type="button"
+                    onClick={(e) => openAutomations(originFromEvent(e.currentTarget))}
+                    className="block w-full text-left hover:text-ink transition-colors"
+                    title="Open automations"
+                  >
+                    <SectionHeader
+                      label="Automations"
+                      count={runningAutomations.length}
+                    />
+                  </button>
+                ) : null}
+                <div>
+                  {runningAutomations.map((automation) => (
+                    <AutomationRow
+                      key={automation.task_id}
+                      name={automation.name || automation.task_id}
+                      runningSince={automation.running_since!}
+                      status={automationStatuses[automation.task_id]}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {!visible && (
+              <div className="grid place-items-center min-h-[120px] px-3 text-center">
+                <p className="text-xs text-faint leading-relaxed">
+                  No active agents or automations.
+                  <br />
+                  Background tasks will appear here.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.aside>
+    </>
   );
 }
