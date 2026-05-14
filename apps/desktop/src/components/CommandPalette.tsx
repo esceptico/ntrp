@@ -395,10 +395,8 @@ function Row({
         onMouseEnter={onHover}
         onMouseDown={(e) => e.preventDefault()}
         onClick={onClick}
-        className={clsx(
-          "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[8px] text-left transition-colors",
-          active ? "bg-surface-soft text-ink" : "hover:bg-surface-soft/60",
-        )}
+        data-active={active ? "true" : undefined}
+        className="app-row w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[8px] text-ink-soft text-left"
       >
         <span
           className={clsx(

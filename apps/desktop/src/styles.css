@@ -339,6 +339,42 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   );
 }
 
+/* ─── Quiet rows ─────────────────────────────────────────────
+   Restraint pass on list items, shared across the sidebar, the
+   command picker, and the command palette. Hover shifts text
+   color only — no background flood. Active state is a 2px
+   accent rail at the left edge (no body fill). One element
+   changes per state instead of the whole surface.
+
+   Consumers provide layout, padding, radius, and base text
+   color. Mark the active row with `data-active="true"` (current
+   session, keyboard-highlighted entry, etc.) or
+   `aria-selected="true"` if the row already exposes it. */
+.app-row {
+  position: relative;
+  transition: color 120ms ease-out;
+}
+.app-row:hover {
+  color: var(--color-ink);
+}
+.app-row[data-active="true"],
+.app-row[aria-selected="true"] {
+  color: var(--color-ink);
+}
+.app-row[data-active="true"]::before,
+.app-row[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background-color: var(--color-accent-strong);
+  border-top-right-radius: 2px;
+  border-bottom-right-radius: 2px;
+  pointer-events: none;
+}
+
 /* Messages list scrollbar — always visible, draggable, slim. */
 .scroll-messages::-webkit-scrollbar { width: 8px; }
 .scroll-messages::-webkit-scrollbar-track { background: transparent; }

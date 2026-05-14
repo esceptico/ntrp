@@ -82,7 +82,7 @@ function NavRow({
     <button
       type="button"
       onClick={onClick}
-      className="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-1 rounded-lg text-base font-medium text-ink-soft text-left tracking-[-0.005em] hover:bg-surface-soft/60 transition-colors"
+      className="app-row grid grid-cols-[16px_minmax(0,1fr)] items-center gap-2 w-full px-2 py-1 rounded-lg text-base font-medium text-ink-soft text-left tracking-[-0.005em]"
     >
       <span className="grid place-items-center w-4 h-4 shrink-0">
         {icon}
@@ -187,12 +187,8 @@ function SessionRow({
         onStartRename();
       }}
       data-streaming={streaming ? "true" : undefined}
-      className={clsx(
-        "session-row group/row grid grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-1 rounded-lg text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
-        active
-          ? "bg-surface-soft text-ink shadow-[var(--shadow-sm)]"
-          : "text-ink-soft hover:bg-surface-soft/60",
-      )}
+      data-active={active ? "true" : undefined}
+      className="app-row session-row group/row grid grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 w-full px-2 py-1 rounded-lg text-ink-soft text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
     >
       <SessionStateIcon streaming={streaming} unread={unread} isChannel={isChannel} />
       <span className="min-w-0 truncate text-base font-medium tracking-[-0.005em]">

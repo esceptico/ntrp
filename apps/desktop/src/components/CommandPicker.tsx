@@ -156,18 +156,13 @@ function Section({
                 onSelect(entry);
               }}
               onMouseEnter={() => setIndex(idx)}
-              className={clsx(
-                "group/cmd relative w-full flex items-center gap-2.5 pl-3 pr-3 py-1.5 text-left transition-colors",
-                active ? "bg-surface-soft" : "hover:bg-surface-soft/60",
-              )}
+              data-active={active ? "true" : undefined}
+              className="app-row group/cmd w-full flex items-center gap-2.5 pl-3 pr-3 py-1.5 text-ink-soft text-left"
             >
-              {active && (
-                <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-r-full bg-accent" />
-              )}
               <span
                 className={clsx(
                   "shrink-0 grid place-items-center w-5 h-5 rounded-md transition-colors",
-                  active ? "bg-surface text-ink-soft" : "text-faint",
+                  active ? "text-ink-soft" : "text-faint",
                 )}
               >
                 <Icon size={ICON.XS} strokeWidth={2} />
