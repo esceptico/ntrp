@@ -37,7 +37,7 @@ function statusDotClass(status: BackgroundAgent["status"] | "running"): string {
   }
 }
 
-function StatusDot({
+export function StatusDot({
   status,
   pulse = false,
 }: {
@@ -277,7 +277,7 @@ export function AgentRightSidebar() {
       >
         {collapsed && totalCount > 0 && <StatusDot status="running" pulse />}
         {collapsed && totalCount > 0 && (
-          <span className="text-xs tabular-nums text-ink-soft">{totalCount}</span>
+          <span className="text-xs tabular-nums text-faint">{totalCount}</span>
         )}
         {collapsed ? (
           <PanelRightOpen size={ICON.MD} strokeWidth={2} />

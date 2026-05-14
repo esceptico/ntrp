@@ -8,6 +8,7 @@ import { useStore } from "../store";
 import { apiWithConfig } from "../api";
 import { archiveSession, createSession, fetchAutomations, renameSession, switchSession } from "../actions";
 import { ICON } from "../lib/icons";
+import { StatusDot } from "./AgentRightSidebar";
 
 function formatAge(value: string): string {
   const delta = Date.now() - new Date(value).getTime();
@@ -239,15 +240,15 @@ function SessionStateIcon({
 }) {
   if (streaming) {
     return (
-      <span className="thinking-dots grid grid-flow-col gap-[2px] place-items-center w-4 h-4 text-accent" aria-label="Running">
-        <span /><span /><span />
+      <span className="grid place-items-center w-4 h-4" aria-label="Running">
+        <StatusDot status="running" pulse />
       </span>
     );
   }
   if (unread) {
     return (
       <span className="grid place-items-center w-4 h-4" aria-label="Unread">
-        <span className="block w-[7px] h-[7px] rounded-full bg-accent-strong shadow-[0_0_6px_1px_color-mix(in_oklab,var(--color-accent)_45%,transparent)]" />
+        <span className="block w-[5px] h-[5px] rounded-full bg-accent-strong" />
       </span>
     );
   }
