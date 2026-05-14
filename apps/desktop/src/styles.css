@@ -341,10 +341,12 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 /* ─── Quiet rows ─────────────────────────────────────────────
    Restraint pass on list items, shared across the sidebar, the
-   command picker, and the command palette. Hover shifts text
-   color only — no background flood. Active state is a 2px
-   accent rail at the left edge (no body fill). One element
-   changes per state instead of the whole surface.
+   command picker, the command palette, and modal lists. Hover
+   shifts text color only — no background flood. Active state is
+   a 1px inset ring at low alpha — the same edge cue the glass
+   panes use. Each active row reads as a "defined sub-surface"
+   in the parent, in the same material vocabulary as the
+   surrounding chrome. No colored rails, no surface flood.
 
    Consumers provide layout, padding, radius, and base text
    color. Mark the active row with `data-active="true"` (current
@@ -352,7 +354,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    `aria-selected="true"` if the row already exposes it. */
 .app-row {
   position: relative;
-  transition: color 120ms ease-out;
+  transition: color 120ms ease-out, box-shadow 120ms ease-out;
 }
 .app-row:hover {
   color: var(--color-ink);
@@ -360,19 +362,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .app-row[data-active="true"],
 .app-row[aria-selected="true"] {
   color: var(--color-ink);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 10%, transparent);
 }
-.app-row[data-active="true"]::before,
-.app-row[aria-selected="true"]::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 4px;
-  bottom: 4px;
-  width: 2px;
-  background-color: var(--color-accent-strong);
-  border-top-right-radius: 2px;
-  border-bottom-right-radius: 2px;
-  pointer-events: none;
+:root.dark .app-row[data-active="true"],
+:root.dark .app-row[aria-selected="true"] {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, white 6%, transparent);
 }
 
 /* Messages list scrollbar — always visible, draggable, slim. */
