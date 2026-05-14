@@ -32,7 +32,6 @@ function ChatHeader() {
   const session = sessions.find((s) => s.session_id === sessionId);
 
   const title = session?.name || (sessionId ? "untitled" : "no session");
-  const meta = sessionId ? sessionId.slice(0, 8) : "—";
   const isChannel = session?.session_type === "channel";
   const originId = session?.origin_automation_id ?? null;
   const originAutomation = originId
@@ -68,9 +67,6 @@ function ChatHeader() {
             from {originLabel}
           </span>
         )}
-        <span className="shrink-0 text-xs text-faint font-mono tracking-[-0.01em]">
-          {meta}
-        </span>
       </div>
     </div>
   );
@@ -131,25 +127,15 @@ export function Chat() {
           className="chat-bottom-fade absolute left-0 right-0 bottom-0 pointer-events-none z-[5]"
           style={{ height: "calc(var(--chat-bottom-h, 96px) + 24px)" }}
         />
-        {/* Top fade — bg-color gradient. Messages dissolve into bg as
-            they scroll up under the header instead of crisply sliding
-            under glass. */}
+        {/* Soft bg-color fade behind the floating header card. No blur —
+            just lets messages dissolve into the bg as they scroll up
+            toward the chrome, so the card doesn't sit on a crisp text
+            edge. Mirrors `chat-bottom-fade`. */}
         <div
           aria-hidden
           className="chat-top-fade absolute left-0 right-0 top-0 pointer-events-none z-[5]"
-          style={{ height: "88px" }}
+          style={{ height: "72px" }}
         />
-        {/* Progressive blur stack — five layered backdrop-filters with
-            feathered masks. Approximates a gradient blur from strong
-            at the very top to none at the bottom edge, so the chrome→
-            content transition doesn't read as a hard seam. */}
-        <div
-          aria-hidden
-          className="progressive-blur-top absolute left-0 right-0 top-0 pointer-events-none z-[6]"
-          style={{ height: "88px" }}
-        >
-          <div /><div /><div /><div /><div />
-        </div>
         <div className="absolute top-0 left-0 right-0 z-10">
           <ChatHeader />
         </div>

@@ -279,54 +279,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   background-color: transparent;
 }
 
-/* Progressive blur stack for the top chrome — strongest blur at the
-   very top, tapering to none where the messages take over. Five
-   stacked layers each with a soft mask reveal in its band; their
-   backdrop-filters sum to an approximately smooth blur gradient.
-   Pattern popularized by Rauno (rauno.me/craft/depth) and used in
-   visionOS chrome — beats a single uniform blur, which always reads
-   as a hard horizontal seam where the blur ends.
-   Heights track the wrapper element (88px in `Chat.tsx`). */
-.progressive-blur-top > div {
-  position: absolute;
-  inset: 0;
-}
-.progressive-blur-top > div:nth-child(1) {
-  backdrop-filter: blur(10px) saturate(180%);
-  -webkit-backdrop-filter: blur(10px) saturate(180%);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 20%, transparent 30%);
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 20%, transparent 30%);
-}
-.progressive-blur-top > div:nth-child(2) {
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  mask-image: linear-gradient(to bottom, transparent 10%, #000 20%, #000 40%, transparent 50%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 10%, #000 20%, #000 40%, transparent 50%);
-}
-.progressive-blur-top > div:nth-child(3) {
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  mask-image: linear-gradient(to bottom, transparent 30%, #000 40%, #000 60%, transparent 70%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 30%, #000 40%, #000 60%, transparent 70%);
-}
-.progressive-blur-top > div:nth-child(4) {
-  backdrop-filter: blur(1.5px);
-  -webkit-backdrop-filter: blur(1.5px);
-  mask-image: linear-gradient(to bottom, transparent 50%, #000 60%, #000 80%, transparent 90%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 50%, #000 60%, #000 80%, transparent 90%);
-}
-.progressive-blur-top > div:nth-child(5) {
-  backdrop-filter: blur(0.5px);
-  -webkit-backdrop-filter: blur(0.5px);
-  mask-image: linear-gradient(to bottom, transparent 70%, #000 80%, #000 100%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 70%, #000 80%, #000 100%);
-}
-
-
-/* Mirror of `.chat-bottom-fade` — soft fade-from-bg behind the header
-   so messages dissolve into bg as they scroll up toward the chrome
-   instead of sliding under it as crisp text. Header sits above at
-   z-10 with its own blur. */
+/* Soft fade behind the floating header card — bg-color gradient only,
+   no blur. Mirrors `.chat-bottom-fade` for the composer: messages
+   dissolve into bg as they scroll up under the chrome instead of
+   crisply abutting the card edge. */
 .chat-top-fade {
   background: linear-gradient(
     to bottom,
@@ -335,6 +291,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     transparent 100%
   );
 }
+
 
 /* Anything portaled above the main layout (modals, viewers) must
    explicitly opt out of the drag region — the sidebar / chat-header
