@@ -117,6 +117,26 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ─── Status dot breathing light ─────────────────────────────
+   Soft pulsing glow on a small color dot, used for "this thing is
+   running" indicators. The dot itself stays put; its halo expands
+   and contracts via box-shadow alone — same vocabulary as a glass
+   light source breathing. `currentColor` picks up the dot's tint
+   (accent/ok/bad) so the recipe works for any status hue. */
+@keyframes statusBreathe {
+  0%, 100% {
+    box-shadow: 0 0 0 0 currentColor, 0 0 3px 0 currentColor;
+    opacity: 0.85;
+  }
+  50% {
+    box-shadow: 0 0 6px 1px currentColor, 0 0 12px 2px currentColor;
+    opacity: 1;
+  }
+}
+.status-dot-breathe {
+  animation: statusBreathe 2s ease-in-out infinite;
+}
+
 /* ─── Base ─────────────────────────────────────────────────── */
 :root {
   color-scheme: light;

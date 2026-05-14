@@ -25,15 +25,17 @@ function formatElapsed(since: number | string): string {
 // Cribbed from Codex's Cloud Tasks (running/completed/failed/cancelled
 // map to the same conceptual buckets as their PENDING/READY/ERROR/...).
 function statusDotClass(status: BackgroundAgent["status"] | "running"): string {
+  // Both bg-* and text-* so the breathing-glow box-shadow (which uses
+  // `currentColor`) tints to the same hue as the dot fill.
   switch (status) {
     case "completed":
-      return "bg-ok";
+      return "bg-ok text-ok";
     case "failed":
-      return "bg-bad";
+      return "bg-bad text-bad";
     case "cancelled":
-      return "bg-faint";
+      return "bg-faint text-faint";
     default:
-      return "bg-accent";
+      return "bg-accent text-accent";
   }
 }
 
@@ -44,23 +46,16 @@ export function StatusDot({
   status: BackgroundAgent["status"] | "running";
   pulse?: boolean;
 }) {
+  const breathing = pulse && status === "running";
   return (
-    <span className="relative inline-flex w-1.5 h-1.5 shrink-0" aria-hidden>
-      {pulse && status === "running" && (
-        <span
-          className={clsx(
-            "absolute inset-0 rounded-full opacity-60 animate-ping",
-            statusDotClass(status),
-          )}
-        />
+    <span
+      className={clsx(
+        "inline-block w-1.5 h-1.5 rounded-full shrink-0",
+        statusDotClass(status),
+        breathing && "status-dot-breathe",
       )}
-      <span
-        className={clsx(
-          "relative inline-block w-1.5 h-1.5 rounded-full",
-          statusDotClass(status),
-        )}
-      />
-    </span>
+      aria-hidden
+    />
   );
 }
 
