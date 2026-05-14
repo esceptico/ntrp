@@ -259,7 +259,7 @@ function ApprovalCard({
   return (
     <div
       aria-hidden={!interactive || undefined}
-      className="rounded-xl border border-line-soft bg-surface shadow-[var(--shadow-sm)] overflow-hidden"
+      className="glass-pane rounded-xl overflow-hidden"
     >
       <header className="px-4 pt-3 pb-2 flex items-baseline gap-2">
         <h3 className="m-0 text-md font-medium text-ink tracking-[-0.005em]">
