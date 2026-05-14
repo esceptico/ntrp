@@ -223,7 +223,7 @@ function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: 
       <div
         role="dialog"
         aria-label="Loop detail"
-        className="w-[min(560px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-32px))] grid grid-rows-[auto_minmax(0,1fr)_auto] rounded-[14px] bg-surface shadow-[var(--shadow-pop)] border border-line"
+        className="glass-pane-thick w-[min(560px,calc(100vw-32px))] max-h-[min(640px,calc(100vh-32px))] grid grid-rows-[auto_minmax(0,1fr)_auto] rounded-[14px]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
