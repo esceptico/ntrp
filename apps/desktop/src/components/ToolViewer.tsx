@@ -340,7 +340,7 @@ function ActivityTreeNode({
         type="button"
         onClick={() => onPick(item)}
         style={{ paddingLeft: indent }}
-        className="flex items-center gap-2 w-full pr-3 py-1.5 text-left bg-transparent border-0 hover:bg-surface-soft/60 transition-colors min-w-0"
+        className="app-row flex items-center gap-2 w-full pr-3 py-1.5 text-left bg-transparent border-0 text-ink-soft min-w-0"
       >
         {agent ? (
           <span
@@ -432,7 +432,7 @@ function ChildRuns({ items }: { items: ActivityItem[] }) {
             <button
               type="button"
               onClick={() => setViewing(child)}
-              className="flex items-baseline gap-2 w-full px-3 py-2 text-left bg-transparent border-0 hover:bg-surface-soft/60 transition-colors"
+              className="app-row flex items-baseline gap-2 w-full px-3 py-2 text-left bg-transparent border-0 text-ink-soft"
             >
               <ArrowRight size={ICON.XS} strokeWidth={2} className="self-center text-whisper shrink-0" />
               <span className="text-sm font-medium text-ink-soft shrink-0">{child.kind}</span>

@@ -192,9 +192,9 @@ function ObservationRow({
     <button
       type="button"
       onClick={onSelect}
+      data-active={selected ? "true" : undefined}
       className={clsx(
-        "w-full text-left px-4 py-2.5 transition-[background-color,color,box-shadow] rounded-md",
-        selected ? "bg-surface-soft text-ink" : "hover:bg-surface-soft/50 text-ink-soft",
+        "app-row w-full text-left px-4 py-2.5 rounded-md text-ink-soft",
         highlighted && "bg-accent-soft/50 shadow-[inset_0_0_0_1px_var(--color-accent-strong)]",
       )}
     >

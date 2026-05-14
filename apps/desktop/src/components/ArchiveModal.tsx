@@ -102,7 +102,7 @@ function ArchivedRow({ session }: { session: ArchivedSession }) {
   };
 
   return (
-    <li className="group flex items-center gap-3 px-3 py-2 rounded-[10px] hover:bg-surface-soft/50 transition-colors">
+    <li className="app-row group flex items-center gap-3 px-3 py-2 rounded-[10px]">
       <div className="min-w-0 flex-1">
         <div className="text-base font-medium text-ink tracking-[-0.005em] truncate">
           {session.name || "untitled"}

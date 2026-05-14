@@ -161,10 +161,8 @@ export function ModelReasoningPicker({
                           if (m !== currentModel) onSelectModel(m);
                           setQuery("");
                         }}
-                        className={clsx(
-                          "w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm font-mono transition-colors",
-                          isCurrent ? "text-ink" : "text-ink-soft hover:bg-surface-soft/60",
-                        )}
+                        data-active={isCurrent ? "true" : undefined}
+                        className="app-row w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm font-mono text-ink-soft"
                       >
                         <span className="grid place-items-center w-3 h-3 shrink-0">
                           {isCurrent && <Check size={ICON.SM} strokeWidth={2.4} className="text-accent" />}
