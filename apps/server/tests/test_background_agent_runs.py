@@ -60,7 +60,15 @@ async def test_background_registry_injects_hidden_meta_completion_with_result():
     assert injected == [
         {
             "role": "user",
-            "content": "[background agent bg-1 completed]\n\nResult:\nemail summary",
+            "content": (
+                '<background_agent_result task_id="bg-1" status="completed">\n'
+                "This is a hidden completion event. The user cannot see this message.\n"
+                "Write a visible assistant response now. Summarize the result directly for the user.\n"
+                "If the result contains sources, IDs, links, or evidence, include the relevant ones inline.\n"
+                "Do not say the sources/result are above, hidden, attached, in a file, or in the bg result.\n\n"
+                "<result>\nemail summary\n</result>\n"
+                "</background_agent_result>"
+            ),
             "is_meta": True,
             "client_id": "bg:bg-1:completed",
         }

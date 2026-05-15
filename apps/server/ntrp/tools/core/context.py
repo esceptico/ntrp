@@ -183,7 +183,15 @@ class BackgroundTaskRegistry:
         path = self._write_result_file(task_id, result)
         result_ref = str(path.relative_to(RESULT_BASE / self.session_id))
 
-        notification = f"[background agent {task_id} {status}]\n\nResult:\n{result}"
+        notification = (
+            f"<background_agent_result task_id=\"{task_id}\" status=\"{status}\">\n"
+            "This is a hidden completion event. The user cannot see this message.\n"
+            "Write a visible assistant response now. Summarize the result directly for the user.\n"
+            "If the result contains sources, IDs, links, or evidence, include the relevant ones inline.\n"
+            "Do not say the sources/result are above, hidden, attached, in a file, or in the bg result.\n\n"
+            f"<result>\n{result}\n</result>\n"
+            "</background_agent_result>"
+        )
         messages = [
             {
                 "role": Role.USER,
