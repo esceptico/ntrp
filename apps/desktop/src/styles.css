@@ -722,11 +722,18 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  box-shadow: inset 0 1px 0 0 color-mix(in oklab, var(--color-ink) 22%, transparent);
-  animation: composerJustSent 280ms ease-out forwards;
+  /* Two-layer pulse: sharp top-edge line + soft glow spreading
+     downward into the surface. Reads as light catching the top
+     edge and bleeding into the material — not just a 1px flash. */
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, var(--color-ink) 38%, transparent),
+    inset 0 8px 16px -6px color-mix(in oklab, var(--color-ink) 14%, transparent);
+  animation: composerJustSent 360ms ease-out forwards;
 }
 :root.dark .composer-card.glass-pane[data-just-sent="true"]::after {
-  box-shadow: inset 0 1px 0 0 color-mix(in oklab, white 22%, transparent);
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, white 38%, transparent),
+    inset 0 8px 16px -6px color-mix(in oklab, white 14%, transparent);
 }
 @keyframes composerJustSent {
   from { opacity: 1; }
