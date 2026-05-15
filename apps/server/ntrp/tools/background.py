@@ -15,8 +15,10 @@ BACKGROUND_DESCRIPTION = (
     "Spawn a background agent that runs independently and delivers results automatically when done. "
     "The agent has read-only tool access (search, read, web, memory, bash). "
     "Use for long-running tasks: deep research, multi-source investigation, data gathering. "
-    "Use cancel_background_task to stop, list_background_tasks to check status, "
-    "get_background_result to read full output."
+    "When it finishes, the result is delivered back into the parent conversation as a hidden meta message. "
+    "Do not inspect the filesystem for background results. "
+    "Use cancel_background_task to stop, list_background_tasks to check currently running tasks, "
+    "and get_background_result only when the user explicitly asks to retrieve a result by task ID."
 )
 
 
@@ -68,7 +70,10 @@ async def get_background_result(execution: ToolExecution, args: GetBackgroundRes
     content = await execution.ctx.background_tasks.read_background_result(args.task_id)
     if content is None:
         return ToolResult(
-            content=f"No result for task {args.task_id} — use list_background_tasks to check if it's still running.",
+            content=(
+                f"No stored result for task {args.task_id}. "
+                "If it is still running, wait for the hidden completion notification; do not search files."
+            ),
             preview="Not found",
             is_error=True,
         )
@@ -114,8 +119,8 @@ get_background_result_tool = tool(
 list_background_tasks_tool = tool(
     display_name="List Background Tasks",
     description=(
-        "List all running background tasks. "
-        "Results are delivered automatically when tasks finish — do NOT poll this tool in a loop."
+        "List currently running background tasks only. Finished task results are delivered automatically "
+        "as hidden parent-conversation notifications — do not poll or inspect files for results."
     ),
     volatile=True,
     execute=list_background_tasks,

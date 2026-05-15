@@ -38,3 +38,29 @@ async def test_background_registry_records_started_activity_and_completed():
 
     results["bg-1"] = "done"
     assert await registry.read_background_result("bg-1") == "done"
+
+
+@pytest.mark.asyncio
+async def test_background_registry_injects_hidden_meta_completion_with_result():
+    injected = []
+
+    async def on_result(messages):
+        injected.extend(messages)
+
+    registry = BackgroundTaskRegistry(session_id="sess-1", on_result=on_result)
+
+    await registry.deliver_result(
+        task_id="bg-1",
+        result="email summary",
+        label="fetch email",
+        status="completed",
+        emit=None,
+    )
+
+    assert injected == [
+        {
+            "role": "user",
+            "content": "[background agent bg-1 completed]\n\nResult:\nemail summary",
+            "is_meta": True,
+        }
+    ]

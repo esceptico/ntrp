@@ -183,8 +183,8 @@ class BackgroundTaskRegistry:
         path = self._write_result_file(task_id, result)
         result_ref = str(path.relative_to(RESULT_BASE / self.session_id))
 
-        notification = f"[background task {task_id} {status}]"
-        messages = [{"role": Role.USER, "content": notification}]
+        notification = f"[background agent {task_id} {status}]\n\nResult:\n{result}"
+        messages = [{"role": Role.USER, "content": notification, "is_meta": True}]
 
         if emit:
             await emit(
