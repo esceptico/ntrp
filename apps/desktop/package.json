@@ -37,6 +37,7 @@
     "clsx": "^2.1.1",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.45",
+    "liquid-glass-react": "^1.1.1",
     "lucide-react": "^1.14.0",
     "mermaid": "^11.14.0",
     "motion": "^12.38.0",
@@ -92,8 +93,17 @@
       "title": "ntrp ${version}",
       "writeUpdateInfo": false,
       "contents": [
-        { "x": 130, "y": 200, "type": "file" },
-        { "x": 420, "y": 200, "type": "link", "path": "/Applications" }
+        {
+          "x": 130,
+          "y": 200,
+          "type": "file"
+        },
+        {
+          "x": 420,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     },
     "win": {

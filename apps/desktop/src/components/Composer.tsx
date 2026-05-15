@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from "react-dom";
 import { ArrowUp, ImagePlus, Repeat2, ShieldOff, ShieldCheck, Sparkles, Square, X } from "lucide-react";
 import clsx from "clsx";
+import LiquidGlass from "liquid-glass-react";
 import { useStore, type ImageBlock, type ServerLoop } from "../store";
 import { enqueueMessage, isBuiltin, refreshLoops, respondToAllApprovals, runBuiltinCommand, sendMessage, stopLoop, stopRun, toggleAuto, viewSkill } from "../actions";
 import { QueueCard } from "./QueueCard";
@@ -544,6 +545,17 @@ export function Composer() {
         {pickerOpen && query !== null && (
           <CommandPicker query={query} onSelect={applyPickerSelection} />
         )}
+      <LiquidGlass
+        cornerRadius={14}
+        displacementScale={30}
+        blurAmount={0.08}
+        saturation={160}
+        aberrationIntensity={1.5}
+        elasticity={0}
+        padding="0px"
+        mode="standard"
+        className="w-full"
+      >
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -556,7 +568,7 @@ export function Composer() {
         data-thinking-style={thinkingStyle}
         data-thinking-intensity={thinkingIntensity}
         data-just-sent={justSent ? "true" : undefined}
-        className="composer-card glass-pane relative flex flex-col border border-line rounded-[14px] focus-within:border-line-strong transition-colors"
+        className="composer-card relative flex flex-col rounded-[14px]"
       >
         {selectedSkill && (
           <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">
@@ -763,6 +775,7 @@ export function Composer() {
           )}
         </div>
       </form>
+      </LiquidGlass>
       </div>
     </div>
   );
