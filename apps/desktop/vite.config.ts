@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import preload from "vite-plugin-preload";
 
 export default defineConfig({
   root: "src",
@@ -11,7 +12,23 @@ export default defineConfig({
   // and stylesheet refs relative to the html file location so they
   // resolve correctly inside the asar.
   base: "./",
-  plugins: [react(), tailwindcss()],
+  // `preload()` emits <link rel="modulepreload"> tags for every async
+  // chunk produced by React.lazy + Vite's code-split. Without it, the
+  // first time the user opens (say) the Settings modal the renderer has
+  // to round-trip-load the chunk before mount; with it, the chunks are
+  // already warmed in browser/Electron's module cache when the import()
+  // resolves. Negligible cold-start cost vs. instant modal-open.
+  plugins: [
+    // React Compiler 1.0 — auto-memoizes components + hooks so we don't
+    // have to scatter useMemo / useCallback / React.memo. Meta reports
+    // significant load + interaction wins from enabling it. Compiler is
+    // safe-by-default: it skips compilation for anything it can't prove
+    // pure (e.g. components that mutate Maps/Sets in render), the rest
+    // of the tree still benefits.
+    react({ babel: { plugins: [["babel-plugin-react-compiler"]] } }),
+    tailwindcss(),
+    preload(),
+  ],
   build: {
     outDir: "../dist/renderer",
     emptyOutDir: true,

@@ -27,17 +27,18 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
+    "babel-plugin-react-compiler": "^1.0.0",
     "electron": "^39.2.7",
     "electron-builder": "^26.8.1",
     "tailwindcss": "^4.2.4",
     "typescript": "latest",
-    "vite": "^7.2.7"
+    "vite": "^7.2.7",
+    "vite-plugin-preload": "^0.7.0"
   },
   "dependencies": {
     "clsx": "^2.1.1",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.45",
-    "liquid-glass-react": "^1.1.1",
     "lucide-react": "^1.14.0",
     "mermaid": "^11.14.0",
     "motion": "^12.38.0",
@@ -77,11 +78,17 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["arm64", "x64"]
+          "arch": [
+            "arm64",
+            "x64"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["arm64", "x64"]
+          "arch": [
+            "arm64",
+            "x64"
+          ]
         }
       ],
       "darkModeSupport": true,
@@ -108,11 +115,15 @@
     },
     "win": {
       "icon": "electron/icons/icon.png",
-      "target": ["nsis"]
+      "target": [
+        "nsis"
+      ]
     },
     "linux": {
       "icon": "electron/icons/icon.png",
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "category": "Office"
     }
   }

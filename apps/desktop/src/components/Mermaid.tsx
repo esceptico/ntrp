@@ -5,6 +5,7 @@ import { Check, Copy, Maximize2, Minimize2, Minus, Plus, RotateCcw } from "lucid
 import clsx from "clsx";
 import { getMermaid, invalidateMermaidTheme } from "../lib/mermaidTheme";
 import { SPRING_SMOOTH } from "../lib/motion";
+import { useEscapeKey, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
 
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
@@ -139,13 +140,12 @@ function PanelInner({
   const naturalRef = useRef<{ w: number; h: number } | null>(null);
   const [view, setView] = useState<ViewState>({ zoom: 1, x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, flashCopied] = useTimeoutFlag(1200);
   const dragRef = useRef<{ startX: number; startY: number; viewX: number; viewY: number } | null>(null);
 
   const onCopy = async () => {
     await window.ntrpDesktop?.clipboard?.writeText(source);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
+    flashCopied();
   };
 
   // Inject the SVG once, capture natural size, fit-to-view.
@@ -229,16 +229,8 @@ function PanelInner({
     setView(computeFit(surface, natural));
   };
 
-  // Esc exits fullscreen. Re-fit when toggling so the diagram lands sized
-  // to whichever surface it's currently in.
-  useEffect(() => {
-    if (!fullscreen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onToggleFullscreen();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [fullscreen, onToggleFullscreen]);
+  // Esc exits fullscreen.
+  useEscapeKey(onToggleFullscreen, fullscreen);
 
   return (
     <div
@@ -340,11 +332,10 @@ function computeFit(surface: HTMLElement, natural: { w: number; h: number }): Vi
 }
 
 function MermaidErrorBlock({ source, message }: { source: string; message: string }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, flashCopied] = useTimeoutFlag(1200);
   const onCopy = async () => {
     await window.ntrpDesktop?.clipboard?.writeText(source);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
+    flashCopied();
   };
   return (
     <div className="my-[0.6em] px-3.5 py-3 border border-[rgba(184,68,43,0.18)] rounded-xl bg-bad-soft">

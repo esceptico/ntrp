@@ -1,4 +1,4 @@
-import { Children, isValidElement, useMemo, useState, type ReactNode } from "react";
+import { Children, isValidElement, useMemo, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -14,6 +14,7 @@ import python from "highlight.js/lib/languages/python";
 import typescript from "highlight.js/lib/languages/typescript";
 import { Mermaid } from "./Mermaid";
 import { ICON } from "../lib/icons";
+import { useTimeoutFlag } from "../lib/hooks";
 
 const HL_LANGUAGES = {
   json,
@@ -155,7 +156,7 @@ function PreBlock({ children }: { children?: ReactNode }) {
 }
 
 function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, flashCopied] = useTimeoutFlag(1200);
 
   const onClick = async () => {
     try {
@@ -176,8 +177,7 @@ function CopyButton({ text }: { text: string }) {
         document.body.removeChild(ta);
       }
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
+    flashCopied();
   };
 
   return (

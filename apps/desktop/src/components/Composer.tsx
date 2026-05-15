@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, ImagePlus, ShieldOff, ShieldCheck, Sparkles, Square, X } from "lucide-react";
 import clsx from "clsx";
 import { useStore, type ImageBlock } from "../store";
@@ -13,6 +13,7 @@ import {
 import { ModelReasoningChip } from "./ComposerSelectors";
 import { LoopStatusBar } from "./composer/LoopStatus";
 import { UsageDisplay } from "./composer/UsageDisplay";
+import { useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
 
 /** Read a single File and return its bytes as base64 + media type. */
@@ -152,22 +153,14 @@ export function Composer() {
   // pseudo doesn't fire when Enter submits the form (no actual click).
   // This gives keyboard submits the same tactile feedback as a mouse
   // click — the button shrinks for ~140ms each time submit() runs.
-  const [sendPressing, setSendPressing] = useState(false);
-  const flashSendPress = useCallback(() => {
-    setSendPressing(true);
-    window.setTimeout(() => setSendPressing(false), 140);
-  }, []);
+  const [sendPressing, flashSendPress] = useTimeoutFlag(140);
   // Composer-level send acknowledgement — the inner ring pulses
   // brighter for a single beat (280ms) on submit. Uses the existing
   // glass edge specular as its vocabulary, so the material itself
   // responds to the action rather than a new animation layer being
   // grafted on top. Composes alongside the thinking-rim ::before
   // since this lives on a separate ::after pseudo-element in CSS.
-  const [justSent, setJustSent] = useState(false);
-  const flashJustSent = useCallback(() => {
-    setJustSent(true);
-    window.setTimeout(() => setJustSent(false), 280);
-  }, []);
+  const [justSent, flashJustSent] = useTimeoutFlag(280);
 
   useEffect(() => {
     if (inputRef.current) resize(inputRef.current);

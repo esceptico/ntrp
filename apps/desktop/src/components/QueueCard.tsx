@@ -1,6 +1,6 @@
 import { Loader2, X } from "lucide-react";
 import clsx from "clsx";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { cancelQueuedMessage } from "../actions";
 import { useStore, type QueuedMessage } from "../store";
 import { ICON } from "../lib/icons";

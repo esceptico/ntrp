@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { CornerDownLeft } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { useStore, type ApprovalState } from "../store";
 import { respondToAllApprovals, respondToApproval } from "../actions";
 import { ICON } from "../lib/icons";

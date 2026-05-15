@@ -1,4 +1,48 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+
+/** Returns `[flag, fire]`. `fire()` flips the flag true and schedules
+ *  it back to false after `durationMs`. The pending timeout is cleared
+ *  if the component unmounts (or `fire()` is called again) so the flag
+ *  never updates after unmount — fixing the classic "setCopied(false)
+ *  after the button is gone" warning. */
+export function useTimeoutFlag(durationMs: number): readonly [boolean, () => void] {
+  const [flag, setFlag] = useState(false);
+  const timerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    },
+    [],
+  );
+  const fire = useCallback(() => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    setFlag(true);
+    timerRef.current = window.setTimeout(() => {
+      setFlag(false);
+      timerRef.current = null;
+    }, durationMs);
+  }, [durationMs]);
+  return [flag, fire] as const;
+}
+
+/** Fire `onEscape` while `active` is true. Replaces the boilerplate
+ *  useEffect + addEventListener("keydown") + Escape branch that every
+ *  modal/popover/picker would otherwise hand-roll. The callback is held
+ *  in a ref so callers don't need to memoize it. */
+export function useEscapeKey(onEscape: () => void, active = true): void {
+  const ref = useRef(onEscape);
+  useEffect(() => {
+    ref.current = onEscape;
+  }, [onEscape]);
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") ref.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [active]);
+}
 
 /** Tracks whether the component is still mounted. Use to gate state updates
  *  that follow an `await` whose resolution could outlive the component

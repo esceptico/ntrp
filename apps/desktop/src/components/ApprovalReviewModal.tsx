@@ -1,10 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, X } from "lucide-react";
 import { useStore } from "../store";
 import { respondToApproval } from "../actions";
 import { SPRING_SMOOTH, modalOriginTransform } from "../lib/motion";
+import { useEscapeKey } from "../lib/hooks";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
 
@@ -47,14 +48,7 @@ export function ApprovalReviewModal() {
   }
   const originDelta = modalOriginTransform(snapshotRef.current);
 
-  useEffect(() => {
-    if (!approval) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [approval, close]);
+  useEscapeKey(() => close(null), !!approval);
 
   const root = document.querySelector("#app");
   if (!root) return null;

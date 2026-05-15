@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Bot, Check, Copy, X } from "lucide-react";
@@ -10,6 +10,7 @@ import { extractTask, friendlyAgentLabel, isAgent } from "../lib/agent";
 import { Markdown } from "./Markdown";
 import { IconButton } from "./IconButton";
 import { SPRING_SMOOTH } from "../lib/motion";
+import { useEscapeKey, useTimeoutFlag } from "../lib/hooks";
 import { ICON } from "../lib/icons";
 
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
@@ -98,14 +99,7 @@ export function ToolViewer() {
     [output.body, output.lang],
   );
 
-  useEffect(() => {
-    if (!item) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [item, close]);
+  useEscapeKey(() => close(null), !!item);
 
   const root = document.querySelector("#app");
   if (!root) return null;
@@ -389,12 +383,11 @@ function buildStats(descendants: ActivityItem[]) {
 }
 
 function CopyButton({ getValue }: { getValue: () => string }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, flashCopied] = useTimeoutFlag(1200);
   const onCopy = async () => {
     try {
       await navigator.clipboard.writeText(getValue());
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
+      flashCopied();
     } catch {
       /* ignore */
     }
@@ -454,15 +447,14 @@ function Section({
   html: string;
   placeholder: string;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, flashCopied] = useTimeoutFlag(1200);
   const hasBody = body.trim().length > 0;
 
   const onCopy = async () => {
     if (!hasBody) return;
     try {
       await navigator.clipboard.writeText(body);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
+      flashCopied();
     } catch {
       /* clipboard refused — silently ignore */
     }

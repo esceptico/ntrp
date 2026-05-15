@@ -8,19 +8,11 @@ import { useStore } from "../store";
 import { apiWithConfig } from "../api";
 import { archiveSession, createSession, fetchAutomations, renameSession, switchSession } from "../actions";
 import { ICON } from "../lib/icons";
+import { formatRelativePast } from "../lib/format";
 import { StatusDot } from "./AgentRightSidebar";
 
-function formatAge(value: string): string {
-  const delta = Date.now() - new Date(value).getTime();
-  const minutes = Math.max(1, Math.floor(delta / 60_000));
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 48) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
-}
-
 /** Re-render the caller every `intervalMs` so `Date.now()`-based labels
- *  (formatAge, "1m / 12h / 2d") tick forward without user interaction. */
+ *  ("1m / 12h / 2d") tick forward without user interaction. */
 function useTimeTicker(intervalMs = 30_000): void {
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -204,7 +196,7 @@ function SessionRow({
               active ? "text-muted" : "text-faint",
             )}
           >
-            {formatAge(lastActivity)}
+            {formatRelativePast(lastActivity)}
           </span>
         </span>
         <span className="absolute inset-0 flex items-center justify-end gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity duration-150">

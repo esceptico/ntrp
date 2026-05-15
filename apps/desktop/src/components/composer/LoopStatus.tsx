@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Repeat2, X } from "lucide-react";
 import { useStore, type ServerLoop } from "../../store";
 import { refreshLoops, stopLoop } from "../../actions";
+import { useEscapeKey } from "../../lib/hooks";
 import { ICON } from "../../lib/icons";
 import { formatLoopCountdown } from "../../lib/loops";
 import { Markdown } from "../Markdown";
@@ -184,14 +185,7 @@ export function LoopStatusBar() {
 }
 
 function LoopDetailModal({ loop, onClose }: { loop: ServerLoop | null; onClose: () => void }) {
-  useEffect(() => {
-    if (!loop) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [loop, onClose]);
+  useEscapeKey(onClose, !!loop);
 
   if (!loop) return null;
   const nextRunMs = loop.next_run_at ? Date.parse(loop.next_run_at) : Number.POSITIVE_INFINITY;

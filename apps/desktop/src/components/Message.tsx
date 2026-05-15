@@ -10,6 +10,7 @@ import { branchAtMessage, viewSkill } from "../actions";
 import { Markdown } from "./Markdown";
 import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
 import { ICON } from "../lib/icons";
+import { useTimeoutFlag } from "../lib/hooks";
 import { useSmoothStreamedContent } from "../lib/useSmoothStream";
 
 const EASE = EASE_EMPHASIZED;
@@ -62,7 +63,7 @@ function formatMessageTime(ms: number): string {
 }
 
 function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, flashCopied] = useTimeoutFlag(1200);
   const [branching, setBranching] = useState(false);
   const startedAt = useStore((s) => s.messages.get(id)?.turn?.startedAt);
 
@@ -70,8 +71,7 @@ function MessageActions({ id, role }: { id: string; role: "user" | "assistant" }
     const message = useStore.getState().messages.get(id);
     if (!message) return;
     await window.ntrpDesktop?.clipboard?.writeText(message.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
+    flashCopied();
   }
 
   function edit() {

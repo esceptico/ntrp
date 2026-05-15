@@ -1,8 +1,9 @@
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { X } from "lucide-react";
 import { SPRING_SMOOTH } from "../lib/motion";
+import { useEscapeKey } from "../lib/hooks";
 import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
 
@@ -64,14 +65,7 @@ export function PageModal({
   rounded = DEFAULT_ROUNDED,
   disableEscape,
 }: PageModalProps) {
-  useEffect(() => {
-    if (!open || disableEscape) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, disableEscape, onClose]);
+  useEscapeKey(onClose, open && !disableEscape);
 
   const root = document.querySelector("#app");
   if (!root) return null;

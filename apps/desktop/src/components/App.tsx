@@ -1,19 +1,36 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { MotionConfig, motion } from "motion/react";
 import { MOTION, EASE_EMPHASIZED } from "../lib/motion";
 import { Sidebar } from "./Sidebar";
 import { Chat } from "./Chat";
-import { SettingsModal } from "./SettingsModal";
-import { AutomationsModal } from "./AutomationsModal";
-import { ArchiveModal } from "./ArchiveModal";
-import { MemoryModal } from "./MemoryModal";
 import { CommandPalette } from "./CommandPalette";
 import { MarkdownViewer } from "./MarkdownViewer";
-import { ToolViewer } from "./ToolViewer";
 import { ApprovalReviewModal } from "./ApprovalReviewModal";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { AgentRightSidebar } from "./AgentRightSidebar";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { Demo as TraceDemo } from "./trace/Demo";
+
+// The five "open from chrome" modals only mount when the user actually
+// opens them. Lazy boundaries here keep ~300 KB of MCP/Providers/Memory/
+// Automations code out of the initial bundle. Suspense fallback is null
+// — modals are conditional anyway, no spinner needed for the brief
+// chunk-fetch in an Electron renderer.
+const SettingsModal = lazy(() =>
+  import("./SettingsModal").then((m) => ({ default: m.SettingsModal })),
+);
+const AutomationsModal = lazy(() =>
+  import("./AutomationsModal").then((m) => ({ default: m.AutomationsModal })),
+);
+const ArchiveModal = lazy(() =>
+  import("./ArchiveModal").then((m) => ({ default: m.ArchiveModal })),
+);
+const MemoryModal = lazy(() =>
+  import("./MemoryModal").then((m) => ({ default: m.MemoryModal })),
+);
+const ToolViewer = lazy(() =>
+  import("./ToolViewer").then((m) => ({ default: m.ToolViewer })),
+);
 import { useStore } from "../store";
 import { useEvents } from "../hooks/useEvents";
 import { useActiveRuns } from "../hooks/useActiveRuns";
@@ -152,15 +169,21 @@ export function App() {
         <Sidebar />
         <SidebarResizeHandle />
       </motion.div>
-      <Chat />
+      <ErrorBoundary>
+        <Chat />
+      </ErrorBoundary>
       <AgentRightSidebar />
-      <SettingsModal />
-      <AutomationsModal />
-      <ArchiveModal />
-      <MemoryModal />
+      <ErrorBoundary>
+        <Suspense fallback={null}>
+          <SettingsModal />
+          <AutomationsModal />
+          <ArchiveModal />
+          <MemoryModal />
+          <ToolViewer />
+        </Suspense>
+      </ErrorBoundary>
       <CommandPalette />
       <MarkdownViewer />
-      <ToolViewer />
       <ApprovalReviewModal />
     </MotionConfig>
   );
