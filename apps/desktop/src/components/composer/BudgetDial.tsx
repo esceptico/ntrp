@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import clsx from "clsx";
@@ -8,26 +8,20 @@ import { SPRING_SMOOTH } from "../../lib/motion";
 /** Compact "two scales on one ring" budget meter. Outer arc = token
  *  pressure (parent context only — subagent internals don't count, per
  *  the compactor logic). Inner arc = message pressure. Either hitting
- *  100% triggers auto-compaction on the server. Hover for the breakdown.
- *
- *  Replaces the old UsageDisplay text pill. Renders nothing until the
- *  first run finishes (`messageCount > 0`) so a fresh session shows no
- *  decoration. */
+ *  100% triggers auto-compaction on the server. Hover or click for the
+ *  breakdown. */
 
-const SIZE = 22;
-const STROKE = 2.4;
+const SIZE = 18;
+const STROKE = 2.2;
 const OUTER_R = SIZE / 2 - STROKE / 2 - 0.5;
-const INNER_R = OUTER_R - STROKE - 1.4;
+const INNER_R = OUTER_R - STROKE - 1.2;
 const OUTER_C = 2 * Math.PI * OUTER_R;
 const INNER_C = 2 * Math.PI * INNER_R;
 
 function ratioColor(ratio: number): string {
-  // Single graduation: cool → amber → red. Used by both arcs so the eye
-  // can compare them against the same scale. CSS vars keep it palette-
-  // aware in light / dark themes.
   if (ratio >= 0.9) return "var(--color-bad, #b8442b)";
   if (ratio >= 0.7) return "var(--color-warn, #c98a2b)";
-  return "var(--color-muted)";
+  return "var(--color-ink-soft, #2e3338)";
 }
 
 function formatTokens(n: number): string {
@@ -50,47 +44,59 @@ export function BudgetDial() {
   const serverConfig = useStore((s) => s.serverConfig);
   const lastCompaction = useStore((s) => s.lastCompaction);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [coords, setCoords] = useState<{ bottom: number; right: number } | null>(null);
+  const [coords, setCoords] = useState<{ bottom: number; right: number }>({
+    bottom: 0,
+    right: 0,
+  });
   const hideTimerRef = useRef<number | null>(null);
 
-  // Compaction fires at `compression_threshold * model.max_context_tokens`,
-  // so the dial's "100%" matches the actual trigger — not the raw model
-  // ceiling. Falls back gracefully when serverConfig hasn't loaded yet.
   const modelCeiling = serverConfig?.chat_model_max_context ?? 0;
   const compressionPct = serverConfig
     ? Math.round(serverConfig.compression_threshold * 100)
     : 80;
-  const tokenLimit = modelCeiling > 0
-    ? Math.floor(modelCeiling * (serverConfig?.compression_threshold ?? 0.8))
-    : 0;
+  const tokenLimit =
+    modelCeiling > 0
+      ? Math.floor(modelCeiling * (serverConfig?.compression_threshold ?? 0.8))
+      : 0;
   const messageLimit = serverConfig?.max_messages ?? 0;
   const tokenRatio = tokenLimit > 0 ? Math.min(1, usage.lastPrompt / tokenLimit) : 0;
   const messageRatio = messageLimit > 0 ? Math.min(1, usage.messageCount / messageLimit) : 0;
   const maxRatio = Math.max(tokenRatio, messageRatio);
+  const hasAnyData = usage.lastPrompt > 0 || usage.messageCount > 0 || usage.totalCost > 0;
 
-  const show = () => {
-    if (hideTimerRef.current) {
+  const cancelHide = () => {
+    if (hideTimerRef.current !== null) {
       window.clearTimeout(hideTimerRef.current);
       hideTimerRef.current = null;
     }
+  };
+  const show = () => {
+    cancelHide();
     setOpen(true);
   };
   const scheduleHide = () => {
-    if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = window.setTimeout(() => setOpen(false), 80);
+    cancelHide();
+    // 200ms — generous bridge for the 8px gap so the user can move from
+    // trigger to popover without the popover snapping shut. LoopStatus
+    // uses the same shape with 80ms; bumped here because the dial sits
+    // close to the composer's right edge and the popover renders to its
+    // left, so the cursor has to travel further across that gap.
+    hideTimerRef.current = window.setTimeout(() => setOpen(false), 200);
   };
+  const toggle = () => setOpen((v) => !v);
 
-  useEffect(() => {
+  // useLayoutEffect so coords are committed before the popover paints —
+  // an open=true / coords-still-zero frame would render the popover at
+  // the top-left of the viewport for one tick (visible flash).
+  useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
     const update = () => {
       const r = triggerRef.current!.getBoundingClientRect();
-      // 8px gap above the trigger, right-anchored. With the dial near the
-      // composer's right edge, anchoring by left would let the popover
-      // overflow the chat. Anchoring by right keeps it on-screen.
       setCoords({
-        bottom: window.innerHeight - r.top + 8,
-        right: window.innerWidth - r.right - 8,
+        bottom: Math.max(8, window.innerHeight - r.top + 8),
+        right: Math.max(8, window.innerWidth - r.right - 8),
       });
     };
     update();
@@ -102,6 +108,29 @@ export function BudgetDial() {
     };
   }, [open]);
 
+  // Click-outside to close. Cheap insurance for the case where hover
+  // misbehaves on a flaky trackpad and the popover gets stuck open.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    window.addEventListener("mousedown", onClick);
+    return () => window.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  // Visible compact label: prefer cost when present (most useful at a
+  // glance), else the last prompt's tokens, else a tiny "—" placeholder
+  // so the dial always has a hover target with text in it.
+  const compactLabel = usage.totalCost > 0
+    ? formatCost(usage.totalCost)
+    : usage.lastPrompt > 0
+      ? `${formatTokens(usage.lastPrompt)}`
+      : "—";
+
   return (
     <span className="inline-flex items-center">
       <button
@@ -111,27 +140,34 @@ export function BudgetDial() {
         onMouseLeave={scheduleHide}
         onFocus={show}
         onBlur={scheduleHide}
-        aria-label="Budget"
+        onClick={toggle}
+        aria-label="Context budget"
+        aria-expanded={open}
+        title={
+          hasAnyData
+            ? `${formatTokens(usage.lastPrompt)} / ${formatTokens(tokenLimit)} tokens · ${usage.messageCount} / ${messageLimit} msgs`
+            : "Context budget"
+        }
         className={clsx(
-          "inline-flex items-center gap-1.5 h-7 px-1.5 rounded-full",
-          "text-xs text-faint hover:bg-surface-soft hover:text-ink transition-colors",
+          "inline-flex items-center gap-1.5 h-7 px-2 rounded-full",
+          "text-xs text-muted hover:bg-surface-soft hover:text-ink transition-colors",
+          open && "bg-surface-soft text-ink",
         )}
       >
         <svg
           width={SIZE}
           height={SIZE}
           viewBox={`0 0 ${SIZE} ${SIZE}`}
-          className={clsx(maxRatio >= 1 && "animate-pulse")}
+          className={clsx("shrink-0", maxRatio >= 1 && "animate-pulse")}
+          aria-hidden
         >
-          {/* Track (faint) — drawn for both arcs so an empty scale still
-              shows a visible ring rather than a blank pixel. */}
           <circle
             cx={SIZE / 2}
             cy={SIZE / 2}
             r={OUTER_R}
             fill="none"
             stroke="currentColor"
-            strokeOpacity={0.12}
+            strokeOpacity={0.22}
             strokeWidth={STROKE}
           />
           <circle
@@ -140,11 +176,9 @@ export function BudgetDial() {
             r={INNER_R}
             fill="none"
             stroke="currentColor"
-            strokeOpacity={0.12}
+            strokeOpacity={0.22}
             strokeWidth={STROKE}
           />
-          {/* Outer fill = tokens. Rotated -90° so progress starts at 12
-              o'clock; dasharray trick paints `ratio` of the circumference. */}
           <circle
             cx={SIZE / 2}
             cy={SIZE / 2}
@@ -158,7 +192,6 @@ export function BudgetDial() {
             transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
             style={{ transition: "stroke-dashoffset 240ms ease-out, stroke 240ms ease-out" }}
           />
-          {/* Inner fill = messages. */}
           <circle
             cx={SIZE / 2}
             cy={SIZE / 2}
@@ -173,79 +206,86 @@ export function BudgetDial() {
             style={{ transition: "stroke-dashoffset 240ms ease-out, stroke 240ms ease-out" }}
           />
         </svg>
-        {usage.totalCost > 0 && (
-          <span className="tabular-nums tracking-[-0.005em]">
-            {formatCost(usage.totalCost)}
-          </span>
-        )}
+        <span className="tabular-nums tracking-[-0.005em]">{compactLabel}</span>
       </button>
-      <AnimatePresence>
-        {open && coords && createPortal(
-          <motion.div
-            onMouseEnter={show}
-            onMouseLeave={scheduleHide}
-            initial={{ opacity: 0, y: 4, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.98 }}
-            transition={SPRING_SMOOTH}
-            style={{ position: "fixed", bottom: coords.bottom, right: coords.right, zIndex: 60 }}
-            className="glass-pane-thick w-[300px] rounded-[12px] p-3 text-sm"
-          >
-            <div className="mb-2 flex items-baseline justify-between gap-2">
-              <span className="text-xs font-medium text-muted">Context budget</span>
-              {serverConfig?.chat_model && (
-                <span className="text-[11px] text-faint truncate" title={serverConfig.chat_model}>
-                  {serverConfig.chat_model}
+      {createPortal(
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              ref={popoverRef}
+              onMouseEnter={cancelHide}
+              onMouseLeave={scheduleHide}
+              initial={{ opacity: 0, y: 4, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 4, scale: 0.98 }}
+              transition={SPRING_SMOOTH}
+              style={{
+                position: "fixed",
+                bottom: coords.bottom,
+                right: coords.right,
+                zIndex: 60,
+              }}
+              className="glass-pane-thick w-[300px] rounded-[12px] p-3 text-sm"
+            >
+              <div className="mb-2 flex items-baseline justify-between gap-2">
+                <span className="text-xs font-medium text-muted">Context budget</span>
+                {serverConfig?.chat_model && (
+                  <span
+                    className="text-[11px] text-faint truncate max-w-[170px]"
+                    title={serverConfig.chat_model}
+                  >
+                    {serverConfig.chat_model}
+                  </span>
+                )}
+              </div>
+              <Row
+                label="Tokens"
+                value={`${formatTokens(usage.lastPrompt)} / ${formatTokens(tokenLimit)}`}
+                hint={tokenLimit > 0 ? formatPct(tokenRatio) : "—"}
+                color={ratioColor(tokenRatio)}
+                detail={
+                  modelCeiling > 0
+                    ? `${formatTokens(modelCeiling)} ceiling · compacts at ${compressionPct}%`
+                    : undefined
+                }
+              />
+              <Row
+                label="Messages"
+                value={`${usage.messageCount} / ${messageLimit}`}
+                hint={messageLimit > 0 ? formatPct(messageRatio) : "—"}
+                color={ratioColor(messageRatio)}
+              />
+              <div className="mt-2 pt-2 border-t border-line-soft grid grid-cols-2 gap-y-1 gap-x-3">
+                <span className="text-faint">Session spend</span>
+                <span className="tabular-nums text-ink-soft text-right">
+                  {formatCost(usage.totalCost)}
                 </span>
-              )}
-            </div>
-            <Row
-              label="Tokens"
-              value={`${formatTokens(usage.lastPrompt)} / ${formatTokens(tokenLimit)}`}
-              hint={tokenLimit > 0 ? formatPct(tokenRatio) : "—"}
-              color={ratioColor(tokenRatio)}
-              detail={
-                modelCeiling > 0
-                  ? `${formatTokens(modelCeiling)} ceiling · compact at ${compressionPct}%`
-                  : undefined
-              }
-            />
-            <Row
-              label="Messages"
-              value={`${usage.messageCount} / ${messageLimit}`}
-              hint={messageLimit > 0 ? formatPct(messageRatio) : "—"}
-              color={ratioColor(messageRatio)}
-            />
-            <div className="mt-2 pt-2 border-t border-line-soft grid grid-cols-2 gap-y-1 gap-x-3">
-              <span className="text-faint">Session spend</span>
-              <span className="tabular-nums text-ink-soft text-right">
-                {formatCost(usage.totalCost)}
-              </span>
-              {usage.totalTokens > 0 && (
-                <>
-                  <span className="text-faint">Total tokens</span>
-                  <span className="tabular-nums text-ink-soft text-right">
-                    {formatTokens(usage.totalTokens)}
-                  </span>
-                </>
-              )}
-              {lastCompaction && (
-                <>
-                  <span className="text-faint">Last compaction</span>
-                  <span className="tabular-nums text-ink-soft text-right">
-                    {lastCompaction.before} → {lastCompaction.after} msgs
-                  </span>
-                </>
-              )}
-            </div>
-            <div className="mt-2 text-[11px] text-faint leading-snug">
-              Auto-compacts when either scale hits 100%. Subagent spend is
-              rolled into the cost; their own tokens stay off this gauge.
-            </div>
-          </motion.div>,
-          document.body,
-        )}
-      </AnimatePresence>
+                {usage.totalTokens > 0 && (
+                  <>
+                    <span className="text-faint">Total tokens</span>
+                    <span className="tabular-nums text-ink-soft text-right">
+                      {formatTokens(usage.totalTokens)}
+                    </span>
+                  </>
+                )}
+                {lastCompaction && (
+                  <>
+                    <span className="text-faint">Last compaction</span>
+                    <span className="tabular-nums text-ink-soft text-right">
+                      {lastCompaction.before} → {lastCompaction.after} msgs
+                    </span>
+                  </>
+                )}
+              </div>
+              <div className="mt-2 text-[11px] text-faint leading-snug">
+                Auto-compacts when either scale hits 100%. Subagent spend is
+                rolled into the cost; their tokens stay off this gauge.
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </span>
   );
 }
