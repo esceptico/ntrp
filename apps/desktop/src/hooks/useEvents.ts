@@ -101,6 +101,7 @@ const pendingToolCalls = new Map<
 
 let activeAssistantMessageId: string | null = null;
 const lastEventSeqBySession = new Map<string, number>();
+let clearReplayMutationTimer: ReturnType<typeof setTimeout> | null = null;
 
 type ServerEventEffect = { type: "replay_gap"; sessionId: string };
 type HistoryReloader = (sessionId: string) => Promise<void>;
@@ -247,7 +248,18 @@ export function handleServerEvent(event: ServerEvent): ServerEventEffect | undef
 
 export function handleReplayServerEvent(event: ServerEvent): ServerEventEffect | undefined {
   if (shouldDropServerEvent(event)) return;
+  markReplayMutation();
   return applyServerEvent(event, "replay");
+}
+
+function markReplayMutation(): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.dataset.streamReplaying = "true";
+  if (clearReplayMutationTimer !== null) clearTimeout(clearReplayMutationTimer);
+  clearReplayMutationTimer = setTimeout(() => {
+    clearReplayMutationTimer = null;
+    delete document.documentElement.dataset.streamReplaying;
+  }, 0);
 }
 
 function applyServerEvent(event: ServerEvent, mode: EventApplicationMode): ServerEventEffect | undefined {
@@ -652,6 +664,13 @@ function resetStreamState(): void {
   pendingResultPatches.clear();
   activeAssistantMessageId = null;
   nextItemRenderAt = 0;
+  if (clearReplayMutationTimer !== null) {
+    clearTimeout(clearReplayMutationTimer);
+    clearReplayMutationTimer = null;
+  }
+  if (typeof document !== "undefined") {
+    delete document.documentElement.dataset.streamReplaying;
+  }
 }
 
 export const resetStreamStateForTest = resetStreamState;

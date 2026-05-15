@@ -46,15 +46,19 @@ async def _event_stream(
     event_store=None,
 ) -> AsyncGenerator[str]:
     persisted_snapshot = []
+    bus = bus_registry.get(session_id)
     if event_store is not None and after_seq is not None:
         latest_seq = await event_store.get_latest_session_event_seq(session_id)
         if latest_seq:
             bus_registry.remember_session_cursor(session_id, next_seq=latest_seq + 1)
-            persisted_snapshot = await event_store.list_session_events(session_id, after_seq=after_seq)
-            if persisted_snapshot:
-                after_seq = persisted_snapshot[-1].seq
+            bus = bus_registry.get_or_create(session_id)
+            if after_seq >= bus.checkpoint_seq:
+                persisted_snapshot = await event_store.list_session_events(session_id, after_seq=after_seq)
+                if persisted_snapshot:
+                    after_seq = persisted_snapshot[-1].seq
 
-    bus = bus_registry.get_or_create(session_id)
+    if bus is None:
+        bus = bus_registry.get_or_create(session_id)
     subscription = bus.subscribe_with_replay(after_seq=after_seq)
     snapshot, queue = subscription
     last_event_at = time.monotonic()

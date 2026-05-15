@@ -590,6 +590,22 @@ test("replay mode applies tool burst activity synchronously", () => {
   expect(items.map((item) => item.id)).toEqual(["tool-1", "tool-2"]);
 });
 
+test("replay mode marks transcript mutations as non-live motion", async () => {
+  const originalDocument = (globalThis as typeof globalThis & { document?: unknown }).document;
+  const documentElement = { dataset: {} as Record<string, string> };
+  (globalThis as typeof globalThis & { document?: unknown }).document = { documentElement };
+
+  try {
+    handleReplayServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", timestamp: 1 });
+
+    expect(documentElement.dataset.streamReplaying).toBe("true");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(documentElement.dataset.streamReplaying).toBeUndefined();
+  } finally {
+    (globalThis as typeof globalThis & { document?: unknown }).document = originalDocument;
+  }
+});
+
 test("updates an agent activity item from task lifecycle events", () => {
   handleServerEvent({ type: "RUN_STARTED", run_id: "run-1", session_id: "session-1", timestamp: 1 });
   handleServerEvent({

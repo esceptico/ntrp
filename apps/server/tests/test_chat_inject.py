@@ -133,6 +133,43 @@ async def test_event_stream_replays_persisted_events_after_bus_recreation(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_event_stream_resets_instead_of_replaying_persisted_checkpointed_events(tmp_path):
+    import ntrp.database as database
+
+    conn = await database.connect(tmp_path / "sessions.db")
+    read_conn = await database.connect(tmp_path / "sessions.db", readonly=True)
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    await store.record_session_event(
+        StreamRecord(seq=2, session_id="sess-1", event=ThinkingEvent(status="checkpointed")),
+    )
+    buses = BusRegistry()
+    bus = buses.get_or_create("sess-1")
+    await bus.emit(ThinkingEvent(status="old-a"))
+    await bus.emit(ThinkingEvent(status="old-b"))
+    bus.mark_checkpoint()
+    await bus.emit(ThinkingEvent(status="live-tail"))
+
+    stream = _event_stream("sess-1", buses, RunRegistry(), stream=True, after_seq=1, event_store=store)
+    try:
+        reset_chunk = await anext(stream)
+        tail_chunk = await anext(stream)
+    finally:
+        await stream.aclose()
+        await read_conn.close()
+        await conn.close()
+
+    reset_seq, _reset_event_name, reset_payload = _parse_sse_chunk(reset_chunk)
+    tail_seq, _tail_event_name, tail_payload = _parse_sse_chunk(tail_chunk)
+    assert reset_seq == 2
+    assert reset_payload["type"] == "stream_reset"
+    assert reset_payload["reason"] == "replay_gap"
+    assert tail_seq == 3
+    assert tail_payload["status"] == "live-tail"
+    assert tail_payload["replay"] is True
+
+
+@pytest.mark.asyncio
 async def test_event_stream_stream_false_filters_text_deltas_but_preserves_sequence_ids():
     buses = BusRegistry()
     bus = buses.get_or_create("sess-1")
