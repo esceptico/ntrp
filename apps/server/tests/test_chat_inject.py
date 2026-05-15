@@ -1,5 +1,6 @@
 import asyncio
 import json
+from contextlib import suppress
 from datetime import UTC, datetime
 
 import pytest
@@ -11,9 +12,11 @@ from ntrp.core.factory import AgentConfig
 from ntrp.events.sse import (
     MessageIngestedEvent,
     TextDeltaEvent,
+    TextMessageContentEvent,
     TextMessageEndEvent,
     TextMessageStartEvent,
     ThinkingEvent,
+    ToolCallStartEvent,
 )
 from ntrp.server.app import app
 from ntrp.server.bus import BusRegistry, SessionBus, StreamRecord
@@ -105,7 +108,7 @@ async def test_event_stream_replay_honors_after_seq_without_old_duplicates():
 
 
 @pytest.mark.asyncio
-async def test_event_stream_replays_persisted_events_after_bus_recreation(tmp_path):
+async def test_event_stream_resets_instead_of_replaying_persisted_events_after_bus_recreation(tmp_path):
     import ntrp.database as database
 
     conn = await database.connect(tmp_path / "sessions.db")
@@ -113,7 +116,20 @@ async def test_event_stream_replays_persisted_events_after_bus_recreation(tmp_pa
     store = SessionStore(conn, read_conn)
     await store.init_schema()
     await store.record_session_event(
-        StreamRecord(seq=1, session_id="sess-1", event=ThinkingEvent(status="persisted")),
+        StreamRecord(seq=1, session_id="sess-1", event=TextMessageStartEvent(message_id="a-1"))
+    )
+    await store.record_session_event(
+        StreamRecord(seq=2, session_id="sess-1", event=TextMessageContentEvent(message_id="a-1", delta="old"))
+    )
+    await store.record_session_event(
+        StreamRecord(seq=3, session_id="sess-1", event=TextMessageEndEvent(message_id="a-1", content="old"))
+    )
+    await store.record_session_event(
+        StreamRecord(
+            seq=4,
+            session_id="sess-1",
+            event=ToolCallStartEvent(tool_call_id="tool-1", tool_call_name="read_file"),
+        )
     )
     buses = BusRegistry()
 
@@ -127,9 +143,96 @@ async def test_event_stream_replays_persisted_events_after_bus_recreation(tmp_pa
 
     seq, _event_name, payload = _parse_sse_chunk(chunk)
     assert seq == 1
-    assert payload["status"] == "persisted"
-    assert payload["replay"] is True
-    assert buses.get_or_create("sess-1").next_seq == 2
+    assert _event_name == "stream_reset"
+    assert payload["type"] == "stream_reset"
+    assert payload["reason"] == "replay_gap"
+    assert "replay" not in payload
+    assert buses.get_or_create("sess-1").next_seq == 5
+    assert buses.get_or_create("sess-1").checkpoint_seq == 0
+
+
+@pytest.mark.asyncio
+async def test_event_stream_uses_persisted_checkpoint_as_cursor_boundary(tmp_path):
+    import ntrp.database as database
+
+    conn = await database.connect(tmp_path / "sessions.db")
+    read_conn = await database.connect(tmp_path / "sessions.db", readonly=True)
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    await store.record_chat_run_started("run-1", "sess-1")
+    await store.record_chat_run_status("run-1", "running", last_seq=7)
+    await store.record_session_event(
+        StreamRecord(seq=7, session_id="sess-1", event=ThinkingEvent(status="checkpoint-evidence")),
+    )
+    buses = BusRegistry()
+
+    stream = _event_stream("sess-1", buses, RunRegistry(), stream=True, after_seq=7, event_store=store)
+    next_chunk = asyncio.create_task(anext(stream))
+    try:
+        for _ in range(100):
+            await asyncio.sleep(0)
+            bus = buses.get("sess-1")
+            if bus is not None and bus._subscribers:
+                break
+
+        bus = buses.get("sess-1")
+        assert bus is not None
+        assert bus.next_seq == 8
+        assert bus.checkpoint_seq == 7
+
+        await bus.emit(ThinkingEvent(status="live-after-checkpoint"))
+        chunk = await asyncio.wait_for(next_chunk, timeout=1)
+    finally:
+        if not next_chunk.done():
+            next_chunk.cancel()
+            with suppress(asyncio.CancelledError):
+                await next_chunk
+        await stream.aclose()
+        await read_conn.close()
+        await conn.close()
+
+    seq, event_name, payload = _parse_sse_chunk(chunk)
+    assert seq == 8
+    assert event_name == "thinking"
+    assert payload["status"] == "live-after-checkpoint"
+    assert "replay" not in payload
+
+
+@pytest.mark.asyncio
+async def test_event_stream_does_not_promote_raw_events_to_checkpoint(tmp_path):
+    import ntrp.database as database
+
+    conn = await database.connect(tmp_path / "sessions.db")
+    read_conn = await database.connect(tmp_path / "sessions.db", readonly=True)
+    store = SessionStore(conn, read_conn)
+    await store.init_schema()
+    await store.record_chat_run_started("run-1", "sess-1")
+    await store.record_chat_run_status("run-1", "running", last_seq=2)
+    await store.record_session_event(
+        StreamRecord(seq=3, session_id="sess-1", event=ThinkingEvent(status="noncanonical-1")),
+    )
+    await store.record_session_event(
+        StreamRecord(seq=4, session_id="sess-1", event=ThinkingEvent(status="noncanonical-2")),
+    )
+    buses = BusRegistry()
+
+    stream = _event_stream("sess-1", buses, RunRegistry(), stream=True, after_seq=2, event_store=store)
+    try:
+        chunk = await anext(stream)
+    finally:
+        await stream.aclose()
+        await read_conn.close()
+        await conn.close()
+
+    seq, event_name, payload = _parse_sse_chunk(chunk)
+    bus = buses.get_or_create("sess-1")
+    assert seq == 3
+    assert event_name == "stream_reset"
+    assert payload["type"] == "stream_reset"
+    assert payload["reason"] == "replay_gap"
+    assert "replay" not in payload
+    assert bus.next_seq == 5
+    assert bus.checkpoint_seq == 2
 
 
 @pytest.mark.asyncio
@@ -162,8 +265,10 @@ async def test_event_stream_resets_instead_of_replaying_persisted_checkpointed_e
     reset_seq, _reset_event_name, reset_payload = _parse_sse_chunk(reset_chunk)
     tail_seq, _tail_event_name, tail_payload = _parse_sse_chunk(tail_chunk)
     assert reset_seq == 2
+    assert _reset_event_name == "stream_reset"
     assert reset_payload["type"] == "stream_reset"
     assert reset_payload["reason"] == "replay_gap"
+    assert "replay" not in reset_payload
     assert tail_seq == 3
     assert tail_payload["status"] == "live-tail"
     assert tail_payload["replay"] is True

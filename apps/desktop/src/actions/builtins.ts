@@ -1,6 +1,6 @@
 import { apiWithConfig, type SessionListItem } from "../api";
 import { getState } from "../store";
-import { forgetEventSeqForSession } from "../hooks/useEvents";
+import { forgetEventSeqForSession } from "../store/chat-stream";
 import { loadHistory } from "./history";
 import { switchSession } from "./sessions";
 import { appendError, appendStatus, formatCost, formatTokens } from "./_shared";

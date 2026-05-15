@@ -1,4 +1,5 @@
 import type { CachedSessionState, SessionUsage, State } from "./types";
+import { createInitialSessionViewState } from "./session-view";
 
 export const initialUsage: SessionUsage = {
   lastPrompt: 0,
@@ -9,6 +10,7 @@ export const initialUsage: SessionUsage = {
 
 export function blankSessionView(): CachedSessionState {
   return {
+    sessionView: createInitialSessionViewState(),
     messages: new Map(),
     order: [],
     historyLoadedFor: null,
@@ -27,11 +29,14 @@ export function blankSessionView(): CachedSessionState {
     pendingApprovals: [],
     reviewingApprovalToolId: null,
     queuedMessages: [],
+    pendingResume: null,
+    stoppingRunId: null,
   };
 }
 
 export function snapshotSession(s: State): CachedSessionState {
   return {
+    sessionView: s.sessionView,
     messages: s.messages,
     order: s.order,
     historyLoadedFor: s.historyLoadedFor,
@@ -50,5 +55,20 @@ export function snapshotSession(s: State): CachedSessionState {
     pendingApprovals: s.pendingApprovals,
     reviewingApprovalToolId: s.reviewingApprovalToolId,
     queuedMessages: s.queuedMessages,
+    pendingResume: s.pendingResume,
+    stoppingRunId: s.stoppingRunId,
   };
+}
+
+export function clearCachedStoppingRun(
+  s: State,
+  sessionId: string | null,
+  runId: string,
+): Pick<State, "sessionCache"> | {} {
+  if (!sessionId) return {};
+  const cached = s.sessionCache.get(sessionId);
+  if (!cached || cached.stoppingRunId !== runId) return {};
+  const sessionCache = new Map(s.sessionCache);
+  sessionCache.set(sessionId, { ...cached, stoppingRunId: null });
+  return { sessionCache };
 }

@@ -3,6 +3,46 @@ import { DEFAULT_CONFIG } from "../api";
 import type { State, Actions, UiMessage } from "./types";
 import { loadPrefs, loadSkipApprovals, persistPrefs, persistSkipApprovals } from "./prefs";
 import { blankSessionView, initialUsage, snapshotSession } from "./session-cache";
+import {
+  createInitialSessionViewState,
+  legacyFieldsFromSessionView,
+  reduceCachePreviewRestored,
+  reduceHistoryLoadSucceeded,
+  reduceHistoryPageLoading,
+  reduceSessionSelected,
+} from "./session-view";
+import {
+  createAutomationStreamDomainState,
+  reduceAutomationFinished,
+  reduceAutomationProgress,
+  reduceAutomationStreamConnected,
+  reduceAutomationStreamConnecting,
+  reduceAutomationStreamFailed,
+  reduceAutomationStreamIdle,
+  reduceAutomationStreamStale,
+  type AutomationStreamDomainState,
+  type AutomationStreamPhase,
+} from "./automation-domain";
+import {
+  createBackgroundAgentsDomainState,
+  reduceBackgroundAgentUpsert,
+  reduceBackgroundAgentsForSession,
+  reduceBackgroundAgentsRefreshFailed,
+  reduceBackgroundAgentsRefreshStarted,
+  type BackgroundAgentsDomainState,
+  type BackgroundAgentRefreshStatus,
+} from "./background-agent-domain";
+import {
+  reduceApprovalRequested,
+  reduceApprovalResolved,
+  reduceCancellingQueuedMessagesReset,
+  reduceQueuedMessageAdded,
+  reduceQueuedMessageRemoved,
+  reduceQueuedMessagesCleared,
+  reduceQueuedMessagesPersisted,
+  reduceQueuedMessageStatus,
+  reduceRunStatus,
+} from "./run-lifecycle";
 
 // Re-export types so existing `import { X } from "../store"` keeps working.
 export type {
@@ -23,6 +63,7 @@ export type {
   Role,
   ServerLoop,
   SessionUsage,
+  SessionViewState,
   State,
   ThemeChoice,
   ThinkingAnimation,
@@ -30,6 +71,12 @@ export type {
   TurnMeta,
   UiMessage,
 } from "./types";
+export type {
+  AutomationStreamPhase,
+  BackgroundAgentRefreshStatus,
+  BackgroundAgentsDomainState,
+  AutomationStreamDomainState,
+};
 export {
   DEFAULT_QUICK_CAPTURE_SHORTCUT,
   SIDEBAR_MAX_WIDTH,
@@ -41,10 +88,12 @@ export {
 export const useStore = create<State & Actions>((set) => ({
   config: { ...DEFAULT_CONFIG },
   sessions: [],
+  sessionView: createInitialSessionViewState(),
   currentSessionId: null,
   messages: new Map(),
   order: [],
   historyLoadedFor: null,
+  historyReloadingFor: null,
   historyHasMoreBefore: false,
   historyHasMoreAfter: false,
   historyLoadingBefore: false,
@@ -76,7 +125,7 @@ export const useStore = create<State & Actions>((set) => ({
   serverModels: null,
   automations: null,
   automationsOpen: false,
-  automationStatuses: {},
+  automationStream: createAutomationStreamDomainState(),
   archiveOpen: false,
   archivedSessions: null,
   compacting: false,
@@ -87,49 +136,20 @@ export const useStore = create<State & Actions>((set) => ({
   pendingApprovals: [],
   reviewingApprovalToolId: null,
   queuedMessages: [],
+  pendingResume: null,
+  stoppingRunId: null,
+  terminalRunIds: new Set(),
   modalOrigin: null,
   loops: [],
-  backgroundAgents: {},
+  backgroundAgents: createBackgroundAgentsDomainState(),
   prefs: loadPrefs(),
 
   setConfig: (config) => set({ config, connectionDraft: { ...config } }),
   setSessions: (sessions) => set({ sessions }),
   prependSession: (session) => set((s) => ({ sessions: [session, ...s.sessions] })),
   setActiveRunSessions: (ids) =>
-    set((s) => {
-      const next = new Set(ids);
-      // Sessions that just transitioned active → idle are "unread done"
-      // unless the user is currently viewing them.
-      const newlyDone: string[] = [];
-      for (const prev of s.activeRunSessionIds) {
-        if (!next.has(prev) && prev !== s.currentSessionId) {
-          newlyDone.push(prev);
-        }
-      }
-
-      let unread = s.unreadDoneSessionIds;
-      if (newlyDone.length > 0) {
-        unread = new Set(unread);
-        for (const id of newlyDone) unread.add(id);
-      }
-
-      // Skip the activeRunSessionIds update if nothing changed by membership.
-      let activeChanged = next.size !== s.activeRunSessionIds.size || newlyDone.length > 0;
-      if (!activeChanged) {
-        for (const id of next) {
-          if (!s.activeRunSessionIds.has(id)) {
-            activeChanged = true;
-            break;
-          }
-        }
-      }
-
-      if (!activeChanged && unread === s.unreadDoneSessionIds) return {};
-      return {
-        ...(activeChanged ? { activeRunSessionIds: next } : {}),
-        ...(unread !== s.unreadDoneSessionIds ? { unreadDoneSessionIds: unread } : {}),
-      };
-    }),
+    set((s) => reduceRunStatus(s, { activeRuns: ids.map((sessionId) => ({ sessionId })) })),
+  setActiveRunStatus: (runs) => set((s) => reduceRunStatus(s, { activeRuns: runs })),
   setCurrentSession: (currentSessionId) =>
     set((s) => {
       let unread = s.unreadDoneSessionIds;
@@ -152,8 +172,13 @@ export const useStore = create<State & Actions>((set) => ({
       }
       const restored = currentSessionId ? cache.get(currentSessionId) : undefined;
       const view = restored ?? blankSessionView();
+      let sessionView = reduceSessionSelected(s.sessionView, currentSessionId);
+      if (currentSessionId && restored) {
+        sessionView = reduceCachePreviewRestored(sessionView, currentSessionId);
+      }
       return {
-        currentSessionId,
+        sessionView,
+        ...legacyFieldsFromSessionView(sessionView),
         sessionCache: cache,
         messages: view.messages,
         order: view.order,
@@ -165,14 +190,11 @@ export const useStore = create<State & Actions>((set) => ({
         compacting: view.compacting,
         lastCompaction: view.lastCompaction,
         sourceFocus: view.sourceFocus,
-        historyLoadedFor: view.historyLoadedFor,
-        historyHasMoreBefore: view.historyHasMoreBefore,
-        historyHasMoreAfter: view.historyHasMoreAfter,
-        historyLoadingBefore: view.historyLoadingBefore,
-        historyLoadingAfter: view.historyLoadingAfter,
         pendingApprovals: view.pendingApprovals,
         reviewingApprovalToolId: view.reviewingApprovalToolId,
         queuedMessages: view.queuedMessages,
+        pendingResume: view.pendingResume,
+        stoppingRunId: view.stoppingRunId,
         ...(unread !== s.unreadDoneSessionIds ? { unreadDoneSessionIds: unread } : {}),
       };
     }),
@@ -186,13 +208,15 @@ export const useStore = create<State & Actions>((set) => ({
         order.push(m.id);
       }
       const persistedIds = new Set(order);
+      const sessionView = s.currentSessionId
+        ? reduceHistoryLoadSucceeded(s.sessionView, s.currentSessionId, page)
+        : s.sessionView;
       return {
+        sessionView,
+        ...legacyFieldsFromSessionView(sessionView),
         messages: map,
         order,
-        historyLoadedFor: s.currentSessionId,
-        historyHasMoreBefore: page?.has_more_before ?? false,
-        historyHasMoreAfter: page?.has_more_after ?? false,
-        queuedMessages: s.queuedMessages.filter((q) => !persistedIds.has(q.clientId)),
+        ...reduceQueuedMessagesPersisted(s, persistedIds),
       };
     }),
 
@@ -205,12 +229,14 @@ export const useStore = create<State & Actions>((set) => ({
         map.set(m.id, m);
         if (!exists) ids.push(m.id);
       }
+      const sessionView = s.currentSessionId
+        ? reduceHistoryLoadSucceeded(s.sessionView, s.currentSessionId, page, "prepend")
+        : s.sessionView;
       return {
+        sessionView,
+        ...legacyFieldsFromSessionView(sessionView),
         messages: map,
         order: [...ids, ...s.order],
-        historyLoadedFor: s.currentSessionId,
-        historyHasMoreBefore: page?.has_more_before ?? false,
-        historyHasMoreAfter: s.historyHasMoreAfter || Boolean(page?.has_more_after),
       };
     }),
 
@@ -223,21 +249,25 @@ export const useStore = create<State & Actions>((set) => ({
         map.set(m.id, m);
         if (!exists) ids.push(m.id);
       }
+      const sessionView = s.currentSessionId
+        ? reduceHistoryLoadSucceeded(s.sessionView, s.currentSessionId, page, "append")
+        : s.sessionView;
       return {
+        sessionView,
+        ...legacyFieldsFromSessionView(sessionView),
         messages: map,
         order: [...s.order, ...ids],
-        historyLoadedFor: s.currentSessionId,
-        historyHasMoreBefore: s.historyHasMoreBefore || Boolean(page?.has_more_before),
-        historyHasMoreAfter: page?.has_more_after ?? false,
       };
     }),
 
   setHistoryLoading: (direction, loading) =>
-    set(
-      direction === "before"
-        ? { historyLoadingBefore: loading }
-        : { historyLoadingAfter: loading },
-    ),
+    set((s) => {
+      const sessionView = reduceHistoryPageLoading(s.sessionView, direction, loading);
+      return {
+        sessionView,
+        ...legacyFieldsFromSessionView(sessionView),
+      };
+    }),
 
   appendMessage: (message) =>
     set((s) => {
@@ -386,81 +416,46 @@ export const useStore = create<State & Actions>((set) => ({
       return { messages };
     }),
 
-  addPendingApproval: (approval) =>
-    set((s) => {
-      // Dedupe by toolId — same tool re-emitting approval shouldn't stack.
-      const filtered = s.pendingApprovals.filter((a) => a.toolId !== approval.toolId);
-      return { pendingApprovals: [...filtered, approval] };
-    }),
-  resolvePendingApproval: (toolId) =>
-    set((s) => ({
-      pendingApprovals: s.pendingApprovals.filter((a) => a.toolId !== toolId),
-      reviewingApprovalToolId:
-        s.reviewingApprovalToolId === toolId ? null : s.reviewingApprovalToolId,
-    })),
+  addPendingApproval: (approval) => set((s) => reduceApprovalRequested(s, approval)),
+  resolvePendingApproval: (toolId) => set((s) => reduceApprovalResolved(s, toolId)),
   setReviewingApproval: (toolId, origin) =>
     set({ reviewingApprovalToolId: toolId, modalOrigin: toolId ? origin ?? null : null }),
 
-  addQueuedMessage: (message) =>
-    set((s) => ({ queuedMessages: [...s.queuedMessages, message] })),
+  addQueuedMessage: (message) => set((s) => reduceQueuedMessageAdded(s, message)),
   setQueuedMessageStatus: (clientId, status) =>
-    set((s) => ({
-      queuedMessages: s.queuedMessages.map((q) =>
-        q.clientId === clientId ? { ...q, status } : q,
-      ),
-    })),
+    set((s) => reduceQueuedMessageStatus(s, clientId, status)),
   removeQueuedMessage: (clientId) =>
-    set((s) => ({
-      queuedMessages: s.queuedMessages.filter((q) => q.clientId !== clientId),
-    })),
-  clearQueuedMessages: () => set({ queuedMessages: [] }),
+    set((s) => reduceQueuedMessageRemoved(s, clientId)),
+  clearQueuedMessages: () => set(reduceQueuedMessagesCleared()),
   // After a run terminates without ingesting a queued message, the
   // server dropped its inject_queue. Any "cancelling" entries are now
   // stuck — flip them back to "pending" so the user can retry/cancel.
   resetCancellingQueuedMessages: () =>
+    set((s) => reduceCancellingQueuedMessagesReset(s)),
+  setLoops: (loops) => set({ loops }),
+  backgroundAgentsRefreshStarted: () =>
     set((s) => ({
-      queuedMessages: s.queuedMessages.map((q) =>
-        q.status === "cancelling" ? { ...q, status: "pending" } : q,
+      backgroundAgents: reduceBackgroundAgentsRefreshStarted(s.backgroundAgents),
+    })),
+  backgroundAgentsRefreshFailed: (error) =>
+    set((s) => ({
+      backgroundAgents: reduceBackgroundAgentsRefreshFailed(
+        s.backgroundAgents,
+        error,
       ),
     })),
-  setLoops: (loops) => set({ loops }),
   setBackgroundAgentsForSession: (sessionId, agents) =>
-    set((s) => {
-      const now = Date.now();
-      const next = { ...(s.backgroundAgents ?? {}) };
-      for (const agent of agents) {
-        const key = `${sessionId}:${agent.taskId}`;
-        const prev = next[key];
-        next[key] = {
-          taskId: agent.taskId,
-          sessionId,
-          command: agent.command,
-          status: agent.status ?? prev?.status ?? "running",
-          detail: agent.detail ?? prev?.detail,
-          resultRef: agent.resultRef ?? prev?.resultRef,
-          createdAt: prev?.createdAt ?? now,
-          updatedAt: now,
-        };
-      }
-      return { backgroundAgents: next };
-    }),
+    set((s) => ({
+      backgroundAgents: reduceBackgroundAgentsForSession(
+        s.backgroundAgents,
+        sessionId,
+        agents,
+      ),
+    })),
   upsertBackgroundAgent: (agent) =>
-    set((s) => {
-      const now = Date.now();
-      const key = `${agent.sessionId}:${agent.taskId}`;
-      const prev = (s.backgroundAgents ?? {})[key];
-      return {
-        backgroundAgents: {
-          ...(s.backgroundAgents ?? {}),
-          [key]: {
-            ...prev,
-            ...agent,
-            createdAt: agent.createdAt ?? prev?.createdAt ?? now,
-            updatedAt: agent.updatedAt ?? now,
-          },
-        },
-      };
-    }),
+    set((s) => ({
+      backgroundAgents: reduceBackgroundAgentUpsert(s.backgroundAgents, agent),
+    })),
 
   setSkills: (skills) => set({ skills }),
   setCommandPickerOpen: (commandPickerOpen) => set({ commandPickerOpen, commandPickerIndex: 0 }),
@@ -480,15 +475,34 @@ export const useStore = create<State & Actions>((set) => ({
   setAutomations: (automations) => set({ automations }),
   openAutomations: (origin) => set({ automationsOpen: true, modalOrigin: origin ?? null }),
   closeAutomations: () => set({ automationsOpen: false }),
-  setAutomationStatus: (taskId, status) =>
-    set((s) => ({ automationStatuses: { ...s.automationStatuses, [taskId]: status } })),
-  clearAutomationStatus: (taskId) =>
-    set((s) => {
-      if (!(taskId in s.automationStatuses)) return s;
-      const next = { ...s.automationStatuses };
-      delete next[taskId];
-      return { automationStatuses: next };
-    }),
+  automationStreamConnecting: () =>
+    set((s) => ({
+      automationStream: reduceAutomationStreamConnecting(s.automationStream),
+    })),
+  automationStreamConnected: () =>
+    set((s) => ({
+      automationStream: reduceAutomationStreamConnected(s.automationStream),
+    })),
+  automationStreamStale: () =>
+    set((s) => ({
+      automationStream: reduceAutomationStreamStale(s.automationStream),
+    })),
+  automationStreamFailed: (error) =>
+    set((s) => ({
+      automationStream: reduceAutomationStreamFailed(s.automationStream, error),
+    })),
+  automationStreamIdle: () =>
+    set((s) => ({
+      automationStream: reduceAutomationStreamIdle(s.automationStream),
+    })),
+  automationProgress: (taskId, status) =>
+    set((s) => ({
+      automationStream: reduceAutomationProgress(s.automationStream, taskId, status),
+    })),
+  automationFinished: (taskId) =>
+    set((s) => ({
+      automationStream: reduceAutomationFinished(s.automationStream, taskId),
+    })),
   setArchivedSessions: (archivedSessions) => set({ archivedSessions }),
   openArchive: (origin) => set({ archiveOpen: true, modalOrigin: origin ?? null }),
   closeArchive: () => set({ archiveOpen: false }),

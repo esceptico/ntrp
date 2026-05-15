@@ -3,12 +3,21 @@ import {
   cancelQueuedMessageApi,
   cancelRun,
 } from "../api";
-import { getState, type ImageBlock } from "../store";
+import { getState, setState, type ImageBlock } from "../store";
 import { messagesScroll } from "../lib/messagesScroll";
+import {
+  reduceRunCompleted,
+  reduceRunFailed,
+  reduceRunStarted,
+  reduceRunStopCleared,
+  reduceRunStopRequested,
+} from "../store/run-lifecycle";
+import { clearCachedStoppingRun } from "../store/session-cache";
 
 export async function sendMessage(text: string, images: ImageBlock[] = []): Promise<void> {
   const s = getState();
   if (!s.currentSessionId) return;
+  const sendSessionId = s.currentSessionId;
   const trimmedText = text.trim();
   if (!trimmedText && images.length === 0) return;
 
@@ -20,18 +29,21 @@ export async function sendMessage(text: string, images: ImageBlock[] = []): Prom
       await apiWithConfig(s.config, "/session/revert", {
         method: "POST",
         body: JSON.stringify({
-          session_id: s.currentSessionId,
+          session_id: sendSessionId,
           message_id: s.editingId,
         }),
       });
     } catch (error) {
-      s.appendMessage({
-        id: crypto.randomUUID(),
-        role: "error",
-        content: error instanceof Error ? error.message : String(error),
-      });
+      if (getState().currentSessionId === sendSessionId) {
+        s.appendMessage({
+          id: crypto.randomUUID(),
+          role: "error",
+          content: error instanceof Error ? error.message : String(error),
+        });
+      }
       return;
     }
+    if (getState().currentSessionId !== sendSessionId) return;
     s.truncateFrom(s.editingId);
     s.setEditingId(null);
   }
@@ -47,26 +59,35 @@ export async function sendMessage(text: string, images: ImageBlock[] = []): Prom
     images: images.length > 0 ? images : undefined,
   });
   messagesScroll.scrollToBottom?.("smooth");
-  s.setRunning(true);
+  setState((state) =>
+    reduceRunStarted(state, { runId: null, sessionId: sendSessionId }),
+  );
 
   try {
-    await apiWithConfig<{ run_id: string }>(s.config, "/chat/message", {
+    const response = await apiWithConfig<{ run_id: string }>(s.config, "/chat/message", {
       method: "POST",
       body: JSON.stringify({
         message: trimmedText,
-        session_id: s.currentSessionId,
+        session_id: sendSessionId,
         skip_approvals: s.skipApprovals,
         images: images.length > 0 ? images : undefined,
         client_id: userMessageId,
       }),
     });
+    setState((state) =>
+      reduceRunStarted(state, { runId: response.run_id, sessionId: sendSessionId }),
+    );
   } catch (error) {
-    s.setRunning(false);
-    s.appendMessage({
-      id: crypto.randomUUID(),
-      role: "error",
-      content: error instanceof Error ? error.message : String(error),
-    });
+    setState((state) =>
+      reduceRunFailed(state, { runId: null, sessionId: sendSessionId }),
+    );
+    if (getState().currentSessionId === sendSessionId) {
+      s.appendMessage({
+        id: crypto.randomUUID(),
+        role: "error",
+        content: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }
 
@@ -130,13 +151,16 @@ export async function cancelQueuedMessage(clientId: string): Promise<void> {
 export async function stopRun(): Promise<void> {
   const s = getState();
   const runId = s.currentRunId;
+  const sessionId = s.currentSessionId;
   if (!runId) return;
+  setState((state) => reduceRunStopRequested(state, runId));
   const clearStoppedRun = () => {
-    const latest = getState();
-    if (latest.currentRunId === runId) {
-      latest.setRunning(false);
-      latest.setCurrentRunId(null);
-    }
+    setState((state) =>
+      reduceRunCompleted(state, {
+        runId,
+        sessionId,
+      }),
+    );
   };
   try {
     await cancelRun(s.config, runId);
@@ -147,10 +171,16 @@ export async function stopRun(): Promise<void> {
       clearStoppedRun();
       return;
     }
-    s.appendMessage({
-      id: crypto.randomUUID(),
-      role: "error",
-      content: message,
-    });
+    setState((state) => ({
+      ...reduceRunStopCleared(state, runId),
+      ...clearCachedStoppingRun(state, sessionId, runId),
+    }));
+    if (getState().currentSessionId === sessionId) {
+      s.appendMessage({
+        id: crypto.randomUUID(),
+        role: "error",
+        content: message,
+      });
+    }
   }
 }

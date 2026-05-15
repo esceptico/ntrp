@@ -83,6 +83,19 @@ async def test_chat_run_and_queued_message_ledger(store: SessionStore):
 
 
 @pytest.mark.asyncio
+async def test_latest_session_checkpoint_uses_chat_run_last_seq(store: SessionStore):
+    await store.record_chat_run_started("run-1", "sess-1")
+    await store.record_chat_run_status("run-1", "running", last_seq=12)
+    await store.record_chat_run_started("run-2", "sess-1")
+    await store.record_chat_run_status("run-2", "running")
+    await store.record_chat_run_started("run-other", "sess-2")
+    await store.record_chat_run_status("run-other", "running", last_seq=99)
+
+    assert await store.get_latest_session_checkpoint_seq("sess-1") == 12
+    assert await store.get_latest_session_checkpoint_seq("missing") == 0
+
+
+@pytest.mark.asyncio
 async def test_marks_interrupted_chat_runs_on_startup(store: SessionStore):
     await store.record_chat_run_started("run-1", "sess-1")
     await store.record_chat_run_status("run-1", "running")

@@ -5,8 +5,9 @@ import { useStore } from "../store";
 const POLL_INTERVAL_MS = 2000;
 
 interface ActiveRun {
+  run_id?: string | null;
   session_id: string;
-  status: string;
+  status?: string | null;
 }
 
 interface RunsStatus {
@@ -19,7 +20,7 @@ interface RunsStatus {
 export function useActiveRuns(): void {
   const config = useStore((s) => s.config);
   const connected = useStore((s) => s.connected);
-  const setActiveRunSessions = useStore((s) => s.setActiveRunSessions);
+  const setActiveRunStatus = useStore((s) => s.setActiveRunStatus);
 
   useEffect(() => {
     if (!connected) return;
@@ -29,7 +30,13 @@ export function useActiveRuns(): void {
       try {
         const data = await apiWithConfig<RunsStatus>(config, "/chat/runs/status");
         if (disposed) return;
-        setActiveRunSessions(data.active_runs.map((r) => r.session_id));
+        setActiveRunStatus(
+          data.active_runs.map((run) => ({
+            runId: run.run_id,
+            sessionId: run.session_id,
+            status: run.status,
+          })),
+        );
       } catch {
         /* transient — next tick will retry */
       }
@@ -41,5 +48,5 @@ export function useActiveRuns(): void {
       disposed = true;
       clearInterval(id);
     };
-  }, [config, connected, setActiveRunSessions]);
+  }, [config, connected, setActiveRunStatus]);
 }

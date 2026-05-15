@@ -17,11 +17,9 @@ function headersFor(config: AppConfig): HeadersInit {
   return config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {};
 }
 
-/** Subscribe to `/automations/events` for the lifetime of the app. Live
- *  status strings land in `state.automationStatuses[task_id]`; on
- *  `automation_finished` we drop the key and refresh the automations
- *  list so the sidebar card removes the now-stopped row immediately
- *  (without waiting for the 20s poll). */
+/** Subscribe to `/automations/events` for the lifetime of the app. The
+ *  hook owns transport only; automation stream status and per-task
+ *  projections live in the automation domain. */
 export function useAutomationEvents(): void {
   const config = useStore((s) => s.config);
 
@@ -29,10 +27,7 @@ export function useAutomationEvents(): void {
     const controller = new AbortController();
     let disposed = false;
 
-    const setStatus = (taskId: string, status: string) =>
-      useStore.getState().setAutomationStatus(taskId, status);
-    const clearStatus = (taskId: string) =>
-      useStore.getState().clearAutomationStatus(taskId);
+    const store = () => useStore.getState();
 
     const url = `${config.serverUrl}/automations/events`;
 
@@ -43,6 +38,7 @@ export function useAutomationEvents(): void {
     void (async () => {
       while (!disposed && !controller.signal.aborted) {
         try {
+          store().automationStreamConnecting();
           const response = await fetch(url, {
             headers: { ...headersFor(config), Accept: "text/event-stream" },
             signal: controller.signal,
@@ -50,6 +46,7 @@ export function useAutomationEvents(): void {
           if (!response.ok || !response.body) {
             throw new Error(`automation event stream failed: ${response.status}`);
           }
+          store().automationStreamConnected();
 
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
@@ -66,7 +63,7 @@ export function useAutomationEvents(): void {
               try {
                 const event = JSON.parse(line.slice(6)) as AutomationEvent;
                 if (event.type === "automation_progress") {
-                  setStatus(event.task_id, event.status);
+                  store().automationProgress(event.task_id, event.status);
                   // The "starting..." status is the scheduler's fire signal —
                   // server has just bumped next_run_at to the next slot.
                   // Pull loops for the current session so the countdown chip
@@ -77,7 +74,7 @@ export function useAutomationEvents(): void {
                     if (sid) void refreshLoops(sid);
                   }
                 } else if (event.type === "automation_finished") {
-                  clearStatus(event.task_id);
+                  store().automationFinished(event.task_id);
                   // Refresh the automations list so the row leaves the
                   // sidebar card immediately rather than after the next
                   // 20s poll catches up to running_since going null.
@@ -88,8 +85,15 @@ export function useAutomationEvents(): void {
               }
             }
           }
-        } catch {
+          if (!disposed && !controller.signal.aborted) {
+            store().automationStreamStale();
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+          }
+        } catch (error) {
           if (controller.signal.aborted) return;
+          store().automationStreamFailed(
+            error instanceof Error ? error.message : String(error),
+          );
           // Backoff briefly before reconnecting so a server flap
           // doesn't turn into a tight reconnect loop.
           await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -100,6 +104,7 @@ export function useAutomationEvents(): void {
     return () => {
       disposed = true;
       controller.abort();
+      store().automationStreamIdle();
     };
   }, [config]);
 }

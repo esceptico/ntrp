@@ -66,11 +66,14 @@ export function StatusDot({
 function useBackgroundTasksPoll(sessionId: string | null): void {
   const config = useStore((s) => s.config);
   const setBackgroundAgentsForSession = useStore((s) => s.setBackgroundAgentsForSession);
+  const backgroundAgentsRefreshStarted = useStore((s) => s.backgroundAgentsRefreshStarted);
+  const backgroundAgentsRefreshFailed = useStore((s) => s.backgroundAgentsRefreshFailed);
 
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
     const tick = async () => {
+      backgroundAgentsRefreshStarted();
       try {
         const tasks = await listBackgroundTasksApi(config, sessionId);
         if (!cancelled) {
@@ -95,8 +98,12 @@ function useBackgroundTasksPoll(sessionId: string | null): void {
             }),
           );
         }
-      } catch {
-        /* non-critical surface */
+      } catch (error) {
+        if (!cancelled) {
+          backgroundAgentsRefreshFailed(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
       }
     };
     void tick();
@@ -112,7 +119,13 @@ function useBackgroundTasksPoll(sessionId: string | null): void {
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [config, sessionId, setBackgroundAgentsForSession]);
+  }, [
+    backgroundAgentsRefreshFailed,
+    backgroundAgentsRefreshStarted,
+    config,
+    sessionId,
+    setBackgroundAgentsForSession,
+  ]);
 }
 
 // Row anatomy (one row = up to two lines):
@@ -238,8 +251,8 @@ function SectionHeader({ label, count }: { label: string; count?: number }) {
 export function AgentRightSidebar() {
   const currentSessionId = useStore((s) => s.currentSessionId);
   const automations = useStore((s) => s.automations);
-  const automationStatuses = useStore((s) => s.automationStatuses);
-  const backgroundAgents = useStore((s) => s.backgroundAgents);
+  const automationStatuses = useStore((s) => s.automationStream.statuses);
+  const backgroundAgentRows = useStore((s) => s.backgroundAgents.rows);
   const openAutomations = useStore((s) => s.openAutomations);
   const [collapsed, setCollapsed] = useState(true);
 
@@ -247,12 +260,12 @@ export function AgentRightSidebar() {
 
   const agents = useMemo(
     () =>
-      Object.values(backgroundAgents ?? {})
+      Object.values(backgroundAgentRows)
         .filter((agent) => !currentSessionId || agent.sessionId === currentSessionId)
         .filter(isActiveBackgroundAgent)
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, 8),
-    [backgroundAgents, currentSessionId],
+    [backgroundAgentRows, currentSessionId],
   );
 
   const runningAutomations = useMemo(

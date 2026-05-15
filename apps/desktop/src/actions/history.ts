@@ -1,10 +1,17 @@
 import { apiWithConfig, type HistoryMessage, type HistoryPage } from "../api";
-import { getState, type UiMessage } from "../store";
-import { SEMANTIC_KIND_AGENT } from "../lib/agent";
-import { clearReplayGapBlockForSession, forgetEventSeqForSession } from "../hooks/useEvents";
-import { formatCall } from "./_shared";
+import { getState, setState, type UiMessage } from "../store";
+import { clearReplayGapBlockForSession } from "../store/chat-stream";
+import {
+  legacyFieldsFromSessionView,
+  reduceHistoryLoadFailed,
+  reduceHistoryLoadStarted,
+} from "../store/session-view";
+import { reduceRunCompleted, reduceRunStarted } from "../store/run-lifecycle";
+import { rebuildTranscriptFromHistory } from "../store/transcript-projection";
 
 type HistoryLoadMode = "replace" | "prepend" | "append";
+
+const replaceHistoryLoadVersions = new Map<string, number>();
 
 export interface LoadHistoryOptions {
   mode?: HistoryLoadMode;
@@ -38,104 +45,7 @@ function historyBoundaryId(
 }
 
 export function historyMessagesToUi(messages: HistoryMessage[], activeRunId: string | null): UiMessage[] {
-  // Pre-index tool results so we can attach them to their calls regardless
-  // of ordering between the assistant message and its `tool` follow-ups.
-  const resultsById = new Map<string, string>();
-  for (const msg of messages) {
-    if (msg.role === "tool" && msg.tool_call_id) {
-      resultsById.set(msg.tool_call_id, msg.content);
-    }
-  }
-
-  const items: UiMessage[] = [];
-  let activeActivityId: string | null = null;
-
-  const findActivity = (id: string) =>
-    items.find((it) => it.id === id && it.role === "activity")?.activity;
-
-  messages.forEach((msg, index) => {
-    // Prefer the stable server-issued id; fall back to a positional id for
-    // older sessions whose messages were saved before id-based persistence.
-    const sourceIndex = msg.seq ?? index;
-    const sourceMessageId = msg.message_id ?? msg.id;
-    const stableId = msg.id ?? msg.message_id ?? `history-${sourceIndex}`;
-    const stampedAt = msg.created_at ? Date.parse(msg.created_at) : 0;
-
-    if (msg.role === "user") {
-      activeActivityId = null;
-      items.push({
-        id: stableId,
-        role: "user",
-        sourceIndex,
-        sourceMessageId,
-        content: msg.content,
-        turn: { startedAt: stampedAt, endedAt: stampedAt, durationMs: null },
-        images: msg.images,
-        isMeta: msg.is_meta,
-      });
-      return;
-    }
-
-    if (msg.role === "tool") {
-      // Already folded into the matching activity item via resultsById.
-      return;
-    }
-
-    // assistant
-    if (msg.reasoning_content) {
-      items.push({
-        id: `${stableId}-reasoning`,
-        role: "reasoning",
-        sourceIndex,
-        sourceMessageId,
-        title: "Reasoning",
-        content: msg.reasoning_content,
-      });
-    }
-
-    if (msg.content && msg.content.trim().length > 0) {
-      activeActivityId = null;
-      items.push({
-        id: stableId,
-        role: "assistant",
-        sourceIndex,
-        sourceMessageId,
-        content: msg.content,
-        turn: stampedAt
-          ? { startedAt: stampedAt, endedAt: stampedAt, durationMs: null }
-          : undefined,
-      });
-    }
-
-    if (msg.tool_calls && msg.tool_calls.length > 0) {
-      if (!activeActivityId) {
-        activeActivityId = `${stableId}-activity`;
-        items.push({
-          id: activeActivityId,
-          role: "activity",
-          sourceIndex,
-          sourceMessageId,
-          content: "",
-          activity: { items: [], label: "Called", done: true },
-        });
-      }
-      const activity = findActivity(activeActivityId);
-      if (activity) {
-        for (const tc of msg.tool_calls) {
-          const args = tc.arguments || "";
-          activity.items.push({
-            id: tc.id,
-            kind: tc.name,
-            semanticKind:
-              tc.kind === SEMANTIC_KIND_AGENT ? SEMANTIC_KIND_AGENT : undefined,
-            target: formatCall(tc.name, args || "{}"),
-            args,
-            result: resultsById.get(tc.id),
-          });
-        }
-      }
-    }
-  });
+  const items = rebuildTranscriptFromHistory(messages);
 
   // If the server has an active run for this session, the latest user
   // turn is still in flight. Clear its `endedAt` so TurnGroup doesn't
@@ -156,20 +66,45 @@ export function historyMessagesToUi(messages: HistoryMessage[], activeRunId: str
 
 export async function loadHistory(sessionId: string, options: LoadHistoryOptions = {}): Promise<void> {
   const s = getState();
-  const { messages, active_run_id, page, usage } = await apiWithConfig<{
+  const mode = options.mode ?? "replace";
+  let replaceLoadVersion: number | null = null;
+  if (mode === "replace") {
+    replaceLoadVersion = (replaceHistoryLoadVersions.get(sessionId) ?? 0) + 1;
+    replaceHistoryLoadVersions.set(sessionId, replaceLoadVersion);
+    const sessionView = reduceHistoryLoadStarted(s.sessionView, sessionId);
+    setState({ sessionView, ...legacyFieldsFromSessionView(sessionView) });
+  }
+
+  let history: {
     messages: HistoryMessage[];
     active_run_id: string | null;
     page?: HistoryPage;
     usage?: { last_input_tokens: number; message_count: number };
-  }>(s.config, historyPath(sessionId, options));
+  };
+  try {
+    history = await apiWithConfig(s.config, historyPath(sessionId, options));
+  } catch (error) {
+    if (mode === "replace") {
+      if (replaceHistoryLoadVersions.get(sessionId) !== replaceLoadVersion) return;
+      const state = getState();
+      const sessionView = reduceHistoryLoadFailed(state.sessionView, sessionId);
+      setState({ sessionView, ...legacyFieldsFromSessionView(sessionView) });
+    }
+    throw error;
+  }
 
   if (getState().currentSessionId !== sessionId) return;
-  const mode = options.mode ?? "replace";
+  if (
+    mode === "replace" &&
+    replaceHistoryLoadVersions.get(sessionId) !== replaceLoadVersion
+  ) {
+    return;
+  }
   if (mode === "replace") {
-    forgetEventSeqForSession(sessionId);
     clearReplayGapBlockForSession(sessionId);
   }
 
+  const { messages, active_run_id, page, usage } = history;
   const items = historyMessagesToUi(messages, active_run_id);
   if (mode === "prepend") {
     s.prependHistory(items, page);
@@ -187,9 +122,14 @@ export async function loadHistory(sessionId: string, options: LoadHistoryOptions
       });
     }
   }
-  if (active_run_id) {
-    s.setRunning(true);
-    s.setCurrentRunId(active_run_id);
+  if (mode === "replace") {
+    setState((state) =>
+      active_run_id
+        ? reduceRunStarted(state, { runId: active_run_id, sessionId })
+        : reduceRunCompleted(state, { runId: state.currentRunId, sessionId }),
+    );
+  } else if (active_run_id) {
+    setState((state) => reduceRunStarted(state, { runId: active_run_id, sessionId }));
   }
 }
 

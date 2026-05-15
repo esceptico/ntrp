@@ -122,6 +122,8 @@ class SessionBus:
             return True
         if after_seq < self._checkpoint_seq:
             return True
+        if not self._recent and after_seq < newest_seq:
+            return True
         # Buffer eviction can in theory leave a gap above the checkpoint
         # if a single step emits more events than RECENT_BUFFER_MAX. In
         # practice steps are far smaller than that, but we guard anyway.

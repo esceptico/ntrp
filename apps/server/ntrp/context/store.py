@@ -973,6 +973,13 @@ class SessionStore:
         )
         return int(rows[0]["latest_seq"] or 0)
 
+    async def get_latest_session_checkpoint_seq(self, session_id: str) -> int:
+        rows = await self.read_conn.execute_fetchall(
+            "SELECT COALESCE(MAX(last_seq), 0) AS latest_seq FROM chat_runs WHERE session_id = ? AND last_seq IS NOT NULL",
+            (session_id,),
+        )
+        return int(rows[0]["latest_seq"] or 0)
+
     async def record_chat_compaction(
         self,
         *,

@@ -45,17 +45,19 @@ async def _event_stream(
     after_seq: int | None = None,
     event_store=None,
 ) -> AsyncGenerator[str]:
-    persisted_snapshot = []
     bus = bus_registry.get(session_id)
     if event_store is not None and after_seq is not None:
         latest_seq = await event_store.get_latest_session_event_seq(session_id)
         if latest_seq:
-            bus_registry.remember_session_cursor(session_id, next_seq=latest_seq + 1)
+            checkpoint_seq = await event_store.get_latest_session_checkpoint_seq(session_id)
+            # session_events is only a cursor ledger; chat_runs.last_seq is
+            # the persisted canonical checkpoint written after save/save_progress.
+            bus_registry.remember_session_cursor(
+                session_id,
+                next_seq=latest_seq + 1,
+                checkpoint_seq=checkpoint_seq,
+            )
             bus = bus_registry.get_or_create(session_id)
-            if after_seq >= bus.checkpoint_seq:
-                persisted_snapshot = await event_store.list_session_events(session_id, after_seq=after_seq)
-                if persisted_snapshot:
-                    after_seq = persisted_snapshot[-1].seq
 
     if bus is None:
         bus = bus_registry.get_or_create(session_id)
@@ -67,15 +69,6 @@ async def _event_stream(
         return stream or not isinstance(event, TextDeltaEvent)
 
     try:
-        for record in persisted_snapshot:
-            event = record.event
-            if not should_emit(event):
-                last_event_at = time.monotonic()
-                continue
-            yield stream_record_to_sse_string(session_id, record, replay=True)
-            last_event_at = time.monotonic()
-            await asyncio.sleep(0)
-
         if subscription.replay_gap and after_seq is not None:
             reset_record = StreamRecord(
                 seq=after_seq + 1,

@@ -8,6 +8,11 @@ import type {
   SkillDescriptor,
 } from "../api";
 import type { MessageSourceFocus } from "../lib/messageSourceFocus";
+import type { AutomationStreamDomainState } from "./automation-domain";
+import type { BackgroundAgentsDomainState } from "./background-agent-domain";
+import type { SessionViewState } from "./session-view";
+
+export type { SessionViewState } from "./session-view";
 
 export type Role =
   | "user"
@@ -220,6 +225,7 @@ export interface MarkdownViewState {
  *  SSE replay (with the bus's checkpoint watermark) catches up any
  *  events that landed while the session was in the background. */
 export interface CachedSessionState {
+  sessionView: SessionViewState;
   messages: Map<string, UiMessage>;
   order: string[];
   historyLoadedFor: string | null;
@@ -238,11 +244,14 @@ export interface CachedSessionState {
   pendingApprovals: ApprovalState[];
   reviewingApprovalToolId: string | null;
   queuedMessages: QueuedMessage[];
+  pendingResume: { runId: string | null; sessionId: string } | null;
+  stoppingRunId: string | null;
 }
 
 export interface State {
   config: AppConfig;
   sessions: SessionListItem[];
+  sessionView: SessionViewState;
   currentSessionId: string | null;
   messages: Map<string, UiMessage>;
   order: string[];
@@ -251,6 +260,9 @@ export interface State {
    *  matches `currentSessionId` — otherwise `setHistory()` racing the
    *  first live deltas would wipe them. */
   historyLoadedFor: string | null;
+  /** Session currently being reconciled against /session/history. Cached
+   *  messages may remain visible, but SSE should wait until this clears. */
+  historyReloadingFor: string | null;
   historyHasMoreBefore: boolean;
   historyHasMoreAfter: boolean;
   historyLoadingBefore: boolean;
@@ -290,9 +302,7 @@ export interface State {
   serverModels: ModelsResponse | null;
   automations: Automation[] | null;
   automationsOpen: boolean;
-  /** Live "current step" string per running automation, fed by the
-   *  `/automations/events` SSE stream. Cleared on automation_finished. */
-  automationStatuses: Record<string, string>;
+  automationStream: AutomationStreamDomainState;
   archiveOpen: boolean;
   archivedSessions: ArchivedSession[] | null;
   compacting: boolean;
@@ -309,11 +319,18 @@ export interface State {
   reviewingApprovalToolId: string | null;
   /** Messages submitted while a run was in flight. */
   queuedMessages: QueuedMessage[];
+  /** Run resume requested by the UI but not yet reflected by stream state. */
+  pendingResume: { runId: string | null; sessionId: string } | null;
+  /** Active run currently being stopped by the user. */
+  stoppingRunId: string | null;
+  /** Terminal run ids seen locally. Prevents stale status polls from
+   *  re-adding a run that the live stream already finished. */
+  terminalRunIds: Set<string>;
   /** Center point of the element that triggered the currently-open modal.
    *  Null when the modal opens via keyboard / palette / non-positional path. */
   modalOrigin: { x: number; y: number } | null;
   loops: ServerLoop[];
-  backgroundAgents: Record<string, BackgroundAgent>;
+  backgroundAgents: BackgroundAgentsDomainState;
   prefs: Prefs;
 }
 
@@ -322,6 +339,9 @@ export interface Actions {
   setSessions: (sessions: SessionListItem[]) => void;
   prependSession: (session: SessionListItem) => void;
   setActiveRunSessions: (ids: string[]) => void;
+  setActiveRunStatus: (
+    runs: { runId?: string | null; sessionId: string; status?: string | null }[],
+  ) => void;
   setCurrentSession: (sessionId: string | null) => void;
   setHistory: (messages: UiMessage[], page?: import("../api").HistoryPage) => void;
   prependHistory: (messages: UiMessage[], page?: import("../api").HistoryPage) => void;
@@ -394,8 +414,15 @@ export interface Actions {
   setAutomations: (automations: Automation[] | null) => void;
   openAutomations: (origin?: { x: number; y: number } | null) => void;
   closeAutomations: () => void;
-  setAutomationStatus: (taskId: string, status: string) => void;
-  clearAutomationStatus: (taskId: string) => void;
+  automationStreamConnecting: () => void;
+  automationStreamConnected: () => void;
+  automationStreamStale: () => void;
+  automationStreamFailed: (error: string) => void;
+  automationStreamIdle: () => void;
+  automationProgress: (taskId: string, status: string) => void;
+  automationFinished: (taskId: string) => void;
+  backgroundAgentsRefreshStarted: () => void;
+  backgroundAgentsRefreshFailed: (error: string) => void;
   setArchivedSessions: (sessions: ArchivedSession[] | null) => void;
   openArchive: (origin?: { x: number; y: number } | null) => void;
   closeArchive: () => void;

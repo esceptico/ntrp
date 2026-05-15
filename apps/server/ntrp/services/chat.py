@@ -739,6 +739,12 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             # stashed prefix to keep disk history complete.
             await ctx.session_service.save_progress(session_state, _persistable_messages(run))
             bus.mark_checkpoint()
+            await _record_run_status(
+                ctx.session_service,
+                run.run_id,
+                RunStatus.RUNNING.value,
+                last_seq=bus.checkpoint_seq,
+            )
 
         agent.hooks.on_step_finish = _checkpoint
 

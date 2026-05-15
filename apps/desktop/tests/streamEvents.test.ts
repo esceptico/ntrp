@@ -9,10 +9,12 @@ import {
   resetEventSeqStateForTest,
   resetReplayGapReloadStateForTest,
   resetStreamStateForTest,
-} from "../src/hooks/useEvents.js";
-import { loadHistory, stopRun } from "../src/actions.js";
-import { isActiveBackgroundAgent } from "../src/components/AgentRightSidebar.js";
-import { getState, setState } from "../src/store.js";
+} from "../src/hooks/useEvents.ts";
+import { loadHistory, sendMessage, stopRun } from "../src/actions/index.ts";
+import { isActiveBackgroundAgent } from "../src/components/AgentRightSidebar.tsx";
+import { getState, setState } from "../src/store/index.ts";
+import { createBackgroundAgentsDomainState } from "../src/store/background-agent-domain.ts";
+import type { HistoryMessage } from "../src/api.ts";
 
 beforeEach(() => {
   resetStreamStateForTest();
@@ -26,7 +28,7 @@ beforeEach(() => {
     currentRunId: null,
     currentSessionId: null,
     error: null,
-    backgroundAgents: {},
+    backgroundAgents: createBackgroundAgentsDomainState(),
   });
 });
 
@@ -50,6 +52,25 @@ test("continues assistant content by message id without moving prior text below 
   expect(assistantIds).toEqual(["assistant-1"]);
   expect(state.messages.get("assistant-1")?.content).toBe("hello world");
   expect(roles).toEqual(["assistant", "activity"]);
+  expect(state.messages.get(state.order[1])?.activity?.items[0]?.target).toBe("read app");
+});
+
+test("live tool target matches persisted history formatting without description", () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-live-target", session_id: "target-session" });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-live-target",
+    tool_call_name: "ReadFile",
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_ARGS",
+    tool_call_id: "tool-live-target",
+    delta: "{\"path\":\"a\"}",
+  });
+  handleServerEvent({ type: "TOOL_CALL_END", tool_call_id: "tool-live-target" });
+
+  const activityId = getState().order.find((id) => getState().messages.get(id)?.role === "activity");
+  expect(getState().messages.get(activityId!)?.activity?.items[0]?.target).toBe('ReadFile(path="a")');
 });
 
 test("ignores duplicate same-session replay events without duplicating text or tools", () => {
@@ -223,6 +244,47 @@ test("event stream URL includes after_seq once a session sequence is known", () 
   );
 });
 
+test("replace loadHistory preserves event cursor for reconnect after canonical reload", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  const config = { serverUrl: "http://localhost:6877", apiKey: "" };
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          contentType: "application/json",
+          data: { messages: [], active_run_id: null },
+          text: "",
+        }),
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({ config, currentSessionId: "reload-session" });
+    handleServerEvent({
+      type: "TEXT_MESSAGE_CONTENT",
+      message_id: "assistant-reload",
+      delta: "accepted",
+      session_id: "reload-session",
+      seq: 31,
+    });
+
+    await loadHistory("reload-session");
+
+    expect(lastEventSeqForSession("reload-session")).toBe(31);
+    expect(eventStreamUrl(config, "reload-session")).toBe(
+      "http://localhost:6877/chat/events/reload-session?stream=true&after_seq=31",
+    );
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
 test("exposes the last event sequence for bridge reconnects", () => {
   expect(lastEventSeqForSession("bridge-session")).toBeUndefined();
 
@@ -234,6 +296,127 @@ test("exposes the last event sequence for bridge reconnects", () => {
   });
 
   expect(lastEventSeqForSession("bridge-session")).toBe(44);
+});
+
+test("rebuilds persisted transcript without replay animation marker", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  const originalDocument = (globalThis as typeof globalThis & { document?: unknown }).document;
+  const documentElement = { dataset: {} as Record<string, string> };
+  (globalThis as typeof globalThis & { document?: unknown }).document = { documentElement };
+
+  try {
+    const messages: HistoryMessage[] = [
+      { role: "user", content: "inspect", id: "user-1" },
+      {
+        role: "assistant",
+        content: "checking",
+        id: "assistant-1",
+        tool_calls: [{ id: "tool-1", name: "ReadFile", arguments: "{\"path\":\"a\"}" }],
+      },
+      { role: "tool", content: "ok", id: "tool-result-1", tool_call_id: "tool-1" },
+    ];
+
+    (globalThis as typeof globalThis & { window?: unknown }).window = {
+      ntrpDesktop: {
+        api: {
+          request: async () => ({
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            contentType: "application/json",
+            data: { messages, active_run_id: null },
+            text: "",
+          }),
+        },
+      },
+      setTimeout,
+      clearTimeout,
+    };
+
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: "history-no-animation",
+    });
+
+    await loadHistory("history-no-animation");
+
+    expect(documentElement.dataset.streamReplaying).toBeUndefined();
+    expect(getState().order).toEqual(["user-1", "assistant-1", "assistant-1-activity"]);
+    expect(getState().messages.get("assistant-1-activity")?.activity?.items[0].result).toBe("ok");
+    expect(getState().messages.get("assistant-1-activity")?.activity?.items[0].target).toBe('ReadFile(path="a")');
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+    (globalThis as typeof globalThis & { document?: unknown }).document = originalDocument;
+  }
+});
+
+test("live deltas render during active stream", () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-live", session_id: "session-live", timestamp: 1 });
+  handleServerEvent({
+    type: "TEXT_MESSAGE_CONTENT",
+    message_id: "assistant-live",
+    delta: "live",
+    session_id: "session-live",
+    timestamp: 2,
+  });
+
+  expect(getState().running).toBe(true);
+  expect(getState().messages.get("assistant-live")?.content).toBe("live");
+});
+
+test("tool lifecycle updates remain in call order", async () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-tools", session_id: "session-tools", timestamp: 1 });
+  handleServerEvent({ type: "TOOL_CALL_START", tool_call_id: "tool-1", tool_call_name: "ReadFile", timestamp: 2 });
+  handleServerEvent({ type: "TOOL_CALL_END", tool_call_id: "tool-1", timestamp: 3 });
+  handleServerEvent({ type: "TOOL_CALL_START", tool_call_id: "tool-2", tool_call_name: "ListFiles", timestamp: 4 });
+  handleServerEvent({ type: "TOOL_CALL_END", tool_call_id: "tool-2", timestamp: 5 });
+  handleServerEvent({
+    type: "TOOL_CALL_RESULT",
+    tool_call_id: "tool-1",
+    name: "ReadFile",
+    content: "first",
+    timestamp: 6,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  const state = getState();
+  const activityId = state.order.find((id) => state.messages.get(id)?.role === "activity");
+  const items = state.messages.get(activityId!)?.activity?.items ?? [];
+  expect(items.map((item) => item.id)).toEqual(["tool-1", "tool-2"]);
+  expect(items[0].result).toBe("first");
+});
+
+test("done terminal event finalizes running state once", () => {
+  handleServerEvent({ type: "RUN_STARTED", run_id: "run-done", session_id: "session-done", seq: 1, timestamp: 1 });
+  handleServerEvent({
+    type: "RUN_FINISHED",
+    run_id: "run-done",
+    session_id: "session-done",
+    seq: 2,
+    timestamp: 2,
+    usage: { prompt: 3, completion: 4, cost: 0.01 },
+    message_count: 5,
+  });
+  handleServerEvent({
+    type: "RUN_FINISHED",
+    run_id: "run-done",
+    session_id: "session-done",
+    seq: 2,
+    timestamp: 3,
+    usage: { prompt: 10, completion: 10, cost: 1 },
+    message_count: 10,
+  });
+
+  const state = getState();
+  expect(state.running).toBe(false);
+  expect(state.currentRunId).toBeNull();
+  expect(state.usage).toMatchObject({
+    lastPrompt: 3,
+    totalTokens: 7,
+    totalCost: 0.01,
+    messageCount: 5,
+  });
 });
 
 test("stream_reset clears transient buffers and schedules one history reload", async () => {
@@ -280,7 +463,7 @@ test("stream_reset clears transient buffers and schedules one history reload", a
   } as const;
   const tailApply = handleIncomingServerEvent(tailEvent);
 
-  expect(lastEventSeqForSession("reset-session")).toBeUndefined();
+  expect(lastEventSeqForSession("reset-session")).toBe(3);
   expect(getState().activeActivityId).toBeNull();
   expect(getState().order).toEqual([]);
   expect(secondReload).toBeNull();
@@ -291,6 +474,60 @@ test("stream_reset clears transient buffers and schedules one history reload", a
 
   expect(lastEventSeqForSession("reset-session")).toBe(4);
   expect(reloads).toEqual(["reset-session"]);
+});
+
+test("stream_reset cancels delayed activity items from the old projection", async () => {
+  setState({ currentSessionId: "reset-delayed-session" });
+  handleServerEvent({
+    type: "RUN_STARTED",
+    run_id: "run-reset-delayed",
+    session_id: "reset-delayed-session",
+    seq: 1,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-immediate",
+    tool_call_name: "ReadFile",
+    session_id: "reset-delayed-session",
+    seq: 2,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-immediate",
+    session_id: "reset-delayed-session",
+    seq: 3,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_START",
+    tool_call_id: "tool-delayed",
+    tool_call_name: "ListFiles",
+    session_id: "reset-delayed-session",
+    seq: 4,
+  });
+  handleServerEvent({
+    type: "TOOL_CALL_END",
+    tool_call_id: "tool-delayed",
+    session_id: "reset-delayed-session",
+    seq: 5,
+  });
+
+  const activityId = getState().activeActivityId;
+  expect(activityId).toBeTruthy();
+
+  const resetReload = handleIncomingServerEvent(
+    {
+      type: "stream_reset",
+      reason: "replay_gap",
+      session_id: "reset-delayed-session",
+      seq: 6,
+    },
+    async () => undefined,
+  );
+  await resetReload;
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  const items = getState().messages.get(activityId!)?.activity?.items ?? [];
+  expect(items.map((item) => item.id)).toEqual(["tool-immediate"]);
 });
 
 test("stream_reset drops queued tail events after session navigation", async () => {
@@ -322,7 +559,7 @@ test("stream_reset drops queued tail events after session navigation", async () 
   await resetReload;
   await tailApply;
 
-  expect(lastEventSeqForSession("reset-session")).toBeUndefined();
+  expect(lastEventSeqForSession("reset-session")).toBe(3);
   expect(getState().order).toEqual([]);
 });
 
@@ -356,7 +593,7 @@ test("stream_reset keeps tail blocked when history reload fails", async () => {
     seq: 5,
   });
 
-  expect(lastEventSeqForSession("reset-session")).toBeUndefined();
+  expect(lastEventSeqForSession("reset-session")).toBe(3);
   expect(getState().order).toEqual([]);
   expect(getState().error).toBe("reload failed");
 
@@ -436,6 +673,286 @@ test("stopRun clears running state after successful cancel request", async () =>
   }
 });
 
+test("stopRun clears stopped session after switching sessions during cancel", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  let resolveCancel!: () => void;
+  const cancelAccepted = new Promise<void>((resolve) => {
+    resolveCancel = resolve;
+  });
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => {
+          await cancelAccepted;
+          return {
+            ok: true,
+            status: 202,
+            statusText: "Accepted",
+            contentType: "application/json",
+            data: { status: "cancelling" },
+            text: "",
+          };
+        },
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: "session-1",
+      running: true,
+      currentRunId: "run-1",
+      activeRunSessionIds: new Set(["session-1", "session-2"]),
+    });
+
+    const stopPromise = stopRun();
+    setState({
+      currentSessionId: "session-2",
+      running: true,
+      currentRunId: "run-2",
+    });
+    resolveCancel();
+    await stopPromise;
+
+    expect(getState().running).toBe(true);
+    expect(getState().currentRunId).toBe("run-2");
+    expect(getState().activeRunSessionIds.has("session-1")).toBe(false);
+    expect(getState().activeRunSessionIds.has("session-2")).toBe(true);
+    expect(getState().terminalRunIds.has("run-1")).toBe(true);
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("old-session send failure does not clear newer optimistic run", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  let rejectSend!: () => void;
+  const sendFailed = new Promise<never>((_resolve, reject) => {
+    rejectSend = () => reject(new Error("send failed"));
+  });
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => sendFailed,
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: "session-old",
+      running: false,
+      currentRunId: null,
+      activeRunSessionIds: new Set(),
+      messages: new Map(),
+      order: [],
+    });
+
+    const sendPromise = sendMessage("old session send");
+    getState().setCurrentSession("session-new");
+    setState({
+      currentSessionId: "session-new",
+      running: true,
+      currentRunId: null,
+      activeRunSessionIds: new Set(["session-old", "session-new"]),
+      messages: new Map([["new-message", { id: "new-message", role: "assistant", content: "new" }]]),
+      order: ["new-message"],
+    });
+    rejectSend();
+    await sendPromise;
+
+    expect(getState().currentSessionId).toBe("session-new");
+    expect(getState().running).toBe(true);
+    expect(getState().currentRunId).toBeNull();
+    expect(getState().activeRunSessionIds.has("session-old")).toBe(false);
+    expect(getState().activeRunSessionIds.has("session-new")).toBe(true);
+    expect(getState().order).toEqual(["new-message"]);
+    expect(getState().messages.get("new-message")?.content).toBe("new");
+    expect([...getState().messages.values()].some((message) => message.role === "error")).toBe(false);
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("stopRun failure after session switch clears cached old-session stopping state", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  let rejectCancel!: () => void;
+  const cancelFailed = new Promise<never>((_resolve, reject) => {
+    rejectCancel = () => reject(new Error("cancel failed"));
+  });
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => cancelFailed,
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: null,
+      sessionCache: new Map(),
+      running: false,
+      currentRunId: null,
+      stoppingRunId: null,
+      messages: new Map(),
+      order: [],
+    });
+    const s = getState();
+    s.setCurrentSession("session-old");
+    setState({
+      running: true,
+      currentRunId: "run-old",
+      messages: new Map([["old-message", { id: "old-message", role: "assistant", content: "old" }]]),
+      order: ["old-message"],
+    });
+
+    const stopPromise = stopRun();
+    expect(getState().stoppingRunId).toBe("run-old");
+    s.setCurrentSession("session-new");
+    getState().appendMessage({ id: "new-message", role: "assistant", content: "new" });
+    expect(getState().sessionCache.get("session-old")?.stoppingRunId).toBe("run-old");
+
+    rejectCancel();
+    await stopPromise;
+
+    expect(getState().currentSessionId).toBe("session-new");
+    expect(getState().stoppingRunId).toBeNull();
+    expect(getState().order).toEqual(["new-message"]);
+    expect(getState().messages.get("new-message")?.content).toBe("new");
+    expect([...getState().messages.values()].some((message) => message.role === "error")).toBe(false);
+    expect(getState().sessionCache.get("session-old")?.stoppingRunId).toBeNull();
+
+    s.setCurrentSession("session-old");
+    expect(getState().stoppingRunId).toBeNull();
+    expect(getState().order).toEqual(["old-message"]);
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("old-session edit revert failure does not mutate newer transcript", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  let rejectRevert!: () => void;
+  const revertFailed = new Promise<never>((_resolve, reject) => {
+    rejectRevert = () => reject(new Error("revert failed"));
+  });
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async () => revertFailed,
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: "session-old",
+      editingId: "edit-old",
+      messages: new Map([["edit-old", { id: "edit-old", role: "user", content: "old" }]]),
+      order: ["edit-old"],
+    });
+
+    const sendPromise = sendMessage("edited old message");
+    getState().setCurrentSession("session-new");
+    setState({
+      currentSessionId: "session-new",
+      messages: new Map([["new-message", { id: "new-message", role: "assistant", content: "new" }]]),
+      order: ["new-message"],
+      editingId: null,
+    });
+    rejectRevert();
+    await sendPromise;
+
+    expect(getState().currentSessionId).toBe("session-new");
+    expect(getState().order).toEqual(["new-message"]);
+    expect(getState().messages.get("new-message")?.content).toBe("new");
+    expect([...getState().messages.values()].some((message) => message.role === "error")).toBe(false);
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
+test("old-session edit revert success does not mutate newer transcript or post edit", async () => {
+  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
+  let resolveRevert!: () => void;
+  const revertSucceeded = new Promise((resolve) => {
+    resolveRevert = () =>
+      resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        contentType: "application/json",
+        data: {},
+        text: "",
+      });
+  });
+  let chatPostCount = 0;
+  (globalThis as typeof globalThis & { window?: unknown }).window = {
+    ntrpDesktop: {
+      api: {
+        request: async (_config: unknown, request: { path: string }) => {
+          if (request.path === "/session/revert") return revertSucceeded;
+          if (request.path === "/chat/message") {
+            chatPostCount += 1;
+            return {
+              ok: true,
+              status: 200,
+              statusText: "OK",
+              contentType: "application/json",
+              data: { run_id: "run-old" },
+              text: "",
+            };
+          }
+          throw new Error(`Unexpected path ${request.path}`);
+        },
+      },
+    },
+    setTimeout,
+    clearTimeout,
+  };
+
+  try {
+    setState({
+      config: { serverUrl: "http://localhost:6877", apiKey: "" },
+      currentSessionId: "session-old",
+      editingId: "edit-old",
+      messages: new Map([["edit-old", { id: "edit-old", role: "user", content: "old" }]]),
+      order: ["edit-old"],
+    });
+
+    const sendPromise = sendMessage("edited old message");
+    getState().setCurrentSession("session-new");
+    setState({
+      currentSessionId: "session-new",
+      messages: new Map([["new-message", { id: "new-message", role: "assistant", content: "new" }]]),
+      order: ["new-message"],
+      editingId: null,
+    });
+    resolveRevert();
+    await sendPromise;
+
+    expect(getState().currentSessionId).toBe("session-new");
+    expect(getState().order).toEqual(["new-message"]);
+    expect(getState().messages.get("new-message")?.content).toBe("new");
+    expect(chatPostCount).toBe(0);
+  } finally {
+    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
+  }
+});
+
 test("stopRun clears running state when server no longer knows the run", async () => {
   const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
   (globalThis as typeof globalThis & { window?: unknown }).window = {
@@ -479,6 +996,47 @@ test("stale run_cancelled does not clear a newer active run", () => {
 
   expect(getState().running).toBe(true);
   expect(getState().currentRunId).toBe("run-new");
+});
+
+test("run_cancelled resends pending queued messages through stream callback", () => {
+  const resent: Array<{ text: string; images: unknown[] }> = [];
+  setState({
+    running: true,
+    currentRunId: "run-cancel",
+    queuedMessages: [
+      {
+        clientId: "queued-1",
+        text: "retry one",
+        images: [{ type: "input_image", image_url: "data:image/png;base64,a" }],
+        status: "pending",
+        enqueuedAt: 1,
+      },
+      {
+        clientId: "queued-2",
+        text: "skip failed",
+        status: "failed",
+        enqueuedAt: 2,
+      },
+    ],
+  });
+
+  handleIncomingServerEvent(
+    { type: "run_cancelled", run_id: "run-cancel", timestamp: 3 },
+    undefined,
+    {
+      resendQueuedMessage: (text, images) => {
+        resent.push({ text, images: images ?? [] });
+      },
+    },
+  );
+
+  expect(resent).toEqual([
+    {
+      text: "retry one",
+      images: [{ type: "input_image", image_url: "data:image/png;base64,a" }],
+    },
+  ]);
+  expect(getState().queuedMessages).toEqual([]);
 });
 
 test("loadHistory restores currentRunId for active sessions", async () => {
@@ -660,7 +1218,7 @@ test("background task event updates background agents without transcript noise",
 
   const state = getState();
   expect(state.order).toEqual([]);
-  expect(state.backgroundAgents["session-1:bg-1"]).toMatchObject({
+  expect(state.backgroundAgents.rows["session-1:bg-1"]).toMatchObject({
     taskId: "bg-1",
     sessionId: "session-1",
     command: "research event systems",
@@ -681,7 +1239,7 @@ test("background snapshot does not complete missing running tasks", () => {
 
   s.setBackgroundAgentsForSession("session-1", []);
 
-  expect(getState().backgroundAgents["session-1:bg-1"].status).toBe("running");
+  expect(getState().backgroundAgents.rows["session-1:bg-1"].status).toBe("running");
 });
 
 test("right sidebar active background agents excludes terminal statuses", () => {
