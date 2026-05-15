@@ -11,6 +11,7 @@ import { ContextTab } from "./settings/ContextTab";
 import { MCPTab } from "./settings/MCPTab";
 import { AppearanceTab } from "./settings/AppearanceTab";
 import { PageModal } from "./PageModal";
+import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
 
 type TabId = "connection" | "providers" | "integrations" | "models" | "agent" | "context" | "mcp" | "appearance";
@@ -108,15 +109,9 @@ export function SettingsModal() {
             <div className="text-lg font-semibold tracking-[-0.012em] text-ink">
               {TABS.find((t) => t.id === active)?.label}
             </div>
-            <button
-              type="button"
-              onClick={close}
-              disabled={saving}
-              aria-label="Close"
-              className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
-            >
+            <IconButton onClick={close} disabled={saving} aria-label="Close">
               <X size={ICON.SM} strokeWidth={2} />
-            </button>
+            </IconButton>
           </header>
 
           <div className="overflow-y-auto scroll-thin px-5 py-4">

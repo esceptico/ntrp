@@ -5,6 +5,7 @@ import { Check, X } from "lucide-react";
 import { useStore } from "../store";
 import { respondToApproval } from "../actions";
 import { SPRING_SMOOTH, modalOriginTransform } from "../lib/motion";
+import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
 
 const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
@@ -93,14 +94,13 @@ export function ApprovalReviewModal() {
               {approval.path && (
                 <span className="font-mono text-sm text-faint truncate">{approval.path}</span>
               )}
-              <button
-                type="button"
+              <IconButton
                 onClick={() => close(null)}
                 aria-label="Close"
-                className="ml-auto grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors shrink-0"
+                className="ml-auto shrink-0"
               >
                 <X size={ICON.SM} strokeWidth={2} />
-              </button>
+              </IconButton>
             </header>
 
             <div className="overflow-y-auto scroll-thin">

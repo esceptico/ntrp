@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Circle, FileText, Play, Plus, Radio, Trash2, X, type LucideIcon } from "lucide-react";
+import { Circle, FileText, Play, Plus, Radio, Trash2, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
 import { deleteAutomation, fetchAutomations, runAutomation, toggleAutomation } from "../actions";
@@ -44,12 +44,9 @@ export function AutomationsModal() {
         onClose={close}
         grid="grid-rows-[auto_auto_minmax(0,1fr)]"
         disableEscape={!!editor}
-      >
-        <header className="flex items-center justify-between gap-3 px-6 pt-5 pb-4">
-          <h2 className="m-0 text-xl font-semibold tracking-[-0.014em] text-ink">
-            Automations
-          </h2>
-          <div className="flex items-center gap-1.5">
+        header={{
+          title: "Automations",
+          actions: (
             <button
               type="button"
               onClick={() => setEditor({ kind: "create" })}
@@ -58,17 +55,9 @@ export function AutomationsModal() {
               <Plus size={ICON.XS} strokeWidth={2.2} />
               New
             </button>
-            <button
-              type="button"
-              onClick={close}
-              aria-label="Close"
-              className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
-            >
-              <X size={ICON.SM} strokeWidth={2} />
-            </button>
-          </div>
-        </header>
-
+          ),
+        }}
+      >
         <nav className="flex items-center gap-5 px-6 border-b border-line-soft">
           <TabButton label="Active" count={activeCount} active={tab === "active"} onClick={() => setTab("active")} />
           <TabButton

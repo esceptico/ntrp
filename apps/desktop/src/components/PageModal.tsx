@@ -1,15 +1,34 @@
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
+import { X } from "lucide-react";
 import { SPRING_SMOOTH } from "../lib/motion";
+import { IconButton } from "./IconButton";
+import { ICON } from "../lib/icons";
 
 const BACKDROP_DURATION = 0.2;
 const EASE = [0.2, 0.8, 0.2, 1] as const;
+
+export interface PageModalHeader {
+  /** Main title — usually a string but any node so callers can include
+   *  count badges, icons, etc. */
+  title: ReactNode;
+  /** Optional second line under the title (small, faint, mono). Used by
+   *  MarkdownViewer for source paths. */
+  subtitle?: ReactNode;
+  /** Extra buttons rendered to the left of the standard close X. */
+  actions?: ReactNode;
+}
 
 export interface PageModalProps {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
+  /** When provided, PageModal renders a standard header bar with the title,
+   *  optional subtitle, any extra actions, and a close X button. Callers
+   *  with non-standard headers (e.g. Settings' sidebar layout) omit this
+   *  and compose their own header inside `children`. */
+  header?: PageModalHeader;
   /** Tailwind size class string for the panel — e.g.
    *  `"w-[min(960px,calc(100vw-80px))] h-[min(680px,calc(100vh-80px))]"`.
    *  Defaults to a 960×680 viewport-aware panel. */
@@ -39,6 +58,7 @@ export function PageModal({
   open,
   onClose,
   children,
+  header,
   size = DEFAULT_SIZE,
   grid = DEFAULT_GRID,
   rounded = DEFAULT_ROUNDED,
@@ -61,7 +81,7 @@ export function PageModal({
       {open && (
         <motion.div
           key="page-modal"
-          className="modal-scrim absolute inset-0 z-50 grid place-items-center p-4 sm:p-8 backdrop-blur-md"
+          className="modal-scrim absolute inset-0 z-50 grid place-items-center p-4 sm:p-8 backdrop-blur-sm"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -76,6 +96,26 @@ export function PageModal({
             transition={SPRING_SMOOTH}
             onClick={(e) => e.stopPropagation()}
           >
+            {header && (
+              <header className="flex items-start justify-between gap-3 px-5 pt-[18px] pb-3 border-b border-line-soft">
+                <div className="min-w-0">
+                  <div className="text-lg font-semibold tracking-[-0.012em] text-ink truncate">
+                    {header.title}
+                  </div>
+                  {header.subtitle && (
+                    <div className="mt-0.5 text-xs text-faint font-mono truncate">
+                      {header.subtitle}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {header.actions}
+                  <IconButton onClick={onClose} aria-label="Close">
+                    <X size={ICON.SM} strokeWidth={2} />
+                  </IconButton>
+                </div>
+              </header>
+            )}
             {children}
           </motion.div>
         </motion.div>

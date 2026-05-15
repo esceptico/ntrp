@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArchiveRestore, Search, Trash2, X } from "lucide-react";
+import { ArchiveRestore, Search, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import { useStore } from "../store";
 import {
@@ -31,36 +31,27 @@ export function ArchiveModal() {
     return archived.filter((s) => (s.name ?? "untitled").toLowerCase().includes(q));
   }, [archived, query]);
 
+  const archivedCount = archived?.length ?? 0;
+
   return (
     <PageModal
       open={open}
       onClose={close}
       size="w-[min(720px,calc(100vw-80px))] h-[min(560px,calc(100vh-80px))]"
+      header={{
+        title: (
+          <span className="inline-flex items-center gap-3">
+            <span>Archive</span>
+            {archivedCount > 0 && (
+              <span className="text-sm font-normal text-faint tabular-nums">
+                {archivedCount} session{archivedCount === 1 ? "" : "s"}
+              </span>
+            )}
+          </span>
+        ),
+        actions: <SearchInput value={query} onChange={setQuery} />,
+      }}
     >
-      <header className="flex items-center justify-between gap-3 px-6 pt-5 pb-4 border-b border-line-soft">
-        <div className="flex items-center gap-3">
-          <h2 className="m-0 text-xl font-semibold tracking-[-0.014em] text-ink">
-            Archive
-          </h2>
-          {archived && archived.length > 0 && (
-            <span className="text-sm text-faint tabular-nums">
-              {archived.length} session{archived.length === 1 ? "" : "s"}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5">
-          <SearchInput value={query} onChange={setQuery} />
-          <button
-            type="button"
-            onClick={close}
-            aria-label="Close"
-            className="grid place-items-center w-7 h-7 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
-          >
-            <X size={ICON.SM} strokeWidth={2} />
-          </button>
-        </div>
-      </header>
-
       <div className="overflow-y-auto scroll-thin px-3 py-3">
         {filtered === null ? (
           <Empty>Loading…</Empty>

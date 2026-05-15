@@ -8,6 +8,7 @@ import { useStore, type ActivityItem } from "../store";
 import { highlight } from "../highlight";
 import { extractTask, friendlyAgentLabel, isAgent } from "../lib/agent";
 import { Markdown } from "./Markdown";
+import { IconButton } from "./IconButton";
 import { SPRING_SMOOTH } from "../lib/motion";
 import { ICON } from "../lib/icons";
 
@@ -151,14 +152,9 @@ export function ToolViewer() {
                   )}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => close(null)}
-                aria-label="Close"
-                className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors shrink-0"
-              >
+              <IconButton onClick={() => close(null)} aria-label="Close" className="shrink-0">
                 <X size={ICON.SM} strokeWidth={2} />
-              </button>
+              </IconButton>
             </header>
 
             <div className="overflow-y-auto scroll-thin px-5 py-4 grid grid-cols-[minmax(0,1fr)] gap-4 min-w-0">

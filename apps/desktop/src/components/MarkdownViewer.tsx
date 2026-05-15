@@ -1,13 +1,9 @@
-import { useEffect } from "react";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "motion/react";
-import { ExternalLink, X } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { useStore } from "../store";
 import { Markdown } from "./Markdown";
-import { SPRING_SMOOTH } from "../lib/motion";
+import { PageModal } from "./PageModal";
+import { IconButton } from "./IconButton";
 import { ICON } from "../lib/icons";
-
-const MODAL_EASE = [0.2, 0.8, 0.2, 1] as const;
 
 /** Generic markdown viewer modal. State lives in the store as `viewingMarkdown`
  *  so any code can pop the viewer with a `setViewingMarkdown({title, content, ...})`
@@ -17,82 +13,39 @@ export function MarkdownViewer() {
   const view = useStore((s) => s.viewingMarkdown);
   const close = useStore((s) => s.setViewingMarkdown);
 
-  useEffect(() => {
-    if (!view) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [view, close]);
-
-  const root = document.querySelector("#app");
-  if (!root) return null;
-
   const openExternal = () => {
     if (view?.sourcePath) void window.ntrpDesktop?.shell?.openPath(view.sourcePath);
   };
 
-  return createPortal(
-    <AnimatePresence>
-      {view && (
-        <motion.div
-          key="markdown-viewer"
-          className="modal-scrim absolute inset-0 z-50 grid place-items-center p-8 backdrop-blur-md"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2, ease: MODAL_EASE }}
-          onClick={() => close(null)}
-        >
-          <motion.div
-            className="glass-pane-thick w-[min(720px,calc(100vw-80px))] max-h-[calc(100vh-80px)] grid grid-rows-[auto_minmax(0,1fr)] rounded-2xl overflow-hidden"
-            initial={{ opacity: 0, scale: 0.96, y: 6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 6 }}
-            transition={SPRING_SMOOTH}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="flex items-start justify-between gap-3.5 px-5 pt-[18px] pb-3 border-b border-line-soft">
-              <div className="min-w-0">
-                <div className="text-lg font-semibold tracking-[-0.012em] text-ink truncate">
-                  {view.title}
-                </div>
-                {view.subtitle && (
-                  <div className="mt-0.5 text-xs text-faint font-mono truncate">
-                    {view.subtitle}
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                {view.sourcePath && (
-                  <button
-                    type="button"
-                    onClick={openExternal}
-                    aria-label="Open in default app"
-                    title="Open in default app"
-                    className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
-                  >
-                    <ExternalLink size={ICON.SM} strokeWidth={2} />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => close(null)}
-                  aria-label="Close"
-                  className="grid place-items-center w-[26px] h-[26px] rounded-md text-muted hover:bg-surface-soft hover:text-ink transition-colors"
+  return (
+    <PageModal
+      open={!!view}
+      onClose={() => close(null)}
+      size="w-[min(720px,calc(100vw-32px))] max-h-[calc(100vh-32px)] sm:w-[min(720px,calc(100vw-80px))] sm:max-h-[calc(100vh-80px)]"
+      rounded="rounded-2xl"
+      header={
+        view
+          ? {
+              title: view.title,
+              subtitle: view.subtitle,
+              actions: view.sourcePath ? (
+                <IconButton
+                  onClick={openExternal}
+                  aria-label="Open in default app"
+                  title="Open in default app"
                 >
-                  <X size={ICON.SM} strokeWidth={2} />
-                </button>
-              </div>
-            </header>
-            <div className="overflow-y-auto scroll-thin px-5 py-4">
-              <Markdown content={view.content} className="text-md leading-[1.6] text-ink" />
-            </div>
-          </motion.div>
-        </motion.div>
+                  <ExternalLink size={ICON.SM} strokeWidth={2} />
+                </IconButton>
+              ) : undefined,
+            }
+          : undefined
+      }
+    >
+      {view && (
+        <div className="overflow-y-auto scroll-thin px-5 py-4">
+          <Markdown content={view.content} className="text-md leading-[1.6] text-ink" />
+        </div>
       )}
-    </AnimatePresence>,
-    root,
+    </PageModal>
   );
 }
