@@ -569,3 +569,12 @@ app.on("will-quit", () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+
+// In dev mode the parent script (scripts/dev.mjs) sends SIGTERM/SIGINT to
+// kill the Electron child during reloads. Without an explicit handler, the
+// process dies before Chromium flushes pending localStorage writes — so any
+// settings the user just toggled are lost on the next launch. Routing the
+// signal through `app.quit()` runs the proper shutdown sequence (graceful
+// renderer teardown + storage flush) before exiting.
+process.on("SIGTERM", () => app.quit());
+process.on("SIGINT", () => app.quit());

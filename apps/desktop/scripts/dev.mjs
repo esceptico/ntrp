@@ -27,13 +27,27 @@ async function waitForVite() {
   throw new Error(`Vite did not start at ${devUrl}`);
 }
 
-function shutdown(code = 0) {
-  for (const child of children) child.kill();
+async function shutdown(code = 0) {
+  // Send SIGTERM to children and wait up to 3s for graceful exit before
+  // tearing the parent down. Critical for the Electron child: Chromium
+  // flushes localStorage to disk during its shutdown sequence, and
+  // exiting the parent first kills the renderer mid-flush — which is
+  // why dev-mode setting changes used to vanish across hard reloads.
+  const exits = [];
+  for (const child of children) {
+    if (child.exitCode !== null || child.killed) continue;
+    exits.push(new Promise((resolve) => child.once("exit", resolve)));
+    child.kill("SIGTERM");
+  }
+  await Promise.race([
+    Promise.all(exits),
+    new Promise((resolve) => setTimeout(resolve, 3000)),
+  ]);
   process.exit(code);
 }
 
-process.on("SIGINT", () => shutdown(0));
-process.on("SIGTERM", () => shutdown(0));
+process.on("SIGINT", () => { void shutdown(0); });
+process.on("SIGTERM", () => { void shutdown(0); });
 
 const vite = run("vite", ["--host", "127.0.0.1", "--port", "5175", "--strictPort"]);
 
