@@ -668,8 +668,8 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   /* Light recipe — placeholder until Phase 3 tunes a real light
      spec. Solid-ish surface, hairline ring. */
   background-color: color-mix(in oklab, var(--color-surface) 25%, transparent);
-  backdrop-filter: url(#liquid-edge) blur(12px) saturate(180%);
-  -webkit-backdrop-filter: url(#liquid-edge) blur(12px) saturate(180%);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
   box-shadow:
     var(--shadow-sm),
     inset 0 0 0 1px var(--color-line);
@@ -685,13 +685,8 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
     );
   background-size: 240px 240px, auto;
   background-repeat: repeat, no-repeat;
-  /* Liquid glass: feDisplacementMap (#liquid-edge defined in App.tsx)
-     warps the backdrop via a low-frequency turbulence field before the
-     blur. Reads as gentle refraction — light bending through real
-     material — not just diffused frost. The blur+saturate downstream
-     keep the frosted character on top. */
-  backdrop-filter: url(#liquid-edge) blur(14px) saturate(160%);
-  -webkit-backdrop-filter: url(#liquid-edge) blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
   border-color: transparent;
   /* Stacked-glass shadow stack (dark mode):
        1. Drop shadow — deeper than --shadow-sm so the halo reads on
