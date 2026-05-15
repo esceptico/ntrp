@@ -1,0 +1,51 @@
+import {
+  type AppConfig,
+  type ServerConfigPatch,
+  getServerConfig,
+  getServerModels,
+  loadInitialConfig,
+  patchServerConfig,
+  saveConfig,
+  validateConnection,
+} from "../api";
+import { getState } from "../store";
+import { refresh } from "./bootstrap";
+
+export async function fetchServerConfig(): Promise<void> {
+  const s = getState();
+  try {
+    const [cfg, models] = await Promise.all([
+      getServerConfig(s.config),
+      getServerModels(s.config).catch(() => null),
+    ]);
+    s.setServerConfig(cfg);
+    if (models) s.setServerModels(models);
+  } catch {
+    /* server config is optional UI surface — don't surface this error */
+  }
+}
+
+export async function updateServerConfig(patch: ServerConfigPatch): Promise<void> {
+  const s = getState();
+  const next = await patchServerConfig(s.config, patch);
+  s.setServerConfig(next);
+}
+
+export async function saveAndReconnect(next: AppConfig): Promise<void> {
+  const s = getState();
+  s.setConnectionSaving(true);
+  s.setConnectionError(null);
+  try {
+    await validateConnection(next);
+    const saved = await saveConfig(next);
+    s.setConfig(saved);
+    s.closeSettings();
+    await refresh();
+  } catch (error) {
+    s.setConnectionError(error instanceof Error ? error.message : String(error));
+  } finally {
+    s.setConnectionSaving(false);
+  }
+}
+
+export { loadInitialConfig };
