@@ -108,7 +108,7 @@ async def research(execution: ToolExecution, args: ResearchInput) -> ToolResult:
     tools = [t for t in tools if t["function"]["name"] not in exclude]
     prompt = await _build_research_prompt(ctx, args.depth, remaining, execution.tool_id)
     try:
-        result = await ctx.spawn_fn(
+        spawn = await ctx.spawn_fn(
             ctx,
             task=args.task,
             system_prompt=prompt,
@@ -121,7 +121,11 @@ async def research(execution: ToolExecution, args: ResearchInput) -> ToolResult:
         if ctx.ledger:
             await ctx.ledger.complete(execution.tool_id)
 
-    return ToolResult(content=result, preview=f"Researched ({args.depth})")
+    # Carry the subagent's own usage + cost out via `data` so the desktop
+    # can render a per-agent budget breakdown on its trace row. The cost
+    # has already rolled into the caller's tracker inside spawn_fn.
+    data = {"usage": spawn.usage, "cost": spawn.cost} if spawn.usage is not None else None
+    return ToolResult(content=spawn.text, preview=f"Researched ({args.depth})", data=data)
 
 
 research_tool = tool(

@@ -460,6 +460,12 @@ function applyServerEvent(event: ServerEvent, mode: EventApplicationMode): Serve
       if (typeof event.duration_ms === "number" && event.duration_ms > 0) {
         patch.durationMs = event.duration_ms;
       }
+      // The spawner attaches per-subagent usage + cost to `data` for
+      // `kind === "agent"` results. The desktop renders this on the agent
+      // row so each subagent shows its own context size and spend.
+      const data = event.data as { usage?: ActivityItem["usage"]; cost?: number } | null;
+      if (data?.usage) patch.usage = data.usage;
+      if (typeof data?.cost === "number") patch.cost = data.cost;
       const merged = s.mergeActivityItem(event.tool_call_id, patch);
       if (!merged) bufferActivityPatch(event.tool_call_id, patch);
       return;

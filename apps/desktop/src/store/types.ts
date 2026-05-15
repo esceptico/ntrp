@@ -133,6 +133,20 @@ export interface ActivityItem {
   durationMs?: number;
   taskStatus?: "running" | "completed" | "failed" | "cancelled";
   progress?: string;
+  /** Subagent token usage (only populated when `semanticKind === "agent"`).
+   *  Reports the spawned agent's INTERNAL spend — these tokens never enter
+   *  the parent's context. Used by the activity-trace agent row to surface
+   *  per-agent context + cost without polluting the parent's budget gauge. */
+  usage?: {
+    prompt: number;
+    completion: number;
+    total: number;
+    cache_read?: number;
+    cache_write?: number;
+  };
+  /** Subagent USD cost (only populated when `semanticKind === "agent"`).
+   *  Already rolled up into the parent run's `totalCost` server-side. */
+  cost?: number;
 }
 
 export interface ActivityState {

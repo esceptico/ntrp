@@ -10,6 +10,7 @@ from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddlew
 from ntrp.core.llm_client import llm_client
 from ntrp.core.spawner import create_spawn_fn
 from ntrp.core.tool_executor import NtrpToolExecutor
+from ntrp.core.usage_tracker import UsageTracker
 from ntrp.tools.core.context import BackgroundTaskRegistry, IOBridge, RunContext, ToolContext
 from ntrp.tools.deferred import tool_schema_names
 from ntrp.tools.executor import ToolExecutor
@@ -55,6 +56,7 @@ def create_agent(
     background_tasks: BackgroundTaskRegistry | None = None,
     loaded_tools: set[str] | None = None,
     loop_task_id: str | None = None,
+    parent_tracker: UsageTracker | None = None,
 ) -> Agent:
     run_ctx = RunContext(
         run_id=run_id,
@@ -77,6 +79,7 @@ def create_agent(
         services=executor.tool_services,
         ledger=SharedLedger(),
         background_tasks=bg_tasks,
+        parent_tracker=parent_tracker,
     )
     tool_ctx.spawn_fn = create_spawn_fn(
         executor=executor,

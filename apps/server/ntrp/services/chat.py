@@ -718,6 +718,7 @@ async def run_chat(ctx: ChatContext, bus: SessionBus) -> None:
             background_tasks=bg_registry,
             loaded_tools=run.loaded_tools,
             loop_task_id=run.loop_task_id,
+            parent_tracker=tracker,
         )
         agent.hooks.on_response = tracker.track
 

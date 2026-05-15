@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from inspect import isawaitable
 from uuid import uuid4
@@ -22,6 +23,7 @@ from ntrp.core.deferred_tools_middleware import DeferredToolsModelRequestMiddlew
 from ntrp.core.isolation import IsolationLevel
 from ntrp.core.llm_client import llm_client
 from ntrp.core.tool_executor import NtrpToolExecutor
+from ntrp.core.usage_tracker import UsageTracker
 from ntrp.events.sse import (
     BackgroundTaskEvent,
     SSEEvent,
@@ -33,6 +35,26 @@ from ntrp.logging import get_logger
 from ntrp.tools.core.context import IOBridge, RunContext, ToolContext
 from ntrp.tools.deferred import append_deferred_tools_prompt, tool_schema_names
 from ntrp.tools.executor import ToolExecutor
+
+
+@dataclass(frozen=True)
+class SpawnResult:
+    """What `spawn_fn` returns to its caller (research/background tools).
+
+    `text` is the subagent's final message — the only thing that flows into
+    the parent's context. `usage` and `cost` describe the subagent's
+    internal LLM spend; the calling tool surfaces them via `ToolResult.data`
+    so the desktop can render per-agent budget breakdowns without polluting
+    the parent's context size with the subagent's internals.
+
+    Background spawns return early (before the subagent has run), so their
+    `usage` and `cost` are `None` — the eventual real result is delivered
+    via the background-task registry on a separate channel.
+    """
+
+    text: str
+    usage: dict | None = None
+    cost: float | None = None
 
 _logger = get_logger(__name__)
 
@@ -249,6 +271,22 @@ def create_spawn_fn(
             model_request_middlewares=middlewares,
         )
 
+        # Each spawned subagent gets its own UsageTracker so we can attribute
+        # its cost (and any nested sub-subagent costs that already rolled up
+        # into it) to the caller. After the subagent finishes we roll its
+        # `cost` into the parent's tracker — but NOT its `usage`, because the
+        # parent's `usage.prompt` is what drives the on-screen "context size"
+        # gauge, and the parent's context never actually held the subagent's
+        # internal back-and-forth.
+        sub_tracker = UsageTracker()
+        # `hasattr` so test-fake agents without hooks don't trip — they just
+        # won't accumulate usage, which is the right behavior for a fake.
+        if hasattr(sub_agent, "hooks"):
+            sub_agent.hooks.on_response = sub_tracker.track
+        # Hand sub_tracker down so a nested sub-subagent rolls its cost into
+        # *this* subagent's tracker — costs cascade up one level at a time.
+        child_ctx.parent_tracker = sub_tracker
+
         child_messages = [
             {"role": Role.SYSTEM, "content": child_system_prompt},
             {"role": Role.USER, "content": task},
@@ -293,6 +331,17 @@ def create_spawn_fn(
                     return f"[partial — sub-agent errored: {exc}]\n\n{summary}"
                 return _deterministic_salvage(child_messages, str(exc))
 
+        def _settle_with(text: str) -> SpawnResult:
+            """Build the final SpawnResult and roll subagent cost up to the
+            caller (foreground only)."""
+            if calling_ctx.parent_tracker is not None:
+                calling_ctx.parent_tracker.cost += sub_tracker.cost
+            return SpawnResult(
+                text=text,
+                usage=sub_tracker.usage.to_dict(),
+                cost=sub_tracker.cost,
+            )
+
         if not background:
             if parent_emit:
                 await parent_emit(
@@ -318,7 +367,7 @@ def create_spawn_fn(
                             depth=task_depth,
                         )
                     )
-                return text
+                return _settle_with(text)
             except asyncio.CancelledError:
                 if parent_emit:
                     await parent_emit(
@@ -350,8 +399,12 @@ def create_spawn_fn(
                     child_model, child_messages, f"timed out after {timeout}s", task
                 )
                 if summary:
-                    return f"[partial — sub-agent timed out after {timeout}s]\n\n{summary}"
-                return _deterministic_salvage(child_messages, f"timed out after {timeout}s")
+                    return _settle_with(
+                        f"[partial — sub-agent timed out after {timeout}s]\n\n{summary}"
+                    )
+                return _settle_with(
+                    _deterministic_salvage(child_messages, f"timed out after {timeout}s")
+                )
 
         registry = calling_ctx.background_tasks
         task_id = registry.generate_id()
@@ -433,6 +486,9 @@ def create_spawn_fn(
                 )
             )
 
-        return f"Background task {task_id} started: {task}"
+        # Background path returns immediately — the real result is delivered
+        # asynchronously via registry.deliver_result. Usage/cost belong to
+        # the background task's own ledger, not this caller's tool result.
+        return SpawnResult(text=f"Background task {task_id} started: {task}")
 
     return spawn_child

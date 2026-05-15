@@ -36,7 +36,7 @@ async def background(execution: ToolExecution, args: BackgroundInput) -> ToolRes
 
     tools = ctx.registry.get_schemas(mutates=False, capabilities=ctx.capabilities)
 
-    result = await ctx.spawn_fn(
+    spawn = await ctx.spawn_fn(
         ctx,
         task=args.task,
         system_prompt=BACKGROUND_SYSTEM_PROMPT,
@@ -46,7 +46,7 @@ async def background(execution: ToolExecution, args: BackgroundInput) -> ToolRes
         background=True,
     )
 
-    return ToolResult(content=result, preview=result[:80])
+    return ToolResult(content=spawn.text, preview=spawn.text[:80])
 
 
 class CancelBackgroundTaskInput(BaseModel):

@@ -146,7 +146,7 @@ async def test_spawn_emits_foreground_task_lifecycle_on_success(monkeypatch):
         timeout=1,
     )
 
-    assert result == "done"
+    assert result.text == "done"
     task_events = [event for event in emitted if isinstance(event, (TaskStartedEvent, TaskFinishedEvent))]
     assert [event.type.value for event in task_events] == ["task_started", "task_finished"]
     assert task_events[0].run_id == "run-1"
@@ -211,8 +211,8 @@ async def test_spawn_returns_salvage_when_inner_agent_fails(monkeypatch):
         timeout=1,
     )
 
-    assert "[partial — sub-agent errored:" in result
-    assert salvage_text in result
+    assert "[partial — sub-agent errored:" in result.text
+    assert salvage_text in result.text
     assert fake.complete_calls == 1
     task_events = [event for event in emitted if isinstance(event, (TaskStartedEvent, TaskFinishedEvent))]
     assert [event.type.value for event in task_events] == ["task_started", "task_finished"]
@@ -267,7 +267,7 @@ async def test_spawn_uses_reasoning_effort_for_model_override(monkeypatch):
         timeout=1,
     )
 
-    assert result == "done"
+    assert result.text == "done"
     assert captured == {"model": "research-model", "reasoning_effort": "max"}
 
 
@@ -367,8 +367,8 @@ async def test_spawn_salvage_preserves_tool_results_after_loop_progress(monkeypa
         timeout=5,
     )
 
-    assert "[partial — sub-agent errored:" in result
-    assert "Recovered: found one thing about apricots." in result
+    assert "[partial — sub-agent errored:" in result.text
+    assert "Recovered: found one thing about apricots." in result.text
     # Verify the salvage call actually saw the tool result — that's the
     # whole point. Find the tool message in what we sent to `complete`.
     salvage_msgs = captured_salvage_messages[0]
@@ -427,8 +427,8 @@ async def test_spawn_salvages_on_foreground_timeout(monkeypatch):
         timeout=0.1,
     )
 
-    assert "[partial — sub-agent timed out" in result
-    assert "best-effort summary" in result
+    assert "[partial — sub-agent timed out" in result.text
+    assert "best-effort summary" in result.text
 
 
 def test_clamp_for_salvage_handles_list_typed_content():

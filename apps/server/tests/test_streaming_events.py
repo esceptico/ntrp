@@ -134,7 +134,7 @@ async def test_research_child_reasoning_is_not_emitted_to_parent(monkeypatch):
         timeout=1,
     )
 
-    assert result == "child answer"
+    assert result.text == "child answer"
     assert [event.type.value for event in emitted] == ["task_started", "task_finished"]
     assert len(prompt_cache_keys) == 1
     assert prompt_cache_keys[0].startswith("test::")

@@ -329,7 +329,7 @@ async def test_spawned_agents_inherit_deferred_loading(monkeypatch):
         tools=registry.get_schemas(),
     )
 
-    assert result == "done"
+    assert result.text == "done"
     assert "## DEFERRED TOOLS" in captured["messages"][0]["content"]
     assert "slack_search" in captured["messages"][0]["content"]
 

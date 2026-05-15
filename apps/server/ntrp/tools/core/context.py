@@ -233,8 +233,13 @@ class ToolContext:
     io: IOBridge
     services: dict[str, Any] = field(default_factory=dict)
     ledger: SharedLedger | None = None
-    spawn_fn: Callable[..., Awaitable[str]] | None = None
+    spawn_fn: Callable[..., Awaitable[Any]] | None = None
     background_tasks: BackgroundTaskRegistry = field(default_factory=BackgroundTaskRegistry)
+    # UsageTracker of the caller. Spawned subagents create their own tracker
+    # for their internal LLM calls and, on completion, roll the resulting
+    # `cost` (not the token usage — see SpawnResult docstring) into this
+    # one. None at the top-level chat context until chat.py wires it.
+    parent_tracker: Any = None
 
     @property
     def session_id(self) -> str:
