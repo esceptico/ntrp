@@ -465,8 +465,8 @@ export function Composer() {
             )}
           </button>
           <LoopStatusBar />
-          <BudgetDial />
           <span className="flex-1" />
+          <BudgetDial />
           <ModelReasoningChip />
           {running ? (
             <button

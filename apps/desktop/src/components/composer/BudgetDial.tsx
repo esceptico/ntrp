@@ -48,18 +48,22 @@ function formatPct(n: number): string {
 export function BudgetDial() {
   const usage = useStore((s) => s.usage);
   const serverConfig = useStore((s) => s.serverConfig);
+  const lastCompaction = useStore((s) => s.lastCompaction);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const [coords, setCoords] = useState<{ bottom: number; left: number } | null>(null);
+  const [coords, setCoords] = useState<{ bottom: number; right: number } | null>(null);
   const hideTimerRef = useRef<number | null>(null);
 
   // Compaction fires at `compression_threshold * model.max_context_tokens`,
   // so the dial's "100%" matches the actual trigger — not the raw model
   // ceiling. Falls back gracefully when serverConfig hasn't loaded yet.
-  const tokenLimit =
-    serverConfig && serverConfig.chat_model_max_context > 0
-      ? Math.floor(serverConfig.chat_model_max_context * serverConfig.compression_threshold)
-      : 0;
+  const modelCeiling = serverConfig?.chat_model_max_context ?? 0;
+  const compressionPct = serverConfig
+    ? Math.round(serverConfig.compression_threshold * 100)
+    : 80;
+  const tokenLimit = modelCeiling > 0
+    ? Math.floor(modelCeiling * (serverConfig?.compression_threshold ?? 0.8))
+    : 0;
   const messageLimit = serverConfig?.max_messages ?? 0;
   const tokenRatio = tokenLimit > 0 ? Math.min(1, usage.lastPrompt / tokenLimit) : 0;
   const messageRatio = messageLimit > 0 ? Math.min(1, usage.messageCount / messageLimit) : 0;
@@ -81,8 +85,13 @@ export function BudgetDial() {
     if (!open || !triggerRef.current) return;
     const update = () => {
       const r = triggerRef.current!.getBoundingClientRect();
-      // 8px gap above the trigger, left-aligned to the trigger's left edge.
-      setCoords({ bottom: window.innerHeight - r.top + 8, left: r.left - 8 });
+      // 8px gap above the trigger, right-anchored. With the dial near the
+      // composer's right edge, anchoring by left would let the popover
+      // overflow the chat. Anchoring by right keeps it on-screen.
+      setCoords({
+        bottom: window.innerHeight - r.top + 8,
+        right: window.innerWidth - r.right - 8,
+      });
     };
     update();
     window.addEventListener("resize", update);
@@ -185,15 +194,27 @@ export function BudgetDial() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 4, scale: 0.98 }}
             transition={SPRING_SMOOTH}
-            style={{ position: "fixed", bottom: coords.bottom, left: coords.left, zIndex: 60 }}
-            className="glass-pane-thick w-[260px] rounded-[12px] p-3 text-sm"
+            style={{ position: "fixed", bottom: coords.bottom, right: coords.right, zIndex: 60 }}
+            className="glass-pane-thick w-[300px] rounded-[12px] p-3 text-sm"
           >
-            <div className="mb-2 text-xs font-medium text-muted">Context budget</div>
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              <span className="text-xs font-medium text-muted">Context budget</span>
+              {serverConfig?.chat_model && (
+                <span className="text-[11px] text-faint truncate" title={serverConfig.chat_model}>
+                  {serverConfig.chat_model}
+                </span>
+              )}
+            </div>
             <Row
               label="Tokens"
               value={`${formatTokens(usage.lastPrompt)} / ${formatTokens(tokenLimit)}`}
               hint={tokenLimit > 0 ? formatPct(tokenRatio) : "—"}
               color={ratioColor(tokenRatio)}
+              detail={
+                modelCeiling > 0
+                  ? `${formatTokens(modelCeiling)} ceiling · compact at ${compressionPct}%`
+                  : undefined
+              }
             />
             <Row
               label="Messages"
@@ -201,12 +222,31 @@ export function BudgetDial() {
               hint={messageLimit > 0 ? formatPct(messageRatio) : "—"}
               color={ratioColor(messageRatio)}
             />
-            <div className="mt-2 pt-2 border-t border-line-soft flex items-center justify-between">
-              <span className="text-faint">Spend</span>
-              <span className="tabular-nums text-ink-soft">{formatCost(usage.totalCost)}</span>
+            <div className="mt-2 pt-2 border-t border-line-soft grid grid-cols-2 gap-y-1 gap-x-3">
+              <span className="text-faint">Session spend</span>
+              <span className="tabular-nums text-ink-soft text-right">
+                {formatCost(usage.totalCost)}
+              </span>
+              {usage.totalTokens > 0 && (
+                <>
+                  <span className="text-faint">Total tokens</span>
+                  <span className="tabular-nums text-ink-soft text-right">
+                    {formatTokens(usage.totalTokens)}
+                  </span>
+                </>
+              )}
+              {lastCompaction && (
+                <>
+                  <span className="text-faint">Last compaction</span>
+                  <span className="tabular-nums text-ink-soft text-right">
+                    {lastCompaction.before} → {lastCompaction.after} msgs
+                  </span>
+                </>
+              )}
             </div>
-            <div className="mt-1 text-[11px] text-faint leading-snug">
-              Auto-compacts when either scale hits 100%.
+            <div className="mt-2 text-[11px] text-faint leading-snug">
+              Auto-compacts when either scale hits 100%. Subagent spend is
+              rolled into the cost; their own tokens stay off this gauge.
             </div>
           </motion.div>,
           document.body,
@@ -221,26 +261,33 @@ function Row({
   value,
   hint,
   color,
+  detail,
 }: {
   label: string;
   value: string;
   hint: string;
   color: string;
+  detail?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 py-0.5">
-      <span className="flex items-center gap-1.5 text-faint">
-        <span
-          aria-hidden
-          className="inline-block w-1.5 h-1.5 rounded-full"
-          style={{ backgroundColor: color }}
-        />
-        {label}
-      </span>
-      <span className="tabular-nums text-ink-soft">
-        {value}{" "}
-        <span className="text-faint">· {hint}</span>
-      </span>
+    <div className="py-0.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-faint">
+          <span
+            aria-hidden
+            className="inline-block w-1.5 h-1.5 rounded-full"
+            style={{ backgroundColor: color }}
+          />
+          {label}
+        </span>
+        <span className="tabular-nums text-ink-soft">
+          {value}{" "}
+          <span className="text-faint">· {hint}</span>
+        </span>
+      </div>
+      {detail && (
+        <div className="pl-3 text-[11px] text-faint tabular-nums">{detail}</div>
+      )}
     </div>
   );
 }
