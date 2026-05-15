@@ -384,14 +384,27 @@ export function Composer() {
   // the timer fires and the indicator never appears. This is the
   // "spinner only when actually slow" pattern from ChatGPT/Cursor.
   const [showThinking, setShowThinking] = useState(false);
+  // When the rim's been visible and the agent's first token arrives,
+  // hold the rim mounted for ~250ms in a "leaving" state so its exit
+  // can fade rather than hard-cut. Beat 1 of the thinking → streaming
+  // transition pass.
+  const [thinkingLeaving, setThinkingLeaving] = useState(false);
   useEffect(() => {
     if (!awaitingFirstToken) {
-      setShowThinking(false);
+      if (showThinking) {
+        setThinkingLeaving(true);
+        const id = window.setTimeout(() => {
+          setShowThinking(false);
+          setThinkingLeaving(false);
+        }, 250);
+        return () => window.clearTimeout(id);
+      }
       return;
     }
+    setThinkingLeaving(false);
     const id = window.setTimeout(() => setShowThinking(true), 350);
     return () => window.clearTimeout(id);
-  }, [awaitingFirstToken]);
+  }, [awaitingFirstToken, showThinking]);
   const thinkingStyle = useStore((s) => s.prefs.thinkingAnimation);
   const thinkingIntensity = useStore((s) => s.prefs.thinkingIntensity);
   // Brief programmatic "press" on the send button. The button's :active
@@ -539,6 +552,7 @@ export function Composer() {
           submit();
         }}
         data-thinking={showThinking ? "true" : undefined}
+        data-thinking-leaving={thinkingLeaving ? "true" : undefined}
         data-thinking-style={thinkingStyle}
         data-thinking-intensity={thinkingIntensity}
         data-just-sent={justSent ? "true" : undefined}

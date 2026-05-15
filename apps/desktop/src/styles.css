@@ -866,6 +866,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   position: absolute;
   inset: 0;
   border-radius: inherit;
+  /* Beat 1: graceful rim exit. When the rim transitions out via the
+     `data-thinking-leaving="true"` flag, opacity fades over 250ms
+     instead of the element vanishing instantly when data-thinking
+     flips off. */
+  transition: opacity 250ms ease-out;
   /* Rim thickness — was 1px, bumped to 1.6 so the comet reads at a
      glance without dominating the composer outline. */
   padding: 1.6px;
@@ -892,6 +897,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 @keyframes snakeRotate {
   to { --snake-angle: 360deg; }
 }
+/* Comet leaving: fade the rim opacity to 0 over the 250ms hold. The
+   ::before above transitions opacity, so this just sets the target. */
+.composer-card[data-thinking="true"][data-thinking-leaving="true"][data-thinking-style="comet"]::before {
+  opacity: 0;
+}
 
 /* Variant: breath — wide diffuse halo, no rim.
    The halo covers a *much* larger area than the rim arc, so it
@@ -909,6 +919,13 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
       0 0 24px 2px color-mix(in oklab, var(--color-accent) var(--breath-peak), transparent);
   }
 }
+/* Breath leaving: stop the animation and let box-shadow transition
+   back to whatever the glass-pane base provides over 250ms. Keeps
+   the halo dissolving instead of snapping off mid-cycle. */
+.composer-card[data-thinking="true"][data-thinking-leaving="true"][data-thinking-style="breath"] {
+  animation: none;
+  transition: box-shadow 250ms ease-out;
+}
 
 /* Variant: hue-cycle — no motion, border color drifts toward accent. */
 .composer-card[data-thinking="true"][data-thinking-style="hue-cycle"] {
@@ -917,6 +934,12 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 @keyframes composerHue {
   0%, 100% { border-color: var(--color-line); }
   50% { border-color: color-mix(in oklab, var(--color-accent) var(--thinking-peak), var(--color-line)); }
+}
+/* Hue-cycle leaving: stop the animation, transition border-color
+   back to baseline over 250ms. */
+.composer-card[data-thinking="true"][data-thinking-leaving="true"][data-thinking-style="hue-cycle"] {
+  animation: none;
+  transition: border-color 250ms ease-out;
 }
 
 
@@ -934,6 +957,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   border-right-color: color-mix(in oklab, var(--color-accent) var(--thinking-shoulder), transparent);
   animation: sendOrbit calc(var(--thinking-duration) * 0.45) linear infinite;
   pointer-events: none;
+  transition: opacity 250ms ease-out;
+}
+/* Send-orbit leaving: fade the spinner out over 250ms. */
+.composer-card[data-thinking="true"][data-thinking-leaving="true"][data-thinking-style="send-orbit"] [data-send="true"]::before {
+  opacity: 0;
 }
 @keyframes sendOrbit {
   to { transform: rotate(360deg); }
