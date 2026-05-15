@@ -6,14 +6,25 @@ import {
   Bot,
   Brain,
   ChevronRight,
+  Copy,
+  Eraser,
   GitBranch,
   Layers,
   MessageSquare,
+  Monitor,
+  Moon,
+  Palette as PaletteIcon,
   PanelLeft,
   Pencil,
+  Power,
+  RotateCw,
   Search,
   Settings as SettingsIcon,
+  ShieldCheck,
+  ShieldOff,
   Sparkles,
+  Square,
+  Sun,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -23,9 +34,15 @@ import {
   archiveSession,
   branchAtMessage,
   createSession,
+  renameSession,
+  runBuiltinCommand,
+  stopRun,
   switchSession,
+  toggleAuto,
   updateServerConfig,
 } from "../actions";
+import { PALETTES, type PaletteId } from "../lib/palettes";
+import type { ThemeChoice } from "../store";
 import { apiWithConfig } from "../api";
 import { formatRelativePast } from "../lib/format";
 import { ICON } from "../lib/icons";
@@ -39,7 +56,7 @@ const EASE = EASE_OUT;
  *  (`children`) that opens a sub-view via breadcrumb drill-down. */
 interface CommandEntry {
   id: string;
-  section: "suggested" | "open" | "session" | "provider" | "model";
+  section: "suggested" | "open" | "session" | "provider" | "model" | "appearance" | "system";
   label: string;
   hint?: string;
   shortcut?: string;
@@ -429,7 +446,9 @@ function Row({
 const SECTION_LABEL: Record<CommandEntry["section"], string> = {
   suggested: "Suggested",
   open: "Navigation",
+  appearance: "Appearance",
   session: "Sessions",
+  system: "System",
   provider: "Providers",
   model: "Models",
 };
@@ -437,9 +456,11 @@ const SECTION_LABEL: Record<CommandEntry["section"], string> = {
 const SECTION_ORDER: CommandEntry["section"][] = [
   "suggested",
   "open",
+  "appearance",
   "provider",
   "model",
   "session",
+  "system",
 ];
 
 // ─── Entry sources ───────────────────────────────────────────────────
@@ -454,6 +475,11 @@ function useEntries(): CommandEntry[] {
   const openMemory = useStore((s) => s.openMemory);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
   const sidebarHidden = useStore((s) => s.prefs.sidebarHidden);
+  const setPref = useStore((s) => s.setPref);
+  const currentTheme = useStore((s) => s.prefs.theme);
+  const currentPalette = useStore((s) => s.prefs.palette);
+  const skipApprovals = useStore((s) => s.skipApprovals);
+  const running = useStore((s) => s.running);
   const order = useStore((s) => s.order);
   const serverModels = useStore((s) => s.serverModels);
   const serverConfig = useStore((s) => s.serverConfig);
@@ -578,6 +604,110 @@ function useEntries(): CommandEntry[] {
       });
     }
 
+    // Session-scoped actions (only meaningful when a session is open).
+    if (currentSessionId) {
+      const currentSession = sessions.find((s) => s.session_id === currentSessionId);
+      const currentName = currentSession?.name?.trim() || "untitled";
+      entries.push({
+        id: "suggested:rename-current",
+        section: "suggested",
+        label: "Rename current session",
+        hint: currentName,
+        icon: Pencil,
+        run: async () => {
+          const next = window.prompt("Rename session", currentName);
+          if (next && next.trim() && next.trim() !== currentName) {
+            await renameSession(currentSessionId, next.trim());
+          }
+        },
+        search: "rename session title",
+      });
+      entries.push({
+        id: "suggested:clear-current",
+        section: "suggested",
+        label: "Clear session messages",
+        icon: Eraser,
+        run: async () => {
+          if (!confirm("Clear all messages in this session? This cannot be undone.")) return;
+          await runBuiltinCommand("clear", "");
+        },
+        search: "clear reset wipe messages",
+      });
+      entries.push({
+        id: "suggested:copy-session-id",
+        section: "suggested",
+        label: "Copy session ID",
+        hint: currentSessionId.slice(0, 8),
+        icon: Copy,
+        run: async () => {
+          await window.ntrpDesktop?.clipboard?.writeText(currentSessionId);
+        },
+        search: "copy session id identifier",
+      });
+    }
+    entries.push({
+      id: "suggested:toggle-auto",
+      section: "suggested",
+      label: skipApprovals ? "Disable Auto-approve" : "Enable Auto-approve",
+      hint: skipApprovals ? "currently on" : undefined,
+      icon: skipApprovals ? ShieldOff : ShieldCheck,
+      run: () => toggleAuto(!skipApprovals),
+      search: "auto approve approval toggle",
+    });
+    if (running) {
+      entries.push({
+        id: "suggested:stop-run",
+        section: "suggested",
+        label: "Stop current run",
+        icon: Square,
+        shortcut: "Esc",
+        run: () => stopRun(),
+        search: "stop cancel halt run",
+      });
+    }
+
+    // Appearance — theme and palette as drill-downs.
+    entries.push({
+      id: "appearance:theme",
+      section: "appearance",
+      label: "Theme",
+      hint: currentTheme,
+      icon: currentTheme === "dark" ? Moon : currentTheme === "light" ? Sun : Monitor,
+      children: () => buildThemeView(currentTheme, setPref),
+      search: "theme dark light system mode",
+    });
+    entries.push({
+      id: "appearance:palette",
+      section: "appearance",
+      label: "Color palette",
+      hint: currentPalette,
+      icon: PaletteIcon,
+      children: () => buildPaletteView(currentPalette, setPref),
+      search: "palette color accent style",
+    });
+
+    // System — Electron-only utilities.
+    if (window.ntrpDesktop?.app) {
+      entries.push({
+        id: "system:reload",
+        section: "system",
+        label: "Reload window",
+        icon: RotateCw,
+        shortcut: "⌘R",
+        run: () => window.ntrpDesktop!.app.reload(),
+        search: "reload refresh restart window",
+      });
+      entries.push({
+        id: "system:quit",
+        section: "system",
+        label: "Quit ntrp",
+        icon: Power,
+        shortcut: "⌘Q",
+        run: () => window.ntrpDesktop!.app.quit(),
+        search: "quit exit close app",
+      });
+    }
+
     // Sessions — recent first, skip the active one.
     for (const s of sessions) {
       if (s.session_id === currentSessionId) continue;
@@ -604,6 +734,11 @@ function useEntries(): CommandEntry[] {
     openMemory,
     toggleSidebar,
     sidebarHidden,
+    setPref,
+    currentTheme,
+    currentPalette,
+    skipApprovals,
+    running,
     order,
     serverModels,
     currentChatModel,
@@ -652,6 +787,53 @@ function buildModelView(
         }
       },
       search: `${model.toLowerCase()} model`,
+    })),
+  };
+}
+
+/** Three-option theme picker — Light / Dark / System. The "current"
+ *  hint mirrors what the model switcher shows; selecting the active
+ *  theme is a no-op (cheaper than guarding setPref). */
+function buildThemeView(
+  current: ThemeChoice,
+  setPref: <K extends "theme">(key: K, value: ThemeChoice) => void,
+): CommandView {
+  const options: { id: ThemeChoice; label: string; icon: LucideIcon }[] = [
+    { id: "system", label: "System", icon: Monitor },
+    { id: "light", label: "Light", icon: Sun },
+    { id: "dark", label: "Dark", icon: Moon },
+  ];
+  return {
+    placeholder: "Choose theme...",
+    entries: options.map((opt) => ({
+      id: `theme:${opt.id}`,
+      section: "appearance" as const,
+      label: opt.label,
+      hint: opt.id === current ? "current" : undefined,
+      icon: opt.icon,
+      run: () => setPref("theme", opt.id),
+      search: `${opt.label.toLowerCase()} theme`,
+    })),
+  };
+}
+
+/** Color-palette picker (graphite / warm / vercel / raycast / github /
+ *  linear / notion / catppuccin). Labels come from PALETTES so adding a
+ *  palette in lib/palettes.ts surfaces here automatically. */
+function buildPaletteView(
+  current: PaletteId,
+  setPref: <K extends "palette">(key: K, value: PaletteId) => void,
+): CommandView {
+  return {
+    placeholder: "Choose palette...",
+    entries: PALETTES.map((p) => ({
+      id: `palette:${p.id}`,
+      section: "appearance" as const,
+      label: p.label,
+      hint: p.id === current ? "current" : undefined,
+      icon: PaletteIcon,
+      run: () => setPref("palette", p.id),
+      search: `${p.label.toLowerCase()} palette ${p.id}`,
     })),
   };
 }

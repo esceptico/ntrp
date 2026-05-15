@@ -2,6 +2,10 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("ntrpDesktop", {
   version: () => process.versions.electron,
+  app: {
+    reload: () => ipcRenderer.invoke("app:reload"),
+    quit: () => ipcRenderer.invoke("app:quit"),
+  },
   config: {
     get: () => ipcRenderer.invoke("config:get"),
     set: config => ipcRenderer.invoke("config:set", config),

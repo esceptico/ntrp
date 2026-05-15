@@ -3,6 +3,12 @@ declare module "*.css";
 interface Window {
   ntrpDesktop?: {
     version: () => string;
+    app: {
+      /** Reload the renderer (Cmd-R equivalent). */
+      reload: () => Promise<void>;
+      /** Quit the Electron app entirely. */
+      quit: () => Promise<void>;
+    };
     config: {
       get: () => Promise<{ serverUrl: string; apiKey: string }>;
       set: (config: { serverUrl: string; apiKey: string }) => Promise<{ serverUrl: string; apiKey: string }>;

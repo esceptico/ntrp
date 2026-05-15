@@ -461,6 +461,15 @@ app.whenReady().then(() => {
     callback(false);
   });
 
+  ipcMain.handle("app:reload", event => {
+    assertTrustedSender(event);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) win.reload();
+  });
+  ipcMain.handle("app:quit", event => {
+    assertTrustedSender(event);
+    app.quit();
+  });
   ipcMain.handle("config:get", event => {
     assertTrustedSender(event);
     return readConfig();
