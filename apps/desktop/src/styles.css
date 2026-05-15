@@ -36,12 +36,15 @@
   --text-xl: 19.5px;
   --text-2xl: 21.5px;
 
-  /* Light-mode neutrals. Sidebar and chat share the same white
-     surface — no tonal step — and rely on a hairline divider for the
-     seam (.sidebar gets `border-right` below). Slight gray tints
-     remain for hover states (surface-soft), code blocks, and other
-     elevated surfaces so hierarchy still reads. */
-  --color-bg: #ffffff;
+  /* Light-mode neutrals. The chat scroll bg (`--color-bg`) is a
+     subtle warm cream — NOT pure white. Glass chrome over pure white
+     can't read as glass (no contrast for the material to define
+     against). Content surfaces (`--color-bg-main`, `--color-surface`)
+     stay pure white so message content / cards have max contrast for
+     reading. The hairline-divider sidebar/chat seam pattern still
+     reads because sidebar uses bg-main (white) and chat uses bg
+     (cream). */
+  --color-bg: #faf9f3;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
   --color-surface-soft: #f3f3f2;
@@ -665,25 +668,31 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    `border border-line` from Tailwind utilities will see it
    suppressed in dark mode via `border-color: transparent` here. */
 .glass-pane {
-  /* Light recipe — researched against Apple Materials / NSVisualEffectView /
-     glassmorphism best-practice. Three key moves:
-       1. Cool-neutral surface, not pure white. hsl(220 25% 99%) at
-          65% alpha. Prevents the "hospital white" feeling pure white
-          gives over text-heavy backdrops.
-       2. Strong inset top specular (white @ 85%). The "meniscus" —
-          the bright edge where liquid meets the side of a glass.
-          Eye reads it as glass; body can stay translucent.
-       3. saturate(180%) — restores the chroma backdrop-filter blur
-          washes out. Single most important fix for "light glass goes
-          gray." */
-  background-color: color-mix(in oklab, hsl(220 25% 99%) 65%, transparent);
+  /* Light recipe. Structurally: the chat bg is now subtly tinted
+     (--color-bg = cream/cool-gray per palette), so pure white at
+     moderate alpha here CONTRASTS as "lighter pane" against the
+     tinted scroll bg. That's what makes the surface read as glass
+     instead of as a card on white.
+
+     Recipe:
+       - Pure white surface at 65% alpha (the brightest in the scene,
+         visibly distinct from the tinted bg)
+       - blur 20 + saturate 180% (chroma recovery; otherwise text
+         behind blurs to gray)
+       - Hairline inset top specular (white @ 45%) — the meniscus.
+         NOT 85% (that read as a stark white delimiter on white-on-
+         white). Hairline highlight = glass edge cue without yelling.
+       - Ink hairline ring at 8% — defines the surface edge
+       - Two-step drop shadow (close contact + soft elevation) — the
+         "floating pane" cue. */
+  background-color: rgba(255, 255, 255, 0.65);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-color: transparent;
   box-shadow:
-    0 1px 2px rgba(20, 24, 28, 0.06),
+    0 1px 2px rgba(20, 24, 28, 0.04),
     0 8px 24px rgba(20, 24, 28, 0.06),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.85),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.45),
     inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 8%, transparent);
 }
 :root.dark .glass-pane {
@@ -713,11 +722,14 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 
 /* Composer-specific focus state. Light: the inset ring darkens
-   slightly so the surface feels "engaged" without changing
-   character. Dark: the top-edge specular brightens. */
+   slightly so the surface feels "engaged"; the rest of the recipe
+   (meniscus + contact shadow + elevation) stays so the glass
+   identity doesn't break on focus. */
 .composer-card.glass-pane:focus-within {
   box-shadow:
-    0 2px 8px -2px rgba(0, 0, 0, 0.08),
+    0 1px 2px rgba(20, 24, 28, 0.05),
+    0 8px 24px rgba(20, 24, 28, 0.08),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.45),
     inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 14%, transparent);
 }
 :root.dark .composer-card.glass-pane:focus-within {
@@ -769,19 +781,21 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
    This is Apple's "Thick" / "Regular" material vs `.glass-pane`'s
    "Thin" — same surface, different role. */
 .glass-pane-thick {
-  /* Light: same recipe as thin but tuned for focused-attention
-     popovers. Surface tint up to 78% so content reads cleanly,
-     heavier blur (32px), lifted shadow, slightly stronger ring.
-     Same cool-neutral hue and meniscus specular for visual family
-     continuity. */
-  background-color: color-mix(in oklab, hsl(220 25% 99%) 78%, transparent);
-  backdrop-filter: blur(32px) saturate(180%);
-  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  /* Light: thick tier for popovers + modals. Opens over chat
+     content + dark scrim — blur captures both, which produces gray
+     unless surface dominates. So tint goes to 82% white (high
+     enough to overcome the dark-scrim contribution but still
+     glass not paint), heavier blur (32px), saturate up to 200%
+     for stronger chroma recovery, lifted shadow. Same hairline
+     meniscus as thin. */
+  background-color: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
   border-color: transparent;
   box-shadow:
     0 1px 2px rgba(20, 24, 28, 0.06),
     0 16px 40px rgba(20, 24, 28, 0.10),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.85),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.45),
     inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 10%, transparent);
 }
 :root.dark .glass-pane-thick {
@@ -822,15 +836,15 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
    See `feedback_backdrop_filter_containing_block.md` in memory. */
 .glass-pane-static {
-  /* Light: solid cool-neutral (no backdrop-filter — this tier exists
-     for nested popovers inside another filter). Same meniscus
-     specular + edge + shadow as thick so it visually belongs. */
-  background-color: hsl(220 25% 99%);
+  /* Light: solid pure white (no backdrop-filter — this tier exists
+     for nested popovers inside another filter). Same hairline
+     meniscus + edge + shadow as thick. */
+  background-color: #ffffff;
   border-color: transparent;
   box-shadow:
     0 1px 2px rgba(20, 24, 28, 0.06),
     0 16px 40px rgba(20, 24, 28, 0.10),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.85),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.45),
     inset 0 0 0 1px color-mix(in oklab, var(--color-ink) 10%, transparent);
 }
 :root.dark .glass-pane-static {
@@ -1184,7 +1198,7 @@ main[data-has-approval="false"] .scroll-messages {
    mint accent reserved for live agent state. Light variant uses a
    deeper teal so the accent meets AA contrast on white surfaces. */
 :root.palette-graphite {
-  --color-bg: #ffffff;
+  --color-bg: #f5f6f8;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
   --color-surface-soft: #f1f2f4;
@@ -1226,7 +1240,7 @@ main[data-has-approval="false"] .scroll-messages {
 
 /* Vercel — Geist tokens */
 :root.palette-vercel {
-  --color-bg: #ffffff;
+  --color-bg: #fafafa;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
   --color-surface-soft: #f4f4f4;
@@ -1264,7 +1278,7 @@ main[data-has-approval="false"] .scroll-messages {
 
 /* Raycast — only the wordmark red is canonical; neutrals approximated. */
 :root.palette-raycast {
-  --color-bg: #ffffff;
+  --color-bg: #f4f4f5;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
   --color-surface-soft: #f3f3f3;
@@ -1304,7 +1318,7 @@ main[data-has-approval="false"] .scroll-messages {
    (#f6f8fa) while the main chat pane stays pure white, matching how
    GitHub itself splits the navigation rail from the content. */
 :root.palette-github {
-  --color-bg: #ffffff;
+  --color-bg: #f6f8fa;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
   --color-surface-soft: #f0f3f6;
@@ -1342,7 +1356,7 @@ main[data-has-approval="false"] .scroll-messages {
 
 /* Linear — Mercury White / Nordic Gray / Brand Indigo */
 :root.palette-linear {
-  --color-bg: #ffffff;
+  --color-bg: #f4f4f5;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
   --color-surface-soft: #f1f2f5;
@@ -1380,7 +1394,7 @@ main[data-has-approval="false"] .scroll-messages {
 
 /* Notion — only black/white are canonical brand; neutrals approximated. */
 :root.palette-notion {
-  --color-bg: #ffffff;
+  --color-bg: #f7f6f3;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
   --color-surface-soft: #f4f3f0;
@@ -1418,7 +1432,7 @@ main[data-has-approval="false"] .scroll-messages {
 
 /* Catppuccin */
 :root.palette-catppuccin {
-  --color-bg: #ffffff;
+  --color-bg: #eff1f5;
   --color-bg-main: #ffffff;
   --color-surface: #ffffff;
   --color-surface-soft: #eff1f5;
